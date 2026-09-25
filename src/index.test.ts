@@ -69,6 +69,7 @@ const LAYER_1 = [
   'DatasetColumnarGeometry',
   'DatasetColumnarGeometryType',
   'DatasetColumnarInput',
+  'DatasetColumnarMixedGeometry',
   'DatasetColumnarPrepared',
   'DatasetDictionaryCodes',
   'DatasetDictionaryColumn',

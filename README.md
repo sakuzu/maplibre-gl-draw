@@ -90,10 +90,11 @@ features in the next picture can be edited
 Large data such as tens of thousands of parcels or a million points is
 shown fast, in exchange for not being editable. Pass it all at once, or
 fetch from a server only what is in view each time the map moves. A
-table from GeoParquet or Arrow is passed as columns, so no time goes
-into converting every row. It can be read in a Worker, so the page does
-not stop while a large file opens. It is styled by the same style rules
-as drawn features, and a click reads its properties
+table from GeoParquet or Arrow is passed as columns, even when its rows
+mix points, lines and polygons, so no time goes into converting every
+row. It can be read in a Worker, so the page does not stop while a
+large file opens. It is styled by the same style rules as drawn
+features, and a click reads its properties
 ([large data](docs/guides/large-data.md)).
 
 ### Export and load

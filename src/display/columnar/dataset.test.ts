@@ -42,7 +42,13 @@ import type { DisplayBatchTarget } from '../dataset.js';
 import { createDatasetManager, type DatasetManager } from '../manager.js';
 import type { DatasetFeatureInput, DatasetOptions } from '../types.js';
 import { prepareDatasetColumnar } from './prepare.js';
-import type { DatasetColumn, DatasetColumnarGeometryType, DatasetColumnarInput } from './types.js';
+import type {
+  DatasetColumn,
+  DatasetColumnarGeometry,
+  DatasetColumnarGeometryType,
+  DatasetColumnarInput,
+  DatasetColumnarMixedGeometry,
+} from './types.js';
 
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
@@ -188,6 +194,8 @@ type Geometry = Coordinate | Coordinate[] | Coordinate[][] | Coordinate[][][];
 interface Row {
   geometry: Geometry | null;
   properties: Record<string, string | number>;
+  /** The type of the row in a mixed table (the type of the table otherwise) */
+  type?: DatasetColumnarGeometryType;
 }
 
 /** The depth of the offsets of each type */
@@ -200,8 +208,11 @@ const DEPTH: Record<DatasetColumnarGeometryType, number> = {
   MultiPolygon: 3,
 };
 
+/** A table whose geometry column has one type */
+type SingleTypeInput = DatasetColumnarInput & { geometry: DatasetColumnarGeometry };
+
 /** Encodes the rows as a GeoArrow table (a dictionary for strings, Float64 for numbers) */
-function toColumnar(type: DatasetColumnarGeometryType, rows: Row[]): DatasetColumnarInput {
+function toColumnar(type: DatasetColumnarGeometryType, rows: Row[]): SingleTypeInput {
   const coords: number[] = [];
   const depth = DEPTH[type];
   const offsets: number[][] = Array.from({ length: depth }, () => [0]);
@@ -229,6 +240,20 @@ function toColumnar(type: DatasetColumnarGeometryType, rows: Row[]): DatasetColu
     push(row.geometry, 0);
   });
 
+  return {
+    length: rows.length,
+    geometry: {
+      type,
+      coords: Float64Array.from(coords),
+      offsets: offsets.map((o) => Int32Array.from(o)),
+    },
+    validity,
+    ...attributesOf(rows),
+  };
+}
+
+/** The ids and the attribute columns of the rows */
+function attributesOf(rows: Row[]): Pick<DatasetColumnarInput, 'ids' | 'columns'> {
   const columns: Record<string, DatasetColumn> = {};
   const names = [...new Set(rows.flatMap((row) => Object.keys(row.properties)))];
   for (const name of names) {
@@ -244,17 +269,7 @@ function toColumnar(type: DatasetColumnarGeometryType, rows: Row[]): DatasetColu
       };
     }
   }
-  return {
-    length: rows.length,
-    geometry: {
-      type,
-      coords: Float64Array.from(coords),
-      offsets: offsets.map((o) => Int32Array.from(o)),
-    },
-    validity,
-    ids: rows.map((_, i) => `r${i}`),
-    columns,
-  };
+  return { ids: rows.map((_, i) => `r${i}`), columns };
 }
 
 /**
@@ -270,7 +285,7 @@ function toFeatures(type: DatasetColumnarGeometryType, rows: Row[]): DatasetFeat
     for (const name of names) properties[name] = row.properties[name] ?? null;
     features.push({
       id: `r${i}`,
-      type,
+      type: row.type ?? type,
       coordinates: row.geometry as Feature['coordinates'],
       properties,
     });
@@ -288,53 +303,54 @@ const square = (x: number, y: number, size: number): Coordinate[] => [
 
 const CLASSES = ['a', 'b', 'c'];
 
+/** The geometry of row `i` of a type (a grid of cells 2 degrees apart) */
+function geometryOf(type: DatasetColumnarGeometryType, i: number): Geometry {
+  const x = (i % 6) * 2;
+  const y = Math.floor(i / 6) * 2;
+  switch (type) {
+    case 'Point':
+      return [x, y];
+    case 'MultiPoint':
+      return [
+        [x, y],
+        [x + 0.5, y + 0.5],
+      ];
+    case 'LineString':
+      return [
+        [x, y],
+        [x + 1, y + 0.5],
+        [x + 1.5, y + 1],
+      ];
+    case 'MultiLineString':
+      return [
+        [
+          [x, y],
+          [x + 1, y],
+        ],
+        [
+          [x, y + 1],
+          [x + 1, y + 1],
+        ],
+      ];
+    case 'Polygon':
+      return [square(x, y, 1.5), square(x + 0.5, y + 0.5, 0.25).reverse()];
+    case 'MultiPolygon':
+      return [[square(x, y, 0.5)], [square(x + 1, y + 1, 0.5)]];
+  }
+}
+
+/** The properties of row `i` (some with createdZoom) */
+function propertiesOf(i: number): Record<string, string | number> {
+  const properties: Record<string, string | number> = { cls: CLASSES[i % 3], value: i };
+  if (i % 4 === 0) properties.createdZoom = 12;
+  return properties;
+}
+
 /** Rows of every geometry type (a few without a geometry, some with createdZoom) */
 function rowsOf(type: DatasetColumnarGeometryType, count = 30): Row[] {
   const rows: Row[] = [];
   for (let i = 0; i < count; i++) {
-    const x = (i % 6) * 2;
-    const y = Math.floor(i / 6) * 2;
-    const properties: Record<string, string | number> = { cls: CLASSES[i % 3], value: i };
-    if (i % 4 === 0) properties.createdZoom = 12;
-    let geometry: Geometry | null;
-    switch (type) {
-      case 'Point':
-        geometry = [x, y];
-        break;
-      case 'MultiPoint':
-        geometry = [
-          [x, y],
-          [x + 0.5, y + 0.5],
-        ];
-        break;
-      case 'LineString':
-        geometry = [
-          [x, y],
-          [x + 1, y + 0.5],
-          [x + 1.5, y + 1],
-        ];
-        break;
-      case 'MultiLineString':
-        geometry = [
-          [
-            [x, y],
-            [x + 1, y],
-          ],
-          [
-            [x, y + 1],
-            [x + 1, y + 1],
-          ],
-        ];
-        break;
-      case 'Polygon':
-        geometry = [square(x, y, 1.5), square(x + 0.5, y + 0.5, 0.25).reverse()];
-        break;
-      case 'MultiPolygon':
-        geometry = [[square(x, y, 0.5)], [square(x + 1, y + 1, 0.5)]];
-        break;
-    }
-    if (i % 7 === 3) geometry = null;
-    rows.push({ geometry, properties });
+    rows.push({ geometry: i % 7 === 3 ? null : geometryOf(type, i), properties: propertiesOf(i) });
   }
   return rows;
 }
@@ -608,6 +624,278 @@ describe('the style of a row', () => {
     expect(second.properties.cls).toBeNull();
     expect((second.style as FeatureStyle).pointColor).toBe(
       RULE.kind === 'categorical' && RULE.other,
+    );
+  });
+});
+
+// === A mixed geometry column ===
+
+/** A row of a mixed table, and how a row without a geometry says so */
+interface MixedRow extends Row {
+  type: DatasetColumnarGeometryType;
+  /** No child (a negative type), or a geometry in its child hidden by a 0 bit of validity */
+  missing?: 'type' | 'validity';
+}
+
+/** Rows of every type in turn (a few without a geometry, in both ways) */
+function mixedRows(count = 36, typeOf = (i: number) => TYPES[i % TYPES.length]): MixedRow[] {
+  const rows: MixedRow[] = [];
+  for (let i = 0; i < count; i++) {
+    const type = typeOf(i);
+    const missing = i % 7 === 3 ? (i % 2 === 1 ? 'type' : 'validity') : undefined;
+    rows.push({
+      type,
+      geometry: missing ? null : geometryOf(type, i),
+      properties: propertiesOf(i),
+      missing,
+    });
+  }
+  return rows;
+}
+
+/** A geometry column with a z value after every coordinate */
+function withZ(geometry: DatasetColumnarGeometry): DatasetColumnarGeometry {
+  const xy = geometry.coords;
+  const xyz = new Float64Array((xy.length / 2) * 3);
+  for (let v = 0; v < xy.length / 2; v++) {
+    xyz[v * 3] = xy[v * 2];
+    xyz[v * 3 + 1] = xy[v * 2 + 1];
+    xyz[v * 3 + 2] = 99;
+  }
+  return { ...geometry, coords: xyz, dimensions: 3 };
+}
+
+/**
+ * Encodes the rows as a table with a mixed geometry column
+ *
+ * The children are filled from the last row to the first, so the order within a child is not the
+ * order of the table. The MultiLineString child has z values.
+ */
+function toMixed(rows: MixedRow[]): DatasetColumnarInput {
+  const childOfType = new Map<DatasetColumnarGeometryType, number>();
+  const childRows: Row[][] = [];
+  const childTypes: DatasetColumnarGeometryType[] = [];
+  const types = new Int8Array(rows.length);
+  const offsets = new Int32Array(rows.length);
+  const validity = new Uint8Array(Math.ceil(rows.length / 8));
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (row.missing !== 'validity' && row.missing !== 'type') validity[i >> 3] |= 1 << (i & 7);
+    if (row.missing === 'type') {
+      types[i] = -1;
+      continue;
+    }
+    let child = childOfType.get(row.type);
+    if (child === undefined) {
+      child = childRows.length;
+      childOfType.set(row.type, child);
+      childRows.push([]);
+      childTypes.push(row.type);
+    }
+    types[i] = child;
+    offsets[i] = childRows[child].length;
+    // A row hidden by validity still has a geometry in its child
+    childRows[child].push({ geometry: row.geometry ?? geometryOf(row.type, i), properties: {} });
+  }
+  const children = childTypes.map((type, k) => {
+    const geometry = toColumnar(type, childRows[k]).geometry;
+    return type === 'MultiLineString' ? withZ(geometry) : geometry;
+  });
+  return {
+    length: rows.length,
+    geometry: { type: 'Mixed', types, offsets, children },
+    validity,
+    ...attributesOf(rows),
+  };
+}
+
+describe('a mixed geometry column behaves as the same features', () => {
+  const style = {
+    styleRule: RULE,
+    baseStyle: {
+      point: { pointRadius: 5 },
+      stroke: { strokeWidth: 3 },
+      fill: { fillOpacity: 0.4 },
+    },
+  };
+
+  it('draws the same polygons, lines and points in the order of the table', () => {
+    const rows = mixedRows();
+    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...style });
+    const columnar = drawDataset({ id: 'c', columnar: toMixed(rows), ...style });
+
+    expect(columnar.recorded.polygons).toEqual(features.recorded.polygons);
+    expect(columnar.recorded.lines).toEqual(features.recorded.lines);
+    expect(columnar.recorded.points).toEqual(features.recorded.points);
+    expect(columnar.recorded.immediate).toEqual(features.recorded.immediate);
+    expect(features.recorded.polygons.length).toBeGreaterThan(0);
+    expect(features.recorded.lines.length).toBeGreaterThan(0);
+    expect(features.recorded.points.length).toBeGreaterThan(0);
+  });
+
+  it('sends the dashed lines and outlines to immediate mode as the same features', () => {
+    const rows = mixedRows();
+    const dashed = { styleRule: RULE, baseStyle: { stroke: { lineStyle: 'dashed' as const } } };
+    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...dashed });
+    const columnar = drawDataset({ id: 'c', columnar: toMixed(rows), ...dashed });
+    expect(columnar.recorded.immediate.length).toBeGreaterThan(0);
+    expect(columnar.recorded.immediate).toEqual(features.recorded.immediate);
+    expect(columnar.recorded.lines).toEqual(features.recorded.lines);
+    expect(columnar.recorded.points).toEqual(features.recorded.points);
+  });
+
+  it('draws the same with the prepared arrays of a Worker', () => {
+    const input = toMixed(mixedRows());
+    const withPrepared = drawDataset({
+      id: 'c',
+      columnar: input,
+      prepared: prepareDatasetColumnar(input),
+      ...style,
+    });
+    const without = drawDataset({ id: 'c', columnar: input, ...style });
+    expect(withPrepared.recorded).toEqual(without.recorded);
+  });
+
+  it('a hit returns the same feature and its row', () => {
+    const rows = mixedRows();
+    const manager = createManager();
+    manager.add({ id: 'f', features: toFeatures('Point', rows), interactive: true });
+    const columnar = createManager();
+    columnar.add({ id: 'c', columnar: toMixed(rows), interactive: true });
+    /** A test that hits a feature whose bbox, grown by 0.25, holds the position */
+    const nearBbox = (feature: Feature, coordinate: Coordinate): boolean => {
+      const flat = (feature.coordinates as unknown as number[]).flat(3) as number[];
+      const xs = flat.filter((_, i) => i % 2 === 0);
+      const ys = flat.filter((_, i) => i % 2 === 1);
+      return (
+        coordinate[0] >= Math.min(...xs) - 0.25 &&
+        coordinate[0] <= Math.max(...xs) + 0.25 &&
+        coordinate[1] >= Math.min(...ys) - 0.25 &&
+        coordinate[1] <= Math.max(...ys) + 0.25
+      );
+    };
+
+    let hits = 0;
+    const types = new Set<string>();
+    for (let y = 0; y < 6; y++) {
+      for (let x = 0; x < 6; x++) {
+        const probe: Coordinate = [x * 2 + 0.2, y * 2 + 0.2];
+        const a = manager.hitTestSide('below-store', probe, 0.3, nearBbox);
+        const b = columnar.hitTestSide('below-store', probe, 0.3, nearBbox);
+        expect(b?.feature).toEqual(a?.feature);
+        if (b?.feature) {
+          hits++;
+          types.add(b.feature.type);
+          expect(b.row).toBe(Number(b.feature.id.slice(1)));
+        }
+      }
+    }
+    // Every type is hit, and the rows without a geometry are not
+    expect(types.size).toBe(TYPES.length);
+    expect(hits).toBe(rows.filter((row) => row.geometry !== null).length);
+  });
+
+  it('getFeatures, collectVisible and the selection match the features', () => {
+    const rows = mixedRows();
+    const manager = createManager();
+    const a = manager.add({ id: 'f', features: toFeatures('Point', rows), styleRule: RULE });
+    const b = manager.add({ id: 'c', columnar: toMixed(rows), styleRule: RULE });
+
+    expect(b.getFeatures()).toEqual(a.getFeatures());
+    expect(b.getFeatures().length).toBe(rows.filter((row) => row.geometry !== null).length);
+    const view: BoundingBox = { minX: 1, minY: 1, maxX: 7, maxY: 5 };
+    expect(b.collectVisible(view)).toEqual(a.collectVisible(view));
+
+    // r3 has no child, r10 is hidden by validity
+    b.setSelectedIds(['r8', 'r1', 'r3', 'r10', 'r4', 'nope']);
+    a.setSelectedIds(['r8', 'r1', 'r3', 'r10', 'r4', 'nope']);
+    expect(b.getSelectedIds()).toEqual(['r1', 'r4', 'r8']);
+    expect(b.getSelectedIds()).toEqual(a.getSelectedIds());
+  });
+
+  it('thins the points among the other rows as the features do', () => {
+    const rows = mixedRows(40, (i) => (i % 3 === 2 ? 'LineString' : 'Point')).map((row, i) =>
+      row.type === 'Point' && row.geometry
+        ? { ...row, geometry: [i * 0.0001, 0] as Geometry }
+        : row,
+    );
+    const options = { collisionThinning: { enabled: true }, styleRule: RULE };
+    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...options });
+    const columnar = drawDataset({ id: 'c', columnar: toMixed(rows), ...options });
+    const a = features.manager.get('c');
+    const b = columnar.manager.get('c');
+    // The total of a table counts its rows without a geometry too (as for a table of one type)
+    expect(b?.getThinningStats()).toEqual({ ...a?.getThinningStats(), total: rows.length });
+    expect(a?.getThinningStats().visible).toBeLessThan(a?.getThinningStats().total ?? 0);
+    expect([...(b?.getVisibleFeatureIds() ?? [])].sort()).toEqual(
+      [...(a?.getVisibleFeatureIds() ?? [])].sort(),
+    );
+    expect(columnar.recorded.points).toEqual(features.recorded.points);
+    expect(columnar.recorded.lines).toEqual(features.recorded.lines);
+  });
+
+  it('the terrain drape gets the same features, and nothing from points alone', () => {
+    const rows = mixedRows();
+    const points = mixedRows(12, (i) => (i % 2 === 0 ? 'Point' : 'MultiPoint'));
+    const manager = createManager();
+    manager.add({ id: 'f', features: toFeatures('Point', rows), styleRule: RULE });
+    manager.add({ id: 'c', columnar: toMixed(rows), styleRule: RULE });
+    manager.add({ id: 'p', columnar: toMixed(points) });
+    const drape = (id: string) => manager.getInternal(id)?.drapeFeatures();
+    expect(drape('c')).toEqual(drape('f'));
+    expect(drape('c')?.some((feature) => feature.type === 'MultiPolygon')).toBe(true);
+    expect(drape('p')).toEqual([]);
+  });
+
+  it('an external point renderer claims the Point rows and never sees a MultiPoint', () => {
+    for (const [name, rows, input] of [
+      ['one type', rowsOf('MultiPoint'), toColumnar('MultiPoint', rowsOf('MultiPoint'))],
+      [
+        'mixed',
+        mixedRows(36, (i) => (i % 2 === 0 ? 'Point' : 'MultiPoint')),
+        toMixed(mixedRows(36, (i) => (i % 2 === 0 ? 'Point' : 'MultiPoint'))),
+      ],
+    ] as const) {
+      const seen = { features: new Set<string>(), columnar: new Set<string>() };
+      const predicate =
+        (into: Set<string>) =>
+        (feature: Feature): boolean => {
+          into.add(feature.type);
+          return true;
+        };
+      const features = drawDataset({
+        id: 'c',
+        features: toFeatures('MultiPoint', rows as Row[]),
+        externalPointRender: predicate(seen.features),
+      });
+      const columnar = drawDataset({
+        id: 'c',
+        columnar: input,
+        externalPointRender: predicate(seen.columnar),
+      });
+      expect(columnar.recorded.points, name).toEqual(features.recorded.points);
+      expect(columnar.recorded.immediate, name).toEqual(features.recorded.immediate);
+      expect(features.recorded.points.length, name).toBeGreaterThan(0);
+      // Both paths hand the predicate the Point rows only
+      expect([...seen.columnar], name).toEqual([...seen.features]);
+      expect(seen.columnar.has('MultiPoint'), name).toBe(false);
+    }
+  });
+
+  it('refuses a row that names a missing child or a row past the end of its child', () => {
+    const manager = createManager();
+    const dataset = manager.add({ id: 'c' });
+    const input = toMixed(mixedRows(12));
+    const geometry = input.geometry as DatasetColumnarMixedGeometry;
+    const types = geometry.types.slice();
+    types[5] = 9;
+    expect(() => dataset.setColumnar({ ...input, geometry: { ...geometry, types } })).toThrow(
+      /geometry\.types\[5\] is 9/,
+    );
+    const offsets = geometry.offsets.slice();
+    offsets[4] = 100;
+    expect(() => dataset.setColumnar({ ...input, geometry: { ...geometry, offsets } })).toThrow(
+      /geometry\.offsets\[4\] is 100/,
     );
   });
 });

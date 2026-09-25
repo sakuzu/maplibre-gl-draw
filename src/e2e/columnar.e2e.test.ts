@@ -7,7 +7,8 @@
  * The same rows are drawn once as features and once as a columnar table (with and without the
  * arrays of `prepareDatasetColumnar`), on the real maplibre and WebGL of the browser. The pictures
  * must be the same pixel for pixel, and a click with the real pointer must report the same
- * feature and row.
+ * feature and row. The mixed kind puts points, lines, polygons and two-part lines in one table
+ * with a mixed geometry column.
  */
 
 import type { Browser, Page } from 'playwright-core';
@@ -36,7 +37,7 @@ afterAll(async () => {
   await browser?.close();
 });
 
-type Kind = 'points' | 'lines' | 'polygons';
+type Kind = 'points' | 'lines' | 'polygons' | 'mixed';
 
 /**
  * Builds the rows of a kind in the page (as features and as a table), and the helpers that draw
@@ -81,18 +82,105 @@ async function installRows(page: Page): Promise<void> {
       return rows;
     };
     const typeOf = (kind: string) =>
-      kind === 'points' ? 'Point' : kind === 'lines' ? 'LineString' : 'Polygon';
+      kind === 'points'
+        ? 'Point'
+        : kind === 'lines'
+          ? 'LineString'
+          : kind === 'multilines'
+            ? 'MultiLineString'
+            : 'Polygon';
+    /** The kind of row `i` of the mixed table */
+    const MIXED = ['points', 'lines', 'polygons', 'multilines'];
+    /** The coordinates of a row of a kind (a two-part line adds a copy of the line above it) */
+    const coordinatesOf = (kind: string, coords: number[][]) =>
+      kind === 'points'
+        ? coords[0]
+        : kind === 'lines'
+          ? coords
+          : kind === 'multilines'
+            ? [coords, coords.map(([x, y]) => [x, y + 0.0012])]
+            : [coords];
 
-    w.featuresOf = (kind: string) =>
-      rowsOf(kind).map((row, i) => ({
-        id: `r${i}`,
-        type: typeOf(kind),
-        coordinates:
-          kind === 'points' ? row.coords[0] : kind === 'lines' ? row.coords : [row.coords],
-        properties: { cls: CLASSES[row.cls], value: row.value },
+    w.featuresOf = (kind: string) => {
+      const rowsOfKind: Record<string, ReturnType<typeof rowsOf>> = {};
+      const kindOf = (i: number) => (kind === 'mixed' ? MIXED[i % MIXED.length] : kind);
+      return Array.from({ length: 400 }, (_, i) => {
+        const k = kindOf(i);
+        rowsOfKind[k] ??= rowsOf(k === 'multilines' ? 'lines' : k);
+        const row = rowsOfKind[k][i];
+        return {
+          id: `r${i}`,
+          type: typeOf(k),
+          coordinates: coordinatesOf(k, row.coords),
+          properties: { cls: CLASSES[row.cls], value: row.value },
+        };
+      });
+    };
+
+    /**
+     * The mixed table: one child per kind, filled from the last row to the first (the order
+     * within a child is not the order of the table)
+     */
+    const mixedTableOf = () => {
+      const features = (w.featuresOf as (k: string) => Array<Record<string, unknown>>)('mixed');
+      const children = MIXED.map((kind) => ({
+        kind,
+        coords: [] as number[],
+        rowOffsets: [0],
+        partOffsets: [0],
+        rows: 0,
       }));
+      const types = new Int8Array(features.length);
+      const offsets = new Int32Array(features.length);
+      for (let i = features.length - 1; i >= 0; i--) {
+        const k = i % MIXED.length;
+        const child = children[k];
+        types[i] = k;
+        offsets[i] = child.rows++;
+        const coordinates = features[i].coordinates as never;
+        if (child.kind === 'points') {
+          child.coords.push(...(coordinates as number[]));
+          continue;
+        }
+        const parts: number[][][] = child.kind === 'lines' ? [coordinates] : coordinates;
+        for (const part of parts) {
+          for (const c of part) child.coords.push(c[0], c[1]);
+          child.partOffsets.push(child.coords.length / 2);
+        }
+        child.rowOffsets.push(child.partOffsets.length - 1);
+      }
+      return {
+        length: features.length,
+        geometry: {
+          type: 'Mixed',
+          types,
+          offsets,
+          children: children.map((child) => ({
+            type: typeOf(child.kind),
+            coords: Float64Array.from(child.coords),
+            offsets:
+              child.kind === 'points'
+                ? []
+                : child.kind === 'lines'
+                  ? [Int32Array.from(child.partOffsets)]
+                  : [Int32Array.from(child.rowOffsets), Int32Array.from(child.partOffsets)],
+          })),
+        },
+        ids: features.map((f) => f.id),
+        columns: {
+          cls: {
+            codes: Int32Array.from(features, (f) =>
+              CLASSES.indexOf((f.properties as { cls: string }).cls),
+            ),
+            dictionary: CLASSES,
+          },
+          value: Float64Array.from(features, (f) => (f.properties as { value: number }).value),
+        },
+      };
+    };
 
     w.tableOf = (kind: string) => {
+      if (kind === 'mixed') return mixedTableOf();
       const rows = rowsOf(kind);
       const coords: number[] = [];
       const rowOffsets = [0];
@@ -272,9 +360,11 @@ describe('the columnar input on a real map', () => {
     points: [139.66 + 7 * 0.004, 35.655 + 2 * 0.0025],
     lines: [139.66 + 7 * 0.004 + 0.001, 35.655 + 2 * 0.0025 + 0.0005],
     polygons: [139.66 + 7 * 0.004 + 0.0015, 35.655 + 2 * 0.0025 + 0.001],
+    // Row 47 is a two-part line whose first part is the line of the lines kind
+    mixed: [139.66 + 7 * 0.004 + 0.001, 35.655 + 2 * 0.0025 + 0.0005],
   };
 
-  for (const kind of ['points', 'lines', 'polygons'] as const) {
+  for (const kind of ['points', 'lines', 'polygons', 'mixed'] as const) {
     it(`${kind}: the same pixels and the same clicked row as the features`, {
       timeout: 90_000,
     }, async () => {

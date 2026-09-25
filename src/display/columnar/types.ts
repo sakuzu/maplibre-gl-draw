@@ -11,7 +11,8 @@
  */
 
 /**
- * The geometry type of a columnar table. A table holds one type.
+ * The geometry type of a geometry column of a single type. A table whose rows have different
+ * types gives a {@link DatasetColumnarMixedGeometry}, made of columns of these types.
  */
 export type DatasetColumnarGeometryType =
   | 'Point'
@@ -66,6 +67,54 @@ export interface DatasetColumnarGeometry {
   dimensions?: 2 | 3;
   /** The offset arrays, outermost first (see the table above). Omitted or empty for Point */
   offsets?: Int32Array[];
+}
+
+/**
+ * The geometry column of a table whose rows have different geometry types, in the layout of the
+ * mixed geometry of GeoArrow (a dense union of Arrow): a geometry column of a single type per
+ * child, and for every row of the table the child and the row within it.
+ *
+ * The geometry of row `i` is row `offsets[i]` of `children[types[i]]`, and row `i` behaves exactly
+ * as the feature of that child's type with those coordinates. The rows of a child can be in any
+ * order; the draw order is the order of the table rows. A row with a negative `types[i]` has no
+ * geometry (as a 0 bit in {@link DatasetColumnarInput.validity}, which still applies on top). The
+ * number of rows of a child is read from its arrays: the coordinates for a Point column,
+ * `offsets[0].length - 1` for the others.
+ *
+ * @example A point, a line and a polygon, the polygon first in the table
+ * ```ts
+ * const geometry: DatasetColumnarMixedGeometry = {
+ *   type: 'Mixed',
+ *   types: new Int8Array([2, 0, 1]),
+ *   offsets: new Int32Array([0, 0, 0]),
+ *   children: [
+ *     { type: 'Point', coords: new Float64Array([139.70, 35.68]) },
+ *     {
+ *       type: 'LineString',
+ *       coords: new Float64Array([139.71, 35.69, 139.72, 35.70]),
+ *       offsets: [new Int32Array([0, 2])],
+ *     },
+ *     {
+ *       type: 'Polygon',
+ *       coords: new Float64Array([139.73, 35.66, 139.75, 35.66, 139.75, 35.68, 139.73, 35.66]),
+ *       offsets: [new Int32Array([0, 1]), new Int32Array([0, 4])],
+ *     },
+ *   ],
+ * };
+ * ```
+ */
+export interface DatasetColumnarMixedGeometry {
+  /** Marks the mixed form */
+  type: 'Mixed';
+  /**
+   * For every row, the child column that holds its geometry (an index into `children`; negative
+   * for a row without a geometry)
+   */
+  types: Int8Array;
+  /** For every row, the row within its child column */
+  offsets: Int32Array;
+  /** The geometry columns of a single type */
+  children: DatasetColumnarGeometry[];
 }
 
 /**
@@ -128,8 +177,10 @@ export type DatasetColumn =
  *
  * Row `i` behaves as the feature `{ id, type: geometry.type, coordinates, properties }` where
  * `coordinates` are read from the geometry column, `properties` holds the value of every column at
- * row `i`, and `id` is `String(ids[i])` (or `String(i)` without `ids`). The rows have no
- * individual style; the style rule and the base style of the dataset color them.
+ * row `i`, and `id` is `String(ids[i])` (or `String(i)` without `ids`). With a
+ * {@link DatasetColumnarMixedGeometry}, `type` and `coordinates` are those of the row's child
+ * column. The rows have no individual style; the style rule and the base style of the dataset
+ * color them.
  *
  * @example
  * ```ts
@@ -150,8 +201,11 @@ export type DatasetColumn =
 export interface DatasetColumnarInput {
   /** The number of rows */
   length: number;
-  /** The geometry column */
-  geometry: DatasetColumnarGeometry;
+  /**
+   * The geometry column: of one type, or {@link DatasetColumnarMixedGeometry} for rows of
+   * different types
+   */
+  geometry: DatasetColumnarGeometry | DatasetColumnarMixedGeometry;
   /**
    * Which rows have a geometry, as the validity bitmap of Arrow: bit `i % 8` of byte `i >> 3` (the
    * lowest bit first) is 1 for a row with a geometry. Every row has one when omitted

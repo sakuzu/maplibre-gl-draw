@@ -15,7 +15,12 @@
 import { buildPackedRTree } from '../packed-rtree.js';
 import { partitionRows } from '../partition.js';
 import { ColumnarTable, isDictionaryColumn } from './table.js';
-import type { DatasetColumn, DatasetColumnarInput, DatasetColumnarPrepared } from './types.js';
+import type {
+  DatasetColumn,
+  DatasetColumnarGeometry,
+  DatasetColumnarInput,
+  DatasetColumnarPrepared,
+} from './types.js';
 
 /**
  * Computes the bboxes, the spatial chunks and the spatial index of a columnar table.
@@ -62,7 +67,8 @@ export function prepareDatasetColumnar(input: DatasetColumnarInput): DatasetColu
  * Lists the buffers of a columnar table (and of its prepared arrays) for the transfer list of
  * `postMessage`, so that they move to the other thread without a copy.
  *
- * Each buffer appears once, even when several arrays share it. A `SharedArrayBuffer` is left out
+ * The geometry arrays of every child of a mixed geometry column are listed too. Each buffer
+ * appears once, even when several arrays share it. A `SharedArrayBuffer` is left out
  * (it is shared, not moved). After the transfer the arrays are empty on the sending side.
  *
  * @param input The table
@@ -88,8 +94,19 @@ export function columnarTransferables(
     else if (ArrayBuffer.isView(column)) add(column);
   };
 
-  add(input.geometry.coords);
-  for (const offsets of input.geometry.offsets ?? []) add(offsets);
+  const addGeometry = (geometry: DatasetColumnarGeometry): void => {
+    add(geometry.coords);
+    for (const offsets of geometry.offsets ?? []) add(offsets);
+  };
+
+  const geometry = input.geometry;
+  if (geometry.type === 'Mixed') {
+    add(geometry.types);
+    add(geometry.offsets);
+    for (const child of geometry.children) addGeometry(child);
+  } else {
+    addGeometry(geometry);
+  }
   add(input.validity);
   addColumn(input.ids);
   for (const column of Object.values(input.columns ?? {})) addColumn(column);

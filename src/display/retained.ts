@@ -116,6 +116,11 @@ export class PackedPointsBuilder {
 /**
  * Lines packed into growing typed arrays; the coordinates stay in the buffer they come from
  *
+ * While every line comes from one buffer, the lines are read from it without a copy. When a line
+ * comes from another buffer (a table whose rows are read from geometry columns of several types),
+ * the coordinates of the lines pushed so far and of every later line are copied into a buffer of
+ * the builder, in the same order, so the lines read the same values.
+ *
  * @internal
  */
 export class PackedLinesBuilder {
@@ -125,11 +130,12 @@ export class PackedLinesBuilder {
   private strokeWidth = new Float64Array(64);
   private createdZoom = new Float64Array(64);
   private color = new Float64Array(256);
-
-  constructor(
-    private readonly coords: Float64Array,
-    private readonly stride: number,
-  ) {}
+  /** The buffer the lines are read from (null before the first line) */
+  private coords: Float64Array | null = null;
+  /** The number of values per coordinate in `coords` */
+  private stride = 2;
+  /** The coordinates written into the buffer of the builder (-1 while it reads the caller's) */
+  private copied = -1;
 
   /** The number of lines pushed */
   get count(): number {
@@ -137,18 +143,32 @@ export class PackedLinesBuilder {
   }
 
   /**
-   * Pushes a line: the coordinates `[start, end)` of the buffer
+   * Pushes a line: the coordinates `[start, end)` of a buffer
    *
+   * @param coords The buffer of the coordinates (interleaved)
+   * @param stride The number of values per coordinate in `coords` (2 or 3)
    * @param strokeWidth The width in CSS px with the sign convention of `LineBatchItemBase`
    * @param color The instance color (`toLineInstanceColor`)
    */
   push(
+    coords: Float64Array,
+    stride: number,
     start: number,
     end: number,
     strokeWidth: number,
     createdZoom: number,
     color: ArrayLike<number>,
   ): void {
+    if (this.coords === null) {
+      this.coords = coords;
+      this.stride = stride;
+    } else if (this.copied >= 0 || coords !== this.coords || stride !== this.stride) {
+      if (this.copied < 0) this.copyPushed();
+      const at = this.append(coords, stride, start, end);
+      end = at + (end - start);
+      start = at;
+    }
+
     const i = this.size;
     if (i + 1 > this.start.length) {
       this.start = grow(this.start, i + 1);
@@ -172,7 +192,7 @@ export class PackedLinesBuilder {
   view(): PackedLineItems {
     return {
       count: this.size,
-      coords: this.coords,
+      coords: this.coords ?? new Float64Array(0),
       stride: this.stride,
       start: this.start,
       end: this.end,
@@ -180,6 +200,44 @@ export class PackedLinesBuilder {
       createdZoom: this.createdZoom,
       color: this.color,
     };
+  }
+
+  /** Moves the coordinates of the lines pushed so far into a buffer of the builder */
+  private copyPushed(): void {
+    const from = this.coords as Float64Array;
+    const stride = this.stride;
+    let total = 0;
+    for (let i = 0; i < this.size; i++) total += this.end[i] - this.start[i];
+    this.coords = new Float64Array(Math.max(256, total * 4));
+    this.stride = 2;
+    this.copied = 0;
+    for (let i = 0; i < this.size; i++) {
+      const at = this.append(from, stride, this.start[i], this.end[i]);
+      this.end[i] = at + (this.end[i] - this.start[i]);
+      this.start[i] = at;
+    }
+  }
+
+  /**
+   * Appends the coordinates `[start, end)` of a buffer to the buffer of the builder
+   *
+   * @returns Where they start in the buffer of the builder
+   */
+  private append(from: Float64Array, stride: number, start: number, end: number): number {
+    const at = this.copied;
+    const next = at + (end - start);
+    let coords = this.coords as Float64Array;
+    if (next * 2 > coords.length) {
+      coords = grow(coords, next * 2);
+      this.coords = coords;
+    }
+    for (let v = start; v < end; v++) {
+      const to = (at + v - start) * 2;
+      coords[to] = from[v * stride];
+      coords[to + 1] = from[v * stride + 1];
+    }
+    this.copied = next;
+    return at;
   }
 }
 

@@ -28,8 +28,9 @@ The package has three entry points.
   depend on maplibre-gl, the DOM or the instance, so they also run in
   Node and in workers
 - `@sakuzu/maplibre-gl-draw/columnar` — the preparation of a columnar
-  table for a dataset (`prepareDatasetColumnar`) and the
-  list of its buffers for `postMessage` (`columnarTransferables`). It
+  table for a dataset (`prepareDatasetColumnar`), whose rows have one
+  geometry type or several, and the list of its buffers for
+  `postMessage` (`columnarTransferables`). It
   depends on neither maplibre-gl nor WebGL nor the DOM, so a Worker that
   reads a file can use it
 

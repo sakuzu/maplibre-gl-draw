@@ -11,9 +11,15 @@
  * asked for (a hit, the selection, `getFeatures`, the analytic drape, a row drawn in immediate
  * mode).
  *
- * The styles are resolved once per rule color, not per row: the rows have no individual style, so
- * two rows with the same rule color look the same. The resolution goes through the same styler
- * and the same resolver as the features, so a row looks exactly as its feature would.
+ * The styles are resolved once per geometry type and rule color, not per row: the rows have no
+ * individual style, so two rows of the same type with the same rule color look the same. The
+ * resolution goes through the same styler and the same resolver as the features, so a row looks
+ * exactly as its feature would.
+ *
+ * A row is read from the geometry column that holds it: the one column of a table of one type, or
+ * the child of a mixed geometry column that the row names, at the row within that child. Each row
+ * is collected as its type is (the decisions of `collectFeature`), so the rows of a mixed table
+ * are drawn in the order of the table whatever the order within the children.
  */
 
 import type { Feature } from '../../shared/types/model.js';
@@ -44,8 +50,17 @@ import { DisplaySpatialIndex } from '../spatial.js';
 import type { DisplayFeatureStyler } from '../style.js';
 import type { ThinningRole } from '../thinning.js';
 import { prepareDatasetColumnar } from './prepare.js';
-import { ColumnarTable, columnValue, isDictionaryColumn } from './table.js';
-import type { DatasetColumnarInput, DatasetColumnarPrepared } from './types.js';
+import {
+  type ColumnarGeometryColumn,
+  ColumnarTable,
+  columnValue,
+  isDictionaryColumn,
+} from './table.js';
+import type {
+  DatasetColumnarGeometryType,
+  DatasetColumnarInput,
+  DatasetColumnarPrepared,
+} from './types.js';
 
 /** The column the zoom of creation of a row is read from (the same key as on a feature) */
 const CREATED_ZOOM_COLUMN = 'createdZoom';
@@ -79,13 +94,26 @@ interface PolygonSlot {
   scaledStyle: SDFPolygonStyle;
 }
 
+/** The slots of one kind of style, per geometry type and then per rule color */
+type SlotMaps<T> = Map<DatasetColumnarGeometryType, Map<string, T>>;
+
+/** The slots of a geometry type (created on the first request) */
+function slotsOfType<T>(maps: SlotMaps<T>, type: DatasetColumnarGeometryType): Map<string, T> {
+  let slots = maps.get(type);
+  if (!slots) {
+    slots = new Map();
+    maps.set(type, slots);
+  }
+  return slots;
+}
+
 /**
- * The styles of the rows of a table, resolved once per rule color
+ * The styles of the rows of a table, resolved once per geometry type and rule color
  */
 class ColumnarStyleSlots {
-  private readonly points = new Map<string, PointSlot>();
-  private readonly lines = new Map<string, LineSlot>();
-  private readonly polygons = new Map<string, PolygonSlot>();
+  private readonly points: SlotMaps<PointSlot> = new Map();
+  private readonly lines: SlotMaps<LineSlot> = new Map();
+  private readonly polygons: SlotMaps<PolygonSlot> = new Map();
   /** The rule color of each code, when the rule reads a dictionary column */
   private readonly codeColors: (string | undefined)[] = [];
 
@@ -118,33 +146,36 @@ class ColumnarStyleSlots {
     return evaluateStyleRuleValue(rule, columnValue(column, row));
   }
 
-  point(color: string | null): PointSlot {
+  point(type: DatasetColumnarGeometryType, color: string | null): PointSlot {
     const key = color ?? NO_RULE_COLOR;
-    let slot = this.points.get(key);
+    const slots = slotsOfType(this.points, type);
+    let slot = slots.get(key);
     if (!slot) {
-      const style = this.resolver.getPointStyle(this.probe(color));
+      const style = this.resolver.getPointStyle(this.probe(type, color));
       slot = { shape: toInstancedPointShape(style.shape), packed: toPackedPointStyle(style) };
-      this.points.set(key, slot);
+      slots.set(key, slot);
     }
     return slot;
   }
 
-  line(color: string | null): LineSlot {
+  line(type: DatasetColumnarGeometryType, color: string | null): LineSlot {
     const key = color ?? NO_RULE_COLOR;
-    let slot = this.lines.get(key);
+    const slots = slotsOfType(this.lines, type);
+    let slot = slots.get(key);
     if (!slot) {
-      const stroke = this.resolver.getLineStringStrokeStyle(this.probe(color));
+      const stroke = this.resolver.getLineStringStrokeStyle(this.probe(type, color));
       slot = { stroke, color: toLineInstanceColor(stroke.color, stroke.opacity) };
-      this.lines.set(key, slot);
+      slots.set(key, slot);
     }
     return slot;
   }
 
-  polygon(color: string | null): PolygonSlot {
+  polygon(type: DatasetColumnarGeometryType, color: string | null): PolygonSlot {
     const key = color ?? NO_RULE_COLOR;
-    let slot = this.polygons.get(key);
+    const slots = slotsOfType(this.polygons, type);
+    let slot = slots.get(key);
     if (!slot) {
-      const { fillColor, strokeStyle } = this.resolver.getPolygonStyles(this.probe(color));
+      const { fillColor, strokeStyle } = this.resolver.getPolygonStyles(this.probe(type, color));
       const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
       const styleFor = (strokeWidth: number): SDFPolygonStyle => ({
         fillColor,
@@ -160,14 +191,13 @@ class ColumnarStyleSlots {
         fixedStyle: styleFor(hasStroke ? -strokeStyle.width : 0),
         scaledStyle: styleFor(hasStroke ? strokeStyle.width : 0),
       };
-      this.polygons.set(key, slot);
+      slots.set(key, slot);
     }
     return slot;
   }
 
-  /** A feature of the table's type carrying the style a row with this rule color gets */
-  private probe(color: string | null): Feature {
-    const type = this.table.type;
+  /** A feature of a geometry type carrying the style a row with this rule color gets */
+  private probe(type: DatasetColumnarGeometryType, color: string | null): Feature {
     return {
       id: '',
       type,
@@ -266,11 +296,12 @@ export class ColumnarSource implements DisplaySource {
 
   thinningRole(row: number): ThinningRole {
     if (!this.hasGeometry(row)) return 'skip';
-    return this.table.type === 'Point' ? 'point' : 'winner';
+    return this.table.columnOf(row)?.type === 'Point' ? 'point' : 'winner';
   }
 
   pointOf(row: number): readonly [number, number] {
-    return this.table.position(row);
+    const column = this.table.columnOf(row) as ColumnarGeometryColumn;
+    return column.position(this.table.childRowOf(row));
   }
 
   styleRadiusOf(): number | undefined {
@@ -279,9 +310,10 @@ export class ColumnarSource implements DisplaySource {
 
   collector(rows: Int32Array, context: SourceCollectContext): ChunkCollector {
     const table = this.table;
-    const o = table.offsets;
-    const type = table.type;
-    const skipDraped = context.skipDrapedFills === true && isDraped(type);
+    // Whether the solid lines and polygons of each child are left to the analytic drape
+    const skipDraped = table.children.map(
+      (column) => context.skipDrapedFills === true && isDraped(column.type),
+    );
     const createdZoom = table.columns[CREATED_ZOOM_COLUMN];
     let next = 0;
     let lastFallbackRow = -1;
@@ -306,7 +338,13 @@ export class ColumnarSource implements DisplaySource {
           for (; next < end; next++) {
             const row = rows[next];
             if (!context.isDrawn(row)) continue;
-            switch (type) {
+            const child = table.childOf(row);
+            if (child < 0) continue;
+            const column = table.children[child];
+            const at = table.childRowOf(row);
+            const o = column.offsets;
+            const skip = skipDraped[child];
+            switch (column.type) {
               case 'Point':
                 // Only a point needs the feature for the predicate of the external renderer
                 if (
@@ -316,44 +354,46 @@ export class ColumnarSource implements DisplaySource {
                 ) {
                   break;
                 }
-                collect.point(row, row);
+                collect.point(row, column, at);
                 break;
               case 'MultiPoint':
-                for (let v = o[0][row]; v < o[0][row + 1]; v++) collect.point(row, v);
+                for (let v = o[0][at]; v < o[0][at + 1]; v++) collect.point(row, column, v);
                 break;
               case 'LineString':
                 if (context.pointsOnly) break;
-                collect.line(row, o[0][row], o[0][row + 1], createdZoomOf(row), skipDraped);
+                collect.line(row, column, o[0][at], o[0][at + 1], createdZoomOf(row), skip);
                 break;
               case 'MultiLineString':
                 if (context.pointsOnly) break;
-                for (let p = o[0][row]; p < o[0][row + 1]; p++) {
-                  collect.line(row, o[1][p], o[1][p + 1], createdZoomOf(row), skipDraped);
+                for (let p = o[0][at]; p < o[0][at + 1]; p++) {
+                  collect.line(row, column, o[1][p], o[1][p + 1], createdZoomOf(row), skip);
                 }
                 break;
               case 'Polygon':
                 if (context.pointsOnly) break;
                 collect.polygon(
                   row,
-                  o[0][row],
-                  o[0][row + 1],
+                  column,
+                  o[0][at],
+                  o[0][at + 1],
                   o[1],
                   0,
                   createdZoomOf(row),
-                  skipDraped,
+                  skip,
                 );
                 break;
               case 'MultiPolygon':
                 if (context.pointsOnly) break;
-                for (let p = o[0][row]; p < o[0][row + 1]; p++) {
+                for (let p = o[0][at]; p < o[0][at + 1]; p++) {
                   collect.polygon(
                     row,
+                    column,
                     o[1][p],
                     o[1][p + 1],
                     o[2],
-                    p - o[0][row],
+                    p - o[0][at],
                     createdZoomOf(row),
-                    skipDraped,
+                    skip,
                   );
                 }
                 break;
@@ -406,7 +446,7 @@ export class ColumnarSource implements DisplaySource {
 }
 
 /** Whether the analytic drape draws the rows of this type */
-function isDraped(type: ColumnarTable['type']): boolean {
+function isDraped(type: DatasetColumnarGeometryType): boolean {
   return isDrapedGeometry({ type } as Feature);
 }
 
@@ -416,20 +456,19 @@ function isDraped(type: ColumnarTable['type']): boolean {
  * The decisions are those of `collectFeature` in `retained.ts`, made on the arrays of the table.
  */
 class RowCollector {
-  private readonly table: ColumnarTable;
-
   constructor(
     private readonly source: ColumnarSource,
     private readonly draft: ChunkDraft,
     private readonly slots: ColumnarStyleSlots,
     private readonly fallback: (row: number) => void,
-  ) {
-    this.table = source.table;
-  }
+  ) {}
 
-  /** A point at coordinate `v` (a shape without instancing support goes to immediate mode) */
-  point(row: number, v: number): void {
-    const slot = this.slots.point(this.slots.ruleColorOf(row));
+  /**
+   * A point at coordinate `v` of the geometry column of the row (a shape without instancing
+   * support goes to immediate mode)
+   */
+  point(row: number, column: ColumnarGeometryColumn, v: number): void {
+    const slot = this.slots.point(column.type, this.slots.ruleColorOf(row));
     if (!slot.shape) {
       this.fallback(row);
       return;
@@ -439,20 +478,24 @@ class RowCollector {
       builder = new PackedPointsBuilder();
       this.draft.packedPoints.set(slot.shape, builder);
     }
-    const at = v * this.table.dimensions;
-    builder.push(this.table.coords[at], this.table.coords[at + 1], slot.packed);
+    const at = v * column.dimensions;
+    builder.push(column.coords[at], column.coords[at + 1], slot.packed);
   }
 
-  /** A line over the coordinates `[start, end)` (a dashed line goes to immediate mode) */
+  /**
+   * A line over the coordinates `[start, end)` of the geometry column of the row (a dashed line
+   * goes to immediate mode)
+   */
   line(
     row: number,
+    column: ColumnarGeometryColumn,
     start: number,
     end: number,
     createdZoom: number | undefined,
     skipSolid: boolean,
   ): void {
     if (end - start < 2) return;
-    const slot = this.slots.line(this.slots.ruleColorOf(row));
+    const slot = this.slots.line(column.type, this.slots.ruleColorOf(row));
     const stroke = slot.stroke;
     if (stroke.lineStyle !== 'solid') {
       this.fallback(row);
@@ -465,12 +508,14 @@ class RowCollector {
     const fixed = createdZoom === undefined;
     let builder = fixed ? draft.packedFixedLines : draft.packedScaledLines;
     if (!builder) {
-      builder = new PackedLinesBuilder(this.table.coords, this.table.dimensions);
+      builder = new PackedLinesBuilder();
       if (fixed) draft.packedFixedLines = builder;
       else draft.packedScaledLines = builder;
     }
     // A fixed line width is declared by the negative convention (as in `collectLine`)
     builder.push(
+      column.coords,
+      column.dimensions,
       start,
       end,
       fixed ? -stroke.width : stroke.width,
@@ -480,12 +525,14 @@ class RowCollector {
   }
 
   /**
-   * A polygon made of the rings `[ringStart, ringEnd)` (a dashed outline goes to immediate mode)
+   * A polygon made of the rings `[ringStart, ringEnd)` of the geometry column of the row (a dashed
+   * outline goes to immediate mode)
    *
    * @param ringOffsets The offsets from a ring to its coordinates
    */
   polygon(
     row: number,
+    column: ColumnarGeometryColumn,
     ringStart: number,
     ringEnd: number,
     ringOffsets: Int32Array,
@@ -496,7 +543,7 @@ class RowCollector {
     if (ringEnd <= ringStart) return;
     if (ringOffsets[ringStart + 1] - ringOffsets[ringStart] < 3) return;
 
-    const slot = this.slots.polygon(this.slots.ruleColorOf(row));
+    const slot = this.slots.polygon(column.type, this.slots.ruleColorOf(row));
     if (slot.hasStroke && slot.strokeStyle.lineStyle !== 'solid') {
       this.fallback(row);
       return;
@@ -507,7 +554,7 @@ class RowCollector {
 
     const rings: Array<[number, number][]> = new Array(ringEnd - ringStart);
     for (let r = ringStart; r < ringEnd; r++) {
-      rings[r - ringStart] = this.table.positions(ringOffsets[r], ringOffsets[r + 1]);
+      rings[r - ringStart] = column.positions(ringOffsets[r], ringOffsets[r + 1]);
     }
     const fixed = createdZoom === undefined;
     (fixed ? this.draft.fixedPolygons : this.draft.scaledPolygons).push({

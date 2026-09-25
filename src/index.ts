@@ -163,6 +163,7 @@ export type {
   DatasetColumnarGeometry,
   DatasetColumnarGeometryType,
   DatasetColumnarInput,
+  DatasetColumnarMixedGeometry,
   DatasetColumnarPrepared,
   DatasetDictionaryCodes,
   DatasetDictionaryColumn,

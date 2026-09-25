@@ -42,7 +42,12 @@ import type { DisplayBatchTarget } from './dataset.js';
 const terrain = new TerrainContext();
 
 import { createDatasetManager, type DatasetManager } from './manager.js';
-import { collectFeatureArray, createChunkBuildJob } from './retained.js';
+import {
+  collectFeatureArray,
+  createChunkBuildJob,
+  PackedLinesBuilder,
+  unpackLines,
+} from './retained.js';
 import type { DatasetFeatureInput, DatasetOptions } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
@@ -1221,5 +1226,58 @@ describe('the origin of a chunk seen at high zoom', () => {
     probe.built.length = 0;
     manager.draw('below-store', probe.target, {} as ProjectionData, 22);
     expect(probe.built).toEqual([]);
+  });
+});
+
+describe('the packed lines', () => {
+  const color = [1, 0, 0, 1];
+
+  it('reads the lines of one buffer without a copy', () => {
+    const coords = Float64Array.of(0, 0, 1, 1, 2, 2, 3, 3);
+    const builder = new PackedLinesBuilder();
+    builder.push(coords, 2, 0, 2, 3, 0, color);
+    builder.push(coords, 2, 2, 4, 3, 0, color);
+    expect(builder.view().coords).toBe(coords);
+    expect(unpackLines(builder.view()).map((line) => line.coords)).toEqual([
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [
+        [2, 2],
+        [3, 3],
+      ],
+    ]);
+  });
+
+  it('copies the lines in their order once they come from several buffers', () => {
+    const xy = Float64Array.of(0, 0, 1, 1, 2, 2);
+    const xyz = Float64Array.of(5, 5, 9, 6, 6, 9, 7, 7, 9);
+    const builder = new PackedLinesBuilder();
+    builder.push(xy, 2, 0, 2, 1, 0, color);
+    builder.push(xyz, 3, 1, 3, 2, 12, color);
+    builder.push(xy, 2, 1, 3, 3, 0, color);
+    const lines = unpackLines(builder.view());
+    expect(lines.map((line) => line.coords)).toEqual([
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [
+        [6, 6],
+        [7, 7],
+      ],
+      [
+        [1, 1],
+        [2, 2],
+      ],
+    ]);
+    expect(lines.map((line) => [line.strokeWidth, line.createdZoom])).toEqual([
+      [1, 0],
+      [2, 12],
+      [3, 0],
+    ]);
+    // The buffers of the caller are left as they are
+    expect(Array.from(xy)).toEqual([0, 0, 1, 1, 2, 2]);
   });
 });

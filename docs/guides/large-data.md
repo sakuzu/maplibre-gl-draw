@@ -145,8 +145,9 @@ const places = draw.addDataset({
 });
 ```
 
-A table holds one geometry type. The offsets say where each row starts,
-outermost first:
+A geometry column holds one geometry type (a table whose rows have
+different types is described below). The offsets say where each row
+starts, outermost first:
 
 | Type | `offsets` |
 | --- | --- |
@@ -180,6 +181,43 @@ and a row becomes a feature only when one is asked for:
 - `externalPointRender` is called with the feature of each point row
 - On a map with terrain, the lines and polygons handed to the drape are
   built as features
+
+### Rows of different types
+
+A table whose rows have different geometry types, such as a file of
+points, lines and polygons, is given as the mixed geometry column of
+GeoArrow (a dense union of Arrow). Each child is a geometry column of one
+type, as above. The geometry of row `i` is row `offsets[i]` of child
+`types[i]`:
+
+```ts
+draw.addDataset({
+  id: 'network',
+  columnar: {
+    length: 3,
+    geometry: {
+      type: 'Mixed',
+      types: new Int8Array([1, 0, -1]),
+      offsets: new Int32Array([0, 0, 0]),
+      children: [
+        { type: 'Point', coords: new Float64Array([139.70, 35.68]) },
+        {
+          type: 'LineString',
+          coords: new Float64Array([139.71, 35.69, 139.72, 35.66]),
+          offsets: [new Int32Array([0, 2])],
+        },
+      ],
+    },
+    columns: { name: ['route', 'station', 'unknown'] },
+  },
+});
+```
+
+Row `i` behaves exactly as the feature of its child's type. The rows of
+a child can be in any order; the rows are drawn in the order of the
+table. A row with a negative `types[i]` has no geometry, and `validity`
+still applies on top. `prepareDatasetColumnar` and
+`columnarTransferables` take this form too.
 
 ### Reading in a Worker
 

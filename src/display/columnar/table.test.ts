@@ -7,9 +7,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { ColumnarTable, columnValue } from './table.js';
-import type { DatasetColumnarInput } from './types.js';
+import type {
+  DatasetColumnarGeometry,
+  DatasetColumnarInput,
+  DatasetColumnarMixedGeometry,
+} from './types.js';
 
-const lines = (): DatasetColumnarInput => ({
+const lines = (): DatasetColumnarInput & { geometry: DatasetColumnarGeometry } => ({
   length: 2,
   geometry: {
     type: 'LineString',
@@ -151,5 +155,94 @@ describe('the rows', () => {
     // A code outside the dictionary and NaN in a float column mean no value
     expect(table.propertiesOf(1)).toEqual({ name: 'b', kind: null, value: null });
     expect(columnValue(Int32Array.of(7), 0)).toBe(7);
+  });
+});
+
+/** A point, a line with z values and a polygon; the rows of the table in another order */
+const mixed = (): DatasetColumnarInput & { geometry: DatasetColumnarMixedGeometry } => ({
+  length: 5,
+  geometry: {
+    type: 'Mixed',
+    types: Int8Array.of(2, 0, -1, 1, 0),
+    offsets: Int32Array.of(0, 1, 0, 0, 0),
+    children: [
+      { type: 'Point', coords: Float64Array.of(7, 7, 8, 8) },
+      {
+        type: 'LineString',
+        dimensions: 3,
+        coords: Float64Array.of(0, 0, 9, 1, 2, 9),
+        offsets: [Int32Array.of(0, 2)],
+      },
+      {
+        type: 'Polygon',
+        coords: Float64Array.of(3, 3, 4, 3, 4, 5, 3, 3),
+        offsets: [Int32Array.of(0, 1), Int32Array.of(0, 4)],
+      },
+    ],
+  },
+});
+
+describe('a mixed geometry column', () => {
+  it('reads each row from its child, at its row within the child', () => {
+    const table = new ColumnarTable(mixed());
+    expect(table.featureAt(0, true).type).toBe('Polygon');
+    expect(table.coordinatesOf(0)).toEqual([
+      [
+        [3, 3],
+        [4, 3],
+        [4, 5],
+        [3, 3],
+      ],
+    ]);
+    expect(table.coordinatesOf(1)).toEqual([8, 8]);
+    expect(table.coordinatesOf(3)).toEqual([
+      [0, 0],
+      [1, 2],
+    ]);
+    expect(table.coordinatesOf(4)).toEqual([7, 7]);
+    const bounds = Array.from(table.computeBounds());
+    expect(bounds.slice(0, 8)).toEqual([3, 3, 4, 5, 8, 8, 8, 8]);
+    // A negative type is a row without a geometry
+    expect(bounds.slice(8, 12).every(Number.isNaN)).toBe(true);
+    expect(bounds.slice(12)).toEqual([0, 0, 1, 2, 7, 7, 7, 7]);
+    expect(Array.from(table.computeVertexCounts())).toEqual([4, 1, 0, 2, 1]);
+    expect(table.featureAt(2, false)).toMatchObject({ type: 'Point', visible: false });
+  });
+
+  it('validity still applies on top', () => {
+    const table = new ColumnarTable({ ...mixed(), validity: Uint8Array.of(0b11101) });
+    const bounds = table.computeBounds();
+    expect(Number.isNaN(bounds[4])).toBe(true);
+    expect(Array.from(bounds.subarray(0, 4))).toEqual([3, 3, 4, 5]);
+  });
+
+  it('refuses arrays of the wrong type or shorter than the table', () => {
+    const input = mixed();
+    const geometry = input.geometry;
+    const at = (patch: Partial<DatasetColumnarMixedGeometry>) => () =>
+      new ColumnarTable({ ...input, geometry: { ...geometry, ...patch } });
+    expect(at({ types: Int32Array.of(0) as unknown as Int8Array })).toThrow(/types must be/);
+    expect(at({ offsets: [0] as unknown as Int32Array })).toThrow(/offsets must be/);
+    expect(at({ types: Int8Array.of(0, 0) })).toThrow(/types is shorter/);
+    expect(at({ offsets: Int32Array.of(0, 0) })).toThrow(/offsets is shorter/);
+  });
+
+  it('refuses a missing child, a row past the end of its child, and a broken child', () => {
+    const input = mixed();
+    const geometry = input.geometry;
+    const at = (patch: Partial<DatasetColumnarMixedGeometry>) => () =>
+      new ColumnarTable({ ...input, geometry: { ...geometry, ...patch } });
+    expect(at({ types: Int8Array.of(2, 0, -1, 3, 0) })).toThrow(
+      /geometry\.types\[3\] is 3, but there are 3 children/,
+    );
+    expect(at({ offsets: Int32Array.of(0, 2, 0, 0, 0) })).toThrow(
+      /geometry\.offsets\[1\] is 2, but geometry\.children\[0\] has 2 rows/,
+    );
+    expect(at({ offsets: Int32Array.of(0, 1, 0, -1, 0) })).toThrow(/offsets\[3\] is -1/);
+    const children = [...geometry.children];
+    children[1] = { ...children[1], offsets: [Int32Array.of(0, 3)] };
+    expect(at({ children })).toThrow(/geometry\.children\[1\]: the offsets reach coordinate 3/);
+    children[1] = { ...children[1], type: 'Mixed' as never };
+    expect(at({ children })).toThrow(/geometry\.children\[1\]: unknown geometry type "Mixed"/);
   });
 });

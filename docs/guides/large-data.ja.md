@@ -147,8 +147,9 @@ const places = draw.addDataset({
 });
 ```
 
-1 つの表が持つ幾何の種類は 1 つです。区切りは、各行がどこから
-始まるかを外側から順に表します。
+1 つの幾何の列が持つ種類は 1 つです (行ごとに種類の違う表は
+後で説明します)。区切りは、各行がどこから始まるかを外側から順に
+表します。
 
 | 種類 | `offsets` |
 | --- | --- |
@@ -183,6 +184,42 @@ const places = draw.addDataset({
   `getFeatures()` を読みます
 - `externalPointRender` は、点の行ごとにその地物を受け取ります
 - 地形のある地図では、地形に沿って描く線と多角形を地物にします
+
+### 種類の違う行を混ぜる
+
+点、線、多角形が混ざったファイルのように、行ごとに幾何の種類が
+違う表は、GeoArrow の混在する幾何の列 (Arrow の dense union) で
+渡します。子の列は、それぞれ上で説明した 1 種類の幾何の列です。
+行 `i` の幾何は、`types[i]` 番目の子の `offsets[i]` 番目の行です。
+
+```ts
+draw.addDataset({
+  id: 'network',
+  columnar: {
+    length: 3,
+    geometry: {
+      type: 'Mixed',
+      types: new Int8Array([1, 0, -1]),
+      offsets: new Int32Array([0, 0, 0]),
+      children: [
+        { type: 'Point', coords: new Float64Array([139.70, 35.68]) },
+        {
+          type: 'LineString',
+          coords: new Float64Array([139.71, 35.69, 139.72, 35.66]),
+          offsets: [new Int32Array([0, 2])],
+        },
+      ],
+    },
+    columns: { name: ['route', 'station', 'unknown'] },
+  },
+});
+```
+
+行 `i` は、その子の種類の地物とまったく同じように振る舞います。
+子の中の行の順序は自由で、描く順序は表の行の順序です。
+`types[i]` が負の行は幾何を持たず、`validity` もその上で効きます。
+`prepareDatasetColumnar` と `columnarTransferables` も、この形を
+受け取ります。
 
 ### Worker で読む
 

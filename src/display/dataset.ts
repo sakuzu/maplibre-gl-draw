@@ -447,10 +447,7 @@ export class DatasetImpl implements Dataset {
     this.ensureThinning(this.deps.getZoom());
     // The drape draws polygons and lines; a table of points has nothing for it (and its rows are
     // not built into features for nothing)
-    if (this.source instanceof ColumnarSource) {
-      const type = this.source.table.type;
-      if (type === 'Point' || type === 'MultiPoint') return [];
-    }
+    if (this.source instanceof ColumnarSource && this.source.table.onlyPoints) return [];
     // Without thinning every row is drawn (the features of a table are built once and kept)
     if (!this.thinning.active) return this.styler.prepareAll(this.source.features());
     const drawn: Feature[] = [];

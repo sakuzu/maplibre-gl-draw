@@ -7,6 +7,13 @@ the project follows semantic versioning.
 ## Unreleased
 
 - First public release under AGPL-3.0-only.
+- Added: the columnar input of a dataset takes a table whose rows have
+  different geometry types, as the mixed geometry column of GeoArrow
+  (`DatasetColumnarMixedGeometry`).
+- Changed: `DatasetColumnarInput.geometry` is a union of
+  `DatasetColumnarGeometry` and `DatasetColumnarMixedGeometry`, so code
+  that reads `geometry.coords` or `geometry.offsets` must narrow on
+  `geometry.type` first.
 - Fixed: polygons and lines follow the terrain's vertical exaggeration
   instead of always drawing at 1.0, so they stay on the map's ground.
 - Fixed: on terrain, dashed lines, polygons with a dashed outline, the

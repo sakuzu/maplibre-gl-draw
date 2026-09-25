@@ -10,10 +10,13 @@ import { chunkTargetSizeFor, partitionIntoChunks } from '../chunk.js';
 import { searchPackedRTree } from '../packed-rtree.js';
 import { normalizeDisplayFeature } from '../types.js';
 import { columnarTransferables, prepareDatasetColumnar } from './prepare.js';
-import type { DatasetColumnarInput } from './types.js';
+import type { DatasetColumnarGeometry, DatasetColumnarInput } from './types.js';
 
 /** 2,000 points on a spiral, as a table */
-function points(count = 2_000): { input: DatasetColumnarInput; coords: Array<[number, number]> } {
+function points(count = 2_000): {
+  input: DatasetColumnarInput & { geometry: DatasetColumnarGeometry };
+  coords: Array<[number, number]>;
+} {
   const coords: Array<[number, number]> = [];
   for (let i = 0; i < count; i++) {
     const angle = i * 0.37;
@@ -75,7 +78,7 @@ describe('prepareDatasetColumnar', () => {
   it('lists every buffer once for the transfer', () => {
     const { input } = points(10);
     const shared = new Float64Array(20);
-    const table: DatasetColumnarInput = {
+    const table = {
       ...input,
       columns: {
         a: shared.subarray(0, 10),
@@ -92,5 +95,31 @@ describe('prepareDatasetColumnar', () => {
     expect(buffers).toContain(prepared.indexBoxes.buffer);
     // coords, the shared column buffer, the codes of the ids, and 7 prepared arrays
     expect(buffers).toHaveLength(3 + 7);
+  });
+
+  it('lists the arrays of a mixed geometry column and of every child', () => {
+    const types = Int8Array.of(0, 1);
+    const offsets = Int32Array.of(0, 0);
+    const point = Float64Array.of(1, 1);
+    const line = Float64Array.of(0, 0, 2, 2);
+    const lineOffsets = Int32Array.of(0, 2);
+    const table: DatasetColumnarInput = {
+      length: 2,
+      geometry: {
+        type: 'Mixed',
+        types,
+        offsets,
+        children: [
+          { type: 'Point', coords: point },
+          { type: 'LineString', coords: line, offsets: [lineOffsets] },
+        ],
+      },
+    };
+    const prepared = prepareDatasetColumnar(table);
+    expect(Array.from(prepared.bounds)).toEqual([1, 1, 1, 1, 0, 0, 2, 2]);
+    const buffers = columnarTransferables(table);
+    expect(buffers).toEqual(
+      [types, offsets, point, line, lineOffsets].map((array) => array.buffer),
+    );
   });
 });
