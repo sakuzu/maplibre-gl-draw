@@ -1,0 +1,252 @@
+# @sakuzu/maplibre-gl-draw
+
+A library for drawing and editing shapes on a [MapLibre GL JS][maplibre]
+map. It draws with its own WebGL2 renderer, so a drawing of 200,000
+features stays editable, and it draws on 3D terrain and on the globe as
+it does on a flat map.
+
+[Demos][demo] | [Documentation](docs/README.md) | [API reference][api] |
+[日本語](README.ja.md)
+
+![The playground over central Tokyo: overlapping translucent circles, lines from thin to thick, dashed and dotted lines, a polygon with a hole selected with its frame and vertex handles, a multipolygon, circle, square, triangle and star markers, a freehand loop around an image, a faded layer, parcels colored by a categorical rule, a fine hexagon grid colored by a graduated rule, a legend, and the Layers panel showing layers and groups](docs/images/overview.jpg)
+
+## Features
+
+### Drawing
+
+Draw points, lines, polygons, circles and freehand lines with the mouse,
+touch, a pen or the keyboard. An image you provide can be placed on the
+map ([drawing](docs/guides/drawing.md)).
+
+### Selecting and transforming
+
+Select features one by one with a click, or several at once with a box,
+then move, resize and rotate them.
+
+### Editing vertices
+
+Add, delete and move vertices. Features made of several parts, such as a
+MultiPolygon, and the holes of a polygon are edited the same way.
+
+### Snapping
+
+While drawing, the point under the pointer snaps to nearby vertices,
+edges, the intersections of edges, and angle guides such as horizontal
+and vertical. To draw a neighboring parcel, click two points on an
+existing boundary and the vertices along that boundary are inserted
+between them ([snapping and geometry](docs/guides/snapping-geometry.md)).
+
+### Geometry operations
+
+Combine selected polygons with union, subtract and intersect, split them
+with a line, and buffer them by a distance. Distance, length and area can
+be computed too. These computations are plain functions that do not need
+the map, collected in `@sakuzu/maplibre-gl-draw/geometry`, and give the
+same results outside the browser (Node, Bun).
+
+### Styles
+
+Set colors, opacity, line widths, dashed and dotted lines, and point
+shapes. A style rule colors features by the value of a property they
+carry, such as land use or population ([styles](docs/guides/styles.md)).
+
+### Layers and groups
+
+Group features in layers and groups. Layers can be reordered, hidden,
+locked and faded. MapLibre's own layers, such as the roads and buildings
+of the basemap, can be placed between the layers of the drawing
+([layers](docs/guides/layers.md)).
+
+### Tilted maps, the globe and 3D terrain
+
+Drawing works as on a flat map when the map is tilted or rotated, shown
+as a globe, or has 3D terrain enabled. Features can cross the
+antimeridian ([terrain](docs/guides/terrain.md)).
+
+The drawing of the first picture, seen with the map tilted and turned.
+
+![The drawing of the first picture seen with the map tilted and rotated so that north is not at the top](docs/images/tilted.jpg)
+
+On the globe, great-circle routes and areas crossing the antimeridian
+can be drawn.
+
+![The earth as a sphere: great-circle routes between continents, a box between two meridians and two parallels, a circle around Tokyo, an image and city markers](docs/images/globe.jpg)
+
+On 3D terrain, features follow the slopes and a ridge hides what is
+behind it.
+
+![Mountains above Innsbruck in 3D: a translucent area and a gridded image draped over the slopes, a trail zigzagging up to a star on the summit, and a straight dashed line crossing the valley and disappearing over a ridge](docs/images/terrain.jpg)
+
+### Many features
+
+A drawing of 200,000 features stays editable. Every one of the 208,073
+features in the next picture can be edited
+([performance](docs/guides/performance.md)).
+
+![A made-up city seen from a tilted camera: small houses, streets, parks and place markers, all editable features, reaching far into the distance, with a park in the foreground selected](docs/images/large-data.jpg)
+
+### Datasets
+
+Large data such as tens of thousands of parcels or a million points is
+shown fast, in exchange for not being editable. Pass it all at once, or
+fetch from a server only what is in view each time the map moves. A
+table from GeoParquet or Arrow is passed as columns, so no time goes
+into converting every row. It can be read in a Worker, so the page does
+not stop while a large file opens. It is styled by the same style rules
+as drawn features, and a click reads its properties
+([large data](docs/guides/large-data.md)).
+
+### Export and load
+
+Export in the native format to keep layers, groups, styles and images,
+and load it to get the same state back. Export as GeoJSON to exchange
+features with other tools. The store that holds the features can be
+replaced, and every change is reported as an event
+([save and load](docs/guides/save-load.md)).
+
+### Read-only
+
+A read-only mode and an interaction lock make pages that only show a
+drawing ([read-only](docs/guides/read-only.md)).
+
+### Extending
+
+Extend it with plugins, custom modes and custom feature types
+([plugins](docs/guides/plugins.md),
+[custom types](docs/guides/custom-types.md)).
+
+## Demos
+
+Try them in the browser, with nothing to install.
+
+- [Playground][demo]
+  - Every feature in one editor, with layer and property panels
+- [Basic][ex-basic]
+  - Drawing polygons, the change events, saving and restoring
+- [Export and load][ex-save-load]
+  - Export as GeoJSON and in the native format, loading files dropped on
+    the map
+- [Style rules][ex-style-rules]
+  - The four kinds of style rule that color features by a property, with
+    a legend
+- [Snapping and geometry][ex-snapping-and-geometry]
+  - Snapping, tracing a boundary, moving shared vertices, union,
+    subtract, buffer and split
+- [3D terrain][ex-terrain]
+  - Drawing and selecting on 3D terrain
+- [Read-only][ex-read-only]
+  - The read-only mode, the interaction lock and locked layers
+- [Plugin][ex-plugin]
+  - A plugin with a hook and a mode of its own
+- [Custom feature type][ex-custom-feature-type]
+  - A kind of feature with its own renderer and hit test
+- [Datasets][ex-large-data]
+  - 50,000 cells colored by a property, and points fetched for the part
+    of the map in view
+- [A million points][ex-columnar-worker]
+  - A million points read in a Worker
+
+## Installation
+
+```sh
+npm install @sakuzu/maplibre-gl-draw
+```
+
+maplibre-gl is a peer dependency: the library uses the maplibre-gl
+(`~6.11.1`) your application already has. If it is not installed yet,
+npm 7 and later install it along.
+
+## Usage
+
+```ts
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+
+// maplibre-gl v6 needs its worker URL once per page (Vite shown here)
+maplibregl.setWorkerUrl(workerUrl);
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://tiles.openfreemap.org/styles/liberty',
+  center: [139.767, 35.681],
+  zoom: 12,
+});
+
+const draw = createMapLibreGLDraw(map);
+
+// Your own button starts drawing. Click to add vertices; click the first
+// vertex or press Enter to finish
+document.querySelector('#polygon')?.addEventListener('click', () => {
+  draw.setMode('draw_polygon');
+});
+
+draw.on('draw.feature.create', ({ feature }) => {
+  console.log(feature.id, feature.type, feature.coordinates);
+});
+
+// Every feature as a GeoJSON FeatureCollection (a string)
+document.querySelector('#save')?.addEventListener('click', () => {
+  const { data } = draw.export('geojson');
+  console.log(data);
+});
+```
+
+The complete page is [examples/basic/](examples/basic/), and
+[getting started](docs/getting-started.md) walks through it step by step.
+
+## Compatibility
+
+- maplibre-gl `~6.11.1` and WebGL2 are required.
+- ES modules only, with TypeScript types. No framework is required
+  ([frameworks](docs/guides/frameworks.md)).
+
+## Limitations
+
+- Features are drawn by this library's renderer inside a MapLibre GL JS
+  [custom layer][custom-layer]. They are not layers of the MapLibre style,
+  so MapLibre's `queryRenderedFeatures` and style expressions do not see
+  them. To look up features or change their colors, use this library's API
+  and events.
+- Longitudes are handled in [-180, 180].
+- Geometry operations are not available near the antimeridian or the
+  poles.
+
+## Documentation
+
+[docs/README.md](docs/README.md) lists every document in reading order:
+getting started, the guides, the reference and the internals. Coming from
+mapbox-gl-draw or terra-draw? See [migrating](docs/guides/migrating.md).
+
+## Contributing
+
+Development is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Copyright (C) 2026 SAKAIDA Atsushi.
+
+Licensed under the GNU Affero General Public License version 3
+(`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full text.
+
+If the AGPL does not fit your product, a commercial license is available
+from Kasika, Inc. (可視化技研株式会社): <https://www.kasika.xyz/>.
+
+The notices of the third-party code this package contains are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+[maplibre]: https://maplibre.org/maplibre-gl-js/docs/
+[custom-layer]: https://maplibre.org/maplibre-gl-js/docs/API/interfaces/CustomLayerInterface/
+[demo]: https://sakuzu.github.io/maplibre-gl-draw/
+[api]: https://sakuzu.github.io/maplibre-gl-draw/api/
+[ex-basic]: https://sakuzu.github.io/maplibre-gl-draw/examples/basic/
+[ex-save-load]: https://sakuzu.github.io/maplibre-gl-draw/examples/save-load/
+[ex-style-rules]: https://sakuzu.github.io/maplibre-gl-draw/examples/style-rules/
+[ex-snapping-and-geometry]: https://sakuzu.github.io/maplibre-gl-draw/examples/snapping-and-geometry/
+[ex-terrain]: https://sakuzu.github.io/maplibre-gl-draw/examples/terrain/
+[ex-read-only]: https://sakuzu.github.io/maplibre-gl-draw/examples/read-only/
+[ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
+[ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
+[ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
+[ex-columnar-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-worker/

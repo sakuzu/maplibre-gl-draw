@@ -1,0 +1,112 @@
+{
+  "name": "@sakuzu/maplibre-gl-draw",
+  "version": "0.1.0",
+  "description": "WebGL2 drawing and editing engine for MapLibre GL JS: points, lines, and polygons rendered in a custom layer, with selection, hit testing, and geometry utilities.",
+  "keywords": [
+    "maplibre",
+    "maplibre-gl",
+    "map",
+    "draw",
+    "drawing",
+    "editor",
+    "geojson",
+    "webgl",
+    "gis"
+  ],
+  "license": "AGPL-3.0-only",
+  "author": "SAKAIDA Atsushi",
+  "homepage": "https://github.com/sakuzu/maplibre-gl-draw#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sakuzu/maplibre-gl-draw.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sakuzu/maplibre-gl-draw/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./geometry": {
+      "types": "./dist/geometry/index.d.ts",
+      "import": "./dist/geometry/index.js",
+      "default": "./dist/geometry/index.js"
+    },
+    "./columnar": {
+      "types": "./dist/display/columnar/index.d.ts",
+      "import": "./dist/display/columnar/index.js",
+      "default": "./dist/display/columnar/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "workspaces": [
+    "examples",
+    "playground",
+    "bench"
+  ],
+  "scripts": {
+    "build": "rm -rf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "check:spdx": "node scripts/spdx.mjs",
+    "lint": "biome check src examples playground bench scripts && npm run check:layers && npm run check:terms && npm run check:spdx",
+    "check:layers": "node scripts/check-layers.mjs",
+    "check:terms": "node scripts/check-terms.mjs",
+    "docs:api": "typedoc",
+    "docs:check": "node scripts/docs-check.mjs",
+    "docs:image": "node scripts/capture-readme-image.mjs",
+    "build:site": "node scripts/build-site.mjs",
+    "deploy:pages": "node scripts/deploy-pages.mjs",
+    "lint:fix": "biome check --write src examples playground bench",
+    "format": "biome format --write src examples playground bench",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config src/e2e/vitest.config.ts",
+    "test:watch": "vitest",
+    "dev": "npm run dev -w examples",
+    "dev:playground": "npm run dev -w playground",
+    "dev:bench": "npm run dev -w bench",
+    "check:package": "publint && rm -rf .pack && mkdir -p .pack && npm pack --ignore-scripts --pack-destination .pack >/dev/null && attw .pack/*.tgz --profile esm-only && node --input-type=module -e \"await import('./dist/index.js'); await import('./dist/geometry/index.js'); await import('./dist/display/columnar/index.js'); console.log('dist imports ok')\" && rm -rf .pack",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@types/geojson": "^7946.0.16",
+    "earcut": "^3.0.2",
+    "polygon-clipping": "^0.15.7",
+    "rbush": "^4.0.1",
+    "ulid": "^3.0.2"
+  },
+  "peerDependencies": {
+    "maplibre-gl": "~6.11.1"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@biomejs/biome": "^2.5.11",
+    "@types/earcut": "^3.0.0",
+    "@types/node": "^26.4.0",
+    "@types/rbush": "^4.0.0",
+    "maplibre-gl": "6.11.1",
+    "playwright-core": "1.62.1",
+    "publint": "^0.3.24",
+    "typedoc": "0.28.20",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

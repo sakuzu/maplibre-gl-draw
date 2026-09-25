@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Read-only and locks - maplibre-gl-draw examples</title>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="controls">
+      <a href="../">All examples</a>
+      <button type="button" id="draw-polygon">Draw a polygon</button>
+      <button type="button" id="read-only">Read-only</button>
+      <button type="button" id="interaction-lock">Interaction lock</button>
+      <button type="button" id="lock-layer">Lock the parcels</button>
+      <button type="button" id="hide-layer">Hide the parcels here</button>
+    </div>
+    <pre class="output" id="output"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

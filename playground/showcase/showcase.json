@@ -1,0 +1,1233 @@
+{
+  "version": "2.0.0",
+  "metadata": {
+    "title": "maplibre-gl-draw showcase",
+    "description": "The document the README image is taken from"
+  },
+  "layerOrder": ["layer-landuse", "layer-draft", "layer-zones", "layer-routes", "layer-notes"],
+  "layers": [
+    {
+      "id": "layer-landuse",
+      "name": "Land use",
+      "visible": true,
+      "locked": false,
+      "opacity": 1,
+      "order": [
+        "parcel-1",
+        "parcel-2",
+        "parcel-3",
+        "parcel-4",
+        "parcel-5",
+        "parcel-6",
+        "parcel-7",
+        "parcel-8",
+        "parcel-9"
+      ],
+      "styleRule": {
+        "kind": "categorical",
+        "property": "use",
+        "map": {
+          "Residential": "#F4A261",
+          "Commercial": "#E63946",
+          "Park": "#2A9D8F",
+          "Civic": "#457B9D"
+        },
+        "other": "#cccccc"
+      }
+    },
+    {
+      "id": "layer-draft",
+      "name": "Draft (50%)",
+      "visible": true,
+      "locked": false,
+      "opacity": 0.5,
+      "order": ["draft-footprint"]
+    },
+    {
+      "id": "layer-zones",
+      "name": "Zones",
+      "visible": true,
+      "locked": false,
+      "opacity": 1,
+      "order": ["group-opacity", "group-coverage", "islands", "courtyard"]
+    },
+    {
+      "id": "layer-routes",
+      "name": "Routes",
+      "visible": true,
+      "locked": false,
+      "opacity": 1,
+      "order": ["route-1", "route-2", "route-3", "route-4", "route-5", "group-trails"]
+    },
+    {
+      "id": "layer-notes",
+      "name": "Notes",
+      "visible": true,
+      "locked": false,
+      "opacity": 1,
+      "order": ["photo", "scribble", "group-markers"]
+    }
+  ],
+  "groups": [
+    {
+      "id": "group-opacity",
+      "name": "Fill opacity",
+      "featureIds": ["fill-100", "fill-75", "fill-50", "fill-25", "fill-10"],
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "group-coverage",
+      "name": "Coverage",
+      "featureIds": ["circle-1", "circle-2", "circle-3"],
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "group-trails",
+      "name": "Trails",
+      "featureIds": ["trail-dashed", "trail-dotted"],
+      "visible": true,
+      "locked": false
+    },
+    {
+      "id": "group-markers",
+      "name": "Markers",
+      "featureIds": ["marker-circle", "marker-square", "marker-triangle", "marker-star"],
+      "visible": true,
+      "locked": false
+    }
+  ],
+  "features": [
+    {
+      "id": "parcel-1",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.771268, 35.679681],
+          [139.772555, 35.679681],
+          [139.772555, 35.678928],
+          [139.771268, 35.678928],
+          [139.771268, 35.679681]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 1",
+        "createdZoom": 15.0,
+        "use": "Commercial"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-2",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.772641, 35.679681],
+          [139.773714, 35.679681],
+          [139.773714, 35.678928],
+          [139.772641, 35.678928],
+          [139.772641, 35.679681]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 2",
+        "createdZoom": 15.0,
+        "use": "Commercial"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-3",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.7738, 35.679681],
+          [139.775345, 35.679681],
+          [139.775345, 35.678928],
+          [139.7738, 35.678928],
+          [139.7738, 35.679681]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 3",
+        "createdZoom": 15.0,
+        "use": "Residential"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-4",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.771268, 35.678866],
+          [139.772126, 35.678866],
+          [139.772126, 35.677924],
+          [139.771268, 35.677924],
+          [139.771268, 35.678866]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 4",
+        "createdZoom": 15.0,
+        "use": "Residential"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-5",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.772212, 35.678866],
+          [139.7741, 35.678866],
+          [139.7741, 35.677924],
+          [139.772212, 35.677924],
+          [139.772212, 35.678866]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 5",
+        "createdZoom": 15.0,
+        "use": "Park"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-6",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.774186, 35.678866],
+          [139.775345, 35.678866],
+          [139.775345, 35.678426],
+          [139.774186, 35.678426],
+          [139.774186, 35.678866]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 6",
+        "createdZoom": 15.0,
+        "use": "Civic"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-7",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.774186, 35.678364],
+          [139.775345, 35.678364],
+          [139.775345, 35.677924],
+          [139.774186, 35.677924],
+          [139.774186, 35.678364]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 7",
+        "createdZoom": 15.0,
+        "use": "Residential"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-8",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.771268, 35.677862],
+          [139.77277, 35.677862],
+          [139.77277, 35.677171],
+          [139.771268, 35.677171],
+          [139.771268, 35.677862]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 8",
+        "createdZoom": 15.0,
+        "use": "Civic"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "parcel-9",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.772856, 35.677862],
+          [139.775345, 35.677862],
+          [139.775345, 35.677171],
+          [139.772856, 35.677171],
+          [139.772856, 35.677862]
+        ]
+      ],
+      "layerId": "layer-landuse",
+      "properties": {
+        "name": "Parcel 9",
+        "createdZoom": 15.0,
+        "use": "Residential"
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillOpacity": 0.75,
+        "strokeColor": "#ffffff",
+        "strokeWidth": 1.5
+      }
+    },
+    {
+      "id": "circle-1",
+      "type": "Circle",
+      "coordinates": [139.759466, 35.685503],
+      "layerId": "layer-zones",
+      "properties": {
+        "name": "Coverage A",
+        "createdZoom": 15.0,
+        "radiusMeters": 170.7,
+        "radiusHandleAngle": 45
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#FF4D6D",
+        "fillOpacity": 0.32,
+        "strokeColor": "#FF4D6D",
+        "strokeWidth": 2.5,
+        "strokeOpacity": 0.95
+      },
+      "groupId": "group-coverage"
+    },
+    {
+      "id": "circle-2",
+      "type": "Circle",
+      "coordinates": [139.761397, 35.685503],
+      "layerId": "layer-zones",
+      "properties": {
+        "name": "Coverage B",
+        "createdZoom": 15.0,
+        "radiusMeters": 170.7,
+        "radiusHandleAngle": 45
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#3A86FF",
+        "fillOpacity": 0.32,
+        "strokeColor": "#3A86FF",
+        "strokeWidth": 2.5,
+        "strokeOpacity": 0.95
+      },
+      "groupId": "group-coverage"
+    },
+    {
+      "id": "circle-3",
+      "type": "Circle",
+      "coordinates": [139.760432, 35.684143],
+      "layerId": "layer-zones",
+      "properties": {
+        "name": "Coverage C",
+        "createdZoom": 15.0,
+        "radiusMeters": 170.7,
+        "radiusHandleAngle": 45
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#FFBE0B",
+        "fillOpacity": 0.32,
+        "strokeColor": "#FFBE0B",
+        "strokeWidth": 2.5,
+        "strokeOpacity": 0.95
+      },
+      "groupId": "group-coverage"
+    },
+    {
+      "id": "courtyard",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.768329, 35.680128],
+          [139.767358, 35.679297],
+          [139.765949, 35.678792],
+          [139.764549, 35.679322],
+          [139.763716, 35.680214],
+          [139.764204, 35.681201],
+          [139.765251, 35.68199],
+          [139.766835, 35.681876],
+          [139.767931, 35.681159],
+          [139.768329, 35.680128]
+        ],
+        [
+          [139.766742, 35.680654],
+          [139.765988, 35.681001],
+          [139.76522, 35.680645],
+          [139.76528, 35.680068],
+          [139.766034, 35.679721],
+          [139.766802, 35.680077],
+          [139.766742, 35.680654]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "properties": {
+        "name": "Courtyard block",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#8338EC",
+        "fillOpacity": 0.45,
+        "strokeColor": "#5A189A",
+        "strokeWidth": 2.5,
+        "strokeOpacity": 1
+      }
+    },
+    {
+      "id": "islands",
+      "type": "MultiPolygon",
+      "coordinates": [
+        [
+          [
+            [139.771603, 35.680698],
+            [139.770992, 35.680386],
+            [139.770168, 35.680261],
+            [139.769568, 35.680608],
+            [139.76943, 35.68107],
+            [139.770041, 35.681382],
+            [139.770866, 35.681507],
+            [139.771466, 35.681161],
+            [139.771603, 35.680698]
+          ]
+        ],
+        [
+          [
+            [139.773244, 35.680955],
+            [139.772571, 35.680881],
+            [139.771989, 35.68107],
+            [139.771879, 35.681495],
+            [139.772433, 35.681739],
+            [139.773092, 35.681722],
+            [139.773493, 35.681369],
+            [139.773244, 35.680955]
+          ]
+        ],
+        [
+          [
+            [139.774632, 35.680271],
+            [139.774376, 35.679982],
+            [139.773698, 35.67995],
+            [139.773114, 35.680066],
+            [139.772839, 35.680351],
+            [139.773268, 35.680588],
+            [139.773864, 35.68069],
+            [139.774509, 35.680576],
+            [139.774632, 35.680271]
+          ]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "properties": {
+        "name": "Islands",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#06D6A0",
+        "fillOpacity": 0.55,
+        "strokeColor": "#04836B",
+        "strokeWidth": 2,
+        "strokeOpacity": 0.9
+      }
+    },
+    {
+      "id": "route-1",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.686711],
+        [139.764809, 35.686669],
+        [139.76511, 35.686631],
+        [139.76541, 35.686597],
+        [139.76571, 35.68657],
+        [139.766011, 35.68655],
+        [139.766311, 35.686537],
+        [139.766612, 35.686532],
+        [139.766912, 35.686534],
+        [139.767212, 35.686545],
+        [139.767513, 35.686563],
+        [139.767813, 35.686589],
+        [139.768114, 35.68662],
+        [139.768414, 35.686658],
+        [139.768714, 35.686699],
+        [139.769015, 35.686744],
+        [139.769315, 35.68679],
+        [139.769616, 35.686837],
+        [139.769916, 35.686884],
+        [139.770216, 35.686928],
+        [139.770517, 35.686969],
+        [139.770817, 35.687005],
+        [139.771118, 35.687036],
+        [139.771418, 35.68706],
+        [139.771718, 35.687078],
+        [139.772019, 35.687087],
+        [139.772319, 35.687089],
+        [139.77262, 35.687083],
+        [139.77292, 35.687069],
+        [139.773221, 35.687047],
+        [139.773521, 35.687019],
+        [139.773821, 35.686985],
+        [139.774122, 35.686946],
+        [139.774422, 35.686903],
+        [139.774723, 35.686857],
+        [139.775023, 35.68681]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Route 1.5 px",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#00B4D8",
+        "strokeWidth": 1.5,
+        "strokeOpacity": 1,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "id": "route-2",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.686328],
+        [139.764809, 35.686286],
+        [139.76511, 35.686247],
+        [139.76541, 35.686214],
+        [139.76571, 35.686187],
+        [139.766011, 35.686166],
+        [139.766311, 35.686153],
+        [139.766612, 35.686148],
+        [139.766912, 35.686151],
+        [139.767212, 35.686162],
+        [139.767513, 35.68618],
+        [139.767813, 35.686205],
+        [139.768114, 35.686237],
+        [139.768414, 35.686274],
+        [139.768714, 35.686316],
+        [139.769015, 35.68636],
+        [139.769315, 35.686407],
+        [139.769616, 35.686454],
+        [139.769916, 35.6865],
+        [139.770216, 35.686544],
+        [139.770517, 35.686585],
+        [139.770817, 35.686622],
+        [139.771118, 35.686653],
+        [139.771418, 35.686677],
+        [139.771718, 35.686694],
+        [139.772019, 35.686704],
+        [139.772319, 35.686705],
+        [139.77262, 35.686699],
+        [139.77292, 35.686685],
+        [139.773221, 35.686664],
+        [139.773521, 35.686636],
+        [139.773821, 35.686602],
+        [139.774122, 35.686562],
+        [139.774422, 35.686519],
+        [139.774723, 35.686474],
+        [139.775023, 35.686427]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Route 3 px",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#4361EE",
+        "strokeWidth": 3,
+        "strokeOpacity": 1,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "id": "route-3",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.685945],
+        [139.764809, 35.685902],
+        [139.76511, 35.685864],
+        [139.76541, 35.68583],
+        [139.76571, 35.685803],
+        [139.766011, 35.685783],
+        [139.766311, 35.68577],
+        [139.766612, 35.685765],
+        [139.766912, 35.685768],
+        [139.767212, 35.685778],
+        [139.767513, 35.685797],
+        [139.767813, 35.685822],
+        [139.768114, 35.685854],
+        [139.768414, 35.685891],
+        [139.768714, 35.685932],
+        [139.769015, 35.685977],
+        [139.769315, 35.686023],
+        [139.769616, 35.68607],
+        [139.769916, 35.686117],
+        [139.770216, 35.686161],
+        [139.770517, 35.686202],
+        [139.770817, 35.686238],
+        [139.771118, 35.686269],
+        [139.771418, 35.686293],
+        [139.771718, 35.686311],
+        [139.772019, 35.68632],
+        [139.772319, 35.686322],
+        [139.77262, 35.686316],
+        [139.77292, 35.686302],
+        [139.773221, 35.68628],
+        [139.773521, 35.686252],
+        [139.773821, 35.686218],
+        [139.774122, 35.686179],
+        [139.774422, 35.686136],
+        [139.774723, 35.68609],
+        [139.775023, 35.686044]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Route 5 px",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#7209B7",
+        "strokeWidth": 5,
+        "strokeOpacity": 1,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "id": "route-4",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.685561],
+        [139.764809, 35.685519],
+        [139.76511, 35.68548],
+        [139.76541, 35.685447],
+        [139.76571, 35.68542],
+        [139.766011, 35.685399],
+        [139.766311, 35.685386],
+        [139.766612, 35.685381],
+        [139.766912, 35.685384],
+        [139.767212, 35.685395],
+        [139.767513, 35.685413],
+        [139.767813, 35.685438],
+        [139.768114, 35.68547],
+        [139.768414, 35.685507],
+        [139.768714, 35.685549],
+        [139.769015, 35.685593],
+        [139.769315, 35.68564],
+        [139.769616, 35.685687],
+        [139.769916, 35.685733],
+        [139.770216, 35.685778],
+        [139.770517, 35.685818],
+        [139.770817, 35.685855],
+        [139.771118, 35.685886],
+        [139.771418, 35.68591],
+        [139.771718, 35.685927],
+        [139.772019, 35.685937],
+        [139.772319, 35.685939],
+        [139.77262, 35.685932],
+        [139.77292, 35.685918],
+        [139.773221, 35.685897],
+        [139.773521, 35.685869],
+        [139.773821, 35.685835],
+        [139.774122, 35.685796],
+        [139.774422, 35.685753],
+        [139.774723, 35.685707],
+        [139.775023, 35.68566]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Route 8 px",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#F72585",
+        "strokeWidth": 8,
+        "strokeOpacity": 1,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "id": "route-5",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.685178],
+        [139.764809, 35.685135],
+        [139.76511, 35.685097],
+        [139.76541, 35.685064],
+        [139.76571, 35.685036],
+        [139.766011, 35.685016],
+        [139.766311, 35.685003],
+        [139.766612, 35.684998],
+        [139.766912, 35.685001],
+        [139.767212, 35.685011],
+        [139.767513, 35.68503],
+        [139.767813, 35.685055],
+        [139.768114, 35.685087],
+        [139.768414, 35.685124],
+        [139.768714, 35.685165],
+        [139.769015, 35.68521],
+        [139.769315, 35.685256],
+        [139.769616, 35.685304],
+        [139.769916, 35.68535],
+        [139.770216, 35.685394],
+        [139.770517, 35.685435],
+        [139.770817, 35.685471],
+        [139.771118, 35.685502],
+        [139.771418, 35.685527],
+        [139.771718, 35.685544],
+        [139.772019, 35.685553],
+        [139.772319, 35.685555],
+        [139.77262, 35.685549],
+        [139.77292, 35.685535],
+        [139.773221, 35.685514],
+        [139.773521, 35.685485],
+        [139.773821, 35.685451],
+        [139.774122, 35.685412],
+        [139.774422, 35.685369],
+        [139.774723, 35.685324],
+        [139.775023, 35.685277]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Route 12 px",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#FF9E00",
+        "strokeWidth": 12,
+        "strokeOpacity": 1,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "id": "trail-dashed",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.684474],
+        [139.764809, 35.684476],
+        [139.76511, 35.684483],
+        [139.76541, 35.684495],
+        [139.76571, 35.684512],
+        [139.766011, 35.684532],
+        [139.766311, 35.684555],
+        [139.766612, 35.684581],
+        [139.766912, 35.684609],
+        [139.767212, 35.684638],
+        [139.767513, 35.684668],
+        [139.767813, 35.684697],
+        [139.768114, 35.684724],
+        [139.768414, 35.68475],
+        [139.768714, 35.684772],
+        [139.769015, 35.684791],
+        [139.769315, 35.684806],
+        [139.769616, 35.684816],
+        [139.769916, 35.684822],
+        [139.770216, 35.684822],
+        [139.770517, 35.684818],
+        [139.770817, 35.684809],
+        [139.771118, 35.684795],
+        [139.771418, 35.684777],
+        [139.771718, 35.684755],
+        [139.772019, 35.684731],
+        [139.772319, 35.684704],
+        [139.77262, 35.684675],
+        [139.77292, 35.684646],
+        [139.773221, 35.684616],
+        [139.773521, 35.684588],
+        [139.773821, 35.684561],
+        [139.774122, 35.684537],
+        [139.774422, 35.684516],
+        [139.774723, 35.684499],
+        [139.775023, 35.684486]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Dashed trail",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#FB5607",
+        "strokeWidth": 3.5,
+        "strokeOpacity": 1,
+        "lineStyle": "dashed"
+      },
+      "groupId": "group-trails"
+    },
+    {
+      "id": "trail-dotted",
+      "type": "LineString",
+      "coordinates": [
+        [139.764509, 35.684073],
+        [139.764809, 35.684076],
+        [139.76511, 35.684083],
+        [139.76541, 35.684095],
+        [139.76571, 35.684111],
+        [139.766011, 35.684131],
+        [139.766311, 35.684155],
+        [139.766612, 35.684181],
+        [139.766912, 35.684209],
+        [139.767212, 35.684238],
+        [139.767513, 35.684267],
+        [139.767813, 35.684296],
+        [139.768114, 35.684324],
+        [139.768414, 35.684349],
+        [139.768714, 35.684371],
+        [139.769015, 35.68439],
+        [139.769315, 35.684405],
+        [139.769616, 35.684416],
+        [139.769916, 35.684421],
+        [139.770216, 35.684422],
+        [139.770517, 35.684417],
+        [139.770817, 35.684408],
+        [139.771118, 35.684394],
+        [139.771418, 35.684376],
+        [139.771718, 35.684355],
+        [139.772019, 35.68433],
+        [139.772319, 35.684303],
+        [139.77262, 35.684274],
+        [139.77292, 35.684245],
+        [139.773221, 35.684216],
+        [139.773521, 35.684187],
+        [139.773821, 35.684161],
+        [139.774122, 35.684136],
+        [139.774422, 35.684115],
+        [139.774723, 35.684098],
+        [139.775023, 35.684085]
+      ],
+      "layerId": "layer-routes",
+      "properties": {
+        "name": "Dotted trail",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#0077B6",
+        "strokeWidth": 3.5,
+        "strokeOpacity": 1,
+        "lineStyle": "dotted"
+      },
+      "groupId": "group-trails"
+    },
+    {
+      "id": "photo",
+      "type": "Image",
+      "coordinates": [139.766869, 35.677764],
+      "layerId": "layer-notes",
+      "properties": {
+        "name": "Station photo",
+        "createdZoom": 15.0,
+        "imageFileId": "file-station",
+        "imageWidth": 240,
+        "imageHeight": 160,
+        "rotation": -6
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "width": 120,
+        "height": 80,
+        "imageOpacity": 1
+      }
+    },
+    {
+      "id": "scribble",
+      "type": "Freehand",
+      "coordinates": [
+        [139.765004, 35.677867],
+        [139.765008, 35.677974],
+        [139.765046, 35.678081],
+        [139.765122, 35.678186],
+        [139.765236, 35.678284],
+        [139.765387, 35.678371],
+        [139.765568, 35.678445],
+        [139.765773, 35.678503],
+        [139.765993, 35.678546],
+        [139.76622, 35.678573],
+        [139.766449, 35.678589],
+        [139.766676, 35.678593],
+        [139.766899, 35.67859],
+        [139.76712, 35.678581],
+        [139.767341, 35.678566],
+        [139.767562, 35.678545],
+        [139.767784, 35.678516],
+        [139.768005, 35.678477],
+        [139.768221, 35.678426],
+        [139.768424, 35.67836],
+        [139.768607, 35.678281],
+        [139.768761, 35.678187],
+        [139.768878, 35.678083],
+        [139.768954, 35.67797],
+        [139.768988, 35.677853],
+        [139.76898, 35.677736],
+        [139.768935, 35.677622],
+        [139.76886, 35.677513],
+        [139.768762, 35.67741],
+        [139.768646, 35.677313],
+        [139.768518, 35.677222],
+        [139.768377, 35.677134],
+        [139.768225, 35.67705],
+        [139.768058, 35.676969],
+        [139.767873, 35.676893],
+        [139.767668, 35.676825],
+        [139.767442, 35.676766],
+        [139.767197, 35.676722],
+        [139.766936, 35.676696],
+        [139.766668, 35.676689],
+        [139.7664, 35.676704],
+        [139.766142, 35.67674],
+        [139.7659, 35.676794],
+        [139.765682, 35.676865],
+        [139.765488, 35.676948],
+        [139.765321, 35.67704],
+        [139.765176, 35.677137],
+        [139.765052, 35.677238],
+        [139.764944, 35.677343],
+        [139.76485, 35.67745],
+        [139.76477, 35.677561],
+        [139.764707, 35.677676],
+        [139.764666, 35.677796],
+        [139.764653, 35.677921],
+        [139.764674, 35.678047],
+        [139.764735, 35.678173],
+        [139.764839, 35.678293],
+        [139.764986, 35.678405]
+      ],
+      "layerId": "layer-notes",
+      "properties": {
+        "name": "Freehand note",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "strokeColor": "#FF006E",
+        "strokeWidth": 3,
+        "strokeOpacity": 0.9,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "id": "marker-circle",
+      "type": "Point",
+      "coordinates": [139.769444, 35.682505],
+      "layerId": "layer-notes",
+      "properties": {
+        "name": "Circle",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "pointShape": "circle",
+        "pointColor": "#FF006E",
+        "pointRadius": 12
+      },
+      "groupId": "group-markers"
+    },
+    {
+      "id": "marker-square",
+      "type": "Point",
+      "coordinates": [139.770517, 35.682505],
+      "layerId": "layer-notes",
+      "properties": {
+        "name": "Square",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "pointShape": "square",
+        "pointColor": "#3A86FF",
+        "pointRadius": 11
+      },
+      "groupId": "group-markers"
+    },
+    {
+      "id": "marker-triangle",
+      "type": "Point",
+      "coordinates": [139.771633, 35.68254],
+      "layerId": "layer-notes",
+      "properties": {
+        "name": "Triangle",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "pointShape": "triangle",
+        "pointColor": "#FFBE0B",
+        "pointRadius": 15
+      },
+      "groupId": "group-markers"
+    },
+    {
+      "id": "marker-star",
+      "type": "Point",
+      "coordinates": [139.772791, 35.682522],
+      "layerId": "layer-notes",
+      "properties": {
+        "name": "Star",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "pointShape": "star",
+        "pointColor": "#8338EC",
+        "pointRadius": 17
+      },
+      "groupId": "group-markers"
+    },
+    {
+      "id": "draft-footprint",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.761548, 35.683063],
+          [139.763908, 35.683237],
+          [139.764037, 35.681668],
+          [139.761719, 35.681494],
+          [139.761548, 35.683063]
+        ]
+      ],
+      "layerId": "layer-draft",
+      "properties": {
+        "name": "Draft footprint",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#FF9E00",
+        "fillOpacity": 1,
+        "strokeColor": "#D00000",
+        "strokeWidth": 3,
+        "lineStyle": "dashed"
+      }
+    },
+    {
+      "id": "fill-100",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.764507, 35.683678],
+          [139.765297, 35.683678],
+          [139.765297, 35.683036],
+          [139.764507, 35.683036],
+          [139.764507, 35.683678]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "groupId": "group-opacity",
+      "properties": {
+        "name": "Fill 100%",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#1D3557",
+        "fillOpacity": 1,
+        "strokeColor": "#1D3557",
+        "strokeWidth": 1.5,
+        "strokeOpacity": 1
+      }
+    },
+    {
+      "id": "fill-75",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.765468, 35.683678],
+          [139.766258, 35.683678],
+          [139.766258, 35.683036],
+          [139.765468, 35.683036],
+          [139.765468, 35.683678]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "groupId": "group-opacity",
+      "properties": {
+        "name": "Fill 75%",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#1D3557",
+        "fillOpacity": 0.75,
+        "strokeColor": "#1D3557",
+        "strokeWidth": 1.5,
+        "strokeOpacity": 1
+      }
+    },
+    {
+      "id": "fill-50",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.76643, 35.683678],
+          [139.76722, 35.683678],
+          [139.76722, 35.683036],
+          [139.76643, 35.683036],
+          [139.76643, 35.683678]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "groupId": "group-opacity",
+      "properties": {
+        "name": "Fill 50%",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#1D3557",
+        "fillOpacity": 0.5,
+        "strokeColor": "#1D3557",
+        "strokeWidth": 1.5,
+        "strokeOpacity": 1
+      }
+    },
+    {
+      "id": "fill-25",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.767391, 35.683678],
+          [139.768181, 35.683678],
+          [139.768181, 35.683036],
+          [139.767391, 35.683036],
+          [139.767391, 35.683678]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "groupId": "group-opacity",
+      "properties": {
+        "name": "Fill 25%",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#1D3557",
+        "fillOpacity": 0.25,
+        "strokeColor": "#1D3557",
+        "strokeWidth": 1.5,
+        "strokeOpacity": 1
+      }
+    },
+    {
+      "id": "fill-10",
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [139.768352, 35.683678],
+          [139.769142, 35.683678],
+          [139.769142, 35.683036],
+          [139.768352, 35.683036],
+          [139.768352, 35.683678]
+        ]
+      ],
+      "layerId": "layer-zones",
+      "groupId": "group-opacity",
+      "properties": {
+        "name": "Fill 10%",
+        "createdZoom": 15.0
+      },
+      "visible": true,
+      "locked": false,
+      "style": {
+        "fillColor": "#1D3557",
+        "fillOpacity": 0.1,
+        "strokeColor": "#1D3557",
+        "strokeWidth": 1.5,
+        "strokeOpacity": 1
+      }
+    }
+  ],
+  "files": {
+    "file-station": {
+      "id": "file-station",
+      "mimeType": "image/png",
+      "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAACgCAYAAAAy2+FlAAAb/0lEQVR42u2de5Bc1X3nP79z7qO7Z4SEwLwMBgQkIIywCdpgYzBgJ0Xs2E5BQhLvbpWLrfJuylRlKzFOpbxVm63apJwtZ9ew2KnKVuxswGDjxZVdV1jCw2CzGLCQAaEhYJCQeAQCCEnz6O7b997z2z/u7dFIzIx6Zvo5c75VFwnNUev2757v/T3O7yEcAVW1IpKXvz8euAFYB3wBiPHw8Og1EuDrwBRwi4i8fSQ325D5yKuqFvhySdoTvDw9PAaGN0sy/2mbm3NJLHPIG4hIpqq/AnwJ+Hj5o6z8NfCy9PDoG47k3f3AfxGR+9pcnSXwHM37CeAHgAHS8i+Ll6WHx8CgJZlDwAGfEpG725yVOeS9DHiwJKzzGtfDY+g0sikJfaWIPKyq1pQaeAz4M8B2Sl71AvXw6JqK7QBByU0L/FnJWUzpEH8R+Mgcs3lBOJ0n+uXh4bFsyBxuqR6VxGnJ1S+2TejjgWeB48rPmpebqiBzftLIwHgWe3h0RQWLQGQPEXkRbml57QM2BxRHRe8pbexgMfI6hYf25uw5oOw6oET2qG8MDw+PDkzoyMCFJxl+caNwzkaDLmzlCpCXnP1CAGw4mslsBHbtd9z3kmPnm45KAIGBuvPC9/DohgndBP5hV85PXoGrzrBceYbFyFFd1Q2iqk0WyLBqk3fvQeWWbSlOYSyCvLTVvQXt4dE9mNLK3d+ED73X8K+3BItpYoDELJYeKUAzg3/YlaGU5HU+iOXh0Qs17Eq2Hl+Dp990/OM+B7polDoW1fm92Lb2feTVnO9M5GysHiKvh4dHb5Er1AL48mURZjGtvZj2zRy8sM9RC8A5r3U9PPqFQArrd9c7bjaQvNC50vwEloLAew4ooV2g+sHDw6Mn5rQRmE5g9wHlnI0s6AsHR4uORQFk6eFnwB4eHr2PTBuB2B49PYujHjJ7zevh0XcCC0fPszBeVB4ew51iuSINbOTQ5eHhQd/OhI0c3XX1JYMea1jD6Twe42hpqqBTW9wrYI/VQVqHESVXiyN4VzFfQAqAwwx013fKuwDPYI+1ENElx2FoaYWWg5rJqMrUnDCQohgO5utQoGJyQlpoQfnBMXjFPjCK8dEuD0axykcw5CiGaVclEGVzvI0Tgl2cHuzhtOhZVOPSlFZyDXmyeTkJVZ5sfJS3842EAhWp47AoMq/Z3RMfeJZz6n1gj7UJS0Zda9SkwVVj3+fM8HnOjreDJKAxaAjSOqTqRLl0/LugyiXVe3iy+SH2tC5kR/JB1pkmBu2zj6wrN6FFDl0eHqMCQ07d1TgneobLa3dxZuWn4GqgFZzWkNI4nmunKqBuPQA1meTSsf/Fh6r3c2r9UzzS+AwZloCstEl7bEG3OSddCGJ5eIyW5s2ZdjXeH2/nt9d/BSEnz07ASF56tPm8HakKvuSzn+LccQg5Hx3/G94b7OaOyS/ixM6a5cNwFhwszR738BjuzhZt8l4Qb+e69X8OGuKoYiVd8qeZsjVz7k7k7MqjfFa+yu0Hv4iKxeBKn7jXPvAKMrG89vUYKc0rOXUKzXvdMX8OagF7hMZdjkZPce5Yzoof5bPHfHW2KZUMQW9W7wN7sFrOdxta5exwguuO+QpFH3Rb+rnd0IjZLIl/V27itskbiaXZcx9YfCKHx9ownoWazHBl7U5EclSrc/xZukdi3cBZ0WNcED/Gs62LiUh74g93yjnv2nqMfJKGxVGnwtbKDzk13IbTdV0n7yHCOFRDPjX2P4glRcX2bMyBeBPaY23oX0OojjPDCVRrXTObF9b2AUZmODV4kRfT91ORZtfPh6VUwSLehPZY5b5vQsx50XbOiJ4oTWfX83/VSovLqnfxcnYOzGZoSd9NaE9gD0Y7YcORqeFk+xJKC2WsZ+bzYVVMWuFku4dIclKNVhzpnj9/2xczeKxy49kRUJMmJwe7EY37NnZPEVRanBY8zwvphVjJumtGd6+YwSdyeAwvcgw1meH0cAKI+nQ2qyiWQN7h9PBZnksvwqJdNdy7ksjh4TEKUWhFSPuofefSJ9W4p8ZpF4oZ1EehPYa4YFCLPTqgrCjBlfzo7j20P/NoDPYa2GOVdHAcFIF1uIsZvA/sMQoUzggJqfdd/+eEs9HibnKkU875KLTHSBM3IGVKj2Fn6zK2Vr6H0/VdP9KZ7981ZKRuIxPpR4lNq/vplN2KQg83f9XXTXnzGRBSaksOYmn5n+XFdxw5IRlRT/jRKe9G2jI2xmJMgPgIG2s5jTKWFhOtj9JwJ2NIO6aTGBC7dPY5BJWEp1sfY8aNl50sZTjLCYfSB5Zi5ESW1FFVrA0xQcAQlGd6DGAzRJKy3x3H8+klfCC+C6fHzRbjL6Z9m81i6mYUQhh0qsDLRnla45n0Y0SSA6br/DB0NkxhBH1gRYwla9b50bf+M9PvvM75V13H5is/QzI9gxjr9/QaPEwKTc7e7ELOj+7HktM+IZ638NBAswGfvyXilbeF3/u1jN++OiefBmuOrvEhYW+2lbquw0rWG3Ks5mKG9v2kzTpJY5o8S32sjbWdEV2hyXPZRZySfIatlW+R64lY0kU18HQTJuvQ6pCDikFIyLTGPc3fA0zPCidWdTGDUB50W4uYACNy6M/8bl6zvvA602Bb+smy7/OjOD12UVM6MBDYzoJYhebNUOCe5g20tEIoKapmoJMZzJI+acDXbJtNaXcl0lkzSUQPq6P011q7ipe4I+QHjT/k5ewSjBwox6e8W/vOXqWVvdgYzzZ5Iefuxo38PNtKJEUnDun1fl8pgYfm+aiiLgeXl9FnOyftTLCmfIB5Dur8fl6DV3EunGFQ/k/jRvZml2BkP4pBFXJXXGIK7XtY2mLJ8ywHp4e858JsbpXk/RLPZxczJtPln/eWI6tguJninCsIGwQEcQgKjakpsmZ9VvouS0nqdcQYauNVspaSpykuT4s3s/g8srXkD1tyBPj7+h9wdfwXbIq2Q1DBxsWeakwKM40yoCWFDzw9DeMGWKeQCKRAniGSkcg4DzRv4OfZxYzLNI6g53zolHeiurDx0Mrh2zuaNLP+zwd2LscGIVE1Im2mNKb2s2fHo2RJg5eefgSXpWRpC9Rhwwh1jvecfi4bTzmdY085kxPPPJe4No7LIU0aoIoYT+Q14xO7DLERphpxevY4Fyf/jfuejJhpwj3bLUkGSavQtnEIucIHNzk2napsOdVx/lmGWm2M19Jz+b8HP0dTx4h6kXG1yHzgeqpc+r6Qi08JcDo/BzsgcKNvBBYE53KMMUS1KlP73ublnY/yxu5/5K29z9NqTOOcI6xUEWSWkMVXUPIsJUsS4toY1XXHcup5WznxzPM49bwPogqtRh1jbdkAxR8as+pOhI/cP2/x8s7HeHX3bqb2buedekGE8UpRet9+n7tyKyQpNBPhmJpjw/qI0867mA1nbOWUcz9IQEaz0ezb/jECjVT58PtCLj4lXB6B0xxu29Eg6ROB1eVEtTGypMnEj3/Arp/9iKl33sQGITaMZoXn1M0bdRAxiBFcnqMuJ202sGHESZvOZ/Plv86p522hOVVHFZ+9tSq17vz7JwgsEtYIrR4i7Bw/dy5pjCn84NxB2mwQhpaTNm1m8+Wf6uv+mauBf2klBP72M30gsCqKEtfGeP3Fnez44d/x2vM/Ix5bh7UhqoqqW3rCuTGoKkljmqhSY/NHPsl5l36CIAzJWi1vUq8a5h59/6BuSTqzqMctgl+D2D9tAn/4tMUJPPAglqoiRgijmL3P/JSHv/PfcXlGbf1xuDzHuXwFAbDi78a1cVDlibtvY//re/jwNZ8nrNTIWokPcI08d3uzf1SZVRqD2D9dCWKlOdzeUw1clIIYER6+8xu8PLGNIK4gxhZHRj0ofkiTJmGlyqXX/jved/4vkcxMY4z1HvGoTmRYpftnrga+aCUm9Hd29o7ATh1RpcqDt93ES08/QmV8Q9EaTHtHJzGGPE1Rdfzq9X/MSZvOpdVoHHau7DEaWM37p03gS04LuejkhQlsujXiYTnHRJXaGC9PPMHLEz+lum5DYbKo9jjQ4QjCCJfnPPXA99E8L4XvdfBIkXeN7B8ZxkwsdTmVWo3XX5zgoTtuJogrOOf6RiLncuJqEfB46I5biOK4sMZ8NtNIXGtp/wxhW1nF2MKXeOqH38cNSAM6lxPXxnl5Yht7dm4jrMSF+bVaTpdktQ56Xlv7Z+VN7aS4unXs5ZyjOjbOtnu+xyvPPcn4+uPI82xgEUwbRvzkf/81J55+DnF1DOfyVXFGrLNBnnasR1aJ6bw29k+bd0OmgRUbhEy+/RY/3/4Qldox5Hk+0G1ug5DG1EGef/wBgigsWjSsgnNRAYIwwtoAGwToavhefv8M1gdW56hUY17a+VOm9v0zNggGHjxyzhGEMS88+WPSRgMTBGWT7pGrpivMLXXYwBJXKux++if88PabyVsJUaU6W0Q3d/r7aPm+a3P/DM18YGMNaZLw+q4JTBChqsPxVrcB9amD/POe53nfuRfSSpojZ3KqFuZyFFVIGtM8+N1vsGfnNhC487/+IR/5jX/DpgsuJs8y8jQrsohGzKpeS/tH5ta/D4cJXX7Rgwd5Y+/zhOGwPIDibC9p1Hlt1wTWmp4fRfTiaMNaSxzH7Jl4gjv/4kb2TDxBEFUI4yppM+H+277GfbfdTJY0CeNKO9VohNoQ+f0zUBNanSOOI3bteJRmfRpjg6E5e3XOUamOsWdiGzOTk9ggLGbuDLtZqcU8niiukLWa3Hfbzdx329dIW0lBUrQgd2AJK1X2TDzBd0tyR5UYa+2sbzwK5vNa3T8rMKH10OCmFb6mpWyDkyYzQxtQyVoJeZYQVSpl254h17pBgA1Ddj+zjR9//5skjZmy1JLDZNzWVGFcIW0l3Hfb19h0wVYuv+Z64uo4WSspi9uHVxevtf0jAqaDz+iTBlaCIKR+8AAvPPUocaVWHrwPV3RzZnI/Lzz5CHElRt1wtuWhrH1ua917b72Je2+96ZDWVV3QtGyb2lGlyksT2/nOV7/ESxNPEFUqBNaCG9ZWRGt7/6ysL3Q357hqYdIZY8upbsOj5UzZekfzbGj9QnUOGwYEQciuZ7bxo0W07qLBrjna+N5bb2LTBVu54prriWqFNp57bqzDNAfY758lEljmHFHIyp+AiNKcmSRp1NHxjUPCEgUx2LRFY3I/WdoqOjUM00zkNukqRYT5gTu+wa5ntmHDiDCuoM4teSu3tbG1hTb+p93PccU117Npy1byNCXPiki1DFFm2VraP51GoftXD6xFFHHrr/4mrjHNuoe/h2RJ0SJwkOIXg0nqJOd9iKkrP8Fpp51N1kpne00Pk6+7a8c2HlqG1u1UG99z602cdcFWrri28I3TVjLb9XMYXmJraf90px7YKT94tkkr165po3i8hm00OeXLH8fUJ8EGAz22URtiD77J/t/6Y/b/zr9F32rSygefTtk+1w2jmKQ+zYN3fXNW6/Yis0qkMEqzVkJcHePKa67nrC1bybP00LnxEGCt7J92T6yL3hvx/hNX0JGjqy05VGnO1JHGFNMEGAnLhrwDfAASYE3ETJbSmMwJ0gQThAP1rtpaNwhDXtyxjQfvKrRukU1FT6KwR2rju2+9ibO3bOXKa6+ncoQ21gFq4TWzf7o1H7g9mVC6l04DxmLROYGIAT6Aou03RgRr7eybUwaldYEortBsTHPvHd/gxR3bCOb4uv1KCjG2yu6d23lt13Ncde31nL1lK9kw+MZrZP90yruAAVe6DUvVnQyJr9vWug/M0brSI63bqTb++7+9iXO2bOWqI7TxoKJ8fv8MuKndsKYL9PX4SI7QupUKSX2ae+bRujrgFE1jq+zauZ1Xdz3Hx669nnO2bCXLUrIsw4hZaJLnmiBwr/ZP986BpUd3Noz17wOYIxNGEUEQ8sKObTxw11+TTE1SjSvFEHOXD15UZb50JYrJkyZ333ozZ3/gl/n4tddTrRXa2DmHSJ84vFb2T4efFXTypjOsDQ3c9jv6xw3Hwbff4IG7vsULT28jiCLkmONoltlWDFVqo0JURZIGzzzyAC889Tgfu/Z6fuHCrUXv5T7Kbi3sn04/KxhVYY06RATnlL3P7eDEUzdx2jnvR9KE6o++i6St8nxziPKxjUGadZLzLiHd/Ju4mRkO7nuDfW+8xslnnE2Wpn63DOBl1dd64LnZXcP2rA/7ntK/8riLr/gk1oIakJkG73nw60hz8Oeb74INMVNvMrnpOiY/82nspIIVWklKnhaJC33LyFoD+6dTznWggXW2NKo7nZra4f9hDUL061iiGEfdrE8VRLUBUi/ON2UIzjfffbsBxkTMtIrzTjNVvGRkdnxrP+51be0fmfNdpZ/HSMLomeX9j18VD8aasgDcGMQYzJCcb84/p16x5XmnMebQeL8+3+eo7h9laQF76YoPvEwTWkcpiljerBrQQd3fKLTG8HJaplzkMCtWOjWhzQCLGQJxC1RuOETcEL5BlVAcRhz0/f6GVy5eTt2Ri9OlOaLda2q3RAJrSd7za28QyBFJCKqIteQyw2soOYOv+BGUVC0nx1NsHH+DLDuAWNv/s9Yhk4uXU3fkogih5LyabOCVZAOh5B0RWbplQi9HBYsUJH4XgdEy6DGcb9CgfHv2vxJpeOXi5bQyuShCIK5oCVS6otrPYoblmtCLhWGGtdvUoMNGo9IL08upc7nM/bMl+cCDMqF98oeHx8p5JIOMQouA5jk6jw8Mxc+GsOFUcc+DuLdhlouX04rkoggqOahbEo865V3QqzTBYP0GAqPoXAqXQQgJQximPF9VJK4SHHtsEegMBhOcGTq5eDmtWC6qQmAd5mAVWtr1oo/uFvSrosZAq8W+792OyZqH9ywqExY0baFpq1TVOvA6XIlj6s88xZvf/Ctcs9n/9jFDKBcvp+7IRcVgkxkav3AF9hcvh6RRjkM9ugndiXQX7YmVOeWhFxuknfbEUoUgQGYmqdx4NTIzCTZ8t5AF7Nj48LxFRdCkiWsmReMhHZyjNFRy8XJauVyCANn/Fq1/+Ue0/tUfIPsPFnnuHZjQSaZsPjHi7OMjdIHitB75wIUJLaFdMCl/qPyYtglUrQ3+VobZD/ZyWrpcbICQkVUriHZe7CDdKmZYkYDzvLjb+ZT8fHe3mDnU6/Uo6nR47mdo18+Rk5dPB/tHCh645ZkrsnIfWMsE++5Wi2ieH/qC7XidMQu+dvx6v34k1x9WDNJ5tZKU3Ot/JlanGSRjtcMXCmia4lrpvELy6/36kVyfzykHXAqXutFSZyWZWLKQs5/lBONjXHTTV7DjNcjyIpK3bgOv3HYHe/72DqIN64s3ml/v14/6+m/fSVzmRi9HDw5lW9n2G8uMj0OWgXNQG8dE4YJ+hl/v14/selledqJ05RxYiku6bEJrnhdftv3G0mzRIIFf79eP9Pq5PJJO5wOz8vnA9KOJUCcxc7/er19N6/sRhZYRahbh4cGQFzOYHjQe6X4ih2e7h8fCR8tLTOQQGdK+0LOVG3nhM8z+6tf79atsvQ5yNlJPlKoIwYYNEI8BOYIDjsVWqwtmbfn1fv0or19OTf3wmdBlRrZrtdj7P29HoqgIuatCXOHgU09jKvGhN51f79eP/PoKJNOz7XSWbEKvpBopd8rje+tkS6lGsgHUpzD/4begPjV/MYMq6fT04baFKrYSF1/Yr/frV8v6sXE48BZ63e+j190ABw90XI3UypSzjo85feMKqpF65c1HGzbMX088n5/h1/v1o7q+x/XK3S3o72E5mF/v14/kemuWlXQhHfJuYMUMHh6stSmDgylmWMpws0PNZLWjQzF8/W231i/7YNLLs1/rZQlNeeWI4WZDV8zg60W7u35JRo+AOi3NPi9P+lAPLAPzgZdZzJD7euC+rk+185l36pQwCgmi8LCu416e9KweuF3MQJeLGYK+N//y9aLdW1/uhVSVh/Y1SPXoro4NDFP7DvBrX/gcV37+c+ST+4sXtJdnz+qBoxXMkJJBjVbx9cD9XZ+qdkRgp9DKFcIQWxtHXKt403t50ut64IFkYvWqjMLXi3Z3facvWmnHW1RBMzTLUcHLsx/rlxiF7koxQ6/OgX296GDqSxfM1/Py7Pl604Pyw8EV9Ht4sMbOgQcRhe40qdoncnh4LM4LI6BdLmYYWBDL14t2d/1yZvq0/w0VvDzpbT3w4IJYvTAXfL1od9cvYxSIrVYReyzBsVo+MC/PoX1eQ2NC+3rR7q5fpuY1lZj9P3uK1779V6TNRhEI8fLsbT0w5aDOpZjQpoPY2dHqgSf+aYbMacfjRbEBWp+i+UfXob4euOfr24kc979d7+gcWIBEYXOobA6h2VbAXp49qwfW/W8R/e7vE332BvTA/o7rgdNcOfXYmJPXxyuYTkhvWur4etEurl+mCR0eU8HNfTl7edLLeuDl+MBdCGLpEtpyLXG4ma8XZVDjM2eDWB1OzfPyZ4X1wHpExV6nfOpCJtZSfWD1x0geHoeRQpbZEwvf2N3DY1horEs0oXXlJrQVA7KEgn4xqPgELw8PDkt5FKxIwY0O+CECTgQ5iho+KoGTvLG0KDQB5A3/xDw85ujTzGU08yaaNzrzXAXS3JGpAaKlEVhRBCHJE/7mqZuZadWxYjtplIMTIW5lXKstImtxnSTKe6woacYpqJEljQBQIzhTpBz4p9M7OHFU4xrb3vgJ2x57i2q9heugUt8ay8HGJL/zgd/glPW/gtMcK3bpGriZNWhmjSURmCyjWm8Rt7Li/z16SuBUFTud4Do8BxanREYYs4Lt1LryWB6BjTA200JaCfW8gWSdE7iR1clcutKWOmb26oTAIoIGAY//8pnYLEc9gXu/SVQ5UE/JO9SmuSovRgGTsSVTr4F7CRUhTDNePW0jcQZibGdzf8VgxCJIf3OhRZXcCI/9izP80+sjIiNL0tovqvKcJ2+fSAxhmhOmZeFI53+TgfXEqtVb/sn1c5OwtCl4ERB7sfWVxL2wRoNe2v4eq4fwHgzp8ZSHh4cnsIeHhyewh4eHJ7CHhyewh4eHJ7CHh4cnsIeHhyewh4cnsIeHhyewh4eHJ7CHhyewh4eHJ7CHh4cnsIeHhyewh8caIHDixeDhMZJIAuAvgX8PZMxT4G/FYo3tuKmdh4fHymFNwbsF+kK3ufqXAXCABbs2KAebk0y3ZjyBPTz6TOD99QM000UN5AOiqscDzwLHUXYdbfeFTvOMe194kFaeYjCewB4e/fJtxdDMmmw5aTPnnnAOTh2mmOjQ7oa0D9hcjobV/wj8CZACoRefh8fQos3RPxGR/ySqaoEKcA/wkSN94Vxz3/3Mw2OAmniOH9zm5v8DrgaaoqpWRHJVvQx4sD2to5cdKz08PJaMrDw1UuBKEXlYVa0pyWtF5GHg0xxqN5v6zqMeHgxDB+B0jkL9dJu8IpIbinEouaoGInJ3qZrvL+1sKZmfeTl6ePRd42YlB8OSk1eLyN0lV3OOHKUzx5y2wJeBLwAneFl6eAwMbwJfB/50jrWcM2dMDvORuPz98cANwLqSzH4ah4dH75GUpJ0CbhGRt4/kZhv/H1IGuU38JUHkAAAAAElFTkSuQmCC"
+    }
+  }
+}

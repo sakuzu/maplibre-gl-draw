@@ -1,0 +1,172 @@
+{
+  "description": "Renames of public terms. scripts/rename-terms.mjs applies the rules in order; scripts/check-terms.mjs fails on every retired pattern. To rename a term again, append rules that turn the current name into the new one, add the current name to retired, and run the script. The `api` stage renames only identifiers and event names and is safe in any repository; the `term` stage also renames the word in prose and code, so a repository that uses the word in another sense takes only `api` (with --paths to leave its records of past work alone) and edits its own text by hand. The word `dataset` is also the DOM property `element.dataset`: protect `.dataset.` except in `draw.dataset.` before renaming it again.",
+  "protect": [
+    "FeatureCollection",
+    "featureCollection",
+    "GeometryCollection",
+    "geometryCollection",
+    "SharedCollection",
+    "recollection",
+    "re-collection",
+    "A collection of pure functions",
+    "a collection of edges",
+    "a collection of triangles",
+    "The collection process"
+  ],
+  "stages": {
+    "api": [
+      {
+        "from": "draw\\.display\\.",
+        "to": "draw.dataset."
+      },
+      {
+        "from": "(['`])display\\.(click|add|remove|reorder)\\b",
+        "to": "$1dataset.$2"
+      },
+      {
+        "from": "DisplayCollection",
+        "to": "Dataset"
+      },
+      {
+        "from": "displayCollection",
+        "to": "dataset"
+      },
+      {
+        "from": "displaycollection",
+        "to": "dataset"
+      },
+      {
+        "from": "\\b(D|d)isplay(BaseStyle|ChangePayload|ClickEventPayload|ClickPayload|HoverPayload|CollisionThinning|ThinningStats|ColumnarGeometryType|ColumnarGeometry|ColumnarInput|ColumnarPrepared|Column|DictionaryCodes|DictionaryColumn|FeatureInput|FeatureProvider|ZoomScale)\\b",
+        "to": "$1ataset$2"
+      },
+      {
+        "from": "\\bdisplay(basestyle|changepayload|clickeventpayload|clickpayload|hoverpayload|collisionthinning|thinningstats|columnargeometrytype|columnargeometry|columnarinput|columnarprepared|column|dictionarycodes|dictionarycolumn|featureinput|featureprovider|zoomscale)\\b",
+        "to": "dataset$1"
+      },
+      {
+        "from": "\\bprepareDisplayColumnar\\b",
+        "to": "prepareDatasetColumnar"
+      },
+      {
+        "from": "\\bpreparedisplaycolumnar\\b",
+        "to": "preparedatasetcolumnar"
+      },
+      {
+        "from": "\\bsetDisplayEnabled\\b",
+        "to": "setDatasetsEnabled"
+      },
+      {
+        "from": "\\bisDisplayEnabled\\b",
+        "to": "isDatasetsEnabled"
+      },
+      {
+        "from": "\\bsetdisplayenabled\\b",
+        "to": "setdatasetsenabled"
+      },
+      {
+        "from": "\\bisdisplayenabled\\b",
+        "to": "isdatasetsenabled"
+      },
+      {
+        "from": "\\bgetDisplayTraceFeatures\\b",
+        "to": "getDatasetTraceFeatures"
+      },
+      {
+        "from": "\\bgetdisplaytracefeatures\\b",
+        "to": "getdatasettracefeatures"
+      },
+      {
+        "from": "\\bgetDisplayFeature\\b",
+        "to": "getDatasetFeature"
+      },
+      {
+        "from": "\\bgetdisplayfeature\\b",
+        "to": "getdatasetfeature"
+      },
+      {
+        "from": "\\bdrawdisplayclick\\b",
+        "to": "drawdatasetclick"
+      },
+      {
+        "from": "collectionId",
+        "to": "datasetId"
+      },
+      {
+        "from": "\\b(set|clear|get)CollectionConfig\\b",
+        "to": "$1DatasetConfig"
+      },
+      {
+        "from": "\\b(set|clear|get)collectionconfig\\b",
+        "to": "$1datasetconfig"
+      }
+    ],
+    "term": [
+      {
+        "from": "\\bDisplay-only collection",
+        "to": "Dataset"
+      },
+      {
+        "from": "\\bdisplay-only collection",
+        "to": "dataset"
+      },
+      {
+        "from": "\\bdisplay collection",
+        "to": "dataset"
+      },
+      {
+        "from": "\\bcollection",
+        "to": "dataset"
+      },
+      {
+        "from": "\\bCollection",
+        "to": "Dataset"
+      },
+      {
+        "from": "(?<=[a-z0-9_])Collection",
+        "to": "Dataset"
+      },
+      {
+        "from": "(?<=_)COLLECTION",
+        "to": "DATASET"
+      },
+      {
+        "from": "\\bCOLLECTION",
+        "to": "DATASET"
+      },
+      {
+        "from": "表示専用の?コレクション",
+        "to": "データセット"
+      },
+      {
+        "from": "コレクション",
+        "to": "データセット"
+      }
+    ]
+  },
+  "files": [
+    {
+      "from": "src/display/collection.ts",
+      "to": "src/display/dataset.ts"
+    },
+    {
+      "from": "src/display/collection.test.ts",
+      "to": "src/display/dataset.test.ts"
+    },
+    {
+      "from": "src/display/columnar/collection.test.ts",
+      "to": "src/display/columnar/dataset.test.ts"
+    }
+  ],
+  "retired": [
+    "DisplayCollection",
+    "displayCollection",
+    "draw\\.display\\.",
+    "collectionId",
+    "[Dd]isplay-only collection",
+    "\\b[Dd]isplay(BaseStyle|FeatureInput|ColumnarInput|ZoomScale)\\b",
+    "\\b(set|is)DisplayEnabled\\b",
+    "表示専用の?コレクション",
+    "_COLLECTION",
+    "[Dd]isplay-only"
+  ]
+}

@@ -1,0 +1,246 @@
+# @sakuzu/maplibre-gl-draw
+
+[MapLibre GL JS][maplibre] の地図の上に図形を描き、編集するための
+ライブラリーです。独自の WebGL2 レンダラーで描くので、20 万の地物を
+載せても編集できます。3D 地形や地球儀の上にも、平らな地図と同じように
+描けます。
+
+[デモ][demo] | [ドキュメント](docs/README.ja.md) | [API リファレンス][api] |
+[English](README.md)
+
+このページの正は英語版 ([README.md](README.md)) です。
+
+![東京駅周辺の playground。半透明で重なる円、細い線から太い線、破線と点線、枠と頂点ハンドルが付いた選択中の穴あき多角形、マルチポリゴン、円と四角と三角と星のマーカー、画像を囲むフリーハンドの線、不透明度を下げたレイヤー、カテゴリーのスタイル規則で塗り分けた区画、段階区分の規則で塗り分けた細かい六角形と凡例、レイヤーとグループの階層を示すレイヤーパネル](docs/images/overview.jpg)
+
+## 機能
+
+### 描画
+
+点、線、面、円、フリーハンドの線を、マウス、タッチ、ペン、キーボードで
+描けます。用意した画像を地図の上に置くこともできます
+([描画](docs/guides/drawing.ja.md))。
+
+### 選択と変形
+
+地物をクリックで 1 つずつ、または矩形で囲んでまとめて選べます。選んだ
+地物は移動、拡大縮小、回転ができます。
+
+### 頂点の編集
+
+頂点を足したり、消したり、動かしたりできます。MultiPolygon のように
+複数の部分からなる地物や、面の穴の頂点も同じように編集できます。
+
+### 吸着
+
+描いている途中の点は、近くにある既存の頂点、辺、辺どうしの交点、水平や
+垂直などの角度のガイドに吸着します。隣り合う区画を描くときは、既存の
+境界の上の 2 点をクリックするだけで、その間の境界に沿った頂点が入ります
+([吸着と幾何演算](docs/guides/snapping-geometry.ja.md))。
+
+### 幾何演算
+
+選んだ面どうしの結合、切り抜き、交差、線による分割、一定の距離だけ
+広げるバッファができます。距離、長さ、面積も計算できます。これらの計算は
+地図に依存しない関数として `@sakuzu/maplibre-gl-draw/geometry` に
+まとめてあり、ブラウザーの外 (Node や Bun) でも同じ結果が得られます。
+
+### スタイル
+
+色、不透明度、線の太さ、破線と点線、点の形を決められます。スタイル規則を
+使うと、地物が持つ属性の値 (土地の用途や人口など) に応じて色を自動で
+分けられます ([スタイル](docs/guides/styles.ja.md))。
+
+### レイヤーとグループ
+
+レイヤーとグループで地物をまとめられます。レイヤーは並べ替え、非表示、
+ロック、半透明化ができます。基図の道路や建物など MapLibre 自身の
+レイヤーを、このライブラリーのレイヤーの間に挟んで描くこともできます
+([レイヤー](docs/guides/layers.ja.md))。
+
+### 傾けた地図、地球儀、3D 地形
+
+地図を傾けても、回しても、地球儀の表示にしても、3D 地形を有効にしても、
+平らな地図と同じように描けます。日付変更線をまたぐ地物も描けます
+([地形](docs/guides/terrain.ja.md))。
+
+最初の画像と同じ図形を、地図を傾けて回して見たところです。
+
+![最初の画像と同じ図形を、地図を傾けて回し、北が上でない向きで見たもの](docs/images/tilted.jpg)
+
+地球儀の上では、大圏航路も日付変更線をまたぐ領域も描けます。
+
+![球に見える地球。大陸をまたぐ大圏航路、2 本の経線と 2 本の緯線で囲んだ領域、東京を中心とする円、画像、都市のマーカー](docs/images/globe.jpg)
+
+3D 地形の上では、地物は斜面に沿い、尾根の向こうは尾根に隠れます。
+
+![谷から見たインスブルック北の山並みの 3D 地形。斜面を覆う半透明の領域と格子の画像、山頂の星までジグザグに登る登山道、谷を横切って尾根の向こうへ消えるまっすぐな破線](docs/images/terrain.jpg)
+
+### 大量の地物
+
+20 万の地物を載せても編集できます。次の画像の 20 万 8,073 件の地物は、
+すべて編集できます ([性能](docs/guides/performance.ja.md))。
+
+![傾けたカメラから見た架空の街。小さな家、道、公園、場所のマーカーが、すべて編集できる地物として遠くまで続き、手前の公園が選ばれている](docs/images/large-data.jpg)
+
+### データセット
+
+数万件の区画や 100 万件の点のような大きなデータを、編集の対象に
+しない代わりに速く表示します。全部を一度に渡すほか、地図を動かす
+たびに見えている範囲の分だけサーバーから取り寄せることもできます。
+GeoParquet や Arrow の表は列の形のまま渡せるので、行ごとに変換する
+時間がかかりません。読み込みは Worker で行えるので、大きなファイルを
+開いても画面は止まりません。見た目は描いた地物と同じスタイル規則で
+決められ、クリックすると属性を読めます
+([大量のデータ](docs/guides/large-data.ja.md))。
+
+### 書き出しと読み込み
+
+独自形式で書き出すと、レイヤー、グループ、スタイル、画像まで含めて
+保存でき、読み込めば同じ状態に戻ります。GeoJSON で書き出せば、ほかの
+ツールと地物をやり取りできます。地物を保存するストアは差し替えられ、
+変更はすべてイベントで通知されます
+([保存と読み込み](docs/guides/save-load.ja.md))。
+
+### 閲覧専用
+
+閲覧専用モードと操作のロックがあり、描いたものを見せるだけの画面を
+作れます ([読み取り専用](docs/guides/read-only.ja.md))。
+
+### 拡張
+
+プラグイン、独自のモード、独自の地物型を足して拡張できます
+([プラグイン](docs/guides/plugins.ja.md)、
+[独自の型](docs/guides/custom-types.ja.md))。
+
+## デモ
+
+ブラウザーですぐに試せます。インストールは要りません。
+
+- [プレイグラウンド][demo]
+  - すべての機能を 1 つの画面で。レイヤーとプロパティのパネル付き
+- [基本][ex-basic]
+  - 面の描画、変更のイベント、保存と復元
+- [書き出しと読み込み][ex-save-load]
+  - GeoJSON と独自形式の書き出し、地図に落としたファイルの読み込み
+- [スタイル規則][ex-style-rules]
+  - 属性の値で色を分ける 4 種類の規則と凡例
+- [吸着と幾何演算][ex-snapping-and-geometry]
+  - 吸着、境界のなぞり、共有する頂点の同時移動、結合、切り抜き、
+    バッファ、分割
+- [3D 地形][ex-terrain]
+  - 3D 地形の上での描画と選択
+- [閲覧専用][ex-read-only]
+  - 閲覧専用モード、操作のロック、ロックしたレイヤー
+- [プラグイン][ex-plugin]
+  - フックと独自のモードを持つプラグイン
+- [独自の地物型][ex-custom-feature-type]
+  - 独自のレンダラーと当たり判定を持つ地物型
+- [データセット][ex-large-data]
+  - 5 万のマス目の色分けと、見えている範囲の点の取り寄せ
+- [100 万の点][ex-columnar-worker]
+  - Worker で読み込む 100 万の点
+
+## インストール
+
+```sh
+npm install @sakuzu/maplibre-gl-draw
+```
+
+maplibre-gl は peer dependency です。アプリにすでに入っている
+maplibre-gl (`~6.11.1`) を使います。まだ入っていなければ、npm 7 以降は
+一緒にインストールされます。
+
+## 使い方
+
+```ts
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+
+// maplibre-gl v6 はページごとに 1 回 worker の URL を要する (これは Vite の例)
+maplibregl.setWorkerUrl(workerUrl);
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://tiles.openfreemap.org/styles/liberty',
+  center: [139.767, 35.681],
+  zoom: 12,
+});
+
+const draw = createMapLibreGLDraw(map);
+
+// 自分のボタンで描き始める。クリックで頂点を足し、最初の頂点のクリックか
+// Enter で確定する
+document.querySelector('#polygon')?.addEventListener('click', () => {
+  draw.setMode('draw_polygon');
+});
+
+draw.on('draw.feature.create', ({ feature }) => {
+  console.log(feature.id, feature.type, feature.coordinates);
+});
+
+// すべての地物を GeoJSON の FeatureCollection (文字列) で得る
+document.querySelector('#save')?.addEventListener('click', () => {
+  const { data } = draw.export('geojson');
+  console.log(data);
+});
+```
+
+ページ全体は [examples/basic/](examples/basic/) にあります。
+[はじめかた](docs/getting-started.ja.md) で順を追って説明しています。
+
+## 動作環境
+
+- maplibre-gl `~6.11.1` で動き、WebGL2 が必要です。
+- ESM のみで、TypeScript の型が付いています。フレームワークには依存
+  しません ([フレームワーク](docs/guides/frameworks.ja.md))。
+
+## 制約
+
+- 地物は、MapLibre GL JS の[カスタムレイヤー][custom-layer]の中に、この
+  ライブラリーのレンダラーで描いています。MapLibre のスタイルのレイヤー
+  ではないので、MapLibre の `queryRenderedFeatures` やスタイル式からは
+  見えません。地物を調べたり色を変えたりするときは、このライブラリーの
+  API とイベントを使います。
+- 経度は [-180, 180] の範囲で扱います。
+- 幾何演算は、日付変更線と極の付近では使えません。
+
+## ドキュメント
+
+[docs/README.ja.md](docs/README.ja.md) に、はじめかた、手引き、
+リファレンス、内部の文書を読む順に並べています。mapbox-gl-draw や
+terra-draw から移る場合は [移行](docs/guides/migrating.ja.md) を参照して
+ください。
+
+## 開発に参加する
+
+開発の手順は [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) にあります。
+
+## ライセンス
+
+Copyright (C) 2026 SAKAIDA Atsushi.
+
+GNU Affero General Public License version 3 (`AGPL-3.0-only`) で提供して
+います。全文は [LICENSE](LICENSE) にあります。
+
+AGPL が製品に合わない場合は、Kasika, Inc. (可視化技研株式会社) から商用
+ライセンスを受けられます。連絡先は <https://www.kasika.xyz/> です。
+
+このパッケージに含まれる第三者のコードの表示は
+[THIRD_PARTY_NOTICES.ja.md](THIRD_PARTY_NOTICES.ja.md) にあります。
+
+[maplibre]: https://maplibre.org/maplibre-gl-js/docs/
+[custom-layer]: https://maplibre.org/maplibre-gl-js/docs/API/interfaces/CustomLayerInterface/
+[demo]: https://sakuzu.github.io/maplibre-gl-draw/
+[api]: https://sakuzu.github.io/maplibre-gl-draw/api/
+[ex-basic]: https://sakuzu.github.io/maplibre-gl-draw/examples/basic/
+[ex-save-load]: https://sakuzu.github.io/maplibre-gl-draw/examples/save-load/
+[ex-style-rules]: https://sakuzu.github.io/maplibre-gl-draw/examples/style-rules/
+[ex-snapping-and-geometry]: https://sakuzu.github.io/maplibre-gl-draw/examples/snapping-and-geometry/
+[ex-terrain]: https://sakuzu.github.io/maplibre-gl-draw/examples/terrain/
+[ex-read-only]: https://sakuzu.github.io/maplibre-gl-draw/examples/read-only/
+[ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
+[ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
+[ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
+[ex-columnar-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-worker/

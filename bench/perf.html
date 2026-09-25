@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dataset Performance Measurement</title>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      #map { position: absolute; inset: 0; }
+      #panel {
+        position: absolute; top: 12px; left: 12px; z-index: 10;
+        background: rgba(255, 255, 255, 0.95); border: 1px solid #dee2e6;
+        border-radius: 8px; padding: 12px 16px; width: 300px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px; line-height: 1.7; color: #212529;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      }
+      #panel h1 { font-size: 14px; margin: 0 0 8px; }
+      #live { font-size: 22px; }
+      #result { white-space: pre-line; margin-top: 8px; }
+      #result.pass { color: #2b8a3e; }
+      #result.fail { color: #c92a2a; }
+      button {
+        margin-top: 8px; padding: 6px 14px; font-size: 13px;
+        border: 1px solid #adb5bd; border-radius: 6px;
+        background: #f1f3f5; cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .note { color: #868e96; font-size: 11px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="panel">
+      <h1>Dataset Performance</h1>
+      <div>Features: <span id="count">-</span></div>
+      <div>Add time: <span id="add-ms">-</span></div>
+      <div>Visible cells (approx.): <span id="visible">-</span></div>
+      <div>Current <span id="live">-</span> fps</div>
+      <button type="button" id="run">Auto measure (10 s pan / zoom)</button>
+      <div id="result"></div>
+      <div class="note">
+        The target is 60fps while panning and zooming 50,000 polygons (about
+        5,000 visible): an average of 55fps or more and a p90 frame time of
+        20ms or less. The fps above also updates when you pan and zoom by hand.
+      </div>
+    </div>
+    <script type="module" src="./perf-main.ts"></script>
+  </body>
+</html>

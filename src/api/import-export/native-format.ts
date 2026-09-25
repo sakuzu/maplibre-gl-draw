@@ -1,0 +1,154 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * Import / export of the native format
+ */
+
+import type { Store } from '../../store/store.js';
+import type { Data, ExportOptions, FileData, LoadResult } from '../../store/types.js';
+import { NATIVE_VERSION } from './constants.js';
+import { validateNativeData } from './native-validation.js';
+
+/** The layer that survives the replacement (it is updated in place when the data has it) */
+const DEFAULT_LAYER_ID = 'default-layer';
+
+/**
+ * Exports the current data in the native format
+ */
+export function exportNative(store: Store, options?: ExportOptions): Data {
+  let features = store.getAllFeatures();
+  const layers = store.getAllLayers();
+  const groups = store.getAllGroups();
+
+  if (options?.featureIds && options.featureIds.length > 0) {
+    const featureIdSet = new Set(options.featureIds);
+    features = features.filter((f) => featureIdSet.has(f.id));
+  }
+  if (options?.layerIds && options.layerIds.length > 0) {
+    const layerIdSet = new Set(options.layerIds);
+    features = features.filter((f) => layerIdSet.has(f.layerId));
+  }
+
+  // Get only the files that are in use
+  const usedFileIds = new Set<string>();
+  for (const feature of features) {
+    if (feature.type === 'Image' && feature.properties.imageFileId) {
+      usedFileIds.add(feature.properties.imageFileId as string);
+    }
+  }
+
+  const files = store.getAllFiles();
+  const filesRecord: Record<string, FileData> = {};
+  for (const file of files) {
+    if (usedFileIds.has(file.id)) {
+      filesRecord[file.id] = file;
+    }
+  }
+
+  const metadata = store.getMetadata();
+  const now = new Date().toISOString();
+
+  return {
+    version: NATIVE_VERSION,
+    created: now,
+    modified: now,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+    layers,
+    // The whole stacking order, entries of the application that are not layers included
+    layerOrder: [...store.getLayerOrder()],
+    groups,
+    features,
+    files: Object.keys(filesRecord).length > 0 ? filesRecord : undefined,
+  };
+}
+
+/**
+ * Imports the native format (replaces the existing data)
+ */
+export async function loadNative(data: Data, deps: { store: Store }): Promise<LoadResult> {
+  const { store } = deps;
+
+  // Validate before applying. Since store.transact does not roll back, if an exception
+  // is thrown on invalid data after the existing data has been cleared, the existing data
+  // is lost. Everything the steps below rely on (the shape of the layers, groups, features
+  // and files, the references between them, and the uniqueness of the ids) is checked
+  // before the destructive operation, so a problem throws while the existing data is
+  // still intact.
+  const retainedLayerIds = new Set<string>();
+  if (store.getLayer(DEFAULT_LAYER_ID)) retainedLayerIds.add(DEFAULT_LAYER_ID);
+  const { layers, layerOrder, groups, features, files } = await validateNativeData(
+    data,
+    retainedLayerIds,
+  );
+  const featureIds = features.map((f) => f.id);
+  // A kept layer the data does not list goes to the back, where it stays when the data does
+  // not mention it (every layer must be on the stacking order to be drawn)
+  const retainedUnlisted = [...retainedLayerIds].filter((id) => !layerOrder.includes(id));
+
+  // Import atomically (silent, so a subscriber that records changes leaves it out)
+  store.transact(() => {
+    // 1. Clear the existing data
+    const existingFeatures = store.getAllFeatures();
+    for (const feature of existingFeatures) {
+      store.deleteFeature(feature.id);
+    }
+
+    const existingGroups = store.getAllGroups();
+    for (const group of existingGroups) {
+      store.deleteGroup(group.id);
+    }
+
+    const existingLayers = store.getAllLayers();
+    for (const layer of existingLayers) {
+      if (layer.id !== DEFAULT_LAYER_ID) {
+        store.deleteLayer(layer.id);
+      }
+    }
+
+    // The files belong to the features that were just removed, and the data brings its own
+    // (leaving them would also make a file id of the data collide)
+    for (const file of store.getAllFiles()) {
+      store.deleteFile(file.id);
+    }
+
+    // 2. Import the layers
+    for (const layer of layers) {
+      if (store.getLayer(layer.id)) {
+        store.updateLayer(layer.id, layer);
+      } else {
+        store.createLayer(layer);
+      }
+    }
+
+    // 3. Import the groups
+    for (const group of groups) {
+      store.createGroup(group);
+    }
+
+    // 4. Import the features
+    for (const feature of features) {
+      store.createFeature(feature);
+    }
+
+    // 5. Import the files
+    for (const file of files) {
+      store.createFile(file);
+    }
+
+    // 6. Replace the whole stacking order. Entries that are not layers are replaced too, so
+    //    nothing of the previous document is left on it
+    store.setLayerOrder([...retainedUnlisted, ...layerOrder]);
+
+    // 7. Import the metadata
+    if (data.metadata) {
+      store.setMetadata(data.metadata);
+    }
+  }, 'silent');
+
+  return {
+    format: 'native',
+    featureIds,
+    replaced: true,
+  };
+}

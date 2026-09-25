@@ -1,0 +1,125 @@
+# 地形
+
+地図に地形 (`map.setTerrain`) があると、描いたものは地表に沿います。面と
+線は起伏の上に塗られ、点とハンドルは地表の上に立ち、クリックは見えている
+ものに当たります。ライブラリーの側で有効にする設定はありません。この
+手引きでは、何が変わるか、記号の振る舞い、高さの誇張、診断、制約を説明
+します。
+
+## 最小のコード
+
+```ts
+import * as maplibregl from 'maplibre-gl';
+import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://demotiles.maplibre.org/style.json',
+  center: [138.73, 35.36],
+  zoom: 11,
+  pitch: 60,
+});
+
+map.on('load', () => {
+  map.addSource('dem', {
+    type: 'raster-dem',
+    url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+    tileSize: 256,
+  });
+  map.setTerrain({ source: 'dem', exaggeration: 1.5 });
+});
+
+const draw = createMapLibreGLDraw(map);
+draw.setMode('draw_polygon');
+```
+
+多角形は斜面の上に描かれ、地図を傾けても回転してもそこに留まります。
+`map.setTerrain(null)` で地形を切ると、ライブラリーを呼ばなくても、
+描いたものは平らな表示に戻ります。
+
+## 何が変わるか
+
+ライブラリーはフレームごとに地図の地形を確かめます。地形の無い地図は
+これまでとまったく同じに描かれ、地形の有効と無効を切り替えるのに
+呼び出しは要りません。
+
+- 面と線は、地表に持ち上げた三角形としてではなく、地表のピクセルとして
+  塗ります。そのため、裂けたり沈んだりせずに、起伏の細かな折れ目にも
+  沿います。線は、斜面がどれほど急でも、平らな地図のときと同じ幅を
+  保ちます
+- 面の塗りには地表の陰影と同じ光で陰を付けるので、不透明な塗りの下でも
+  起伏が読み取れます。変わるのは明るさだけで、色は凡例と一致したまま
+  です
+- 画像は、描画順の中の自分の位置で地表に貼られます
+- 当たり判定、吸着、編集には描画と同じ位置を使うので、クリックは
+  見えているものに当たります
+- 描画、選択、移動、頂点の編集は、平らな地図と同じように使えます
+
+ライブラリーは、DEM の提供元、符号化の方式、カタログについては何も
+知りません。ホストが `setTerrain` に渡した DEM をそのまま読みます。
+
+## 点、ハンドル、ラベル
+
+点、頂点のハンドル、そのほかの記号は、アンカーの位置で地表の上に立ち、
+画面上の大きさを保ちます。深度テストをせずに描くので、記号が斜面に半分
+沈むことはありません。
+
+丘の陰に隠れた記号は、消さずに薄く描きます。利用者が自分で置いたものを
+見失わないようにするためです。薄く描いた記号もクリックして選べます。
+現在選んでいるもののハンドルは、常に普通に描きます。
+
+## 誇張
+
+描画には、地図自身の高さの誇張 (`setTerrain` の `exaggeration`) を
+使います。ライブラリーが独自に誇張を加えることはなく、別に変える
+オプションもありません。実際の縮尺の起伏にするには、`exaggeration` を
+1 のままにしてください。
+
+## 診断
+
+`draw.getTerrainDiagnostics()` は、最後のフレームがどのように描かれたかを
+数値で返します。デバッグや計測の道具のためのものです。型は API の層 2 に
+あるので、項目はマイナー版で変わることがあります。
+
+```ts
+const { render, drape } = draw.getTerrainDiagnostics();
+console.log(render.active, render.stepMeters, drape.used, drape.reason);
+```
+
+- `render.active` は、地形の無い地図のときと、DEM がまだ使えない間は
+  `false` です
+- `drape.used` は、そのフレームで面と線を地表に塗ったかどうかを示し、
+  `drape.reason` は塗らなかった理由を示します。件数の項目
+  (`featureCount`、`edgeCount`、`tileCount` など) で負荷が分かります
+- 値は、このインスタンスのその時点の写しです。後のフレームで、すでに
+  返したオブジェクトが変わることはありません。1 つのページにある複数の
+  地図は、それぞれ自分の値を返します
+
+## 制約
+
+- 地表への塗りには処理量の上限があります。大きく縮小した地図に
+  地物が多いときや、データセットでは、形を細かく分割して
+  頂点を持ち上げる方法に切り替わるので、起伏への沿い方が粗くなります。
+  そのような重い地図では、低いズームで面と線を平らに描きます。そこでは
+  画面上の起伏が小さく、違いが目立たないからです
+- 破線は常に分割する方法で描きます
+- 記号はアンカーの 1 点の高さだけを使います。急な斜面にある大きな
+  マーカーが、地表に沿って曲がることはありません
+- 立体の形はありません。地物は自分の高さを持たず、常に地表の
+  上にあります
+- 地形での描画は MapLibre の内部に依存しているので、対応する MapLibre の
+  版の範囲が狭くなっています。README を参照してください
+
+## 関連する例
+
+- [terrain](../../examples/terrain/) では、公開されている DEM で
+  地形を有効にし、その上で描いたり選んだりして、
+  `getTerrainDiagnostics()` の結果を表示します
+
+## リファレンス
+
+- `MapLibreGLDraw` の
+  [`getTerrainDiagnostics`](../reference/api/interfaces/index.MapLibreGLDraw.html#getterraindiagnostics)
+- [`TerrainDiagnostics`](../reference/api/interfaces/index.TerrainDiagnostics.html)、
+  [`TerrainRenderState`](../reference/api/interfaces/index.TerrainRenderState.html)、
+  [`TerrainDrapeDebug`](../reference/api/interfaces/index.TerrainDrapeDebug.html)

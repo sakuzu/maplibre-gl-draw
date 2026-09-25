@@ -1,0 +1,13 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts", "src/geometry/index.ts", "src/display/columnar/index.ts"],
+  "tsconfig": "tsconfig.build.json",
+  "out": "docs/reference/api",
+  "name": "@sakuzu/maplibre-gl-draw",
+  "readme": "none",
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "includeVersion": true,
+  "treatWarningsAsErrors": false,
+  "validation": { "notExported": true, "invalidLink": true, "notDocumented": false }
+}

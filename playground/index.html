@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>maplibre-gl-draw playground</title>
+  </head>
+  <body>
+    <div class="app-container">
+      <header class="header">
+        <h1 class="header-title">
+          <a href="./">maplibre-gl-draw playground</a>
+        </h1>
+        <nav class="header-links" aria-label="Links">
+          <a id="scene-link" href="?showcase">Showcase</a>
+          <a href="./examples/" data-site-only hidden>Examples</a>
+          <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/main/docs/README.md">Docs</a>
+          <a href="./api/" data-site-only hidden>API</a>
+          <a href="https://github.com/sakuzu/maplibre-gl-draw">GitHub</a>
+        </nav>
+      </header>
+
+      <div class="content-wrapper">
+        <main class="main-content">
+          <div id="map">
+            <!-- Drawing Toolbar -->
+            <div class="map-toolbar" id="draw-toolbar">
+              <button type="button" class="toolbar-btn active" data-mode="select" title="Select (V)"></button>
+              <button type="button" class="toolbar-btn" data-mode="draw_point" title="Point (P)"></button>
+              <button type="button" class="toolbar-btn" data-mode="draw_line" title="Line (L)"></button>
+              <button type="button" class="toolbar-btn" data-mode="draw_polygon" title="Polygon (G)"></button>
+              <button type="button" class="toolbar-btn" data-mode="draw_circle" title="Circle (C)"></button>
+              <button type="button" class="toolbar-btn" data-mode="draw_freehand" title="Freehand (F)"></button>
+              <button type="button" class="toolbar-btn" data-mode="draw_image" title="Add image (I)"></button>
+              <div class="toolbar-separator"></div>
+              <button type="button" class="toolbar-btn" id="delete-btn" title="Delete (Delete)" disabled></button>
+            </div>
+
+            <!-- Geometry Toolbar -->
+            <div class="map-geometry-bar" id="geometry-bar">
+              <div class="geometry-bar-group">
+                <button type="button" class="geometry-btn" id="geom-union" title="Merge the selected polygons (2 or more)" disabled>Merge</button>
+                <button type="button" class="geometry-btn" id="geom-subtract" title="Subtract the other polygons from the bottom one (2 or more)"
+                      disabled>Subtract</button>
+                <button type="button" class="geometry-btn" id="geom-intersect" title="Keep only the overlapping part (2 or more)" disabled>Intersect</button>
+              </div>
+              <div class="geometry-bar-separator"></div>
+              <div class="geometry-bar-group">
+                <label class="geometry-bar-label" for="geom-buffer-distance">Buffer</label>
+                <input type="number" class="geometry-bar-input" id="geom-buffer-distance"
+                       value="100" step="10" title="Enter a negative value to shrink">
+                <span class="geometry-bar-unit">m</span>
+                <button type="button" class="geometry-btn" id="geom-buffer" disabled>Apply</button>
+              </div>
+              <div class="geometry-bar-separator"></div>
+              <span class="geometry-bar-status" id="geom-status">Select a feature</span>
+            </div>
+
+            <!-- Toasts -->
+            <div class="toast-container" id="toast-container"></div>
+          </div>
+        </main>
+
+        <aside class="sidebar">
+          <section class="sidebar-section" id="property-panel">
+            <!-- PropertyPanel is generated dynamically by JavaScript -->
+          </section>
+
+          <section class="sidebar-section layer-panel-section" id="layer-panel">
+            <!-- LayerPanel is generated dynamically by JavaScript -->
+          </section>
+        </aside>
+      </div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
