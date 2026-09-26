@@ -24,7 +24,7 @@ held, so the total size of the source does not matter.
 A table of hundreds of thousands of rows is best given as columns of
 typed arrays (`columnar`), read and prepared in a Worker: the rows are
 packed straight into the GPU arrays, and the main thread does not build
-an object per row ([large data](large-data.md#columns-of-typed-arrays)).
+an object per row ([large data](large-data.md#a-table-as-columns)).
 
 The Store is drawn from retained batches too, but every feature in it
 takes part in editing, hit testing, events and export. One measured
