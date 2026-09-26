@@ -25,6 +25,7 @@ import { TerrainContext } from '../view/terrain/context.js';
 import { chunkTargetSizeFor, type DisplayChunk, partitionIntoChunks } from './chunk.js';
 import { type DisplayChunkFrame, DisplayChunkSet, type DisplayChunkSetHost } from './chunk-set.js';
 import { type ChunkCollector, collectFeatures } from './retained.js';
+import type { DrawnRowMask } from './thinning.js';
 import { normalizeDisplayFeature } from './types.js';
 
 const PROJECTION = {} as ProjectionData;
@@ -40,15 +41,21 @@ function createStubGL(): WebGL2RenderingContext {
   } as unknown as WebGL2RenderingContext;
 }
 
-/** Renderers that count the builds, the draws and the releases of the point batches */
+/**
+ * Renderers that count the builds, the draws and the releases of the point batches (and the
+ * builds of the polygon batches)
+ */
 function createRenderers(): {
   renderers: RetainedRendererSet;
-  counts: { builds: number; draws: number; disposes: number };
+  counts: { builds: number; draws: number; disposes: number; polygonBuilds: number };
 } {
-  const counts = { builds: 0, draws: 0, disposes: 0 };
+  const counts = { builds: 0, draws: 0, disposes: 0, polygonBuilds: 0 };
   const renderers: RetainedRendererSet = {
     polygon: {
-      buildRetained: () => ({}) as RetainedPolygonBatch,
+      buildRetained: () => {
+        counts.polygonBuilds++;
+        return {} as RetainedPolygonBatch;
+      },
       drawRetained: (): void => {},
       disposeRetained: (): void => {},
     },
@@ -100,9 +107,20 @@ function chunksOf(features: Feature[]): DisplayChunk[] {
   return partitionIntoChunks(features, chunkTargetSizeFor(features.length));
 }
 
+/** A collector of the rows of `features` that skips the rows not drawn */
+function collectorOf(features: Feature[]): DisplayChunkSetHost['collector'] {
+  return (rows, options, drawn) =>
+    collectFeatures(
+      rows.length,
+      (i) => (drawn === null || drawn[rows[i]] === 1 ? features[rows[i]] : null),
+      options,
+    );
+}
+
 function createHost(overrides: Partial<DisplayChunkSetHost> = {}): DisplayChunkSetHost {
   return {
-    collector: (rows, options) => collectFeatures(rows.length, (i) => FEATURES[rows[i]], options),
+    collector: collectorOf(FEATURES),
+    drawnRows: () => null,
     externalPointFilter: () => undefined,
     drapedFills: () => false,
     requestRepaint: vi.fn(),
@@ -241,32 +259,119 @@ describe('DisplayChunkSet', () => {
     expect(counts.builds).toBe(2 * built);
   });
 
-  it('refreshing keeps drawing the previous batches and rebuilds while the camera moves', () => {
+  it('a change of the drawn rows rebuilds only the point part of the chunks drawn, while the camera moves too', () => {
+    // The first group gets a polygon next to its points, so its chunks hold both
+    const square = normalizeDisplayFeature({
+      id: 'square',
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [0.01, 0],
+          [0.01, 0.01],
+          [0, 0],
+        ],
+      ],
+    });
+    const features = [...FEATURES, square];
     const { renderers, counts } = createRenderers();
-    const host = createHost();
+    let drawn: DrawnRowMask = null;
+    const host = createHost({ collector: collectorOf(features), drawnRows: () => drawn });
     const set = new DisplayChunkSet(host);
-    set.replace(chunksOf(FEATURES));
+    const chunks = chunksOf(features);
+    set.replace(chunks);
     set.draw(frameFor(renderers, LEFT));
-    const built = counts.builds;
+    const pointBuilds = counts.builds;
+    const polygonBuilds = counts.polygonBuilds;
+    expect(polygonBuilds).toBe(1);
     vi.mocked(host.onInvalidateAll).mockClear();
 
-    set.refreshAll();
-    expect(host.onInvalidateAll).toHaveBeenCalledTimes(1);
-    // Nothing is released yet: the previous version is drawn until the new one is complete
-    expect(counts.disposes).toBe(0);
-
+    // Thin away the first point only: one chunk has a point that changed
+    const mask = new Uint8Array(features.length).fill(1);
+    mask[0] = 0;
+    drawn = mask;
     const moving = frameFor(renderers, LEFT);
     moving.terrain.cameraMoving = true;
     const drawsBefore = counts.draws;
     set.draw(moving);
-    expect(counts.builds).toBe(2 * built);
-    expect(counts.disposes).toBe(built);
-    expect(counts.draws - drawsBefore).toBe(built);
+    expect(counts.builds).toBe(pointBuilds + 1);
+    expect(counts.disposes).toBe(1);
+    // The polygons are untouched and nothing is discarded as a whole
+    expect(counts.polygonBuilds).toBe(polygonBuilds);
+    expect(host.onInvalidateAll).not.toHaveBeenCalled();
+    // Every chunk in view is still drawn in that frame
+    expect(counts.draws - drawsBefore).toBe(pointBuilds);
+    expect(set.hasPendingBuild).toBe(false);
 
-    // A chunk entering the view while moving still waits for the camera to stop
+    // The same rows in another mask rebuild nothing
+    drawn = mask.slice();
+    set.draw(moving);
+    expect(counts.builds).toBe(pointBuilds + 1);
+
+    // A chunk entering the view while moving is not built (it waits for the camera to stop)
     set.draw({ ...moving, bounds: BOTH });
-    expect(counts.builds).toBe(2 * built);
+    expect(counts.builds).toBe(pointBuilds + 1);
     expect(set.hasPendingBuild).toBe(true);
+  });
+
+  it('the points drawn in immediate mode follow the drawn rows too, after the other features', () => {
+    // A point shape without instancing goes to immediate mode
+    const { renderers } = createRenderers();
+    const styles = renderers.styles;
+    const iconRenderers: RetainedRendererSet = {
+      ...renderers,
+      styles: {
+        getPointStyle: (feature) => ({ ...styles.getPointStyle(feature), shape: 'icon' }),
+        getLineStringStrokeStyle: (feature) => ({
+          ...styles.getLineStringStrokeStyle(feature),
+          lineStyle: 'dashed',
+        }),
+        getPolygonStyles: (feature) => styles.getPolygonStyles(feature),
+      },
+    };
+    const dashed = normalizeDisplayFeature({
+      id: 'dashed',
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [0.001, 0.001],
+      ],
+    });
+    const features = [...FEATURES.slice(0, 3), dashed];
+    let drawn: DrawnRowMask = null;
+    const set = new DisplayChunkSet(
+      createHost({ collector: collectorOf(features), drawnRows: () => drawn }),
+    );
+    set.replace(chunksOf(features));
+    const drawnIds = (): string[] => {
+      const frame = frameFor(iconRenderers, LEFT);
+      frame.terrain.cameraMoving = drawn !== null;
+      set.draw(frame);
+      return vi.mocked(frame.target.processFeature).mock.calls.map(([feature]) => feature.id);
+    };
+
+    expect(drawnIds()).toEqual(['dashed', 'p0', 'p1', 'p2']);
+    drawn = Uint8Array.from([1, 0, 1, 1]);
+    expect(drawnIds()).toEqual(['dashed', 'p0', 'p2']);
+  });
+
+  it('a build takes the drawn rows of the moment it starts', () => {
+    const { renderers } = createRenderers();
+    let drawn: DrawnRowMask = null;
+    const seen: DrawnRowMask[] = [];
+    const host = createHost({
+      drawnRows: () => drawn,
+      collector: (rows, options, mask) => {
+        seen.push(mask);
+        return collectorOf(FEATURES)(rows, options, mask);
+      },
+    });
+    const set = new DisplayChunkSet(host);
+    set.replace(chunksOf(FEATURES));
+    drawn = new Uint8Array(FEATURES.length).fill(1);
+    set.draw(frameFor(renderers, LEFT));
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((mask) => mask === drawn)).toBe(true);
   });
 
   it('a change of the hand-over to the drape re-bakes the chunks already built', () => {

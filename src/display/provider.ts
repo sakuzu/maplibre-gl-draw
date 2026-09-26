@@ -236,12 +236,22 @@ export class DisplayProviderLoader {
    * would be dropped only after it entered tileCache, so a stale result would remain).
    */
   private cacheGeneration = 0;
+  /** The serial number of the request whose response is awaited (null = none in flight) */
+  private awaitedSeq: number | null = null;
   private disposed = false;
 
   constructor(
     private readonly provider: DatasetFeatureProvider,
     private readonly host: DisplayProviderLoaderHost,
   ) {}
+
+  /**
+   * Whether a call is waiting for its debounce, or the response of the last call has not
+   * arrived yet (the features shown will change without anything else happening)
+   */
+  get busy(): boolean {
+    return !this.disposed && (this.timer !== null || this.awaitedSeq !== null);
+  }
 
   /** Schedules the call of the provider for a displayed range */
   schedule(bounds: BoundingBox, zoom: number): void {
@@ -305,9 +315,14 @@ export class DisplayProviderLoader {
     const seq = ++this.requestSeq;
     const generation = this.cacheGeneration;
     const bounds = tileRangeBounds(range);
+    this.awaitedSeq = seq;
+    const settle = (): void => {
+      if (this.awaitedSeq === seq) this.awaitedSeq = null;
+    };
 
     void this.provider(bounds, zoom).then(
       (features) => {
+        settle();
         if (this.disposed) return;
         // A response in flight across the discard is thrown away with its contents. It does not
         // enter the cache either
@@ -323,6 +338,7 @@ export class DisplayProviderLoader {
         this.host.apply(normalized);
       },
       (error) => {
+        settle();
         console.error(`Dataset "${this.host.id}": provider failed`, error);
       },
     );

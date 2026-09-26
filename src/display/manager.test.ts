@@ -10,9 +10,19 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import { FeatureDrawer } from '../view/renderers/drawer.js';
+import type { ImageRenderer } from '../view/renderers/image.js';
+import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
+import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
+import type { RetainedPointBatch } from '../view/renderers/point/point-instance.js';
+import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
+import type { RetainedPolygonBatch } from '../view/renderers/polygon/sdf-polygon.js';
+import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
+import type { TriangulationScheduler } from './triangulation.js';
 import type { DatasetFeatureInput } from './types.js';
 
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
@@ -697,5 +707,155 @@ describe('the reorder notification of DatasetManager', () => {
     manager.remove('a');
 
     expect(orders).toEqual([]);
+  });
+});
+
+describe('the pending work of DatasetManager', () => {
+  /** Renderers without GPU resources (every build succeeds) */
+  function createRenderers(): RetainedRendererSet {
+    return {
+      polygon: {
+        buildRetained: () => ({}) as RetainedPolygonBatch,
+        drawRetained: (): void => {},
+        disposeRetained: (): void => {},
+      },
+      line: {
+        buildRetainedBatch: () => ({}) as RetainedLineBatch,
+        drawRetainedBatch: (): void => {},
+        disposeRetainedBatch: (): void => {},
+      },
+      point: {
+        buildRetained: () => ({}) as RetainedPointBatch,
+        drawRetained: (): void => {},
+        disposeRetained: (): void => {},
+      },
+      styles: new FeatureDrawer({
+        gl: {
+          createBuffer: (): object => ({}),
+          createVertexArray: (): object => ({}),
+          bindBuffer: (): void => {},
+          bindVertexArray: (): void => {},
+          enableVertexAttribArray: (): void => {},
+          vertexAttribPointer: (): void => {},
+        } as unknown as WebGL2RenderingContext,
+        map: {} as never,
+        sdfLineRenderer: {} as SDFLineRenderer,
+        pointShapeRenderer: {} as PointShapeRenderer,
+        imageRenderer: {} as ImageRenderer,
+        featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
+      }),
+      viewport: (): [number, number] => [1920, 1080],
+    };
+  }
+
+  /** Points spread so that they fall into several chunks */
+  const SPREAD = Array.from({ length: 400 }, (_, i) => point(`p${i}`, [i * 0.1, (i % 20) * 0.1]));
+
+  /** Draws one frame into retained renderers */
+  function drawFrame(manager: DatasetManager, renderers: RetainedRendererSet): void {
+    const target: DisplayBatchTarget = {
+      ...createBatchTarget().target,
+      getRetainedRenderers: () => renderers,
+    };
+    manager.beginFrame(10);
+    manager.draw('below-store', target, {} as ProjectionData, 10);
+  }
+
+  function managerWith(options: Partial<Parameters<typeof createDatasetManager>[0]> = {}) {
+    return createDatasetManager({
+      getViewportBounds: () => WORLD,
+      getZoom: () => 10,
+      onViewportChange: () => () => {},
+      requestRepaint: () => {},
+      ...options,
+    });
+  }
+
+  it('the chunks a frame left unbuilt are pending, until a frame builds them', () => {
+    // Every look at the clock is past the budget: one chunk per frame
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
+    try {
+      const manager = managerWith();
+      const renderers = createRenderers();
+      manager.add({ id: 'c1', features: SPREAD });
+
+      drawFrame(manager, renderers);
+      expect(manager.hasPendingWork()).toBe(true);
+      for (let frame = 0; frame < 20 && manager.hasPendingWork(); frame++) {
+        drawFrame(manager, renderers);
+      }
+      expect(manager.hasPendingWork()).toBe(false);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('a dataset that is not drawn has no pending work', () => {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
+    try {
+      const manager = managerWith();
+      const renderers = createRenderers();
+      const dataset = manager.add({ id: 'c1', features: SPREAD });
+      drawFrame(manager, renderers);
+      expect(manager.hasPendingWork()).toBe(true);
+
+      dataset.setVisible(false);
+      expect(manager.hasPendingWork()).toBe(false);
+
+      // A frame that does not draw it (another side) leaves nothing of it pending either
+      dataset.setVisible(true);
+      manager.move('c1', { order: 'above-store' });
+      manager.beginFrame(10);
+      expect(manager.hasPendingWork()).toBe(false);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('without time slicing a frame builds every chunk in view', () => {
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
+    try {
+      const manager = managerWith({ timeSlicing: false });
+      manager.add({ id: 'c1', features: SPREAD });
+      drawFrame(manager, createRenderers());
+      expect(manager.hasPendingWork()).toBe(false);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('a huge polygon being triangulated is pending', () => {
+    const scheduler = { pendingCount: 1 } as TriangulationScheduler;
+    const manager = managerWith({ triangulationScheduler: scheduler });
+    expect(manager.hasPendingWork()).toBe(true);
+  });
+
+  it('a provider call waiting for its debounce or its response is pending', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolve: (features: DatasetFeatureInput[]) => void = () => {};
+      const manager = managerWith({ providerDebounceMs: 50 });
+      manager.add({
+        id: 'c1',
+        provider: () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      });
+      expect(manager.hasPendingWork()).toBe(true);
+
+      vi.advanceTimersByTime(50);
+      // The response has not arrived
+      expect(manager.hasPendingWork()).toBe(true);
+
+      resolve([point('a')]);
+      await vi.runAllTimersAsync();
+      expect(manager.hasPendingWork()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

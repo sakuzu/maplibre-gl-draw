@@ -51,6 +51,7 @@ export type InstanceApi = Pick<
   | 'setRenderScale'
   | 'getPixelRatio'
   | 'getTerrainDiagnostics'
+  | 'hasPendingWork'
   | 'isLocallyHidden'
   | 'getLocallyHidden'
   | 'setLocallyHidden'
@@ -180,6 +181,16 @@ export function createInstanceApi(deps: InstanceApiDeps): InstanceApi {
           ...(terrain ? getTerrainDrapeDebug(terrain) : INITIAL_DRAPE_DEBUG),
         }),
       });
+    },
+
+    hasPendingWork(): boolean {
+      // The engine of this instance knows its deferred work (an external implementation of the
+      // layer reports none)
+      return (
+        'hasPendingWork' in customLayer &&
+        typeof customLayer.hasPendingWork === 'function' &&
+        customLayer.hasPendingWork()
+      );
     },
 
     isLocallyHidden(id: string): boolean {

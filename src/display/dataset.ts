@@ -49,6 +49,7 @@ import { DisplayFeatureStyler } from './style.js';
 import type {
   DatasetCollisionThinning,
   DatasetThinningStats,
+  DrawnRowMask,
   ResolvedCollisionThinning,
 } from './thinning.js';
 import { CollisionThinningState, pointMarkerRadiusPx } from './thinning.js';
@@ -106,11 +107,20 @@ export class DatasetImpl implements Dataset {
   /**
    * The revision that triggers rebuilding the index of the drape
    *
-   * It advances only when the contents, the style, the thinning or the visibility changed. It
-   * does not advance on a zoom or on the view (if it did, the index would be rebuilt on every
-   * pan).
+   * It advances only when the contents, the style or the visibility changed. It does not advance
+   * on a zoom, on the view or on the thinning (the drape draws no point; if it advanced on a
+   * pan or a zoom band, the index would be rebuilt on every gesture).
    */
   private contentRevision = 0;
+  /** Advances whenever the drawn rows change (`getDrawnRowsRevision`) */
+  private drawnRowsRevision = 0;
+  /**
+   * The zoom of the most recent frame drawn (the zoom the sizes are drawn with; null before the
+   * first frame). The band of the thinning is decided from it
+   */
+  private frameZoom: number | null = null;
+  /** Whether this dataset was drawn in the most recent frame */
+  private drawnInFrame = false;
   /**
    * Revision number of the style
    *
@@ -132,7 +142,7 @@ export class DatasetImpl implements Dataset {
   private selected: Feature[] = [];
 
   private removed = false;
-  /** Whether the 'change' of a band followed while drawing is waiting to be sent */
+  /** Whether the 'change' of a band followed by a frame is waiting to be sent */
   private thinningNoticePending = false;
   /** Cancels the waiting picking of the winners of the nearby bands (null = nothing waits) */
   private cancelPrefetch: (() => void) | null = null;
@@ -175,7 +185,9 @@ export class DatasetImpl implements Dataset {
     this.deps = deps;
 
     this.chunks = new DisplayChunkSet({
-      collector: (rows, collect) => this.source.collector(rows, this.collectContext(collect)),
+      collector: (rows, collect, drawn) =>
+        this.source.collector(rows, this.collectContext(collect, drawn)),
+      drawnRows: () => this.thinning.mask,
       // Not passed when it is not injected (the path without a predicate is as before)
       externalPointFilter: () =>
         this.externalPointRender ? this.isExternallyRenderedPoint : undefined,
@@ -186,6 +198,7 @@ export class DatasetImpl implements Dataset {
       },
       pixelRatio: deps.pixelRatio,
       triangulationScheduler: deps.triangulationScheduler,
+      buildBudgetMs: deps.timeSlicing === false ? Number.POSITIVE_INFINITY : undefined,
     });
     this.thinning = new CollisionThinningState(
       {
@@ -199,7 +212,6 @@ export class DatasetImpl implements Dataset {
           return (styleRadius) =>
             pointMarkerRadiusPx(styleRadius, baseStyle, defaults, scale) + marginPx;
         },
-        viewport: () => this.deps.getViewportState(),
       },
       options.collisionThinning,
     );
@@ -237,12 +249,11 @@ export class DatasetImpl implements Dataset {
   }
 
   /**
-   * Whether it needs to know about the changes of the displayed range (moveend)
-   *
-   * The uses are calling the provider and following the zoom band of the collision thinning.
+   * Whether it needs to know about the changes of the displayed range (moveend): only to call
+   * its provider (the band of the thinning follows the frames drawn)
    */
   get needsViewportUpdates(): boolean {
-    return this.loader !== null || this.thinning.enabled;
+    return this.loader !== null;
   }
 
   /** Whether it has been removed */
@@ -296,12 +307,11 @@ export class DatasetImpl implements Dataset {
   setZoomScale(zoomScale: DatasetZoomScale | null): void {
     // The factors are only multiplied in at draw time, so the retained batches are untouched
     this.zoomScale = zoomScale;
-    // The footprint of the thinning does change with the factors, so it is rebuilt if the winners
-    // change
-    if (this.markStyleChanged()) {
-      this.chunks.invalidateAll();
-      this.emit('change', { reason: 'thinning' });
-    }
+    // The footprint of the thinning does change with the factors, so the winners are picked
+    // again (the next draw rebuilds the points when they changed)
+    this.styleRevision++;
+    this.syncThinning('change');
+    this.schedulePrefetch();
     this.deps.requestRepaint();
   }
 
@@ -333,13 +343,11 @@ export class DatasetImpl implements Dataset {
   }
 
   setCollisionThinning(options: DatasetCollisionThinning | null): void {
-    const result = this.thinning.setOptions(options);
+    const result = this.thinning.setOptions(options, this.thinningZoom());
     if (!result) return;
-
-    // The retained batches are rebuilt only when what is drawn changed
-    if (result.drawnChanged) this.thinningChanged();
-    // Whether moveend has to be subscribed to may have changed
-    this.deps.onViewportSubscriptionChange?.();
+    // The next draw rebuilds the points only when the drawn rows changed
+    if (result.drawnChanged) this.drawnRowsChanged('change');
+    this.schedulePrefetch();
   }
 
   getCollisionThinning(): ResolvedCollisionThinning | null {
@@ -354,9 +362,13 @@ export class DatasetImpl implements Dataset {
     return this.thinning.stats(this.source.length);
   }
 
-  refreshThinning(zoom?: number): void {
-    if (!this.thinning.enabled || this.removed) return;
-    if (this.thinning.refresh(zoom)) this.thinningChanged();
+  getDrawnRowsRevision(): number {
+    return this.drawnRowsRevision;
+  }
+
+  findRow(id: string): number | null {
+    const row = this.source.rowOfId(id);
+    return row >= 0 ? row : null;
   }
 
   invalidateProviderCache(): void {
@@ -439,28 +451,27 @@ export class DatasetImpl implements Dataset {
   }
 
   /**
-   * The features handed to the analytic drape (with the thinning and the rule colors applied, in
-   * draw order)
+   * The features handed to the analytic drape (with the rule colors applied, in draw order)
    *
-   * They are not narrowed by the view. Narrowing them would change the order of the elements
+   * The drape draws polygons and lines, and the thinning removes only points, so the drawn rows
+   * play no part here (a change of the zoom band does not rebuild the index of the drape). They
+   * are not narrowed by the view either. Narrowing them would change the order of the elements
    * whenever the view moves and force the tile index to be rebuilt (the narrowing is done with
    * the bounding box of each tile; `view/terrain/drape/binning.ts`).
    */
   drapeFeatures(): Feature[] {
     if (!this.isVisible) return [];
-    this.ensureThinning(this.deps.getZoom());
-    // The drape draws polygons and lines; a table of points has nothing for it (and its rows are
-    // not built into features for nothing)
-    if (this.source instanceof ColumnarSource && this.source.table.onlyPoints) return [];
-    // Without thinning every row is drawn (the features of a table are built once and kept)
-    if (!this.thinning.active) return this.styler.prepareAll(this.source.features());
-    const drawn: Feature[] = [];
-    for (let row = 0; row < this.source.length; row++) {
-      if (this.source.hasGeometry(row) && this.thinning.isDrawnRow(row)) {
-        drawn.push(this.source.featureAt(row));
-      }
+    const source = this.source;
+    // A table of points has nothing for it (and its rows are not built into features for
+    // nothing)
+    if (source instanceof ColumnarSource && source.table.onlyPoints) return [];
+    const features: Feature[] = [];
+    for (let row = 0; row < source.length; row++) {
+      const type = source.typeOf(row);
+      if (type === null || type === 'Point' || type === 'MultiPoint') continue;
+      features.push(source.featureAt(row));
     }
-    return this.styler.prepareAll(drawn);
+    return this.styler.prepareAll(features);
   }
 
   /**
@@ -539,6 +550,32 @@ export class DatasetImpl implements Dataset {
   }
 
   /**
+   * Whether work remains that will change what this dataset draws without the host doing
+   * anything: a chunk the most recent frame left unbuilt (only when it drew this dataset), or
+   * a call of the provider waiting for its debounce or its response. A hidden dataset draws
+   * nothing, so it has none
+   */
+  get hasPendingWork(): boolean {
+    if (!this.isVisible) return false;
+    return this.loader?.busy === true || (this.drawnInFrame && this.chunks.hasPendingBuild);
+  }
+
+  /**
+   * The start of a frame (called by the manager before anything is drawn)
+   *
+   * The frame decides the zoom band of the thinning, once, from the zoom it draws with, before
+   * any layer draws: every layer of the frame that reads the drawn rows then reads the rows this
+   * frame draws. A hidden dataset only records the zoom (its rows follow once it is drawn).
+   *
+   * @param zoom The zoom the frame draws with
+   */
+  beginFrame(zoom: number): void {
+    this.frameZoom = zoom;
+    this.drawnInFrame = false;
+    if (this.isVisible && !this.removed) this.syncThinning('frame');
+  }
+
+  /**
    * Draws the chunks that intersect the viewport
    *
    * In retained mode it only draws the retained batches of the chunks that intersect (building
@@ -561,11 +598,15 @@ export class DatasetImpl implements Dataset {
   ): void {
     if (!this.isVisible) return;
 
+    // The rows follow the band of the zoom drawn (the manager normally did it at the start of
+    // the frame, with the same zoom, and this finds nothing to do)
+    this.frameZoom = zoom;
+    this.syncThinning('frame');
+
     const factors = sanitizeDrawFactors(this.zoomScale?.(zoom));
     // Completely transparent means there is nothing to draw (the immediate path is skipped too)
     if (factors.opacity <= 0) return;
-
-    this.ensureThinning(zoom);
+    this.drawnInFrame = true;
 
     // The terrain state of the draw instance this dataset is drawn into
     const terrain = target.getTerrain?.() ?? this.flatTerrain;
@@ -731,8 +772,10 @@ export class DatasetImpl implements Dataset {
     this.chunks.replace(source.chunks);
 
     // The winners are picked again together with the replacement (it is done before emit so that
-    // a host receiving change does not read the old set)
-    this.thinning.onFeaturesReplaced();
+    // a host receiving change does not read the old set). The rows themselves are new
+    this.syncDrawnRows();
+    this.drawnRowsRevision++;
+    this.schedulePrefetch();
 
     this.emit('change', { reason: 'features' });
   }
@@ -749,75 +792,85 @@ export class DatasetImpl implements Dataset {
     return features;
   }
 
-  /** What the source needs to collect the rows of a chunk */
-  private collectContext(options: CollectOptions) {
+  /**
+   * What the source needs to collect the rows of a chunk
+   *
+   * @param drawn The rows to collect (a build reads the mask of the moment it starts, never a
+   *   later one, so the chunk knows exactly which rows its points were built with)
+   */
+  private collectContext(options: CollectOptions, drawn: DrawnRowMask) {
     return {
       ...options,
       styler: this.styler,
-      isDrawn: (row: number) => this.thinning.isDrawnRow(row),
+      isDrawn: drawn === null ? () => true : (row: number) => drawn[row] === 1,
       styleKey: this.styleRevision,
     };
   }
 
   /** The appearance changed: pick the winners again, rebuild every chunk and tell the listeners */
   private restyle(): void {
-    this.markStyleChanged();
+    this.styleRevision++;
+    // The chunks are rebuilt anyway; the change of the drawn rows is part of this change
+    if (this.syncDrawnRows()) this.drawnRowsRevision++;
+    this.schedulePrefetch();
     this.chunks.invalidateAll();
     this.emit('change', { reason: 'style' });
     this.deps.requestRepaint();
   }
 
   /**
-   * Records that the style changed and picks the winners again when necessary
+   * The zoom the band of the thinning is decided from: the zoom of the most recent frame (the
+   * zoom the frame draws with; the zoom of the map before the first frame), lowered by the drop
+   * of the pitch correction
    *
-   * @returns Whether what is drawn actually changed
+   * One zoom decides the band. The zoom of the map itself is not read again: the elevation
+   * settlement of the terrain changes it without changing the picture, and the band would flip
+   * while nothing moved.
    */
-  private markStyleChanged(): boolean {
-    this.styleRevision++;
-    return this.thinning.onStyleChanged();
+  private thinningZoom(): number {
+    return (this.frameZoom ?? this.deps.getZoom()) - this.deps.getPitchZoomDrop();
   }
 
   /**
-   * What is drawn changed through the thinning: rebuild, tell the listeners and repaint
+   * Brings the drawn rows up to the band of the zoom (`CollisionThinningState.sync`)
    *
-   * The previous rows keep being drawn until the rebuild is complete (nothing goes blank).
+   * @param cause `frame` for a frame about to draw, `change` for a change made by the host
    */
-  private thinningChanged(): void {
-    this.chunks.refreshAll();
+  private syncThinning(cause: 'frame' | 'change'): void {
+    if (this.syncDrawnRows()) this.drawnRowsChanged(cause);
+  }
+
+  /**
+   * `CollisionThinningState.sync` with the zoom of `thinningZoom` (nothing is measured while the
+   * thinning is off)
+   *
+   * @returns Whether the drawn rows changed
+   */
+  private syncDrawnRows(): boolean {
+    if (!this.thinning.enabled && !this.thinning.active) return false;
+    return this.thinning.sync(this.thinningZoom());
+  }
+
+  /**
+   * The drawn rows changed through the thinning (the only place that handles it)
+   *
+   * Nothing is discarded: the draw rebuilds the point part of each chunk it draws before it
+   * draws it (`DisplayChunkSet.draw`). The drawn rows, the hit testing and the queries switch
+   * together, and the `change` event (`thinning`) is sent:
+   *
+   * - `frame`: the frame that picked them draws them; the event is sent after that frame, so a
+   *   listener never runs in the middle of drawing and reads the rows that are on screen
+   * - `change`: a change made by the host (the settings, the zoom factors); the event is sent at
+   *   once, like the other events of a change, and the next frame draws them
+   */
+  private drawnRowsChanged(cause: 'frame' | 'change'): void {
+    this.drawnRowsRevision++;
     this.schedulePrefetch();
-    this.emit('change', { reason: 'thinning' });
-    this.deps.requestRepaint();
-  }
-
-  /**
-   * Picks the winners of the bands near the current one while the page is idle, one band per
-   * idle period (`CollisionThinningState.prefetchNeighbor`)
-   */
-  private schedulePrefetch(): void {
-    if (this.cancelPrefetch || this.removed || !this.thinning.enabled) return;
-    this.cancelPrefetch = whenIdle(() => {
-      this.cancelPrefetch = null;
-      if (this.removed) return;
-      if (this.thinning.prefetchNeighbor()) this.schedulePrefetch();
-    });
-  }
-
-  /**
-   * Prepares the set of winners right before drawing (`CollisionThinningState.ensure`), and
-   * follows the band of the current zoom of the map (`CollisionThinningState.follow`)
-   *
-   * The listeners are told about a change of band after the frame, so that they do not run in
-   * the middle of drawing.
-   */
-  private ensureThinning(zoom: number): void {
-    if (this.thinning.ensure(zoom)) {
-      this.chunks.invalidateAll();
-      this.schedulePrefetch();
+    if (cause === 'change') {
+      this.emit('change', { reason: 'thinning' });
+      this.deps.requestRepaint();
+      return;
     }
-    if (!this.thinning.follow()) return;
-
-    this.chunks.refreshAll();
-    this.schedulePrefetch();
     if (this.thinningNoticePending) return;
     this.thinningNoticePending = true;
     queueMicrotask(() => {
@@ -825,21 +878,45 @@ export class DatasetImpl implements Dataset {
       if (!this.removed) this.emit('change', { reason: 'thinning' });
     });
   }
+
+  /**
+   * Picks the winners of the bands near the current one while the page is idle, in slices that
+   * end with the idle period (`CollisionThinningState.prefetch`)
+   */
+  private schedulePrefetch(): void {
+    if (this.cancelPrefetch || this.removed || !this.thinning.enabled) return;
+    this.cancelPrefetch = whenIdle((deadline) => {
+      this.cancelPrefetch = null;
+      if (this.removed) return;
+      if (this.thinning.prefetch(deadline, idleNow)) this.schedulePrefetch();
+    });
+  }
 }
 
+/**
+ * The time given to one idle task where `requestIdleCallback` is missing (ms): a slice that
+ * does not blow a frame
+ */
+const IDLE_FALLBACK_BUDGET_MS = 8;
 /** How long to wait for an idle period where `requestIdleCallback` is missing (ms) */
 const IDLE_FALLBACK_MS = 100;
 
+/** The clock the idle deadlines are measured with */
+function idleNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 /**
- * Runs `task` when the page is idle (a timer where `requestIdleCallback` is missing)
+ * Runs `task` when the page is idle, with the time at which the idle period ends (a timer and a
+ * fixed budget where `requestIdleCallback` is missing)
  *
  * @returns Cancels it
  */
-function whenIdle(task: () => void): () => void {
+function whenIdle(task: (deadline: number) => void): () => void {
   if (typeof globalThis.requestIdleCallback === 'function') {
-    const handle = globalThis.requestIdleCallback(task);
+    const handle = globalThis.requestIdleCallback((idle) => task(idleNow() + idle.timeRemaining()));
     return () => globalThis.cancelIdleCallback(handle);
   }
-  const handle = setTimeout(task, IDLE_FALLBACK_MS);
+  const handle = setTimeout(() => task(idleNow() + IDLE_FALLBACK_BUDGET_MS), IDLE_FALLBACK_MS);
   return () => clearTimeout(handle);
 }

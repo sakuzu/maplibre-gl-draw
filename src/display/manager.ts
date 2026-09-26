@@ -46,10 +46,8 @@ export interface DatasetManagerDeps {
    */
   getEffectiveZoom?(): number;
   /**
-   * Subscribes to the changes of the displayed range (the equivalent of moveend)
-   *
-   * A change of the pitch (pitchend) is also routed here. When the effective zoom changes, the
-   * band of the thinning has to follow it.
+   * Subscribes to the changes of the displayed range (the equivalent of moveend); the providers
+   * are called from it
    *
    * @returns A function that cancels the subscription
    */
@@ -72,6 +70,11 @@ export interface DatasetManagerDeps {
    * injected so that a test can replace the clock and the launching of the slices.
    */
   triangulationScheduler?: TriangulationScheduler;
+  /**
+   * Whether the work that does not fit in a frame is spread over later frames (true when
+   * omitted; the `timeSlicing` of the rendering settings)
+   */
+  timeSlicing?: boolean;
   /**
    * Default style of the features (the default of core when omitted)
    *
@@ -167,15 +170,17 @@ export class DatasetManager {
       pixelRatio: this.deps.pixelRatio,
       triangulationScheduler: this.deps.triangulationScheduler,
       pointStyle: this.deps.featureStyle?.point.point,
-      onViewportSubscriptionChange: () => this.syncViewportSubscription(),
+      timeSlicing: this.deps.timeSlicing,
       getZoom: () => this.deps.getZoom(),
-      getViewportState: () => {
-        const zoom = this.deps.getZoom();
-        return {
-          bounds: this.deps.getViewportBounds(),
-          zoom,
-          effectiveZoom: this.deps.getEffectiveZoom?.() ?? zoom,
-        };
+      getViewportState: () => ({
+        bounds: this.deps.getViewportBounds(),
+        zoom: this.deps.getZoom(),
+      }),
+      getPitchZoomDrop: () => {
+        const effective = this.deps.getEffectiveZoom?.();
+        if (effective === undefined || !Number.isFinite(effective)) return 0;
+        const drop = this.deps.getZoom() - effective;
+        return drop > 0 ? drop : 0;
       },
       onRemove: (id) => {
         this.datasets.delete(id);
@@ -322,6 +327,31 @@ export class DatasetManager {
   hasAny(): boolean {
     for (const dataset of this.datasets.values()) {
       if (dataset.visible) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Starts a frame, before anything of it is drawn
+   *
+   * Each dataset decides the zoom band of its collision thinning from the zoom the frame draws
+   * with, so every layer of the frame reads the rows the frame draws.
+   *
+   * @param zoom The zoom the frame draws with
+   */
+  beginFrame(zoom: number): void {
+    for (const dataset of this.ordered) dataset.beginFrame(zoom);
+  }
+
+  /**
+   * Whether work remains that will change what the datasets draw without the host doing anything:
+   * a chunk the most recent frame left unbuilt, a huge polygon still being triangulated, or a
+   * call of a provider waiting for its debounce or its response
+   */
+  hasPendingWork(): boolean {
+    if ((this.deps.triangulationScheduler?.pendingCount ?? 0) > 0) return true;
+    for (const dataset of this.ordered) {
+      if (dataset.hasPendingWork) return true;
     }
     return false;
   }
@@ -487,10 +517,7 @@ export class DatasetManager {
 
   /**
    * Rewires the subscription to the changes of the displayed range to whether any dataset
-   * needs them
-   *
-   * The ones that need them are the datasets that have a provider and the datasets with
-   * the collision thinning enabled (to follow the zoom band).
+   * needs them (the datasets that have a provider)
    */
   private syncViewportSubscription(): void {
     let needed = false;
@@ -509,15 +536,7 @@ export class DatasetManager {
     }
   }
 
-  /**
-   * Schedules the call of the provider when the displayed range changed, and makes the band of
-   * the thinning follow it
-   *
-   * While the camera moves, each dataset follows the band as it draws. This is the last check at
-   * the end of the gesture (moveend / pitchend). The band is decided by the effective zoom (with
-   * the pitch correction), so `refreshThinning` is called without an argument and the dataset
-   * side takes it from the state of the viewport.
-   */
+  /** Schedules the call of the providers when the displayed range changed */
   private handleViewportChange(): void {
     const bounds = this.deps.getViewportBounds();
     const zoom = this.deps.getZoom();
@@ -525,7 +544,6 @@ export class DatasetManager {
       if (dataset.hasProvider) {
         dataset.scheduleProviderUpdate(bounds, zoom);
       }
-      dataset.refreshThinning();
     }
   }
 }

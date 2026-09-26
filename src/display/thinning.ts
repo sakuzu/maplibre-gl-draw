@@ -406,7 +406,175 @@ export interface ThinningRows {
 }
 
 /**
- * Picks the winners among the rows
+ * The number of rows handled between two looks at the clock by a selection advanced in slices
+ *
+ * @internal
+ */
+export const SELECTION_SLICE_ROWS = 4096;
+
+/**
+ * The selection of the winners of one band, advanced in slices (`step`)
+ *
+ * The work is the same as `selectCollisionWinnerRows`, in two phases that both stop at a deadline:
+ * the rows are read into arrays of points in world coordinates, then the points are taken
+ * greedily from the front. Whatever the slicing, the result is the same as a selection run in one
+ * go (the greedy order and the grid do not depend on where it stopped).
+ *
+ * @internal
+ */
+export class CollisionSelection {
+  private readonly winners: Uint8Array;
+  private readonly xs: Float64Array;
+  private readonly ys: Float64Array;
+  private readonly rs: Float64Array;
+  private readonly pointRows: Int32Array;
+  private readonly perPixel: number;
+  /** The next row to read (the first phase) */
+  private nextRow = 0;
+  private pointCount = 0;
+  private maxRadius = 0;
+  /** The grid of the winners (null until the rows are read) */
+  private grid: HashGrid | null = null;
+  /** The next point to decide, from the front (the second phase) */
+  private nextPoint = -1;
+  private finished = false;
+
+  /**
+   * @param radiusPx The footprint radius of a row (px, including the outline and the margin)
+   */
+  constructor(
+    private readonly rows: ThinningRows,
+    band: number,
+    private readonly radiusPx: (row: number) => number,
+  ) {
+    const count = rows.length;
+    this.winners = new Uint8Array(count);
+    this.xs = new Float64Array(count);
+    this.ys = new Float64Array(count);
+    this.rs = new Float64Array(count);
+    this.pointRows = new Int32Array(count);
+    this.perPixel = worldUnitsPerPixel(band);
+  }
+
+  /** Whether the selection is finished */
+  get done(): boolean {
+    return this.finished;
+  }
+
+  /**
+   * Advances until the deadline or the end
+   *
+   * At least one slice of rows is handled per call (otherwise it would never end).
+   *
+   * @returns Whether it is finished
+   */
+  step(deadline: number, now: () => number): boolean {
+    while (!this.finished) {
+      if (this.grid === null) this.readRows();
+      else this.decidePoints();
+      if (this.finished || now() >= deadline) break;
+    }
+    return this.finished;
+  }
+
+  /** 1 for each row that may be drawn, 0 otherwise (complete once `done`) */
+  result(): Uint8Array {
+    return this.winners;
+  }
+
+  /** Reads one slice of rows into the arrays of points (the first phase) */
+  private readRows(): void {
+    const rows = this.rows;
+    const winners = this.winners;
+    const xs = this.xs;
+    const ys = this.ys;
+    const rs = this.rs;
+    const pointRows = this.pointRows;
+    const count = rows.length;
+    const end = Math.min(count, this.nextRow + SELECTION_SLICE_ROWS);
+    for (let row = this.nextRow; row < end; row++) {
+      const role = rows.thinningRole(row);
+      if (role === 'skip') continue;
+      if (role === 'winner') {
+        // A line, a polygon, a MultiPoint and so on are not thinned (they win unconditionally)
+        winners[row] = 1;
+        continue;
+      }
+      const coord = rows.pointOf(row);
+      const radius = this.radiusPx(row) * this.perPixel;
+      const k = this.pointCount++;
+      xs[k] = lngToWorldX(coord[0]);
+      ys[k] = latToWorldY(coord[1]);
+      rs[k] = radius;
+      pointRows[k] = row;
+      if (radius > this.maxRadius) this.maxRadius = radius;
+    }
+    this.nextRow = end;
+    if (end < count) return;
+
+    if (this.pointCount === 0) {
+      this.finished = true;
+      return;
+    }
+    // With no footprint (radius 0) nobody collides
+    if (this.maxRadius <= 0) {
+      for (let k = 0; k < this.pointCount; k++) winners[pointRows[k]] = 1;
+      this.finished = true;
+      return;
+    }
+    this.grid = createHashGrid(xs, ys, this.pointCount, this.maxRadius);
+    this.nextPoint = this.pointCount - 1;
+  }
+
+  /** Decides one slice of points, from the front (the second phase) */
+  private decidePoints(): void {
+    const xs = this.xs;
+    const ys = this.ys;
+    const rs = this.rs;
+    const pointRows = this.pointRows;
+    const winners = this.winners;
+    const { cell, minX, minY, stride, buckets, keyDeltas } = this.grid as HashGrid;
+    const end = Math.max(-1, this.nextPoint - SELECTION_SLICE_ROWS);
+
+    // Taken greedily in the reverse of the draw order (from the frontmost)
+    for (let k = this.nextPoint; k > end; k--) {
+      const x = xs[k];
+      const y = ys[k];
+      const r = rs[k];
+      const key =
+        (Math.floor((y - minY) / cell) + 1) * stride + (Math.floor((x - minX) / cell) + 1);
+
+      let blocked = false;
+      // From its own cell outwards, decided by the real distance to the winners (not by occupancy)
+      for (let d = 0; d < keyDeltas.length; d++) {
+        const bucket = buckets.get(key + keyDeltas[d]);
+        if (bucket === undefined) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          const j = bucket[i];
+          const ddx = xs[j] - x;
+          const ddy = ys[j] - y;
+          const sum = rs[j] + r;
+          if (ddx * ddx + ddy * ddy < sum * sum) {
+            blocked = true;
+            break;
+          }
+        }
+        if (blocked) break;
+      }
+      if (blocked) continue;
+
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(k);
+      else buckets.set(key, [k]);
+      winners[pointRows[k]] = 1;
+    }
+    this.nextPoint = end;
+    if (end < 0) this.finished = true;
+  }
+}
+
+/**
+ * Picks the winners among the rows (a `CollisionSelection` run in one go)
  *
  * The result also marks what is out of scope for the thinning (anything but a Point, and so on).
  * A row that is not drawn (`skip`) becomes neither a winner nor an obstacle.
@@ -421,81 +589,9 @@ export function selectCollisionWinnerRows(
   band: number,
   radiusPx: (row: number) => number,
 ): Uint8Array {
-  const count = rows.length;
-  const winners = new Uint8Array(count);
-
-  // Build arrays that hold only the points (the decision is made in world coordinates)
-  const xs = new Float64Array(count);
-  const ys = new Float64Array(count);
-  const rs = new Float64Array(count);
-  const pointRows = new Int32Array(count);
-  const perPixel = worldUnitsPerPixel(band);
-  let pointCount = 0;
-  let maxRadius = 0;
-
-  for (let row = 0; row < count; row++) {
-    const role = rows.thinningRole(row);
-    if (role === 'skip') continue;
-    if (role === 'winner') {
-      // A line, a polygon, a MultiPoint and so on are not thinned (they win unconditionally)
-      winners[row] = 1;
-      continue;
-    }
-
-    const coord = rows.pointOf(row);
-    const radius = radiusPx(row) * perPixel;
-    xs[pointCount] = lngToWorldX(coord[0]);
-    ys[pointCount] = latToWorldY(coord[1]);
-    rs[pointCount] = radius;
-    pointRows[pointCount] = row;
-    if (radius > maxRadius) maxRadius = radius;
-    pointCount++;
-  }
-
-  if (pointCount === 0) return winners;
-
-  // With no footprint (radius 0) nobody collides
-  if (maxRadius <= 0) {
-    for (let k = 0; k < pointCount; k++) winners[pointRows[k]] = 1;
-    return winners;
-  }
-
-  const grid = createHashGrid(xs, ys, pointCount, maxRadius);
-  const { cell, minX, minY, stride, buckets, keyDeltas } = grid;
-
-  // Take them greedily in the reverse of the draw order (from the frontmost)
-  for (let k = pointCount - 1; k >= 0; k--) {
-    const x = xs[k];
-    const y = ys[k];
-    const r = rs[k];
-    const key = (Math.floor((y - minY) / cell) + 1) * stride + (Math.floor((x - minX) / cell) + 1);
-
-    let blocked = false;
-    // From its own cell outwards, decided by the real distance to the winners (not by occupancy)
-    for (let d = 0; d < keyDeltas.length; d++) {
-      const bucket = buckets.get(key + keyDeltas[d]);
-      if (bucket === undefined) continue;
-      for (let i = 0; i < bucket.length; i++) {
-        const j = bucket[i];
-        const ddx = xs[j] - x;
-        const ddy = ys[j] - y;
-        const sum = rs[j] + r;
-        if (ddx * ddx + ddy * ddy < sum * sum) {
-          blocked = true;
-          break;
-        }
-      }
-      if (blocked) break;
-    }
-    if (blocked) continue;
-
-    const bucket = buckets.get(key);
-    if (bucket) bucket.push(k);
-    else buckets.set(key, [k]);
-    winners[pointRows[k]] = 1;
-  }
-
-  return winners;
+  const selection = new CollisionSelection(rows, band, radiusPx);
+  selection.step(Number.POSITIVE_INFINITY, () => 0);
+  return selection.result();
 }
 
 /**
@@ -624,6 +720,15 @@ function createHashGrid(
 }
 
 /**
+ * The rows a dataset draws: 1 for each row that is drawn, 0 otherwise; null means every row
+ *
+ * A mask is never modified once it is in use, so its identity tells two masks apart cheaply.
+ *
+ * @internal
+ */
+export type DrawnRowMask = Uint8Array | null;
+
+/**
  * What the thinning state of a dataset reads from its dataset
  *
  * @internal
@@ -642,40 +747,48 @@ export interface CollisionThinningHost {
    * The zoom-dependent factor is applied with the value of the band.
    */
   footprintPx(band: number, marginPx: number): (styleRadius: number | undefined) => number;
-  /** The current zoom and "the shallowest effective zoom on screen" (with the pitch correction) */
-  viewport(): { zoom: number; effectiveZoom?: number };
+}
+
+/** What a set of winners was picked for */
+interface PickKey {
+  generation: number;
+  revision: number;
 }
 
 /**
  * The collision thinning state of one dataset
  *
- * It holds the settings and the rows that are drawn (the winners; cached by the feature
- * generation, the style revision and the zoom band). The methods that change what is drawn
- * return whether it actually changed; the dataset then discards its retained batches and
- * tells its listeners.
+ * It holds the settings and the rows that are drawn (`mask`). There is one way to bring the
+ * drawn rows up to date, `sync(zoom)`: it picks the winners of the band of `zoom` for the current
+ * contents, style and settings, and does nothing when they are already those. The winners of
+ * each band are kept for the current contents and style, so going back to a band costs nothing,
+ * and the bands next to the current one can be picked ahead in slices while the page is idle
+ * (`prefetch`). Every change of the drawn rows advances `revision`.
  *
  * @internal
  */
 export class CollisionThinningState {
   /** Settings of the collision thinning (null = not set = disabled) */
   private settings: ResolvedCollisionThinning | null;
-  /**
-   * The cache key of the winners (the feature generation, the style revision and the zoom band)
-   */
-  private state: { generation: number; revision: number; band: number } | null = null;
-  /** 1 for each row that is drawn (the winners). null means every row */
-  private drawnRows: Uint8Array | null = null;
+  /** What the drawn rows were picked for (null = nothing picked: every row is drawn) */
+  private picked: (PickKey & { band: number }) | null = null;
+  /** The drawn rows */
+  private drawnRows: DrawnRowMask = null;
   /** The number of rows that are drawn */
   private drawnCount = 0;
   /** The ids of the drawn rows, built on the first request */
   private drawnIds: Set<string> | null = null;
+  /** Advances whenever the drawn rows change */
+  private drawnRevision = 0;
   /**
-   * The winners already picked for each band, for the feature generation and the style revision
-   * in `cacheKey` (null = every row). Going back to a band seen before costs nothing
+   * The winners already picked for each band, for the key in `cacheKey` (null = every row).
+   * Going back to a band seen before costs nothing
    */
-  private readonly bandCache = new Map<number, Uint8Array | null>();
-  /** The feature generation and the style revision the bands in `bandCache` were picked for */
-  private cacheKey: { generation: number; revision: number } | null = null;
+  private readonly bandCache = new Map<number, DrawnRowMask>();
+  /** The contents and the style the bands in `bandCache` were picked for */
+  private cacheKey: PickKey | null = null;
+  /** The band being picked ahead, a slice at a time (null = none) */
+  private ahead: (PickKey & { band: number; selection: CollisionSelection }) | null = null;
 
   constructor(
     private readonly host: CollisionThinningHost,
@@ -699,6 +812,16 @@ export class CollisionThinningState {
     return this.drawnRows !== null;
   }
 
+  /** The drawn rows (null = every row) */
+  get mask(): DrawnRowMask {
+    return this.drawnRows;
+  }
+
+  /** A number that advances whenever the drawn rows change */
+  get revision(): number {
+    return this.drawnRevision;
+  }
+
   /** The ids of the rows that are drawn (null = every row) */
   get drawable(): ReadonlySet<string> | null {
     const mask = this.drawnRows;
@@ -715,24 +838,22 @@ export class CollisionThinningState {
   }
 
   /**
-   * Replaces the settings
+   * Replaces the settings and brings the drawn rows up to date for `zoom`
    *
-   * @returns null when the settings are the same; otherwise whether what is drawn changed
+   * @param zoom The zoom the band is decided from (with the pitch correction applied)
+   * @returns null when the settings are the same; otherwise whether the drawn rows changed
    */
-  setOptions(options: DatasetCollisionThinning | null): { drawnChanged: boolean } | null {
+  setOptions(
+    options: DatasetCollisionThinning | null,
+    zoom: number,
+  ): { drawnChanged: boolean } | null {
     const next = options ? resolveCollisionThinning(options) : null;
     if (sameCollisionThinning(this.settings, next)) return null;
 
-    const wasThinning = this.drawnRows !== null;
     this.settings = next;
-    this.state = null;
-    this.setDrawn(null);
+    this.picked = null;
     this.forgetBands();
-
-    if (next?.enabled) {
-      this.recompute(zoomBandFor(this.zoomFor()));
-    }
-    return { drawnChanged: wasThinning || this.drawnRows !== null };
+    return { drawnChanged: this.sync(zoom) };
   }
 
   /** Whether a row is drawn (it survived the thinning, or nothing is thinned) */
@@ -748,85 +869,88 @@ export class CollisionThinningState {
       active: thinning,
       total,
       visible: thinning ? this.drawnCount : total,
-      band: thinning ? (this.state?.band ?? null) : null,
+      band: thinning ? (this.picked?.band ?? null) : null,
     };
   }
 
   /**
-   * Follows the band of the displayed zoom (the path of moveend)
+   * Brings the drawn rows up to date: the winners of the band of `zoom` for the current contents,
+   * style and settings (every row while the thinning is disabled)
    *
-   * @returns Whether what is drawn changed
+   * It is the only way the drawn rows change. Nothing is picked when they are already those; a
+   * band kept from before (or picked ahead) is reused, and a band being picked ahead is
+   * finished rather than started again.
+   *
+   * @param zoom The zoom the band is decided from (with the pitch correction applied)
+   * @returns Whether the drawn rows changed
    */
-  refresh(zoom?: number): boolean {
-    const band = zoomBandFor(this.zoomFor(zoom));
-    if (this.isFresh() && this.state?.band === band) return false;
-    return this.recompute(band);
-  }
-
-  /**
-   * Prepares the winners right before drawing
-   *
-   * The winners are rebuilt when there are none yet, or when they went stale because the
-   * features or the style changed.
-   *
-   * @returns Whether what is drawn changed
-   */
-  ensure(zoom: number): boolean {
-    if (!this.enabled) {
-      if (this.drawnRows === null) return false;
-      this.state = null;
-      this.setDrawn(null);
-      return true;
-    }
-    if (this.isFresh()) return false;
-    return this.recompute(zoomBandFor(this.zoomFor(zoom)));
-  }
-
-  /**
-   * Follows the band of the current zoom of the map, in the middle of a zoom or pitch gesture as
-   * well (called right before drawing)
-   *
-   * Keeping the winners of the band the gesture started in would draw them at another scale:
-   * after a large zoom out they pile up into a solid patch until the gesture ends. The winners
-   * of each band are kept for the current features and style, so the selection runs at most once
-   * per band crossed, not once per frame.
-   *
-   * @returns Whether what is drawn changed
-   */
-  follow(): boolean {
-    if (!this.enabled || !this.isFresh()) return false;
-    const band = zoomBandFor(this.zoomFor());
-    if (this.state?.band === band) return false;
-    return this.recompute(band);
-  }
-
-  /**
-   * Picks the winners again after the style changed (in the band already decided)
-   *
-   * @returns Whether what is drawn changed
-   */
-  onStyleChanged(): boolean {
-    if (!this.enabled) return false;
-    return this.recompute(this.state?.band ?? zoomBandFor(this.zoomFor()));
-  }
-
-  /**
-   * Picks the winners of one band near the current one ahead of time (`missingNeighbors`)
-   *
-   * Called while the page is idle, so that crossing into that band during a gesture costs no
-   * selection in the middle of a frame.
-   *
-   * @returns Whether a band near the current one is still missing
-   */
-  prefetchNeighbor(): boolean {
+  sync(zoom: number): boolean {
     const settings = this.settings;
-    const state = this.state;
-    if (!settings?.enabled || !state || !this.isFresh()) return false;
+    if (!settings?.enabled) {
+      this.picked = null;
+      return this.setDrawn(null);
+    }
 
-    const missing = this.missingNeighbors(state.band);
-    if (missing.length === 0) return false;
-    this.keepBand(missing[0], this.pickWinners(missing[0], settings));
-    return missing.length > 1;
+    const key = this.currentKey();
+    const band = zoomBandFor(zoom);
+    const picked = this.picked;
+    if (picked && sameKey(picked, key) && picked.band === band) return false;
+
+    if (!this.cacheKey || !sameKey(this.cacheKey, key)) {
+      this.forgetBands();
+      this.cacheKey = key;
+    }
+    let mask = this.bandCache.get(band);
+    if (mask === undefined) mask = this.finishAhead(band, key) ?? this.pickWinners(band, settings);
+    this.keepBand(band, mask);
+    this.picked = { ...key, band };
+    return this.setDrawn(mask);
+  }
+
+  /**
+   * Picks the winners of the bands next to the current one ahead of time, until the deadline
+   *
+   * Called while the page is idle, so that crossing into one of those bands during a gesture
+   * costs no selection in the middle of a frame. The selection of a band is advanced in slices
+   * (`CollisionSelection`), so an idle period is never overrun by more than one slice.
+   *
+   * @returns Whether a band next to the current one is still missing
+   */
+  prefetch(deadline: number, now: () => number): boolean {
+    const settings = this.settings;
+    const picked = this.picked;
+    const key = this.currentKey();
+    if (!settings?.enabled || !picked || !sameKey(picked, key)) {
+      this.ahead = null;
+      return false;
+    }
+
+    for (;;) {
+      let ahead = this.ahead;
+      if (ahead && !sameKey(ahead, key)) ahead = null;
+      if (!ahead) {
+        const band = this.missingNeighbors(picked.band)[0];
+        if (band === undefined) return false;
+        if (band >= settings.fullDisplayZoom) {
+          // Nothing is thinned there; there is nothing to pick
+          this.keepBand(band, null);
+          continue;
+        }
+        ahead = { ...key, band, selection: this.selectionFor(band, settings) };
+        this.ahead = ahead;
+      }
+      if (!ahead.selection.step(deadline, now)) return true;
+      this.keepBand(ahead.band, ahead.selection.result());
+      this.ahead = null;
+      if (now() >= deadline) return this.missingNeighbors(picked.band).length > 0;
+    }
+  }
+
+  /** Forgets the winners (the settings are kept) */
+  clear(): void {
+    this.picked = null;
+    this.setDrawn(null);
+    this.forgetBands();
   }
 
   /**
@@ -845,102 +969,42 @@ export class CollisionThinningState {
     return missing;
   }
 
-  /** Picks the winners again after the contents were replaced */
-  onFeaturesReplaced(): void {
-    if (this.enabled) this.recompute(zoomBandFor(this.zoomFor()));
+  /** The contents and the style of now */
+  private currentKey(): PickKey {
+    return { generation: this.host.featuresGeneration(), revision: this.host.styleRevision() };
   }
 
-  /** Forgets the winners (the settings are kept) */
-  clear(): void {
-    this.state = null;
-    this.setDrawn(null);
-    this.forgetBands();
-  }
-
-  /**
-   * The zoom that decides the band of the thinning (with the pitch correction)
-   *
-   * With a pitch, the higher part of the screen is farther away and only there the effective
-   * scale gets shallower. Deciding the band with the zoom of the camera would let everything flow
-   * into the distance and get squashed, so the difference from "the shallowest effective zoom on
-   * screen" (the drop) is subtracted. At pitch 0 the drop is 0 and the band is exactly the same
-   * as before.
-   *
-   * @param zoom The zoom to base it on (the current zoom of the map when omitted)
-   */
-  zoomFor(zoom?: number): number {
-    const view = this.host.viewport();
-    const base = zoom ?? view.zoom;
-    const effective = view.effectiveZoom;
-    if (effective === undefined || !Number.isFinite(effective)) return base;
-    const drop = view.zoom - effective;
-    return drop > 0 ? base - drop : base;
-  }
-
-  /** Whether the winners are those of the current feature generation and style revision */
-  private isFresh(): boolean {
-    const state = this.state;
-    return (
-      state !== null &&
-      state.generation === this.host.featuresGeneration() &&
-      state.revision === this.host.styleRevision()
-    );
-  }
-
-  /** Discards the winners kept per band */
+  /** Discards the winners kept per band and the band being picked ahead */
   private forgetBands(): void {
     this.bandCache.clear();
     this.cacheKey = null;
+    this.ahead = null;
   }
 
-  /** Replaces the drawn rows (null = every row) */
-  private setDrawn(mask: Uint8Array | null): void {
+  /**
+   * Replaces the drawn rows (null = every row)
+   *
+   * A mask with the same rows as the current one keeps the current one, so nothing that depends
+   * on the drawn rows is redone.
+   *
+   * @returns Whether the drawn rows changed
+   */
+  private setDrawn(mask: DrawnRowMask): boolean {
+    if (sameMask(this.drawnRows, mask)) return false;
     this.drawnRows = mask;
     this.drawnIds = null;
     let count = 0;
     if (mask) for (let row = 0; row < mask.length; row++) count += mask[row];
     this.drawnCount = count;
-  }
-
-  /**
-   * Picks the winners again for the band `band`
-   *
-   * The footprint is "the resolved radius + the outline + the margin" seen as a size in the
-   * screen pixels of the band. At a band at or above `fullDisplayZoom` nothing is thinned (every
-   * row is drawn).
-   *
-   * @returns Whether what is drawn actually changed
-   */
-  private recompute(band: number): boolean {
-    const settings = this.settings;
-    if (!settings?.enabled) return false;
-
-    const before = this.drawnRows;
-    const generation = this.host.featuresGeneration();
-    const revision = this.host.styleRevision();
-    this.state = { generation, revision, band };
-
-    const key = this.cacheKey;
-    if (!key || key.generation !== generation || key.revision !== revision) {
-      this.bandCache.clear();
-      this.cacheKey = { generation, revision };
-    }
-
-    let mask = this.bandCache.get(band);
-    if (mask === undefined) mask = this.pickWinners(band, settings);
-    this.keepBand(band, mask);
-    if (mask === before) return false;
-
-    const changed = !sameMask(before, mask);
-    this.setDrawn(mask);
-    return changed;
+    this.drawnRevision++;
+    return true;
   }
 
   /**
    * Keeps the winners of a band as the most recently used one (the least recently used band is
    * dropped first; a Map keeps the order of insertion)
    */
-  private keepBand(band: number, mask: Uint8Array | null): void {
+  private keepBand(band: number, mask: DrawnRowMask): void {
     this.bandCache.delete(band);
     if (this.bandCache.size >= MAX_CACHED_BANDS) {
       const oldest = this.bandCache.keys().next().value;
@@ -949,21 +1013,61 @@ export class CollisionThinningState {
     this.bandCache.set(band, mask);
   }
 
+  /** Finishes the band being picked ahead when it is `band` (undefined otherwise) */
+  private finishAhead(band: number, key: PickKey): Uint8Array | undefined {
+    const ahead = this.ahead;
+    if (!ahead || ahead.band !== band || !sameKey(ahead, key)) return undefined;
+    this.ahead = null;
+    ahead.selection.step(Number.POSITIVE_INFINITY, () => 0);
+    return ahead.selection.result();
+  }
+
   /** The winners of the band `band` (null = every row) */
-  private pickWinners(band: number, settings: ResolvedCollisionThinning): Uint8Array | null {
+  private pickWinners(band: number, settings: ResolvedCollisionThinning): DrawnRowMask {
     if (band >= settings.fullDisplayZoom) return null;
+    const selection = this.selectionFor(band, settings);
+    selection.step(Number.POSITIVE_INFINITY, () => 0);
+    return selection.result();
+  }
+
+  /** A selection of the winners of the band `band`, not started yet */
+  private selectionFor(band: number, settings: ResolvedCollisionThinning): CollisionSelection {
     const rows = this.host.rows();
     const footprint = this.host.footprintPx(band, settings.marginPx);
-    return selectCollisionWinnerRows(rows, band, (row) => footprint(rows.styleRadiusOf(row)));
+    return new CollisionSelection(rows, band, (row) => footprint(rows.styleRadiusOf(row)));
   }
 }
 
-/** Whether two masks of drawn rows are the same (null = every row) */
-function sameMask(a: Uint8Array | null, b: Uint8Array | null): boolean {
-  if (a === null || b === null) return a === b;
+/** Whether two keys name the same contents and style */
+function sameKey(a: PickKey, b: PickKey): boolean {
+  return a.generation === b.generation && a.revision === b.revision;
+}
+
+/**
+ * Whether two masks of drawn rows are the same (null = every row)
+ *
+ * @internal
+ */
+export function sameMask(a: DrawnRowMask, b: DrawnRowMask): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether the rows `rows` are drawn alike in two masks (null = every row)
+ *
+ * @internal
+ */
+export function sameRowsInMasks(a: DrawnRowMask, b: DrawnRowMask, rows: Int32Array): boolean {
+  if (a === b) return true;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if ((a === null ? 1 : a[row]) !== (b === null ? 1 : b[row])) return false;
   }
   return true;
 }

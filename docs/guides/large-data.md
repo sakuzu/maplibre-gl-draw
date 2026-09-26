@@ -372,15 +372,18 @@ const { total, visible } = places.getThinningStats();
 - Only `Point` is thinned; lines, polygons and `MultiPoint` are always
   drawn
 - From `fullDisplayZoom` (17) on, every point is drawn
-- The winners are chosen again when the features or the style change, and
-  each time the integer zoom changes, in the middle of a zoom or pitch
-  gesture as well. The winners of the nearby integer zooms are chosen
-  ahead while the page is idle, so crossing into them costs no selection
+- Every frame decides the integer zoom from the zoom it draws with, in
+  the middle of a zoom or pitch gesture as well, and draws the winners of
+  that zoom. The winners of the nearby integer zooms are chosen ahead
+  while the page is idle, so crossing into them costs no selection
+- The winners are chosen again at once when the features, the style, the
+  zoom factors or the settings change, and the next frame draws them
 
-A thinned point is neither drawn nor hit. `getVisibleFeatureIds` tells
-which points are drawn, for a host that labels only those, and
-`getThinningStats` how many. When one picture is taken at a given zoom,
-such as a snapshot of the view, call `refreshThinning(zoom)` first.
+A thinned point is neither drawn nor hit. `getThinningStats` tells how
+many points are drawn, and the reads of the next section which ones.
+There is nothing to call before taking a picture at a given camera, such
+as a snapshot of the view or a print: the frame that draws it decides the
+winners.
 
 ## Clicks, hover and selection
 
@@ -420,7 +423,9 @@ places.setSelectedIds([]); // clear
 The `change` event fires, whatever `interactive` is, when the features,
 the style, the visibility, the selection or the winners of the thinning
 change. Its `reason` says which. Use it to rebuild what you derive from
-the dataset, such as labels. `collectVisible(bounds)` returns the
+the dataset, such as labels. A change you make fires it at once; a new
+integer zoom entered by the camera fires it (`thinning`) right after the
+frame that drew the new winners. `collectVisible(bounds)` returns the
 features in an extent, in draw order and with the styles applied; its
 cost follows the number of features in the extent, not the total.
 
@@ -431,16 +436,40 @@ points, can read a dataset by row number and build features only for
 the rows it keeps. `collectDrawnRows(bounds)` returns the rows that
 intersect an extent and are drawn now, in draw order: the rows with a
 geometry that are not hidden and that the collision thinning keeps. It
-is `collectVisible(bounds)` narrowed with `getVisibleFeatureIds()`, but
-it builds no feature, so its cost follows the number of rows in the
-extent.
+builds no feature, so its cost follows the number of rows in the extent.
+It is the entry for a host that labels the drawn points.
+
+"Drawn now" means the rows of the most recent frame. A frame decides the
+integer zoom before anything of it is drawn, so a layer that draws in the
+same frame reads the rows that frame draws. `getDrawnRowsRevision()` is a
+number that advances whenever the drawn rows change (the contents
+replaced, or the winners of the thinning); it costs nothing to read, so
+keep what you derive from the drawn rows under it and rebuild when it
+moves. `getVisibleFeatureIds()` returns the same rows as a set of ids,
+built on the first request after each change with one pass over every
+row; do not use it, or its identity, as the key of such a cache.
+
+<!-- docs-check: with datasets -->
+
+```ts
+// Place the text again only when the drawn rows changed
+let placedFor = -1;
+function placeText(): void {
+  const revision = places.getDrawnRowsRevision();
+  if (revision === placedFor) return;
+  placedFor = revision;
+  // ... walk places.collectDrawnRows(extent) and place the text
+}
+```
 
 The reads of one row do not build its feature either: `getRowId`,
 `getRowType`, `getRowBounds` (the box the spatial index holds) and
 `getRowPoint` (the `[lng, lat]` of a `Point`). `getRowFeature` builds
 the feature of a row with the styles applied, as `collectVisible`
-returns it. A row is the `row` of `click` and `hover`, and the numbers
-hold until the contents are replaced.
+returns it. `findRow(id)` goes the other way, from an id to its row
+(`null` when no row has it; the first call indexes the ids). A row is the
+`row` of `click` and `hover`, and the numbers hold until the contents are
+replaced.
 
 <!-- docs-check: with datasets -->
 

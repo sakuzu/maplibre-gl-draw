@@ -410,10 +410,7 @@ export class ColumnarSource implements DisplaySource {
     };
   }
 
-  // === Internals ===
-
-  /** The row of an id (-1 when no row has it) */
-  private rowOfId(id: string): number {
+  rowOfId(id: string): number {
     const table = this.table;
     if (!table.ids) {
       const row = Number(id);
@@ -428,6 +425,8 @@ export class ColumnarSource implements DisplaySource {
     }
     return this.rowById.get(id) ?? -1;
   }
+
+  // === Internals ===
 
   /** The resolved styles for this dataset and resolver (dropped when the style changed) */
   private slotsFor(

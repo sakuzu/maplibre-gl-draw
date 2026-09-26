@@ -72,20 +72,32 @@ export interface RenderingConfig {
    */
   storeRetained?: boolean;
   /**
-   * Time-slicing of the triangulation of huge polygons
+   * Whether work that does not fit in one frame is spread over the following frames
    *
-   * When true (the default), polygons with many vertices that are placed on a
-   * dataset (by default more than 10,000 vertices) are triangulated in small pieces,
-   * progressing across frames. The fill of such a polygon does not appear until the
-   * triangulation finishes (the outline does appear).
+   * When true (the default), the renderer keeps every frame short while the picture fills in
+   * over a few frames, much like tiles arriving:
    *
-   * Setting it to false always triangulates on the spot. Rendering that "cannot wait", that
-   * is, uses that draw once and take the picture out (printing, thumbnails), should use this,
-   * because it prevents taking the picture out while the fill is not yet ready.
+   * - the retained batches of the datasets are built within a time budget per frame, the
+   *   chunks in view first (the ones left over appear in the next frames)
+   * - polygons of a dataset with more than 10,000 vertices are triangulated in slices across
+   *   frames; their fill appears when the triangulation ends (the outline appears at once)
+   * - the tile index of the terrain drape is built within a time budget per frame
+   *
+   * Set it to false to draw frames that are complete: everything above is done in the frame
+   * that needs it, however long that frame takes. It is meant for a map that draws a frame to
+   * read the picture back (printing, thumbnails, exports), not for an interactive map. While
+   * the camera moves, the rebuilds that wait for the camera to stop still wait (a capture is
+   * taken with the camera still).
+   *
+   * A complete frame is not yet a complete picture: the map's tiles and the DEM arrive
+   * asynchronously. Wait for the map's `idle`, then for
+   * {@link MapLibreGLDraw.hasPendingWork} to return false, which also covers the work that no
+   * setting can make synchronous (the responses of a provider, an overlay renderer that
+   * prepares resources over several frames).
    *
    * @defaultValue `true`
    */
-  asyncTriangulation?: boolean;
+  timeSlicing?: boolean;
 }
 
 /**
@@ -105,7 +117,7 @@ export const DEFAULT_BOX_SELECTION_STYLE_CONFIG: BoxSelectionStyleConfig = {
 export const DEFAULT_RENDERING_CONFIG: RenderingConfig = {
   boxSelectionStyle: DEFAULT_BOX_SELECTION_STYLE_CONFIG,
   storeRetained: true,
-  asyncTriangulation: true,
+  timeSlicing: true,
 };
 
 /**
@@ -121,6 +133,6 @@ export function mergeRenderingConfig(
       ...override.boxSelectionStyle,
     },
     storeRetained: override.storeRetained ?? base.storeRetained,
-    asyncTriangulation: override.asyncTriangulation ?? base.asyncTriangulation,
+    timeSlicing: override.timeSlicing ?? base.timeSlicing,
   };
 }

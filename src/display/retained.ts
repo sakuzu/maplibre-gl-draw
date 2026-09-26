@@ -13,9 +13,14 @@
  * toPointInstanceData) and the style resolution of FeatureDrawer as they are.
  *
  * Within a chunk the draw order is bundled as "polygons → lines → points → the features that
- * cannot be retained" (once things are batched, features of the same kind become a single draw
- * call). The features that cannot be retained (dashed lines, images, point shapes without
- * instancing support) are sent through the immediate-mode path.
+ * cannot be retained → the points that cannot be retained" (once things are batched, features of
+ * the same kind become a single draw call). The features that cannot be retained (dashed lines,
+ * images, point shapes without instancing support) are sent through the immediate-mode path.
+ *
+ * The points of a chunk (its point batches and its points drawn in immediate mode) form a part of
+ * their own, the point part, that can be rebuilt without touching the polygons and the lines
+ * (`rebuildChunkPoints`): the anchor elevations of the terrain and the collision thinning change
+ * only the points.
  *
  * A build has two phases, both advanced by the time budget of the frame: the dataset, which
  * walks the rows of the chunk and resolves their styles into the intermediate data (a
@@ -75,8 +80,16 @@ export interface DisplayChunkBatches {
   lines: RetainedLineBatch[];
   /** Points (per shape) */
   points: RetainedPointBatch[];
-  /** The features that cannot be retained and are drawn in immediate mode (in draw order) */
+  /**
+   * The features other than points that cannot be retained and are drawn in immediate mode (in
+   * draw order)
+   */
   fallback: Feature[];
+  /**
+   * The points (Point and MultiPoint) that cannot be retained and are drawn in immediate mode, in
+   * draw order, after `fallback`. With `points` they form the point part of the chunk
+   */
+  pointFallback: Feature[];
 }
 
 /**
@@ -275,8 +288,10 @@ export interface ChunkDraft {
   points: Map<PointShape, PointInstanceDataFull[]>;
   /** Packed points per shape */
   packedPoints: Map<PointShape, PackedPointsBuilder>;
-  /** The features sent to immediate mode */
+  /** The features other than points sent to immediate mode */
   fallback: Feature[];
+  /** The points sent to immediate mode */
+  pointFallback: Feature[];
 }
 
 /**
@@ -295,6 +310,7 @@ export function createChunkDraft(): ChunkDraft {
     points: new Map(),
     packedPoints: new Map(),
     fallback: [],
+    pointFallback: [],
   };
 }
 
@@ -410,7 +426,8 @@ export function isEmptyChunkBatches(batches: DisplayChunkBatches): boolean {
     batches.polygons.length === 0 &&
     batches.lines.length === 0 &&
     batches.points.length === 0 &&
-    batches.fallback.length === 0
+    batches.fallback.length === 0 &&
+    batches.pointFallback.length === 0
   );
 }
 
@@ -453,6 +470,7 @@ export function buildChunkBatches(
     lines: [],
     points: [],
     fallback: draft.fallback,
+    pointFallback: draft.pointFallback,
   };
 
   // Polygons (drawn in the order fixed width → createdZoom)
@@ -701,6 +719,7 @@ export function createChunkBuildJob(
     lines: [],
     points: [],
     fallback: draft.fallback,
+    pointFallback: draft.pointFallback,
   };
 
   let collected = false;
@@ -783,24 +802,20 @@ function buildTasks(
 }
 
 /**
- * Rebuilds only the retained batches of the points of a chunk (exclusively for re-baking the
- * anchor elevation when a DEM arrives)
+ * Rebuilds only the point part of a chunk: its point batches and its points drawn in immediate
+ * mode (`pointFallback`)
  *
- * The polygons, the lines and fallback are not touched at all. The polygons and lines of a
- * dataset do not refer to the terrain elevation, so there is no reason to rebuild
- * them. Avoiding the re-triangulation of the polygons, which goes through earcut, is the only
- * purpose of separating this function out.
- *
- * The point shapes without instancing support (on the fallback side) are not handled here. They
- * are drawn in immediate mode with `anchorElevationMeters` looked up again every frame
- * (point-shape.ts), so they are never left behind when the generation advances.
+ * The polygons, the lines and `fallback` are not touched at all. Two things change the points
+ * alone: the anchor elevations baked into the point instances when DEM tiles arrive, and the
+ * rows the collision thinning draws (it only ever removes points). Rebuilding the polygons for
+ * them would re-triangulate every polygon through earcut, so the point part is rebuilt on its
+ * own; its cost is a walk over the rows of the chunk plus the packing of the points it draws.
  *
  * @param collector A collector of the points of the chunk (`pointsOnly`). The dataset uses
  *   the same code as the build, so the appearance at build time and at re-bake time cannot
  *   disagree
  * @returns true when they could be rebuilt. When the retained-mode renderers do not have their
- *   shaders yet (the build failed) false is returned and the old point batches are left as they
- *   are (it is tried again the next time the generation advances)
+ *   shaders yet (the build failed) false is returned and the old point part is left as it is
  */
 export function rebuildChunkPoints(
   batches: DisplayChunkBatches,
@@ -810,9 +825,6 @@ export function rebuildChunkPoints(
 ): boolean {
   const draft = createChunkDraft();
   collector.collect(draft, renderers.styles, Number.POSITIVE_INFINITY, () => 0);
-  // draft.fallback collects the shapes without instancing support, but they can be thrown away.
-  // They are drawn by immediate mode, which looks the elevation up again every frame, so they are
-  // never left behind.
 
   const newBatches: RetainedPointBatch[] = [];
   const built = (batch: RetainedPointBatch | null): boolean => {
@@ -839,6 +851,7 @@ export function rebuildChunkPoints(
     renderers.point.disposeRetained(old);
   }
   batches.points = newBatches;
+  batches.pointFallback = draft.pointFallback;
   return true;
 }
 
@@ -977,7 +990,8 @@ export function collectFeature(
 }
 
 /**
- * Pushes a feature that is sent to immediate mode
+ * Pushes a feature that is sent to immediate mode (a point goes to the point part,
+ * `pointFallback`; anything else to `fallback`)
  *
  * A Multi geometry is decided per part, so the same feature can come around several times in a
  * row. The immediate-mode path draws every part of a feature at once, so it is not pushed twice.
@@ -985,8 +999,12 @@ export function collectFeature(
  * @internal
  */
 export function pushFallback(draft: ChunkDraft, feature: Feature): void {
-  if (draft.fallback[draft.fallback.length - 1] === feature) return;
-  draft.fallback.push(feature);
+  const list =
+    feature.type === 'Point' || feature.type === 'MultiPoint'
+      ? draft.pointFallback
+      : draft.fallback;
+  if (list[list.length - 1] === feature) return;
+  list.push(feature);
 }
 
 /**

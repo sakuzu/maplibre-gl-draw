@@ -7,7 +7,9 @@
  * The selection itself is checked by calling the pure function (selectCollisionWinners)
  * directly, and its application (what is drawn, the hit testing, the pinned entries, the triggers
  * of a recomputation) is checked through a dataset. The drawing goes to a stub batch without
- * GL and is judged by "what goes onto the batch" (the same style as dataset.test.ts).
+ * GL and is judged by "what goes onto the batch" (the same style as dataset.test.ts). A frame
+ * is drawn as the render loop draws it: the manager starts it with the zoom of the frame, then
+ * draws.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -18,10 +20,13 @@ import { createDatasetManager, type DatasetManager } from './manager.js';
 import { FeatureArraySource } from './source.js';
 import type { CollisionThinningHost, ThinningCamera } from './thinning.js';
 import {
+  CollisionSelection,
   CollisionThinningState,
   effectiveZoomForCamera,
   effectiveZoomForPitch,
   MAX_PITCH_ZOOM_DROP,
+  SELECTION_SLICE_ROWS,
+  selectCollisionWinnerRows,
   selectCollisionWinners,
   worldUnitsPerPixel,
   zoomBandFor,
@@ -78,6 +83,7 @@ function createBatchTarget(): { target: DisplayBatchTarget; frames: Feature[][] 
 
 function createManager(zoom = 10): {
   manager: DatasetManager;
+  /** Replaces the zoom of the map (not of a frame: a frame is drawn with `drawnIds`) */
   setZoom: (next: number) => void;
   /** Replaces the shallowest effective zoom on screen (the pitch correction) */
   setEffectiveZoom: (next: number | null) => void;
@@ -121,9 +127,10 @@ function createManager(zoom = 10): {
   };
 }
 
-/** Draws and returns the ids of the features pushed in the first frame */
+/** Draws a frame at `zoom` and returns the ids of the features pushed in it */
 function drawnIds(manager: DatasetManager, zoom = 10): string[] {
   const { target, frames } = createBatchTarget();
+  manager.beginFrame(zoom);
   manager.draw('below-store', target, {} as ProjectionData, zoom);
   return frames[0]?.map((feature) => feature.id) ?? [];
 }
@@ -442,7 +449,7 @@ describe('the application to a dataset', () => {
   });
 
   it('everything is drawn at zooms at or above fullDisplayZoom', () => {
-    const { manager, setZoom, moveEnd } = createManager();
+    const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0), pointAtPx('b', 1)],
@@ -450,9 +457,6 @@ describe('the application to a dataset', () => {
     });
 
     expect(drawnIds(manager)).toEqual(['b']);
-
-    setZoom(17);
-    moveEnd();
 
     expect(drawnIds(manager, 17)).toEqual(['a', 'b']);
     expect(dataset.getThinningStats()).toMatchObject({
@@ -464,7 +468,7 @@ describe('the application to a dataset', () => {
   });
 
   it('fullDisplayZoom can be changed at runtime', () => {
-    const { manager, setZoom, moveEnd } = createManager(14);
+    const { manager } = createManager(14);
     const dataset = add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0, 14), pointAtPx('b', 1, 14)],
@@ -478,8 +482,7 @@ describe('the application to a dataset', () => {
     expect(drawnIds(manager, 14)).toEqual(['a', 'b']);
 
     // Disabling it gives everything as before
-    setZoom(10);
-    moveEnd();
+    drawnIds(manager, 10);
     dataset.setCollisionThinning(null);
     expect(dataset.getCollisionThinning()).toBeNull();
     expect(drawnIds(manager)).toEqual(['a', 'b']);
@@ -523,7 +526,7 @@ describe('the application to a dataset', () => {
   });
 
   it('drawing follows the band during a gesture, and tells the listeners after the frame', async () => {
-    const { manager, setZoom } = createManager(10);
+    const { manager } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0), pointAtPx('b', 5)],
@@ -535,7 +538,6 @@ describe('the application to a dataset', () => {
     expect(dataset.getThinningStats().band).toBe(10);
 
     // In band 12 they look 20px apart, so both win (no moveend in between)
-    setZoom(12.5);
     expect(drawnIds(manager, 12.5)).toEqual(['a', 'b']);
     expect(dataset.getThinningStats().band).toBe(12);
     expect(reasons).toEqual([]);
@@ -543,23 +545,99 @@ describe('the application to a dataset', () => {
     expect(reasons).toEqual(['thinning']);
 
     // Back in band 10 the first winners come back
-    setZoom(10.5);
     expect(drawnIds(manager, 10.5)).toEqual(['b']);
   });
 
-  it('moveend follows the band as well', () => {
+  it('the start of a frame switches the rows the queries report, before anything is drawn', () => {
+    const { manager } = createManager(10);
+    const dataset = add(manager, {
+      id: 'c1',
+      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      collisionThinning: { enabled: true },
+    });
+    const revision = dataset.getDrawnRowsRevision();
+    expect(dataset.collectDrawnRows(WORLD)).toEqual(new Int32Array([1]));
+
+    manager.beginFrame(12.5);
+    // A layer that draws in this frame reads the rows of this frame
+    expect(dataset.getDrawnRowsRevision()).toBeGreaterThan(revision);
+    expect(dataset.collectDrawnRows(WORLD)).toEqual(new Int32Array([0, 1]));
+    expect(dataset.getThinningStats()).toMatchObject({ band: 12, visible: 2 });
+
+    // The same band again changes nothing
+    const next = dataset.getDrawnRowsRevision();
+    manager.beginFrame(12.9);
+    expect(dataset.getDrawnRowsRevision()).toBe(next);
+  });
+
+  it('the band is decided from the zoom of the frame, not from the zoom of the map', () => {
+    // The elevation settlement of the terrain changes the zoom of the map while the picture (and
+    // the zoom of the frame) stays the same: the band must not flip
     const { manager, setZoom, moveEnd } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
+    expect(drawnIds(manager, 10.9)).toEqual(['b']);
+    const revision = dataset.getDrawnRowsRevision();
 
-    setZoom(12.5);
+    setZoom(12.2);
     moveEnd();
+    expect(drawnIds(manager, 10.9)).toEqual(['b']);
+    // A change of the settings takes the zoom of the last frame as well
+    dataset.setCollisionThinning({ enabled: true, marginPx: 2.5 });
+    expect(dataset.getThinningStats().band).toBe(10);
+    expect(dataset.getDrawnRowsRevision()).toBe(revision);
+  });
 
-    expect(dataset.getThinningStats().band).toBe(12);
+  it('before the first frame the zoom of the map decides the band', () => {
+    const { manager } = createManager(12.5);
+    const dataset = add(manager, {
+      id: 'c1',
+      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      collisionThinning: { enabled: true },
+    });
+    expect(dataset.getThinningStats()).toMatchObject({ enabled: true, band: 12, visible: 2 });
+  });
+
+  it('a change of band leaves the terrain drape alone (it draws no point)', () => {
+    const { manager } = createManager(10);
+    add(manager, {
+      id: 'c1',
+      features: [
+        pointAtPx('a', 0),
+        pointAtPx('b', 5),
+        line('l1', [
+          [0, 0],
+          [pxDeg(10), 0],
+        ]),
+      ],
+      collisionThinning: { enabled: true },
+    });
+    const dataset = manager.getInternal('c1');
+    const revision = dataset?.drapeRevision;
+    expect(dataset?.drapeFeatures().map((feature) => feature.id)).toEqual(['l1']);
+
+    expect(drawnIds(manager, 12.5)).toEqual(['a', 'b', 'l1']);
+    expect(dataset?.drapeRevision).toBe(revision);
+    expect(dataset?.drapeFeatures().map((feature) => feature.id)).toEqual(['l1']);
+  });
+
+  it('a hidden dataset keeps its rows until it is drawn again', () => {
+    const { manager } = createManager(10);
+    const dataset = add(manager, {
+      id: 'c1',
+      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      collisionThinning: { enabled: true },
+    });
+    dataset.setVisible(false);
+    manager.beginFrame(12.5);
+    expect(dataset.getThinningStats().band).toBe(10);
+
+    dataset.setVisible(true);
     expect(drawnIds(manager, 12.5)).toEqual(['a', 'b']);
+    expect(dataset.getThinningStats().band).toBe(12);
   });
 
   it('setFeatures and a style change pick the winners again (the cache is invalidated)', () => {
@@ -631,27 +709,50 @@ describe('the application to a dataset', () => {
     expect(hit?.feature?.id).toBe('b');
   });
 
-  it('a change of the winners reports change (thinning)', () => {
-    const { manager, setZoom, moveEnd } = createManager();
+  it('a change of the winners reports change (thinning)', async () => {
+    const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      features: [pointAtPx('a', 0), pointAtPx('b', 40)],
       collisionThinning: { enabled: true },
     });
 
     const reasons: string[] = [];
     dataset.on('change', (payload) => reasons.push(payload.reason));
 
-    setZoom(16);
-    moveEnd();
+    // A change of the settings reports it at once
+    dataset.setCollisionThinning({ enabled: true, marginPx: 30 });
+    expect(reasons).toEqual(['thinning']);
 
-    expect(reasons).toContain('thinning');
+    // A band entered by a frame reports it after the frame
+    drawnIds(manager, 16);
+    expect(reasons).toEqual(['thinning']);
+    await Promise.resolve();
+    expect(reasons).toEqual(['thinning', 'thinning']);
+  });
+
+  it('the zoom factors change the drawn rows without discarding the batches', () => {
+    const { manager } = createManager();
+    const dataset = add(manager, {
+      id: 'c1',
+      features: [pointAtPx('a', 0), pointAtPx('b', 40)],
+      collisionThinning: { enabled: true },
+    });
+    const reasons: string[] = [];
+    dataset.on('change', (payload) => reasons.push(payload.reason));
+    expect(drawnIds(manager)).toEqual(['a', 'b']);
+    const revision = dataset.getDrawnRowsRevision();
+
+    dataset.setZoomScale(() => ({ scale: 4, opacity: 1 }));
+    expect(reasons).toEqual(['thinning']);
+    expect(dataset.getDrawnRowsRevision()).toBe(revision + 1);
+    expect(drawnIds(manager)).toEqual(['b']);
   });
 
   it('the band is decided by the effective zoom (with the pitch correction)', () => {
     // In band 16 they are 30px apart and both win, but at an effective 13 (a scale one eighth of
     // it) they are only 3.75px apart, so only the front one wins
-    const { manager, setEffectiveZoom, moveEnd } = createManager(16);
+    const { manager, setEffectiveZoom } = createManager(16);
     const dataset = add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0, 16), pointAtPx('b', 30, 16)],
@@ -662,7 +763,6 @@ describe('the application to a dataset', () => {
     expect(dataset.getThinningStats().band).toBe(16);
 
     setEffectiveZoom(13);
-    moveEnd();
 
     expect(drawnIds(manager, 16)).toEqual(['b']);
     // The band in the stats is the effective band too
@@ -672,7 +772,7 @@ describe('the application to a dataset', () => {
   it('the threshold of showing everything is judged by the effective zoom too', () => {
     // The camera is at z17.5 (which would normally stop the thinning), but the top of the screen
     // is about z14
-    const { manager, setEffectiveZoom, moveEnd } = createManager(17.5);
+    const { manager, setEffectiveZoom } = createManager(17.5);
     add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0, 17), pointAtPx('b', 30, 17)],
@@ -682,13 +782,12 @@ describe('the application to a dataset', () => {
     expect(drawnIds(manager, 17.5)).toEqual(['a', 'b']);
 
     setEffectiveZoom(14);
-    moveEnd();
 
     expect(drawnIds(manager, 17.5)).toEqual(['b']);
   });
 
   it('at pitch 0 (the effective zoom = the zoom of the camera) the result is as before', () => {
-    const { manager, setEffectiveZoom, moveEnd } = createManager(16);
+    const { manager, setEffectiveZoom } = createManager(16);
     add(manager, {
       id: 'c1',
       features: [pointAtPx('a', 0, 16), pointAtPx('b', 30, 16)],
@@ -696,7 +795,6 @@ describe('the application to a dataset', () => {
     });
 
     setEffectiveZoom(16);
-    moveEnd();
 
     expect(drawnIds(manager, 16)).toEqual(['a', 'b']);
   });
@@ -724,11 +822,12 @@ describe('the application to a dataset', () => {
 
 describe('the time the selection takes (a guide; no exact time is claimed)', () => {
   it('the selection of 260,000 points finishes in a practical time', () => {
-    // A deterministic pseudo-random distribution (fixed seed) imitating the scale of central Tokyo
+    // A deterministic pseudo-random distribution (fixed seed) imitating the scale of central Tokyo.
+    // The generator stays in 32-bit integers, so all of the points are distinct
     let seed = 12345;
     const random = (): number => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed / 2147483648;
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
     };
 
     const count = 260_000;
@@ -753,31 +852,53 @@ describe('the time the selection takes (a guide; no exact time is claimed)', () 
 
     expect(winners.size).toBeGreaterThan(0);
     expect(winners.size).toBeLessThan(count);
-    // The target is within 30ms. The check is kept to a loose upper bound so it does not fail on
-    // the jitter of CI
+    // It takes a few tens of milliseconds, more than a frame: the bands next to the current one
+    // are picked ahead in slices while the page is idle. The check is kept to a loose upper bound
+    // so it does not fail on the jitter of CI
     expect(elapsed).toBeLessThan(2000);
+  });
+});
+
+describe('CollisionSelection (the selection in slices)', () => {
+  it('gives the same winners however it is sliced', () => {
+    const count = SELECTION_SLICE_ROWS * 3 + 17;
+    const features = Array.from({ length: count }, (_, i) =>
+      normalizeDisplayFeature(pointAtPx(`p${i}`, (i * 7) % 900, 10, (i * 13) % 700)),
+    );
+    const rows = new FeatureArraySource(features);
+    const whole = selectCollisionWinnerRows(rows, 10, () => FOOTPRINT_PX);
+
+    const selection = new CollisionSelection(rows, 10, () => FOOTPRINT_PX);
+    let steps = 0;
+    // A deadline already passed: one slice per call
+    while (!selection.step(0, () => 1)) steps++;
+    expect(steps).toBeGreaterThanOrEqual(6);
+    expect(selection.result()).toEqual(whole);
   });
 });
 
 describe('CollisionThinningState', () => {
   /** Two points 5px apart in band 10 (they collide) and one far away */
-  function createHost(zoom = 10): CollisionThinningHost & {
+  function createHost(): CollisionThinningHost & {
     generation: number;
     revision: number;
-    zoom: number;
+    picks: number;
   } {
     const features = [pointAtPx('a', 0), pointAtPx('b', 5), pointAtPx('c', 1000)].map(
       normalizeDisplayFeature,
     );
+    const source = new FeatureArraySource(features);
     const host = {
       generation: 1,
       revision: 0,
-      zoom,
-      rows: () => new FeatureArraySource(features),
+      picks: 0,
+      rows: () => source,
       featuresGeneration: () => host.generation,
       styleRevision: () => host.revision,
-      footprintPx: (_band: number, marginPx: number) => () => FOOTPRINT_PX - 2 + marginPx,
-      viewport: () => ({ zoom: host.zoom }),
+      footprintPx: (_band: number, marginPx: number) => {
+        host.picks++;
+        return () => FOOTPRINT_PX - 2 + marginPx;
+      },
     };
     return host;
   }
@@ -786,8 +907,9 @@ describe('CollisionThinningState', () => {
     const state = new CollisionThinningState(createHost());
     expect(state.enabled).toBe(false);
     expect(state.options).toBeNull();
-    expect(state.ensure(10)).toBe(false);
+    expect(state.sync(10)).toBe(false);
     expect(state.isDrawnRow(1)).toBe(true);
+    expect(state.mask).toBeNull();
     expect(state.stats(3)).toEqual({
       enabled: false,
       active: false,
@@ -799,106 +921,107 @@ describe('CollisionThinningState', () => {
 
   it('enabling it picks the winners, and the same settings again change nothing', () => {
     const state = new CollisionThinningState(createHost());
-    expect(state.setOptions({ enabled: true })).toEqual({ drawnChanged: true });
+    expect(state.setOptions({ enabled: true }, 10)).toEqual({ drawnChanged: true });
     expect(state.isDrawnRow(1)).toBe(true);
     expect(state.isDrawnRow(0)).toBe(false);
     expect(state.stats(3)).toMatchObject({ active: true, visible: 2, band: 10 });
-    expect(state.setOptions({ enabled: true })).toBeNull();
+    expect(state.setOptions({ enabled: true }, 10)).toBeNull();
+    // Settings that draw the same rows are a change of the settings, not of the rows
+    expect(state.setOptions({ enabled: true, marginPx: 2.5 }, 10)).toEqual({
+      drawnChanged: false,
+    });
   });
 
   it('the winners are picked again only when the contents or the style went stale', () => {
     const host = createHost();
     const state = new CollisionThinningState(host, { enabled: true });
-    expect(state.ensure(10)).toBe(true);
-    expect(state.ensure(10)).toBe(false);
-
+    expect(state.sync(10)).toBe(true);
+    expect(state.sync(10)).toBe(false);
     // A zoom inside the same band during a gesture does not pick them again
-    expect(state.ensure(10.9)).toBe(false);
+    expect(state.sync(10.9)).toBe(false);
+    expect(host.picks).toBe(1);
 
     host.generation++;
     // Same winners: nothing drawn changed even though they were picked again
-    expect(state.ensure(10)).toBe(false);
+    const revision = state.revision;
+    expect(state.sync(10)).toBe(false);
+    expect(host.picks).toBe(2);
+    expect(state.revision).toBe(revision);
   });
 
-  it('refresh follows the band, and at the full display zoom nothing is thinned', () => {
-    const host = createHost();
-    const state = new CollisionThinningState(host, { enabled: true, fullDisplayZoom: 12 });
-    state.ensure(10);
+  it('sync follows the band, and at the full display zoom nothing is thinned', () => {
+    const state = new CollisionThinningState(createHost(), { enabled: true, fullDisplayZoom: 12 });
+    state.sync(10);
     expect(state.isDrawnRow(0)).toBe(false);
+    const revision = state.revision;
 
-    expect(state.refresh(12)).toBe(true);
+    expect(state.sync(12)).toBe(true);
     expect(state.drawable).toBeNull();
+    expect(state.mask).toBeNull();
     expect(state.isDrawnRow(0)).toBe(true);
+    expect(state.revision).toBe(revision + 1);
   });
 
-  it('the band is lowered by the pitch drop of the effective zoom', () => {
+  it('the winners of a band are picked once, and a band seen before costs nothing', () => {
     const host = createHost();
-    host.viewport = () => ({ zoom: 10, effectiveZoom: 8 });
     const state = new CollisionThinningState(host, { enabled: true });
-    expect(state.zoomFor(10)).toBe(8);
-    expect(state.zoomFor()).toBe(8);
-  });
+    state.sync(10);
+    expect(host.picks).toBe(1);
 
-  it('follow picks the winners of a new band once, and a band seen before costs nothing', () => {
-    const host = createHost();
-    let picks = 0;
-    const footprintPx = host.footprintPx;
-    host.footprintPx = (band, marginPx) => {
-      picks++;
-      return footprintPx(band, marginPx);
-    };
-    const state = new CollisionThinningState(host, { enabled: true });
-    state.ensure(10);
-    expect(picks).toBe(1);
-
-    host.zoom = 10.9;
-    expect(state.follow()).toBe(false);
-    host.zoom = 12;
-    expect(state.follow()).toBe(true);
+    expect(state.sync(12)).toBe(true);
     expect(state.stats(3)).toMatchObject({ band: 12, visible: 3 });
-    host.zoom = 10;
-    expect(state.follow()).toBe(true);
-    host.zoom = 12;
-    expect(state.follow()).toBe(true);
-    expect(picks).toBe(2);
+    expect(state.sync(10)).toBe(true);
+    expect(state.sync(12)).toBe(true);
+    expect(host.picks).toBe(2);
 
     // New contents forget the bands picked for the old ones
     host.generation++;
-    expect(state.follow()).toBe(false);
-    state.ensure(10);
-    host.zoom = 12;
-    expect(state.follow()).toBe(true);
-    expect(picks).toBe(4);
+    state.sync(10);
+    state.sync(12);
+    expect(host.picks).toBe(4);
   });
 
-  it('the bands near the current one can be picked ahead, one per call', () => {
+  it('the bands near the current one are picked ahead until the deadline', () => {
     const host = createHost();
-    let picks = 0;
-    const footprintPx = host.footprintPx;
-    host.footprintPx = (band, marginPx) => {
-      picks++;
-      return footprintPx(band, marginPx);
-    };
     const state = new CollisionThinningState(host, { enabled: true });
-    state.ensure(10);
+    state.sync(10);
 
-    expect(state.prefetchNeighbor()).toBe(true);
-    expect(state.prefetchNeighbor()).toBe(true);
-    expect(state.prefetchNeighbor()).toBe(true);
-    expect(state.prefetchNeighbor()).toBe(false);
-    expect(picks).toBe(5);
+    // A deadline already passed: one band per call (a slice at least)
+    expect(state.prefetch(0, () => 1)).toBe(true);
+    expect(host.picks).toBe(2);
+    // A deadline far away: the rest at once
+    expect(state.prefetch(Number.POSITIVE_INFINITY, () => 0)).toBe(false);
+    expect(host.picks).toBe(5);
 
     // Crossing into a band picked ahead costs no selection
-    host.zoom = 9;
-    expect(state.follow()).toBe(false);
-    host.zoom = 12;
-    state.follow();
-    expect(picks).toBe(5);
+    state.sync(9);
+    state.sync(12);
+    expect(host.picks).toBe(5);
+  });
+
+  it('a band being picked ahead is finished by a frame that needs it, not started again', () => {
+    const count = SELECTION_SLICE_ROWS * 2;
+    const features = Array.from({ length: count }, (_, i) =>
+      normalizeDisplayFeature(pointAtPx(`p${i}`, i % 500, 10, Math.floor(i / 500))),
+    );
+    const host = createHost();
+    const source = new FeatureArraySource(features);
+    host.rows = () => source;
+    const state = new CollisionThinningState(host, { enabled: true });
+    state.sync(10);
+
+    // One slice of band 9 (the first neighbour)
+    expect(state.prefetch(0, () => 1)).toBe(true);
+    expect(host.picks).toBe(2);
+    state.sync(9);
+    expect(host.picks).toBe(2);
+    expect(state.stats(count).band).toBe(9);
+    expect(state.mask).toEqual(selectCollisionWinnerRows(source, 9, () => FOOTPRINT_PX));
   });
 
   it('clear forgets the winners and keeps the settings', () => {
     const state = new CollisionThinningState(createHost(), { enabled: true });
-    state.ensure(10);
+    state.sync(10);
     state.clear();
     expect(state.drawable).toBeNull();
     expect(state.enabled).toBe(true);

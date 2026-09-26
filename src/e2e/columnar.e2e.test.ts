@@ -256,7 +256,7 @@ async function drawAndRead(
                 const table = (w.tableOf as (k: string) => unknown)(kind);
                 return { columnar: table, prepared: w.e2e.prepareDatasetColumnar(table) };
               })();
-      const dataset = draw.addDataset({
+      draw.addDataset({
         id: 'data',
         ...style,
         ...(options as object),
@@ -283,7 +283,7 @@ async function drawAndRead(
         });
       let pixels = await read();
       for (let i = 0; i < 100; i++) {
-        if (!(dataset as unknown as { hasPendingBuild: boolean }).hasPendingBuild) break;
+        if (!draw.hasPendingWork()) break;
         pixels = await read();
       }
       // One more frame, with everything built

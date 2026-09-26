@@ -43,7 +43,7 @@ import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
 const draw = createMapLibreGLDraw(map, {
   renderingStyle: {
     storeRetained: true, // the default
-    asyncTriangulation: true, // the default
+    timeSlicing: true, // the default
   },
 });
 ```
@@ -60,12 +60,39 @@ only the chunks in view. `storeRetained: false` draws the Store again
 every frame. The picture is the same; use it only to rule out the
 retained path when you look into a rendering problem.
 
-A polygon with a very large number of vertices (more than 10,000) in a
-dataset is triangulated over several frames, so adding
-it does not stall the page. Its outline appears first and its fill when
-the triangulation ends. Set `asyncTriangulation: false` when you draw
-once and take the picture, as for printing or a thumbnail, so that no
-fill is missing.
+Work that does not fit in one frame is spread over the following
+frames, so the page never stalls while the picture fills in, much like
+tiles arriving: the batches of a dataset are built within a time budget
+per frame, a polygon of a dataset with a very large number of vertices
+(more than 10,000) is triangulated over several frames (its outline
+appears first and its fill when the triangulation ends), and so is the
+index of the terrain drape.
+
+## Complete frames for a picture
+
+A map that draws a frame to read the picture back, for printing, a
+thumbnail or an export, sets `timeSlicing: false`. Every frame is then
+complete: the work above is done in the frame that needs it, however
+long that frame takes. Keep the default on an interactive map.
+
+A complete frame is not yet a complete picture: the tiles and the DEM of
+the map arrive asynchronously, and some work cannot be done in a frame
+at all (the answer of a provider, an overlay renderer that prepares its
+resources over several frames). `hasPendingWork()` tells whether such
+work remains. The map fires `idle` even when this library asked for
+another frame during the last one, so wait for `idle` and then for
+`hasPendingWork()` to be false after a frame:
+
+```ts
+async function whenPictureComplete(): Promise<void> {
+  map.triggerRepaint();
+  await map.once('idle');
+  while (draw.hasPendingWork()) await map.once('render');
+}
+```
+
+The collision thinning of a dataset needs nothing: the frame decides
+which points it draws from the zoom it draws with.
 
 ## Dense lines
 

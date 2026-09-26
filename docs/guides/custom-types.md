@@ -293,6 +293,14 @@ renderer has the same `onAdd`, `draw` and `onRemove` as a feature
 renderer, with the same rules for context loss and the antimeridian.
 The returned function removes it.
 
+A renderer that prepares something over several frames (resources made in
+a Worker, say) implements `hasPendingWork()` and returns true until it is
+done, requesting the repaints that finish it. `draw.hasPendingWork()` asks
+every overlay renderer, so a host that waits for a complete picture (see
+[Performance](performance.md#complete-frames-for-a-picture)) waits for it
+too. With `timeSlicing: false` in the rendering settings, finish in the
+frame what you would otherwise spread over frames.
+
 ## The building blocks
 
 The parts the library uses for its own drawing are exported as building

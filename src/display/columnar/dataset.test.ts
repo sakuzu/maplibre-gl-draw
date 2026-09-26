@@ -1019,6 +1019,36 @@ describe('reading by row matches the features', () => {
     }
   });
 
+  it('findRow is the reverse of getRowId, for every form', () => {
+    const rows = mixedRows();
+    const manager = createManager();
+    const features = manager.add({ id: 'f', features: toFeatures('Point', rows) });
+    const table = manager.add({ id: 'm', columnar: toMixed(rows) });
+    for (const dataset of [features, table]) {
+      let row = 0;
+      for (let id = dataset.getRowId(row); id !== null; id = dataset.getRowId(++row)) {
+        expect(dataset.findRow(id)).toBe(row);
+      }
+      expect(row).toBeGreaterThan(0);
+      expect(dataset.findRow('missing')).toBeNull();
+    }
+    // A row without a geometry is found too
+    expect(table.findRow('r3')).toBe(3);
+
+    // Without an ids column the id is the number of the row, written as it is
+    const input = toColumnar('Point', rowsOf('Point', 5));
+    delete input.ids;
+    const plain = manager.add({ id: 'p', columnar: input });
+    expect(plain.findRow('4')).toBe(4);
+    expect(plain.findRow('04')).toBeNull();
+    expect(plain.findRow('5')).toBeNull();
+
+    // The index follows a replacement of the contents
+    features.setFeatures([{ id: 'x', type: 'Point', coordinates: [0, 0] }]);
+    expect(features.findRow('x')).toBe(0);
+    expect(features.findRow(`r0`)).toBeNull();
+  });
+
   it('the row of a hit reads back the feature of the hit', () => {
     const manager = createManager();
     const dataset = manager.add({

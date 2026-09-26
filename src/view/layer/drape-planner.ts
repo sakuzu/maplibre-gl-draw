@@ -83,7 +83,9 @@ export const TERRAIN_ANALYTIC_MIN_ZOOM = 11;
  * Time that may be spent building the tile index in one frame (milliseconds)
  *
  * Only the tiles that newly entered the view are built, so it is usually 1 to 3 tiles. What
- * exceeds the budget is deferred to the next frame (at least one tile is always built).
+ * exceeds the budget is deferred to the next frame (at least one tile is always built). With the
+ * time slicing off (`timeSlicing: false` of the rendering settings) every tile is built in the
+ * frame.
  */
 const DRAPE_BIN_BUDGET_MS = 8;
 
@@ -187,6 +189,11 @@ export interface DrapePlannerDeps {
   store: Store;
   terrain: TerrainContext;
   datasets?: DrapePlannerDatasets;
+  /**
+   * Whether the work that does not fit in a frame is spread over later frames (true when
+   * omitted; the `timeSlicing` of the rendering settings)
+   */
+  timeSlicing?: boolean;
 }
 
 /** The inputs of one frame */
@@ -294,9 +301,21 @@ export class DrapePlanner {
   private stalePlanFrames = 0;
   /** The set of hand-overs currently reported to the datasets (kept to prevent flapping) */
   private handoff: ReadonlySet<string> | null = null;
+  /** Whether the most recent frame left work for later frames (see `hasPendingWork`) */
+  private pendingWork = false;
 
   constructor(deps: DrapePlannerDeps) {
     this.deps = deps;
+  }
+
+  /**
+   * Whether the most recent frame left work that later frames finish on their own: tiles of the
+   * index not built yet (the previous plan drawn meanwhile), or a hand-over to the datasets
+   * waiting for the drape to stay usable (`DRAPE_STABLE_FRAMES`). A repaint is requested for
+   * each, so the work finishes without the host doing anything
+   */
+  get hasPendingWork(): boolean {
+    return this.pendingWork;
   }
 
   /** The drape renderer (null until a frame needed it, and after the GPU side was dropped) */
@@ -354,6 +373,7 @@ export class DrapePlanner {
     const { terrain } = this.deps;
     const { mapTerrain, dpr, zoom, rawZoom } = input;
     let drapeUsable = false;
+    this.pendingWork = false;
     // The analytic drape is used even in a wide band when building the index is light. Cutting
     // uniformly by zoom alone would swap "a picture pinned to the ground" and "a flat picture" at
     // the boundary of the band, making the positions and the look of the features jump. It is
@@ -395,7 +415,12 @@ export class DrapePlanner {
     this.stableFrames = drapeUsable ? this.stableFrames + 1 : 0;
     if (drapeUsable && this.stableFrames >= DRAPE_STABLE_FRAMES) {
       this.handoff = this.collected?.drapedDatasets ?? null;
-    } else if (!drapeUsable) {
+    } else if (drapeUsable) {
+      // The hand-over is decided by the frames to come: they are asked for, so that it settles
+      // on a map that is not moving as well
+      this.pendingWork = true;
+      this.deps.map?.triggerRepaint?.();
+    } else {
       const reason = getTerrainDrapeDebug(terrain).reason;
       if (reason !== 'no-dem-tiles') this.handoff = null;
     }
@@ -683,8 +708,12 @@ export class DrapePlanner {
     // time after the movement stops. The occasional build hitch (27 to 59 ms on a huge wide-area
     // tile) remains, but it is milder than fills that keep disappearing.
     const drapeTiles: DrapeTile[] = tiles.map((t) => ({ x: t.x, y: t.y, z: t.z }));
-    const prepared = this.tileStore.prepare(drapeTiles, DRAPE_BIN_BUDGET_MS, marginZoom(zoom));
-    if (prepared.pending) map?.triggerRepaint?.();
+    const budget = this.deps.timeSlicing === false ? Number.POSITIVE_INFINITY : DRAPE_BIN_BUDGET_MS;
+    const prepared = this.tileStore.prepare(drapeTiles, budget, marginZoom(zoom));
+    if (prepared.pending) {
+      this.pendingWork = true;
+      map?.triggerRepaint?.();
+    }
     debugBase.maxTileEdges = prepared.maxTileEdges;
     debugBase.truncatedCells = prepared.truncatedCells;
     debugBase.unfitTiles = prepared.unfitTiles;
@@ -770,6 +799,7 @@ export class DrapePlanner {
           reason: 'stale-plan',
           tileCount: drapePlan.tiles.length,
         });
+        this.pendingWork = true;
         map?.triggerRepaint?.();
         return true;
       }

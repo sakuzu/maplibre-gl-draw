@@ -504,6 +504,37 @@ export interface MapLibreGLDraw {
    */
   getTerrainDiagnostics(): TerrainDiagnostics;
 
+  // Pending work API
+  /**
+   * Whether the renderer still has work that later frames finish on their own and that will
+   * change the picture.
+   *
+   * It is true while the most recent frame left chunks of a dataset unbuilt or the tile index
+   * of the terrain drape incomplete, while a huge polygon is being triangulated, while a
+   * provider call waits for its debounce or its response, and while an overlay renderer reports
+   * work of its own (`CustomOverlayRenderer.hasPendingWork`). The renderer requests the repaints
+   * that finish this work itself.
+   *
+   * A host that reads the picture back (a print, a thumbnail) waits for the map's `idle`, which
+   * covers the tiles and the DEM of the map, and then for this to return false after a frame:
+   * maplibre fires `idle` even when this library asked for another frame during the last one,
+   * so `idle` alone does not mean the picture is complete. With `timeSlicing: false` in the
+   * rendering settings, the frames themselves are complete, and this usually turns false right
+   * after the first frame. A change made after the last frame is drawn by the next one; ask
+   * after that frame.
+   *
+   * @example
+   * ```typescript
+   * // Resolves once the picture on the canvas is complete
+   * async function whenPictureComplete(map: maplibregl.Map, draw: MapLibreGLDraw): Promise<void> {
+   *   map.triggerRepaint();
+   *   await map.once('idle');
+   *   while (draw.hasPendingWork()) await map.once('render');
+   * }
+   * ```
+   */
+  hasPendingWork(): boolean;
+
   // LocallyHidden API (hiding for this client only; it does not change the shared visible)
   /**
    * Whether a feature, group or layer is hidden for this client only (it does not look at

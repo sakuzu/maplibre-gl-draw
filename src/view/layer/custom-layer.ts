@@ -178,6 +178,11 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    * The terrain state of this draw instance (the anchor projection of the plugins reads it)
    */
   getTerrainContext(): TerrainContext;
+  /**
+   * Whether work remains that later frames finish without the host doing anything (see
+   * `MapLibreGLDraw.hasPendingWork`)
+   */
+  hasPendingWork(): boolean;
 }
 
 /**
@@ -279,7 +284,13 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   const renderScope = createRenderScope(deps.selectionScope);
   const terrainContext = renderScope.terrain;
   const terrainResolver = new TerrainResolver(map, terrainContext);
-  const drape = new DrapePlanner({ map, store, terrain: terrainContext, datasets });
+  const drape = new DrapePlanner({
+    map,
+    store,
+    terrain: terrainContext,
+    datasets,
+    timeSlicing: renderingConfig.timeSlicing,
+  });
   const styleZoom = new StyleZoom();
   const slots = new SlotManager({
     map,
@@ -538,6 +549,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     const rawZoom = map?.getZoom() ?? 14;
     const cameraBusy = map?.isMoving?.() === true || map?.isZooming?.() === true;
     const zoom = styleZoom.update(rawZoom, cameraBusy, getCameraMercator(map, 1));
+    // The datasets decide the rows they draw from the zoom of this frame, before anything of it
+    // is drawn (the drape plan below and every layer of the frame read the same rows)
+    datasets?.beginFrame(zoom);
 
     // Detection of the terrain and establishing the frame state
     //
@@ -738,6 +752,15 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     },
     getTerrainContext(): TerrainContext {
       return terrainContext;
+    },
+
+    hasPendingWork(): boolean {
+      if (drape.hasPendingWork) return true;
+      if (datasets?.hasPendingWork()) return true;
+      for (const renderer of dynamicOverlayRenderers) {
+        if (renderer.hasPendingWork?.()) return true;
+      }
+      return false;
     },
   };
 

@@ -895,6 +895,32 @@ Each item has the same five parts.
   itself; the bounds item goes away if maplibre's globe bounds come to
   cover the whole visible cap.
 
+## 29. `idle` Does Not Wait for a Frame a Custom Layer Asked For
+
+- Upstream behavior — at the end of `Map._render` (`ui/map.ts`, around
+  line 4480) maplibre asks for another frame only for its own dirty state
+  (sources, style, placement, render to texture) or `repaint`; otherwise
+  it fires `idle` when the map is not moving and loaded. `triggerRepaint`
+  called by a custom layer during `render` schedules the next frame
+  (`_frameRequest` was cleared before `_render`), and `idle` still fires
+  after the frame that asked for it.
+- What we rely on — avoidance. Work spread over frames (the chunks of a
+  dataset, the triangulation of huge polygons, the index of the terrain
+  drape, the hand-over of the drape) asks for the next frame with
+  `triggerRepaint`, which maplibre does not count as unfinished.
+  `MapLibreGLDraw.hasPendingWork()` (`src/api/instance-api.ts`, asking the
+  custom layer in `src/view/layer/custom-layer.ts`) reports that work, and
+  a host that reads the picture back waits for `idle` and then for a
+  `render` after which it is false
+  ([Performance](../guides/performance.md#complete-frames-for-a-picture)).
+- Symptoms when it breaks — none here: if `idle` came to wait for the
+  frames a custom layer asks for, waiting for `idle` would be enough and
+  `hasPendingWork()` would simply be false when it fires.
+- Check when upgrading — read the end of `Map._render` in the new source.
+- Conditions for removal — `idle` waiting for the frames requested during
+  `render`; `hasPendingWork()` stays useful for the work that no frame
+  finishes (the answer of a provider).
+
 ## When Upgrading the Version
 
 When moving to a new maplibre version, do the following.

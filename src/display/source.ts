@@ -67,6 +67,8 @@ export interface DisplaySource extends ThinningRows {
   typeOf(row: number): Feature['type'] | null;
   /** The rows whose id is in the set, in draw order (only rows with a geometry) */
   rowsOfIds(ids: ReadonlySet<string>): number[];
+  /** The row of an id: the last (frontmost) when several rows share it; -1 when none has it */
+  rowOfId(id: string): number;
   /** Every row with a geometry as a feature, in draw order (it may be built on demand) */
   features(): Feature[];
   /** What the row is to the collision thinning */
@@ -90,6 +92,8 @@ export class FeatureArraySource implements DisplaySource {
   readonly chunks: readonly DisplayChunk[];
   readonly index = new DisplaySpatialIndex();
   readonly maxStylePointRadius: number;
+  /** The row of each id, built on the first request */
+  private rowById: Map<string, number> | null = null;
 
   /**
    * @param list The normalized features, in draw order
@@ -126,6 +130,15 @@ export class FeatureArraySource implements DisplaySource {
       if (ids.has(this.list[row].id)) rows.push(row);
     }
     return rows;
+  }
+
+  rowOfId(id: string): number {
+    if (!this.rowById) {
+      const map = new Map<string, number>();
+      for (let row = 0; row < this.list.length; row++) map.set(this.list[row].id, row);
+      this.rowById = map;
+    }
+    return this.rowById.get(id) ?? -1;
   }
 
   features(): Feature[] {

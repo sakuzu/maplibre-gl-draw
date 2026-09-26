@@ -339,7 +339,10 @@ regardless. `reason` is `'features'` (`setFeatures`, `setColumnar` or a
 provider result),
 `'style'` (`setStyleRule` or `setBaseStyle`), `'visibility'` (`setVisible`
 actually switched), `'selection'` (`setSelectedIds` actually changed) or
-`'thinning'` (the set of features kept by collision thinning changed). See
+`'thinning'` (the set of features kept by collision thinning changed). A
+`'thinning'` caused by `setCollisionThinning` or `setZoomScale` fires
+inside the call; one caused by the camera entering another integer zoom
+fires right after the frame that drew the new set. See
 [Large data](../guides/large-data.md).
 
 ### draw.renderslots.change

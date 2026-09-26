@@ -269,12 +269,17 @@ export interface DatasetHoverPayload {
  * changed. It exists so that a host that builds another representation from the contents of a
  * dataset, such as label rendering, gets a trigger to rebuild it.
  *
- * - features: the features were replaced (setFeatures, or a provider result applied)
- * - style: the style rule or the base style changed
+ * - features: the features were replaced (setFeatures, setColumnar, or a provider result
+ *   applied). The rows are new, and so are the drawn rows
+ * - style: the style rule or the base style changed (the drawn rows may have changed with it)
  * - visibility: it was actually switched between shown and hidden
  * - selection: the selected features actually changed
- * - thinning: the set of winners of the collision thinning changed (a band change, a change of
- *   the contents or of the style)
+ * - thinning: the rows the collision thinning draws changed, and nothing else did. When a
+ *   frame changed them (the zoom entered another band), it is sent right after that frame,
+ *   which drew them; when the host did (`setCollisionThinning`, `setZoomScale`), it is sent at
+ *   once and the next frame draws them
+ *
+ * Every change of the drawn rows also advances {@link Dataset.getDrawnRowsRevision}.
  */
 export interface DatasetChangePayload {
   /** What changed (see the list above) */
@@ -381,7 +386,9 @@ export interface Dataset {
    * Replaces the zoom-dependent drawing factors (null clears them)
    *
    * The factors are only multiplied in at draw time, so the retained batches are not rebuilt
-   * (they take effect from the next frame).
+   * (they take effect from the next frame). With the collision thinning on, the footprints of
+   * the points change with the scale: the winners are picked again at once and, when they
+   * changed, the next frame rebuilds the points alone.
    */
   setZoomScale(zoomScale: DatasetZoomScale | null): void;
   /** The zoom-dependent drawing factors in effect (null when not set) */
@@ -431,11 +438,16 @@ export interface Dataset {
   /**
    * Returns the rows that intersect the range and are drawn now, in draw order
    *
-   * It is the counterpart of `collectVisible` narrowed with `getVisibleFeatureIds`, by row
-   * number: a row is kept when its bbox intersects the range, it has a geometry, it is not
-   * hidden (`visible: false`) and it survived the collision thinning (every row survives while
-   * the thinning is off). A point handed to `externalPointRender` counts as drawn. The
-   * visibility of the dataset itself is not looked at (as in `collectVisible`).
+   * It is the counterpart of `collectVisible` narrowed to the drawn rows, by row number: a row
+   * is kept when its bbox intersects the range, it has a geometry, it is not hidden
+   * (`visible: false`) and it survived the collision thinning (every row survives while the
+   * thinning is off). A point handed to `externalPointRender` counts as drawn. The visibility
+   * of the dataset itself is not looked at (as in `collectVisible`).
+   *
+   * "Drawn now" means the rows of the zoom band of the most recent frame: a frame decides the
+   * band before anything of it is drawn, and draws exactly these rows (see
+   * {@link Dataset.getDrawnRowsRevision} for when they change). A layer that draws in the same
+   * frame reads the rows of that frame.
    *
    * The narrowing uses the spatial index and builds no feature, so the cost is proportional to
    * the number of rows in the range. It is the entry point for code that walks only what is
@@ -485,6 +497,17 @@ export interface Dataset {
    * @returns null for any other row (another type, no geometry, out of range)
    */
   getRowPoint(row: number): Coordinate | null;
+  /**
+   * The row of a feature id: the reverse of `getRowId`
+   *
+   * The first call builds an index of the ids (one pass over the rows), and the calls after it
+   * are a lookup, until the contents are replaced. The ids of a dataset are expected to be
+   * unique; when several rows share one, the last (frontmost) row is returned. A row without a
+   * geometry is found too (it is never drawn).
+   *
+   * @returns null when no row has the id
+   */
+  findRow(id: string): number | null;
 
   /**
    * Replaces the selected features
@@ -512,7 +535,11 @@ export interface Dataset {
    * decided with "the shallowest effective zoom on screen" (so that only the distance does not
    * get squashed).
    *
-   * Changing the settings picks the winners again and rebuilds the retained batches.
+   * The band follows the zoom being drawn by itself: every frame decides it from the zoom it
+   * draws with, during a zoom or pitch gesture as well, so there is nothing to call when the
+   * camera moves or before drawing once at a given camera (a snapshot, a print). Changing the
+   * settings picks the winners at once, for the band of the most recent frame, and the next
+   * frame draws them (only the points are rebuilt).
    */
   setCollisionThinning(options: DatasetCollisionThinning | null): void;
   /** The collision thinning in effect (null when not set) */
@@ -521,28 +548,30 @@ export interface Dataset {
   /**
    * The set of feature ids that are drawn (null when no thinning is in effect)
    *
-   * null means "every feature is drawn" (the set of all of them is not built). A host that
-   * attaches something only to the drawn points, such as labels, reads it.
+   * null means "every feature is drawn" (the set of all of them is not built). The rows are
+   * those of {@link Dataset.collectDrawnRows}. The set is built on the first request after each
+   * change of the drawn rows, one pass over every row, so code that walks the drawn points of
+   * a range reads `collectDrawnRows` instead, and code that caches something per set of drawn
+   * rows keys it on {@link Dataset.getDrawnRowsRevision}.
    */
   getVisibleFeatureIds(): ReadonlySet<string> | null;
-  /** The state of the thinning: how many of the features are drawn, in which band */
-  getThinningStats(): DatasetThinningStats;
-
   /**
-   * Picks the winners again for the band of the given zoom (nothing happens when the band did
-   * not change)
-   *
-   * While the camera moves, the band follows the zoom being drawn by itself, and the manager
-   * calls this from moveend / pitchend of the map as well. On a path that draws once at a given
-   * zoom and reads the result, such as a snapshot or an export of the view, calling it with that
-   * zoom before drawing gives the same picture as the screen.
-   *
-   * When there is a pitch, the difference from "the shallowest effective zoom on screen" is
-   * subtracted from the zoom given as well (at pitch 0 the value given is used as it is).
-   *
-   * @param zoom The current zoom of the map when omitted
+   * The state of the thinning: how many of the features are drawn, in which band (the rows of
+   * {@link Dataset.collectDrawnRows})
    */
-  refreshThinning(zoom?: number): void;
+  getThinningStats(): DatasetThinningStats;
+  /**
+   * A number that advances whenever the drawn rows change: the contents replaced, or the rows
+   * the collision thinning draws (a band entered by a frame, the settings, the style, the zoom
+   * factors)
+   *
+   * Reading it costs nothing, so it is the key for a cache of what is derived from the drawn
+   * rows (the text placed next to the drawn points, say): the same number means the same rows
+   * for `collectDrawnRows`, `getVisibleFeatureIds`, `getThinningStats` and the hit testing. A
+   * layer that draws in the same frame as the dataset can compare it when it draws, and see a
+   * new band in the very frame that draws it, before the `change` event of that frame arrives.
+   */
+  getDrawnRowsRevision(): number;
 
   /**
    * Discards the cache of the fetch results of the provider
@@ -679,12 +708,16 @@ export interface DatasetDeps {
    *
    * It is used to fetch the same range again after the provider cache has been discarded. Only
    * the manager knows the displayed range.
-   *
-   * `effectiveZoom` is "the shallowest effective zoom on screen" (with the pitch correction) and
-   * only the band of the collision thinning looks at it. When it is omitted, or at pitch 0, it is
-   * the same value as zoom.
    */
-  getViewportState(): { bounds: BoundingBox; zoom: number; effectiveZoom?: number };
+  getViewportState(): { bounds: BoundingBox; zoom: number };
+  /**
+   * How far "the shallowest effective zoom on screen" lies below the zoom of the camera (the
+   * pitch correction; 0 at pitch 0)
+   *
+   * Only the band of the collision thinning reads it: the band is decided from the zoom of the
+   * frame lowered by this drop.
+   */
+  getPitchZoomDrop(): number;
   /**
    * A light entry point that returns only the current zoom
    *
@@ -717,10 +750,9 @@ export interface DatasetDeps {
    */
   pointStyle?: PointStyle;
   /**
-   * Reports that the need to subscribe to the changes of the displayed range has changed
-   *
-   * The collision thinning can be enabled or disabled at runtime, so the manager has to rewire
-   * its subscription to moveend.
+   * Whether the work that does not fit in a frame is spread over later frames (true when
+   * omitted; the `timeSlicing` of the rendering settings). With false every chunk in view is
+   * built in the frame that needs it
    */
-  onViewportSubscriptionChange?(): void;
+  timeSlicing?: boolean;
 }

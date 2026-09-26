@@ -16,6 +16,42 @@ the project follows semantic versioning.
   in draw order, through the spatial index. `getRowFeature`, `getRowId`,
   `getRowType`, `getRowBounds` and `getRowPoint` read one row, so code that
   walks only what is drawn builds features only for the rows it keeps.
+- Added: `Dataset.findRow(id)` returns the row of a feature id (`null` when
+  no row has it), the reverse of `getRowId`, so a host does not read the
+  id column of a table itself.
+- Added: `Dataset.getDrawnRowsRevision()`, a number that advances whenever
+  the drawn rows change (the contents replaced, or the points kept by the
+  collision thinning). It costs nothing to read, so it is the key for a
+  cache of what is derived from the drawn rows; the identity of the set
+  `getVisibleFeatureIds()` builds is not.
+- Added: `MapLibreGLDraw.hasPendingWork()` tells whether work remains that
+  later frames finish on their own (chunks of a dataset left for the next
+  frames, a polygon being triangulated, the index of the terrain drape, a
+  provider call, and the work of an overlay renderer through the optional
+  `CustomOverlayRenderer.hasPendingWork()`), so a host that reads the
+  picture back can wait until it is complete. maplibre's `idle` alone does
+  not tell.
+- Changed: `renderingStyle.asyncTriangulation` is replaced by
+  `renderingStyle.timeSlicing`, one switch for all the work spread over
+  frames. With `timeSlicing: false` every frame is complete: the batches of
+  the datasets in view and the index of the terrain drape are built in the
+  frame as well as the triangulation of huge polygons.
+- Changed: the collision thinning decides the integer zoom from the zoom of
+  the frame being drawn (the zoom the sizes are drawn with), not from the
+  zoom of the map, so the elevation settlement of the terrain no longer
+  switches the points while nothing moves. Every frame decides it before
+  anything of it is drawn, and the queries (`collectDrawnRows`,
+  `getVisibleFeatureIds`, `getThinningStats`) and the hit test answer for
+  the rows of the most recent frame. A `change` event with the reason
+  `thinning` caused by the camera arrives right after the frame that drew
+  the new points; one caused by `setCollisionThinning` or `setZoomScale`
+  arrives inside the call.
+- Changed: within a chunk of a dataset, the points drawn in immediate mode
+  (a point shape without instancing) are drawn after the other features
+  drawn in immediate mode.
+- Removed: `Dataset.refreshThinning(zoom)`. The frame that draws a picture
+  decides the points it draws, so there is nothing to call before a
+  snapshot or a print, and nothing that a later frame would override.
 - Changed: `DatasetColumnarInput.geometry` is a union of
   `DatasetColumnarGeometry` and `DatasetColumnarMixedGeometry`, so code
   that reads `geometry.coords` or `geometry.offsets` must narrow on
@@ -23,9 +59,11 @@ the project follows semantic versioning.
 - Fixed: the collision thinning of a dataset follows the integer zoom in
   the middle of a zoom or pitch gesture, instead of keeping the points
   chosen for the zoom the gesture started at. After a fast zoom out those
-  points piled up into a solid patch until the gesture ended. The points
-  chosen for nearby zooms are kept and picked ahead while the page is idle,
-  and the points drawn before stay on screen until the new ones are ready.
+  points piled up into a solid patch until the gesture ended. The frame
+  that enters another integer zoom rebuilds only the points of the chunks
+  it draws and draws the new points; the polygons and lines are not
+  rebuilt. The points chosen for nearby zooms are kept, and picked ahead in
+  slices that end with the idle periods of the page.
 - Fixed: after `jumpTo`, `setZoom` or another change of the zoom that is
   not animated, points, lines and labels are drawn at the sizes of the new
   zoom. Such a change was taken for the terrain's elevation settlement and

@@ -42,6 +42,10 @@ const fake = {
   drapedDatasets: new Set<string>(['c1']),
   /** Number of calls of collectDrapeElements */
   collects: 0,
+  /** Whether the index leaves tiles for the next frames */
+  pending: false,
+  /** The budgets the index was prepared with */
+  budgets: [] as number[],
 };
 
 vi.mock('../terrain/detect.js', () => ({
@@ -78,9 +82,10 @@ vi.mock('../terrain/drape/bin-store.js', () => ({
     sync(): void {}
     setSelection(): void {}
     clear(): void {}
-    prepare() {
+    prepare(_tiles: unknown, budget: number) {
+      fake.budgets.push(budget);
       return {
-        pending: false,
+        pending: fake.pending,
         overflow: fake.overflow,
         maxTileEdges: 0,
         truncatedCells: 0,
@@ -122,7 +127,7 @@ function tile(x: number): RenderableTerrainTile {
   return { x, y: 0, z: 12, tileID: `t${x}` };
 }
 
-function createPlanner() {
+function createPlanner(options: { timeSlicing?: boolean } = {}) {
   const terrain = new TerrainContext();
   const layer = { id: 'layer-1', opacity: 1 };
   const setDrapedDatasets = vi.fn();
@@ -130,8 +135,10 @@ function createPlanner() {
     listInternal: () => [],
     setDrapedDatasets,
   };
+  const map = { triggerRepaint: vi.fn() };
   const planner = new DrapePlanner({
-    map: { triggerRepaint: vi.fn() } as unknown as MapLibreMap,
+    map: map as unknown as MapLibreMap,
+    timeSlicing: options.timeSlicing,
     store: {
       getLayerOrder: () => ['layer-1'],
       getLayer: (id: string) => (id === 'layer-1' ? layer : undefined),
@@ -149,7 +156,7 @@ function createPlanner() {
       rawZoom: options.rawZoom ?? 14,
     });
   const reason = () => getTerrainDrapeDebug(terrain).reason;
-  return { planner, terrain, frame, reason, setDrapedDatasets, layer };
+  return { planner, terrain, frame, reason, setDrapedDatasets, layer, map };
 }
 
 beforeEach(() => {
@@ -163,6 +170,35 @@ beforeEach(() => {
   fake.packId = 1;
   fake.upload = true;
   fake.collects = 0;
+  fake.pending = false;
+  fake.budgets = [];
+});
+
+describe('DrapePlanner pending work', () => {
+  it('is pending, and asks for frames, while the hand-over settles', () => {
+    const { planner, frame, map } = createPlanner();
+    frame();
+    expect(planner.hasPendingWork).toBe(true);
+    expect(map.triggerRepaint).toHaveBeenCalled();
+    for (let i = 1; i < DRAPE_STABLE_FRAMES; i++) frame();
+    expect(planner.hasPendingWork).toBe(false);
+  });
+
+  it('is pending while the index leaves tiles for the next frames', () => {
+    const { planner, frame } = createPlanner();
+    for (let i = 0; i < DRAPE_STABLE_FRAMES; i++) frame();
+    expect(planner.hasPendingWork).toBe(false);
+    fake.pending = true;
+    frame();
+    expect(planner.hasPendingWork).toBe(true);
+  });
+
+  it('builds the whole index in the frame without time slicing', () => {
+    createPlanner({ timeSlicing: false }).frame();
+    createPlanner().frame();
+    expect(fake.budgets[0]).toBe(Number.POSITIVE_INFINITY);
+    expect(fake.budgets[1]).toBeLessThan(Number.POSITIVE_INFINITY);
+  });
 });
 
 describe('DrapePlanner reasons', () => {

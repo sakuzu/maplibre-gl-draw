@@ -191,6 +191,36 @@ terrain, the picture unchanged), and the change is absorbed so that nothing
 resizes. If the camera moved, as after `jumpTo` or `setZoom`, the style
 zoom takes the zoom as it is.
 
+The test rests on an invariant rather than on a measured threshold. A
+settlement keeps the camera where it is in space and only describes it
+again; any change of the zoom at the same pitch moves the camera along its
+line of sight and multiplies its altitude by `2^-Δzoom`. The altitude is
+compared with a tolerance relative to it (1e-7, with a floor of 1 cm),
+which takes any change of the zoom above about 1.5e-7 for a move at every
+altitude while the noise of describing the same camera again stays far
+below it. The position on the ground is compared as well, with a bound
+(about 40 m) well above the drift of a settlement and far below a jump
+made on purpose, so a jump sideways at the same altitude is not taken for
+a settlement.
+
+The gap between the style zoom and the raw zoom comes from settlements
+only, and the kind of move decides what happens to it:
+
+- a move that changes the zoom within one frame (`jumpTo`, `setZoom`):
+  the next frame sees the camera moved and takes the raw zoom, dropping
+  the gap
+- an animated move (`easeTo`, `flyTo`, a gesture, inertia): the frames of
+  the move follow the increments of the raw zoom and keep the gap, so no
+  size jumps when the move starts; the gap stays after the move ends
+- a settlement: absorbed, the gap changes by its step (about ±0.3 at
+  most as the elevation under the camera changes)
+
+Right after the style zoom, `beginFrame` starts the frame of the datasets
+(`DatasetManager.beginFrame`): each visible dataset decides the zoom band
+of its collision thinning from the style zoom, before the drape plan and
+before any layer of the frame draws (see
+[Collision thinning](#collision-thinning)).
+
 `renderForeground` runs once per world copy in the last slot. It draws the
 selection UI (only the selection frame when editing is blocked), the
 vertices that follow a shared vertex, the tentative vertices and those of
@@ -1054,7 +1084,9 @@ so a new input form is one more implementation.
   `collectDrawnRows` and the other `getRow*` reads build none: they read
   the thinning mask, the spatial index and the bbox array
   (`DisplaySpatialIndex.searchWhere` filters the rows before it sorts
-  them)
+  them). `findRow` reads an index of the ids built on its first call
+  (`DisplaySource.rowOfId`; a table without an ids column parses the
+  number instead)
 
 ### Spatial chunks
 
@@ -1099,10 +1131,14 @@ cannot be retained, drawn in immediate mode.
   0, which keeps their width constant on screen. Fixed-width and
   zoom-scaled polygons and lines go into separate batches
 - Within a chunk the order is polygons, lines, points, then the immediate
-  features. The exact original order within a chunk is the price of
-  batching
+  features, then the immediate points. The exact original order within a
+  chunk is the price of batching
 - Dashed or dotted outlines and lines, images and point shapes without
   instancing are drawn immediately after the chunk's batches
+- The point batches and the immediate points form the point part of the
+  chunk. `rebuildChunkPoints` rebuilds it alone, without touching the
+  polygons and the lines: the anchor elevations of the terrain and the
+  collision thinning change only the points
 
 ### Building across frames
 
@@ -1112,6 +1148,9 @@ least one chunk. Chunks not built yet appear over the next frames, much
 like tiles arriving. Polygons are built in bundles of about 2,000 vertices,
 so one large surface does not stall a frame, and a chunk that is being
 rebuilt keeps drawing its previous batches until the new ones are ready.
+With `timeSlicing: false` in the rendering settings the budget is
+infinite, and every chunk in view is built in the frame (see
+[Complete frames](#complete-frames)).
 
 A build has two phases, and the budget covers both. The first walks the
 rows of the chunk, applies the rule colors and resolves the styles into
@@ -1136,14 +1175,17 @@ into them changes:
 - `setStyleRule()`, `setBaseStyle()` (colors change; chunks are kept)
 - `setExternalPointRender()` (see
   [Delegating point rendering](#delegating-point-rendering))
-- A change in the winners of collision thinning (`setCollisionThinning`,
-  or `setZoomScale` and `refreshThinning` when the winner set changes)
 - A change of the rendering pixel ratio, since widths are baked in physical
   pixels. A `pixelRatio` passed in the options is fixed and never triggers
   this
 - The hand-over of polygons and lines to the terrain drape starting or
   stopping (see [Terrain](#terrain))
 - The triangulation of a huge polygon finishing (only that chunk)
+
+A change of the rows the collision thinning draws discards nothing. Each
+chunk records the mask of drawn rows its point part was built with, and
+the draw rebuilds the point part of a chunk whose mask differs before it
+draws the chunk (see [Collision thinning](#collision-thinning)).
 
 `onRemove()` of the custom layer releases only the GPU resources. The
 dataset itself survives and is rebuilt on the next draw once the layer
@@ -1170,8 +1212,47 @@ never simplified.
 - No worker is used, so the library does not depend on how the host
   bundles workers
 - Drawing that happens once and is read back (an export, a thumbnail) sets
-  `asyncTriangulation: false` in the rendering style, so fills are ready
-  in the first frame
+  `timeSlicing: false` in the rendering style, so fills are ready in the
+  first frame
+
+### Complete frames
+
+A host that reads the picture back (a print, a thumbnail) needs to know
+when it is complete. Two things answer it.
+
+`timeSlicing` (rendering settings, true by default) is the one switch of
+the work that is spread over frames. With false, every frame is complete
+while the camera is still:
+
+- the chunks of the datasets in view are built in the frame
+  (`buildBudgetMs` of the chunk set is infinite)
+- every polygon is triangulated on the spot (the threshold of
+  `TriangulationScheduler` is infinite)
+- the tile index of the analytic drape is built in the frame
+  (`DrapePlanner` prepares it without a budget)
+
+The rebuilds that wait for the camera to stop still wait; a capture is
+taken with the camera still.
+
+`MapLibreGLDraw.hasPendingWork()` reports the work later frames finish on
+their own. It asks the engine (`CustomLayerInterface.hasPendingWork`),
+which asks:
+
+- the drape planner: tiles of the index left for the next frames (the
+  previous plan drawn meanwhile), or a hand-over to the datasets waiting
+  for `DRAPE_STABLE_FRAMES` usable frames. It requests the frames that
+  finish either
+- the datasets (`DatasetManager.hasPendingWork`): a queued triangulation;
+  a chunk the most recent frame left unbuilt, for a visible dataset that
+  frame drew (a hidden one, or one on no side of the frame, has no work);
+  a provider call waiting for its debounce or its response
+- the overlay renderers, through the optional
+  `CustomOverlayRenderer.hasPendingWork`
+
+maplibre fires `idle` after a frame even when a custom layer asked for
+another frame while drawing it, so `idle` alone does not tell. The host
+waits for `idle` (the tiles and the DEM of the map), then for a `render`
+after which `hasPendingWork()` is false.
 
 ### Insertion points in the render loop
 
@@ -1377,29 +1458,72 @@ screen.
   horizon is on screen, so the drop is capped at `MAX_PITCH_ZOOM_DROP` (8)
 - `getThinningStats().band` reports the effective band
 
-The winners are recomputed when the features are replaced (`setFeatures`,
-a provider response), when the style changes (`styleRule`, `baseStyle`,
-`zoomScale`), and when the effective band changes. The band is followed
-right before each draw (`CollisionThinningState.follow`), in the middle of
-a zoom or pitch gesture as well: keeping the winners of the band a gesture
-started in would draw them at another scale, and after a large zoom out
-they would pile up into a solid patch until the gesture ends.
+### Following the zoom
 
-- The winners of up to six bands are kept per (feature generation, style
-  revision), least recently used first out, so the selection runs once per
-  band crossed and going back to a band costs nothing
-- While the page is idle, the bands within two of the current one are
-  picked ahead (`prefetchNeighbor`, one band per idle period), so a
-  gesture usually crosses into bands that are ready
-- A change of band rebuilds the retained batches with `refreshAll`: the
-  previous batches keep being drawn until the new ones are complete, and
-  this rebuild is advanced while the camera moves, unlike other rebuilds
-- The `change` event (`reason: 'thinning'`) of a band followed while
-  drawing is sent after the frame
+The drawn rows follow one zoom: the style zoom of the frame being drawn,
+lowered by the drop of the pitch correction. The zoom of the map is not
+read again. The elevation settlement of the terrain changes it without
+changing the picture, and a band taken from it would flip while nothing
+moves. `CollisionThinningState.sync(zoom)` is the only way the drawn rows
+change: it picks the winners of the band of `zoom` for the current
+contents, style and settings, and does nothing when they are already
+those.
 
-`refreshThinning` picks the band of a given zoom: the manager also calls
-it on `moveend` / `pitchend`, and a path that draws once at a given zoom
-(an export) can call it at that zoom.
+- Every frame calls it first, in `DatasetManager.beginFrame`, before the
+  drape plan and before any layer draws, for every visible dataset. A
+  layer that draws in the same frame reads the rows the frame draws. The
+  draw of a dataset calls it again with the same zoom, which finds
+  nothing to do (and keeps a draw without a frame, in a test, correct)
+- A change made by the host picks the winners at once, with the zoom of
+  the most recent frame (the zoom of the map before the first frame):
+  replaced contents, a new style, new zoom factors, new settings. The next
+  frame draws them
+- A hidden dataset keeps its rows; the first frame that draws it again
+  brings them up to date
+
+The winners of up to six bands are kept per (feature generation, style
+revision), least recently used first out, so the selection runs once per
+band crossed and going back to a band costs nothing. The selection of a
+band over 260,000 points takes 20 to 75 ms (more winners, more work), more
+than a frame, so while the page is idle the bands within two of the
+current one are picked ahead. `CollisionSelection` advances a selection
+in slices of `SELECTION_SLICE_ROWS` (4,096) rows, under 2 ms each at that
+size, and stops at the deadline of the idle period
+(`CollisionThinningState.prefetch`). A frame that needs a band being
+picked ahead finishes that selection instead of starting over. A
+selection sliced this way gives the same winners as one run in one go.
+
+### Drawing the new rows
+
+A change of the drawn rows discards no batch and does not advance the
+revision of the drape (the drape draws polygons and lines, which the
+thinning never removes; `drapeFeatures` ignores the drawn rows). A mask
+is never modified once it is in use, so its identity names it:
+
+- A build of a chunk collects the mask of the moment it starts, and the
+  chunk records it with its batches (`pointsMask`)
+- Before a chunk is drawn, a chunk whose mask differs from the current
+  one has its point part rebuilt (`rebuildChunkPoints`). When its rows are
+  drawn alike in both masks (it has no point, or none of its points
+  changed) it only records the new mask
+- This rebuild runs in every frame, while the camera moves as well: until
+  it does, the points of another band would be drawn at this scale (after
+  a large zoom out, piled up into a solid patch). It costs a walk over the
+  rows of the chunk plus the packing of the points it draws, which the
+  thinning bounds by what fits on screen: about 2 ms to bring the whole of
+  260,000 points in view to a band with a few thousand winners, on the
+  CPU. The other rebuilds keep waiting for the camera to stop
+
+So the frame that switches the rows draws exactly those rows, and the
+queries (`collectDrawnRows`, `getVisibleFeatureIds`, `getThinningStats`)
+and the hit test answer for them from the start of that frame. Every
+change of the drawn rows advances `getDrawnRowsRevision()`, a number a
+listener can keep its derived data under. The `change` event (`reason:
+'thinning'`) of a band entered by a frame is sent after that frame (a
+microtask), so no listener runs in the middle of drawing; a change made by
+the host sends it at once, like its other events.
+`DatasetImpl.drawnRowsChanged` is the one place that handles a change of
+the rows.
 
 ## Delegating point rendering
 

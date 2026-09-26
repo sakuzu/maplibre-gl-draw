@@ -158,18 +158,13 @@ export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): M
     // The band of the collision thinning is decided by "the shallowest
     // effective zoom on screen" (pitch correction)
     getEffectiveZoom: () => effectiveZoomForCamera(map),
+    // The providers are called when the displayed range changed
     onViewportChange: (handler) => {
       // A destroyed instance attaches nothing to the map again
       if (teardown.done) return () => {};
-      // The end of a pitch operation also arrives as moveend, but pitchend is
-      // subscribed as well so that it is not missed because of implementation
-      // differences (recomputing the band is a no-op for the same band, so
-      // doing it twice is cheap)
       map.on('moveend', handler);
-      map.on('pitchend', handler);
       return () => {
         map.off('moveend', handler);
-        map.off('pitchend', handler);
       };
     },
     requestRepaint: () => map.triggerRepaint(),
@@ -179,13 +174,14 @@ export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): M
     featureStyle,
     // The time slicing of the triangulation belongs to this instance (its queue
     // and its finished triangles are never shared with another instance).
-    // Rendering that "cannot wait" (printing, thumbnails) turns off time
+    // Rendering that draws complete frames (printing, thumbnails) turns off time
     // slicing and triangulates on the spot: setting the threshold to infinity
     // puts every polygon on the synchronous path
     triangulationScheduler:
-      renderingConfig.asyncTriangulation === false
+      renderingConfig.timeSlicing === false
         ? new TriangulationScheduler({ vertexThreshold: Number.POSITIVE_INFINITY })
         : new TriangulationScheduler(),
+    timeSlicing: renderingConfig.timeSlicing,
     // Announce the datasets that come and go and their reordering (draw.dataset.add,
     // draw.dataset.remove and draw.dataset.reorder)
     onDatasetAdd: (datasetId) => eventEmitter.emit('dataset.add', { datasetId }),
