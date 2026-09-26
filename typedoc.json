@@ -4,7 +4,7 @@
   "tsconfig": "tsconfig.build.json",
   "out": "docs/reference/api",
   "name": "@sakuzu/maplibre-gl-draw",
-  "readme": "none",
+  "readme": "docs/api-index.md",
   "excludeInternal": true,
   "excludePrivate": true,
   "includeVersion": true,
