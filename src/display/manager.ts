@@ -513,10 +513,10 @@ export class DatasetManager {
    * Schedules the call of the provider when the displayed range changed, and makes the band of
    * the thinning follow it
    *
-   * The band is made to follow here (moveend / pitchend) so that the winners are not picked again
-   * in the middle of a zoom or pitch gesture. The band is decided by the effective zoom (with the
-   * pitch correction), so `refreshThinning` is called without an argument and the dataset side
-   * takes it from the state of the viewport.
+   * While the camera moves, each dataset follows the band as it draws. This is the last check at
+   * the end of the gesture (moveend / pitchend). The band is decided by the effective zoom (with
+   * the pitch correction), so `refreshThinning` is called without an argument and the dataset
+   * side takes it from the state of the viewport.
    */
   private handleViewportChange(): void {
     const bounds = this.deps.getViewportBounds();

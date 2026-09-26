@@ -522,7 +522,32 @@ describe('the application to a dataset', () => {
     expect(drawnIds(manager)).toEqual(['c']);
   });
 
-  it('nothing is picked again during a zoom gesture; moveend picks on a band change', () => {
+  it('drawing follows the band during a gesture, and tells the listeners after the frame', async () => {
+    const { manager, setZoom } = createManager(10);
+    const dataset = add(manager, {
+      id: 'c1',
+      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      collisionThinning: { enabled: true },
+    });
+    const reasons: string[] = [];
+    dataset.on('change', ({ reason }) => reasons.push(reason));
+
+    expect(dataset.getThinningStats().band).toBe(10);
+
+    // In band 12 they look 20px apart, so both win (no moveend in between)
+    setZoom(12.5);
+    expect(drawnIds(manager, 12.5)).toEqual(['a', 'b']);
+    expect(dataset.getThinningStats().band).toBe(12);
+    expect(reasons).toEqual([]);
+    await Promise.resolve();
+    expect(reasons).toEqual(['thinning']);
+
+    // Back in band 10 the first winners come back
+    setZoom(10.5);
+    expect(drawnIds(manager, 10.5)).toEqual(['b']);
+  });
+
+  it('moveend follows the band as well', () => {
     const { manager, setZoom, moveEnd } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
@@ -530,13 +555,6 @@ describe('the application to a dataset', () => {
       collisionThinning: { enabled: true },
     });
 
-    expect(dataset.getThinningStats().band).toBe(10);
-
-    // Drawing during the gesture (nothing is picked again even when the band changes)
-    expect(drawnIds(manager, 12.5)).toEqual(['b']);
-    expect(dataset.getThinningStats().band).toBe(10);
-
-    // moveend follows the band (in band 12 they look 20px apart, so both win)
     setZoom(12.5);
     moveEnd();
 
@@ -819,6 +837,63 @@ describe('CollisionThinningState', () => {
     const state = new CollisionThinningState(host, { enabled: true });
     expect(state.zoomFor(10)).toBe(8);
     expect(state.zoomFor()).toBe(8);
+  });
+
+  it('follow picks the winners of a new band once, and a band seen before costs nothing', () => {
+    const host = createHost();
+    let picks = 0;
+    const footprintPx = host.footprintPx;
+    host.footprintPx = (band, marginPx) => {
+      picks++;
+      return footprintPx(band, marginPx);
+    };
+    const state = new CollisionThinningState(host, { enabled: true });
+    state.ensure(10);
+    expect(picks).toBe(1);
+
+    host.zoom = 10.9;
+    expect(state.follow()).toBe(false);
+    host.zoom = 12;
+    expect(state.follow()).toBe(true);
+    expect(state.stats(3)).toMatchObject({ band: 12, visible: 3 });
+    host.zoom = 10;
+    expect(state.follow()).toBe(true);
+    host.zoom = 12;
+    expect(state.follow()).toBe(true);
+    expect(picks).toBe(2);
+
+    // New contents forget the bands picked for the old ones
+    host.generation++;
+    expect(state.follow()).toBe(false);
+    state.ensure(10);
+    host.zoom = 12;
+    expect(state.follow()).toBe(true);
+    expect(picks).toBe(4);
+  });
+
+  it('the bands near the current one can be picked ahead, one per call', () => {
+    const host = createHost();
+    let picks = 0;
+    const footprintPx = host.footprintPx;
+    host.footprintPx = (band, marginPx) => {
+      picks++;
+      return footprintPx(band, marginPx);
+    };
+    const state = new CollisionThinningState(host, { enabled: true });
+    state.ensure(10);
+
+    expect(state.prefetchNeighbor()).toBe(true);
+    expect(state.prefetchNeighbor()).toBe(true);
+    expect(state.prefetchNeighbor()).toBe(true);
+    expect(state.prefetchNeighbor()).toBe(false);
+    expect(picks).toBe(5);
+
+    // Crossing into a band picked ahead costs no selection
+    host.zoom = 9;
+    expect(state.follow()).toBe(false);
+    host.zoom = 12;
+    state.follow();
+    expect(picks).toBe(5);
   });
 
   it('clear forgets the winners and keeps the settings', () => {

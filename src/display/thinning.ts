@@ -51,6 +51,12 @@ export const DEFAULT_FULL_DISPLAY_ZOOM = 17;
  */
 export const DEFAULT_THINNING_MARGIN_PX = 2;
 
+/**
+ * How many bands of winners a dataset keeps (one byte per row each). A zoom gesture crosses a few
+ * bands; going back and forth over them costs no selection
+ */
+const MAX_CACHED_BANDS = 6;
+
 /** Upper limit of the zoom bands (22 steps, the same as the tile coordinates) */
 const MAX_ZOOM_BAND = 22;
 
@@ -663,6 +669,13 @@ export class CollisionThinningState {
   private drawnCount = 0;
   /** The ids of the drawn rows, built on the first request */
   private drawnIds: Set<string> | null = null;
+  /**
+   * The winners already picked for each band, for the feature generation and the style revision
+   * in `cacheKey` (null = every row). Going back to a band seen before costs nothing
+   */
+  private readonly bandCache = new Map<number, Uint8Array | null>();
+  /** The feature generation and the style revision the bands in `bandCache` were picked for */
+  private cacheKey: { generation: number; revision: number } | null = null;
 
   constructor(
     private readonly host: CollisionThinningHost,
@@ -714,6 +727,7 @@ export class CollisionThinningState {
     this.settings = next;
     this.state = null;
     this.setDrawn(null);
+    this.forgetBands();
 
     if (next?.enabled) {
       this.recompute(zoomBandFor(this.zoomFor()));
@@ -752,10 +766,8 @@ export class CollisionThinningState {
   /**
    * Prepares the winners right before drawing
    *
-   * The winners are not picked again merely because the band changed (so that the selection does
-   * not run per frame during a zoom gesture). Following the band is done with `refresh` from
-   * moveend. What is rebuilt here is only the case where there are no winners yet, or where they
-   * went stale because the features or the style changed.
+   * The winners are rebuilt when there are none yet, or when they went stale because the
+   * features or the style changed.
    *
    * @returns Whether what is drawn changed
    */
@@ -771,6 +783,24 @@ export class CollisionThinningState {
   }
 
   /**
+   * Follows the band of the current zoom of the map, in the middle of a zoom or pitch gesture as
+   * well (called right before drawing)
+   *
+   * Keeping the winners of the band the gesture started in would draw them at another scale:
+   * after a large zoom out they pile up into a solid patch until the gesture ends. The winners
+   * of each band are kept for the current features and style, so the selection runs at most once
+   * per band crossed, not once per frame.
+   *
+   * @returns Whether what is drawn changed
+   */
+  follow(): boolean {
+    if (!this.enabled || !this.isFresh()) return false;
+    const band = zoomBandFor(this.zoomFor());
+    if (this.state?.band === band) return false;
+    return this.recompute(band);
+  }
+
+  /**
    * Picks the winners again after the style changed (in the band already decided)
    *
    * @returns Whether what is drawn changed
@@ -778,6 +808,41 @@ export class CollisionThinningState {
   onStyleChanged(): boolean {
     if (!this.enabled) return false;
     return this.recompute(this.state?.band ?? zoomBandFor(this.zoomFor()));
+  }
+
+  /**
+   * Picks the winners of one band near the current one ahead of time (`missingNeighbors`)
+   *
+   * Called while the page is idle, so that crossing into that band during a gesture costs no
+   * selection in the middle of a frame.
+   *
+   * @returns Whether a band near the current one is still missing
+   */
+  prefetchNeighbor(): boolean {
+    const settings = this.settings;
+    const state = this.state;
+    if (!settings?.enabled || !state || !this.isFresh()) return false;
+
+    const missing = this.missingNeighbors(state.band);
+    if (missing.length === 0) return false;
+    this.keepBand(missing[0], this.pickWinners(missing[0], settings));
+    return missing.length > 1;
+  }
+
+  /**
+   * The bands near `band` (two on each side) whose winners are not kept yet, the nearest and the
+   * lower first. A fast zoom gesture crosses two bands before the page is idle again
+   */
+  private missingNeighbors(band: number): number[] {
+    const missing: number[] = [];
+    for (const next of [band - 1, band + 1, band - 2, band + 2]) {
+      if (next < 0 || next > MAX_ZOOM_BAND) continue;
+      const kept = this.bandCache.get(next);
+      // A band still kept is marked as used, so that picking the missing ones does not drop it
+      if (kept === undefined) missing.push(next);
+      else this.keepBand(next, kept);
+    }
+    return missing;
   }
 
   /** Picks the winners again after the contents were replaced */
@@ -789,6 +854,7 @@ export class CollisionThinningState {
   clear(): void {
     this.state = null;
     this.setDrawn(null);
+    this.forgetBands();
   }
 
   /**
@@ -821,6 +887,12 @@ export class CollisionThinningState {
     );
   }
 
+  /** Discards the winners kept per band */
+  private forgetBands(): void {
+    this.bandCache.clear();
+    this.cacheKey = null;
+  }
+
   /** Replaces the drawn rows (null = every row) */
   private setDrawn(mask: Uint8Array | null): void {
     this.drawnRows = mask;
@@ -844,22 +916,45 @@ export class CollisionThinningState {
     if (!settings?.enabled) return false;
 
     const before = this.drawnRows;
-    this.state = {
-      generation: this.host.featuresGeneration(),
-      revision: this.host.styleRevision(),
-      band,
-    };
-    if (band >= settings.fullDisplayZoom) {
-      this.setDrawn(null);
-      return before !== null;
+    const generation = this.host.featuresGeneration();
+    const revision = this.host.styleRevision();
+    this.state = { generation, revision, band };
+
+    const key = this.cacheKey;
+    if (!key || key.generation !== generation || key.revision !== revision) {
+      this.bandCache.clear();
+      this.cacheKey = { generation, revision };
     }
 
-    const rows = this.host.rows();
-    const footprint = this.host.footprintPx(band, settings.marginPx);
-    const mask = selectCollisionWinnerRows(rows, band, (row) => footprint(rows.styleRadiusOf(row)));
+    let mask = this.bandCache.get(band);
+    if (mask === undefined) mask = this.pickWinners(band, settings);
+    this.keepBand(band, mask);
+    if (mask === before) return false;
+
     const changed = !sameMask(before, mask);
     this.setDrawn(mask);
     return changed;
+  }
+
+  /**
+   * Keeps the winners of a band as the most recently used one (the least recently used band is
+   * dropped first; a Map keeps the order of insertion)
+   */
+  private keepBand(band: number, mask: Uint8Array | null): void {
+    this.bandCache.delete(band);
+    if (this.bandCache.size >= MAX_CACHED_BANDS) {
+      const oldest = this.bandCache.keys().next().value;
+      if (oldest !== undefined) this.bandCache.delete(oldest);
+    }
+    this.bandCache.set(band, mask);
+  }
+
+  /** The winners of the band `band` (null = every row) */
+  private pickWinners(band: number, settings: ResolvedCollisionThinning): Uint8Array | null {
+    if (band >= settings.fullDisplayZoom) return null;
+    const rows = this.host.rows();
+    const footprint = this.host.footprintPx(band, settings.marginPx);
+    return selectCollisionWinnerRows(rows, band, (row) => footprint(rows.styleRadiusOf(row)));
   }
 }
 

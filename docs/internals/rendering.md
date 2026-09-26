@@ -1368,14 +1368,29 @@ screen.
   horizon is on screen, so the drop is capped at `MAX_PITCH_ZOOM_DROP` (8)
 - `getThinningStats().band` reports the effective band
 
-The winners are recomputed only when the features are replaced
-(`setFeatures`, a provider response), when the style changes (`styleRule`,
-`baseStyle`, `zoomScale`), and when the effective band changes at
-`moveend` / `pitchend`. The cache key is (feature generation, style
-revision, band). During a zoom gesture the previous winners are kept.
-`refreshThinning` is the entry point for following the band: the manager
-calls it on `moveend`, and a path that draws once at a given zoom (an
-export) can call it at that zoom.
+The winners are recomputed when the features are replaced (`setFeatures`,
+a provider response), when the style changes (`styleRule`, `baseStyle`,
+`zoomScale`), and when the effective band changes. The band is followed
+right before each draw (`CollisionThinningState.follow`), in the middle of
+a zoom or pitch gesture as well: keeping the winners of the band a gesture
+started in would draw them at another scale, and after a large zoom out
+they would pile up into a solid patch until the gesture ends.
+
+- The winners of up to six bands are kept per (feature generation, style
+  revision), least recently used first out, so the selection runs once per
+  band crossed and going back to a band costs nothing
+- While the page is idle, the bands within two of the current one are
+  picked ahead (`prefetchNeighbor`, one band per idle period), so a
+  gesture usually crosses into bands that are ready
+- A change of band rebuilds the retained batches with `refreshAll`: the
+  previous batches keep being drawn until the new ones are complete, and
+  this rebuild is advanced while the camera moves, unlike other rebuilds
+- The `change` event (`reason: 'thinning'`) of a band followed while
+  drawing is sent after the frame
+
+`refreshThinning` picks the band of a given zoom: the manager also calls
+it on `moveend` / `pitchend`, and a path that draws once at a given zoom
+(an export) can call it at that zoom.
 
 ## Delegating point rendering
 

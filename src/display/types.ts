@@ -532,11 +532,10 @@ export interface Dataset {
    * Picks the winners again for the band of the given zoom (nothing happens when the band did
    * not change)
    *
-   * The manager calls it from moveend / pitchend of the map (the end of a zoom or pitch
-   * operation). During a gesture the winners are not picked again per frame and the previous set
-   * of winners keeps being used. On a path that draws once at a given zoom and reads the
-   * result, such as a snapshot or an export of the view, calling it with that zoom before
-   * drawing gives the same picture as the screen.
+   * While the camera moves, the band follows the zoom being drawn by itself, and the manager
+   * calls this from moveend / pitchend of the map as well. On a path that draws once at a given
+   * zoom and reads the result, such as a snapshot or an export of the view, calling it with that
+   * zoom before drawing gives the same picture as the screen.
    *
    * When there is a pitch, the difference from "the shallowest effective zoom on screen" is
    * subtracted from the zoom given as well (at pitch 0 the value given is used as it is).

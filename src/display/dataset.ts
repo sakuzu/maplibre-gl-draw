@@ -132,6 +132,10 @@ export class DatasetImpl implements Dataset {
   private selected: Feature[] = [];
 
   private removed = false;
+  /** Whether the 'change' of a band followed while drawing is waiting to be sent */
+  private thinningNoticePending = false;
+  /** Cancels the waiting picking of the winners of the nearby bands (null = nothing waits) */
+  private cancelPrefetch: (() => void) | null = null;
   private readonly deps: DatasetDeps;
 
   /** Predicate that picks out the points drawn by an external renderer (null when not injected) */
@@ -648,6 +652,8 @@ export class DatasetImpl implements Dataset {
    * from the destroy of the manager is treated the same way).
    */
   dispose(): void {
+    this.cancelPrefetch?.();
+    this.cancelPrefetch = null;
     this.removed = true;
     this.loader?.dispose();
     this.chunks.dispose();
@@ -771,15 +777,69 @@ export class DatasetImpl implements Dataset {
     return this.thinning.onStyleChanged();
   }
 
-  /** What is drawn changed through the thinning: rebuild, tell the listeners and repaint */
+  /**
+   * What is drawn changed through the thinning: rebuild, tell the listeners and repaint
+   *
+   * The previous rows keep being drawn until the rebuild is complete (nothing goes blank).
+   */
   private thinningChanged(): void {
-    this.chunks.invalidateAll();
+    this.chunks.refreshAll();
+    this.schedulePrefetch();
     this.emit('change', { reason: 'thinning' });
     this.deps.requestRepaint();
   }
 
-  /** Prepares the set of winners right before drawing (`CollisionThinningState.ensure`) */
-  private ensureThinning(zoom: number): void {
-    if (this.thinning.ensure(zoom)) this.chunks.invalidateAll();
+  /**
+   * Picks the winners of the bands near the current one while the page is idle, one band per
+   * idle period (`CollisionThinningState.prefetchNeighbor`)
+   */
+  private schedulePrefetch(): void {
+    if (this.cancelPrefetch || this.removed || !this.thinning.enabled) return;
+    this.cancelPrefetch = whenIdle(() => {
+      this.cancelPrefetch = null;
+      if (this.removed) return;
+      if (this.thinning.prefetchNeighbor()) this.schedulePrefetch();
+    });
   }
+
+  /**
+   * Prepares the set of winners right before drawing (`CollisionThinningState.ensure`), and
+   * follows the band of the current zoom of the map (`CollisionThinningState.follow`)
+   *
+   * The listeners are told about a change of band after the frame, so that they do not run in
+   * the middle of drawing.
+   */
+  private ensureThinning(zoom: number): void {
+    if (this.thinning.ensure(zoom)) {
+      this.chunks.invalidateAll();
+      this.schedulePrefetch();
+    }
+    if (!this.thinning.follow()) return;
+
+    this.chunks.refreshAll();
+    this.schedulePrefetch();
+    if (this.thinningNoticePending) return;
+    this.thinningNoticePending = true;
+    queueMicrotask(() => {
+      this.thinningNoticePending = false;
+      if (!this.removed) this.emit('change', { reason: 'thinning' });
+    });
+  }
+}
+
+/** How long to wait for an idle period where `requestIdleCallback` is missing (ms) */
+const IDLE_FALLBACK_MS = 100;
+
+/**
+ * Runs `task` when the page is idle (a timer where `requestIdleCallback` is missing)
+ *
+ * @returns Cancels it
+ */
+function whenIdle(task: () => void): () => void {
+  if (typeof globalThis.requestIdleCallback === 'function') {
+    const handle = globalThis.requestIdleCallback(task);
+    return () => globalThis.cancelIdleCallback(handle);
+  }
+  const handle = setTimeout(task, IDLE_FALLBACK_MS);
+  return () => clearTimeout(handle);
 }

@@ -372,8 +372,10 @@ const { total, visible } = places.getThinningStats();
 - Only `Point` is thinned; lines, polygons and `MultiPoint` are always
   drawn
 - From `fullDisplayZoom` (17) on, every point is drawn
-- The winners are chosen again when the features or the style change and
-  when a zoom or pitch gesture ends, not during the gesture
+- The winners are chosen again when the features or the style change, and
+  each time the integer zoom changes, in the middle of a zoom or pitch
+  gesture as well. The winners of the nearby integer zooms are chosen
+  ahead while the page is idle, so crossing into them costs no selection
 
 A thinned point is neither drawn nor hit. `getVisibleFeatureIds` tells
 which points are drawn, for a host that labels only those, and

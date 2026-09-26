@@ -241,6 +241,34 @@ describe('DisplayChunkSet', () => {
     expect(counts.builds).toBe(2 * built);
   });
 
+  it('refreshing keeps drawing the previous batches and rebuilds while the camera moves', () => {
+    const { renderers, counts } = createRenderers();
+    const host = createHost();
+    const set = new DisplayChunkSet(host);
+    set.replace(chunksOf(FEATURES));
+    set.draw(frameFor(renderers, LEFT));
+    const built = counts.builds;
+    vi.mocked(host.onInvalidateAll).mockClear();
+
+    set.refreshAll();
+    expect(host.onInvalidateAll).toHaveBeenCalledTimes(1);
+    // Nothing is released yet: the previous version is drawn until the new one is complete
+    expect(counts.disposes).toBe(0);
+
+    const moving = frameFor(renderers, LEFT);
+    moving.terrain.cameraMoving = true;
+    const drawsBefore = counts.draws;
+    set.draw(moving);
+    expect(counts.builds).toBe(2 * built);
+    expect(counts.disposes).toBe(built);
+    expect(counts.draws - drawsBefore).toBe(built);
+
+    // A chunk entering the view while moving still waits for the camera to stop
+    set.draw({ ...moving, bounds: BOTH });
+    expect(counts.builds).toBe(2 * built);
+    expect(set.hasPendingBuild).toBe(true);
+  });
+
   it('a change of the hand-over to the drape re-bakes the chunks already built', () => {
     const { renderers, counts } = createRenderers();
     let draped = false;

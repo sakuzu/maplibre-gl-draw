@@ -20,6 +20,12 @@ the project follows semantic versioning.
   `DatasetColumnarGeometry` and `DatasetColumnarMixedGeometry`, so code
   that reads `geometry.coords` or `geometry.offsets` must narrow on
   `geometry.type` first.
+- Fixed: the collision thinning of a dataset follows the integer zoom in
+  the middle of a zoom or pitch gesture, instead of keeping the points
+  chosen for the zoom the gesture started at. After a fast zoom out those
+  points piled up into a solid patch until the gesture ended. The points
+  chosen for nearby zooms are kept and picked ahead while the page is idle,
+  and the points drawn before stay on screen until the new ones are ready.
 - Fixed: polygons and lines follow the terrain's vertical exaggeration
   instead of always drawing at 1.0, so they stay on the map's ground.
 - Fixed: on terrain, dashed lines, polygons with a dashed outline, the

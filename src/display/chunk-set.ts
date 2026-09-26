@@ -174,6 +174,11 @@ interface DisplayChunkState {
    * It is remembered so that it can be taken off the scheduler when the dataset is removed.
    */
   onTriangulated: (() => void) | null;
+  /**
+   * Whether the rows drawn changed while `batches` (the previous version) keeps being drawn
+   * (`refreshAll`). This rebuild runs while the camera moves as well
+   */
+  refreshing: boolean;
 }
 
 /**
@@ -302,6 +307,7 @@ export class DisplayChunkSet {
       jobOrigin: null,
       viewOrigin: null,
       onTriangulated: null,
+      refreshing: false,
     }));
   }
 
@@ -354,15 +360,21 @@ export class DisplayChunkSet {
       if (rebased) state.viewOrigin = rebased;
       const stale =
         state.batches !== null &&
-        (needsRetessellation(state, step) || state.builtDraped !== drapedFills || rebased !== null);
+        (state.refreshing ||
+          needsRetessellation(state, step) ||
+          state.builtDraped !== drapedFills ||
+          rebased !== null);
+      // A change of the rows drawn (the thinning following the zoom) is built while moving too:
+      // until it is, the previous rows are drawn at a scale they were not picked for
+      const buildNow = settled || state.refreshing;
       // Building a new chunk is also deferred until the camera stops (treated the same as a
       // re-bake). Zooming out lets new chunks enter all at once as the view widens (137 of them
       // measured), and a build of 20 to 50 ms per step while moving makes the gesture stutter
       // (measured). Starting to build while moving leaves a blank until it is finished anyway, so
       // building after it stops costs only one beat at the start. The drawing of the existing
       // batches continues below as before (the appearance is unchanged).
-      if (!settled && (state.job || !state.batches || stale)) pending = true;
-      if (settled && !state.job && (!state.batches || stale)) {
+      if (!buildNow && (state.job || !state.batches || stale)) pending = true;
+      if (buildNow && !state.job && (!state.batches || stale)) {
         const origin = state.viewOrigin ?? boundsCenter(state.chunk.bounds);
         state.jobOrigin = origin;
         // Nothing is walked here: the job walks the rows of the chunk when it is stepped, within
@@ -384,8 +396,8 @@ export class DisplayChunkSet {
 
       // A job in progress is not advanced while the camera is moving either (a single step can
       // blow through the budget, and paying it during a gesture always stutters).
-      if (state.job && !settled) pending = true;
-      if (state.job && settled) {
+      if (state.job && !buildNow) pending = true;
+      if (state.job && buildNow) {
         if (canBuild()) {
           builtHere++;
           const done = state.job.step(budgetStart + CHUNK_BUILD_BUDGET_MS, nowMs);
@@ -400,6 +412,7 @@ export class DisplayChunkSet {
               state.builtGrid = state.jobGrid;
               state.builtTilingKey = state.jobTilingKey;
               state.builtDraped = state.jobDraped;
+              state.refreshing = false;
             }
             // When it could not be built (the shaders are not initialized) it is rebuilt on the
             // next frame
@@ -453,6 +466,22 @@ export class DisplayChunkSet {
   }
 
   /**
+   * Rebuilds every chunk that has batches, drawing the previous version until the new one is
+   * complete (the rows drawn changed; the splitting is kept)
+   *
+   * Unlike `invalidateAll`, nothing goes blank in between, and the rebuild is advanced while the
+   * camera moves as well (by the budget of the frame).
+   */
+  refreshAll(): void {
+    this.host.onInvalidateAll();
+    for (const state of this.chunks) {
+      if (state.job && this.renderers) state.job.dispose(this.renderers);
+      state.job = null;
+      if (state.batches) state.refreshing = true;
+    }
+  }
+
+  /**
    * Releases only the GPU resources (the chunks are built again on the next draw)
    *
    * It is called when the rendering layer is disposed.
@@ -484,6 +513,7 @@ export class DisplayChunkSet {
       if (this.renderers) state.job.dispose(this.renderers);
       state.job = null;
     }
+    state.refreshing = false;
     if (!state.batches) return;
     if (this.renderers) {
       disposeChunkBatches(state.batches, this.renderers);
