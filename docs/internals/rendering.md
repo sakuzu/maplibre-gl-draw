@@ -182,6 +182,15 @@ mode (from the display list), the selected features
 (`getSelectedFeatureIds`) and the copies of the world (`planCopies`).
 Every later slot of the same maplibre frame reuses it.
 
+The style zoom (`StyleZoom` in `frame-state.ts`) is the zoom the sizes are
+derived from. It follows the increments of the zoom while the camera
+moves. When the zoom number changes with nothing moving, the position of
+the camera decides: if its altitude stayed the same, it was the elevation
+settlement of maplibre (the zoom and the center solved again onto the
+terrain, the picture unchanged), and the change is absorbed so that nothing
+resizes. If the camera moved, as after `jumpTo` or `setZoom`, the style
+zoom takes the zoom as it is.
+
 `renderForeground` runs once per world copy in the last slot. It draws the
 selection UI (only the selection frame when editing is blocked), the
 vertices that follow a shared vertex, the tentative vertices and those of

@@ -58,6 +58,7 @@ import {
   type TerrainContext,
   type TerrainRenderState,
 } from '../terrain/context.js';
+import { getCameraMercator } from '../terrain/detect.js';
 import {
   setQuadDrapeFrame,
   setTerrainCameraMoving,
@@ -532,10 +533,11 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     );
 
     // The zoom that the rendering reads is the style zoom (a value that absorbs the steps of the
-    // elevation settlement; frame-state.ts)
+    // elevation settlement; frame-state.ts). The position of the camera (the altitude in meters)
+    // tells a settlement from a jump of the camera
     const rawZoom = map?.getZoom() ?? 14;
     const cameraBusy = map?.isMoving?.() === true || map?.isZooming?.() === true;
-    const zoom = styleZoom.update(rawZoom, cameraBusy);
+    const zoom = styleZoom.update(rawZoom, cameraBusy, getCameraMercator(map, 1));
 
     // Detection of the terrain and establishing the frame state
     //

@@ -26,6 +26,10 @@ the project follows semantic versioning.
   points piled up into a solid patch until the gesture ended. The points
   chosen for nearby zooms are kept and picked ahead while the page is idle,
   and the points drawn before stay on screen until the new ones are ready.
+- Fixed: after `jumpTo`, `setZoom` or another change of the zoom that is
+  not animated, points, lines and labels are drawn at the sizes of the new
+  zoom. Such a change was taken for the terrain's elevation settlement and
+  ignored, so every size kept the scale of the old zoom from then on.
 - Fixed: polygons and lines follow the terrain's vertical exaggeration
   instead of always drawing at 1.0, so they stay on the map's ground.
 - Fixed: on terrain, dashed lines, polygons with a dashed outline, the

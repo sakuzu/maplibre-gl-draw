@@ -142,12 +142,17 @@ export interface FrameState {
  * it in with a time-constant smoothing turned into "a 250 ms breath on every settlement" and
  * was rejected.
  *
- * The correct rule is absorption: a change of the zoom number while the camera is not moving
- * (= a settlement) is not reflected in the style zoom. Only during a real operation (zoom,
- * pan, inertia) does it follow the raw increments. The difference from the settlements (the
- * gap between the style zoom and the raw zoom) is bounded at around ±0.3 as the elevation
- * goes up and down, and it matters more that the apparent sizes keep matching the real
- * scale.
+ * The correct rule is absorption: a change of the zoom number while the camera stays where it
+ * is (= a settlement) is not reflected in the style zoom. During a real operation (zoom, pan,
+ * inertia) it follows the raw increments. The difference from the settlements (the gap between
+ * the style zoom and the raw zoom) is bounded at around ±0.3 as the elevation goes up and down,
+ * and it matters more that the apparent sizes keep matching the real scale.
+ *
+ * A change of the zoom number with no operation in progress is not always a settlement: `jumpTo`
+ * and `setZoom` move the camera at once, and the frame after them sees a camera that is not
+ * moving. So the position of the camera tells them apart: when it moved, the style zoom takes
+ * the raw zoom as it is (absorbing that change would keep every size at the old scale from then
+ * on). When the position cannot be read, a change of the zoom number is not absorbed.
  *
  * @internal
  */
@@ -156,17 +161,54 @@ export class StyleZoom {
   private value: number | null = null;
   /** The raw zoom of the previous frame (recorded to follow the increments during an operation) */
   private raw: number | null = null;
+  /** The position of the camera in the previous frame (null = unknown) */
+  private camera: CameraPosition | null = null;
 
-  /** Advances by one frame and returns the style zoom of that frame */
-  update(rawZoom: number, cameraBusy: boolean): number {
+  /**
+   * Advances by one frame and returns the style zoom of that frame
+   *
+   * @param camera The position of the camera in this frame (null when it cannot be read)
+   */
+  update(rawZoom: number, cameraBusy: boolean, camera: CameraPosition | null = null): number {
     if (this.value === null || this.raw === null) {
       this.value = rawZoom;
     } else if (cameraBusy) {
       this.value += rawZoom - this.raw;
+    } else if (rawZoom !== this.raw && !sameCameraPosition(this.camera, camera)) {
+      this.value = rawZoom;
     }
     this.raw = rawZoom;
+    this.camera = camera;
     return this.value;
   }
+}
+
+/** The position of the camera: mercator x and y (0..1) and the altitude in meters */
+export type CameraPosition = readonly [number, number, number];
+
+/**
+ * Mercator distance under which the camera has not moved sideways (about 40 m on the ground)
+ *
+ * A settlement solves the zoom and the center again, and the camera it reports drifts sideways
+ * by 1 to 2 m in the process (measured on 6.11.1 over Mt. Fuji at pitch 60). Its altitude does
+ * not change, while a jump that changes the zoom always changes the altitude, so the altitude is
+ * the test and this only keeps a far jump at the same altitude from being taken for one.
+ */
+const CAMERA_STILL_MERCATOR = 1e-6;
+/** Altitude difference (m) under which the camera has not moved up or down */
+const CAMERA_STILL_METERS = 0.01;
+/** The same, relative to the altitude (for the altitudes of the globe) */
+const CAMERA_STILL_RELATIVE = 1e-7;
+
+/** Whether two positions of the camera are the same place (false when either is unknown) */
+function sameCameraPosition(a: CameraPosition | null, b: CameraPosition | null): boolean {
+  if (!a || !b) return false;
+  const altitudeTolerance = Math.max(CAMERA_STILL_METERS, Math.abs(a[2]) * CAMERA_STILL_RELATIVE);
+  return (
+    Math.abs(a[0] - b[0]) <= CAMERA_STILL_MERCATOR &&
+    Math.abs(a[1] - b[1]) <= CAMERA_STILL_MERCATOR &&
+    Math.abs(a[2] - b[2]) <= altitudeTolerance
+  );
 }
 
 /** What building a frame reads */
