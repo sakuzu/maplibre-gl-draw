@@ -650,7 +650,7 @@ export interface MapLibreGLDraw {
    * to draw into it. Emits `draw.layer.create`.
    *
    * @param name the name; when omitted, a name from the automatic naming
-   *   ({@link Options.autoName}), or `New Layer` when it is off
+   *   ({@link Options.autoName}), or the word of Layer alone when it is off
    * @returns the ID of the layer; null when the write was refused because the Store is
    *   read-only (nothing is added)
    */
@@ -760,7 +760,8 @@ export interface MapLibreGLDraw {
    *
    * @param featureIds the IDs of the features to group, from the back
    * @param layerId the ID of the layer the features are in
-   * @param name the name; when omitted, a name from the automatic naming, or `New Group`
+   * @param name the name; when omitted, a name from the automatic naming
+   *   ({@link Options.autoName}), or the word of Group alone when it is off
    * @returns the ID of the group; null when the write was refused because the Store is
    *   read-only (nothing changes)
    *

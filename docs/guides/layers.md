@@ -40,6 +40,10 @@ optional `styleRule` ([Styles](styles.md)).
 While the instance is read-only, `addLayer` adds nothing and returns
 `null`, as `addFeature` and `addGroup` do ([Read-only](read-only.md)).
 
+A layer or a group added without a name is named by the automatic naming
+(`Layer 2`, `Group 1`), in the words of the `autoName` option
+([Automatic names](drawing.md#automatic-names)).
+
 On creation a default layer with the ID `default-layer` is created. With
 `initDefaultLayer: false` no layer is created, and the host creates the
 layers itself, for example when it restores a structure from its own data.

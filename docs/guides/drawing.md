@@ -341,8 +341,9 @@ panel itself.
 ## Automatic names
 
 New features, layers and groups get a name with a serial number per type:
-`Point 1`, `LineString 1`, `Polygon 1`, `Image 1`, `Layer 1`, `Group 1`.
-The other types use their type name (`Circle 1`, `Freehand 1`).
+`Point 1`, `LineString 1`, `Polygon 1`, `Circle 1`, `Freehand 1`,
+`Image 1`, `Layer 1`, `Group 1`. A custom feature type that an extension
+draws uses its type id as the word.
 
 A number is never reused: after `Point 1` and `Point 2`, deleting
 `Point 2` and drawing again gives `Point 3`. Names that arrive from a load
@@ -359,6 +360,39 @@ const draw = createMapLibreGLDraw(map, {
 ```
 
 `autoName: false` turns the names off; new features then have no `name`.
+A layer or a group always has a name, so one created without a name then
+gets the word of its type alone (`Layer`, or your `typeNames.Layer`).
+
+### Names in another language
+
+The words of every generated name come from this one configuration, and
+the defaults are English. The library does not translate them, and they
+are not part of `Options.messages` ([Messages](styles.md#messages)). A host
+that shows another language passes a word for each type it uses in
+`typeNames`, keyed by the type id: `Point`, `LineString`, `Polygon`,
+`Circle`, `Freehand`, `Image`, `Layer`, `Group`, and the type id of each
+custom feature type it draws.
+
+```ts
+const draw = createMapLibreGLDraw(map, {
+  autoName: {
+    enabled: true,
+    typeNames: {
+      Point: 'Punkt',
+      LineString: 'Linie',
+      Polygon: 'Polygon',
+      Circle: 'Kreis',
+      Freehand: 'Freihand',
+      Image: 'Bild',
+      Layer: 'Ebene',
+      Group: 'Gruppe',
+    },
+  },
+});
+```
+
+A name is written into the document when the item is created, so it stays
+in the language it was created in.
 
 ## Near the antimeridian
 

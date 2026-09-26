@@ -105,6 +105,11 @@ the instance.
 - `setMode`, which returns false when the mode was refused
 - `getStore()`, the Store itself with its write methods, for a plugin
   that works on the document directly
+- `autoNameGenerator`, the automatic naming of the instance. A plugin
+  that creates a feature, a layer or a group without a name the user typed
+  names it here (`generateName(type)`, `generateLayerName()`,
+  `generateGroupName()`), so the name takes its words from the host's
+  `autoName` option ([automatic names](drawing.md#automatic-names))
 - `invalidateFeatures(type)`, `computeBoundingBox(feature)` and the
   terrain anchors, used by custom feature types (see
   [custom types](custom-types.md))

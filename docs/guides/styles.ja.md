@@ -264,6 +264,10 @@ deriveLegend(rule, { legendOther: 'Autres' });
 インスタンスごとに持つので、1 つのページにある 2 つの地図で別々の言語を
 使えます。ロケールの自動判定は行いません。
 
+ライブラリーが新しい地物、レイヤー、グループに付ける名前の語
+(`Layer 1`) は、この表には含まれません。`Options.autoName` で翻訳して
+ください ([自動の名前](drawing.ja.md#ほかの言語の名前))。
+
 ## 関連する例
 
 - [style-rules](../../examples/style-rules/) では、レイヤーに

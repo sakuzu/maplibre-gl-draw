@@ -264,6 +264,10 @@ A value is a string or a function that formats one from numbers already
 turned into strings. The table belongs to the instance, so two maps on a
 page can use different languages. There is no locale detection.
 
+The words of the names the library gives new features, layers and groups
+(`Layer 1`) are not in this table. Translate them with `Options.autoName`
+([Automatic names](drawing.md#names-in-another-language)).
+
 ## Examples
 
 - [style-rules](../../examples/style-rules/) gives layers each kind

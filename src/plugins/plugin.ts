@@ -19,6 +19,7 @@ import type {
 import type { ModeFactory } from '../modes/handler.js';
 import type { ScreenPoint } from '../shared/math/index.js';
 import type { EventEmitter, EventMap } from '../shared/utils/event-emitter.js';
+import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import type { Store } from '../store/store.js';
 import type {
   Feature,
@@ -95,6 +96,14 @@ export interface PluginContext {
    * subscriber. Anything else goes through the methods below or the public API of `draw`.
    */
   getStore(): Store;
+
+  /**
+   * The automatic naming of this draw instance (the `autoName` option)
+   *
+   * A plugin that creates a feature, a layer or a group without a name the user typed names it
+   * here, so every generated name takes its words from the host's one naming configuration.
+   */
+  readonly autoNameGenerator: AutoNameGenerator;
 
   // === Read API ===
   /** Returns the feature with this ID, or undefined */

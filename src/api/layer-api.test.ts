@@ -9,7 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
+import { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { MemoryStore } from '../store/memory.js';
 import { StoreSpatialIndex } from '../store/spatial/store-spatial-index.js';
 import type { Feature } from '../store/types.js';
@@ -68,6 +68,21 @@ describe('LayerApi.addLayer', () => {
     const id = api.addLayer();
     expect(id).not.toBeNull();
     expect(store.getLayer(id as string)?.name).toBe('自動レイヤー');
+  });
+
+  it('names the layer with the configured word alone when automatic naming is off', () => {
+    const offApi = createLayerApi({
+      store,
+      generateFeatureId: () => `off-${++idSeq}`,
+      autoNameGenerator: new AutoNameGenerator(store, {
+        enabled: false,
+        typeNames: { Layer: 'Ebene' },
+      }),
+      getActiveLayerId: () => activeLayerId,
+      setActiveLayerId: () => undefined,
+    });
+    const id = offApi.addLayer();
+    expect(store.getLayer(id as string)?.name).toBe('Ebene');
   });
 
   it('returns null and adds nothing while read-only', () => {

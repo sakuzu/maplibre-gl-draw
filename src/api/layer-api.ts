@@ -51,7 +51,7 @@ export function createLayerApi(deps: LayerApiDeps): LayerApi {
 
     addLayer(name?: string): string | null {
       const id = generateFeatureId();
-      const layerName = name || autoNameGenerator.generateLayerName() || 'New Layer';
+      const layerName = name || autoNameGenerator.generateLayerName();
       const layer: Layer = {
         id,
         name: layerName,

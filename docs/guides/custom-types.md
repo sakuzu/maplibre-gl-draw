@@ -113,6 +113,13 @@ coordinates, with the type name in the `maplibre-gl-draw:featureType`
 property, and the type comes back on load (see
 [data format](../reference/data-format.md)).
 
+A mode that creates a feature of the type names it with
+`autoNameGenerator.generateName(type)` of its context. The word is the type
+name unless the host gives one in `autoName.typeNames` under the same key,
+so a type that is shown to users should say its type name in its
+documentation, for the host to translate
+([automatic names](drawing.md#names-in-another-language)).
+
 A renderer often needs values of its own for each feature, such as an
 icon or the side of a label. Keep them in `properties` or in `style` under
 keys that core does not define. Such keys are stored, exported and

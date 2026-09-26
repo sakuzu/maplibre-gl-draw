@@ -85,13 +85,41 @@ describe('AutoNameGenerator.generateName', () => {
     expect(generator.generateName('Point')).toBe('Point 3');
   });
 
-  it('returns undefined when disabled', () => {
+  it('gives features no name when disabled, and layers / groups the word alone', () => {
     const generator = new AutoNameGenerator(store, false);
 
     expect(generator.isEnabled()).toBe(false);
     expect(generator.generateName('Point')).toBeUndefined();
-    expect(generator.generateLayerName()).toBeUndefined();
-    expect(generator.generateGroupName()).toBeUndefined();
+    expect(generator.generateLayerName()).toBe('Layer');
+    expect(generator.generateGroupName()).toBe('Group');
+  });
+
+  it('takes the word of a disabled layer / group from typeNames', () => {
+    const generator = new AutoNameGenerator(store, {
+      enabled: false,
+      typeNames: { Layer: 'レイヤー', Group: 'グループ' },
+      formatter: (typeName, n) => `${typeName}-${n}`,
+    });
+
+    expect(generator.generateLayerName()).toBe('レイヤー');
+    expect(generator.generateGroupName()).toBe('グループ');
+  });
+
+  it('names every built-in type in English by default, and a custom type with its id', () => {
+    const generator = new AutoNameGenerator(store);
+
+    expect(generator.generateName('Circle')).toBe('Circle 1');
+    expect(generator.generateName('Freehand')).toBe('Freehand 1');
+    expect(generator.generateName('Stamp')).toBe('Stamp 1');
+  });
+
+  it('takes the word of a custom type from typeNames', () => {
+    const generator = new AutoNameGenerator(store, {
+      enabled: true,
+      typeNames: { Stamp: 'スタンプ' },
+    });
+
+    expect(generator.generateName('Stamp')).toBe('スタンプ 1');
   });
 
   it('uses a custom typeNames and a custom formatter', () => {

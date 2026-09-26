@@ -40,6 +40,10 @@ if (notes !== null) {
 読み取り専用の間は、`addLayer` は何も追加せずに `null` を返します。
 `addFeature` と `addGroup` も同じです ([読み取り専用](read-only.ja.md))。
 
+名前を指定せずに追加したレイヤーとグループには、自動の名前付けで
+名前が付きます (`Layer 2`、`Group 1`)。語は `autoName` オプションから
+取られます ([自動の名前](drawing.ja.md#自動の名前))。
+
 インスタンスを作ると、ID が `default-layer` の既定のレイヤーができます。
 `initDefaultLayer: false` を指定するとレイヤーは作られず、ホストが自分で
 作ります。自前のデータから構造を復元するときなどに使います。

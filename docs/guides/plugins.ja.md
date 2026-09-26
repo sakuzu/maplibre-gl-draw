@@ -113,6 +113,11 @@ api?.count();
 - `setMode`。モードが拒まれたときは false を返します
 - `getStore()`。書き込みのメソッドを含む Store そのものです。
   文書を直接扱うプラグインが使います
+- `autoNameGenerator`。インスタンスの自動の名前付けです。利用者が
+  入力した名前を持たない地物、レイヤー、グループを作るプラグインは、
+  ここで名前を付けます (`generateName(type)`、`generateLayerName()`、
+  `generateGroupName()`)。こうすると、名前の語はホストの `autoName`
+  オプションから取られます ([自動の名前](drawing.ja.md#自動の名前))
 - `invalidateFeatures(type)`、`computeBoundingBox(feature)`、
   地形のアンカー。独自の地物の型で使います
   ([独自の型](custom-types.ja.md) を参照してください)

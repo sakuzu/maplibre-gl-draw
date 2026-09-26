@@ -339,9 +339,9 @@ draw.input.click([139.7, 35.68], { snap: false });
 ## 自動の名前
 
 新しい地物、レイヤー、グループには、型ごとの連番の名前が付き
-ます。`Point 1`、`LineString 1`、`Polygon 1`、`Image 1`、`Layer 1`、
-`Group 1` のような名前です。ほかの型では型の名前を使います (`Circle 1`、
-`Freehand 1`)。
+ます。`Point 1`、`LineString 1`、`Polygon 1`、`Circle 1`、`Freehand 1`、
+`Image 1`、`Layer 1`、`Group 1` のような名前です。拡張が描く独自の
+地物の型では、型の ID を語として使います。
 
 番号は使い回しません。`Point 1` と `Point 2` の後で `Point 2` を削除して
 もう一度描くと、`Point 3` になります。読み込みや `addFeature` で入って
@@ -358,7 +358,40 @@ const draw = createMapLibreGLDraw(map, {
 ```
 
 `autoName: false` にすると名前を付けません。その場合、新しい
-地物は `name` を持ちません。
+地物は `name` を持ちません。レイヤーとグループには必ず名前があるので、
+名前を指定せずに作ったものには型の語だけが付きます (`Layer`、または
+指定した `typeNames.Layer`)。
+
+### ほかの言語の名前
+
+自動で付ける名前の語は、すべてこの 1 つの設定から取られます。既定は
+英語です。ライブラリーはこの語を翻訳しません。また、この語は
+`Options.messages` ([メッセージ](styles.ja.md#メッセージ)) には含まれ
+ません。ほかの言語で表示するホストは、使う型ごとの語を `typeNames` に
+渡してください。キーは型の ID で、`Point`、`LineString`、`Polygon`、
+`Circle`、`Freehand`、`Image`、`Layer`、`Group` と、描画に使う独自の
+地物の型の ID です。
+
+```ts
+const draw = createMapLibreGLDraw(map, {
+  autoName: {
+    enabled: true,
+    typeNames: {
+      Point: 'ポイント',
+      LineString: 'ライン',
+      Polygon: 'ポリゴン',
+      Circle: '円',
+      Freehand: 'フリーハンド',
+      Image: '画像',
+      Layer: 'レイヤー',
+      Group: 'グループ',
+    },
+  },
+});
+```
+
+名前は作ったときに文書へ書き込まれるので、作ったときの言語のまま
+残ります。
 
 ## 日付変更線の近く
 

@@ -56,6 +56,18 @@ the project follows semantic versioning.
   `DatasetColumnarGeometry` and `DatasetColumnarMixedGeometry`, so code
   that reads `geometry.coords` or `geometry.offsets` must narrow on
   `geometry.type` first.
+- Added: `PluginContext.autoNameGenerator`, the automatic naming of the
+  instance, so a plugin that creates a feature, a layer or a group names it
+  with the words of the host's one naming configuration.
+- Changed: every word of a generated name comes from `Options.autoName`.
+  `addLayer()`, `addGroup()`, grouping with the keyboard and the first
+  layer no longer fall back to the inline English `New Layer`, `New Group`
+  or `Layer 1`. When `autoName` is off, `AutoNameGenerator.generateLayerName()`
+  and `generateGroupName()` return the word of the type alone (`Layer`, or
+  `typeNames.Layer`) instead of `undefined`, so a layer or a group created
+  without a name is named in the host's language. `Circle` and `Freehand`
+  are listed among the English defaults. The guides describe translating
+  the words through `typeNames`.
 - Fixed: the collision thinning of a dataset follows the integer zoom in
   the middle of a zoom or pitch gesture, instead of keeping the points
   chosen for the zoom the gesture started at. After a fast zoom out those

@@ -58,7 +58,7 @@ export function createGroupApi(deps: GroupApiDeps): GroupApi {
       // While read-only every write below would be refused: report it as null up front
       if (store.isReadOnly()) return null;
       const id = generateFeatureId();
-      const groupName = name || autoNameGenerator.generateGroupName() || 'New Group';
+      const groupName = name || autoNameGenerator.generateGroupName();
       const group: Group = {
         id,
         name: groupName,

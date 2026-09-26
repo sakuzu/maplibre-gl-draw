@@ -366,6 +366,7 @@ export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): M
   pluginContext = createPluginContext({
     store,
     eventEmitter,
+    autoNameGenerator: context.autoNameGenerator,
     spatialIndex,
     getActiveLayerId: context.getActiveLayerId,
     findLayerForItem,

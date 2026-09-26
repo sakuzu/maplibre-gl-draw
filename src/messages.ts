@@ -16,6 +16,8 @@
  *   the instance and is never module-level state
  * - There is no locale detection and no automatic switching: the host passes the table
  *   it wants
+ * - The words of the names generated for features, layers and groups are not in this table:
+ *   they come from the naming configuration (`AutoNameConfig`, the `autoName` option)
  */
 
 /**
@@ -26,7 +28,8 @@
  * the host can show them in its own language. Pass the entries to replace as the `messages`
  * option of `createMapLibreGLDraw`; the entries left out keep {@link MESSAGES_EN}. A value is
  * a string, or a function that formats one from numbers already turned into strings. There is
- * no locale detection and no other built-in language.
+ * no locale detection and no other built-in language. The words of generated names ("Layer 1")
+ * are translated through the `autoName` option (`AutoNameConfig`), not here.
  *
  * @example
  * ```ts

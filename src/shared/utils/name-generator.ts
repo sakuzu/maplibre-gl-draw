@@ -6,6 +6,10 @@
  *
  * A utility that automatically generates a name with a sequential number when a Feature is
  * newly created.
+ *
+ * Every word of a name the library gives a feature, a layer or a group comes from here: from
+ * the host's `typeNames`, or from the English defaults below. Nothing else in the library
+ * writes such a word inline.
  */
 
 import type { Feature, FeatureType, Group, Layer, StateChanges } from '../types/model.js';
@@ -36,6 +40,17 @@ export type AutoNameType = FeatureType | 'Layer' | 'Group';
  * the next point is "Point 3". Existing names of the form "<word> <number>" move the count on
  * as well, however they arrived (a load, an import).
  *
+ * This is the one place the words of generated names come from, and the words are the host's
+ * to translate: the defaults are English, so a host that shows another language passes a
+ * word for each type it uses in `typeNames`. The keys are the type ids: the built-in feature
+ * types (`Point`, `LineString`, `Polygon`, `Circle`, `Freehand`, `Image`), `Layer`, `Group`,
+ * and the type id of every custom feature type an extension draws (a type without a word is
+ * named with its id).
+ *
+ * A layer or a group always has a name. When one is created without a name while `enabled`
+ * is false, it gets the word of its type alone, without a number ("Layer", or the
+ * `typeNames.Layer` of the host); features get no name then.
+ *
  * @example
  * ```ts
  * const draw = createMapLibreGLDraw(map, {
@@ -50,15 +65,18 @@ export type AutoNameType = FeatureType | 'Layer' | 'Group';
  */
 export interface AutoNameConfig {
   /**
-   * Whether names are generated
+   * Whether names are generated. When false, features get no name, and a layer or a group
+   * created without a name gets the word of its type alone
    *
    * @defaultValue `true`
    */
   enabled: boolean;
   /**
-   * The word used for each type in the name
+   * The word used for each type in the name, keyed by the type id (a built-in feature type,
+   * `Layer`, `Group`, or a custom feature type)
    *
-   * @defaultValue the name of the type (`'Point'`, `'Layer'`, `'Group'`, or the custom type)
+   * @defaultValue English: `'Point'`, `'LineString'`, `'Polygon'`, `'Circle'`, `'Freehand'`,
+   *   `'Image'`, `'Layer'`, `'Group'`, and the id itself for any other type
    */
   typeNames?: Partial<Record<AutoNameType, string>>;
   /**
@@ -76,6 +94,8 @@ const DEFAULT_TYPE_NAMES: Record<string, string> = {
   Point: 'Point',
   LineString: 'LineString',
   Polygon: 'Polygon',
+  Circle: 'Circle',
+  Freehand: 'Freehand',
   Image: 'Image',
 };
 
@@ -348,16 +368,19 @@ export class AutoNameGenerator {
   }
 
   /**
-   * Automatically generates a Layer name
+   * Generates the name of a new Layer
    *
-   * @returns The generated name, or undefined when it is disabled
+   * A layer always has a name, so this never gives up: when naming is disabled it returns the
+   * word of Layer alone, without a number.
+   *
+   * @returns The generated name ("Layer 2"), or the word of Layer when it is disabled
    */
-  generateLayerName(): string | undefined {
+  generateLayerName(): string {
+    const typeName = this.getLayerTypeName();
     if (!this.config.enabled) {
-      return undefined;
+      return typeName;
     }
 
-    const typeName = this.getLayerTypeName();
     const nextNumber = this.findNextLayerNumber(typeName);
     const formatter = this.config.formatter ?? defaultFormatter;
 
@@ -386,16 +409,19 @@ export class AutoNameGenerator {
   }
 
   /**
-   * Automatically generates a Group name
+   * Generates the name of a new Group
    *
-   * @returns The generated name, or undefined when it is disabled
+   * A group always has a name, so this never gives up: when naming is disabled it returns the
+   * word of Group alone, without a number.
+   *
+   * @returns The generated name ("Group 2"), or the word of Group when it is disabled
    */
-  generateGroupName(): string | undefined {
+  generateGroupName(): string {
+    const typeName = this.getGroupTypeName();
     if (!this.config.enabled) {
-      return undefined;
+      return typeName;
     }
 
-    const typeName = this.getGroupTypeName();
     const nextNumber = this.findNextGroupNumber(typeName);
     const formatter = this.config.formatter ?? defaultFormatter;
 

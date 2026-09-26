@@ -103,7 +103,8 @@ export interface Options {
    * `Layer 2` (default: enabled)
    *
    * `false` turns it off, and an {@link AutoNameConfig} changes the words or the format. A
-   * number used once is not reused.
+   * number used once is not reused. The words are English by default; a host that shows
+   * another language translates them here (`typeNames`), not through {@link Options.messages}.
    */
   autoName?: AutoNameConfig | boolean;
 
@@ -210,6 +211,8 @@ export interface Options {
    * The given entries replace the English defaults for this instance only; the entries
    * left out keep the default. Legend labels and the descriptions of the snapping guides
    * come from this table. The library ships English only and does no locale detection.
+   * The words of generated names ("Layer 1") are not here: they come from
+   * {@link Options.autoName}.
    *
    * @example
    * ```typescript
@@ -440,7 +443,7 @@ export function createContext(map: MapLibreMap, options: Options = {}): Context 
   // Create the default layer (only when initDefaultLayer !== false)
   let activeLayerId: string;
   if (options.initDefaultLayer !== false) {
-    const defaultLayerName = autoNameGenerator.generateLayerName() ?? 'Layer 1';
+    const defaultLayerName = autoNameGenerator.generateLayerName();
     const defaultLayer: Layer = {
       id: 'default-layer',
       name: defaultLayerName,

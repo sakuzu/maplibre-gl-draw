@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import type { MapLibreGLDraw } from '../maplibre-gl-draw.js';
 import type { ModeManager } from '../modes/manager.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
+import { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { MemoryStore } from '../store/memory.js';
 import { StoreSpatialIndex } from '../store/spatial/index.js';
 import { setAnchorFrame } from '../view/terrain/anchor.js';
@@ -38,6 +39,7 @@ function createContext(
   const ctx = createPluginContext({
     store,
     eventEmitter: new EventEmitterImpl(),
+    autoNameGenerator: new AutoNameGenerator(store),
     spatialIndex: new StoreSpatialIndex(store),
     getActiveLayerId: () => layerId,
     findLayerForItem: () => layerId,
@@ -214,6 +216,7 @@ describe('PluginContext.invalidateFeatures', () => {
     const ctx = createPluginContext({
       store,
       eventEmitter: new EventEmitterImpl(),
+      autoNameGenerator: new AutoNameGenerator(store),
       spatialIndex,
       getActiveLayerId: () => 'l',
       findLayerForItem: () => 'l',

@@ -13,6 +13,7 @@ import type { MapLibreGLDraw } from '../api/api.js';
 import type { ModeManager } from '../modes/manager.js';
 import type { EventEmitter } from '../shared/utils/event-emitter.js';
 import { createId } from '../shared/utils/id.js';
+import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import type { StoreSpatialIndex } from '../store/spatial/store-spatial-index.js';
 import type { Store } from '../store/store.js';
 import type { Feature, Group, Layer, Mode, UpdateSource } from '../store/types.js';
@@ -36,6 +37,8 @@ import type { PluginContext } from './plugin.js';
 export interface PluginContextDependencies {
   store: Store;
   eventEmitter: EventEmitter;
+  /** The automatic naming of this draw instance */
+  autoNameGenerator: AutoNameGenerator;
   /** The spatial index derived from the Store (only its invalidation is used) */
   spatialIndex: Pick<StoreSpatialIndex, 'invalidateType'>;
   getActiveLayerId: () => string;
@@ -62,6 +65,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
   const {
     store,
     eventEmitter,
+    autoNameGenerator,
     spatialIndex,
     getActiveLayerId,
     findLayerForItem,
@@ -120,6 +124,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
       return getDraw();
     },
     getStore: () => store,
+    autoNameGenerator,
 
     // === Read API ===
     getFeature: (id) => store.getFeature(id),

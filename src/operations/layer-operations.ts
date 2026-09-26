@@ -268,7 +268,7 @@ export function groupSelection(
 
   // Create the group
   const groupId = generateFeatureId();
-  const groupName = autoNameGenerator.generateGroupName() ?? 'New Group';
+  const groupName = autoNameGenerator.generateGroupName();
 
   const group: Group = {
     id: groupId,
