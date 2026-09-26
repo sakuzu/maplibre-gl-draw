@@ -154,6 +154,24 @@ export interface FrameState {
  * the raw zoom as it is (absorbing that change would keep every size at the old scale from then
  * on). When the position cannot be read, a change of the zoom number is not absorbed.
  *
+ * The rule behind the test is an invariant, not a measurement: a settlement keeps the camera
+ * where it is in space and only describes it again (a new zoom number and a new center on the
+ * terrain under it), while any change of the zoom at the same pitch moves the camera along its
+ * line of sight and changes its altitude by the factor `2^-Δzoom`. The altitude therefore
+ * separates the two for any change of the zoom, and the tolerances only have to absorb the
+ * floating-point noise of describing the same camera again (see `sameCameraPosition`).
+ *
+ * How the style zoom returns to the raw zoom follows from the same rule:
+ *
+ * - `jumpTo`, `setZoom` and any other move of the camera that changes the zoom within one frame:
+ *   the frame after it sees the camera moved, and the style zoom takes the raw zoom as it is (the
+ *   gap of earlier settlements is dropped; a jump that keeps the zoom number keeps the gap)
+ * - an animated move (`easeTo`, `flyTo`, a gesture, inertia): the frames of the move follow the
+ *   increments of the raw zoom and keep the gap of earlier settlements, so the sizes do not jump
+ *   when the move starts; the gap stays after the move ends until a move of the first kind
+ * - a settlement: absorbed, and the gap changes by its step (bounded by about ±0.3 as the
+ *   elevation under the camera goes up and down)
+ *
  * @internal
  */
 export class StyleZoom {
@@ -189,15 +207,27 @@ export type CameraPosition = readonly [number, number, number];
 /**
  * Mercator distance under which the camera has not moved sideways (about 40 m on the ground)
  *
- * A settlement solves the zoom and the center again, and the camera it reports drifts sideways
- * by 1 to 2 m in the process (measured on 6.11.1 over Mt. Fuji at pitch 60). Its altitude does
- * not change, while a jump that changes the zoom always changes the altitude, so the altitude is
- * the test and this only keeps a far jump at the same altitude from being taken for one.
+ * The camera maplibre reports after a settlement is computed back from the new zoom and center,
+ * and its position on the ground drifts by the rounding of that computation (1 to 2 m seen over
+ * steep terrain at pitch 60). The altitude is the test that tells a settlement from a jump (any
+ * change of the zoom changes it); this bound only keeps a jump far sideways at the same altitude
+ * from being taken for a settlement, so it is set well above the drift and far below any jump a
+ * host makes on purpose.
  */
 const CAMERA_STILL_MERCATOR = 1e-6;
-/** Altitude difference (m) under which the camera has not moved up or down */
+/**
+ * Altitude difference (m) under which the camera has not moved up or down, for a camera close to
+ * the ground (the floor of the relative tolerance below)
+ */
 const CAMERA_STILL_METERS = 0.01;
-/** The same, relative to the altitude (for the altitudes of the globe) */
+/**
+ * The same, relative to the altitude
+ *
+ * A change of the zoom by Δ changes the altitude by the factor `2^-Δ`, a relative change of about
+ * `0.69 * Δ`: this tolerance takes any change of the zoom above about 1.5e-7 for a move of the
+ * camera, at every altitude, while the noise of describing the same camera again (float64
+ * arithmetic on a few terms) stays orders of magnitude below it.
+ */
 const CAMERA_STILL_RELATIVE = 1e-7;
 
 /** Whether two positions of the camera are the same place (false when either is unknown) */
