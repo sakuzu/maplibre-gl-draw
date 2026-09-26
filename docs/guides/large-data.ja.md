@@ -180,8 +180,9 @@ const places = draw.addDataset({
   行のほかの値は、自分の列から読んでください
 - `getFeatures()` は全行を一度だけ地物にするので、地物で渡した
   ときと同じだけかかります。`collectVisible(bounds)` は範囲の中の
-  行を地物にします。表示中のデータへのスナップは
-  `getFeatures()` を読みます
+  行を地物にし、`collectDrawnRows(bounds)` はどの行も地物にしません
+  ([行の番号で読む](#行の番号で読む) を見てください)。表示中の
+  データへのスナップは `getFeatures()` を読みます
 - `externalPointRender` は、点の行ごとにその地物を受け取ります
 - 地形のある地図では、地形に沿って描く線と多角形を地物にします
 
@@ -433,6 +434,41 @@ places.setSelectedIds([]); // clear
 `collectVisible(bounds)` は、範囲の中の地物を、描画順に、
 スタイルを当てた形で返します。処理の重さは、全体の件数ではなく
 範囲の中の件数で決まります。
+
+## 行の番号で読む
+
+点の横に文字を置くときのように、描かれているものだけを見て回る
+コードは、データセットを行の番号で読み、残すと決めた行だけを地物
+にできます。`collectDrawnRows(bounds)` は、範囲にかかり、いま
+描かれている行を、描画順に返します。幾何を持ち、隠されておらず、
+衝突による間引きで残った行です。`collectVisible(bounds)` を
+`getVisibleFeatureIds()` で絞ったものと同じ行ですが、地物を作らない
+ので、処理の重さは範囲の中の行の数で決まります。
+
+1 つの行を読むメソッドも、その行を地物にしません。`getRowId`、
+`getRowType`、`getRowBounds` (空間索引が持つ外接矩形)、
+`getRowPoint` (`Point` の `[lng, lat]`) があります。
+`getRowFeature` は、行を、スタイルを当てた地物にします。
+`collectVisible` が返すものと同じです。行の番号は `click` と
+`hover` の `row` と同じで、中身が差し替えられるまで変わりません。
+
+<!-- docs-check: with datasets -->
+
+```ts
+// 0.01 度の升目ごとに、描画順で最初の点を選ぶ
+const extent = { minX: 139.6, minY: 35.6, maxX: 139.9, maxY: 35.8 };
+const taken = new Set<string>();
+const names: string[] = [];
+for (const row of places.collectDrawnRows(extent)) {
+  const point = places.getRowPoint(row);
+  if (!point) continue;
+  const cell = `${Math.floor(point[0] / 0.01)}:${Math.floor(point[1] / 0.01)}`;
+  if (taken.has(cell)) continue;
+  taken.add(cell);
+  const feature = places.getRowFeature(row);
+  if (feature) names.push(String(feature.properties.name));
+}
+```
 
 ## 表示と非表示
 

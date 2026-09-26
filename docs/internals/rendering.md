@@ -1038,10 +1038,14 @@ so a new input form is one more implementation.
   checked to stay pure (`display/columnar/index.test.ts`). Without it,
   `setColumnar` computes the same arrays on the main thread
 - A table builds a feature for a row only when one is asked for: a hit,
-  the selection, `getFeatures`, `collectVisible`, the predicate of
-  `externalPointRender` (for the point rows), a row drawn in immediate mode
-  (a dashed line or outline, a point shape without instancing), and the
-  lines and polygons handed to the terrain drape
+  the selection, `getFeatures`, `collectVisible`, `getRowFeature`, the
+  predicate of `externalPointRender` (for the point rows), a row drawn in
+  immediate mode (a dashed line or outline, a point shape without
+  instancing), and the lines and polygons handed to the terrain drape.
+  `collectDrawnRows` and the other `getRow*` reads build none: they read
+  the thinning mask, the spatial index and the bbox array
+  (`DisplaySpatialIndex.searchWhere` filters the rows before it sorts
+  them)
 
 ### Spatial chunks
 

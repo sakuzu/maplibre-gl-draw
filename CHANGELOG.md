@@ -10,6 +10,12 @@ the project follows semantic versioning.
 - Added: the columnar input of a dataset takes a table whose rows have
   different geometry types, as the mixed geometry column of GeoArrow
   (`DatasetColumnarMixedGeometry`).
+- Added: a dataset can be read by row number without building features.
+  `Dataset.collectDrawnRows(bounds)` returns the rows in an extent that are
+  drawn now (with a geometry, not hidden, kept by the collision thinning),
+  in draw order, through the spatial index. `getRowFeature`, `getRowId`,
+  `getRowType`, `getRowBounds` and `getRowPoint` read one row, so code that
+  walks only what is drawn builds features only for the rows it keeps.
 - Changed: `DatasetColumnarInput.geometry` is a union of
   `DatasetColumnarGeometry` and `DatasetColumnarMixedGeometry`, so code
   that reads `geometry.coords` or `geometry.offsets` must narrow on

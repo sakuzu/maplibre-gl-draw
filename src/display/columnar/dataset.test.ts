@@ -40,7 +40,7 @@ import type { RetainedRendererSet } from '../../view/renderers/retained.js';
 import { TerrainContext } from '../../view/terrain/context.js';
 import type { DisplayBatchTarget } from '../dataset.js';
 import { createDatasetManager, type DatasetManager } from '../manager.js';
-import type { DatasetFeatureInput, DatasetOptions } from '../types.js';
+import type { Dataset, DatasetFeatureInput, DatasetOptions } from '../types.js';
 import { prepareDatasetColumnar } from './prepare.js';
 import type {
   DatasetColumn,
@@ -897,5 +897,139 @@ describe('a mixed geometry column behaves as the same features', () => {
     expect(() => dataset.setColumnar({ ...input, geometry: { ...geometry, offsets } })).toThrow(
       /geometry\.offsets\[4\] is 100/,
     );
+  });
+});
+
+describe('reading by row matches the features', () => {
+  const style = { styleRule: RULE, baseStyle: { point: { pointRadius: 5 } } };
+  /** The rows of every type, with dense points so that the thinning drops some */
+  const denseRows = (): MixedRow[] =>
+    mixedRows(48, (i) => (i % 3 === 2 ? TYPES[i % TYPES.length] : 'Point')).map((row, i) =>
+      row.type === 'Point' && row.geometry
+        ? { ...row, geometry: [i * 0.0001, i * 0.00005] as Geometry }
+        : row,
+    );
+  /** Dense points only (a few without a geometry) */
+  const densePoints = (): Row[] =>
+    rowsOf('Point', 40).map((row, i) =>
+      row.geometry ? { ...row, geometry: [i * 0.0001, i * 0.00005] as Geometry } : row,
+    );
+  const VIEW: BoundingBox = { minX: -0.001, minY: -0.001, maxX: 7, maxY: 5 };
+
+  /** What collectVisible and getVisibleFeatureIds say is drawn in the view */
+  const drawnFeatures = (dataset: Dataset, view: BoundingBox): Feature[] => {
+    const drawable = dataset.getVisibleFeatureIds();
+    return dataset
+      .collectVisible(view)
+      .filter((feature) => feature.visible && (drawable === null || drawable.has(feature.id)));
+  };
+  /** The bbox of the coordinates of a feature */
+  const bboxOf = (feature: Feature): BoundingBox => {
+    const flat = (feature.coordinates as unknown as number[]).flat(3) as number[];
+    const xs = flat.filter((_, i) => i % 2 === 0);
+    const ys = flat.filter((_, i) => i % 2 === 1);
+    return {
+      minX: Math.min(...xs),
+      minY: Math.min(...ys),
+      maxX: Math.max(...xs),
+      maxY: Math.max(...ys),
+    };
+  };
+
+  for (const thinning of [false, true]) {
+    const options = { ...style, collisionThinning: { enabled: thinning } };
+    const forms: [string, DatasetOptions][] = [
+      ['features', { id: 'f', features: toFeatures('Point', denseRows()), ...options }],
+      ['a table of one type', { id: 'c', columnar: toColumnar('Point', densePoints()) }],
+      ['a mixed table', { id: 'm', columnar: toMixed(denseRows()), ...options }],
+    ];
+    for (const [name, input] of forms) {
+      it(`${name}, thinning ${thinning ? 'on' : 'off'}: the drawn rows are the drawn features`, () => {
+        const dataset = createManager().add({ ...options, ...input });
+        const rows = dataset.collectDrawnRows(VIEW);
+
+        expect(rows).toBeInstanceOf(Int32Array);
+        expect([...rows]).toEqual([...rows].sort((a, b) => a - b));
+        const features = [...rows].map((row) => dataset.getRowFeature(row));
+        expect(features).toEqual(drawnFeatures(dataset, VIEW));
+        expect(features.length).toBeGreaterThan(0);
+        if (thinning) {
+          expect(dataset.getThinningStats().active).toBe(true);
+          expect(features.length).toBeLessThan(dataset.collectVisible(VIEW).length);
+        }
+
+        // The reads of one row agree with its feature
+        for (const row of rows) {
+          const feature = dataset.getRowFeature(row) as Feature;
+          expect(dataset.getRowId(row)).toBe(feature.id);
+          expect(dataset.getRowType(row)).toBe(feature.type);
+          expect(dataset.getRowBounds(row)).toEqual(bboxOf(feature));
+          expect(dataset.getRowPoint(row)).toEqual(
+            feature.type === 'Point' ? feature.coordinates : null,
+          );
+        }
+      });
+    }
+
+    it(`thinning ${thinning ? 'on' : 'off'}: a table and its features draw the same rows`, () => {
+      const rows = denseRows();
+      const manager = createManager();
+      const a = manager.add({ id: 'f', features: toFeatures('Point', rows), ...options });
+      const b = manager.add({ id: 'm', columnar: toMixed(rows), ...options });
+      const read = (dataset: Dataset) =>
+        [...dataset.collectDrawnRows(VIEW)].map((row) => dataset.getRowFeature(row));
+
+      expect(read(b)).toEqual(read(a));
+      // The row of a table is its row; the features left the rows without a geometry out
+      for (const row of b.collectDrawnRows(VIEW)) {
+        expect(b.getRowId(row)).toBe(`r${row}`);
+      }
+    });
+  }
+
+  it('an extent outside everything gives no rows, and a hidden feature is not drawn', () => {
+    const manager = createManager();
+    const features = toFeatures('Point', rowsOf('Point', 6));
+    features[1] = { ...features[1], visible: false };
+    const dataset = manager.add({ id: 'f', features });
+
+    expect(dataset.collectDrawnRows({ minX: 100, minY: 60, maxX: 101, maxY: 61 })).toHaveLength(0);
+    const ids = [...dataset.collectDrawnRows(WORLD)].map((row) => dataset.getRowId(row));
+    expect(ids).toEqual(features.filter((f) => f.visible !== false).map((f) => f.id));
+    // A hidden feature can still be read by its row
+    expect(dataset.getRowId(1)).toBe(features[1].id);
+  });
+
+  it('a row without a geometry, and a number that is not a row', () => {
+    const dataset = createManager().add({ id: 'c', columnar: toMixed(mixedRows()) });
+    // Row 3 names no child; row 10 is hidden by validity
+    for (const row of [3, 10]) {
+      expect(dataset.getRowType(row)).toBeNull();
+      expect(dataset.getRowBounds(row)).toBeNull();
+      expect(dataset.getRowPoint(row)).toBeNull();
+      expect(dataset.getRowId(row)).toBe(`r${row}`);
+    }
+    expect([...dataset.collectDrawnRows(WORLD)]).not.toContain(3);
+    for (const row of [-1, 36, 1.5, Number.NaN]) {
+      expect(dataset.getRowFeature(row)).toBeNull();
+      expect(dataset.getRowId(row)).toBeNull();
+      expect(dataset.getRowType(row)).toBeNull();
+      expect(dataset.getRowBounds(row)).toBeNull();
+      expect(dataset.getRowPoint(row)).toBeNull();
+    }
+  });
+
+  it('the row of a hit reads back the feature of the hit', () => {
+    const manager = createManager();
+    const dataset = manager.add({
+      id: 'c',
+      columnar: toMixed(mixedRows()),
+      interactive: true,
+      ...style,
+    });
+    const hit = manager.hitTestSide('below-store', [4.1, 2.1], 0.3, () => true);
+
+    expect(hit).not.toBeNull();
+    expect(dataset.getRowFeature(hit?.row ?? -1)).toEqual(hit?.feature);
   });
 });

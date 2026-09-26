@@ -487,6 +487,43 @@ export class DatasetImpl implements Dataset {
     return this.styler.prepareAll(this.featuresOf(this.source.index.search(bounds)));
   }
 
+  collectDrawnRows(bounds: BoundingBox): Int32Array {
+    const source = this.source;
+    const thinning = this.thinning;
+    // The index holds only the rows with a geometry. `skip` is a hidden feature (a table has no
+    // hidden rows)
+    return source.index.searchWhere(
+      bounds,
+      (row) => thinning.isDrawnRow(row) && source.thinningRole(row) !== 'skip',
+    );
+  }
+
+  getRowFeature(row: number): Feature | null {
+    if (!this.hasRow(row)) return null;
+    return this.styler.prepareIfStyled(this.source.featureAt(row));
+  }
+
+  getRowId(row: number): string | null {
+    return this.hasRow(row) ? this.source.idOf(row) : null;
+  }
+
+  getRowType(row: number): Feature['type'] | null {
+    return this.hasRow(row) ? this.source.typeOf(row) : null;
+  }
+
+  getRowBounds(row: number): BoundingBox | null {
+    if (!this.hasRow(row) || !this.source.hasGeometry(row)) return null;
+    const bounds = this.source.bounds;
+    const at = row * 4;
+    return { minX: bounds[at], minY: bounds[at + 1], maxX: bounds[at + 2], maxY: bounds[at + 3] };
+  }
+
+  getRowPoint(row: number): Coordinate | null {
+    if (this.getRowType(row) !== 'Point') return null;
+    const point = this.source.pointOf(row);
+    return [point[0], point[1]];
+  }
+
   /**
    * Whether the most recent draw left a chunk unbuilt
    *
@@ -692,6 +729,11 @@ export class DatasetImpl implements Dataset {
     this.thinning.onFeaturesReplaced();
 
     this.emit('change', { reason: 'features' });
+  }
+
+  /** Whether a number is a row of the current contents */
+  private hasRow(row: number): boolean {
+    return Number.isInteger(row) && row >= 0 && row < this.source.length;
   }
 
   /** The features of rows (without the rule colors) */

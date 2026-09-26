@@ -429,6 +429,64 @@ export interface Dataset {
   collectVisible(bounds: BoundingBox): Feature[];
 
   /**
+   * Returns the rows that intersect the range and are drawn now, in draw order
+   *
+   * It is the counterpart of `collectVisible` narrowed with `getVisibleFeatureIds`, by row
+   * number: a row is kept when its bbox intersects the range, it has a geometry, it is not
+   * hidden (`visible: false`) and it survived the collision thinning (every row survives while
+   * the thinning is off). A point handed to `externalPointRender` counts as drawn. The
+   * visibility of the dataset itself is not looked at (as in `collectVisible`).
+   *
+   * The narrowing uses the spatial index and builds no feature, so the cost is proportional to
+   * the number of rows in the range. It is the entry point for code that walks only what is
+   * drawn, such as placing text next to points: choose rows with the `getRow*` reads and build
+   * the features of the chosen ones alone with `getRowFeature`.
+   *
+   * A row is the one reported as `row` by `click` and `hover`: the index in the features given
+   * (or in the result of the provider), or the row of the columnar table. The numbers hold until
+   * the contents are replaced (a `change` with the reason `features`).
+   *
+   * @param bounds The range in degrees (`minX` / `maxX` are longitudes, `minY` / `maxY`
+   *   latitudes)
+   * @returns New array of rows, in ascending order. Empty when nothing is drawn in the range
+   */
+  collectDrawnRows(bounds: BoundingBox): Int32Array;
+  /**
+   * The feature of a row, with the rule colors and the base style applied (the same feature
+   * `collectVisible` returns for that row)
+   *
+   * A row of a columnar table is built into a feature on each call.
+   *
+   * @returns null when the row is out of range
+   */
+  getRowFeature(row: number): Feature | null;
+  /**
+   * The id of a row, without building its feature
+   *
+   * @returns null when the row is out of range
+   */
+  getRowId(row: number): string | null;
+  /**
+   * The geometry type of a row, without building its feature
+   *
+   * @returns null for a row without a geometry, or out of range
+   */
+  getRowType(row: number): Feature['type'] | null;
+  /**
+   * The bounding box of a row in degrees, without building its feature (the box the spatial
+   * index holds for it)
+   *
+   * @returns null for a row without a geometry, or out of range
+   */
+  getRowBounds(row: number): BoundingBox | null;
+  /**
+   * The `[lng, lat]` of a row whose geometry is a `Point`, without building its feature
+   *
+   * @returns null for any other row (another type, no geometry, out of range)
+   */
+  getRowPoint(row: number): Coordinate | null;
+
+  /**
    * Replaces the selected features
    *
    * The selection is a state of the dataset and is independent of the selection of the Store. A

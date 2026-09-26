@@ -63,6 +63,8 @@ export interface DisplaySource extends ThinningRows {
   featureAt(row: number): Feature;
   /** The id of a row */
   idOf(row: number): string;
+  /** The geometry type of a row (null for a row without a geometry) */
+  typeOf(row: number): Feature['type'] | null;
   /** The rows whose id is in the set, in draw order (only rows with a geometry) */
   rowsOfIds(ids: ReadonlySet<string>): number[];
   /** Every row with a geometry as a feature, in draw order (it may be built on demand) */
@@ -111,6 +113,10 @@ export class FeatureArraySource implements DisplaySource {
 
   idOf(row: number): string {
     return this.list[row].id;
+  }
+
+  typeOf(row: number): Feature['type'] | null {
+    return this.hasGeometry(row) ? this.list[row].type : null;
   }
 
   rowsOfIds(ids: ReadonlySet<string>): number[] {

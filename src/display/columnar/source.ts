@@ -274,6 +274,10 @@ export class ColumnarSource implements DisplaySource {
     return this.table.idOf(row);
   }
 
+  typeOf(row: number): Feature['type'] | null {
+    return this.hasGeometry(row) ? (this.table.columnOf(row)?.type ?? null) : null;
+  }
+
   rowsOfIds(ids: ReadonlySet<string>): number[] {
     const rows = new Set<number>();
     for (const id of ids) {

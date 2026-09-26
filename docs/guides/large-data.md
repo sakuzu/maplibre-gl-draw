@@ -176,8 +176,10 @@ and a row becomes a feature only when one is asked for:
 - `click` and `hover` carry the feature of the row and its `row`. Read
   the other values of the row from your own columns
 - `getFeatures()` builds every row once, which costs what the features
-  would have. `collectVisible(bounds)` builds the rows in the extent. The
-  snapping to display data reads `getFeatures()`
+  would have. `collectVisible(bounds)` builds the rows in the extent, and
+  `collectDrawnRows(bounds)` builds none (see
+  [Reading by row](#reading-by-row)). The snapping to display data reads
+  `getFeatures()`
 - `externalPointRender` is called with the feature of each point row
 - On a map with terrain, the lines and polygons handed to the drape are
   built as features
@@ -419,6 +421,42 @@ change. Its `reason` says which. Use it to rebuild what you derive from
 the dataset, such as labels. `collectVisible(bounds)` returns the
 features in an extent, in draw order and with the styles applied; its
 cost follows the number of features in the extent, not the total.
+
+## Reading by row
+
+Code that walks only what is drawn, such as placing text next to
+points, can read a dataset by row number and build features only for
+the rows it keeps. `collectDrawnRows(bounds)` returns the rows that
+intersect an extent and are drawn now, in draw order: the rows with a
+geometry that are not hidden and that the collision thinning keeps. It
+is `collectVisible(bounds)` narrowed with `getVisibleFeatureIds()`, but
+it builds no feature, so its cost follows the number of rows in the
+extent.
+
+The reads of one row do not build its feature either: `getRowId`,
+`getRowType`, `getRowBounds` (the box the spatial index holds) and
+`getRowPoint` (the `[lng, lat]` of a `Point`). `getRowFeature` builds
+the feature of a row with the styles applied, as `collectVisible`
+returns it. A row is the `row` of `click` and `hover`, and the numbers
+hold until the contents are replaced.
+
+<!-- docs-check: with datasets -->
+
+```ts
+// The first point of each 0.01 degree cell, in draw order
+const extent = { minX: 139.6, minY: 35.6, maxX: 139.9, maxY: 35.8 };
+const taken = new Set<string>();
+const names: string[] = [];
+for (const row of places.collectDrawnRows(extent)) {
+  const point = places.getRowPoint(row);
+  if (!point) continue;
+  const cell = `${Math.floor(point[0] / 0.01)}:${Math.floor(point[1] / 0.01)}`;
+  if (taken.has(cell)) continue;
+  taken.add(cell);
+  const feature = places.getRowFeature(row);
+  if (feature) names.push(String(feature.properties.name));
+}
+```
 
 ## Showing and hiding
 
