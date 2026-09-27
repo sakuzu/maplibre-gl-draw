@@ -11,6 +11,7 @@
 
 import type { Feature, LineString, MultiPolygon, Polygon, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
+import type { Feature as DrawnFeature } from '../api/model.js';
 import {
   along,
   area,
@@ -790,5 +791,59 @@ describe('bbox and metersToDegrees', () => {
     expect(bboxIntersects([0, 0, 1, 1], [1.1, 0, 2, 1])).toBe(false);
     expect(bboxContains([0, 0, 2, 2], [0, 0, 1, 1])).toBe(true);
     expect(bboxContains([0, 0, 1, 1], [0, 0, 2, 1])).toBe(false);
+  });
+});
+
+describe('inputs that carry a geometry', () => {
+  /** A feature as the drawing returns it: a `geometry` field and no GeoJSON `type` */
+  function drawn(id: string, geometry: DrawnFeature['geometry']): DrawnFeature {
+    return {
+      id,
+      type: geometry.type === 'LineString' ? 'line' : 'polygon',
+      geometry,
+      layerId: 'layer',
+      groupId: undefined,
+      properties: {},
+      style: {},
+      visible: true,
+      locked: false,
+    };
+  }
+
+  it('takes the features of the drawing as they are', () => {
+    const merged = union([drawn('a', square), drawn('b', shifted)]);
+    expect(merged && area(merged)).toBeCloseTo(area(union([square, shifted]) as Polygon), 3);
+    expect(area(drawn('a', square))).toBeCloseTo(area(square), 6);
+    expect(bbox(drawn('a', square))).toEqual([0, 0, 1, 1]);
+    expect(
+      length(
+        drawn(
+          'l',
+          line([
+            [0, 0],
+            [1, 0],
+          ]),
+        ),
+      ),
+    ).toBeCloseTo(distance([0, 0], [1, 0]), 6);
+    expect(simplify(drawn('a', square), 1)).toEqual(simplify(square, 1));
+    expect(contains(drawn('a', square), drawn('b', square))).toBe(true);
+  });
+
+  it('takes any object with a geometry field', () => {
+    expect(area({ geometry: square })).toBeCloseTo(area(square), 6);
+    expect(buffer({ geometry: square }, 10)).not.toBeNull();
+  });
+
+  it('rejects an object whose geometry field is not a geometry', () => {
+    for (const input of [{ geometry: null }, { geometry: { type: 'Feature' } }, { id: 'x' }]) {
+      try {
+        area(input as unknown as Polygon);
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(GeometryError);
+        expect((error as GeometryError).code).toBe('invalid-input');
+      }
+    }
   });
 });

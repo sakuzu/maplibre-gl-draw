@@ -8,7 +8,7 @@
  * polygon or on its boundary; a polygon is contained when no part of it lies outside.
  */
 
-import type { Feature, Geometry, MultiPolygon, Point, Polygon, Position } from 'geojson';
+import type { Geometry, MultiPolygon, Point, Polygon, Position } from 'geojson';
 import { usableAreaParts } from './coords.js';
 import { withOperation } from './errors.js';
 import { areaOf, geometryOf, positionOf } from './geojson.js';
@@ -32,7 +32,7 @@ import type { AreaCoordinates, Coordinate, MultiPolygonCoordinates } from './typ
  */
 export function pointInPolygon(
   point: Position | Point,
-  polygon: Polygon | MultiPolygon | Feature,
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
 ): boolean {
   return pointInArea(positionOf(point, 'pointInPolygon'), areaOf(polygon, 'pointInPolygon'));
 }
@@ -50,8 +50,8 @@ export function pointInPolygon(
  *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
  */
 export function overlaps(
-  a: Polygon | MultiPolygon | Feature,
-  b: Polygon | MultiPolygon | Feature,
+  a: Polygon | MultiPolygon | { readonly geometry: Geometry },
+  b: Polygon | MultiPolygon | { readonly geometry: Geometry },
 ): boolean {
   const left = areaOf(a, 'overlaps');
   const right = areaOf(b, 'overlaps');
@@ -173,8 +173,8 @@ function containsGeometry(outer: AreaCoordinates, inner: Geometry): boolean {
  *   type, and (`engine-failure`) when the boolean operation fails
  */
 export function contains(
-  outer: Polygon | MultiPolygon | Feature,
-  inner: Geometry | Feature,
+  outer: Polygon | MultiPolygon | { readonly geometry: Geometry },
+  inner: Geometry | { readonly geometry: Geometry },
 ): boolean {
   const area = areaOf(outer, 'contains');
   const geometry = geometryOf(inner, 'contains');

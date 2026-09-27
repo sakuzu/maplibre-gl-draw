@@ -5,7 +5,7 @@
  * Create: the public functions that build polygons from distances in meters
  */
 
-import type { Feature, Geometry, MultiPolygon, Point, Polygon, Position } from 'geojson';
+import type { Geometry, MultiPolygon, Point, Polygon, Position } from 'geojson';
 import { unionAll } from './boolean.js';
 import { buffer as bufferCoordinates } from './buffer.js';
 import { generateCirclePolygon } from './circle.js';
@@ -84,7 +84,7 @@ function bufferOf(
  * ```
  */
 export function buffer(
-  geometry: Geometry | Feature,
+  geometry: Geometry | { readonly geometry: Geometry },
   distanceMeters: number,
   options?: { segments?: number },
 ): Polygon | MultiPolygon | null {

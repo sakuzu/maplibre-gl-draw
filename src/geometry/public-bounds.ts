@@ -5,7 +5,7 @@
  * Bounds: the public bounding box of a geometry
  */
 
-import type { Feature, Geometry } from 'geojson';
+import type { Geometry } from 'geojson';
 import { coordinatesBBox } from './bbox.js';
 import { invalidInput } from './errors.js';
 import { geometryOf, positionsOf } from './geojson.js';
@@ -29,7 +29,7 @@ import type { BBox } from './types.js';
  * // [139.7, 35.6, 139.8, 35.7]
  * ```
  */
-export function bbox(geometry: Geometry | Feature): BBox {
+export function bbox(geometry: Geometry | { readonly geometry: Geometry }): BBox {
   const box = coordinatesBBox(positionsOf(geometryOf(geometry, 'bbox')));
   if (box === null) {
     throw invalidInput('bbox', 'the geometry has no finite position');

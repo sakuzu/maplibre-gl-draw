@@ -333,29 +333,27 @@ The functions are grouped by what they do:
 - Repair: `makeValid`, `rewind` and `simplify`
 - Bounds and units: `bbox` and `metersToDegrees`
 
-A feature of the drawing is not GeoJSON input as it is: its `type` is the
-type of the feature, not `'Feature'`. Pass its `geometry` after checking
-the kind, or take the features from `draw.document.toGeoJSON()`:
+A feature of the drawing is input as it is: the functions use anything
+with a `geometry` field, as they use a GeoJSON feature. A feature whose
+geometry the function cannot take throws a `GeometryError`, so check the
+kind first when the features are mixed:
 
 ```ts
-import { area } from '@sakuzu/maplibre-gl-draw/geometry';
+import { area, union } from '@sakuzu/maplibre-gl-draw/geometry';
 
-const parcel = draw.features.get(featureId);
-if (parcel?.geometry.type === 'Polygon') {
-  console.log(area(parcel.geometry), 'm²');
-}
-
-const total = draw.document
-  .toGeoJSON()
-  .features.filter((f) => f.geometry?.type === 'Polygon')
-  .reduce((sum, f) => sum + area(f), 0);
+const parcels = draw.features
+  .list()
+  .filter((f) => f.geometry.type === 'Polygon');
+const total = parcels.reduce((sum, f) => sum + area(f), 0);
+const merged = union(parcels);
 ```
 
 ### What holds for every function
 
 - The same input always gives the same output. Arguments are not changed;
   results are new objects
-- Inputs are GeoJSON geometries, or GeoJSON features whose geometry is
+- Inputs are GeoJSON geometries, or anything with a `geometry` field
+  (GeoJSON features, the features of the drawing) whose geometry is
   used; a point is a position `[lng, lat]` or a `Point`. Results are
   GeoJSON geometries: an area comes back as a `Polygon`, or a
   `MultiPolygon` when it has several parts

@@ -4,14 +4,14 @@
 /**
  * GeoJSON input and output of the public functions
  *
- * The public functions take GeoJSON geometries and features and return GeoJSON geometries;
+ * The public functions take GeoJSON geometries, or anything that carries one in a `geometry`
+ * field (GeoJSON features, the features of the drawing), and return GeoJSON geometries;
  * the computations underneath work on coordinate arrays. These helpers take the coordinates
  * out of an input, reject an input whose shape a function cannot take with a GeometryError
  * (`invalid-input`), and wrap the computed coordinates back into a geometry.
  */
 
 import type {
-  Feature,
   Geometry,
   LineString,
   MultiLineString,
@@ -27,10 +27,10 @@ import type { AreaCoordinates, Coordinate, MultiPolygonCoordinates } from './typ
 export type PointInput = Position | Point;
 
 /** A polygon as taken by the public functions */
-export type AreaInput = Polygon | MultiPolygon | Feature;
+export type AreaInput = Polygon | MultiPolygon | { readonly geometry: Geometry };
 
 /** A line as taken by the public functions */
-export type LineInput = LineString | MultiLineString | Feature;
+export type LineInput = LineString | MultiLineString | { readonly geometry: Geometry };
 
 /** The geometry types that carry `coordinates` */
 const COORDINATE_TYPES = new Set([
@@ -57,31 +57,43 @@ function isPosition(value: unknown): value is Coordinate {
 }
 
 /**
- * Returns the geometry of a geometry or a feature
+ * Returns the geometry of a geometry, or of anything that carries one in a `geometry` field
+ * (a GeoJSON feature, a feature of the drawing)
  *
  * @throws GeometryError (`invalid-input`) for a value that is neither, and for a feature
  *   without a geometry
  */
-export function geometryOf(input: Geometry | Feature, operation: string): Geometry {
-  if (!isObject(input)) {
+export function geometryOf(
+  input: Geometry | { readonly geometry: Geometry },
+  operation: string,
+): Geometry {
+  const value: unknown = input;
+  if (!isObject(value)) {
     throw invalidInput(operation, 'the input is not a geometry or a feature');
   }
-  if (input.type === 'Feature') {
-    if (!isObject(input.geometry)) {
+  if (!isGeometryType(value.type)) {
+    if (!('geometry' in value) && value.type !== 'Feature') {
+      throw invalidInput(operation, 'the input is not a geometry or a feature');
+    }
+    const geometry = value.geometry;
+    if (!isObject(geometry) || !isGeometryType(geometry.type)) {
       throw invalidInput(operation, 'the feature has no geometry');
     }
-    return geometryOf(input.geometry, operation);
+    return geometryOf(geometry as unknown as Geometry, operation);
   }
-  if (input.type === 'GeometryCollection') {
-    if (!Array.isArray(input.geometries)) {
+  if (value.type === 'GeometryCollection') {
+    if (!Array.isArray(value.geometries)) {
       throw invalidInput(operation, 'the geometry collection has no geometries');
     }
-    return input;
-  }
-  if (!COORDINATE_TYPES.has(input.type) || !Array.isArray(input.coordinates)) {
+  } else if (!Array.isArray(value.coordinates)) {
     throw invalidInput(operation, 'the input is not a geometry or a feature');
   }
-  return input;
+  return value as unknown as Geometry;
+}
+
+/** Whether a value names a GeoJSON geometry type */
+function isGeometryType(type: unknown): boolean {
+  return typeof type === 'string' && (COORDINATE_TYPES.has(type) || type === 'GeometryCollection');
 }
 
 /**
@@ -137,7 +149,10 @@ export function areasOf(inputs: readonly AreaInput[], operation: string): AreaCo
  *
  * @throws GeometryError (`invalid-input`) for any other geometry
  */
-export function lineOf(input: LineString | Feature, operation: string): Coordinate[] {
+export function lineOf(
+  input: LineString | { readonly geometry: Geometry },
+  operation: string,
+): Coordinate[] {
   const geometry = geometryOf(input, operation);
   if (geometry.type !== 'LineString') {
     throw invalidInput(operation, 'the input is not a LineString');

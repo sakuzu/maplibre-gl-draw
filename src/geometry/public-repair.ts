@@ -5,7 +5,7 @@
  * Repair: the public functions that tidy polygons and reduce vertices
  */
 
-import type { Feature, LineString, MultiPolygon, Polygon, Position } from 'geojson';
+import type { Geometry, LineString, MultiPolygon, Polygon, Position } from 'geojson';
 import { coordinatesBBox } from './bbox.js';
 import { normalizeArea } from './boolean.js';
 import { invalidInput, withOperation } from './errors.js';
@@ -31,7 +31,7 @@ import { metersToDegrees, toRadians } from './units.js';
  *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
  */
 export function makeValid(
-  polygon: Polygon | MultiPolygon | Feature,
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
 ): Polygon | MultiPolygon | null {
   const coordinates = areaOf(polygon, 'makeValid');
   return withOperation('makeValid', () => toAreaGeometry(normalizeArea(coordinates)));
@@ -48,10 +48,14 @@ export function makeValid(
  * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
  *   MultiPolygon
  */
-export function rewind(polygon: Polygon | Feature<Polygon>): Polygon;
-export function rewind(polygon: MultiPolygon | Feature<MultiPolygon>): MultiPolygon;
-export function rewind(polygon: Polygon | MultiPolygon | Feature): Polygon | MultiPolygon;
-export function rewind(polygon: Polygon | MultiPolygon | Feature): Polygon | MultiPolygon {
+export function rewind(polygon: Polygon | { readonly geometry: Polygon }): Polygon;
+export function rewind(polygon: MultiPolygon | { readonly geometry: MultiPolygon }): MultiPolygon;
+export function rewind(
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
+): Polygon | MultiPolygon;
+export function rewind(
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
+): Polygon | MultiPolygon {
   const geometry = areaGeometryOf(polygon, 'rewind');
   if (geometry.type === 'Polygon') {
     return {
@@ -110,20 +114,23 @@ function simplifyInMeters(
  * ```
  */
 export function simplify(
-  geometry: LineString | Feature<LineString>,
+  geometry: LineString | { readonly geometry: LineString },
   toleranceMeters: number,
 ): LineString;
-export function simplify(geometry: Polygon | Feature<Polygon>, toleranceMeters: number): Polygon;
 export function simplify(
-  geometry: MultiPolygon | Feature<MultiPolygon>,
+  geometry: Polygon | { readonly geometry: Polygon },
+  toleranceMeters: number,
+): Polygon;
+export function simplify(
+  geometry: MultiPolygon | { readonly geometry: MultiPolygon },
   toleranceMeters: number,
 ): MultiPolygon;
 export function simplify(
-  geometry: LineString | Polygon | MultiPolygon | Feature,
+  geometry: LineString | Polygon | MultiPolygon | { readonly geometry: Geometry },
   toleranceMeters: number,
 ): LineString | Polygon | MultiPolygon;
 export function simplify(
-  geometry: LineString | Polygon | MultiPolygon | Feature,
+  geometry: LineString | Polygon | MultiPolygon | { readonly geometry: Geometry },
   toleranceMeters: number,
 ): LineString | Polygon | MultiPolygon {
   const input = geometryOf(geometry, 'simplify');

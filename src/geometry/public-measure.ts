@@ -9,7 +9,7 @@
  */
 
 import type {
-  Feature,
+  Geometry,
   LineString,
   MultiLineString,
   MultiPolygon,
@@ -123,7 +123,10 @@ export function midpoint(from: Position | Point, to: Position | Point): Position
  * @throws {@link GeometryError} (`invalid-input`) when the line is not a LineString or has no
  *   position, and when the distance is not a finite number
  */
-export function along(line: LineString | Feature, distanceMeters: number): Position {
+export function along(
+  line: LineString | { readonly geometry: Geometry },
+  distanceMeters: number,
+): Position {
   const path = lineOf(line, 'along');
   if (path.length === 0) {
     throw invalidInput('along', 'the line has no position');
@@ -218,7 +221,7 @@ function nearestOnSegment(p: Coordinate, a: Coordinate, b: Coordinate): Coordina
  *   MultiLineString or has no position, and when the point is not a position or a Point
  */
 export function nearestPointOnLine(
-  line: LineString | MultiLineString | Feature,
+  line: LineString | MultiLineString | { readonly geometry: Geometry },
   point: Position | Point,
 ): { position: Position; distanceMeters: number; segmentIndex: number } {
   const lines = linesOf(line, 'nearestPointOnLine');
@@ -254,7 +257,9 @@ export function nearestPointOnLine(
  * @throws {@link GeometryError} (`invalid-input`) when the input is not a LineString or a
  *   MultiLineString
  */
-export function length(line: LineString | MultiLineString | Feature): number {
+export function length(
+  line: LineString | MultiLineString | { readonly geometry: Geometry },
+): number {
   let total = 0;
   for (const path of linesOf(line, 'length')) total += geodesicLength(path);
   return total;
@@ -278,7 +283,7 @@ export function length(line: LineString | MultiLineString | Feature): number {
  * // about 1.236e10 m²
  * ```
  */
-export function area(polygon: Polygon | MultiPolygon | Feature): number {
+export function area(polygon: Polygon | MultiPolygon | { readonly geometry: Geometry }): number {
   const coordinates = areaOf(polygon, 'area');
   return withOperation('area', () => sphericalArea(coordinates));
 }
@@ -293,7 +298,9 @@ export function area(polygon: Polygon | MultiPolygon | Feature): number {
  * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
  *   MultiPolygon
  */
-export function perimeter(polygon: Polygon | MultiPolygon | Feature): number {
+export function perimeter(
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
+): number {
   let total = 0;
   for (const part of usableAreaParts(areaOf(polygon, 'perimeter'))) {
     for (const ring of part) total += geodesicLength(closeRing(ring));
@@ -313,7 +320,9 @@ export function perimeter(polygon: Polygon | MultiPolygon | Feature): number {
  * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
  *   MultiPolygon
  */
-export function centroid(polygon: Polygon | MultiPolygon | Feature): Point | null {
+export function centroid(
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
+): Point | null {
   const result = planarCentroid(areaOf(polygon, 'centroid'));
   return result === null ? null : toPoint(result);
 }
@@ -329,7 +338,9 @@ export function centroid(polygon: Polygon | MultiPolygon | Feature): Point | nul
  * @throws {@link GeometryError} (`invalid-input`) when the input is not a Polygon or a
  *   MultiPolygon
  */
-export function pointOnSurface(polygon: Polygon | MultiPolygon | Feature): Point | null {
+export function pointOnSurface(
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
+): Point | null {
   const result = planarPointOnSurface(areaOf(polygon, 'pointOnSurface'));
   return result === null ? null : toPoint(result);
 }

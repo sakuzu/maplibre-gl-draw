@@ -5,7 +5,7 @@
  * Combine: the public boolean operations on polygons and the split by a line
  */
 
-import type { Feature, LineString, MultiPolygon, Polygon } from 'geojson';
+import type { Geometry, LineString, MultiPolygon, Polygon } from 'geojson';
 import { differenceAll, intersectionAll, unionAll } from './boolean.js';
 import { withOperation } from './errors.js';
 import { areaOf, areasOf, lineOf, toAreaGeometry } from './geojson.js';
@@ -34,7 +34,7 @@ import { splitArea } from './split.js';
  * ```
  */
 export function union(
-  polygons: readonly (Polygon | MultiPolygon | Feature)[],
+  polygons: readonly (Polygon | MultiPolygon | { readonly geometry: Geometry })[],
 ): Polygon | MultiPolygon | null {
   const inputs = areasOf(polygons, 'union');
   return withOperation('union', () => toAreaGeometry(unionAll(inputs)));
@@ -52,7 +52,7 @@ export function union(
  *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
  */
 export function intersection(
-  polygons: readonly (Polygon | MultiPolygon | Feature)[],
+  polygons: readonly (Polygon | MultiPolygon | { readonly geometry: Geometry })[],
 ): Polygon | MultiPolygon | null {
   const inputs = areasOf(polygons, 'intersection');
   return withOperation('intersection', () => toAreaGeometry(intersectionAll(inputs)));
@@ -71,8 +71,8 @@ export function intersection(
  *   MultiPolygon, and (`engine-failure`) when the boolean operation fails
  */
 export function difference(
-  subject: Polygon | MultiPolygon | Feature,
-  others: readonly (Polygon | MultiPolygon | Feature)[],
+  subject: Polygon | MultiPolygon | { readonly geometry: Geometry },
+  others: readonly (Polygon | MultiPolygon | { readonly geometry: Geometry })[],
 ): Polygon | MultiPolygon | null {
   const left = areaOf(subject, 'difference');
   const right = areasOf(others, 'difference');
@@ -93,8 +93,8 @@ export function difference(
  *   type, and (`engine-failure`) when the boolean operation fails
  */
 export function split(
-  polygon: Polygon | MultiPolygon | Feature,
-  line: LineString | Feature,
+  polygon: Polygon | MultiPolygon | { readonly geometry: Geometry },
+  line: LineString | { readonly geometry: Geometry },
 ): Polygon[] {
   const area = areaOf(polygon, 'split');
   const path = lineOf(line, 'split');

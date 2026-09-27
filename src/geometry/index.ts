@@ -11,16 +11,15 @@
  * ```ts
  * import { area, buffer, union } from '@sakuzu/maplibre-gl-draw/geometry';
  *
- * const parks = draw.document
- *   .toGeoJSON()
- *   .features.filter((f) => f.properties?.kind === 'park');
- * const merged = union(parks);                  // Polygon | MultiPolygon | null
- * const zone = merged && buffer(merged, 300);   // the area within 300 m
- * if (zone) console.log(area(zone) / 1e6, 'km²');
+ * const a = draw.features.get('park');
+ * const b = draw.features.get('lake');
+ * const merged = union([a, b]);            // Polygon | MultiPolygon | null
+ * const zone = buffer(merged, 300);        // the area within 300 m
+ * console.log(area(zone) / 1e6, 'km²');
  * ```
  *
- * The functions take GeoJSON geometries, or GeoJSON features whose geometry they use, and
- * return GeoJSON geometries. Lengths, distances, radii and tolerances are in meters, areas in
+ * The functions take GeoJSON geometries, or anything with a `geometry` field whose geometry
+ * they use (GeoJSON features and the features of the drawing), and return GeoJSON geometries. Lengths, distances, radii and tolerances are in meters, areas in
  * square meters, and bearings and coordinates in degrees. An input whose shape a function
  * cannot take throws a {@link GeometryError}; a computation whose result is empty returns null.
  * Crossing the ±180 degree meridian and the vicinity of the poles are out of scope.

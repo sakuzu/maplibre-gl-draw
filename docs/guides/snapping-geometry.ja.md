@@ -336,31 +336,27 @@ const band = buffer(road, 100, { segments: 32 });
 - 整える: `makeValid`、`rewind`、`simplify`
 - 範囲と単位: `bbox`、`metersToDegrees`
 
-描いた地物は、そのままでは GeoJSON の入力になりません。地物の
-`type` は地物の型で、`'Feature'` ではないからです。種類を確かめて
-から `geometry` を渡すか、`draw.document.toGeoJSON()` から地物を
-取り出します。
+描いた地物は、そのまま入力にできます。関数は、GeoJSON の Feature と
+同じように、`geometry` の欄を持つものなら何でも使います。関数が
+受け取れない幾何の地物には `GeometryError` を投げるので、種類が
+混ざるときは先に確かめます。
 
 ```ts
-import { area } from '@sakuzu/maplibre-gl-draw/geometry';
+import { area, union } from '@sakuzu/maplibre-gl-draw/geometry';
 
-const parcel = draw.features.get(featureId);
-if (parcel?.geometry.type === 'Polygon') {
-  console.log(area(parcel.geometry), 'm²');
-}
-
-const total = draw.document
-  .toGeoJSON()
-  .features.filter((f) => f.geometry?.type === 'Polygon')
-  .reduce((sum, f) => sum + area(f), 0);
+const parcels = draw.features
+  .list()
+  .filter((f) => f.geometry.type === 'Polygon');
+const total = parcels.reduce((sum, f) => sum + area(f), 0);
+const merged = union(parcels);
 ```
 
 ### すべての関数で成り立つこと
 
 - 同じ入力からは常に同じ出力が返ります。引数は変更せず、結果は
   新しいオブジェクトです
-- 入力は GeoJSON の geometry か、geometry を使う GeoJSON の
-  Feature です。点は位置 `[lng, lat]` か `Point` で渡します。
+- 入力は GeoJSON の geometry か、`geometry` の欄を持つもの
+  (GeoJSON の Feature、描いた地物) で、その geometry を使います。点は位置 `[lng, lat]` か `Point` で渡します。
   結果は GeoJSON の geometry で、面はパートが 1 つなら `Polygon`、
   複数なら `MultiPolygon` で返ります
 - 長さ、距離、半径、許容の単位はメートル、面積は平方メートル、
