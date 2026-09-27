@@ -10,6 +10,7 @@ import { processImageFile } from '../../../shared/utils/image.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
 import type { Store } from '../../../store/store.js';
 import type { Feature, FileData, LoadOptions, LoadResult } from '../../../store/types.js';
+import { DrawError } from '../../errors.js';
 
 /**
  * Imports an image file and creates an Image feature
@@ -25,11 +26,19 @@ export async function loadImage(
   },
 ): Promise<LoadResult> {
   if (!options.coordinate) {
-    throw new Error('Image files require coordinate option');
+    throw new DrawError('invalid-input', 'Image files require coordinate option');
   }
 
   const { store, autoNameGenerator, generateFeatureId, getCurrentLayerId } = deps;
-  const processed = await processImageFile(file);
+  let processed: Awaited<ReturnType<typeof processImageFile>>;
+  try {
+    processed = await processImageFile(file);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DrawError('unsupported-format', `The image cannot be read: ${message}`, {
+      cause: error,
+    });
+  }
 
   // Create the FileData
   const fileId = generateFeatureId();

@@ -24,6 +24,7 @@ import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
 import type { Draw } from '../draw.js';
+import { DrawError } from '../errors.js';
 import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
@@ -51,6 +52,7 @@ import { createExtensionsCollections, createRegistry } from './extensions.js';
 import { preparePatch } from './features.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { createOverlayStack, terrainAnchorsOf } from './render-context.js';
+import { validateExtension } from './validate-extension.js';
 
 /** The feature types of the engine, which a custom type cannot take the name of */
 const BUILT_IN_TYPES: ReadonlySet<string> = new Set([
@@ -121,7 +123,12 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
 
   let attached: Draw | null = null;
   const getDraw = (): Draw => {
-    if (!attached) throw new Error('The draw instance is not attached to its extensions yet');
+    if (!attached) {
+      throw new DrawError(
+        'invalid-state',
+        'The draw instance is not attached to its extensions yet',
+      );
+    }
     return attached;
   };
 
@@ -163,20 +170,14 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     plugins: createRegistry<Plugin>(
       guarded({
         kind: 'plugin',
-        validate(_, plugin) {
-          if (typeof plugin.onAdd !== 'function') {
-            throw new TypeError('A plugin must have onAdd');
-          }
-        },
+        validate: (_, plugin) => validateExtension('plugin', plugin),
         install: (_, plugin) => installPlugin(plugin),
       }),
     ),
     modes: createRegistry(
       guarded({
         kind: 'mode',
-        validate(_, factory) {
-          if (typeof factory !== 'function') throw new TypeError('A mode must be a function');
-        },
+        validate: (_, factory) => validateExtension('mode', factory),
         isTakenElsewhere: (name) => modeManager.hasMode(name),
         install: (name, factory) =>
           modeManager.registerMode(name, () => {
@@ -193,11 +194,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     featureTypes: createRegistry(
       guarded({
         kind: 'feature type',
-        validate(_, definition) {
-          if (typeof definition.renderer?.draw !== 'function') {
-            throw new TypeError('A feature type must have a renderer');
-          }
-        },
+        validate: (_, definition) => validateExtension('feature type', definition),
         isTakenElsewhere: (name) => BUILT_IN_TYPES.has(name),
         install: (_, definition) => installFeatureType(definition, adapterDeps),
       }),
@@ -205,31 +202,21 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     overlays: createRegistry(
       guarded({
         kind: 'overlay',
-        validate(_, overlay) {
-          if (typeof overlay.draw !== 'function') throw new TypeError('An overlay must draw');
-        },
+        validate: (_, overlay) => validateExtension('overlay', overlay),
         install: (_, overlay) => overlays.add(overlay),
       }),
     ),
     snapProviders: createRegistry(
       guarded({
         kind: 'snap provider',
-        validate(_, provider) {
-          if (typeof provider.candidates !== 'function') {
-            throw new TypeError('A snap provider must have candidates');
-          }
-        },
+        validate: (_, provider) => validateExtension('snap provider', provider),
         install: (_, provider) => context.snapService.register(adaptSnapProvider(provider, screen)),
       }),
     ),
     handleProviders: createRegistry(
       guarded({
         kind: 'handle provider',
-        validate(_, provider) {
-          if (typeof provider.handles !== 'function' || typeof provider.onDrag !== 'function') {
-            throw new TypeError('A handle provider must have handles and onDrag');
-          }
-        },
+        validate: (_, provider) => validateExtension('handle provider', provider),
         isTakenElsewhere: (name) => context.selectionScope.auxiliaryHandles.get(name) !== undefined,
         install: (_, provider) =>
           context.selectionScope.auxiliaryHandles.register(
@@ -240,11 +227,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     companionProviders: createRegistry(
       guarded({
         kind: 'companion provider',
-        validate(_, provider) {
-          if (typeof provider.has !== 'function' || typeof provider.hitTest !== 'function') {
-            throw new TypeError('A companion provider must have has and hitTest');
-          }
-        },
+        validate: (_, provider) => validateExtension('companion provider', provider),
         isTakenElsewhere: (name) => featureCompanions.get(name) !== undefined,
         install: (_, provider) =>
           featureCompanions.register(adaptCompanionProvider(provider, adapterDeps)),

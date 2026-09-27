@@ -132,6 +132,37 @@ describe('draw.document', () => {
     expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
   });
 
+  it('rejects every failure with a DrawError: a broken embedded image and an unreadable image', async () => {
+    const brokenImage = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            'maplibre-gl-draw:featureType': 'Image',
+            'maplibre-gl-draw:imageData': 'data:image/png;base64,not-an-image',
+            'maplibre-gl-draw:imageMimeType': 'image/png',
+          },
+          geometry: { type: 'Point', coordinates: [0, 0] },
+        },
+      ],
+    };
+    await expect(doc.load(brokenImage as never)).rejects.toMatchObject({
+      name: 'DrawError',
+      code: 'invalid-input',
+    });
+    const notAnImage = new File(['not an image'], 'x.png', { type: 'image/png' });
+    await expect(doc.load(notAnImage, { coordinate: [0, 0] })).rejects.toMatchObject({
+      name: 'DrawError',
+      code: 'unsupported-format',
+    });
+    await expect(doc.load(notAnImage)).rejects.toMatchObject({
+      name: 'DrawError',
+      code: 'invalid-input',
+    });
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
+  });
+
   it('returns null while read-only', async () => {
     store.setReadOnly(true);
     expect(await doc.load(geojson)).toBeNull();

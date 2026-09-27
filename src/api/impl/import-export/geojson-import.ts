@@ -25,6 +25,7 @@ import type {
   LoadResult,
   SkippedFeature,
 } from '../../../store/types.js';
+import { DrawError } from '../../errors.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { foldLegacyImageStyle } from './legacy-image-style.js';
@@ -655,7 +656,10 @@ export async function loadGeoJSON(
     let resolved = id;
     for (let attempt = 0; isTaken(resolved); attempt++) {
       if (attempt >= MAX_ID_ATTEMPTS) {
-        throw new Error('Failed to generate a unique feature id for the GeoJSON import');
+        throw new DrawError(
+          'invalid-input',
+          'Failed to generate a unique feature id for the GeoJSON import',
+        );
       }
       resolved = generateFeatureId();
     }
@@ -682,7 +686,8 @@ export async function loadGeoJSON(
     if (!result.fileData) continue;
     const content = await normalizeEmbeddedFile(result.fileData.dataURL, result.fileData.mimeType);
     if (!content) {
-      throw new Error(
+      throw new DrawError(
+        'invalid-input',
         `Invalid GeoJSON: the image data of feature "${result.feature.id}" is not an embedded ` +
           'PNG / JPEG / WebP / GIF data URL of its declared type',
       );

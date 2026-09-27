@@ -53,7 +53,13 @@ export function createDocument(
   const { store } = deps;
 
   const load = async (source: LoadSource, options: LoadOptions = {}) => {
-    const result = await read(source, options);
+    let result: LoadResult | null;
+    try {
+      result = await read(source, options);
+    } catch (error) {
+      // Whatever went wrong, the promise rejects with a DrawError
+      throw asDrawError('invalid-input', error);
+    }
     if (result) onLoaded?.(result, LOAD_SOURCES[result.format]);
     return result;
   };
@@ -155,7 +161,13 @@ async function readSource(source: LoadSource): Promise<ReadSource> {
           : new File([source], name || 'image', { type: source.type });
       return { kind: 'image', file };
     }
-    return { kind: 'data', data: parseJSON(await source.text()) };
+    let text: string;
+    try {
+      text = await source.text();
+    } catch (error) {
+      throw asDrawError('unsupported-format', error);
+    }
+    return { kind: 'data', data: parseJSON(text) };
   }
   if (typeof source === 'string') return { kind: 'data', data: parseJSON(source) };
   return { kind: 'data', data: source };

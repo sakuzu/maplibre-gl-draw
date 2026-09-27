@@ -34,14 +34,16 @@ export interface PluginsCollection {
    * @returns The function that removes it again
    * @throws `DrawError` with the code `already-exists` when a plugin with the same name was
    *   added
+   *   or with `invalid-input` when the value does not have the shape of the contract
    */
   add(plugin: Plugin): () => void;
   /**
    * Adds several plugins in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
-   *   nothing is added then
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
+   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   *   then
    */
   addMany(plugins: readonly Plugin[]): () => void;
   /**
@@ -86,14 +88,16 @@ export interface ModesCollection {
    *
    * @returns The function that removes it again
    * @throws `DrawError` with the code `already-exists` when the name is taken
+   *   or with `invalid-input` when the value does not have the shape of the contract
    */
   add(name: string, factory: ModeFactory): () => void;
   /**
    * Adds several modes in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
-   *   nothing is added then
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
+   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   *   then
    */
   addMany(entries: readonly { name: string; factory: ModeFactory }[]): () => void;
   /**
@@ -132,14 +136,16 @@ export interface FeatureTypesCollection {
    *
    * @returns The function that removes it again
    * @throws `DrawError` with the code `already-exists` when the type name is taken
+   *   or with `invalid-input` when the value does not have the shape of the contract
    */
   add(definition: FeatureTypeDefinition): () => void;
   /**
    * Adds several custom feature types in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
-   *   nothing is added then
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
+   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   *   then
    */
   addMany(definitions: readonly FeatureTypeDefinition[]): () => void;
   /**
@@ -178,14 +184,16 @@ export interface OverlaysCollection {
    *
    * @returns The function that removes it again
    * @throws `DrawError` with the code `already-exists` when the name is taken
+   *   or with `invalid-input` when the value does not have the shape of the contract
    */
   add(renderer: OverlayRenderer): () => void;
   /**
    * Adds several overlay renderers in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
-   *   nothing is added then
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
+   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   *   then
    */
   addMany(renderers: readonly OverlayRenderer[]): () => void;
   /**
@@ -228,14 +236,16 @@ export interface ProvidersCollection<T> {
    *
    * @returns The function that removes it again
    * @throws `DrawError` with the code `already-exists` when the name is taken
+   *   or with `invalid-input` when the value does not have the shape of the contract
    */
   add(provider: T): () => void;
   /**
    * Adds several providers in one transaction: all of them or none.
    *
    * @returns The function that removes them again
-   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
-   *   nothing is added then
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken, or
+   *   `invalid-input` when a value does not have the shape of the contract; nothing is added
+   *   then
    */
   addMany(providers: readonly T[]): () => void;
   /**
