@@ -620,7 +620,12 @@ options)` で描きます。
 `getStrokeDashPattern` と `getTerrainTessellationStep` は、そこでは
 `dashPattern` と `terrainTessellationStep` です。`RenderContext`
 の欄の型である `ShaderData` と `OffsetUniforms` は main の入口に
-残ります。1.0 が出していた
+残ります。地形の上に描く部品は、地形の状態 (`FrameDrawContext.terrain`)
+の代わりに、描画の呼び出しの `RenderContext` (かその `terrain`) を
+受け取ります。`setTerrain(ctx)`、`terrainTessellationStep(ctx)`、
+`drawQuadSurfaceOnTerrain(ctx, ...)` と書き、
+`ProjectionUniformManager` と `QuadShader` は地形を渡さずに作ります。
+`TerrainContext` と `TerrainRenderState` は出さなくなりました。1.0 が出していた
 純粋な計算 (向きのある矩形、ピクセルと度の換算、コントラストの色)
 は出さなくなりました。必要なら手元に写してください。
 

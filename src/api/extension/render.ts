@@ -132,7 +132,10 @@ export interface RenderContext {
   readonly pixelRatio: number;
   /** The opacity of the layer being drawn, from 0 to 1 */
   readonly opacity: number;
-  /** The positions and the heights on the terrain */
+  /**
+   * The positions and the heights on the terrain. The building blocks of the `/webgl` entry
+   * that draw on the terrain take it, or the whole render context.
+   */
   readonly terrain: TerrainAnchors;
   /** The shared renderer of lines */
   readonly line: LineRenderer;

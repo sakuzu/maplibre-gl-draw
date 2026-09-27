@@ -97,7 +97,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   } = deps;
   const textureCache = new TextureCache(gl);
   const terrain = scope.terrain;
-  const quadShader = new QuadShader(gl, terrain);
+  const quadShader = new QuadShader(gl).useTerrainState(terrain);
   const imageRenderer = new ImageRenderer(
     mapInstance,
     gl,

@@ -228,10 +228,9 @@ export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
 /**
  * The terrain state of one draw instance.
  *
- * Treat it as an opaque handle: a custom renderer receives it as
- * `FrameDrawContext.terrain` and passes it to the renderers and to the terrain
- * functions (such as {@link drawQuadSurfaceOnTerrain} and {@link terrainTessellationStep}).
- * Constructing one gives a state with no terrain.
+ * It stays inside the engine: the renderers of a CustomLayer receive it at construction, and
+ * the public building blocks of the second entry reach it through the render context an
+ * extension receives (`terrain/binding.ts`). Constructing one gives a state with no terrain.
  */
 export class TerrainContext {
   /** This frame's terrain state (read by the shaders' projection uniforms) */

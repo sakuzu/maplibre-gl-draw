@@ -26,7 +26,10 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { TerrainAnchors } from '../../api/extension/context.js';
+import type { RenderContext } from '../../api/extension/render.js';
 import { globeGridOf } from '../globe-subdivision.js';
+import { terrainStateOf } from '../terrain/binding.js';
 import type { TerrainContext } from '../terrain/context.js';
 import type { DrapeQuadCorners, QuadDrapeSurface } from '../terrain/drape/quad.js';
 import { quadMercatorCorners } from '../terrain/drape/quad.js';
@@ -107,24 +110,37 @@ export class QuadShader {
   /**
    * The terrain state of the draw instance being drawn (null draws without terrain)
    *
-   * The CustomLayer passes its instance's context at construction. An extension renderer that
-   * owns a QuadShader calls `setTerrain(context.terrain)` with the draw context it receives.
+   * The CustomLayer binds its instance's state after construction. An extension renderer that
+   * owns a QuadShader calls `setTerrain(ctx)` with the render context it receives.
    */
-  private terrain: TerrainContext | null;
+  private terrain: TerrainContext | null = null;
 
-  constructor(gl: WebGL2RenderingContext, terrain: TerrainContext | null = null) {
+  /** @param gl - The WebGL context of the map */
+  constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
-    this.terrain = terrain;
-    this.projectionUniformManager = new ProjectionUniformManager(gl, { terrain });
+    this.projectionUniformManager = new ProjectionUniformManager(gl);
     this.setupBuffers();
   }
 
   /**
-   * Sets the terrain state the next draws use (null draws without terrain)
+   * Sets the terrain the next draws use.
+   *
+   * @param terrain - The render context of the draw call, or its `terrain`; `null` (or an
+   *   object the engine did not hand out) draws without terrain
    */
-  setTerrain(terrain: TerrainContext | null): void {
+  setTerrain(terrain: RenderContext | TerrainAnchors | null): void {
+    this.useTerrainState(terrainStateOf(terrain));
+  }
+
+  /**
+   * Sets the terrain state of an instance directly
+   *
+   * @internal
+   */
+  useTerrainState(terrain: TerrainContext | null): this {
     this.terrain = terrain;
-    this.projectionUniformManager.setTerrain(terrain);
+    this.projectionUniformManager.useTerrainState(terrain);
+    return this;
   }
 
   /**
@@ -519,14 +535,28 @@ void main() {
  * cannot be built). The caller falls back to the conventional way of drawing
  * (the fill texture + a separate draw of the text).
  *
- * @param terrain The terrain state of the draw instance being drawn
- *   (`FrameDrawContext.terrain`)
- * @param corners The corners of the quad in degrees
- * @param surface The fill and the text
- * @param opacity The opacity, 0..1
+ * @param terrain - The render context of the draw call, or its `terrain`
+ * @param corners - The corners of the quad in degrees
+ * @param surface - The fill and the text
+ * @param opacity - The opacity, 0..1
  * @returns true if it was painted; false when the caller must draw it another way
  */
 export function drawQuadSurfaceOnTerrain(
+  terrain: RenderContext | TerrainAnchors,
+  corners: DrapeQuadCorners,
+  surface: QuadDrapeSurface,
+  opacity: number,
+): boolean {
+  const state = terrainStateOf(terrain);
+  return state !== null && drawQuadSurfaceOnTerrainState(state, corners, surface, opacity);
+}
+
+/**
+ * {@link drawQuadSurfaceOnTerrain} over the terrain state of an instance
+ *
+ * @internal
+ */
+export function drawQuadSurfaceOnTerrainState(
   terrain: TerrainContext,
   corners: DrapeQuadCorners,
   surface: QuadDrapeSurface,

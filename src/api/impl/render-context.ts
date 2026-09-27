@@ -22,6 +22,7 @@ import { toColor } from '../../shared/color.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import { applyDrawBlendState } from '../../view/layer/blend.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
+import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import type { TerrainAnchors } from '../extension/context.js';
 import type {
@@ -146,7 +147,7 @@ export function createRenderContext(
       );
     },
   };
-  return {
+  const context: RenderContext = {
     gl,
     shader: base.shaderData,
     offset: offsetOf(base),
@@ -159,6 +160,9 @@ export function createRenderContext(
     fill,
     point,
   };
+  // The building blocks of the second entry find the terrain state behind the context
+  bindTerrainState(context, base.terrain);
+  return context;
 }
 
 /** What the adapters of the renderers read from the instance */

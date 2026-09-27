@@ -605,7 +605,13 @@ The building blocks for custom shaders move from the main entry to
 the main entry follows semver. `getStrokeDashPattern` and
 `getTerrainTessellationStep` are `dashPattern` and
 `terrainTessellationStep` there. `ShaderData` and `OffsetUniforms`,
-the types of the fields of `RenderContext`, stay in the main entry. The
+the types of the fields of `RenderContext`, stay in the main entry.
+The parts that draw on the terrain take the `RenderContext` of the draw
+call (or its `terrain`) in place of the terrain state
+(`FrameDrawContext.terrain`): write `setTerrain(ctx)`,
+`terrainTessellationStep(ctx)` and `drawQuadSurfaceOnTerrain(ctx, ...)`,
+and construct `ProjectionUniformManager` and `QuadShader` without a
+terrain. `TerrainContext` and `TerrainRenderState` are not exported. The
 pure math that 1.0 exported
 (oriented boxes, conversions between pixels and degrees, contrast
 colors) is not exported any more: keep your own copy.

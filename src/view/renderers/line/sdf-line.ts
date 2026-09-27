@@ -131,7 +131,9 @@ export class SDFLineRenderer {
     this.terrain = terrain;
     this.uniforms = new LineUniforms(gl);
     this.immCoordTexture = new ImmediateCoordTexture(gl);
-    this.projectionUniformManager = new ProjectionUniformManager(gl, { surface: true, terrain });
+    this.projectionUniformManager = new ProjectionUniformManager(gl, {
+      surface: true,
+    }).useTerrainState(terrain);
     this.initBuffers();
   }
 

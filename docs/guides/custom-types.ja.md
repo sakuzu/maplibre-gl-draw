@@ -464,6 +464,37 @@ draw.extensions.companionProviders.add(halo);
 主の入口と違い、マイナーリリースで変わることがあります
 ([版](../reference/README.md))。
 
+地形の上に描く部品は、描画の呼び出しの描画の文脈か、その `terrain` を
+受け取ります。描く前に `ProjectionUniformManager` や `QuadShader` の
+`setTerrain(ctx)` を呼び、`terrainTessellationStep(ctx)` と
+`drawQuadSurfaceOnTerrain(ctx, ...)` にも渡します。描画の文脈はその
+呼び出しの間だけ有効なので、呼び出しごとにそのときのものを渡して
+ください。`null` や、ライブラリーが渡したものでないオブジェクトを
+渡すと、地形なしで描きます。
+
+```ts
+import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
+import {
+  densifyPath,
+  type ProjectionUniformManager,
+  terrainTessellationStep,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+function pathOnTerrain(
+  ctx: RenderContext,
+  program: WebGLProgram,
+  uniforms: ProjectionUniformManager,
+  coordinates: [number, number][],
+): [number, number][] {
+  ctx.gl.useProgram(program);
+  uniforms.setTerrain(ctx);
+  uniforms.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+  const step = terrainTessellationStep(ctx);
+  // path を送って描く
+  return step ? densifyPath(coordinates, step) : coordinates;
+}
+```
+
 ## 関連する例
 
 - [examples/custom-feature-type/](../../examples/custom-feature-type/)

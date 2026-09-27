@@ -229,8 +229,6 @@ const WEBGL = [
   'SDFStrokeOptions',
   'SDFStrokeStyle',
   'splitIntoDashes',
-  'TerrainContext',
-  'TerrainRenderState',
   'terrainTessellationStep',
   'TessellationStep',
   'TessellationTiling',

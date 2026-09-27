@@ -5,11 +5,14 @@
  * The injection point for terrain subdivision of polygons
  *
  * Called from the polygon renderers (polygon/sdf-polygon.ts and polygon/batch.ts). When the
- * terrain is disabled, `terrainTessellationStep(context)` returns null and the caller does
+ * terrain is disabled, `terrainStepOf(context)` returns null and the caller does
  * nothing. Rendering without terrain therefore does not change by a single byte.
  */
 
+import type { TerrainAnchors } from '../../api/extension/context.js';
+import type { RenderContext } from '../../api/extension/render.js';
 import type { Coordinate } from '../../store/types.js';
+import { terrainStateOf } from './binding.js';
 import type { TerrainContext } from './context.js';
 import {
   TERRAIN_MAX_BATCH_SUBDIVISION_CELLS,
@@ -32,12 +35,28 @@ import {
 import { tilingSignature } from './tiling.js';
 
 /**
- * Returns the subdivision step of the terrain mesh for the current frame.
+ * Returns the subdivision step of the terrain mesh for the current frame, to cut a shape so
+ * that it follows the terrain (pass it to `densifyPath`).
+ *
+ * @param terrain - The render context of the draw call, or its `terrain`
+ * @returns The step, or `null` when the terrain is disabled (or the object was not handed out
+ *   by the engine)
+ */
+export function terrainTessellationStep(
+  terrain: RenderContext | TerrainAnchors,
+): TessellationStep | null {
+  const state = terrainStateOf(terrain);
+  return state ? terrainStepOf(state) : null;
+}
+
+/**
+ * {@link terrainTessellationStep} over the terrain state of an instance
  *
  * @param context The terrain state of the draw instance
  * @returns The step, or `null` when the terrain is disabled
+ * @internal
  */
-export function terrainTessellationStep(context: TerrainContext): TessellationStep | null {
+export function terrainStepOf(context: TerrainContext): TessellationStep | null {
   const terrain = getTerrainRenderState(context);
   if (!terrain.active || !(terrain.stepGrid > 0)) return null;
   const tiling = terrain.tessellationTiling;

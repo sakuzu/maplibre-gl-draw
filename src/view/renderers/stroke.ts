@@ -164,7 +164,9 @@ export class StrokeRenderer {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
-    this.projectionUniformManager = new ProjectionUniformManager(gl, { surface: true, terrain });
+    this.projectionUniformManager = new ProjectionUniformManager(gl, {
+      surface: true,
+    }).useTerrainState(terrain);
     this.vertexBuffer = gl.createBuffer();
     this.vao = gl.createVertexArray();
     this.setupVAO();

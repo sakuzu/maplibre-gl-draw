@@ -483,6 +483,37 @@ terrain ([the webgl entry](../api/webgl/index.md)). It may change in a
 minor release, unlike the main entry
 ([versions](../reference/README.md)).
 
+The parts that draw on the terrain take the render context of the draw
+call, or its `terrain`: `setTerrain(ctx)` on a
+`ProjectionUniformManager` or a `QuadShader` before drawing, and
+`terrainTessellationStep(ctx)` and `drawQuadSurfaceOnTerrain(ctx, ...)`.
+The render context is valid for its draw call only, so pass the one of
+each call; given `null`, or an object the library did not hand out,
+they draw without terrain.
+
+```ts
+import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
+import {
+  densifyPath,
+  type ProjectionUniformManager,
+  terrainTessellationStep,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+function pathOnTerrain(
+  ctx: RenderContext,
+  program: WebGLProgram,
+  uniforms: ProjectionUniformManager,
+  coordinates: [number, number][],
+): [number, number][] {
+  ctx.gl.useProgram(program);
+  uniforms.setTerrain(ctx);
+  uniforms.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+  const step = terrainTessellationStep(ctx);
+  // upload the path and draw it
+  return step ? densifyPath(coordinates, step) : coordinates;
+}
+```
+
 ## Related example
 
 - [examples/custom-feature-type/](../../examples/custom-feature-type/)

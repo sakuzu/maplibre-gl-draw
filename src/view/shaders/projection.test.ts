@@ -79,7 +79,7 @@ function terrainOnOf(
   draw?: (run: () => void) => void,
 ): number | undefined {
   const { gl, lastValue } = createMockGL();
-  const manager = new ProjectionUniformManager(gl, { surface, terrain });
+  const manager = new ProjectionUniformManager(gl, { surface }).useTerrainState(terrain);
   manager.getLocations({} as WebGLProgram);
   beginRenderFrame();
   const run = (): void => manager.setUniforms(PROJECTION, 14, null);

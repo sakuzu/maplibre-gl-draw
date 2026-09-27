@@ -680,7 +680,7 @@ void main() {
       opacity: gl.getUniformLocation(program, 'u_opacity'),
       shape: gl.getUniformLocation(program, 'u_shape'),
     };
-    const projection = new ProjectionUniformManager(gl, { terrain: this.terrain });
+    const projection = new ProjectionUniformManager(gl).useTerrainState(this.terrain);
     projection.getLocations(program);
     const state: PointProgramState = { locs, memo: createPointMemo(), projection };
     this.programStates.set(program, state);

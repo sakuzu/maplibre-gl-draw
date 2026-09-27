@@ -75,6 +75,12 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   computed, and `onAdd` and `onRemove` take `(map, gl)`.
 - The building blocks for custom shaders (layer 2) move from the main
   entry to `@sakuzu/maplibre-gl-draw/webgl`.
+- The building blocks of `/webgl` that draw on the terrain take the
+  `RenderContext` of the draw call, or its `terrain`, in place of the
+  terrain state of the instance: `ProjectionUniformManager.setTerrain`,
+  `QuadShader.setTerrain`, `drawQuadSurfaceOnTerrain` and
+  `terrainTessellationStep`. The constructors of
+  `ProjectionUniformManager` and `QuadShader` no longer take a terrain.
 - `@sakuzu/maplibre-gl-draw/geometry` takes and returns GeoJSON, uses
   the names of Turf, measures in meters, and merges the two-argument
   and array forms of a function into one. It goes from 60 exports to
@@ -772,7 +778,7 @@ releases.
 | `QuadDrapeSurface`, `QuadShader` | `/webgl` | |
 | `QuadVertices`, `SDFStrokeOptions` | `/webgl` | |
 | `SDFStrokeStyle`, `splitIntoDashes` | `/webgl` | |
-| `TerrainContext`, `TerrainRenderState` | `/webgl` | |
+| `TerrainContext`, `TerrainRenderState` | (removed) | `RenderContext` |
 | `TessellationStep`, `TessellationTiling` | `/webgl` | |
 | `WidthUnit` | `/webgl` | |
 | `ExportOptions` | (removed) | Export every feature |

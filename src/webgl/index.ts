@@ -8,7 +8,8 @@
  * {@link maplibre-gl-draw!RenderContext | RenderContext} a renderer receives already carries
  * the shared renderers of lines, areas and point markers, and most renderers need nothing
  * more. This entry holds the GLSL of the projection, the uniforms that go with it, the quad
- * shader, and the rules the shared renderers follow for dashes and terrain. Unlike the main
+ * shader, and the rules the shared renderers follow for dashes and terrain. The parts that draw
+ * on the terrain take the render context of the draw call (or its `terrain`). Unlike the main
  * entry, it may change in a minor release.
  *
  * ```ts
@@ -29,6 +30,7 @@
  *       uniforms.getLocations(program);
  *     }
  *     ctx.gl.useProgram(program);
+ *     uniforms?.setTerrain(ctx);
  *     uniforms?.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
  *     // bind the buffers of your shape and draw it
  *   },
@@ -91,7 +93,6 @@ export type {
   QuadDrapeFill,
   QuadDrapeSurface,
 } from '../view/terrain/drape/quad.js';
-export type { TerrainContext, TerrainRenderState } from '../view/terrain/context.js';
 export type {
   MercatorRect,
   TessellationStep,

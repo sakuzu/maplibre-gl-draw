@@ -234,7 +234,7 @@ export class PointShapeRenderer {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
-    this.projectionUniformManager = new ProjectionUniformManager(gl, { terrain });
+    this.projectionUniformManager = new ProjectionUniformManager(gl).useTerrainState(terrain);
     this.bufferCache = new BufferCache(gl);
   }
 

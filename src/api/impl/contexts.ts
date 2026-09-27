@@ -30,6 +30,7 @@ import {
   getAnchorElevationGeneration,
   projectAnchor,
 } from '../../view/terrain/anchor.js';
+import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import { anchorGhostOpacity } from '../../view/terrain/occlusion.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
@@ -208,7 +209,7 @@ export interface ContextServices {
  * @internal
  */
 export function createTerrainAnchors(terrain: TerrainContext): TerrainAnchors {
-  return {
+  const anchors: TerrainAnchors = {
     project(lngLat) {
       const point = projectAnchor(terrain, lngLat[0], lngLat[1]);
       return point ? [point.x, point.y] : null;
@@ -217,6 +218,9 @@ export function createTerrainAnchors(terrain: TerrainContext): TerrainAnchors {
     ghostOpacity: (lngLat) => anchorGhostOpacity(terrain, lngLat[0], lngLat[1]),
     generation: () => getAnchorElevationGeneration(terrain),
   };
+  // The building blocks of the second entry find the state behind the anchors
+  bindTerrainState(anchors, terrain);
+  return anchors;
 }
 
 /**

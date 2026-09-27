@@ -47,8 +47,8 @@ export interface FrameDrawContext {
    * The terrain state of the draw instance being drawn
    *
    * A renderer that owns a `ProjectionUniformManager` or a `QuadShader` passes it with
-   * `setTerrain(context.terrain)` before drawing, and the anchor functions (`projectAnchor`,
-   * `anchorElevationMeters`, `anchorGhostOpacity`, `drawQuadSurfaceOnTerrain` and so on) take
+   * `useTerrainState(context.terrain)` before drawing, and the anchor functions (`projectAnchor`,
+   * `anchorElevationMeters`, `anchorGhostOpacity`, `drawQuadSurfaceOnTerrainState` and so on) take
    * it as their first argument. It is valid for this draw call only; a renderer shared between
    * draw instances must not keep it.
    */
