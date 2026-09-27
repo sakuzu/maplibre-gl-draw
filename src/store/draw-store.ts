@@ -434,6 +434,7 @@ function documentPart(changes: StoreChange): StoreChange {
   if (changes.layerReorder) part.layerReorder = changes.layerReorder;
   if (changes.groupReorder) part.groupReorder = changes.groupReorder;
   if (changes.metadata) part.metadata = changes.metadata;
+  if (changes.files) part.files = changes.files;
   if (changes.uiStateChanged) part.uiStateChanged = true;
   return part;
 }

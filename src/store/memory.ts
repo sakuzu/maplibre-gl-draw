@@ -516,6 +516,7 @@ export class MemoryDocumentStore implements DocumentStore {
 
   createFile(file: FileData): void {
     this.#fileStore.create(file);
+    this.#bus.merge({ files: { created: [this.#fileStore.get(file.id) as FileData] } });
   }
   getFile(id: string): FileData | undefined {
     return this.#fileStore.get(id);
@@ -524,7 +525,9 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#fileStore.getAll();
   }
   deleteFile(id: string): void {
+    const file = this.#fileStore.get(id);
     this.#fileStore.delete(id);
+    if (file) this.#bus.merge({ files: { deleted: [file] } });
   }
 
   // ============================================================================

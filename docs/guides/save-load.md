@@ -212,23 +212,15 @@ mode, which asks the application for a file with `image.requested`.
 
 ## Saving as you go
 
-`document.changed` arrives once per transaction with everything that
-changed in it, so it is the place to save after each edit. It also
-carries the changes of the selection and the mode, which the document
-does not keep; save only when the document changed:
+`document.changed` arrives once per transaction that changed the
+document, with everything that changed in it, so it is the place to save
+after each edit. A change of the selection or of the mode alone does not
+fire it:
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('document.changed', (change) => {
-  const documentChanged =
-    change.features ??
-    change.layers ??
-    change.groups ??
-    change.layerReorder ??
-    change.groupReorder ??
-    change.metadata;
-  if (!documentChanged) return;
+draw.on('document.changed', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));

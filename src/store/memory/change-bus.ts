@@ -146,6 +146,14 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.mode) target.mode = changes.mode;
   if (changes.uiStateChanged) target.uiStateChanged = true;
   if (changes.metadata) target.metadata = changes.metadata;
+
+  // files
+  if (changes.files) {
+    if (!target.files) target.files = {};
+    const t = target.files;
+    if (changes.files.created) t.created = appendField(t.created, changes.files.created);
+    if (changes.files.deleted) t.deleted = appendField(t.deleted, changes.files.deleted);
+  }
 }
 
 export class ChangeBus {

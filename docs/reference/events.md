@@ -92,6 +92,9 @@ change is made.
 | `selection.changed` | `{ selection: Selection; previous: Selection }` |
 | `vertexSelection.changed` | `{ selection; previous }` |
 | `mode.changed` | `{ mode; previous }` |
+| `hidden.changed` | `{ ids }` |
+| `readOnly.changed` | `{ readOnly }` |
+| `interactionLock.changed` | `{ locked }` |
 
 ### Input
 
@@ -150,7 +153,8 @@ the new `items`, and inside a group as `group.updated` with the new
 
 ### One event per transaction
 
-`document.changed` fires once per transaction, after every other event of
+`document.changed` fires once per transaction that changed the document
+(features, layers, groups, metadata or files), after every other event of
 it, with a [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
 that holds every change of the transaction by category. A category is
 present only when the transaction changed it.
@@ -164,6 +168,7 @@ present only when the transaction changed it.
 | `layerReorder` | The new order of the items of a layer |
 | `groupReorder` | The new order of the features of a group |
 | `metadata` | The new title and description, and the ones before |
+| `files` | The embedded files created and deleted |
 | `selection` | The new selection and the one before |
 | `editing` | The IDs of the features whose editing started and ended |
 | `mode` | The new mode and the one before |
@@ -172,14 +177,17 @@ A listener that rebuilds a view on any change (a feature list, a legend)
 listens to `document.changed`, so that a load of 1,000 features costs one
 rebuild instead of 1,000.
 
-`document.changed` also fires for a change of the selection or of the mode
-alone. A listener that saves the document checks for the categories it
-saves (`features`, `layers`, `groups`, `layerReorder`, `groupReorder`,
-`metadata`) before saving.
+A change of the selection, of the editing or of the mode alone does not
+fire `document.changed`: it has its own event. When the same transaction
+also changed the document, `document.changed` carries them along in
+`selection`, `editing` and `mode`. A listener that saves the document can
+therefore save on every `document.changed`.
 
 Neither the shape being drawn nor the state of a drag fires
 `document.changed`. Hiding an item on this client (`draw.hidden`),
-read-only and the interaction lock fire no event at all.
+read-only and the interaction lock fire `hidden.changed`,
+`readOnly.changed` and `interactionLock.changed`, and never
+`document.changed`.
 
 ### Order within one transaction
 
@@ -196,7 +204,8 @@ The events of one transaction are emitted in this order.
 7. `selection.changed`
 8. `mode.changed`
 9. `vertexSelection.changed`
-10. `document.changed`
+10. `hidden.changed`, `readOnly.changed`, then `interactionLock.changed`
+11. `document.changed`
 
 ## Sources
 
@@ -281,6 +290,17 @@ only what can be seen, so hiding or deleting a selected item fires it too.
 
 Fires when the selected vertices change. `selection` is `null` when no
 vertex is selected.
+
+### hidden.changed
+
+Fires when the items this client hides change: `draw.hidden`, or the
+deletion of a hidden item. `ids` is the whole set after the change, not the
+difference.
+
+### readOnly.changed and interactionLock.changed
+
+Fire when `draw.setReadOnly` or `draw.setInteractionLocked` changes the
+value. Setting the value it already has fires nothing.
 
 ### snap.changed
 

@@ -46,6 +46,9 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'drag.started',
   'drag.ended',
   'mode.changed',
+  'hidden.changed',
+  'readOnly.changed',
+  'interactionLock.changed',
   'snap.changed',
   'map.clicked',
   'dataset.clicked',
@@ -225,22 +228,47 @@ describe('document.changed', () => {
     }
   });
 
-  it('carries the change of the Store without the state only the drawing reads', () => {
+  it('does not fire for a change of the selection, the mode or the drawing state alone', () => {
+    const a = draw.features.create(pointInput()) as Feature;
     const received: DrawEvents['document.changed'][] = [];
     draw.on('document.changed', (change) => received.push(change));
+    draw.selection.set('feature', [a.id]);
+    draw.selection.clear();
     draw.setMode('draw_line');
-    expect(received.find((change) => change.mode)?.mode).toEqual({
-      mode: 'draw_line',
-      previous: 'select',
-    });
-    for (const change of received) {
-      expect(change).not.toHaveProperty('tentative');
-      expect(change).not.toHaveProperty('uiStateChanged');
-    }
-    // A notification of the drawing state alone is not a change of the document
-    const count = received.length;
     store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'x' });
-    expect(received).toHaveLength(count);
+    draw.setMode('select');
+    draw.hidden.add(a.id);
+    draw.hidden.remove(a.id);
+    draw.setReadOnly(true);
+    draw.setReadOnly(false);
+    draw.setInteractionLocked(true);
+    draw.setInteractionLocked(false);
+    expect(received).toEqual([]);
+  });
+
+  it('carries the selection of a transaction that also changed the document', () => {
+    const received: DrawEvents['document.changed'][] = [];
+    draw.on('document.changed', (change) => received.push(change));
+    draw.transact(() => {
+      const a = draw.features.create(pointInput()) as Feature;
+      draw.selection.set('feature', [a.id]);
+    });
+    expect(received).toHaveLength(1);
+    expect(received[0].features?.created).toHaveLength(1);
+    expect(received[0].selection?.ids).toHaveLength(1);
+    expect(received[0]).not.toHaveProperty('tentative');
+    expect(received[0]).not.toHaveProperty('uiStateChanged');
+  });
+
+  it('fires for a transaction that changed the files alone', () => {
+    const received: DrawEvents['document.changed'][] = [];
+    draw.on('document.changed', (change) => received.push(change));
+    store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'data:image/png;base64,' });
+    store.deleteFile('f1');
+    expect(received.map((change) => change.files)).toEqual([
+      { created: [expect.objectContaining({ id: 'f1' })] },
+      { deleted: [expect.objectContaining({ id: 'f1' })] },
+    ]);
   });
 
   it('document.loaded carries the result and the source of the writes', async () => {
@@ -281,6 +309,39 @@ describe('the events of the state of this client', () => {
       previous: null,
     });
     expect(changes[1]).toMatchObject({ selection: null, previous: { featureId: line.id } });
+  });
+
+  it('hidden.changed carries the whole hidden set after the change', () => {
+    const a = draw.features.create(pointInput()) as Feature;
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    draw.hidden.add(a.id);
+    draw.hidden.add(b.id);
+    draw.hidden.add(b.id);
+    draw.features.delete(a.id);
+    draw.hidden.clear();
+    expect(payloadsOf(events, 'hidden.changed')).toEqual([
+      { ids: [a.id] },
+      { ids: [a.id, b.id] },
+      { ids: [b.id] },
+      { ids: [] },
+    ]);
+  });
+
+  it('readOnly.changed and interactionLock.changed fire when the value changes', () => {
+    draw.setReadOnly(true);
+    draw.setReadOnly(true);
+    draw.setReadOnly(false);
+    draw.setInteractionLocked(true);
+    draw.setInteractionLocked(true);
+    draw.setInteractionLocked(false);
+    expect(payloadsOf(events, 'readOnly.changed')).toEqual([
+      { readOnly: true },
+      { readOnly: false },
+    ]);
+    expect(payloadsOf(events, 'interactionLock.changed')).toEqual([
+      { locked: true },
+      { locked: false },
+    ]);
   });
 
   it('mode.changed carries the mode and the one before it', () => {

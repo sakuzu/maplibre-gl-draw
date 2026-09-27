@@ -167,8 +167,8 @@ ctx.draw.transact(
 書き込んだかを問いません。API、描画モード、ドラッグ、Delete キー、
 読み込み、ほかのプラグイン、差し替えた Store のどれでも届きます。
 
-- `document.changed` は、取引ごとに 1 回、その取引で変わったものの
-  全部と `source` を持って届きます
+- `document.changed` は、文書を変えた取引ごとに 1 回、その取引で
+  変わったものの全部と `source` を持って届きます
 - `feature.updated` は、ドラッグの途中では `intermediate: true` を
   持ちます。その後に必ず確定の更新が届きます
 - `drag.started` と `drag.ended` は、選択モードの移動、拡縮、回転、

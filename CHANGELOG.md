@@ -44,8 +44,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - Events are named `resource.pastParticiple` (`feature.created`,
   `layer.reordered`) in one list, `DrawEvents`, which apps and plugins
   share. The events of the document carry their `source`, and
-  `document.changed` arrives once per transaction with every change to
-  features, layers, groups and metadata.
+  `document.changed` arrives once per transaction that changed the
+  document, with every change to features, layers, groups, metadata and
+  files.
 - A feature holds a GeoJSON `geometry` in place of `coordinates`. Its
   `properties` are the GeoJSON properties: the values of the library
   are under keys with the `maplibre-gl-draw:` prefix, and every other
@@ -274,7 +275,7 @@ A plugin of 1.0 subscribed to the same names without `draw.`
 | `draw.feature.create` | `feature.created` | |
 | `draw.feature.update` | `feature.updated` | With `intermediate` |
 | `draw.feature.delete` | `feature.deleted` | |
-| `draw.features.change` | `document.changed` | Also layers, groups, metadata |
+| `draw.features.change` | `document.changed` | Only a change of the document |
 | `draw.layer.create` | `layer.created` | |
 | `draw.layer.update` | `layer.updated` | |
 | `draw.layer.delete` | `layer.deleted` | |
@@ -298,6 +299,9 @@ A plugin of 1.0 subscribed to the same names without `draw.`
 | (none) | `feature.moved` | Between layers and groups |
 | (none) | `document.loaded` | `{ result, source }` |
 | (none) | `vertexSelection.changed` | |
+| (none) | `hidden.changed` | `{ ids }`, the whole set |
+| (none) | `readOnly.changed` | `{ readOnly }` |
+| (none) | `interactionLock.changed` | `{ locked }` |
 | The hook `drag:start` | `drag.started` | |
 | The hook `drag:end` | `drag.ended` | With `cancelled` |
 

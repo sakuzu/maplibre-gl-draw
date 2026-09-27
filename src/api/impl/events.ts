@@ -6,8 +6,9 @@
  * the Store and by the signals of the engine
  *
  * One transaction of the Store is one notification. From it come first the events of each
- * resource (features, layers, groups, metadata, selection, vertex selection, mode), in that
- * order, and last one `document.changed` with the whole change. The engine announces the rest
+ * resource (features, layers, groups, metadata, selection, vertex selection, mode, hidden,
+ * read-only, interaction lock), in that order, and last one `document.changed` with the whole
+ * change when the transaction changed the document. The engine announces the rest
  * on its internal emitter (snapping, clicks, images, the stacking order, failed loads,
  * drags), and each is passed on under its name here.
  */
@@ -116,6 +117,9 @@ export function createEventHub(): EventHub {
  */
 export function connectStoreEvents(hub: EventHub, store: Store): () => void {
   let vertexSelection = store.getVertexSelection();
+  let hidden: readonly string[] = Object.freeze([...store.listHidden()]);
+  let readOnly = store.isReadOnly();
+  let locked = store.isInteractionLocked();
   return store.subscribe((changes) => {
     emitResourceEvents(hub, store, changes);
 
@@ -126,9 +130,32 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
       hub.emit('vertexSelection.changed', { selection: nextVertexSelection, previous });
     }
 
+    // The state of this client that the notifications do not describe is compared with the
+    // state the previous notification left
+    const nextHidden = store.listHidden();
+    if (!sameIds(hidden, nextHidden)) {
+      hidden = Object.freeze([...nextHidden]);
+      hub.emit('hidden.changed', { ids: hidden });
+    }
+    const nextReadOnly = store.isReadOnly();
+    if (nextReadOnly !== readOnly) {
+      readOnly = nextReadOnly;
+      hub.emit('readOnly.changed', { readOnly });
+    }
+    const nextLocked = store.isInteractionLocked();
+    if (nextLocked !== locked) {
+      locked = nextLocked;
+      hub.emit('interactionLock.changed', { locked });
+    }
+
     const change = toDocumentChange(changes);
     if (change) hub.emit('document.changed', change);
   });
+}
+
+/** Whether a list of IDs holds the same IDs as a set */
+function sameIds(list: readonly string[], set: ReadonlySet<string>): boolean {
+  return list.length === set.size && list.every((id) => set.has(id));
 }
 
 /** The events of each resource of one notification */
@@ -287,34 +314,35 @@ function sameVertexSelection(
   });
 }
 
-/** The categories of a notification that `document.changed` carries */
-const CHANGE_KEYS = [
+/** The categories of a notification that belong to the document */
+const DOCUMENT_KEYS = [
   'features',
   'layers',
   'groups',
   'layerReorder',
   'groupReorder',
-  'selection',
-  'editing',
-  'mode',
   'metadata',
+  'files',
 ] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
+
+/** The categories of the state of this client that `document.changed` carries along */
+const CLIENT_KEYS = ['selection', 'editing', 'mode'] as const satisfies ReadonlyArray<
+  keyof DocumentChange & keyof StoreChange
+>;
 
 /**
  * The change a notification carries, without the state that only the drawing reads (the
- * geometry being drawn, the drag); null when nothing is left
+ * geometry being drawn, the drag); null when the notification changed nothing of the document
  *
  * @internal
  */
 export function toDocumentChange(changes: StoreChange): DocumentChange | null {
+  if (!DOCUMENT_KEYS.some((key) => changes[key] !== undefined)) return null;
   const change: DocumentChange = {};
-  let any = false;
-  for (const key of CHANGE_KEYS) {
+  for (const key of [...DOCUMENT_KEYS, ...CLIENT_KEYS]) {
     if (changes[key] === undefined) continue;
     (change as Record<string, unknown>)[key] = changes[key];
-    any = true;
   }
-  if (!any) return null;
   change.source = changes.source ?? 'local';
   return change;
 }

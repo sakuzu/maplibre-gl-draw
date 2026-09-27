@@ -211,23 +211,14 @@ await draw.document.load(imageFile, {
 
 ## 変更のたびに保存する
 
-`document.changed` は、トランザクション 1 つごとに、その中で変わった
-ものをすべて載せて 1 度だけ届きます。編集のたびに保存するなら、この
-イベントを使います。このイベントは、文書が持たない選択やモードの
-変更も運ぶので、文書が変わったときだけ保存してください。
+`document.changed` は、文書を変えたトランザクション 1 つごとに、その中で
+変わったものをすべて載せて 1 度だけ届きます。編集のたびに保存するなら、
+このイベントを使います。選択やモードだけの変更では届きません。
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('document.changed', (change) => {
-  const documentChanged =
-    change.features ??
-    change.layers ??
-    change.groups ??
-    change.layerReorder ??
-    change.groupReorder ??
-    change.metadata;
-  if (!documentChanged) return;
+draw.on('document.changed', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));

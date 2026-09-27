@@ -86,7 +86,7 @@ import type {
  * yet); the notification then carries nothing for that id.
  *
  * Notifications: `subscribe` delivers the document categories of StoreChange (features,
- * layers, groups, layerReorder, groupReorder, metadata) with their source, and `transact`
+ * layers, groups, layerReorder, groupReorder, metadata, files) with their source, and `transact`
  * groups the changes of a function into one notification. Any other category a notification
  * carries is ignored by core. A change applied from elsewhere is notified like a local one,
  * with the source `'remote'`, and core follows it: a deleted item leaves the selection, the

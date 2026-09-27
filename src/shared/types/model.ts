@@ -602,7 +602,7 @@ export interface UpdateFeatureOptions {
  *
  * `subscribe` of the Store delivers one per outermost transaction (or per write outside
  * one). Each category is present only when the transaction changed it. The document
- * categories (features, layers, groups, layerReorder, groupReorder, metadata) are what a
+ * categories (features, layers, groups, layerReorder, groupReorder, metadata, files) are what a
  * {@link DocumentStore} notifies; the others are local state of this client.
  */
 export interface StoreChange {
@@ -707,6 +707,11 @@ export interface StoreChange {
   metadata?: {
     metadata: Metadata;
     previous: Metadata;
+  };
+  /** The embedded files created and deleted */
+  files?: {
+    created?: FileData[];
+    deleted?: FileData[];
   };
 }
 
