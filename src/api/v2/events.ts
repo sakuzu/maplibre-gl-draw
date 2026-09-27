@@ -97,7 +97,13 @@ export interface DrawEvents {
   /** A place without a feature was clicked */
   'map.clicked': { lngLat: Position; point: ScreenPoint };
   /** A row of a dataset was clicked */
-  'dataset.clicked': { datasetId: string; rowIndex: number; row: DatasetRow };
+  'dataset.clicked': {
+    datasetId: string;
+    rowIndex: number;
+    row: DatasetRow;
+    lngLat: Position;
+    point: ScreenPoint;
+  };
   /** A dataset was added */
   'dataset.added': { dataset: Dataset };
   /** A dataset was removed */

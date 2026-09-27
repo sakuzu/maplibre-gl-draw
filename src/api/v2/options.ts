@@ -59,7 +59,8 @@ export interface RenderingOptions {
 
 /**
  * The look of the box around the selected features and of their handles. Each part given
- * replaces the default of that part; sizes and widths are in CSS pixels.
+ * replaces the default of that part. Colors are CSS colors, and sizes and widths are in CSS
+ * pixels.
  */
 export interface SelectionStyleOptions {
   /** The box around the selection */
@@ -68,8 +69,8 @@ export interface SelectionStyleOptions {
     stroke: {
       /** The width in CSS pixels */
       width: number;
-      /** The color, as RGBA from 0 to 1 */
-      color: [number, number, number, number];
+      /** The color (a CSS color) */
+      color: string;
       /** The opacity, from 0 to 1 */
       opacity: number;
       /** The dash pattern */
@@ -88,12 +89,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -110,12 +111,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -129,8 +130,8 @@ export interface SelectionStyleOptions {
     connector: {
       /** The width in CSS pixels */
       width: number;
-      /** The color, as RGBA from 0 to 1 */
-      color: [number, number, number, number];
+      /** The color (a CSS color) */
+      color: string;
       /** The opacity, from 0 to 1 */
       opacity: number;
       /** The dash pattern */
@@ -147,12 +148,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -166,12 +167,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -185,12 +186,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -207,12 +208,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -229,12 +230,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -251,12 +252,12 @@ export interface SelectionStyleOptions {
       shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
       /** The size in CSS pixels */
       size: number;
-      /** The fill color, as RGBA from 0 to 1 */
-      fillColor: [number, number, number, number];
+      /** The fill color (a CSS color) */
+      fillColor: string;
       /** The opacity of the fill, from 0 to 1 */
       fillOpacity: number;
-      /** The color of the outline, as RGBA from 0 to 1 */
-      strokeColor: [number, number, number, number];
+      /** The color of the outline (a CSS color) */
+      strokeColor: string;
       /** The width of the outline in CSS pixels (0 for none) */
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
@@ -271,8 +272,8 @@ export interface SelectionStyleOptions {
     stroke: {
       /** The width in CSS pixels */
       width: number;
-      /** The color, as RGBA from 0 to 1 */
-      color: [number, number, number, number];
+      /** The color (a CSS color) */
+      color: string;
       /** The opacity, from 0 to 1 */
       opacity: number;
       /** The dash pattern */

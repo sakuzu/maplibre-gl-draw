@@ -23,7 +23,7 @@ export interface SelectionResource {
    * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of this
    *   type
    */
-  set(ids: readonly string[], type: SelectionType): boolean;
+  set(type: SelectionType, ids: readonly string[]): boolean;
   /**
    * Adds items of the selected type to the selection.
    *

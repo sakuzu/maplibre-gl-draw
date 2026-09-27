@@ -6,6 +6,7 @@
  */
 
 import type { BBox, Feature as GeoJSONFeature, Position } from 'geojson';
+import type { ScreenPoint } from './events.js';
 import type { PreparedTable, Table } from './extension-placeholders.js';
 import type { FeatureStyle, FeatureType, StyleRule } from './model.js';
 
@@ -72,13 +73,20 @@ export interface DatasetThinningStats {
 /** The events of one dataset, by name, with their payloads. */
 export interface DatasetEvents {
   /** A row was clicked */
-  clicked: { datasetId: string; rowIndex: number; row: DatasetRow; lngLat: Position };
+  clicked: {
+    datasetId: string;
+    rowIndex: number;
+    row: DatasetRow;
+    lngLat: Position;
+    point: ScreenPoint;
+  };
   /** The pointer moved over a row, or off every row (`rowIndex` and `row` are then `null`) */
   hovered: {
     datasetId: string;
     rowIndex: number | null;
     row: DatasetRow | null;
     lngLat: Position;
+    point: ScreenPoint;
   };
   /** The rows, the look, the visibility, the selection or the thinning changed */
   changed: { reason: 'rows' | 'style' | 'visibility' | 'selection' | 'thinning' };
@@ -151,11 +159,11 @@ export interface Dataset {
   /** The default look, or `undefined` when none is set. */
   getBaseStyle(): DatasetBaseStyle | undefined;
   /** Every row, in drawing order, without the rule colors and the default look. */
-  getFeatures(): DatasetRow[];
+  listRows(): DatasetRow[];
   /** The rows whose extent meets the range, with the rule colors and the default look. */
-  collectVisible(bbox: BBox): DatasetRow[];
+  listVisibleRows(bbox: BBox): DatasetRow[];
   /** The indexes of the rows drawn now whose extent meets the range, in ascending order. */
-  collectDrawnRows(bbox: BBox): Int32Array;
+  listDrawnRows(bbox: BBox): Int32Array;
   /** Reads a row as a GeoJSON feature; `undefined` when there is no such row. */
   getRow(index: number): DatasetRow | undefined;
   /** The ID of a row, or `null` when there is no such row or it has no ID. */
@@ -169,21 +177,21 @@ export interface Dataset {
   /** The index of the row with this ID, or `null` when there is none. */
   findRow(id: string): number | null;
   /** Replaces the IDs of the selected rows. */
-  setSelectedIds(ids: readonly string[]): void;
+  setSelectedRowIds(ids: readonly string[]): void;
   /** The IDs of the selected rows. */
-  getSelectedIds(): string[];
+  getSelectedRowIds(): string[];
   /** Replaces the thinning of overlapping points; `null` turns it off. */
   setCollisionThinning(options: DatasetCollisionThinning | null): void;
   /** The thinning in effect with every default filled in, or `null` when it is off. */
   getCollisionThinning(): Required<DatasetCollisionThinning> | null;
   /** The IDs of the rows the thinning draws, or `null` when it thins nothing. */
-  getVisibleFeatureIds(): ReadonlySet<string> | null;
+  listVisibleRowIds(): ReadonlySet<string> | null;
   /** What the thinning is doing now. */
   getThinningStats(): DatasetThinningStats;
   /** A number that changes whenever the rows drawn change. */
   getDrawnRowsRevision(): number;
   /** Fetches the rows of the provider again on the next move of the map. */
-  invalidateProviderCache(): void;
+  refresh(): void;
   /** Subscribes to an event of this dataset and returns the function that unsubscribes. */
   on<K extends keyof DatasetEvents>(
     event: K,
@@ -191,8 +199,6 @@ export interface Dataset {
   ): () => void;
   /** Unsubscribes from an event of this dataset. */
   off<K extends keyof DatasetEvents>(event: K, listener: (payload: DatasetEvents[K]) => void): void;
-  /** Removes the dataset from the map, as `draw.datasets.remove` does. */
-  remove(): void;
 }
 
 /**
