@@ -1,0 +1,48 @@
+# Publishes a release when a tag vX.Y.Z is pushed. It runs the gates (ci.yml), publishes the
+# package to npm with a provenance statement, and creates the GitHub release from the version's
+# section of CHANGELOG.md. The steps a maintainer follows are in docs/internals/releasing.md.
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: gates
+    runs-on: ubuntu-latest
+    # npm accepts trusted publishing only from this environment (see the package settings on npm)
+    environment: npm
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # npm trusted publishing and the provenance statement
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # Trusted publishing needs npm 11.5.1 or later, which Node 24 carries
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Release notes (also checks the tag against package.json)
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          # Only the first release uses a token. Later releases authenticate by OIDC (trusted
+          # publishing), which npm tries first; the secret is deleted after the first release.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+        env:
+          GH_TOKEN: ${{ github.token }}

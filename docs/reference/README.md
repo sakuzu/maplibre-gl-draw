@@ -64,23 +64,20 @@ list is fixed in `src/index.ts`; whatever it does not export is internal.
 
 ## Versioning
 
-The package follows [semantic versioning](https://semver.org/). While the
-version is `0.x`, the rules are these.
+The package follows [semantic versioning](https://semver.org/).
 
-- A minor release (`0.1.x` to `0.2.0`) is needed for any incompatible
+- A major release (`1.x` to `2.0.0`) is needed for any incompatible
   change of layer 1, a change of the stored data format that old data
   cannot be read under, or a higher minimum version of maplibre-gl or
   Node
-- Layer 2 may change incompatibly in a minor release as well
-- A patch release (`0.1.0` to `0.1.1`) carries fixes and compatible
-  additions only
-- A caret range on `0.x` (`^0.1.0`) accepts patch releases only, so
-  moving to the next minor is a deliberate upgrade
+- A minor release (`1.0.x` to `1.1.0`) carries compatible additions.
+  Layer 2 may change incompatibly in a minor release; if you build an
+  extension on it, declare the minors you tested (`~1.0.0`)
+- A patch release (`1.0.0` to `1.0.1`) carries fixes only
 
 Every change you can notice, in either layer, is recorded in
-[CHANGELOG.md](../../CHANGELOG.md). From `1.0.0` on, the usual rules
-apply: an incompatible change of layer 1 needs a major release, and
-layer 2 may still change in a minor release.
+[CHANGELOG.md](../../CHANGELOG.md), and each release has a GitHub
+release with the same notes.
 
 The supported versions of maplibre-gl and Node, and how they move, are
 in [releasing](../internals/releasing.md).

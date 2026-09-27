@@ -6,25 +6,20 @@ code.
 
 ## Versions
 
-The package follows [semantic versioning](https://semver.org/). While the
-version is `0.x`, the rules are the following.
+The package follows [semantic versioning](https://semver.org/). The first
+public release is `1.0.0`, and the rules are the following.
 
-- A minor release (`0.1.x` to `0.2.0`) is required for any incompatible
-  change: a removed or changed signature or behavior of the public API
-  (layer 1 of the public surface, see
-  [the reference](../reference/README.md)), an incompatible
-  change of a building block for extension authors (layer 2), a change of
-  the stored data format that old data cannot be read under, or a
-  higher lower bound of the maplibre-gl peer or of Node. Adding a checked
-  minor of maplibre-gl to the peer is a patch.
-- A patch release (`0.1.0` to `0.1.1`) carries fixes and compatible
-  additions only.
-- A caret range on `0.x` (`^0.1.0`) accepts patch releases only, so a
-  dependent that declares `^0.1.0` has to be released again to accept
-  `0.2.0`. That is intended: a minor release of core may break it.
-
-Once the API is stable the package moves to `1.0.0`, and from then on the
-usual rules of semver apply (a major release for an incompatible change).
+- A major release (`1.x` to `2.0.0`) is required for any incompatible
+  change of the public API (layer 1 of the public surface, see
+  [the reference](../reference/README.md)): a removed or changed signature
+  or behavior, a change of the stored data format that old data cannot be
+  read under, or a higher lower bound of the maplibre-gl peer or of Node.
+- A minor release (`1.0.x` to `1.1.0`) carries compatible additions. It
+  may also change a building block for extension authors (layer 2)
+  incompatibly; such a change is marked in `CHANGELOG.md`, and an
+  extension declares the minors of core it was tested against (`~1.0.0`).
+- A patch release (`1.0.0` to `1.0.1`) carries fixes only. Adding a
+  checked minor of maplibre-gl to the peer is a patch.
 
 ## Supported versions of maplibre-gl and Node
 
@@ -53,9 +48,11 @@ is raised, in a minor release, when that line reaches its end of life.
 
 ## Tags and the changelog
 
-Each release is tagged `vX.Y.Z` (for example `v0.1.0`) on the commit the
+Each release is tagged `vX.Y.Z` (for example `v1.0.0`) on the commit the
 package was built from. The tag is annotated and carries the version as
-its message.
+its message. Pushing the tag starts the release workflow
+(`.github/workflows/release.yml`), which publishes the package; only the
+maintainers can create tags matching `v*`.
 
 `CHANGELOG.md` follows
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and is
@@ -75,20 +72,28 @@ shipped in the package (it is listed in `files`).
   `[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/vX.Y.Z...HEAD`
   and
   `[X.Y.Z]: https://github.com/sakuzu/maplibre-gl-draw/compare/vW.V.U...vX.Y.Z`
-  (the first release links to `releases/tag/v0.1.0`).
+  (the first release links to `releases/tag/v1.0.0`).
+- The release workflow takes the body of the GitHub release from the
+  version's section (`scripts/release-notes.mjs`), so the section must
+  exist and must not be empty.
 
-The first release is `0.1.0`: `package.json` already carries that
-version, so the `npm version` step below is skipped for it and the
-current `## Unreleased` section becomes `## [0.1.0]`.
+The first release is `1.0.0`: `package.json` already carries that
+version, so the `npm version` step below is skipped for it. Its section
+says that it is the first public release and summarizes what the package
+does, instead of listing the changes made before any release.
 
 ## Steps
 
-Run the steps on an up-to-date `main` with a clean working tree.
+Run the steps on an up-to-date `main` with a clean working tree. The
+package is never published from a local machine: the release workflow
+publishes it from GitHub Actions, so that npm attaches a provenance
+statement tying the published files to the tagged commit.
 
 1. Install from the lock file and run every gate, the documentation
    gate included (see [The documentation gate](#the-documentation-gate)).
    Resolve its warnings too: a warning left at a release is a document
-   that no longer matches the code.
+   that no longer matches the code. The release workflow runs the same
+   gates again and stops before publishing when one fails.
 
    ```sh
    npm ci
@@ -98,15 +103,21 @@ Run the steps on an up-to-date `main` with a clean working tree.
    npm run docs:check -- --base vW.V.U   # the previous release
    ```
 
-2. Set the new version without committing yet (`patch` or `minor`,
-   following the rules above).
+2. Set the new version without committing yet (`major`, `minor` or
+   `patch`, following the rules above).
 
    ```sh
    npm version minor --no-git-tag-version
    ```
 
 3. Turn the `## Unreleased` section of `CHANGELOG.md` into the new
-   version as described above, and add its link reference.
+   version as described above, and add its link reference. Check the
+   body of the release:
+
+   ```sh
+   node scripts/release-notes.mjs vX.Y.Z
+   ```
+
 4. Build and check the package that would be published. `check:package`
    packs with `--ignore-scripts`, so it reads the `dist/` that the build
    leaves.
@@ -116,19 +127,22 @@ Run the steps on an up-to-date `main` with a clean working tree.
    npm run check:package
    ```
 
-5. Commit the version and the changelog together, and tag the commit.
+5. Commit the version and the changelog together, tag the commit, and
+   push both. The tag starts the release workflow.
 
    ```sh
    git commit -am "Release vX.Y.Z"
    git tag -a vX.Y.Z -m vX.Y.Z
+   git push origin main vX.Y.Z
    ```
 
-6. Publish and push. `prepack` builds `dist/` again from the tagged
-   commit.
+6. Watch the workflow. It runs the gates, publishes to npm (`prepack`
+   builds `dist/` from the tagged commit) and creates the GitHub release.
+   Then check the published version.
 
    ```sh
-   npm publish
-   git push origin main --follow-tags
+   gh run watch
+   npm view @sakuzu/maplibre-gl-draw version
    ```
 
 7. Publish the live demo and the API reference again, so that the
@@ -138,11 +152,14 @@ Run the steps on an up-to-date `main` with a clean working tree.
    npm run deploy:pages
    ```
 
-npm attaches a provenance statement (`npm publish --provenance`) only
-when the package is published from a supported CI system such as GitHub
-Actions. The steps above publish from a local machine, so the package
-carries no provenance statement; the tag and the changelog tie the
-published version to its commit.
+When the workflow fails before the publish step, nothing was published:
+fix the cause on `main`, move the tag to the fixed commit
+(`git tag -d vX.Y.Z`, `git push origin :refs/tags/vX.Y.Z`, then step 5
+again). When it fails after the publish step, the version is on npm and
+cannot be published again; create the GitHub release by hand
+(`gh release create vX.Y.Z --verify-tag --notes-file <notes>`). A
+published version is never unpublished; a broken one is followed by a
+patch release and marked with `npm deprecate`.
 
 ## Documentation
 
@@ -180,8 +197,9 @@ and every page of the reference are in it.
 ### The documentation gate
 
 `npm run docs:check` runs these steps in order and fails when any step
-reports an error. Run it at milestones and before a release; it is not
-run by a CI service.
+reports an error. Run it at milestones and before a release. The CI
+workflow runs it on every pull request, with the end-to-end tests in a
+job of their own.
 
 1. typedoc builds the API reference with no warning
 2. The `ts` and `js` code blocks of the READMEs, getting started and the

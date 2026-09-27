@@ -7,6 +7,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # release.yml runs the same gates before it publishes
+  workflow_call:
 
 permissions:
   contents: read
@@ -20,8 +22,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The job names are the required status checks of the main branch ruleset
   check:
-    name: typecheck, lint, test, package, docs
+    name: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -50,7 +53,7 @@ jobs:
         run: npm run docs:check -- --skip-e2e --base origin/${{ github.base_ref || 'main' }}
 
   e2e:
-    name: e2e (headless Chromium)
+    name: e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

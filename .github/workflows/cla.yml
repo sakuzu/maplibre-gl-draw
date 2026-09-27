@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   cla:
+    name: cla
     runs-on: ubuntu-latest
     steps:
       - name: CLA Assistant
@@ -30,4 +31,5 @@ jobs:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/sakuzu/maplibre-gl-draw/blob/main/CLA.md
           branch: main
-          allowlist: dependabot[bot],github-actions[bot]
+          # The copyright holder is not asked to sign the CLA
+          allowlist: asakaida,dependabot[bot],github-actions[bot]

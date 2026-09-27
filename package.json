@@ -1,6 +1,6 @@
 {
   "name": "@sakuzu/maplibre-gl-draw",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "WebGL2 drawing and editing engine for MapLibre GL JS: points, lines, and polygons rendered in a custom layer, with selection, hit testing, and geometry utilities.",
   "keywords": [
     "maplibre",
