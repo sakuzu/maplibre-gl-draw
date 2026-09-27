@@ -27,7 +27,7 @@ function point(id: string): Feature {
 
 function setup(plugin: Plugin) {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, items: [] });
   const manager = createPluginManager(() => ({}) as never, { registerMode: vi.fn() } as never);
   manager.register(plugin);
   const stop = subscribeMutationHooks(store, manager);
@@ -100,7 +100,7 @@ describe('the mutation hooks', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        order: [],
+        items: [],
       });
       store.createFeature({ ...point('a'), layerId: 'm' });
     }, 'import');
@@ -124,7 +124,14 @@ describe('the mutation hooks', () => {
     store.createFeature(point('a'));
     calls.length = 0;
 
-    store.createGroup({ id: 'g', name: 'g', visible: true, locked: false, featureIds: ['a'] });
+    store.createGroup({
+      id: 'g',
+      layerId: 'l',
+      name: 'g',
+      visible: true,
+      locked: false,
+      featureIds: ['a'],
+    });
     store.setSelection('feature', ['a']);
 
     expect(calls).toContain('group:create');

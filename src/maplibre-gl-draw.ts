@@ -340,7 +340,7 @@ export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): M
   // Helper function that looks up which layer an item belongs to
   const findLayerForItem = (itemId: string): string | undefined => {
     for (const layer of store.getAllLayers()) {
-      if (layer.order.includes(itemId)) {
+      if (layer.items.includes(itemId)) {
         return layer.id;
       }
     }

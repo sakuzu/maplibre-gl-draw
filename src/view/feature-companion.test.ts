@@ -41,7 +41,7 @@ const LAYER: Layer = {
   visible: true,
   locked: false,
   opacity: 1,
-  order: [],
+  items: [],
 };
 
 function point(id: string, lng = 0, lat = 0): Feature {

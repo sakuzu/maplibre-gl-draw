@@ -183,8 +183,8 @@ export class LayerPanel {
       };
 
       // Add the items inside the layer in reverse order
-      for (let j = layer.order.length - 1; j >= 0; j--) {
-        const itemId = layer.order[j];
+      for (let j = layer.items.length - 1; j >= 0; j--) {
+        const itemId = layer.items[j];
         const group = groupMap.get(itemId);
 
         if (group) {
@@ -1177,7 +1177,7 @@ export class LayerPanel {
     if (sourceParentId && !this.draw.getGroup(sourceParentId)) {
       if (targetType === 'group' || (targetType === 'feature' && !targetParentId)) {
         const layer = this.draw.getLayer(sourceParentId);
-        if (layer?.order.includes(targetId)) {
+        if (layer?.items.includes(targetId)) {
           return true;
         }
       }
@@ -1262,7 +1262,7 @@ export class LayerPanel {
   private findLayerContainingItem(itemId: string): string | null {
     const layers = this.draw.getAllLayers();
     for (const layer of layers) {
-      if (layer.order.includes(itemId)) {
+      if (layer.items.includes(itemId)) {
         return layer.id;
       }
     }
@@ -1351,7 +1351,7 @@ export class LayerPanel {
     const layer = this.draw.getLayer(layerId);
     if (!layer) return;
 
-    const groupIndex = layer.order.indexOf(groupId);
+    const groupIndex = layer.items.indexOf(groupId);
     if (groupIndex === -1) return;
 
     // Take the item out of its current group
@@ -1428,7 +1428,7 @@ export class LayerPanel {
       const layer = this.draw.getLayer(parentId);
       if (!layer) return;
 
-      const targetIndex = layer.order.indexOf(targetId);
+      const targetIndex = layer.items.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;
@@ -1460,7 +1460,7 @@ export class LayerPanel {
       const layer = this.draw.getLayer(sourceLayerId);
       if (!layer) return;
 
-      const targetIndex = layer.order.indexOf(targetId);
+      const targetIndex = layer.items.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const insertIndex = position === 'before' ? targetIndex + 1 : targetIndex;
@@ -1471,7 +1471,7 @@ export class LayerPanel {
       const layer = this.draw.getLayer(targetLayerId);
       if (!layer) return;
 
-      const targetIndex = layer.order.indexOf(targetId);
+      const targetIndex = layer.items.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;
@@ -1493,7 +1493,7 @@ export class LayerPanel {
     const layer = this.draw.getLayer(targetLayerId);
     if (!layer) return;
 
-    const targetIndex = layer.order.indexOf(targetId);
+    const targetIndex = layer.items.indexOf(targetId);
     if (targetIndex === -1) return;
 
     const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;

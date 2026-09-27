@@ -46,7 +46,7 @@ let spatialIndex: RBushSpatialIndex;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatialIndex = new RBushSpatialIndex();
 });
 

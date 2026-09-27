@@ -61,6 +61,7 @@ export function createGroupApi(deps: GroupApiDeps): GroupApi {
       const groupName = name || autoNameGenerator.generateGroupName();
       const group: Group = {
         id,
+        layerId,
         name: groupName,
         featureIds: [...featureIds],
         locked: false,
@@ -70,10 +71,10 @@ export function createGroupApi(deps: GroupApiDeps): GroupApi {
       // Remove the features from the order of the layer
       const layer = store.getLayer(layerId);
       if (layer) {
-        const newOrder = layer.order.filter((itemId) => !featureIds.includes(itemId));
+        const newOrder = layer.items.filter((itemId) => !featureIds.includes(itemId));
         // Add the group to the order
         newOrder.push(id);
-        store.updateLayer(layerId, { order: newOrder });
+        store.updateLayer(layerId, { items: newOrder });
       }
 
       // Create the group (this sets groupId on the features)
@@ -86,7 +87,7 @@ export function createGroupApi(deps: GroupApiDeps): GroupApi {
         // While locked (itself or its layer), reject any change other than locked/visible
         // (full protection)
         const findLayerOfGroup = (gid: string) =>
-          store.getAllLayers().find((l) => l.order.includes(gid));
+          store.getAllLayers().find((l) => l.items.includes(gid));
         if (isGroupLocked(group, findLayerOfGroup)) return false;
       }
       return store.updateGroup(id, updates);

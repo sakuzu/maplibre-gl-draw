@@ -56,7 +56,7 @@ function key(k: string): void {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   const canvas = { style: {} as { cursor?: string } };
   const map = {
     getZoom: () => 10,

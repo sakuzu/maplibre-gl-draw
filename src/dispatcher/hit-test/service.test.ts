@@ -72,7 +72,7 @@ let service: HitTestServiceImpl;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatialIndex = new RBushSpatialIndex();
   // A 5px tolerance (0.5 degrees on the test map) keeps the numbers below round
   service = new HitTestServiceImpl(store, spatialIndex, { clickTolerance: 5 });
@@ -327,7 +327,14 @@ describe('the visibility lookup of HitTestService', () => {
     // reading a layer costs time proportional to the feature count. Many features are
     // placed in the candidate set, and the queries to the store are checked to level off
     // at the number of containers rather than the number of features.
-    store.createGroup({ id: 'g1', name: 'g1', featureIds: [], locked: false, visible: true });
+    store.createGroup({
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g1',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    });
     const features: Feature[] = [];
     for (let i = 0; i < 200; i++) {
       const f = point(`p${i}`, [5, 5]);

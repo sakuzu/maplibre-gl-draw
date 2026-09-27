@@ -55,7 +55,7 @@ function generate(count: number): Data {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   }));
   const features: Feature[] = [];
   const perLayer: string[][] = Array.from({ length: layerCount }, () => []);
@@ -102,11 +102,18 @@ function generate(count: number): Data {
         const f = features.find((x) => x.id === m);
         if (f) f.groupId = gid;
       }
-      groups.push({ id: gid, name: gid, featureIds: members, locked: false, visible: true });
+      groups.push({
+        id: gid,
+        layerId: `layer-${li}`,
+        name: gid,
+        featureIds: members,
+        locked: false,
+        visible: true,
+      });
       groupIds.push(gid);
       cursor += size;
     }
-    layers[li].order = [...groupIds, ...ids.slice(cursor)];
+    layers[li].items = [...groupIds, ...ids.slice(cursor)];
   }
   return { version: '2.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
 }
@@ -124,7 +131,7 @@ function measureLoadOnce(data: Data): number {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   });
   let c = 0;
   const context = {
@@ -224,7 +231,7 @@ function measureSpreadMs(layerCount: number): number {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
   }
 

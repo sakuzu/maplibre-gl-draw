@@ -14,7 +14,7 @@ import { MemoryDocumentStore, MemoryStore } from './memory.js';
 import type { Feature, Layer, StateChanges } from './types.js';
 
 function layer(id: string): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, order: [] };
+  return { id, name: id, visible: true, locked: false, opacity: 1, items: [] };
 }
 
 function point(id: string, coordinates: [number, number] = [0, 0]): Feature {
@@ -104,13 +104,13 @@ describe('the objects the in-memory store returns', () => {
     store.reorderInLayer('a', 'l1', 1);
     store.createFeature(point('c'));
 
-    expect(before.order).toEqual(['a', 'b']);
-    expect(store.getLayer('l1')?.order).toEqual(['b', 'a', 'c']);
-    expect(updated[updated.length - 1]?.order).toEqual(['b', 'a', 'c']);
+    expect(before.items).toEqual(['a', 'b']);
+    expect(store.getLayer('l1')?.items).toEqual(['b', 'a', 'c']);
+    expect(updated[updated.length - 1]?.items).toEqual(['b', 'a', 'c']);
     const notified = updated[0];
     store.createFeature(point('d'));
-    expect(notified.order).toEqual(['b', 'a', 'c']);
-    expect(() => (store.getLayer('l1') as Layer).order.push('x')).toThrow(TypeError);
+    expect(notified.items).toEqual(['b', 'a', 'c']);
+    expect(() => (store.getLayer('l1') as Layer).items.push('x')).toThrow(TypeError);
   });
 
   it('keeps a bulk load inside one transaction linear (one copy of the order per notification)', () => {
@@ -124,7 +124,7 @@ describe('the objects the in-memory store returns', () => {
     });
     const elapsed = performance.now() - started;
 
-    expect(store.getLayer('l1')?.order).toHaveLength(count);
+    expect(store.getLayer('l1')?.items).toHaveLength(count);
     expect(elapsed).toBeLessThan(5000);
   });
 });
@@ -328,7 +328,14 @@ describe('the invariants of the selection', () => {
 
   it('drops the features of a group that is hidden, and a hidden group itself', () => {
     const store = setup();
-    store.createGroup({ id: 'g1', name: 'g', featureIds: [], locked: false, visible: true });
+    store.createGroup({
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    });
     store.updateFeature('f1', { groupId: 'g1' });
     store.setSelection('feature', ['f1', 'f2']);
     store.updateGroup('g1', { visible: false });

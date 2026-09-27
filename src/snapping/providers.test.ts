@@ -47,7 +47,7 @@ let spatialIndex: RBushSpatialIndex;
 let snapTargets: SnapTargetsRegistry;
 
 function makeLayer(id: string, visible = true): Layer {
-  return { id, name: id, visible, locked: false, opacity: 1, order: [] };
+  return { id, name: id, visible, locked: false, opacity: 1, items: [] };
 }
 
 function addFeature(
@@ -70,7 +70,7 @@ function addFeature(
   store.createFeature(feature);
   const layer = store.getLayer(feature.layerId);
   if (layer) {
-    store.updateLayer(layer.id, { order: [...layer.order, feature.id] });
+    store.updateLayer(layer.id, { items: [...layer.items, feature.id] });
   }
   spatialIndex.insert(feature);
   return feature;
@@ -286,6 +286,7 @@ describe('the built-in vertex provider', () => {
     addFeature('inHiddenLayer', 'Point', [0.1, 0], { layerId: 'l2' });
     store.createGroup({
       id: 'g1',
+      layerId: 'l1',
       name: 'g1',
       featureIds: ['inHiddenGroup'],
       locked: false,

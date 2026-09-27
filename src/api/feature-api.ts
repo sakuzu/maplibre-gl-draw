@@ -114,7 +114,7 @@ function featuresInDisplayOrder(store: Store): Feature[] {
   for (const layerId of store.getLayerOrder()) {
     const layer = store.getLayer(layerId);
     if (!layer) continue;
-    for (const itemId of layer.order) {
+    for (const itemId of layer.items) {
       const group = store.getGroup(itemId);
       if (group) {
         for (const featureId of group.featureIds) push(featureId);

@@ -83,7 +83,7 @@ beforeEach(() => {
 });
 
 function createLayer(id: string): void {
-  store.createLayer({ id, name: id, visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id, name: id, visible: true, locked: false, opacity: 1, items: [] });
 }
 
 function createFeature(feature: Feature): void {
@@ -392,7 +392,7 @@ describe('the z order and the consumption of the companions (feature companion)'
       visible: false,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     createFeature(awayPolygon('f1', 'l1'));
     const hitTest = vi.fn(() => ({ id: 'c1' }));

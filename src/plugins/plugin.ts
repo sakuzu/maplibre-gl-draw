@@ -188,7 +188,7 @@ export interface PluginContext {
   // Layer mutation API
   /**
    * Creates a layer (`visible`, `locked` and `opacity` default to true, false and 1, and
-   * `order` to an empty list)
+   * `items` to an empty list)
    */
   createLayer(layer: Layer, source?: UpdateSource): void;
   /** Updates a layer */

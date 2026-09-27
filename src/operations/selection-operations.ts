@@ -65,7 +65,7 @@ export function deleteSelection(store: Store): boolean {
   if (selection.type === 'group') {
     // Locked groups (themselves / the layer they belong to) are not deleted
     const findLayerOfGroup = (groupId: string) =>
-      store.getAllLayers().find((l) => l.order.includes(groupId));
+      store.getAllLayers().find((l) => l.items.includes(groupId));
     const groupIds = selection.ids.filter((groupId) => {
       const group = store.getGroup(groupId);
       return group !== undefined && !isGroupLocked(group, findLayerOfGroup);
@@ -120,7 +120,7 @@ export function deleteSelection(store: Store): boolean {
 function holdsLockedItem(store: Store, layerId: string): boolean {
   const layer = store.getLayer(layerId);
   if (!layer) return false;
-  for (const itemId of layer.order) {
+  for (const itemId of layer.items) {
     const group = store.getGroup(itemId);
     if (group?.locked) return true;
   }

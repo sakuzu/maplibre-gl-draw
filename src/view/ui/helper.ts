@@ -47,7 +47,7 @@ function featureIdsInLayer(store: Store, layerId: string): string[] {
   const layer = store.getLayer(layerId);
   if (!layer) return [];
   const ids: string[] = [];
-  for (const itemId of layer.order) {
+  for (const itemId of layer.items) {
     if (store.getFeature(itemId)) {
       ids.push(itemId);
     } else {

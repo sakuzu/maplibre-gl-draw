@@ -106,7 +106,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
           style: {},
         };
 
-        // Note: adding to layer.order happens automatically inside createFeature().
+        // Note: adding to layer.items happens automatically inside createFeature().
         // A write refused because the Store is read-only is not listed.
         if (store.createFeature(drawFeature)) ids.push(id);
       }
@@ -139,7 +139,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
     // Use getLayerIds for the stacking order of the layers.
     getLayerOrder: () => {
       const layer = store.getLayer(getActiveLayerId());
-      return layer?.order ?? [];
+      return layer?.items ?? [];
     },
     getLayerIds: () => store.getLayerOrder(),
     getMode: () => store.getMode(),
@@ -194,7 +194,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
           if (layerId) {
             const layer = store.getLayer(layerId);
             if (layer) {
-              store.updateLayer(layerId, { order: layer.order.filter((i) => i !== id) });
+              store.updateLayer(layerId, { items: layer.items.filter((i) => i !== id) });
             }
           }
 
@@ -205,12 +205,15 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
 
     // === Group mutations ===
     createGroup: (group, source) => {
+      const featureIds = group.featureIds ?? [];
       const newGroup: Group = {
         id: group.id ?? createId(),
+        // The layer of its members; the Store settles it on the layer that lists the group
+        layerId: store.getFeature(featureIds[0] ?? '')?.layerId ?? getActiveLayerId(),
         name: group.name,
         visible: group.visible ?? true,
         locked: group.locked ?? false,
-        featureIds: group.featureIds ?? [],
+        featureIds,
       };
       write(() => store.createGroup(newGroup), source);
     },
@@ -247,9 +250,9 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
         const currentLayerId = findLayerForItem(featureId);
         if (currentLayerId) {
           const currentLayer = store.getLayer(currentLayerId);
-          if (currentLayer?.order.includes(featureId)) {
+          if (currentLayer?.items.includes(featureId)) {
             store.updateLayer(currentLayerId, {
-              order: currentLayer.order.filter((id) => id !== featureId),
+              items: currentLayer.items.filter((id) => id !== featureId),
             });
           }
         }
@@ -296,10 +299,10 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
         if (layerId) {
           const layer = store.getLayer(layerId);
           if (layer) {
-            const groupIndex = layer.order.indexOf(groupId);
-            const newOrder = [...layer.order];
+            const groupIndex = layer.items.indexOf(groupId);
+            const newOrder = [...layer.items];
             newOrder.splice(groupIndex + 1, 0, featureId);
-            store.updateLayer(layerId, { order: newOrder });
+            store.updateLayer(layerId, { items: newOrder });
           }
         }
       }, source);
@@ -315,7 +318,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
         visible: layer.visible ?? true,
         locked: layer.locked ?? false,
         opacity: layer.opacity ?? 1.0,
-        order: layer.order ?? [],
+        items: layer.items ?? [],
       };
       write(() => store.createLayer(newLayer), source);
     },
@@ -332,16 +335,16 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
 
     addToLayer: (layerId, featureId, source) => {
       const layer = store.getLayer(layerId);
-      if (layer && !layer.order.includes(featureId)) {
-        write(() => store.updateLayer(layerId, { order: [...layer.order, featureId] }), source);
+      if (layer && !layer.items.includes(featureId)) {
+        write(() => store.updateLayer(layerId, { items: [...layer.items, featureId] }), source);
       }
     },
 
     removeFromLayer: (layerId, featureId, source) => {
       const layer = store.getLayer(layerId);
       if (layer) {
-        const order = layer.order.filter((id) => id !== featureId);
-        write(() => store.updateLayer(layerId, { order }), source);
+        const order = layer.items.filter((id) => id !== featureId);
+        write(() => store.updateLayer(layerId, { items: order }), source);
       }
     },
 
@@ -355,7 +358,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
           const currentLayer = store.getLayer(currentLayerId);
           if (currentLayer) {
             store.updateLayer(currentLayerId, {
-              order: currentLayer.order.filter((id) => id !== itemId),
+              items: currentLayer.items.filter((id) => id !== itemId),
             });
           }
         }
@@ -385,13 +388,13 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
         // Add it to the order of the target layer
         const targetLayer = store.getLayer(targetLayerId);
         if (targetLayer) {
-          const newOrder = [...targetLayer.order];
+          const newOrder = [...targetLayer.items];
           if (targetIndex !== undefined) {
             newOrder.splice(targetIndex, 0, itemId);
           } else {
             newOrder.push(itemId);
           }
-          store.updateLayer(targetLayerId, { order: newOrder });
+          store.updateLayer(targetLayerId, { items: newOrder });
         }
 
         // For a group, update the layerId of every feature inside the group as well
@@ -410,7 +413,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
     setLayerItemOrder: (layerId, order, source) => {
       const layer = store.getLayer(layerId);
       if (!layer) return;
-      write(() => store.updateLayer(layerId, { order: [...order] }), source);
+      write(() => store.updateLayer(layerId, { items: [...order] }), source);
     },
 
     setSelection: (type, ids, source) => {

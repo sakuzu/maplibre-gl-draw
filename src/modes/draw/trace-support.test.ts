@@ -55,7 +55,7 @@ let context: ModeContext;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatialIndex = new RBushSpatialIndex();
   datasets = new Map();
   snapResult = null;
@@ -92,7 +92,7 @@ function addStoreLine(id: string, coordinates: Coordinate[], visible = true): vo
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer('l1', { order: [...layer.order, id] });
+  if (layer) store.updateLayer('l1', { items: [...layer.items, id] });
   spatialIndex.insert(feature);
 }
 

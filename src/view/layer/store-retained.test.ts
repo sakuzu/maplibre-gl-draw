@@ -392,7 +392,7 @@ const PROJECTION = {} as unknown as ProjectionData;
 const LAYER: Layer = {
   id: 'layer-1',
   name: 'layer-1',
-  order: [],
+  items: [],
   visible: true,
 } as unknown as Layer;
 

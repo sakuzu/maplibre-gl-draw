@@ -332,7 +332,7 @@ export interface FileData {
  * feature with `updateFeature`, which stores a new object.
  *
  * The stacking order of the features is not a property of the feature: it is the position of
- * its ID in `Layer.order`, or in `Group.featureIds` when it belongs to a group.
+ * its ID in `Layer.items`, or in `Group.featureIds` when it belongs to a group.
  */
 export interface Feature {
   /** The ID of the feature, unique within the document (a ULID when core generates it) */
@@ -352,7 +352,7 @@ export interface Feature {
   /**
    * The ID of the group the feature belongs to, when it belongs to one
    *
-   * A feature in a group is listed in `Group.featureIds` instead of `Layer.order`.
+   * A feature in a group is listed in `Group.featureIds` instead of `Layer.items`.
    */
   groupId?: string;
   /**
@@ -470,7 +470,7 @@ export type StyleRule =
  * lock and style rule
  *
  * Every feature belongs to one layer. The layers are stacked in the order of
- * `getLayerOrder()`, and within a layer the items are stacked in the order of `order`. New
+ * `getLayerOrder()`, and within a layer the items are stacked in the order of `items`. New
  * features are drawn into the active layer.
  */
 export interface Layer {
@@ -508,7 +508,7 @@ export interface Layer {
    *
    * A feature in a group is listed in `Group.featureIds` instead.
    */
-  order: string[];
+  items: string[];
   /** Free-form data of the host, saved and exported with the layer */
   metadata?: Record<string, unknown>;
   /**
@@ -523,13 +523,19 @@ export interface Layer {
 /**
  * A group of features within one layer, selected, moved and stacked as a unit
  *
- * A group is listed in `Layer.order` of its layer like a feature, and its members are listed
- * in `featureIds` (each member has `groupId` set). The layer of a group is the layer whose
- * order lists it, so a group has no `layerId`.
+ * A group is listed in `Layer.items` of its layer like a feature, and its members are listed
+ * in `featureIds` (each member has `groupId` set).
  */
 export interface Group {
   /** The ID of the group, unique within the document */
   id: string;
+  /**
+   * The ID of the layer the group is in: the layer whose `items` list it
+   *
+   * The Store keeps it: a group takes the layer that lists it when it is created, and a write
+   * that lists it in the items of another layer moves it to that layer.
+   */
+  layerId: string;
   /** The display name */
   name: string;
   /** The IDs of the members, back to front (the last is the frontmost) */
@@ -704,7 +710,7 @@ export interface StateChanges {
   /**
    * Reordering of items within a layer
    *
-   * The reordering of items (features or groups) within the layer.order array.
+   * The reordering of items (features or groups) within the layer.items array.
    * It is emitted separately from layers.updated, and is recorded as a dedicated command
    * by history management.
    */

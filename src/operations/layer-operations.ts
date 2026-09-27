@@ -65,13 +65,13 @@ function moveFeatureToLayer(
       // When it is a standalone feature, remove it from the original layer
       const sourceLayer = store.getLayer(feature.layerId);
       if (sourceLayer) {
-        const sourceOrder = sourceLayer.order.filter((id) => id !== itemId);
-        store.updateLayer(sourceLayer.id, { order: sourceOrder });
+        const sourceOrder = sourceLayer.items.filter((id) => id !== itemId);
+        store.updateLayer(sourceLayer.id, { items: sourceOrder });
       }
     }
 
     // Add it to the new layer
-    store.updateLayer(targetLayerId, { order: [...targetLayer.order, itemId] });
+    store.updateLayer(targetLayerId, { items: [...targetLayer.items, itemId] });
 
     // Update the layerId of the feature and clear its groupId
     store.updateFeature(itemId, { layerId: targetLayerId, groupId: undefined });
@@ -87,7 +87,7 @@ function moveGroupToLayer(store: Store, group: Group, itemId: string, targetLaye
   // Find the layer the group belongs to
   let sourceLayerId: string | null = null;
   for (const layer of store.getAllLayers()) {
-    if (layer.order.includes(itemId)) {
+    if (layer.items.includes(itemId)) {
       sourceLayerId = layer.id;
       break;
     }
@@ -100,11 +100,11 @@ function moveGroupToLayer(store: Store, group: Group, itemId: string, targetLaye
     if (sourceLayer && targetLayer) {
       store.transact(() => {
         // Remove it from the original layer
-        const sourceOrder = sourceLayer.order.filter((id) => id !== itemId);
-        store.updateLayer(sourceLayerId, { order: sourceOrder });
+        const sourceOrder = sourceLayer.items.filter((id) => id !== itemId);
+        store.updateLayer(sourceLayerId, { items: sourceOrder });
 
         // Add it to the new layer
-        store.updateLayer(targetLayerId, { order: [...targetLayer.order, itemId] });
+        store.updateLayer(targetLayerId, { items: [...targetLayer.items, itemId] });
 
         // Update the layerId of the features inside the group
         for (const featureId of group.featureIds) {
@@ -136,7 +136,7 @@ export function addFeatureToGroup(
   // Find the layer the group belongs to
   let targetLayerId: string | null = null;
   for (const layer of store.getAllLayers()) {
-    if (layer.order.includes(groupId)) {
+    if (layer.items.includes(groupId)) {
       targetLayerId = layer.id;
       break;
     }
@@ -158,9 +158,9 @@ export function addFeatureToGroup(
 
     // Remove the feature from the order of the layer (when it is included in order on its own)
     const layer = store.getLayer(feature.layerId);
-    if (layer?.order.includes(featureId)) {
-      const newOrder = layer.order.filter((id) => id !== featureId);
-      store.updateLayer(layer.id, { order: newOrder });
+    if (layer?.items.includes(featureId)) {
+      const newOrder = layer.items.filter((id) => id !== featureId);
+      store.updateLayer(layer.id, { items: newOrder });
     }
 
     // Add the feature to the group (when an index is given, insert it at that position)
@@ -196,7 +196,7 @@ export function removeFeatureFromGroup(store: Store, featureId: string): void {
   // Find the layer the group belongs to
   let layerId: string | null = null;
   for (const layer of store.getAllLayers()) {
-    if (layer.order.includes(group.id)) {
+    if (layer.items.includes(group.id)) {
       layerId = layer.id;
       break;
     }
@@ -214,10 +214,10 @@ export function removeFeatureFromGroup(store: Store, featureId: string): void {
     if (layerId) {
       const layer = store.getLayer(layerId);
       if (layer) {
-        const groupIndex = layer.order.indexOf(group.id);
-        const newOrder = [...layer.order];
+        const groupIndex = layer.items.indexOf(group.id);
+        const newOrder = [...layer.items];
         newOrder.splice(groupIndex + 1, 0, featureId);
-        store.updateLayer(layerId, { order: newOrder });
+        store.updateLayer(layerId, { items: newOrder });
       }
     }
 
@@ -272,6 +272,7 @@ export function groupSelection(
 
   const group: Group = {
     id: groupId,
+    layerId,
     name: groupName,
     featureIds: [...selectedIds],
     locked: false,
@@ -284,16 +285,16 @@ export function groupSelection(
     if (layer) {
       // Find the frontmost one (the largest index) among the selected features
       let frontmostSelectedId: string | null = null;
-      for (let i = layer.order.length - 1; i >= 0; i--) {
-        if (selectedIds.includes(layer.order[i])) {
-          frontmostSelectedId = layer.order[i];
+      for (let i = layer.items.length - 1; i >= 0; i--) {
+        if (selectedIds.includes(layer.items[i])) {
+          frontmostSelectedId = layer.items[i];
           break;
         }
       }
 
       // Build the new order (insert the group at the position of the frontmost selected feature)
       const newOrder: string[] = [];
-      for (const id of layer.order) {
+      for (const id of layer.items) {
         if (selectedIds.includes(id)) {
           // Insert the group at the position of the frontmost selected feature
           if (id === frontmostSelectedId) {
@@ -310,7 +311,7 @@ export function groupSelection(
       if (frontmostSelectedId === null) {
         newOrder.push(groupId);
       }
-      store.updateLayer(layerId, { order: newOrder });
+      store.updateLayer(layerId, { items: newOrder });
     }
 
     // Create the group
@@ -332,7 +333,7 @@ function dissolveGroup(store: Store, groupId: string): void {
   // Identify the layer the group belongs to
   let targetLayerId: string | null = null;
   for (const layer of store.getAllLayers()) {
-    if (layer.order.includes(groupId)) {
+    if (layer.items.includes(groupId)) {
       targetLayerId = layer.id;
       break;
     }
@@ -344,10 +345,10 @@ function dissolveGroup(store: Store, groupId: string): void {
   // position
   const layer = store.getLayer(targetLayerId);
   if (layer) {
-    const groupIndex = layer.order.indexOf(groupId);
-    const newOrder = [...layer.order];
+    const groupIndex = layer.items.indexOf(groupId);
+    const newOrder = [...layer.items];
     newOrder.splice(groupIndex, 1, ...group.featureIds);
-    store.updateLayer(targetLayerId, { order: newOrder });
+    store.updateLayer(targetLayerId, { items: newOrder });
   }
 
   // Delete the group

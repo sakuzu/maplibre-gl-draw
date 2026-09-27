@@ -54,7 +54,7 @@ function drawWith(
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   });
   let idCounter = 0;
   const canvas = { style: { cursor: '' } };

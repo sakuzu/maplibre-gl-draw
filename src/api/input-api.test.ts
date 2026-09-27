@@ -121,7 +121,7 @@ function setup(snapService?: SnapService): void {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   });
   spatialIndex = new RBushSpatialIndex();
 

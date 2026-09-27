@@ -115,7 +115,7 @@ let mode: SelectMode;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   store.createFeature(polygon('f1', 'l1'));
   map = makeMap();
   hit = null;

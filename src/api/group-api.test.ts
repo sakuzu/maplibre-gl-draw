@@ -19,7 +19,7 @@ let idSeq: number;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   for (const id of ['a', 'b']) {
     store.createFeature({
       id,
@@ -45,13 +45,13 @@ describe('GroupApi.addGroup', () => {
     const id = api.addGroup(['a', 'b'], 'l1');
     expect(id).toBe('grp-1');
     expect(store.getGroup('grp-1')?.featureIds).toEqual(['a', 'b']);
-    expect(store.getLayer('l1')?.order).toEqual(['grp-1']);
+    expect(store.getLayer('l1')?.items).toEqual(['grp-1']);
   });
 
   it('returns null and changes nothing while read-only', () => {
     store.setReadOnly(true);
     expect(api.addGroup(['a', 'b'], 'l1', 'refused')).toBeNull();
     expect(store.getAllGroups()).toEqual([]);
-    expect(store.getLayer('l1')?.order).toEqual(['a', 'b']);
+    expect(store.getLayer('l1')?.items).toEqual(['a', 'b']);
   });
 });

@@ -54,7 +54,7 @@ function makeFeature(id: string, type: Feature['type'], layerId: string): Featur
 }
 
 function makeLayer(id: string): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, order: [] } as Layer;
+  return { id, name: id, visible: true, locked: false, opacity: 1, items: [] } as Layer;
 }
 
 /**

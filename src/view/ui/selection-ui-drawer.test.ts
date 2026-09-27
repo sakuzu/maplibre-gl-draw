@@ -50,7 +50,7 @@ let deps: SelectionUIDrawerDeps;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   store.createFeature(square('f2', 10, 0));
 
   drawn = [];

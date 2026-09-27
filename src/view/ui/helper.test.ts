@@ -11,7 +11,7 @@ import { getSelectedFeatureIds } from './helper.js';
 function makeStore(opts: {
   selection: { type: 'feature' | 'group' | 'layer' | null; ids: string[] };
   groups?: Record<string, { featureIds: string[] }>;
-  layers?: Record<string, { order: string[] }>;
+  layers?: Record<string, { items: string[] }>;
   features?: string[];
 }): Store {
   return {
@@ -39,7 +39,7 @@ describe('getSelectedFeatureIds', () => {
   it('resolves a layer selection into the features in order + the group members', () => {
     const store = makeStore({
       selection: { type: 'layer', ids: ['L1'] },
-      layers: { L1: { order: ['f1', 'g1'] } }, // f1=feature, g1=group
+      layers: { L1: { items: ['f1', 'g1'] } }, // f1=feature, g1=group
       groups: { g1: { featureIds: ['f2', 'f3'] } },
       features: ['f1', 'f2', 'f3'],
     });

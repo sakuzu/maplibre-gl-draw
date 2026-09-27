@@ -28,7 +28,7 @@ function createTestLayer(overrides?: Partial<Layer>): Layer {
     visible: true,
     locked: false,
     opacity: 1.0,
-    order: [],
+    items: [],
     ...overrides,
   };
 }
@@ -303,6 +303,7 @@ describe('createImportExportAPI', () => {
 
       const group: Group = {
         id: 'group-1',
+        layerId: 'default-layer',
         name: 'Test Group',
         featureIds: ['f1', 'f2'],
         locked: false,
@@ -454,6 +455,7 @@ describe('createImportExportAPI', () => {
       const api = createImportExportAPI(context);
       const group: Group = {
         id: 'g1',
+        layerId: 'default-layer',
         name: 'Group',
         featureIds: [],
         locked: false,
@@ -1206,7 +1208,7 @@ describe('createImportExportAPI', () => {
         ).rejects.toThrow('Invalid native data');
 
         expect(context.store.getAllFeatures().map((f) => f.id)).toEqual(['existing-1']);
-        expect(context.store.getLayer('default-layer')?.order).toEqual(['existing-1']);
+        expect(context.store.getLayer('default-layer')?.items).toEqual(['existing-1']);
       });
     }
 
@@ -1302,7 +1304,7 @@ describe('createImportExportAPI', () => {
       const feature = context.store.getFeature(result.featureIds[0]);
       expect(feature?.layerId).toBe('default-layer');
       expect(feature?.groupId).toBeUndefined();
-      expect(context.store.getLayer('default-layer')?.order).toEqual(result.featureIds);
+      expect(context.store.getLayer('default-layer')?.items).toEqual(result.featureIds);
     });
   });
 

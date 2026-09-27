@@ -32,7 +32,7 @@ function createTestLayer(id: string): Layer {
     visible: true,
     locked: false,
     opacity: 1.0,
-    order: [],
+    items: [],
   };
 }
 
@@ -128,12 +128,30 @@ describe('mergeChanges', () => {
     it('concatenates groups.created correctly', () => {
       const pending: StateChanges = {
         groups: {
-          created: [{ id: 'g1', name: 'G1', featureIds: [], locked: false, visible: true }],
+          created: [
+            {
+              id: 'g1',
+              layerId: 'layer-1',
+              name: 'G1',
+              featureIds: [],
+              locked: false,
+              visible: true,
+            },
+          ],
         },
       };
       const changes: StateChanges = {
         groups: {
-          created: [{ id: 'g2', name: 'G2', featureIds: [], locked: false, visible: true }],
+          created: [
+            {
+              id: 'g2',
+              layerId: 'layer-1',
+              name: 'G2',
+              featureIds: [],
+              locked: false,
+              visible: true,
+            },
+          ],
         },
       };
 

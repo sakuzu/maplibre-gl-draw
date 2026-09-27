@@ -74,11 +74,11 @@ export class MemoryDocumentStore implements DocumentStore {
   #metadata: Metadata = {};
 
   /**
-   * The content set of layer.order (layer ID -> the set of IDs listed in order).
+   * The content set of layer.items (layer ID -> the set of IDs listed in order).
    *
    * It is an index whose only purpose is to make membership tests O(1), and it always keeps
-   * the same content as `#layers.get(id).order` (an invariant). Because membership used to be
-   * tested with `layer.order.includes()`, inserting N entries at once into a layer whose order
+   * the same content as `#layers.get(id).items` (an invariant). Because membership used to be
+   * tested with `layer.items.includes()`, inserting N entries at once into a layer whose order
    * was already populated cost O(N^2) in total (the main cause of draw.load going quadratic).
    *
    * The order arrays the store returns are frozen, so the outside cannot rewrite them behind
@@ -221,7 +221,7 @@ export class MemoryDocumentStore implements DocumentStore {
       const layer = this.#layers.get(layerId);
       if (!layer?.visible) continue;
 
-      for (const itemId of layer.order) {
+      for (const itemId of layer.items) {
         const group = this.#groups.get(itemId);
         if (group) {
           if (!group.visible) continue;
@@ -255,15 +255,16 @@ export class MemoryDocumentStore implements DocumentStore {
       throw new Error(`Layer with id "${layer.id}" already exists`);
     }
     // The order stays open for the members created in the same notification
-    const stored: Layer = { ...frozenFields(layer), order: [...layer.order] };
+    const stored: Layer = { ...frozenFields(layer), items: [...layer.items] };
     this.#layers.set(layer.id, stored);
     this.#freshLayers.add(layer.id);
-    this.#layerOrderIndex.set(layer.id, new Set(layer.order));
+    this.#layerOrderIndex.set(layer.id, new Set(layer.items));
     // An id the application already placed on the stacking order keeps its position
     if (!this.#layerOrder.includes(layer.id)) this.#layerOrder.push(layer.id);
+    this.#syncGroupLayers(stored);
     // The created entry is the layer as it was created (the stored one may still gain members
     // in the same notification)
-    const created = Object.freeze({ ...stored, order: Object.freeze([...stored.order]) });
+    const created = Object.freeze({ ...stored, items: Object.freeze([...stored.items]) });
     this.#bus.merge({ layers: { created: [created as Layer] } });
   }
 
@@ -276,15 +277,16 @@ export class MemoryDocumentStore implements DocumentStore {
       ...previous,
       ...frozenFields(updates),
       id,
-      order: [...(updates.order ?? previous.order)],
+      items: [...(updates.items ?? previous.items)],
     };
-    if (this.#freshLayers.has(id)) Object.freeze(Object.freeze(previous).order);
+    if (this.#freshLayers.has(id)) Object.freeze(Object.freeze(previous).items);
     this.#layers.set(id, updated);
     this.#freshLayers.add(id);
     // Rebuild the index only when order has been replaced (if it is left as is, it is the same
-    // array as previous.order, so the index also stays valid).
-    if (updates.order) this.#layerOrderIndex.set(id, new Set(updated.order));
+    // array as previous.items, so the index also stays valid).
+    if (updates.items) this.#layerOrderIndex.set(id, new Set(updated.items));
     this.#bus.merge({ layers: { updated: [{ id, layer: updated, previous }] } });
+    if (updates.items) this.#syncGroupLayers(updated);
   }
 
   deleteLayer(id: string): void {
@@ -294,7 +296,7 @@ export class MemoryDocumentStore implements DocumentStore {
     }
 
     // Delete the features and groups in the layer
-    for (const itemId of [...layer.order]) {
+    for (const itemId of [...layer.items]) {
       const group = this.#groups.get(itemId);
       if (group) {
         for (const featureId of [...group.featureIds]) {
@@ -312,7 +314,7 @@ export class MemoryDocumentStore implements DocumentStore {
 
     // The last state of the layer (its order has emptied as its members left)
     const deleted = this.#layers.get(id) ?? layer;
-    Object.freeze(Object.freeze(deleted).order);
+    Object.freeze(Object.freeze(deleted).items);
     this.#freshLayers.delete(id);
     this.#layers.delete(id);
     this.#layerOrderIndex.delete(id);
@@ -336,7 +338,7 @@ export class MemoryDocumentStore implements DocumentStore {
    * (datasets, separators) are kept as they are. Only what cannot be an entry is dropped:
    * a value that is not a non-empty string, and a repeated entry after its first position.
    *
-   * The membership index within a layer (#layerOrderIndex) is an index over the layer.order of
+   * The membership index within a layer (#layerOrderIndex) is an index over the layer.items of
    * each layer, which is a different thing from this sequence, so it is not touched.
    */
   setLayerOrder(order: string[]): void {
@@ -352,21 +354,21 @@ export class MemoryDocumentStore implements DocumentStore {
     if (!current) {
       throw new Error(`Layer with id "${layerId}" not found`);
     }
-    const currentIndex = current.order.indexOf(itemId);
+    const currentIndex = current.items.indexOf(itemId);
     if (currentIndex === -1) {
       throw new Error(`Item "${itemId}" not found in layer "${layerId}"`);
     }
 
-    const previousOrder = [...current.order];
+    const previousOrder = [...current.items];
     const layer = this.#writableLayer(current);
-    layer.order.splice(currentIndex, 1);
-    layer.order.splice(newIndex, 0, itemId);
+    layer.items.splice(currentIndex, 1);
+    layer.items.splice(newIndex, 0, itemId);
     // An update of this layer already stacked in the notification carries the new object
     if (this.#bus.hasPendingLayerUpdate(layerId)) this.#bus.mergeLayerUpdate(layer, undefined);
 
     // Emit the dedicated layerReorder (not layers.updated)
     this.#bus.merge({
-      layerReorder: { layerId, order: [...layer.order], previous: previousOrder },
+      layerReorder: { layerId, order: [...layer.items], previous: previousOrder },
     });
   }
 
@@ -412,7 +414,11 @@ export class MemoryDocumentStore implements DocumentStore {
 
   #createGroup(group: Group): void {
     const featureIdsCopy = [...group.featureIds];
-    const stored: Group = { ...frozenFields(group), featureIds: [...featureIdsCopy] };
+    // The layer of a group is the layer that lists it; a group that no layer lists yet is
+    // placed in the layer of its first member at the end of the operation
+    const layerId =
+      this.#layerListing(group.id) ?? this.#firstMemberLayer(featureIdsCopy) ?? group.layerId;
+    const stored: Group = { ...frozenFields(group), layerId, featureIds: [...featureIdsCopy] };
     this.#groups.set(group.id, stored);
     this.#freshGroups.add(group.id);
     this.#groupFeatureIndex.set(group.id, new Set(featureIdsCopy));
@@ -475,7 +481,7 @@ export class MemoryDocumentStore implements DocumentStore {
     for (const layer of [...this.#layers.values()]) {
       const index = this.#layerOrderSet(layer);
       if (!index.has(id)) continue;
-      const idx = layer.order.indexOf(id);
+      const idx = layer.items.indexOf(id);
       if (idx === -1) continue;
       const members = group.featureIds.filter(
         (fid) => this.#features.get(fid)?.layerId === layer.id && !index.has(fid),
@@ -501,7 +507,7 @@ export class MemoryDocumentStore implements DocumentStore {
       const index = this.#layerOrderSet(layer);
       if (!index.has(id)) continue;
 
-      const idx = layer.order.indexOf(id);
+      const idx = layer.items.indexOf(id);
       if (idx === -1) continue;
 
       this.#mutateLayerOrder(layer, (order) => {
@@ -581,10 +587,10 @@ export class MemoryDocumentStore implements DocumentStore {
     const previous = hadUpdate
       ? undefined
       : fresh
-        ? { ...current, order: [...current.order] }
+        ? { ...current, items: [...current.items] }
         : current;
     const layer = this.#writableLayer(current);
-    mutate(layer.order);
+    mutate(layer.items);
     this.#bus.mergeLayerUpdate(layer, previous);
   }
 
@@ -605,7 +611,7 @@ export class MemoryDocumentStore implements DocumentStore {
   /** The layer's copy for the current notification (made on the first change) */
   #writableLayer(current: Layer): Layer {
     if (this.#freshLayers.has(current.id)) return current;
-    const layer: Layer = { ...current, order: [...current.order] };
+    const layer: Layer = { ...current, items: [...current.items] };
     this.#layers.set(layer.id, layer);
     this.#freshLayers.add(layer.id);
     return layer;
@@ -624,7 +630,7 @@ export class MemoryDocumentStore implements DocumentStore {
   #freezeFresh(): void {
     for (const id of this.#freshLayers) {
       const layer = this.#layers.get(id);
-      if (layer) Object.freeze(Object.freeze(layer).order);
+      if (layer) Object.freeze(Object.freeze(layer).items);
     }
     this.#freshLayers.clear();
     for (const id of this.#freshGroups) {
@@ -635,7 +641,7 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /**
-   * Returns the content set of layer.order (if not registered, builds it from order and
+   * Returns the content set of layer.items (if not registered, builds it from order and
    * registers it).
    *
    * On the regular paths (createLayer / updateLayer) it is always registered already, so this
@@ -644,7 +650,7 @@ export class MemoryDocumentStore implements DocumentStore {
   #layerOrderSet(layer: Layer): Set<string> {
     let index = this.#layerOrderIndex.get(layer.id);
     if (!index) {
-      index = new Set(layer.order);
+      index = new Set(layer.items);
       this.#layerOrderIndex.set(layer.id, index);
     }
     return index;
@@ -682,10 +688,10 @@ export class MemoryDocumentStore implements DocumentStore {
       .find((f): f is Feature => f !== undefined);
     const layer = first && this.#layers.get(first.layerId);
     if (!first || !layer) return;
-    const idx = layer.order.indexOf(first.id);
+    const idx = layer.items.indexOf(first.id);
     this.#pendingGroupPlacement.set(groupId, {
       layerId: layer.id,
-      index: idx === -1 ? layer.order.length : idx,
+      index: idx === -1 ? layer.items.length : idx,
     });
   }
 
@@ -707,6 +713,7 @@ export class MemoryDocumentStore implements DocumentStore {
         order.splice(Math.min(index, order.length), 0, groupId);
       });
       this.#layerOrderSet(layer).add(groupId);
+      this.#setGroupLayer(groupId, layer.id);
     }
 
     for (const id of features) {
@@ -714,6 +721,52 @@ export class MemoryDocumentStore implements DocumentStore {
       if (!feature || feature.groupId) continue;
       this.#addItemToLayerOrder(id, feature.layerId);
     }
+  }
+
+  /** The ID of the layer whose items list the item, or undefined */
+  #layerListing(itemId: string): string | undefined {
+    for (const layer of this.#layers.values()) {
+      if (this.#layerOrderSet(layer).has(itemId)) return layer.id;
+    }
+    return undefined;
+  }
+
+  /** The layer of the first of the features that exists, or undefined */
+  #firstMemberLayer(featureIds: readonly string[]): string | undefined {
+    for (const featureId of featureIds) {
+      const feature = this.#features.get(featureId);
+      if (feature) return feature.layerId;
+    }
+    return undefined;
+  }
+
+  /** Moves every group the items of the layer list to the layer (`Group.layerId`) */
+  #syncGroupLayers(layer: Layer): void {
+    if (this.#groups.size === 0) return;
+    for (const itemId of layer.items) {
+      if (this.#groups.has(itemId)) this.#setGroupLayer(itemId, layer.id);
+    }
+  }
+
+  /**
+   * Sets the layer of a group and notifies it as groups.updated, when it changes
+   *
+   * The change goes into the group's copy for the current notification, like a change of its
+   * featureIds (#mutateGroupFeatureIds).
+   */
+  #setGroupLayer(groupId: string, layerId: string): void {
+    const current = this.#groups.get(groupId);
+    if (!current || current.layerId === layerId) return;
+    const hadUpdate = this.#bus.hasPendingGroupUpdate(groupId);
+    const fresh = this.#freshGroups.has(groupId);
+    const previous = hadUpdate
+      ? undefined
+      : fresh
+        ? { ...current, featureIds: [...current.featureIds] }
+        : current;
+    const group = this.#writableGroup(current);
+    group.layerId = layerId;
+    this.#bus.mergeGroupUpdate(group, previous);
   }
 
   #isListedInAnyLayer(itemId: string): boolean {
@@ -770,7 +823,7 @@ export class MemoryDocumentStore implements DocumentStore {
     const index = this.#layerOrderSet(layer);
     if (!index.has(itemId)) return;
 
-    const idx = layer.order.indexOf(itemId);
+    const idx = layer.items.indexOf(itemId);
     if (idx === -1) return;
 
     this.#mutateLayerOrder(layer, (order) => {

@@ -36,7 +36,7 @@ const DRAWING_MODES: Mode[] = [
 ];
 
 function layer(id: string, overrides: Partial<Layer> = {}): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, order: [], ...overrides };
+  return { id, name: id, visible: true, locked: false, opacity: 1, items: [], ...overrides };
 }
 
 function click(lng: number, lat: number): MouseNormalizedEvent {

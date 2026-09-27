@@ -36,7 +36,7 @@ function createContext(
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   });
   const ctx = createPluginContext({
     store,
@@ -165,7 +165,7 @@ describe('PluginContext.setLayerItemOrder', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     for (const [id, lid] of [
       ['a', layerId],
@@ -190,8 +190,8 @@ describe('PluginContext.setLayerItemOrder', () => {
   it('replaces the item order of the named layer, not of the active layer', () => {
     const { store, ctx, layerId } = withTwoLayers();
     ctx.setLayerItemOrder('layer-2', ['d', 'c']);
-    expect(store.getLayer('layer-2')?.order).toEqual(['d', 'c']);
-    expect(store.getLayer(layerId)?.order).toEqual(['a', 'b']);
+    expect(store.getLayer('layer-2')?.items).toEqual(['d', 'c']);
+    expect(store.getLayer(layerId)?.items).toEqual(['a', 'b']);
   });
 
   it('carries the given source', () => {
@@ -214,7 +214,7 @@ describe('PluginContext.setLayerItemOrder', () => {
 describe('PluginContext.invalidateFeatures', () => {
   it('re-measures the features of the type with their bounding box calculator', () => {
     const store = new MemoryStore();
-    store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, order: [] });
+    store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, items: [] });
     const spatialIndex = new StoreSpatialIndex(store);
     const ctx = createPluginContext({
       store,

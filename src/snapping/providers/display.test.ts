@@ -42,7 +42,7 @@ let enabled: boolean;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatialIndex = new RBushSpatialIndex();
   datasets = createDatasetManager({
     getViewportBounds: () => WORLD,
@@ -78,7 +78,7 @@ function addStoreFeature(id: string, type: string, coordinates: FeatureCoordinat
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer(layer.id, { order: [...layer.order, id] });
+  if (layer) store.updateLayer(layer.id, { items: [...layer.items, id] });
   spatialIndex.insert(feature);
   return feature;
 }

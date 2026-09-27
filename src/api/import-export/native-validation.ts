@@ -38,8 +38,8 @@ function validateLayer(layer: unknown, index: number): Layer {
   if (typeof layer.opacity !== 'number' || !Number.isFinite(layer.opacity)) {
     fail(`${where} has no finite opacity`);
   }
-  if (!Array.isArray(layer.order) || !layer.order.every((id) => typeof id === 'string')) {
-    fail(`${where} has no order array of strings`);
+  if (!Array.isArray(layer.items) || !layer.items.every((id) => typeof id === 'string')) {
+    fail(`${where} has no items array of strings`);
   }
   if (layer.metadata !== undefined && !isRecord(layer.metadata)) {
     fail(`${where} has a metadata that is not an object`);
@@ -210,7 +210,7 @@ export async function validateNativeData(
   }
   const layerOrder = validateLayerOrder(data.layerOrder, layers);
 
-  // Feature and group IDs share the entries of layer.order, so they must not collide either
+  // Feature and group IDs share the entries of layer.items, so they must not collide either
   const itemIds = new Set<string>();
   const groups = (data.groups ?? []).map(validateGroup);
   const groupIds = new Set<string>();

@@ -671,7 +671,7 @@ describe('BatchManager style rules of a layer', () => {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
     styleRule: rule,
   };
 
@@ -789,7 +789,7 @@ describe('BatchManager the opacity of the layer', () => {
     visible: true,
     locked: false,
     opacity: 0.5,
-    order: [],
+    items: [],
   } as Layer;
 
   function createOpacityManager(drawer: FeatureDrawer = createDrawer()) {

@@ -58,7 +58,7 @@ export function createLayerApi(deps: LayerApiDeps): LayerApi {
         visible: true,
         locked: false,
         opacity: 1,
-        order: [],
+        items: [],
       };
       // A write refused because the Store is read-only returns null
       return store.createLayer(layer) ? id : null;

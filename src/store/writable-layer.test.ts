@@ -11,7 +11,7 @@ import type { Layer } from './types.js';
 import { isWritableLayer, resolveWritableLayerId } from './writable-layer.js';
 
 function layer(id: string, overrides: Partial<Layer> = {}): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, order: [], ...overrides };
+  return { id, name: id, visible: true, locked: false, opacity: 1, items: [], ...overrides };
 }
 
 let store: MemoryStore;

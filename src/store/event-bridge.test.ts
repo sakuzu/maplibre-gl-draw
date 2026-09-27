@@ -43,7 +43,7 @@ describe('EventBridge', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
   });
 
@@ -158,7 +158,7 @@ describe('EventBridge', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        order: [],
+        items: [],
       });
 
       expect(handler).not.toHaveBeenCalled();
@@ -190,7 +190,7 @@ describe('EventBridge', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        order: [],
+        items: [],
       });
       store.createLayer({
         id: 'layer-3',
@@ -198,7 +198,7 @@ describe('EventBridge', () => {
         visible: true,
         locked: false,
         opacity: 1,
-        order: [],
+        items: [],
       });
       store.createFeature(makeFeature('f1'));
       store.createFeature(makeFeature('f2'));

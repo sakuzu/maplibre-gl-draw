@@ -161,7 +161,7 @@ function addFeature(id: string, type: string, coordinates: FeatureCoordinates): 
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer('l1', { order: [...layer.order, id] });
+  if (layer) store.updateLayer('l1', { items: [...layer.items, id] });
   spatialIndex.insert(feature);
 }
 
@@ -229,7 +229,7 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   };
   store.createLayer(layer);
   normalizer = new FakeNormalizer();

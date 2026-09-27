@@ -450,7 +450,7 @@ export function createContext(map: MapLibreMap, options: Options = {}): Context 
       visible: true,
       locked: false,
       opacity: 1.0,
-      order: [],
+      items: [],
     };
     store.createLayer(defaultLayer);
     activeLayerId = 'default-layer';

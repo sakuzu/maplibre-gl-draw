@@ -86,7 +86,7 @@ function areaOf(feature: Feature): AreaCoordinates {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatial = new StoreSpatialIndex(store);
   eventEmitter = new EventEmitterImpl();
   idSeq = 0;
@@ -443,7 +443,7 @@ describe('narrowing down the targets', () => {
       visible: true,
       locked: true,
       opacity: 1,
-      order: [],
+      items: [],
     });
     addSquare('a', [0, 0, 10, 10]);
     addSquare('b', [5, 0, 15, 10], { layerId: 'locked' });
@@ -510,7 +510,7 @@ describe('the inheritance and placement of the result', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     addSquare('bottom', [40, 40, 50, 50]);
     addSquare('a', [0, 0, 10, 10]);
@@ -523,7 +523,7 @@ describe('the inheritance and placement of the result', () => {
     const result = store.getFeature('geo-1');
     expect(result?.layerId).toBe('l1');
     // It goes into the position a / b occupied (right after bottom)
-    expect(store.getLayer('l1')?.order).toEqual(['bottom', 'geo-1', 'top']);
+    expect(store.getLayer('l1')?.items).toEqual(['bottom', 'geo-1', 'top']);
   });
 
   it('goes into the layer of the foremost input when the inputs span several layers', () => {
@@ -533,7 +533,7 @@ describe('the inheritance and placement of the result', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     // The layer order is l1 then l2, so l2 is the one in front
     addSquare('a', [0, 0, 10, 10]);
@@ -543,8 +543,8 @@ describe('the inheritance and placement of the result', () => {
     geometry.union();
 
     expect(store.getFeature('geo-1')?.layerId).toBe('l2');
-    expect(store.getLayer('l1')?.order).toEqual([]);
-    expect(store.getLayer('l2')?.order).toEqual(['geo-1']);
+    expect(store.getLayer('l1')?.items).toEqual([]);
+    expect(store.getLayer('l2')?.items).toEqual(['geo-1']);
   });
 
   it('puts the result in the same group when the foremost input is a member of a group', () => {
@@ -553,6 +553,7 @@ describe('the inheritance and placement of the result', () => {
     addSquare('other', [40, 40, 50, 50]);
     store.createGroup({
       id: 'g1',
+      layerId: 'l1',
       name: 'g1',
       featureIds: ['a', 'b', 'other'],
       locked: false,
@@ -768,7 +769,7 @@ describe('a negative value for draw.geometry.buffer', () => {
     // Only the polygon has a result
     expect(resultIds).toEqual(['geo-1']);
     expect(applied[0].inputIds).toEqual(['area']);
-    expect(store.getLayer('l1')?.order).toEqual(['p', 'line', 'area', 'geo-1']);
+    expect(store.getLayer('l1')?.items).toEqual(['p', 'line', 'area', 'geo-1']);
   });
 
   it('changes nothing and reports status empty when every input was skipped', () => {
@@ -962,7 +963,7 @@ describe('the inheritance and placement of draw.geometry.buffer', () => {
     geometry.buffer(['target'], { distanceMeters: 100 });
 
     expect(store.getFeature('geo-1')?.layerId).toBe('l1');
-    expect(store.getLayer('l1')?.order).toEqual(['bottom', 'target', 'geo-1', 'top']);
+    expect(store.getLayer('l1')?.items).toEqual(['bottom', 'target', 'geo-1', 'top']);
   });
 
   it('places each result right in front of its own input even with several inputs', () => {
@@ -977,7 +978,7 @@ describe('the inheritance and placement of draw.geometry.buffer', () => {
 
     geometry.buffer(['a', 'b'], { distanceMeters: 100 });
 
-    expect(store.getLayer('l1')?.order).toEqual(['a', 'geo-1', 'b', 'geo-2']);
+    expect(store.getLayer('l1')?.items).toEqual(['a', 'geo-1', 'b', 'geo-2']);
   });
 
   it('puts the result in the same group when the input is a member of a group', () => {
@@ -988,6 +989,7 @@ describe('the inheritance and placement of draw.geometry.buffer', () => {
     addSquare('other', [40, 40, 50, 50]);
     store.createGroup({
       id: 'g1',
+      layerId: 'l1',
       name: 'g1',
       featureIds: ['target', 'other'],
       locked: false,
@@ -1147,7 +1149,7 @@ describe('draw.geometry.split', () => {
 
     geometry.split('area', 'cut');
 
-    expect(store.getLayer('l1')?.order).toEqual(['bottom', 'geo-1', 'geo-2', 'top', 'cut']);
+    expect(store.getLayer('l1')?.items).toEqual(['bottom', 'geo-1', 'geo-2', 'top', 'cut']);
     for (const id of ['geo-1', 'geo-2']) {
       expect(store.getFeature(id)?.style).toEqual({ fillColor: '#ff0000' });
       // No Circle-specific property is kept in a result that fell to a polygon
@@ -1164,6 +1166,7 @@ describe('draw.geometry.split', () => {
     ]);
     store.createGroup({
       id: 'g1',
+      layerId: 'l1',
       name: 'g1',
       featureIds: ['area', 'other'],
       locked: false,

@@ -36,7 +36,7 @@ function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Featur
 beforeEach(() => {
   store = new MemoryStore();
   idSeq = 0;
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
 });
 
 describe('normalizeAutoNameConfig', () => {
@@ -156,9 +156,16 @@ describe('AutoNameGenerator.generateLayerName / generateGroupName', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
-    store.createGroup({ id: 'g5', name: 'Group 5', featureIds: [], locked: false, visible: true });
+    store.createGroup({
+      id: 'g5',
+      layerId: 'l1',
+      name: 'Group 5',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    });
 
     const generator = new AutoNameGenerator(store);
 
@@ -208,10 +215,11 @@ describe('the incremental following of AutoNameGenerator', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     store.createGroup({
       id: 'g30',
+      layerId: 'l1',
       name: 'Group 30',
       featureIds: [],
       locked: false,

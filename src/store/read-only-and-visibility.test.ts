@@ -39,7 +39,7 @@ function makeStore(): MemoryStore {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   };
   store.createLayer(layer);
   return store;
@@ -139,12 +139,19 @@ describe('local visibility', () => {
 
   it('removes the features under a group from the display list when the group is hidden', () => {
     const store = makeStore();
-    const group: Group = { id: 'g1', name: 'g', featureIds: [], locked: false, visible: true };
+    const group: Group = {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    };
     store.createGroup(group);
     store.createFeature(makeFeature('f1', 'l1', 'g1'));
     store.createFeature(makeFeature('f2', 'l1'));
     // Arrange the group g1 and the feature f2 in the layer order.
-    store.updateLayer('l1', { order: ['g1', 'f2'] });
+    store.updateLayer('l1', { items: ['g1', 'f2'] });
 
     store.setLocallyHidden('g1', true);
     const displayed = getDisplayFeatures(store).map((f) => f.id);

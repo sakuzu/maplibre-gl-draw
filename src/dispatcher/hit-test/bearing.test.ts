@@ -76,7 +76,7 @@ function feature(id: string, type: Feature['type'], coordinates: FeatureCoordina
 
 function serviceWith(features: Feature[]): HitTestServiceImpl {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   const index = new RBushSpatialIndex();
   for (const f of features) {
     store.createFeature(f);

@@ -205,7 +205,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
   const { gl } = createGlStub();
   const map = createMapStub(center, halfWidth);
   const store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   for (const [id, lng] of Object.entries(lngs)) store.createFeature(probe(id, lng));
 
   const draws: ProbeDraw[] = [];

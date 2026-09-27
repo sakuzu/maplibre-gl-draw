@@ -159,7 +159,7 @@ function coordinatesOf(id: string): unknown {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatialIndex = new StoreSpatialIndex(store);
   indexUpdates = [];
   store.subscribe((changes) => {
@@ -445,7 +445,7 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       visible: true,
       locked: true,
       opacity: 1,
-      order: [],
+      items: [],
     });
     addFeature({ ...square('f2', 10, 0), layerId: 'locked-layer' });
     const before = coordinatesOf('f2');
@@ -455,7 +455,14 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
 
   it('a feature whose group is locked does not follow along (effective lock)', () => {
     addFeature(square('f2', 10, 0));
-    store.createGroup({ id: 'g1', name: 'g1', featureIds: [], visible: true, locked: true });
+    store.createGroup({
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g1',
+      featureIds: [],
+      visible: true,
+      locked: true,
+    });
     store.updateFeature('f2', { groupId: 'g1' });
     const before = coordinatesOf('f2');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
@@ -484,7 +491,7 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       visible: false,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     addFeature({ ...square('f2', 10, 0), layerId: 'hidden-layer' });
     const before = coordinatesOf('f2');

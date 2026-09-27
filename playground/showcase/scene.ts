@@ -73,7 +73,7 @@ export function buildDocument(title: string, layers: SceneLayer[], files: FileDa
       visible: true,
       locked: false,
       opacity: 1,
-      order: layer.features.map((feature) => feature.id),
+      items: layer.features.map((feature) => feature.id),
     })),
     features: layers.flatMap((layer) =>
       layer.features.map((feature) => ({

@@ -51,7 +51,7 @@ describe('loadGeoJSON', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
     });
     let counter = 0;
     deps = {

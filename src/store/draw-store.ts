@@ -412,7 +412,7 @@ function groupLayerId(document: DocumentStore, group: Group): string | undefined
     const feature = document.getFeature(featureId);
     if (feature) return feature.layerId;
   }
-  return document.getAllLayers().find((layer) => layer.order.includes(group.id))?.id;
+  return document.getAllLayers().find((layer) => layer.items.includes(group.id))?.id;
 }
 
 /** Whether two coordinate values are equal, position by position */

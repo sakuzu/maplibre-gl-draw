@@ -141,7 +141,7 @@ export class EventBridgeImpl implements EventBridge {
       if (layer) {
         this.emitter.emit('layer.update', {
           layer,
-          previous: { ...layer, order: changes.layerReorder.previous },
+          previous: { ...layer, items: changes.layerReorder.previous },
         });
       }
     }

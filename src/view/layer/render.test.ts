@@ -69,7 +69,7 @@ function makeGetLayer(layerIds: string[]): (id: string) => Layer | undefined {
   const layers = new Set(layerIds);
   return (id: string) =>
     layers.has(id)
-      ? ({ id, name: id, visible: true, locked: false, opacity: 1, order: [] } as Layer)
+      ? ({ id, name: id, visible: true, locked: false, opacity: 1, items: [] } as Layer)
       : undefined;
 }
 
@@ -692,7 +692,7 @@ describe('renderLayers and the opacity of the layers', () => {
               visible: true,
               locked: false,
               opacity: OPACITY[id],
-              order: [],
+              items: [],
             } as Layer)
           : undefined,
       getTentative: (): null => null,

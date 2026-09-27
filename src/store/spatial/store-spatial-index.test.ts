@@ -26,7 +26,7 @@ function point(id: string, lng: number, lat: number): Feature {
 
 function memoryStore(): MemoryStore {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, items: [] });
   return store;
 }
 
@@ -125,7 +125,7 @@ describe('StoreSpatialIndex', () => {
   it('drops the features of a deleted layer', () => {
     const store = memoryStore();
     const index = new StoreSpatialIndex(store);
-    store.createLayer({ id: 'm', name: 'm', visible: true, locked: false, opacity: 1, order: [] });
+    store.createLayer({ id: 'm', name: 'm', visible: true, locked: false, opacity: 1, items: [] });
     store.createFeature({ ...point('a', 1, 1), layerId: 'm' });
 
     store.deleteLayer('m');

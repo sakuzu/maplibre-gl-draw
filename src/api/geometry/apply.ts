@@ -48,7 +48,7 @@ function planPlacement(
   removedIds: ReadonlySet<string>,
 ): ResultPlacement {
   const group = anchor.groupId ? store.getGroup(anchor.groupId) : undefined;
-  const container = group ? group.featureIds : (store.getLayer(anchor.layerId)?.order ?? []);
+  const container = group ? group.featureIds : (store.getLayer(anchor.layerId)?.items ?? []);
   const anchorIndex = container.indexOf(anchor.id);
   const precedingIds = anchorIndex < 0 ? container : container.slice(0, anchorIndex);
   const precedingCount = precedingIds.filter((id) => !removedIds.has(id)).length;
@@ -78,9 +78,9 @@ function moveToPlacement(store: Store, resultId: string, placement: ResultPlacem
 
   const layer = store.getLayer(placement.layerId);
   if (!layer) return;
-  const order = layer.order.filter((id) => id !== resultId);
+  const order = layer.items.filter((id) => id !== resultId);
   order.splice(placement.index, 0, resultId);
-  store.updateLayer(placement.layerId, { order });
+  store.updateLayer(placement.layerId, { items: order });
 }
 
 /**

@@ -36,7 +36,7 @@ let idSeq: number;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
   spatial = new StoreSpatialIndex(store);
   activeLayerId = 'l1';
   idSeq = 0;

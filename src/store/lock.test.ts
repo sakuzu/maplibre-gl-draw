@@ -21,7 +21,7 @@ function makeStore(): MemoryStore {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
   };
   const lockedLayer: Layer = {
     id: 'lLocked',
@@ -29,7 +29,7 @@ function makeStore(): MemoryStore {
     visible: true,
     locked: true,
     opacity: 1,
-    order: [],
+    items: [],
   };
   store.createLayer(layer);
   store.createLayer(lockedLayer);
@@ -65,7 +65,14 @@ describe('isFeatureLocked', () => {
   it('is true if the group it belongs to is locked', () => {
     const store = makeStore();
     store.createFeature(makeFeature('f1', 'l1'));
-    const group: Group = { id: 'g1', name: 'g', featureIds: ['f1'], locked: true, visible: true };
+    const group: Group = {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['f1'],
+      locked: true,
+      visible: true,
+    };
     store.createGroup(group);
     expect(isFeatureLocked(store.getFeature('f1') as Feature, store)).toBe(true);
   });
@@ -73,7 +80,14 @@ describe('isFeatureLocked', () => {
   it('is false if none of the feature/the group/the layer is locked', () => {
     const store = makeStore();
     store.createFeature(makeFeature('f1', 'l1'));
-    const group: Group = { id: 'g1', name: 'g', featureIds: ['f1'], locked: false, visible: true };
+    const group: Group = {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['f1'],
+      locked: false,
+      visible: true,
+    };
     store.createGroup(group);
     expect(isFeatureLocked(store.getFeature('f1') as Feature, store)).toBe(false);
   });
@@ -111,25 +125,46 @@ describe('isInteractionBlocked', () => {
 
 describe('isGroupLocked', () => {
   const findLayerOfGroup = (store: MemoryStore) => (groupId: string) =>
-    store.getAllLayers().find((l) => l.order.includes(groupId));
+    store.getAllLayers().find((l) => l.items.includes(groupId));
 
   it('is true if the group itself is locked', () => {
     const store = makeStore();
-    const group: Group = { id: 'g1', name: 'g', featureIds: [], locked: true, visible: true };
+    const group: Group = {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: [],
+      locked: true,
+      visible: true,
+    };
     expect(isGroupLocked(group, findLayerOfGroup(store))).toBe(true);
   });
 
   it('is true if the layer it belongs to is locked', () => {
     const store = makeStore();
-    store.updateLayer('lLocked', { order: ['g1'] });
-    const group: Group = { id: 'g1', name: 'g', featureIds: [], locked: false, visible: true };
+    store.updateLayer('lLocked', { items: ['g1'] });
+    const group: Group = {
+      id: 'g1',
+      layerId: 'lLocked',
+      name: 'g',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    };
     expect(isGroupLocked(group, findLayerOfGroup(store))).toBe(true);
   });
 
   it('is false if neither the group nor the layer is locked', () => {
     const store = makeStore();
-    store.updateLayer('l1', { order: ['g1'] });
-    const group: Group = { id: 'g1', name: 'g', featureIds: [], locked: false, visible: true };
+    store.updateLayer('l1', { items: ['g1'] });
+    const group: Group = {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    };
     expect(isGroupLocked(group, findLayerOfGroup(store))).toBe(false);
   });
 });
