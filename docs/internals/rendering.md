@@ -881,9 +881,10 @@ Store features are therefore drawn in retained mode by default
 `store-retained-*.ts` parts). Retained batches are built per layer, and a
 frame only binds them, sets uniforms and draws. The vertex data does not
 depend on the camera (projection is done with per-frame uniforms), so it is
-rebuilt only when the features or their style change. Setting
-`storeRetained: false` in the rendering configuration returns to immediate
-mode; both give the same picture, z-order included.
+rebuilt only when the features or their style change. The option
+`rendering.cacheGeometry: false` (`storeRetained` in the internal
+rendering configuration) returns to immediate mode; both give the same
+picture, z-order included.
 
 ### Runs and chunks
 

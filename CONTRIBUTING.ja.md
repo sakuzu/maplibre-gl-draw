@@ -80,9 +80,9 @@ maplibre-gl-draw (core, 本リポジトリ)
 
 拡張は core の export を import しますが、その逆は禁止です。
 
-使ってよい名前の例は `Plugin`、`PluginContext`、`Hooks`、`Mode`、
-`CustomFeatureHandler`、`addOverlayRenderer` (拡張の仕組みとして一般化
-されているもの) です。
+使ってよい名前の例は `Plugin`、`PluginContext`、`Mode`、
+`FeatureTypeDefinition`、`draw.extensions.overlays` (拡張の仕組みとして
+一般化されているもの) です。
 
 特定の拡張に固有の概念を表す名前は使えません。
 
@@ -124,18 +124,20 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
 
 ### 公開する範囲
 
-`src/index.ts` と `src/webgl/index.ts` では公開する記号を 1 つずつ
-名前で並べ、`export *` は使いません。名前は 2 つの層に分かれます。層 1
-は main の入口で、層 2 は入口 `@sakuzu/maplibre-gl-draw/webgl` です。
+`src/index.ts`、`src/geometry/index.ts`、`src/table/index.ts`、
+`src/webgl/index.ts` では公開する記号を 1 つずつ名前で並べ、`export *`
+は使いません。名前は 2 つの層に分かれます。層 1 は main の入口 (同じ
+規則に従う `/geometry` と `/table` を含みます) で、層 2 は入口
+`@sakuzu/maplibre-gl-draw/webgl` です。
 
-- 層 1 は公開 API です。ファクトリー `createMapLibreGLDraw`、
-  インスタンス `MapLibreGLDraw` とその `Options`、データモデル
-  (`Feature`、`Layer`、`Group`、`StyleRule`、`LoadResult` など)、
-  イベントの payload、拡張点 (`Plugin`、`PluginContext`、`ModeHandler`、
-  `ModeContext`、`NormalizedEvent` の一群、`CustomFeatureHandler`、
-  overlay renderer、snapping provider、hit test と box selection の
-  strategy、補助ハンドルと companion の契約)、純関数 (style rule、
-  プロパティーのアクセサー、トレース) を含みます。semver に従います。
+- 層 1 は公開 API です。`createDraw` と、コレクションと資源の型を
+  持つインスタンス `Draw`、`DrawOptions` と `RuntimeOptions`、入力と
+  差分と絞り込みを含む文書のモデル (`Feature`、`Layer`、`Group`、
+  `StyleRule`、`DrawDocument` など)、状態、`DrawEvents`、`DrawError`、
+  データセット、Store の契約、拡張の窓口 (`Plugin`、各種の窓口、
+  `ModeHandler`、`FeatureTypeDefinition`、描画器、提供者)、スタイルの
+  規則の関数を含みます。契約は `src/api/` と `src/api/extension/` で
+  宣言します。semver に従います。
 - 層 2 は独自のシェーダーを書く人向けの部品です (`src/webgl/index.ts`)。
   core のシェーダーと地形の描き方に結び付いた部品を含みます。GLSL の
   断片と投影の uniform、`createProgram`、`QuadShader`、合成と看板の補助、
@@ -156,10 +158,10 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
   置く層は、その型を必要とする宣言の層に合わせます。
 - それ以外は内部の記号で、並べません。
 
-記号を公開するときは、そのドメインの barrel (`src/<domain>/index.ts`。
-公開する記号だけを並べます) に足し、`src/index.ts` か
-`src/webgl/index.ts` の該当する節に名前を書き、`src/index.test.ts` の
-その層の一覧に足し、`CHANGELOG.md` に記録します。テストが一覧を固定して
+記号を公開するときは、その層の契約を置く場所 (main の入口なら
+`src/api/`) で宣言し、入口のファイルの該当する節に名前を書き、
+`src/index.test.ts` のその入口の一覧に足し、`CHANGELOG.md` に記録
+します。テストが一覧を固定して
 いるので、公開する範囲が意図せず変わることはありません。
 
 内部の記号のうち、生成される宣言に出てしまうもの (モジュールから export

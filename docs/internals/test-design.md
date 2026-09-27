@@ -203,11 +203,11 @@ compatibility mouse events.
 ## End-to-End Tests
 
 The tests above run on a stub map that projects longitude and latitude
-linearly with neither pitch nor bearing, and `draw.input` enters after the
-normalizer. They do not cover what the browser and maplibre do first:
-real mouse and keyboard events, maplibre's event system and projection,
-the drag threshold, canvas focus, and hit testing against what is really
-drawn.
+linearly with neither pitch nor bearing, and their input enters after
+the normalizer, through `dispatch` of the InputRouter. They do not cover
+what the browser and maplibre do first: real mouse and keyboard events,
+maplibre's event system and projection, the drag threshold, canvas focus,
+and hit testing against what is really drawn.
 
 The end-to-end tests in `src/e2e/` cover that route. `harness.ts` bundles
 `page-entry.ts` and the sources it imports (not `dist`) with vite in

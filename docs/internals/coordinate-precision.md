@@ -374,10 +374,11 @@ it (`toStoredCopy` in `src/dispatcher/input-router.ts`):
   190 rather than running the other way round the world
 - A drag moves all its events by the one shift decided where it started
 
-Synthetic input (`draw.input`) takes the same path, so what a mode stores
-never carries the longitude of a world copy. A feature drawn across the
-line can carry longitudes a little beyond ±180, which the rendering draws
-on the copy that shows them. GeoJSON export brings them back into
+Input fed straight to the InputRouter (`dispatch`, which the tests use)
+takes the same path, so what a mode stores never carries the longitude
+of a world copy. A feature drawn across the line can carry longitudes a
+little beyond ±180, which the rendering draws on the copy that shows
+them. GeoJSON export brings them back into
 [-180, 180] position by position, without cutting the geometry at the line
 (see [Data format](../reference/data-format.md)).
 

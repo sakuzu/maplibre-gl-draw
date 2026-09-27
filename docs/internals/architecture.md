@@ -581,7 +581,8 @@ handler keeps running, and `false` is returned. A request is refused when:
   written.
 
 Asking for the current mode changes nothing and returns `true`.
-`registerMode` returns a function that removes the registration; removing
+`registerMode` (which `draw.extensions.modes.add` reaches through the
+extension host) returns a function that removes the registration; removing
 the current mode enters `select` first.
 
 `writesFeatures` does not remove the check at commit time: a layer can stop

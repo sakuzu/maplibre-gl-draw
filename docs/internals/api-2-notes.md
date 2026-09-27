@@ -66,11 +66,13 @@ writes, and the decision for each.
 | the key a style rule names | style rules | user data, unprefixed |
 | simplestyle keys (`stroke`, `fill`) | GeoJSON import | user data, unprefixed |
 
-`width` and `height` are written by core only when the resize calculator
-of a custom type returns them, and only that type reads them. The keys of
-simplestyle are read on GeoJSON import as a fallback style, and kept as
-attributes. They belong
-to the extension, not to the library, so they keep their names.
+`width` and `height` are written by core only when the internal resize
+calculator of a custom type returns them, and only that type reads them;
+a type added through the public contract resizes with `handles` and
+`onHandleDrag` and writes what it chooses. The keys of simplestyle are
+read on GeoJSON import as a fallback style, and kept as attributes. These
+keys belong to the user or the extension, not to the library, so they
+keep their names.
 
 The GeoJSON export also writes `maplibre-gl-draw:id`, `layerId`,
 `groupId`, `visible`, `locked`, `style`, `featureType`, `imageData` and

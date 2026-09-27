@@ -83,8 +83,8 @@ maplibre-gl-draw (core, this repository)
 
 An extension imports the exports of core, but the opposite is forbidden.
 
-Examples that are allowed are `Plugin`, `PluginContext`, `Hooks`, `Mode`,
-`CustomFeatureHandler`, and `addOverlayRenderer` (generalized as an
+Examples that are allowed are `Plugin`, `PluginContext`, `Mode`,
+`FeatureTypeDefinition`, and `draw.extensions.overlays` (generalized as an
 extension mechanism).
 
 Names that stand for a concept specific to a particular extension are not
@@ -132,18 +132,21 @@ not cover.
 
 ### The public surface
 
-`src/index.ts` and `src/webgl/index.ts` name every public symbol one by
-one; they have no `export *`. The names fall into two layers: layer 1 is
-the main entry, and layer 2 is the entry `@sakuzu/maplibre-gl-draw/webgl`.
+`src/index.ts`, `src/geometry/index.ts`, `src/table/index.ts` and
+`src/webgl/index.ts` name every public symbol one by one; they have no
+`export *`. The names fall into two layers: layer 1 is the main entry
+(with `/geometry` and `/table`, which follow the same rules), and layer 2
+is the entry `@sakuzu/maplibre-gl-draw/webgl`.
 
-- Layer 1, the public API. The factory `createMapLibreGLDraw`, the
-  `MapLibreGLDraw` instance and its `Options`, the data model (`Feature`,
-  `Layer`, `Group`, `StyleRule`, `LoadResult` and so on), the event
-  payloads, the extension points (`Plugin`, `PluginContext`, `ModeHandler`,
-  `ModeContext`, the `NormalizedEvent` family, `CustomFeatureHandler`, the
-  overlay renderer, the snapping provider, the hit test and box selection
-  strategies, the auxiliary handle and the companion contracts) and the pure
-  functions (style rules, property accessors, tracing). It follows semver.
+- Layer 1, the public API. `createDraw` and the `Draw` instance with the
+  types of its collections and resources, `DrawOptions` and
+  `RuntimeOptions`, the document model (`Feature`, `Layer`, `Group`,
+  `StyleRule`, `DrawDocument` and so on) with its inputs, patches and
+  filters, the state, `DrawEvents`, `DrawError`, the datasets, the Store
+  contracts, the extension contract (`Plugin`, the contexts,
+  `ModeHandler`, `FeatureTypeDefinition`, the renderers and the
+  providers) and the style rule functions. The contracts are declared in
+  `src/api/` and `src/api/extension/`. It follows semver.
 - Layer 2, the building blocks for custom shaders (`src/webgl/index.ts`).
   Parts tied to the shaders and the terrain drawing of core: the GLSL
   snippet and the projection uniforms, `createProgram`, `QuadShader`, the
@@ -166,10 +169,10 @@ Where a new symbol goes is decided as follows.
   a return value, a field), in the layer of the declaration that needs it.
 - Everything else is internal and is not listed.
 
-To publish a symbol, add it to the barrel of its domain
-(`src/<domain>/index.ts`, which lists only public symbols), name it in the
-right section of `src/index.ts` or `src/webgl/index.ts`, add it to the list
-of that layer in `src/index.test.ts`, and record it in `CHANGELOG.md`. The
+To publish a symbol, declare it where its layer keeps its contracts
+(`src/api/` for the main entry), name it in the right section of the
+entry file, add it to the list of that entry in `src/index.test.ts`, and
+record it in `CHANGELOG.md`. The
 test pins the lists, so a change to the surface never happens by accident.
 
 An internal symbol that would still appear in the emitted declarations (an
