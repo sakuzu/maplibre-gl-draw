@@ -43,6 +43,19 @@ export function deleteSelection(store: Store): boolean {
     return deleteSelectedVertices(store, selectedVertices) > 0;
   }
 
+  return deleteSelectedItems(store);
+}
+
+/**
+ * Deletes the selected features, groups or layers as one change, leaving the vertex selection
+ * aside (see {@link deleteSelection} for what each selection deletes)
+ *
+ * @returns true when something was deleted; false while read-only or the interaction lock is
+ *   on, when nothing is selected, or when everything selected is locked
+ */
+export function deleteSelectedItems(store: Store): boolean {
+  if (store.isReadOnly() || store.isInteractionLocked()) return false;
+
   const selection = store.getSelection();
   if (selection.ids.length === 0) return false;
 
@@ -132,7 +145,7 @@ function holdsLockedItem(store: Store, layerId: string): boolean {
  *
  * @returns The number of vertices deleted
  */
-function deleteSelectedVertices(store: Store, selection: VertexSelection): number {
+export function deleteSelectedVertices(store: Store, selection: VertexSelection): number {
   const feature = store.getFeature(selection.featureId);
   if (!feature) return 0;
 
