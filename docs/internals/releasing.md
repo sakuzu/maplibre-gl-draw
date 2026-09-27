@@ -59,14 +59,14 @@ maintainers can create tags matching `v*`.
 shipped in the package (it is listed in `files`).
 
 - During development, every change that a user can notice adds one bullet
-  to the `## Unreleased` section, starting with the kind of change:
+  to the `## [Unreleased]` section, starting with the kind of change:
   `Added:`, `Changed:`, `Deprecated:`, `Removed:`, `Fixed:` or
   `Security:`.
-- At a release, the `## Unreleased` heading becomes
+- At a release, the `## [Unreleased]` heading becomes
   `## [X.Y.Z] - YYYY-MM-DD`, its bullets are grouped under `### Added`,
   `### Changed`, `### Deprecated`, `### Removed`, `### Fixed` and
   `### Security` (in that order, without the prefix), and an empty
-  `## Unreleased` section is put back on top.
+  `## [Unreleased]` section is put back on top.
 - Link references at the end of the file point each version at its
   comparison:
   `[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/vX.Y.Z...HEAD`
@@ -126,7 +126,7 @@ published files to the tagged commit.
    npm version minor --no-git-tag-version
    ```
 
-3. Turn the `## Unreleased` section of `CHANGELOG.md` into the new
+3. Turn the `## [Unreleased]` section of `CHANGELOG.md` into the new
    version as described above, and add its link reference. Check the
    body of the release:
 
@@ -202,7 +202,7 @@ the public surface, and by a gate.
 
 A change that a user can notice changes, in the same commit, the TSDoc of
 the declarations it touches, the guides that cover them, `CHANGELOG.md`
-(the `## Unreleased` section) and the Japanese version of every document
+(the `## [Unreleased]` section) and the Japanese version of every document
 it changes.
 
 `docs/doc-map.json` lists which document covers which sources, with the
