@@ -24,8 +24,14 @@ import type { GeometryApiDeps } from './types.js';
  *
  * @param area The polygon to be cut
  * @param line The cutting line (it is not deleted and remains)
+ * @param select Whether the results become the selection
  */
-export function runSplit(deps: GeometryApiDeps, area: Feature, line: Feature): string[] {
+export function runSplit(
+  deps: GeometryApiDeps,
+  area: Feature,
+  line: Feature,
+  select = true,
+): string[] {
   const { store } = deps;
   const inputIds = [area.id, line.id];
   const source = toAreaCoordinates(area);
@@ -73,7 +79,7 @@ export function runSplit(deps: GeometryApiDeps, area: Feature, line: Feature): s
       ids.push(id);
       anchor = store.getFeature(id) ?? anchor;
     }
-    store.setSelection('feature', ids);
+    if (select) store.setSelection('feature', ids);
     return ids;
   });
 
