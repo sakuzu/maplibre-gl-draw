@@ -397,6 +397,8 @@ export interface ModeServices extends ContextServices {
   getWritableLayerId(): string;
   /** Generates the ID of a new feature */
   generateId(): string;
+  /** Tells the plugins that a drawing mode created a feature (`interaction.onDrawCommit`) */
+  notifyDrawCommit(feature: Feature): void;
   /** Whether new features follow the zoom with their widths */
   readonly scaleWithZoom: boolean;
   /** The resolved look of the selection */
@@ -522,16 +524,18 @@ export function createModeContext(
         properties[DRAW_PROPERTY_KEYS.createdZoom] = map.getZoom();
       }
       const id = input.id ?? pendingId ?? undefined;
-      return store.transact(() => {
-        const feature = services.getDraw().features.create({
+      const feature = store.transact(() => {
+        const created = services.getDraw().features.create({
           ...input,
           ...(id !== undefined && { id }),
           layerId,
           properties: properties as FeatureInput['properties'],
         });
         clearPreview();
-        return feature;
+        return created;
       });
+      if (feature) services.notifyDrawCommit(feature);
+      return feature;
     },
     preview: {
       set(feature, options) {

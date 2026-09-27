@@ -250,7 +250,8 @@ draw.extensions.plugins.add(createShortcuts());
 - `onFeatureDoubleClick(feature, event)` is called when a feature is
   double-clicked, after it is selected
 - `onDrawCommit(feature)` is called when a drawing mode created a
-  feature
+  feature: each commit of `ctx.commitFeature` (the built-in drawing modes
+  use it too), and the image the load after an `image.requested` places
 
 A filter keeps some features out of the selection:
 
@@ -376,8 +377,9 @@ Every member of a `ModeHandler` is optional:
 | `onUndoVertex`, `onRedoVertex` | Remove the last vertex, put it back |
 
 `onCancel` arrives on an Escape that neither a plugin nor the mode
-consumed. The mode drops what it was drawing and stays the current
-mode.
+consumed, and when the Store replaces its whole document (a notification
+with `reset: true`). The mode drops what it was drawing and stays the
+current mode.
 
 ### What the context adds
 

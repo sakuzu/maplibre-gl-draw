@@ -33,6 +33,13 @@ export type ScreenPoint = [number, number];
 export interface DocumentChange {
   /** Where the writes came from */
   source?: UpdateSource;
+  /**
+   * True when the notification replaces the whole document at once, as a Store given in the
+   * `store` option does when it takes a document from elsewhere. The current mode drops what
+   * it was drawing then (`ModeHandler.onCancel`), because the shape it holds may refer to
+   * what is gone. A Store sets it; the changes that come with it list what was replaced.
+   */
+  reset?: boolean;
   /** The features created, updated and deleted */
   features?: {
     created?: Feature[];

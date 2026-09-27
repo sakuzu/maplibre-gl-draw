@@ -7,6 +7,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryStore } from '../../store/memory.js';
+import type { StoreChange } from '../../store/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
@@ -17,6 +19,7 @@ import type { ModeFactory } from '../extension/mode.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from '../extension/provider.js';
 import type { OverlayRenderer } from '../extension/render.js';
+import type { Store } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -346,6 +349,26 @@ describe('the input of the plugins and the modes', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves the mode running on an Escape a plugin or the mode consumes', () => {
+    const onCancel = vi.fn();
+    let modeConsumes = true;
+    engine.extensions.collections.modes.add('probe', () => ({
+      onCancel,
+      onKeyDown: () => modeConsumes,
+    }));
+    engine.modeManager.setMode('probe');
+    createSyntheticInput(engine).key('Escape');
+    expect(onCancel).not.toHaveBeenCalled();
+
+    modeConsumes = false;
+    engine.extensions.collections.plugins.add(
+      plugin('escape', { input: { onKeyDown: (event) => event.key === 'Escape' } }),
+    );
+    createSyntheticInput(engine).key('Escape');
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(engine.modeManager.getMode()).toBe('probe');
+  });
+
   it('narrows a selection with interaction.filterSelection', () => {
     const { store } = engine.context;
     const layerId = store.listLayers()[0].id;
@@ -492,6 +515,55 @@ describe('ModeContext.commitFeature', () => {
     ).toBeNull();
     expect(engine.context.store.listFeatures()).toHaveLength(0);
   });
+
+  it('tells the plugins of each feature it commits, and not of a refused one', () => {
+    const committed: string[] = [];
+    engine.extensions.collections.plugins.add(
+      plugin('commits', { interaction: { onDrawCommit: (feature) => committed.push(feature.id) } }),
+    );
+    const feature = ctx.commitFeature({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+    });
+    expect(committed).toEqual([feature?.id]);
+    engine.context.store.setReadOnly(true);
+    ctx.commitFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [2, 2] } });
+    expect(committed).toHaveLength(1);
+  });
+});
+
+describe('a Store that replaces its whole document', () => {
+  /** A Store of the library that can announce a replacement of its whole document */
+  class ReplacingStore extends MemoryStore {
+    readonly #listeners = new Set<(changes: StoreChange) => void>();
+    override subscribe(listener: (changes: StoreChange) => void): () => void {
+      const stop = super.subscribe(listener);
+      this.#listeners.add(listener);
+      return () => {
+        stop();
+        this.#listeners.delete(listener);
+      };
+    }
+    announce(changes: StoreChange & { reset?: boolean }): void {
+      for (const listener of this.#listeners) listener(changes);
+    }
+  }
+
+  it('interrupts the current mode, and only for a reset', () => {
+    const store = new ReplacingStore();
+    const other = createDraw(createMapStub().map, { store: store as unknown as Store });
+    const onCancel = vi.fn();
+    other.extensions.modes.add('probe', () => ({ onCancel }));
+    other.setMode('probe');
+    store.announce({ source: 'remote' });
+    expect(onCancel).not.toHaveBeenCalled();
+    store.announce({ source: 'remote', reset: true });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(other.getMode()).toBe('probe');
+    other.destroy();
+    store.announce({ source: 'remote', reset: true });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('the built-in modes written to the contract', () => {
@@ -511,6 +583,29 @@ describe('the built-in modes written to the contract', () => {
     expect(feature.geometry).toEqual({ type: 'Point', coordinates: [1, 1] });
     expect(engine.context.store.getSelection().ids).toEqual([feature.id]);
     expect(engine.modeManager.getMode()).toBe('select');
+  });
+
+  it('tells the plugins of a point it draws, and of the image placed after a request', () => {
+    const committed: string[] = [];
+    engine.extensions.collections.plugins.add(
+      plugin('commits', { interaction: { onDrawCommit: (feature) => committed.push(feature.id) } }),
+    );
+    engine.modeManager.setMode('draw_point');
+    createSyntheticInput(engine).click([1, 1]);
+    const [point] = engine.context.store.listFeatures();
+    expect(committed).toEqual([point.id]);
+
+    // An image loaded without a request is not a commit of the image mode
+    const loaded = (featureIds: string[]) =>
+      engine.events.emit('document.loaded', {
+        result: { format: 'image', featureIds, replaced: false },
+        source: 'local',
+      });
+    loaded([point.id]);
+    expect(committed).toHaveLength(1);
+    engine.modeManager.setMode('draw_image');
+    loaded([point.id]);
+    expect(committed).toEqual([point.id, point.id]);
   });
 
   it('draws a circle with two clicks', () => {

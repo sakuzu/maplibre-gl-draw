@@ -283,6 +283,7 @@ export function createModeHarness(options: {
       options.getWritableLayerId ??
       (() => store.listLayers().find((l) => l.visible && !l.locked)?.id ?? ''),
     generateId: deps.generateId,
+    notifyDrawCommit: () => {},
     scaleWithZoom: options.scaleWithZoom ?? false,
     selectionStyle: DEFAULT_SELECTION_CONFIG,
     boxSelectionStyle: DEFAULT_BOX_SELECTION_STYLE_CONFIG,

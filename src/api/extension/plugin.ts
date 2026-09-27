@@ -38,7 +38,11 @@ export interface Plugin<Api = unknown> {
     onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A feature was double-clicked; returning true means the plugin handled it */
     onFeatureDoubleClick?(feature: Feature, event: DrawPointerEvent): boolean;
-    /** A drawing mode created a feature */
+    /**
+     * A drawing mode created a feature: a commit of `ModeContext.commitFeature`, which the
+     * built-in drawing modes use too, or the image placed by the load that follows a request
+     * of the image mode
+     */
     onDrawCommit?(feature: Feature): void;
     /** Whether the plugin is in an exclusive interaction, during which the mode stays still */
     isBusy?(): boolean;

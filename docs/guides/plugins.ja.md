@@ -250,7 +250,8 @@ draw.extensions.plugins.add(createShortcuts());
 - `onFeatureDoubleClick(feature, event)` は、地物がダブルクリック
   されたときに、その地物を選んだ後で呼ばれます
 - `onDrawCommit(feature)` は、描画モードが地物を作ったときに呼ばれ
-  ます
+  ます。`ctx.commitFeature` の確定 (組み込みの描画モードもこれを使い
+  ます) と、`image.requested` の後の読み込みが置いた画像です
 
 一部の地物を選択から外す絞り込みです。
 
@@ -374,7 +375,8 @@ draw.setMode('draw_rectangle');
 | `snapPreference` | どの入力を吸着させ、何を優先するか |
 | `onUndoVertex`、`onRedoVertex` | 最後の頂点を取り除き、また戻す |
 
-`onCancel` は、プラグインもモードも消費しなかった Escape で呼ばれます。
+`onCancel` は、プラグインもモードも消費しなかった Escape と、Store が
+文書の全部を置き換えたとき (`reset: true` の通知) に呼ばれます。
 モードは描いていたものを捨て、今のモードのまま留まります。
 
 ### 窓口が足すもの

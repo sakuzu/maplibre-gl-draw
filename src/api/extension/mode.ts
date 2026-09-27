@@ -102,8 +102,8 @@ export interface ModeHandler extends Partial<InputHandlers> {
   onExit?(): void;
   /**
    * Called when the mode is interrupted: by an Escape that neither a plugin nor the mode
-   * consumed, or when the state is reset from outside the mode. The mode drops what it was
-   * drawing and stays the current mode.
+   * consumed, or when the Store replaces its whole document (a notification with
+   * `reset: true`). The mode drops what it was drawing and stays the current mode.
    */
   onCancel?(): void;
   /**

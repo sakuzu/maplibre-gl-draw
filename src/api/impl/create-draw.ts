@@ -104,7 +104,7 @@ export function createDrawOnEngine(
 
     destroy: () => engine.destroy(),
   };
-  engine.extensions.attach(draw);
+  engine.extensions.attach(draw, options.store);
   return draw;
 }
 

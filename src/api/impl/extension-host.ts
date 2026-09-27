@@ -26,6 +26,7 @@ import type { CustomLayerInterface } from '../../view/layer/index.js';
 import type { Draw } from '../draw.js';
 import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
+import type { StoreView } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature } from '../model.js';
 import type { AdapterDeps } from './adapters.js';
@@ -96,8 +97,11 @@ export interface ExtensionHost {
   readonly input: ExtensionInputRoute;
   /** The interaction hooks of the plugins, which the select mode asks */
   readonly interactions: PluginInteractions;
-  /** Gives the host the draw instance the contexts hand out */
-  attach(draw: Draw): void;
+  /**
+   * Gives the host the draw instance the contexts hand out, and the Store given in the
+   * options, whose notifications that reset the document interrupt the current mode
+   */
+  attach(draw: Draw, documentStore?: StoreView): void;
   /** Starts listening to the map (the pointer leaving it) */
   start(): void;
   /** Removes every extension and stops listening */
@@ -298,6 +302,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     scaleWithZoom: context.options.scaleWithZoom,
     selectionStyle: context.selectionStyle,
     boxSelectionStyle: context.renderingConfig.boxSelectionStyle,
+    notifyDrawCommit: (feature) => announceDrawCommit(feature),
   };
 
   /**
@@ -356,6 +361,13 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     }
     return false;
   }
+  /** Tells every plugin that a drawing mode created a feature */
+  function announceDrawCommit(feature: Feature): void {
+    eachPlugin('onDrawCommit', (plugin) => {
+      plugin.interaction?.onDrawCommit?.(feature);
+      return false;
+    });
+  }
   const featureOf = (id: string): Feature | undefined =>
     store.getFeature(id) as Feature | undefined;
   const click =
@@ -405,11 +417,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     },
     notifyFeatureCreated(featureId) {
       const feature = featureOf(featureId);
-      if (!feature) return;
-      eachPlugin('onDrawCommit', (plugin) => {
-        plugin.interaction?.onDrawCommit?.(feature);
-        return false;
-      });
+      if (feature) announceDrawCommit(feature);
     },
   };
 
@@ -417,13 +425,46 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const onPointerLeave = (): void =>
     deliverPointerLeave(registries.plugins.values(), modeManager.getHandler());
   let listening = false;
+  const watches: Array<() => void> = [];
+
+  /**
+   * The image mode asks the application for a file (`image.requested`), and the application
+   * places the image by loading the file. The image that load places is the commit of the
+   * image mode, which the plugins hear of as the commits of the other drawing modes
+   */
+  function watchImageCommits(draw: Draw): void {
+    let requested = false;
+    watches.push(
+      draw.on('image.requested', () => {
+        requested = true;
+      }),
+      draw.on('document.loaded', ({ result }) => {
+        if (!requested || result.format !== 'image') return;
+        requested = false;
+        for (const id of result.featureIds) {
+          const feature = featureOf(id);
+          if (feature) announceDrawCommit(feature);
+        }
+      }),
+    );
+  }
 
   return {
     collections,
     input,
     interactions,
-    attach(draw) {
+    attach(draw, documentStore) {
       attached = draw;
+      watchImageCommits(draw);
+      // A Store that replaces its whole document says so with `reset`: the mode drops what it
+      // was drawing, as it does for an Escape
+      if (documentStore) {
+        watches.push(
+          documentStore.subscribe((changes) => {
+            if (changes.reset === true && !destroyed) modeManager.notifyStateReset();
+          }),
+        );
+      }
     },
     start() {
       if (listening || destroyed) return;
@@ -432,6 +473,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     },
     destroy() {
       if (destroyed) return;
+      for (const stop of watches.splice(0)) stop();
       if (listening) {
         listening = false;
         map.getCanvasContainer().removeEventListener('mouseleave', onPointerLeave);
