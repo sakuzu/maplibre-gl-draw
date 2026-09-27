@@ -8,6 +8,7 @@
 import { createEngine } from '../../engine.js';
 import type { CreateDraw, Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
+import { createDatasets } from './datasets.js';
 import { createDocument } from './document.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
@@ -74,7 +75,7 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     features,
     layers: createLayers(deps),
     groups,
-    datasets: pending('datasets'),
+    datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps),
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
