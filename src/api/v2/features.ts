@@ -128,54 +128,55 @@ export interface FeaturesCollection {
    */
   getAppliedStyle(id: string): FeatureStyleResolved | undefined;
   /**
-   * Joins areas into one feature and returns it; the original features are deleted.
+   * Joins areas into one feature and returns it; the result replaces the features given.
    *
-   * @returns The new feature, or `null` when the operation is refused
+   * @returns The new feature, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
    *   `invalid-input` when one of the features is not an area
    */
   union(ids: readonly string[]): Feature | null;
   /**
-   * Subtracts other areas from an area and returns the result.
+   * Subtracts other areas from an area and returns the result; the result replaces the area
+   * subtracted from, and the areas subtracted stay.
    *
    * @param id - The area to subtract from
    * @param subtractIds - The areas to subtract
-   * @returns The resulting feature, or `null` when the operation is refused
+   * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
    *   `invalid-input` when one of the features is not an area
    */
-  // TODO(api-2): confirm whether the result replaces the original feature
   difference(id: string, subtractIds: readonly string[]): Feature | null;
   /**
-   * Keeps the part where areas overlap and returns it.
+   * Keeps the part where areas overlap and returns it; the result replaces the features given.
    *
-   * @returns The resulting feature, or `null` when the operation is refused
+   * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
    *   `invalid-input` when one of the features is not an area
    */
-  // TODO(api-2): confirm whether the original features are deleted
   intersection(ids: readonly string[]): Feature | null;
   /**
    * Splits an area along a line and returns the features it made.
    *
    * @param id - The area to split
    * @param lineId - The line to split along
-   * @returns The new features
+   * @returns The new features, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
    *   `invalid-input` when the features are not an area and a line
    */
-  // TODO(api-2): confirm what a refusal returns (the signature has no null)
-  split(id: string, lineId: string): Feature[];
+  split(id: string, lineId: string): Feature[] | null;
   /**
    * Creates the areas around features.
    *
    * @param ids - The features to surround
    * @param options - `distanceMeters` is the distance of the outline from the features, and
-   *   `segments` the number of segments per quarter circle
-   * @returns The new features
+   *   `segments` the number of segments of a full circle, as in the buffer of the geometry
+   *   entry
+   * @returns The new features, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
    *   `invalid-input` when the distance is not a finite number
    */
-  // TODO(api-2): confirm what a refusal returns (the signature has no null) and what segments counts
-  buffer(ids: readonly string[], options: { distanceMeters: number; segments?: number }): Feature[];
+  buffer(
+    ids: readonly string[],
+    options: { distanceMeters: number; segments?: number },
+  ): Feature[] | null;
 }

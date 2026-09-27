@@ -26,6 +26,7 @@ export type {
   TopologyOptions,
   TracingOptions,
 } from './options.js';
+export type { Messages } from '../../messages.js';
 export type { FeaturesCollection } from './features.js';
 export type { LayersCollection } from './layers.js';
 export type { GroupsCollection } from './groups.js';
@@ -73,8 +74,8 @@ export type {
 
 // State
 export type {
+  LayerStackEntry,
   Mode,
-  RenderSlot,
   Selection,
   SelectionType,
   SnapResult,
@@ -101,6 +102,7 @@ export type {
   DatasetOptions,
   DatasetOrder,
   DatasetPlacement,
+  DatasetProvider,
   DatasetRow,
   DatasetsCollection,
   DatasetThinningStats,

@@ -18,7 +18,7 @@ import type { LayersCollection } from './layers.js';
 import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
-import type { Mode, RenderSlot, TerrainDiagnostics } from './state.js';
+import type { LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
 
 /**
  * A draw instance on a map: the collections and resources of the document and of this
@@ -64,10 +64,9 @@ export interface Draw {
   /**
    * Changes the mode.
    *
-   * @returns False when the mode cannot be entered
+   * @returns False when the mode cannot be entered now
    * @throws `DrawError` with the code `not-found` when there is no mode with this name
    */
-  // TODO(api-2): confirm whether an unknown mode throws or returns false
   setMode(mode: Mode): boolean;
 
   // Read-only and interaction lock
@@ -115,7 +114,7 @@ export interface Draw {
   /** Whether some drawing work has not finished yet. */
   hasPendingWork(): boolean;
   /** The divisions of the stacking order, one per run of layers. */
-  getRenderSlots(): readonly RenderSlot[];
+  getLayerStack(): readonly LayerStackEntry[];
   /** Diagnostics; their fields follow the drawing and carry a weaker promise. */
   readonly debug: {
     /** The state the terrain was drawn with. */

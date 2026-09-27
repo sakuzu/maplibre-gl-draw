@@ -9,7 +9,6 @@
 import type { Position } from 'geojson';
 
 /** The names of the built-in modes. */
-// TODO(api-2): confirm the names (carried over, as the design does not rename them)
 export const MODES = [
   'select',
   'draw_point',
@@ -61,7 +60,6 @@ export interface VertexSelection {
  * Where the pointer snapped to. When nothing was snapped to, `lngLat` is the position of the
  * pointer and `target` is absent.
  */
-// TODO(api-2): confirm the fields of target (carried over; the target type is not a symbol of the entry)
 export interface SnapResult {
   /** The position after snapping */
   lngLat: Position;
@@ -84,9 +82,9 @@ export interface SnapResult {
 
 /**
  * One division of the stacking order: the map layer that draws one run of the layer order
- * between two entries that are not layers of the document.
+ * between two entries that come from outside the document.
  */
-export interface RenderSlot {
+export interface LayerStackEntry {
   /** The ID of the map layer that draws the run */
   readonly layerId: string;
   /** The index in the layer order where the run starts (inclusive) */
@@ -99,10 +97,53 @@ export interface RenderSlot {
  * The state the terrain was drawn with, for diagnostics. Its fields follow the drawing and
  * carry a weaker promise than the rest of the API.
  */
-// TODO(api-2): confirm the fields (the previous nested types are not symbols of the entry)
 export interface TerrainDiagnostics {
   /** The terrain state of the last drawing */
-  readonly render: Readonly<Record<string, unknown>>;
-  /** How the features were laid on the terrain in the last drawing */
-  readonly drape: Readonly<Record<string, unknown>>;
+  readonly render: {
+    /** Whether the terrain was on and its elevation data usable */
+    readonly active: boolean;
+    /** The Mercator rectangle the elevation data covers, `[x0, y0, 1 / width, 1 / height]` */
+    readonly atlasRect: readonly [number, number, number, number];
+    /** The size of the elevation data in texels, `[width, height]` */
+    readonly atlasSize: readonly [number, number];
+    /** The factor from meters to Mercator z at the latitude of the center of the screen */
+    readonly elevationScale: number;
+    /** The lift above the ground in meters */
+    readonly liftMeters: number;
+    /** The subdivision step in meters (0 means no subdivision) */
+    readonly stepMeters: number;
+    /** The grid spacing of the subdivision, in Mercator units */
+    readonly stepGrid: number;
+    /** The generation of the subdivision; it counts the changes of the step */
+    readonly generation: number;
+  };
+  /** How the areas were laid on the terrain in the last drawing */
+  readonly drape: {
+    /** Whether the analytic drape was used */
+    readonly used: boolean;
+    /** Why it was not used */
+    readonly reason: string;
+    /** The number of features laid on the drape */
+    readonly featureCount: number;
+    /** The number of edges */
+    readonly edgeCount: number;
+    /** The number of tiles drawn */
+    readonly tileCount: number;
+    /** The largest number of runs in one cell */
+    readonly maxRunsPerCell: number;
+    /** The largest number of edges in one cell */
+    readonly maxEdgesPerCell: number;
+    /** The largest number of edges in one tile of the view */
+    readonly maxTileEdges: number;
+    /** The number of cells cut short for going over the budget */
+    readonly truncatedCells: number;
+    /** The number of tiles that could not be evaluated and were not drawn */
+    readonly unfitTiles: number;
+    /** The number of runs whose cell origin was inside the feature */
+    readonly insideRuns: number;
+    /** The number of features left off the drape */
+    readonly excluded: number;
+    /** The number of features drawn without the drape */
+    readonly immediate: number;
+  };
 }

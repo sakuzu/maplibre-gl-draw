@@ -41,12 +41,28 @@ export interface PluginsCollection {
    */
   add(plugin: Plugin): () => void;
   /**
+   * Adds several plugins in one transaction: all of them or none.
+   *
+   * @returns The function that removes them again
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
+   *   nothing is added then
+   */
+  addMany(plugins: readonly Plugin[]): () => void;
+  /**
    * Removes a plugin, with everything it added.
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is no plugin with this name
    */
   remove(name: string): boolean;
+  /**
+   * Removes several plugins, with everything they added: all of them or none.
+   *
+   * @returns True when they were removed
+   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   *   nothing is removed then
+   */
+  removeMany(names: readonly string[]): boolean;
   /**
    * The API a plugin offers to others.
    *
@@ -77,12 +93,28 @@ export interface ModesCollection {
    */
   add(name: string, factory: ModeFactory): () => void;
   /**
+   * Adds several modes in one transaction: all of them or none.
+   *
+   * @returns The function that removes them again
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
+   *   nothing is added then
+   */
+  addMany(entries: readonly { name: string; factory: ModeFactory }[]): () => void;
+  /**
    * Removes a mode.
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is no mode with this name
    */
   remove(name: string): boolean;
+  /**
+   * Removes several modes: all of them or none.
+   *
+   * @returns True when they were removed
+   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   *   nothing is removed then
+   */
+  removeMany(names: readonly string[]): boolean;
 }
 
 /** The custom feature types, by type name. */
@@ -107,12 +139,28 @@ export interface FeatureTypesCollection {
    */
   add(definition: FeatureTypeDefinition): () => void;
   /**
+   * Adds several custom feature types in one transaction: all of them or none.
+   *
+   * @returns The function that removes them again
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
+   *   nothing is added then
+   */
+  addMany(definitions: readonly FeatureTypeDefinition[]): () => void;
+  /**
    * Removes a custom feature type.
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is no type with this name
    */
   remove(name: string): boolean;
+  /**
+   * Removes several custom feature types: all of them or none.
+   *
+   * @returns True when they were removed
+   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   *   nothing is removed then
+   */
+  removeMany(names: readonly string[]): boolean;
 }
 
 /** The renderers that draw above the features or between the layers, by name. */
@@ -137,12 +185,28 @@ export interface OverlaysCollection {
    */
   add(renderer: OverlayRenderer): () => void;
   /**
+   * Adds several overlay renderers in one transaction: all of them or none.
+   *
+   * @returns The function that removes them again
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
+   *   nothing is added then
+   */
+  addMany(renderers: readonly OverlayRenderer[]): () => void;
+  /**
    * Removes an overlay renderer.
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is none with this name
    */
   remove(name: string): boolean;
+  /**
+   * Removes several overlay renderers: all of them or none.
+   *
+   * @returns True when they were removed
+   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   *   nothing is removed then
+   */
+  removeMany(names: readonly string[]): boolean;
 }
 
 /**
@@ -150,8 +214,19 @@ export interface OverlaysCollection {
  *
  * @typeParam T - The kind of provider
  */
-// TODO(api-2): confirm the members (the design lists add, remove, list and count; get and has are not listed)
 export interface ProvidersCollection<T> {
+  /**
+   * Gets a provider by name.
+   *
+   * @returns The provider, or `undefined` when there is none with this name
+   */
+  get(name: string): T | undefined;
+  /** Lists the names of the providers. */
+  list(): string[];
+  /** Counts the providers. */
+  count(): number;
+  /** Whether a provider with this name was added. */
+  has(name: string): boolean;
   /**
    * Adds a provider.
    *
@@ -160,16 +235,28 @@ export interface ProvidersCollection<T> {
    */
   add(provider: T): () => void;
   /**
+   * Adds several providers in one transaction: all of them or none.
+   *
+   * @returns The function that removes them again
+   * @throws `DrawError` with the code `already-exists` when one of the names is taken;
+   *   nothing is added then
+   */
+  addMany(providers: readonly T[]): () => void;
+  /**
    * Removes a provider.
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is no provider with this name
    */
   remove(name: string): boolean;
-  /** Lists the names of the providers. */
-  list(): string[];
-  /** Counts the providers. */
-  count(): number;
+  /**
+   * Removes several providers: all of them or none.
+   *
+   * @returns True when they were removed
+   * @throws `DrawError` with the code `not-found` when one of the names does not exist;
+   *   nothing is removed then
+   */
+  removeMany(names: readonly string[]): boolean;
 }
 
 /**

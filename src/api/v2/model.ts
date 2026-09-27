@@ -27,7 +27,6 @@ import type { Messages } from '../../messages.js';
  * The built-in types are Point, LineString, Polygon, MultiPoint, MultiLineString,
  * MultiPolygon, Circle, Freehand and Image. Any other string names a custom type.
  */
-// TODO(api-2): confirm that the Multi types stay in the list of built-in types
 export type FeatureType =
   | 'Point'
   | 'LineString'
@@ -44,7 +43,6 @@ export type FeatureType =
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
 
 /** The shape of a point marker. */
-// TODO(api-2): confirm the shapes (the point marker of a feature style has no icon shape)
 export type PointShape = 'circle' | 'square' | 'triangle' | 'star';
 
 /**
@@ -197,6 +195,11 @@ export interface Layer {
   locked: boolean;
   /** The opacity of the whole layer, from 0 to 1 */
   opacity: number;
+  /**
+   * The IDs of the features and groups in the layer, from the back. `features.move` and
+   * `groups.move` change it
+   */
+  items: readonly string[];
   /** The rule that colors its features from their attributes */
   styleRule: StyleRule | undefined;
   /** Values of the user */
@@ -251,7 +254,6 @@ export interface FileData {
  * The whole document in the format of the library, as `document.toJSON` writes it and
  * `document.load` reads it.
  */
-// TODO(api-2): confirm the fields (carried over from the native format; Layer has no item order)
 export interface DrawDocument {
   /** The version of the format */
   version: string;
@@ -349,6 +351,8 @@ export interface LayerInput {
   opacity?: number;
   /** The rule that colors its features */
   styleRule?: StyleRule;
+  /** Values of the user */
+  metadata?: Record<string, unknown>;
   /** The position in the stacking order, 0 at the back; the front when it is left out */
   index?: number;
 }
@@ -412,10 +416,11 @@ export interface GroupFilter {
 }
 
 /**
- * Where a move goes: a layer, or into a group (`null` takes it out of its group).
+ * Where a move goes: a layer, or into a group.
  *
- * `index` is the position within the destination, 0 at the back; the front when it is left
- * out.
+ * `{ groupId: null }` takes a feature out of its group: it stays in its layer, just in front
+ * of the group. `index` is the position within the destination, 0 at the back; the front
+ * when it is left out.
  */
 export type MoveTarget =
   | { layerId: string; index?: number }
@@ -461,7 +466,6 @@ export interface SkippedFeature {
 }
 
 /** What `document.load` read. */
-// TODO(api-2): confirm the fields (carried over from the previous result of load)
 export interface LoadResult {
   /** The format that was detected */
   format: 'native' | 'geojson' | 'image';
@@ -484,7 +488,6 @@ export interface LoadResult {
  * @param properties - The properties of the feature
  * @returns The color, as `#rrggbb`
  */
-// TODO(api-2): confirm the signature (carried over from the previous function)
 export declare function evaluateStyleRule(
   rule: StyleRule,
   properties: Record<string, unknown> | undefined,
@@ -497,7 +500,6 @@ export declare function evaluateStyleRule(
  * @param messages - The words of the labels, to show them in another language
  * @returns The legend rows
  */
-// TODO(api-2): confirm the signature (Messages is not listed among the symbols of the entry)
 export declare function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[];
 
 /**
@@ -506,5 +508,4 @@ export declare function deriveLegend(rule: StyleRule, messages?: Partial<Message
  * @param type - The type of the feature
  * @returns `point` for points, `stroke` for lines and `fill` for areas
  */
-// TODO(api-2): confirm the signature (carried over from the previous function)
 export declare function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill';

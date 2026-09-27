@@ -7,7 +7,7 @@
 
 import type { BBox, Feature as GeoJSONFeature, Position } from 'geojson';
 import type { PreparedTable, Table } from './extension-placeholders.js';
-import type { FeatureStyle, StyleRule } from './model.js';
+import type { FeatureStyle, FeatureType, StyleRule } from './model.js';
 
 /** A row of a dataset, given and read as a GeoJSON feature. */
 export type DatasetRow = GeoJSONFeature;
@@ -16,11 +16,9 @@ export type DatasetRow = GeoJSONFeature;
  * Where a dataset is stacked: below the layers of the document, above them, or inside the
  * layer order.
  */
-// TODO(api-2): confirm the values (carried over)
 export type DatasetOrder = 'below-store' | 'above-store' | 'layer-order';
 
 /** Where a dataset goes in the stacking order. */
-// TODO(api-2): confirm the fields (carried over)
 export interface DatasetPlacement {
   /** The division of the stacking order */
   order?: DatasetOrder;
@@ -29,31 +27,25 @@ export interface DatasetPlacement {
 }
 
 /**
- * The default look of the rows of a dataset for each part a style rule colors. A row without
- * a look of its own takes it.
+ * The default look of the rows of a dataset for each part a style rule colors (`point`,
+ * `stroke` and `fill`). A row without a look of its own takes it.
  */
-// TODO(api-2): confirm the shape (the previous type was a record keyed by the same three parts)
-export interface DatasetBaseStyle {
-  /** The look of points */
-  point?: FeatureStyle;
-  /** The look of lines */
-  stroke?: FeatureStyle;
-  /** The look of areas */
-  fill?: FeatureStyle;
-}
+export type DatasetBaseStyle = Partial<Record<'point' | 'stroke' | 'fill', FeatureStyle>>;
 
-/** The size and the opacity the rows of a dataset are drawn with at a zoom. */
-// TODO(api-2): confirm the shape (the previous type was a function type)
-export interface DatasetZoomScale {
-  /**
-   * @param zoom - The zoom of the map
-   * @returns The scale factor and the opacity at that zoom
-   */
-  (zoom: number): { scale: number; opacity: number };
-}
+/** The scale factor and the opacity the rows of a dataset are drawn with at a zoom. */
+export type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
+
+/**
+ * A function that returns the rows of the range in view, for a dataset whose rows are fetched
+ * as the map moves.
+ *
+ * @param bbox - The range in view, in degrees
+ * @param zoom - The zoom of the map
+ * @returns The rows of the range
+ */
+export type DatasetProvider = (bbox: BBox, zoom: number) => Promise<DatasetRow[]>;
 
 /** How the point rows of a dataset that overlap on the screen are thinned out. */
-// TODO(api-2): confirm the fields (carried over)
 export interface DatasetCollisionThinning {
   /** Whether the thinning is on; false when it is left out */
   enabled?: boolean;
@@ -64,7 +56,6 @@ export interface DatasetCollisionThinning {
 }
 
 /** What the thinning of a dataset is doing now, for a message such as "showing n of N". */
-// TODO(api-2): confirm the fields (carried over)
 export interface DatasetThinningStats {
   /** Whether the thinning is on */
   enabled: boolean;
@@ -79,26 +70,24 @@ export interface DatasetThinningStats {
 }
 
 /** The events of one dataset, by name, with their payloads. */
-// TODO(api-2): confirm the names and payloads (carried over; the naming rule of the events is resource.pastParticiple)
 export interface DatasetEvents {
   /** A row was clicked */
-  click: { datasetId: string; row: DatasetRow; index: number; lngLat: Position };
-  /** The pointer moved over a row, or off every row (`row` and `index` are then `null`) */
-  hover: {
+  clicked: { datasetId: string; rowIndex: number; row: DatasetRow; lngLat: Position };
+  /** The pointer moved over a row, or off every row (`rowIndex` and `row` are then `null`) */
+  hovered: {
     datasetId: string;
+    rowIndex: number | null;
     row: DatasetRow | null;
-    index: number | null;
     lngLat: Position;
   };
   /** The rows, the look, the visibility, the selection or the thinning changed */
-  change: { reason: 'rows' | 'style' | 'visibility' | 'selection' | 'thinning' };
+  changed: { reason: 'rows' | 'style' | 'visibility' | 'selection' | 'thinning' };
 }
 
 /**
  * What `datasets.add` takes. The rows are given in one of three ways, told apart by the name
  * of the field: `rows`, `table` or `provider`.
  */
-// TODO(api-2): confirm the common fields (carried over) and the signature of provider
 export type DatasetOptions = {
   /** The ID */
   id: string;
@@ -110,10 +99,12 @@ export type DatasetOptions = {
   interactive?: boolean;
   /** Where it is stacked */
   order?: DatasetOrder;
-  /** The size and the opacity by zoom */
+  /** The scale factor and the opacity by zoom */
   zoomScale?: DatasetZoomScale;
   /** The thinning of overlapping points */
   collisionThinning?: DatasetCollisionThinning;
+  /** Picks the point rows that another renderer draws; they are not drawn by the dataset */
+  externalPointRender?: (row: DatasetRow) => boolean;
 } & (
   | {
       /** The rows as GeoJSON features */
@@ -124,15 +115,14 @@ export type DatasetOptions = {
       table: Table | PreparedTable;
     }
   | {
-      /** A function that returns the rows of the range in view */
-      provider: (bbox: BBox, zoom: number) => Promise<DatasetRow[]>;
+      /** The function that returns the rows of the range in view */
+      provider: DatasetProvider;
     }
 );
 
 /**
  * Large data drawn on the map and not edited; it is not part of the document.
  */
-// TODO(api-2): confirm the members (the design names setRows, setTable and getRow; the rest are carried over)
 export interface Dataset {
   /** The ID */
   readonly id: string;
@@ -148,22 +138,52 @@ export interface Dataset {
   setRows(rows: readonly DatasetRow[]): void;
   /** Replaces every row with a table. */
   setTable(table: Table | PreparedTable): void;
-  /** Reads a row as a GeoJSON feature; `undefined` when there is no such row. */
-  getRow(index: number): DatasetRow | undefined;
   /** Replaces the style rule; `undefined` removes it. */
   setStyleRule(rule: StyleRule | undefined): void;
+  /** Replaces the scale factor and the opacity by zoom; `null` removes them. */
+  setZoomScale(zoomScale: DatasetZoomScale | null): void;
+  /** The scale factor and the opacity by zoom, or `null` when none is set. */
+  getZoomScale(): DatasetZoomScale | null;
   /** Replaces the default look; `undefined` removes it. */
   setBaseStyle(style: DatasetBaseStyle | undefined): void;
-  /** The default look. */
+  /** Replaces the function that picks the point rows another renderer draws. */
+  setExternalPointRender(predicate: ((row: DatasetRow) => boolean) | undefined): void;
+  /** The default look, or `undefined` when none is set. */
   getBaseStyle(): DatasetBaseStyle | undefined;
-  /** Replaces the size and the opacity by zoom; `null` removes them. */
-  setZoomScale(zoomScale: DatasetZoomScale | null): void;
-  /** The size and the opacity by zoom. */
-  getZoomScale(): DatasetZoomScale | null;
+  /** Every row, in drawing order, without the rule colors and the default look. */
+  getFeatures(): DatasetRow[];
+  /** The rows whose extent meets the range, with the rule colors and the default look. */
+  collectVisible(bbox: BBox): DatasetRow[];
+  /** The indexes of the rows drawn now whose extent meets the range, in ascending order. */
+  collectDrawnRows(bbox: BBox): Int32Array;
+  /** Reads a row as a GeoJSON feature; `undefined` when there is no such row. */
+  getRow(index: number): DatasetRow | undefined;
+  /** The ID of a row, or `null` when there is no such row or it has no ID. */
+  getRowId(index: number): string | null;
+  /** The type of the geometry of a row, or `null` when there is no such row. */
+  getRowType(index: number): FeatureType | null;
+  /** The extent of a row, or `null` when there is no such row or it has no geometry. */
+  getRowBounds(index: number): BBox | null;
+  /** The position of a point row, or `null` when the row is not a point. */
+  getRowPoint(index: number): Position | null;
+  /** The index of the row with this ID, or `null` when there is none. */
+  findRow(id: string): number | null;
+  /** Replaces the IDs of the selected rows. */
+  setSelectedIds(ids: readonly string[]): void;
+  /** The IDs of the selected rows. */
+  getSelectedIds(): string[];
   /** Replaces the thinning of overlapping points; `null` turns it off. */
   setCollisionThinning(options: DatasetCollisionThinning | null): void;
+  /** The thinning in effect with every default filled in, or `null` when it is off. */
+  getCollisionThinning(): Required<DatasetCollisionThinning> | null;
+  /** The IDs of the rows the thinning draws, or `null` when it thins nothing. */
+  getVisibleFeatureIds(): ReadonlySet<string> | null;
   /** What the thinning is doing now. */
   getThinningStats(): DatasetThinningStats;
+  /** A number that changes whenever the rows drawn change. */
+  getDrawnRowsRevision(): number;
+  /** Fetches the rows of the provider again on the next move of the map. */
+  invalidateProviderCache(): void;
   /** Subscribes to an event of this dataset and returns the function that unsubscribes. */
   on<K extends keyof DatasetEvents>(
     event: K,
@@ -171,6 +191,8 @@ export interface Dataset {
   ): () => void;
   /** Unsubscribes from an event of this dataset. */
   off<K extends keyof DatasetEvents>(event: K, listener: (payload: DatasetEvents[K]) => void): void;
+  /** Removes the dataset from the map, as `draw.datasets.remove` does. */
+  remove(): void;
 }
 
 /**
@@ -196,6 +218,13 @@ export interface DatasetsCollection {
    *   `invalid-input` when the options are wrong
    */
   add(options: DatasetOptions): Dataset;
+  /**
+   * Adds several datasets in one transaction, all of them or none, and returns them.
+   *
+   * @throws `DrawError` as {@link DatasetsCollection.add} does, for any of the options;
+   *   nothing is added then
+   */
+  addMany(options: readonly DatasetOptions[]): Dataset[];
   /**
    * Removes a dataset.
    *

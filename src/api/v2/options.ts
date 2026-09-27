@@ -8,11 +8,10 @@
 
 import type { Messages } from '../../messages.js';
 import type { Store } from './extension-placeholders.js';
-import type { FeatureStyle, FeatureType } from './model.js';
+import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
 import type { Mode } from './state.js';
 
 /** The options of snapping to vertices, edges, intersections and guides. */
-// TODO(api-2): confirm the fields (carried over)
 export interface SnappingOptions {
   /** Whether snapping is on; true when it is left out */
   enabled?: boolean;
@@ -29,14 +28,12 @@ export interface SnappingOptions {
 }
 
 /** The options of tracing the boundary of an existing feature while drawing. */
-// TODO(api-2): confirm the fields (carried over)
 export interface TracingOptions {
   /** Whether tracing is on; true when it is left out */
   enabled?: boolean;
 }
 
 /** The options of moving the vertices that features share. */
-// TODO(api-2): confirm the fields (carried over)
 export interface TopologyOptions {
   /** Whether dragging a vertex also moves the vertices of other features at the same position */
   sharedVertexDrag?: boolean;
@@ -44,47 +41,250 @@ export interface TopologyOptions {
 
 /** The switches of the drawing. */
 export interface RenderingOptions {
-  /** The factor the drawing is scaled by */
-  // TODO(api-2): confirm the type and the meaning of renderScale
+  /**
+   * The factor for the sizes this library draws in screen pixels (line widths, point sizes);
+   * 0.5 while the map is shown at half size. 1 when it is left out
+   */
   renderScale?: number;
-  /** The device pixel ratio to draw with, or a function that returns it */
-  // TODO(api-2): confirm the type (the previous type also took a provider object)
-  pixelRatio?: number | (() => number);
-  /** Whether the features that do not change are kept between drawings; true when it is left out */
-  storeRetained?: boolean;
+  /** The pixel ratio to draw with; that of the map when it is left out */
+  pixelRatio?: number;
+  /**
+   * Whether the geometry of the features that do not change is kept between drawings; true
+   * when it is left out
+   */
+  cacheGeometry?: boolean;
   /** Whether work that does not fit in one drawing is spread over the next ones; true when it is left out */
   timeSlicing?: boolean;
 }
 
 /**
- * The look of the box around the selected features and of their handles. Colors are CSS
- * colors, as in the style of a feature.
+ * The look of the box around the selected features and of their handles. Each part given
+ * replaces the default of that part; sizes and widths are in CSS pixels.
  */
-// TODO(api-2): confirm the parts and their fields (the previous handle style types are not symbols of the entry)
 export interface SelectionStyleOptions {
   /** The box around the selection */
-  boundingBox?: FeatureStyle;
+  boundingBox?: {
+    /** The line of the box */
+    stroke: {
+      /** The width in CSS pixels */
+      width: number;
+      /** The color, as RGBA from 0 to 1 */
+      color: [number, number, number, number];
+      /** The opacity, from 0 to 1 */
+      opacity: number;
+      /** The dash pattern */
+      lineStyle: LineStyle;
+      /** A dash pattern in CSS pixels, `[dash, gap]`, instead of that of `lineStyle` */
+      dashArray?: number[];
+    };
+    /** The gap between the features and the box, in CSS pixels */
+    margin: number;
+  };
   /** The resize handles at the corners of the box */
-  resizeHandle?: FeatureStyle;
+  resizeHandle?: {
+    /** The handle */
+    point: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+  };
   /** The rotate handle above the box */
-  rotateHandle?: FeatureStyle;
+  rotateHandle?: {
+    /** The handle */
+    point: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+    /** The distance between the handle and the box, in CSS pixels */
+    distance: number;
+    /** The line that joins the handle to the box */
+    connector: {
+      /** The width in CSS pixels */
+      width: number;
+      /** The color, as RGBA from 0 to 1 */
+      color: [number, number, number, number];
+      /** The opacity, from 0 to 1 */
+      opacity: number;
+      /** The dash pattern */
+      lineStyle: LineStyle;
+      /** A dash pattern in CSS pixels, `[dash, gap]`, instead of that of `lineStyle` */
+      dashArray?: number[];
+    };
+  };
   /** The vertex handles */
-  vertexHandle?: FeatureStyle;
-  /** The midpoint handles */
-  midpointHandle?: FeatureStyle;
+  vertexHandle?: {
+    /** A vertex handle */
+    point: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+    /** A selected vertex */
+    selected: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+    /** A vertex of another feature that moves along with a shared vertex */
+    followed: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+  };
+  /** The midpoint handles, which add a vertex when dragged */
+  midpointHandle?: {
+    /** The handle */
+    point: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+  };
   /** The radius handle of a circle */
-  radiusHandle?: FeatureStyle;
+  radiusHandle?: {
+    /** The handle */
+    point: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+  };
   /** The center marker of a circle */
-  centerMarker?: FeatureStyle;
+  centerMarker?: {
+    /** The marker */
+    point: {
+      /** The shape */
+      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      /** The size in CSS pixels */
+      size: number;
+      /** The fill color, as RGBA from 0 to 1 */
+      fillColor: [number, number, number, number];
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity: number;
+      /** The color of the outline, as RGBA from 0 to 1 */
+      strokeColor: [number, number, number, number];
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity: number;
+      /** The icon, for the `icon` shape */
+      iconId?: string;
+    };
+  };
   /** The line from the center of a circle to its radius handle */
-  radiusLine?: FeatureStyle;
+  radiusLine?: {
+    /** The line */
+    stroke: {
+      /** The width in CSS pixels */
+      width: number;
+      /** The color, as RGBA from 0 to 1 */
+      color: [number, number, number, number];
+      /** The opacity, from 0 to 1 */
+      opacity: number;
+      /** The dash pattern */
+      lineStyle: LineStyle;
+      /** A dash pattern in CSS pixels, `[dash, gap]`, instead of that of `lineStyle` */
+      dashArray?: number[];
+    };
+  };
 }
 
 /** How new features, layers and groups are named ("Point 1", "Layer 2"). */
-// TODO(api-2): confirm the fields (carried over; enabled may be redundant beside `autoName: false`)
 export interface AutoNameOptions {
-  /** Whether names are generated; true when it is left out */
-  enabled?: boolean;
   /** The word used for each type in the name */
   typeNames?: Partial<Record<FeatureType | 'Layer' | 'Group', string>>;
   /** Builds the name from the word of the type and the number */
@@ -92,9 +292,9 @@ export interface AutoNameOptions {
 }
 
 /**
- * The options that can change while the instance runs, with `draw.options.update`.
+ * The options that can change while the instance runs, with `draw.options.update`: every
+ * option but `defaultMode`, `store` and `initDefaultLayer`.
  */
-// TODO(api-2): confirm which options can change at runtime (here every option but defaultMode, store and initDefaultLayer)
 export interface RuntimeOptions {
   /** Replaces the words the library shows */
   messages?: Partial<Messages>;
@@ -130,8 +330,10 @@ export interface RuntimeOptions {
   dragThreshold?: number;
   /** The switches of the drawing */
   rendering?: RenderingOptions;
-  /** Whether an entry of the layer order comes from outside the document and is not edited */
-  // TODO(api-2): confirm whether the ID is an entry of the layer order or a feature
+  /**
+   * Whether an entry of the stacking order comes from outside the document, such as a layer
+   * of the base map; the stacking order is divided at those entries
+   */
   isExternalEntry?: (id: string) => boolean;
 }
 

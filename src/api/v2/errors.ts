@@ -16,9 +16,9 @@
  * - `already-exists`: an ID that is already taken
  * - `invalid-input`: an input of the wrong shape or value
  * - `unsupported-format`: a source that cannot be read
- * - `invalid-state`: an argument that does not fit the current document
+ * - `invalid-state`: a call that is not possible in the current situation, such as deleting
+ *   a feature while it is being drawn
  */
-// TODO(api-2): confirm what `invalid-state` covers, as against a refusal that returns null
 export type DrawErrorCode =
   | 'not-found'
   | 'already-exists'

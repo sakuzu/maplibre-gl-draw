@@ -18,15 +18,18 @@ export interface SelectionResource {
   /**
    * Selects these items instead of the current selection.
    *
-   * @param type - The type of the items; taken from the IDs when it is left out
+   * @param type - The type of the items
    * @returns False when none of the items can be selected
+   * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of this
+   *   type
    */
-  // TODO(api-2): confirm how the type is found when it is left out, and whether an unknown ID throws
-  set(ids: readonly string[], type?: SelectionType): boolean;
+  set(ids: readonly string[], type: SelectionType): boolean;
   /**
    * Adds items of the selected type to the selection.
    *
    * @returns False when none of them can be added
+   * @throws `DrawError` with the code `not-found` when one of the IDs is not an item of the
+   *   selected type
    */
   add(ids: readonly string[]): boolean;
   /**

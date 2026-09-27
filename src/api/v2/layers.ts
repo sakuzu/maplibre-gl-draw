@@ -83,7 +83,6 @@ export interface LayersCollection {
    * @returns True when it was deleted, false when the deletion is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when there is no layer with this ID
    */
-  // TODO(api-2): confirm that the features and groups of the layer are deleted with it
   delete(id: string): boolean;
   /**
    * Deletes several layers in one transaction: all of them or none.

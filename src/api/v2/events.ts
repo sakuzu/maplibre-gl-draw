@@ -9,10 +9,10 @@
  */
 
 import type { Position } from 'geojson';
-import type { Dataset } from './datasets.js';
+import type { Dataset, DatasetRow } from './datasets.js';
 import type { DrawError } from './errors.js';
 import type { Feature, Group, Layer, LoadResult, Metadata, MoveTarget } from './model.js';
-import type { Mode, RenderSlot, Selection, SnapResult, VertexSelection } from './state.js';
+import type { LayerStackEntry, Mode, Selection, SnapResult, VertexSelection } from './state.js';
 
 /** A point on the screen, as `[x, y]` in CSS pixels. */
 export type ScreenPoint = [number, number];
@@ -97,8 +97,7 @@ export interface DrawEvents {
   /** A place without a feature was clicked */
   'map.clicked': { lngLat: Position; point: ScreenPoint };
   /** A row of a dataset was clicked */
-  // TODO(api-2): confirm whether `feature` is a feature of the document or a row of the dataset
-  'dataset.clicked': { datasetId: string; feature: Feature; lngLat: Position };
+  'dataset.clicked': { datasetId: string; rowIndex: number; row: DatasetRow };
   /** A dataset was added */
   'dataset.added': { dataset: Dataset };
   /** A dataset was removed */
@@ -108,7 +107,7 @@ export interface DrawEvents {
   /** The data of an image is needed */
   'image.requested': { featureId: string; fileId: string };
   /** The divisions of the stacking order changed */
-  'renderSlots.changed': { slots: readonly RenderSlot[] };
+  'layerStack.changed': { entries: readonly LayerStackEntry[] };
   /** Loading or reading an image failed */
   error: { error: DrawError; source: string; featureId?: string };
 }
