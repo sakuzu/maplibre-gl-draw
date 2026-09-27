@@ -261,6 +261,13 @@ function headings(file) {
 
 const report = { errors: [], warnings: [], notes: [] };
 
+/**
+ * Where the typedoc step built the API reference: `from` is the output directory of the typedoc
+ * configuration (not tracked by git), `to` the fresh build. The links step checks links into
+ * the reference against the fresh build, so that it does not depend on an old local build.
+ */
+let apiReference = null;
+
 function stepTypedoc() {
   const cfg = config.typedoc;
   const bin = join(ROOT, 'node_modules/.bin/typedoc');
@@ -271,6 +278,9 @@ function stepTypedoc() {
   const out = join(ROOT, 'node_modules/.cache/docs-check/api');
   rmSync(out, { recursive: true, force: true });
   const r = run(bin, ['--options', cfg.config, '--out', out, '--logLevel', 'Warn']);
+  const configuredOut = JSON.parse(readText(cfg.config)).out;
+  if (typeof configuredOut === 'string' && existsSync(out))
+    apiReference = { from: posix.normalize(configuredOut).replace(/\/$/, ''), to: out };
   const ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
   const text = `${r.stdout}${r.stderr}`.replace(ansi, '');
   const issues = text.split('\n').filter((l) => /\[(warning|error)\]/.test(l));
@@ -531,7 +541,13 @@ function stepLinks() {
             : pathPart.startsWith('/')
               ? pathPart.slice(1)
               : posix.normalize(posix.join(posix.dirname(file), pathPart));
-        if (dest.startsWith('..') || !existsSync(join(ROOT, dest))) {
+        const inReference =
+          apiReference !== null &&
+          (dest === apiReference.from || dest.startsWith(`${apiReference.from}/`));
+        const onDisk = inReference
+          ? join(apiReference.to, dest.slice(apiReference.from.length))
+          : join(ROOT, dest);
+        if (dest.startsWith('..') || !existsSync(onDisk)) {
           report.errors.push(`${file}:${i + 1}: broken link ${target}`);
           continue;
         }
