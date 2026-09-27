@@ -23,6 +23,7 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FeatureInput } from '../index.js';
+import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
@@ -51,7 +52,7 @@ let bundle: Bundle;
 
 beforeAll(async () => {
   [browser, bundle] = await Promise.all([launchBrowser(), bundlePage()]);
-}, 60_000);
+}, browserTimeout(60_000));
 
 afterAll(async () => {
   await browser?.close();
@@ -199,7 +200,7 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
 
   beforeAll(async () => {
     page = await openGlobe(CAMERA);
-  }, 60_000);
+  }, browserTimeout(60_000));
 
   afterAll(async () => {
     await page?.close();

@@ -14,6 +14,7 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Feature } from '../index.js';
+import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
@@ -92,7 +93,7 @@ beforeAll(async () => {
   let bundle: Bundle;
   [browser, bundle] = await Promise.all([launchBrowser(), bundlePage()]);
   page = await openMapPage(browser, bundle, FLAT);
-}, 60_000);
+}, browserTimeout(60_000));
 
 afterAll(async () => {
   await browser?.close();

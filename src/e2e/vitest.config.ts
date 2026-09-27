@@ -10,6 +10,7 @@
 
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { browserTimeout } from '../test-utils.js';
 
 export default defineConfig({
   root: fileURLToPath(new URL('../..', import.meta.url)),
@@ -17,7 +18,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/e2e/**/*.test.ts'],
-    testTimeout: 30_000,
-    hookTimeout: 60_000,
+    testTimeout: browserTimeout(30_000),
+    hookTimeout: browserTimeout(60_000),
   },
 });

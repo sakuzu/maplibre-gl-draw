@@ -13,6 +13,7 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
@@ -31,7 +32,7 @@ let bundle: Bundle;
 
 beforeAll(async () => {
   [browser, bundle] = await Promise.all([launchBrowser(), bundlePage()]);
-}, 60_000);
+}, browserTimeout(60_000));
 
 afterAll(async () => {
   await browser?.close();
@@ -366,7 +367,7 @@ describe('the columnar input on a real map', () => {
 
   for (const kind of ['points', 'lines', 'polygons', 'mixed'] as const) {
     it(`${kind}: the same pixels and the same clicked row as the features`, {
-      timeout: 90_000,
+      timeout: browserTimeout(90_000),
     }, async () => {
       const page = await openMapPage(browser, bundle, CAMERA);
       await installRows(page);

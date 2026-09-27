@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { build } from 'vite';
 import type { Feature, MapLibreGLDraw, Mode } from '../index.js';
+import { browserTimeout } from '../test-utils.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const maplibreDist = join(
@@ -129,6 +130,7 @@ function pageHtml(): string {
  */
 export async function openMapPage(browser: Browser, bundle: Bundle, camera: Camera): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 720, height: 560 } });
+  page.setDefaultTimeout(browserTimeout(30_000));
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(String(error)));
   await page.route(`${ORIGIN}/**`, (route) => {
@@ -145,36 +147,39 @@ export async function openMapPage(browser: Browser, bundle: Bundle, camera: Came
   await page.waitForFunction(() => 'e2eReady' in window);
   if (errors.length > 0) throw new Error(`The page failed to start: ${errors.join('\n')}`);
 
-  await page.evaluate(async (cam) => {
-    const w = window as unknown as {
-      e2e: {
-        maplibregl: typeof import('maplibre-gl');
-        createMapLibreGLDraw: typeof import('../index.js').createMapLibreGLDraw;
+  await page.evaluate(
+    async ({ cam, loadTimeout }) => {
+      const w = window as unknown as {
+        e2e: {
+          maplibregl: typeof import('maplibre-gl');
+          createMapLibreGLDraw: typeof import('../index.js').createMapLibreGLDraw;
+        };
+        map: unknown;
+        draw: unknown;
       };
-      map: unknown;
-      draw: unknown;
-    };
-    const { maplibregl, createMapLibreGLDraw } = w.e2e;
-    const map = new maplibregl.Map({
-      container: 'map',
-      style: { version: 8, sources: {}, layers: [] },
-      center: cam.center,
-      zoom: cam.zoom,
-      pitch: cam.pitch ?? 0,
-      bearing: cam.bearing ?? 0,
-      maxPitch: 85,
-      fadeDuration: 0,
-    });
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('the map did not load')), 15_000);
-      map.once('load', () => {
-        clearTimeout(timer);
-        resolve();
+      const { maplibregl, createMapLibreGLDraw } = w.e2e;
+      const map = new maplibregl.Map({
+        container: 'map',
+        style: { version: 8, sources: {}, layers: [] },
+        center: cam.center,
+        zoom: cam.zoom,
+        pitch: cam.pitch ?? 0,
+        bearing: cam.bearing ?? 0,
+        maxPitch: 85,
+        fadeDuration: 0,
       });
-    });
-    w.map = map;
-    w.draw = createMapLibreGLDraw(map);
-  }, camera);
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('the map did not load')), loadTimeout);
+        map.once('load', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      w.map = map;
+      w.draw = createMapLibreGLDraw(map);
+    },
+    { cam: camera, loadTimeout: browserTimeout(15_000) },
+  );
   await settle(page);
   return page;
 }

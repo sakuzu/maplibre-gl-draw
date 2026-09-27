@@ -21,6 +21,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { browserTimeout } from '../test-utils.js';
 import { click, type E2EWindow, launchBrowser, type PagePoint, pageOf, settle } from './harness.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -114,7 +115,7 @@ let site: Site;
 
 beforeAll(async () => {
   [browser, site] = await Promise.all([launchBrowser(), buildExamples()]);
-}, 120_000);
+}, browserTimeout(120_000));
 
 afterAll(async () => {
   await browser?.close();
@@ -156,7 +157,7 @@ async function ready(page: Page): Promise<void> {
       return w.draw !== undefined && w.map?.isStyleLoaded() === true;
     },
     undefined,
-    { timeout: 30_000 },
+    { timeout: browserTimeout(30_000) },
   );
   await settle(page);
 }

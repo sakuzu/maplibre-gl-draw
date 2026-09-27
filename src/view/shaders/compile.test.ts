@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { browserTimeout } from '../../test-utils.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import { PointShapeRenderer } from '../renderers/point/point-shape.js';
@@ -209,6 +210,7 @@ function sourceFiles(dir: string): string[] {
 /** Serves the maplibre build to the page, so the page can run a real map */
 async function openPage(browser: Browser): Promise<Page> {
   const page = await browser.newPage();
+  page.setDefaultTimeout(browserTimeout(30_000));
   await page.route(`${ORIGIN}/**`, (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/') {
@@ -240,7 +242,7 @@ async function openPage(browser: Browser): Promise<Page> {
  * records the `shaderData` of each.
  */
 async function capturePreludes(page: Page): Promise<ShaderData[]> {
-  return page.evaluate(async () => {
+  return page.evaluate(async (renderTimeout) => {
     const maplibre = (window as unknown as { maplibre: typeof import('maplibre-gl') }).maplibre;
     const map = new maplibre.Map({
       container: 'map',
@@ -254,7 +256,7 @@ async function capturePreludes(page: Page): Promise<ShaderData[]> {
     });
     const seen = new Map<string, ShaderData>();
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('maplibre did not render')), 15000);
+      const timer = setTimeout(() => reject(new Error('maplibre did not render')), renderTimeout);
       map.on('load', () => {
         map.addLayer({
           id: 'capture',
@@ -276,7 +278,7 @@ async function capturePreludes(page: Page): Promise<ShaderData[]> {
     });
     map.remove();
     return [...seen.values()];
-  });
+  }, browserTimeout(15_000));
 }
 
 /** Compiles and links the programs on the page's WebGL2 */
@@ -323,7 +325,7 @@ describe('shader programs on a real WebGL2', () => {
     }
     page = await openPage(browser);
     preludes = await capturePreludes(page);
-  }, 60_000);
+  }, browserTimeout(60_000));
 
   afterAll(async () => {
     await browser?.close();
@@ -346,12 +348,16 @@ describe('shader programs on a real WebGL2', () => {
     expect(programs).toHaveLength(12);
   });
 
-  it('compiles and links every program with the Mercator and the globe prelude', async () => {
-    const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-    expect(programs.length).toBe(24);
-    const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
-    expect(failures).toEqual([]);
-  }, 30_000);
+  it(
+    'compiles and links every program with the Mercator and the globe prelude',
+    async () => {
+      const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
+      expect(programs.length).toBe(24);
+      const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
+      expect(failures).toEqual([]);
+    },
+    browserTimeout(30_000),
+  );
 
   it('gives every stage of every program highp samplers', () => {
     for (const program of recordPrograms(preludes[0])) {

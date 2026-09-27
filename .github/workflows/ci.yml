@@ -1,6 +1,7 @@
 # The gates of core, run on every pull request and on pushes to main.
 # They are the same commands as the local gates (see CONTRIBUTING.md).
-# The e2e job starts headless Chromium on software WebGL, so no GPU is needed.
+# Both jobs start headless Chromium on software WebGL (the shader compile test in check,
+# the end-to-end tests in e2e), so no GPU is needed.
 name: CI
 on:
   pull_request:
@@ -9,6 +10,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Software WebGL is several times slower on a runner than on a development machine
+  BROWSER_TEST_TIMEOUT_SCALE: 6
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -28,6 +33,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: playwright-core version
+        id: pw
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - run: npx playwright-core install --with-deps chromium-headless-shell
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

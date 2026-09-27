@@ -21,6 +21,7 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PluginContext } from '../index.js';
+import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
@@ -84,7 +85,7 @@ beforeAll(async () => {
     w.map.triggerRepaint();
   }, EXAGGERATION);
   await settle(page);
-}, 90_000);
+}, browserTimeout(90_000));
 
 afterAll(async () => {
   await browser?.close();
