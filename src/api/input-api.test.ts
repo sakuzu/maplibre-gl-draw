@@ -6,7 +6,7 @@
  *
  * Verifies that feeding synthesized normalized events into the same entry point of the
  * InputRouter advances the drawing just as a real operation would. The real drawing modes
- * (DrawLineMode / DrawPolygonMode / DrawPointMode) are used, and the test watches all the
+ * (the line, polygon, point and circle modes) are used, and the test watches all the
  * way to a feature appearing in the Store. Snapping is stubbed out at the SnapService, so
  * that going through it or not can be observed.
  */
@@ -17,10 +17,10 @@ import type { InputRouter } from '../dispatcher/input-router.js';
 import { createInputRouter } from '../dispatcher/input-router.js';
 import type { NormalizedEvent } from '../dispatcher/types.js';
 import {
-  DrawCircleMode,
   DrawLineMode,
-  DrawPointMode,
   DrawPolygonMode,
+  drawCircleMode,
+  drawPointMode,
 } from '../modes/draw/index.js';
 import type { ModeContext } from '../modes/handler.js';
 import { ModeManagerImpl } from '../modes/manager.js';
@@ -29,6 +29,7 @@ import type { SnapLngLat, SnapService } from '../snapping/types.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type { Coordinate, Mode } from '../store/types.js';
+import { createModeHarness } from '../test-utils.js';
 import type { InputOperations } from './input-api.js';
 import { createInputApi } from './input-api.js';
 
@@ -129,11 +130,18 @@ function setup(snapService?: SnapService): void {
 
   const map = createFakeMap();
   modeManager = new ModeManagerImpl(store);
+  const harness = createModeHarness({
+    store,
+    map,
+    modeManager,
+    getWritableLayerId: () => 'l1',
+    autoName: false,
+  });
   modeManager.registerMode('select', () => ({ modeName: 'select' }));
-  modeManager.registerMode('draw_point', () => new DrawPointMode());
+  harness.register('draw_point', drawPointMode);
   modeManager.registerMode('draw_line', () => new DrawLineMode());
   modeManager.registerMode('draw_polygon', () => new DrawPolygonMode());
-  modeManager.registerMode('draw_circle', () => new DrawCircleMode());
+  harness.register('draw_circle', drawCircleMode);
 
   let idCounter = 0;
   const context = {
@@ -156,6 +164,7 @@ function setup(snapService?: SnapService): void {
     context,
     map,
     snapService,
+    extensionInput: harness.route,
   });
   inputRouter.start();
 

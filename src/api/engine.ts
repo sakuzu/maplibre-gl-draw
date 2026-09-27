@@ -22,12 +22,12 @@ import { createTopmostHitTester } from '../dispatcher/hit-test/topmost.js';
 import { createInputRouter } from '../dispatcher/input-router.js';
 import { createInputNormalizer } from '../dispatcher/normalizer.js';
 import {
-  DrawCircleMode,
-  DrawFreehandMode,
   DrawImageMode,
   DrawLineMode,
-  DrawPointMode,
   DrawPolygonMode,
+  drawCircleMode,
+  drawFreehandMode,
+  drawPointMode,
 } from '../modes/draw/index.js';
 import type { ModeContext } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
@@ -290,12 +290,9 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
 
   // 5. Set up the ModeManager
   modeManager.registerMode('select', () => new SelectMode());
-  modeManager.registerMode('draw_point', () => new DrawPointMode());
   modeManager.registerMode('draw_line', () => new DrawLineMode());
   modeManager.registerMode('draw_polygon', () => new DrawPolygonMode());
   modeManager.registerMode('draw_image', () => new DrawImageMode());
-  modeManager.registerMode('draw_circle', () => new DrawCircleMode());
-  modeManager.registerMode('draw_freehand', () => new DrawFreehandMode());
 
   // 6. Create the PluginManager.
   // The PluginContext is initialized lazily after the PluginManager is created
@@ -307,7 +304,8 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     return pluginContext;
   }, modeManager);
 
-  // 6.5 Create the host of the extensions of the extension contract
+  // 6.5 Create the host of the extensions of the extension contract, and add the built-in
+  // modes written to that contract through it
   const extensions = createExtensionHost({
     map,
     context,
@@ -325,6 +323,11 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     listTraceRows: (bbox) =>
       snapService.isDatasetsEnabled() ? displaySnap.queryFeatures(bbox) : [],
   });
+  extensions.collections.modes.addMany([
+    { name: 'draw_point', factory: drawPointMode },
+    { name: 'draw_circle', factory: drawCircleMode },
+    { name: 'draw_freehand', factory: drawFreehandMode },
+  ]);
 
   // 7. Create the import/export API
   const importExportAPI = createImportExportAPI(context);

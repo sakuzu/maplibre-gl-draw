@@ -4,7 +4,7 @@
 /**
  * Integration tests for the snapping of freehand
  *
- * Through the real InputRouter, the real SnapService and DrawFreehandMode, this checks that
+ * Through the real InputRouter, the real SnapService and the freehand mode, this checks that
  * the inside of a stroke (dragmove) is not bent by snapping, and that the start point
  * (dragstart) and the end point (dragend) are snapped as before.
  *
@@ -14,6 +14,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { bridgeMode } from '../../api/v2/impl/input.js';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import type { DragNormalizedEvent, NormalizedEvent } from '../../dispatcher/types.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
@@ -22,9 +23,10 @@ import type { SnapService } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, Mode } from '../../store/types.js';
+import { createModeHarness } from '../../test-utils.js';
 import type { ModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
-import { DrawFreehandMode } from './freehand.js';
+import { drawFreehandMode } from './freehand.js';
 
 const ZOOM = 14;
 /** The degrees corresponding to one pixel at zoom 14 (= 360 / (512 * 2^14)) */
@@ -104,6 +106,7 @@ let modeManager: ModeManagerImpl;
 let normalizer: FakeNormalizer;
 let snapService: SnapService;
 let map: MapLibreMap;
+let harness: ReturnType<typeof createModeHarness>;
 
 function setup(): void {
   store = new MemoryStore();
@@ -136,7 +139,8 @@ function setup(): void {
   map = createFakeMap();
   modeManager = new ModeManagerImpl(store);
   modeManager.registerMode('select', () => ({ modeName: 'select' }));
-  modeManager.registerMode('draw_freehand', () => new DrawFreehandMode());
+  harness = createModeHarness({ store, map, modeManager, getWritableLayerId: () => 'l1' });
+  harness.register('draw_freehand', drawFreehandMode);
 
   snapService = createSnapService({ store, spatialIndex });
 
@@ -162,6 +166,7 @@ function setup(): void {
     context,
     map,
     snapService,
+    extensionInput: harness.route,
   });
   inputRouter.start();
 }
@@ -253,13 +258,13 @@ describe('snapping of freehand', () => {
   });
 
   it('the declaration of the mode refuses only the drag move', () => {
-    const mode = new DrawFreehandMode();
+    const mode = bridgeMode('draw_freehand', drawFreehandMode(harness.modeContext()), () => {});
 
-    expect(mode.isSnapEnabledFor('dragmove')).toBe(false);
-    expect(mode.isSnapEnabledFor('dragstart')).toBe(true);
-    expect(mode.isSnapEnabledFor('dragend')).toBe(true);
-    expect(mode.isSnapEnabledFor('click')).toBe(true);
-    expect(mode.isSnapEnabledFor('mousemove')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('dragmove')).toBe(false);
+    expect(mode.isSnapEnabledFor?.('dragstart')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('dragend')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('click')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('mousemove')).toBe(true);
   });
 });
 

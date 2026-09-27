@@ -2,278 +2,136 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * DrawFreehandMode
+ * The freehand drawing mode: a drag draws a line, which is created when the drag ends. The mode
+ * stays, so several strokes can be drawn one after another.
  *
- * Freehand drawing mode. A line is drawn continuously by dragging and confirmed on mouse up.
- * The mode is kept active, so several strokes can be drawn one after another.
+ * It is written to the extension contract, through the `ModeContext` alone.
  */
 
-import type { DragNormalizedEvent, KeyNormalizedEvent } from '../../dispatcher/types.js';
-import type { Coordinate, Feature, Mode } from '../../store/types.js';
-import type { ModeContext, ModeHandler, SnapInputType } from '../handler.js';
-import { createdZoomProperty, resolveCommitLayer } from './commit-layer.js';
+import type { Position } from 'geojson';
+import type { ModeFactory } from '../../api/v2/extension/mode.js';
+import type { SnapPreference } from '../../api/v2/state.js';
 
-/** Minimum distance for adding a coordinate (in degrees) */
+/** Minimum distance for adding a position (in degrees) */
 const MIN_DISTANCE_DEGREES = 0.00001;
 
 /**
- * The input types that are not passed through snapping (the points inside a stroke)
+ * The positions inside a stroke are not snapped
  *
- * The snapping tolerance is a value premised on "once per click", so applying it to dragmove,
- * which passes several hundred points in a single stroke, pulls the intermediate sample points
- * one after another to nearby vertices and edges, and a line the user meant to draw straight
- * ends up bent (this is conspicuous when dense administrative boundaries and the like are
- * displayed). Furthermore, when snapping collapses consecutive samples onto the same point,
+ * The snapping tolerance is a value premised on "once per click", so applying it to the moves
+ * of a drag, which pass several hundred points in a single stroke, pulls the points in the
+ * middle one after another to nearby vertices and edges, and a line the user meant to draw
+ * straight ends up bent (this is conspicuous when dense administrative boundaries and the like
+ * are displayed). Furthermore, when snapping collapses consecutive samples onto the same point,
  * they are discarded by the MIN_DISTANCE_DEGREES sieve, and the line jumps all at once the
  * moment it leaves the tolerance.
  *
  * The start and the end of the drag remain snapped, which keeps "start drawing exactly from a
  * corner of a boundary and end at a corner".
  */
-const UNSNAPPED_INPUT_TYPES: ReadonlySet<SnapInputType> = new Set<SnapInputType>(['dragmove']);
+const SNAP_PREFERENCE: SnapPreference = { unsnapped: ['onDrag'] };
+
+/** Whether a position is far enough from the last one to be added */
+function farEnough(last: Position | undefined, next: Position): boolean {
+  if (!last) return true;
+  return Math.hypot(next[0] - last[0], next[1] - last[1]) >= MIN_DISTANCE_DEGREES;
+}
 
 /**
- * DrawFreehandMode implementation
+ * The factory of the freehand drawing mode
  *
  * @internal
  */
-export class DrawFreehandMode implements ModeHandler {
-  readonly modeName: Mode = 'draw_freehand';
-  readonly writesFeatures = true;
+export const drawFreehandMode: ModeFactory = (ctx) => {
+  const map = ctx.draw.getMap();
+  /** The positions of the stroke being drawn, or null between strokes */
+  let stroke: Position[] | null = null;
 
-  private context!: ModeContext;
+  const releasePan = (): void => {
+    if (!map.dragPan.isEnabled()) map.dragPan.enable();
+  };
 
-  /** Whether a drag is in progress */
-  private isDrawing: boolean = false;
+  const dropStroke = (): void => {
+    stroke = null;
+    ctx.preview.clear();
+  };
 
-  /** Coordinates of the current stroke */
-  private currentCoordinates: Coordinate[] = [];
+  const showPreview = (): void => {
+    if (!stroke) return;
+    ctx.preview.set({ type: 'Freehand', geometry: { type: 'LineString', coordinates: stroke } });
+  };
 
-  /** The Feature ID that is going to be created */
-  private pendingFeatureId: string | null = null;
+  return {
+    writes: true,
+    snapPreference: SNAP_PREFERENCE,
 
-  /**
-   * Whether snapping is to be applied, per input type
-   *
-   * Snapping is refused only inside a stroke (dragmove); the start point (dragstart) and the
-   * end point (dragend) are snapped.
-   */
-  isSnapEnabledFor(inputType: SnapInputType): boolean {
-    return !UNSNAPPED_INPUT_TYPES.has(inputType);
-  }
+    onEnter() {
+      ctx.cursor.set('crosshair');
+      ctx.draw.transact(() => ctx.draw.selection.clear(), { source: 'silent' });
+      stroke = null;
+    },
 
-  onStart(context: ModeContext): void {
-    this.context = context;
-    // Change the cursor to a crosshair
-    this.context.map.getCanvas().style.cursor = 'crosshair';
-    // Clear the selection (not notified as a change)
-    this.context.store.transact(() => {
-      this.context.store.setSelection(null, []);
-    }, 'silent');
-    // Reset the state
-    this.reset();
-  }
+    onExit() {
+      ctx.cursor.reset();
+      dropStroke();
+      releasePan();
+    },
 
-  onStop(): void {
-    // Restore the cursor
-    this.context.map.getCanvas().style.cursor = '';
-    // Clear the tentative state
-    this.context.store.setTentative(null);
-    this.reset();
-    // Re-enable the dragPan of MapLibre
-    if (!this.context.map.dragPan.isEnabled()) {
-      this.context.map.dragPan.enable();
-    }
-  }
+    // What was being drawn is dropped when the state is reset from outside
+    onCancel: dropStroke,
 
-  /**
-   * Called after an external state change
-   *
-   * Resets the state of the drawing in progress so that the next drawing operation can start
-   * normally.
-   */
-  onExternalStateChange(): void {
-    this.reset();
-    this.context.store.setTentative(null);
-  }
+    onPointerDown() {
+      // The drag draws instead of panning the map; the press itself goes on to the map
+      map.dragPan.disable();
+      return false;
+    },
 
-  /**
-   * Disables dragPan on a mouse down
-   * @returns true consumes the event (blocks the subsequent processing)
-   */
-  onMouseDown(): boolean {
-    // Disable the dragPan of MapLibre so that dragging is enabled
-    this.context.map.dragPan.disable();
-    return false;
-  }
+    onDragStart(event) {
+      stroke = [event.snapped.lngLat];
+      showPreview();
+      return true;
+    },
 
-  onDragStart(event: DragNormalizedEvent): void {
-    // Start drawing
-    this.isDrawing = true;
-    this.currentCoordinates = [[event.lngLat.lng, event.lngLat.lat]];
-    // Generate the Feature ID in advance (for each stroke)
-    this.pendingFeatureId = this.context.generateFeatureId();
-
-    // Update the tentative state
-    this.updateTentative();
-  }
-
-  onDragMove(event: DragNormalizedEvent): void {
-    if (!this.isDrawing) return;
-
-    const newCoord: Coordinate = [event.lngLat.lng, event.lngLat.lat];
-
-    // Check the distance from the last coordinate
-    if (this.currentCoordinates.length > 0) {
-      const lastCoord = this.currentCoordinates[this.currentCoordinates.length - 1];
-      const dx = newCoord[0] - lastCoord[0];
-      const dy = newCoord[1] - lastCoord[1];
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // Do not add it if it is below the minimum distance
-      if (distance < MIN_DISTANCE_DEGREES) {
-        return;
+    onDrag(event) {
+      if (!stroke) return false;
+      const next = event.snapped.lngLat;
+      if (farEnough(stroke[stroke.length - 1], next)) {
+        stroke.push(next);
+        showPreview();
       }
-    }
+      return true;
+    },
 
-    // Add the coordinate
-    this.currentCoordinates.push(newCoord);
-
-    // Update the tentative state
-    this.updateTentative();
-  }
-
-  onDragEnd(event: DragNormalizedEvent): void {
-    if (!this.isDrawing) return;
-
-    // Add the last coordinate
-    const endCoord: Coordinate = [event.lngLat.lng, event.lngLat.lat];
-    if (this.currentCoordinates.length > 0) {
-      const lastCoord = this.currentCoordinates[this.currentCoordinates.length - 1];
-      const dx = endCoord[0] - lastCoord[0];
-      const dy = endCoord[1] - lastCoord[1];
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance >= MIN_DISTANCE_DEGREES) {
-        this.currentCoordinates.push(endCoord);
+    onDragEnd(event) {
+      if (!stroke) return false;
+      const next = event.snapped.lngLat;
+      if (farEnough(stroke[stroke.length - 1], next)) stroke.push(next);
+      if (stroke.length >= 2) {
+        // The line is not selected, so that drawing can go on
+        ctx.commitFeature({
+          type: 'Freehand',
+          geometry: { type: 'LineString', coordinates: stroke },
+          // The same default color as a line
+          style: { strokeWidth: 3 },
+        });
       }
-    }
+      dropStroke();
+      releasePan();
+      return true;
+    },
 
-    // Confirm the stroke
-    this.finishStroke();
+    // The press ended without a release (a second finger, or the browser cancelled the touch)
+    onDragCancel() {
+      dropStroke();
+      releasePan();
+      return true;
+    },
 
-    // End the drawing (the mode is kept active)
-    this.isDrawing = false;
-    this.currentCoordinates = [];
-    this.context.store.setTentative(null);
-
-    // Re-enable the dragPan of MapLibre (until the next drag)
-    this.context.map.dragPan.enable();
-  }
-
-  /**
-   * The press ended without a release (a second finger, or the browser cancelled the touch)
-   *
-   * The stroke in progress is discarded, and the pan goes back to MapLibre.
-   */
-  onDragCancel(): void {
-    if (this.isDrawing) {
-      this.reset();
-      this.context.store.setTentative(null);
-    }
-    if (!this.context.map.dragPan.isEnabled()) {
-      this.context.map.dragPan.enable();
-    }
-  }
-
-  onKeyDown(event: KeyNormalizedEvent): void {
-    if (event.key === 'Escape') {
-      if (this.isDrawing) {
-        // Cancel if drawing is in progress
-        this.isDrawing = false;
-        this.currentCoordinates = [];
-        this.context.store.setTentative(null);
-      } else {
-        // Return to the select mode if drawing is not in progress
-        this.context.setMode('select');
-      }
-    }
-  }
-
-  /**
-   * Confirms the stroke and creates the feature
-   */
-  private finishStroke(): void {
-    // At least two points are required
-    if (this.currentCoordinates.length < 2) {
-      return;
-    }
-
-    const { store, autoNameGenerator } = this.context;
-
-    // Discard the drawing when no layer can be written any more
-    const layerId = resolveCommitLayer(this.context);
-    if (layerId === null) return;
-
-    // Generate the automatic name
-    const autoName = autoNameGenerator.generateName('Freehand');
-
-    // Use the ID generated in advance (generate a new one if there is none)
-    const featureId = this.pendingFeatureId ?? this.context.generateFeatureId();
-
-    // Create a new freehand feature
-    const feature: Feature = {
-      groupId: undefined,
-      id: featureId,
-      type: 'Freehand',
-      geometry: { type: 'LineString', coordinates: [...this.currentCoordinates] },
-      layerId,
-      properties: {
-        ...createdZoomProperty(this.context),
-        ...(autoName !== undefined && { name: autoName }),
-      },
-      style: {
-        // Uses the same default color as LineString
-        // (lineString.stroke.color of feature-style-config)
-        strokeWidth: 3,
-      },
-      locked: false,
-      visible: true,
-    };
-
-    // Create the feature inside a transaction (notified as a single change)
-    store.transact(() => {
-      store.createFeature(feature);
-    });
-
-    // Clear pendingFeatureId
-    this.pendingFeatureId = null;
-
-    // Note: the feature is not selected after creation (so that drawing can continue)
-  }
-
-  /**
-   * Updates the tentative state
-   */
-  private updateTentative(): void {
-    if (this.currentCoordinates.length === 0) {
-      this.context.store.setTentative(null);
-      return;
-    }
-
-    this.context.store.setTentative({
-      type: 'Freehand',
-      coordinates: [...this.currentCoordinates],
-      layerId: this.context.getCurrentLayerId(),
-      pendingFeatureId: this.pendingFeatureId ?? undefined,
-    });
-  }
-
-  /**
-   * Resets the state
-   */
-  private reset(): void {
-    this.isDrawing = false;
-    this.currentCoordinates = [];
-    this.pendingFeatureId = null;
-  }
-}
+    onKeyDown(event) {
+      if (event.key !== 'Escape') return false;
+      if (stroke) dropStroke();
+      else ctx.setMode('select');
+      return true;
+    },
+  };
+};

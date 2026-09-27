@@ -2,18 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * DrawCircleMode
+ * The circle drawing mode: a click sets the center, moving the pointer adjusts the radius, and
+ * another click creates the circle
  *
- * Circle drawing mode. The center is set by a click, the radius is adjusted by moving the
- * mouse, and another click confirms it.
+ * It is written to the extension contract, through the `ModeContext` alone.
  */
 
-import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import type { Position } from 'geojson';
+import type { ModeFactory } from '../../api/v2/extension/mode.js';
 import { haversineDistanceMeters, initialBearingDegrees } from '../../geometry/distance.js';
 import { drawProperties } from '../../shared/properties.js';
-import type { Coordinate, Feature, Mode } from '../../store/types.js';
-import type { ModeContext, ModeHandler } from '../handler.js';
-import { createdZoomProperty, resolveCommitLayer } from './commit-layer.js';
 
 /** Default angle of the radius handle (toward the lower right) */
 const DEFAULT_RADIUS_HANDLE_ANGLE = 135;
@@ -22,206 +20,96 @@ const DEFAULT_RADIUS_HANDLE_ANGLE = 135;
 const MIN_RADIUS_METERS = 1;
 
 /**
- * DrawCircleMode implementation
+ * The factory of the circle drawing mode
  *
  * @internal
  */
-export class DrawCircleMode implements ModeHandler {
-  readonly modeName: Mode = 'draw_circle';
-  readonly writesFeatures = true;
+export const drawCircleMode: ModeFactory = (ctx) => {
+  /** The center, once the first click set it */
+  let center: Position | null = null;
+  let radiusMeters = 0;
+  let radiusHandleAngle = DEFAULT_RADIUS_HANDLE_ANGLE;
 
-  private context!: ModeContext;
+  /** The values of the circle as it stands */
+  const circleProperties = () => drawProperties({ radiusMeters, radiusHandleAngle });
 
-  /** Center coordinate of the circle */
-  private center: Coordinate | null = null;
+  const reset = (): void => {
+    center = null;
+    radiusMeters = 0;
+    radiusHandleAngle = DEFAULT_RADIUS_HANDLE_ANGLE;
+    ctx.preview.clear();
+  };
 
-  /** Radius (in meters) */
-  private radiusMeters: number = 0;
-
-  /** Angle of the radius handle (in degrees) */
-  private radiusHandleAngle: number = DEFAULT_RADIUS_HANDLE_ANGLE;
-
-  /** Drawing phase: 'waiting' = the center is not set yet, 'adjusting' = adjusting the radius */
-  private phase: 'waiting' | 'adjusting' = 'waiting';
-
-  /** The Feature ID that is going to be created */
-  private pendingFeatureId: string | null = null;
-
-  onStart(context: ModeContext): void {
-    this.context = context;
-    // Change the cursor to a crosshair
-    this.context.map.getCanvas().style.cursor = 'crosshair';
-    // Clear the selection (not notified as a change)
-    this.context.store.transact(() => {
-      this.context.store.setSelection(null, []);
-    }, 'silent');
-    // Reset the state
-    this.reset();
-    // Generate the Feature ID in advance
-    this.pendingFeatureId = this.context.generateFeatureId();
-  }
-
-  onStop(): void {
-    // Restore the cursor
-    this.context.map.getCanvas().style.cursor = '';
-    // Clear the tentative state
-    this.context.store.setTentative(null);
-    this.reset();
-  }
-
-  /**
-   * A double click while drawing is two clicks of the drawing; it never zooms the map
-   * (consumed by preventing its default action)
-   */
-  onDoubleClick(event: MouseNormalizedEvent): void {
-    event.originalEvent.preventDefault();
-  }
-
-  onClick(event: MouseNormalizedEvent): void {
-    const coord: Coordinate = [event.lngLat.lng, event.lngLat.lat];
-
-    if (this.phase === 'waiting') {
-      // Set the center
-      this.center = coord;
-      this.phase = 'adjusting';
-      this.radiusMeters = 0;
-
-      // Update the tentative state
-      this.updateTentative();
-    } else if (this.phase === 'adjusting') {
-      // Confirm if the radius is at least the minimum value
-      if (this.radiusMeters >= MIN_RADIUS_METERS) {
-        this.finishCircle();
-      }
-    }
-  }
-
-  onMouseMove(event: MouseNormalizedEvent): void {
-    if (this.phase === 'adjusting' && this.center) {
-      // Compute the distance from the center to the mouse position
-      const mouseCoord: Coordinate = [event.lngLat.lng, event.lngLat.lat];
-      this.radiusMeters = haversineDistanceMeters(this.center, mouseCoord);
-
-      // The great-circle bearing from the center to the mouse position. The handle is placed
-      // with destinationPoint, the inverse of this bearing, so it lands on the pointer
-      this.radiusHandleAngle = initialBearingDegrees(this.center, mouseCoord);
-
-      // Update the tentative state
-      this.updateTentative();
-    }
-  }
-
-  onKeyDown(event: KeyNormalizedEvent): void {
-    if (event.key === 'Escape') {
-      if (this.phase === 'adjusting') {
-        // Cancel if drawing is in progress
-        this.reset();
-        this.context.store.setTentative(null);
-      } else {
-        // Return to the select mode if drawing is not in progress
-        this.context.setMode('select');
-      }
-    }
-  }
-
-  /**
-   * Called after an external state change
-   *
-   * Resets the state of the drawing in progress so that the next drawing operation can start
-   * normally.
-   */
-  onExternalStateChange(): void {
-    this.reset();
-    this.context.store.setTentative(null);
-  }
-
-  /**
-   * Confirms the circle
-   */
-  private finishCircle(): void {
-    if (!this.center || this.radiusMeters < MIN_RADIUS_METERS) {
-      return;
-    }
-
-    const { store, autoNameGenerator } = this.context;
-
-    // Discard the drawing when no layer can be written any more
-    const layerId = resolveCommitLayer(this.context);
-    if (layerId === null) return;
-
-    // Generate the automatic name
-    const autoName = autoNameGenerator.generateName('Circle');
-
-    // Use the ID generated in advance (generate a new one if there is none)
-    const featureId = this.pendingFeatureId ?? this.context.generateFeatureId();
-
-    // Create a new circle feature
-    const feature: Feature = {
-      groupId: undefined,
-      id: featureId,
+  const showPreview = (): void => {
+    if (!center) return;
+    ctx.preview.set({
       type: 'Circle',
-      geometry: { type: 'Point', coordinates: this.center },
-      layerId,
-      properties: {
-        ...drawProperties({
-          radiusMeters: this.radiusMeters,
-          radiusHandleAngle: this.radiusHandleAngle,
-        }),
-        ...createdZoomProperty(this.context),
-        // The polygon coordinates for rendering are computed at render time, so they are not saved
-        ...(autoName !== undefined && { name: autoName }),
-      },
-      locked: false,
-      visible: true,
-      style: {},
-    };
-
-    // Bundle the feature creation and the selection into a single transaction
-    // (so that both are undone at once on undo)
-    store.transact(() => {
-      store.createFeature(feature);
-
-      // Clear the tentative state
-      store.setTentative(null);
-
-      // Select the created feature
-      store.setSelection('feature', [feature.id]);
+      geometry: { type: 'Point', coordinates: center },
+      properties: circleProperties(),
     });
+  };
 
-    // Reset the state
-    this.reset();
-
-    // Return to the select mode
-    this.context.setMode('select');
-  }
-
-  /**
-   * Updates the tentative state
-   */
-  private updateTentative(): void {
-    if (!this.center) {
-      this.context.store.setTentative(null);
-      return;
-    }
-
-    this.context.store.setTentative({
-      type: 'Circle',
-      coordinates: this.center,
-      layerId: this.context.getCurrentLayerId(),
-      radiusMeters: this.radiusMeters,
-      radiusHandleAngle: this.radiusHandleAngle,
-      pendingFeatureId: this.pendingFeatureId ?? undefined,
+  const finish = (): void => {
+    if (!center || radiusMeters < MIN_RADIUS_METERS) return;
+    const at = center;
+    ctx.draw.transact(() => {
+      const feature = ctx.commitFeature({
+        type: 'Circle',
+        geometry: { type: 'Point', coordinates: at },
+        properties: circleProperties(),
+      });
+      if (feature) ctx.draw.selection.set('feature', [feature.id]);
     });
-  }
+    reset();
+    ctx.setMode('select');
+  };
 
-  /**
-   * Resets the state
-   */
-  private reset(): void {
-    this.center = null;
-    this.radiusMeters = 0;
-    this.radiusHandleAngle = DEFAULT_RADIUS_HANDLE_ANGLE;
-    this.phase = 'waiting';
-    this.pendingFeatureId = null;
-  }
-}
+  return {
+    writes: true,
+
+    onEnter() {
+      ctx.cursor.set('crosshair');
+      ctx.draw.transact(() => ctx.draw.selection.clear(), { source: 'silent' });
+      reset();
+    },
+
+    onExit() {
+      ctx.cursor.reset();
+      reset();
+    },
+
+    // What was being drawn is dropped when the state is reset from outside
+    onCancel: reset,
+
+    // A double click while drawing is two clicks of the drawing; it never zooms the map
+    onDoubleClick: () => true,
+
+    onClick(event) {
+      if (!center) {
+        center = event.snapped.lngLat;
+        radiusMeters = 0;
+        showPreview();
+      } else if (radiusMeters >= MIN_RADIUS_METERS) {
+        finish();
+      }
+      return true;
+    },
+
+    onPointerMove(event) {
+      if (!center) return false;
+      const from: [number, number] = [center[0], center[1]];
+      const to: [number, number] = [event.snapped.lngLat[0], event.snapped.lngLat[1]];
+      radiusMeters = haversineDistanceMeters(from, to);
+      radiusHandleAngle = initialBearingDegrees(from, to);
+      showPreview();
+      return false;
+    },
+
+    onKeyDown(event) {
+      if (event.key !== 'Escape') return false;
+      if (center) reset();
+      else ctx.setMode('select');
+      return true;
+    },
+  };
+};

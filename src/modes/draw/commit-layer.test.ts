@@ -11,19 +11,21 @@
  * returns to select without an exception.
  */
 
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
+import { createModeHarness } from '../../test-utils.js';
 import type { ModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
-import { DrawCircleMode } from './circle.js';
-import { DrawFreehandMode } from './freehand.js';
+import { drawCircleMode } from './circle.js';
+import { drawFreehandMode } from './freehand.js';
 import { DrawImageMode } from './image.js';
 import { DrawLineMode } from './line.js';
-import { DrawPointMode } from './point.js';
+import { drawPointMode } from './point.js';
 import { DrawPolygonMode } from './polygon.js';
 
 const DRAWING_MODES: Mode[] = [
@@ -63,6 +65,8 @@ let store: MemoryStore;
 let manager: ModeManagerImpl;
 let activeLayerId: string;
 let imageRequests: unknown[];
+/** Clicks in the current mode, through the input route of the modes of the contract */
+let clickAt: (lng: number, lat: number) => void;
 
 beforeEach(() => {
   store = new MemoryStore();
@@ -72,14 +76,6 @@ beforeEach(() => {
   manager = new ModeManagerImpl(store, {
     canEnter: (handler) => !handler.writesFeatures || getWritableLayerId() !== '',
   });
-  manager.registerMode('select', () => ({ modeName: 'select' }));
-  manager.registerMode('draw_point', () => new DrawPointMode());
-  manager.registerMode('draw_line', () => new DrawLineMode());
-  manager.registerMode('draw_polygon', () => new DrawPolygonMode());
-  manager.registerMode('draw_circle', () => new DrawCircleMode());
-  manager.registerMode('draw_freehand', () => new DrawFreehandMode());
-  manager.registerMode('draw_image', () => new DrawImageMode());
-
   let idCounter = 0;
   const canvas = { style: { cursor: '' } };
   const map = {
@@ -87,7 +83,24 @@ beforeEach(() => {
     getZoom: () => 10,
     getCenter: () => ({ lng: 0, lat: 0 }),
     project: (c: [number, number]) => ({ x: c[0] * 1000, y: c[1] * 1000 }),
-    dragPan: { enable: () => {}, disable: () => {} },
+    dragPan: { isEnabled: () => true, enable: () => {}, disable: () => {} },
+  };
+  const harness = createModeHarness({
+    store,
+    map: map as unknown as MapLibreMap,
+    modeManager: manager,
+    getWritableLayerId,
+  });
+  manager.registerMode('select', () => ({ modeName: 'select' }));
+  harness.register('draw_point', drawPointMode);
+  manager.registerMode('draw_line', () => new DrawLineMode());
+  manager.registerMode('draw_polygon', () => new DrawPolygonMode());
+  harness.register('draw_circle', drawCircleMode);
+  harness.register('draw_freehand', drawFreehandMode);
+  manager.registerMode('draw_image', () => new DrawImageMode());
+  clickAt = (lng, lat) => {
+    const handler = manager.getHandler();
+    if (handler) harness.route.toMode(handler, click(lng, lat), click(lng, lat), null);
   };
   manager.setContext({
     map,
@@ -166,7 +179,7 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('b'));
     store.createLayer(layer('a'));
     manager.setMode('draw_point');
-    manager.getHandler()?.onClick?.(click(1, 1));
+    clickAt(1, 1);
     const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('a');
   });
@@ -176,7 +189,7 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('b', { visible: false }));
     store.createLayer(layer('c'));
     manager.setMode('draw_point');
-    manager.getHandler()?.onClick?.(click(1, 1));
+    clickAt(1, 1);
     const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('c');
     // The active layer itself is not changed
@@ -198,7 +211,7 @@ describe('losing the layer while drawing', () => {
     manager.setMode('draw_point');
     store.deleteLayer('a');
 
-    expect(() => manager.getHandler()?.onClick?.(click(1, 1))).not.toThrow();
+    expect(() => clickAt(1, 1)).not.toThrow();
     expect(store.getMode()).toBe('select');
     expect(store.listFeatures()).toEqual([]);
   });
@@ -226,7 +239,7 @@ describe('losing the layer while drawing', () => {
     manager.setMode('draw_point');
     store.setLocallyHidden('a', true);
 
-    expect(() => manager.getHandler()?.onClick?.(click(1, 1))).not.toThrow();
+    expect(() => clickAt(1, 1)).not.toThrow();
     expect(store.getMode()).toBe('select');
     expect(store.listFeatures()).toEqual([]);
   });

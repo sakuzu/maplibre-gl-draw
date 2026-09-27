@@ -8,14 +8,26 @@
 import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { vi } from 'vitest';
+import type { ModeFactory } from './api/v2/extension/mode.js';
+import type { ExtensionsCollections } from './api/v2/extensions.js';
+import type { ModeServices } from './api/v2/impl/contexts.js';
+import { createModeContext, createScreenContext } from './api/v2/impl/contexts.js';
+import { createFeatures } from './api/v2/impl/features.js';
+import { bridgeMode, createInputRoute } from './api/v2/impl/input.js';
 import type { ResourceDeps } from './api/v2/impl/shared.js';
+import { createStandaloneDraw } from './api/v2/impl/standalone-draw.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
+import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
+import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
 import type { Feature } from './shared/types/model.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
+import type { SnapResult } from './snapping/types.js';
 import type { Store } from './store/store.js';
+import type { TerrainContext } from './view/terrain/context.js';
+import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
 
 /**
  * Scales a time limit of a test that runs a browser
@@ -196,5 +208,72 @@ export function createResourceDeps(store: Store): ResourceDeps & { emitter: Even
     featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
     eventEmitter: emitter,
     emitter,
+  };
+}
+
+/**
+ * Runs modes written to the extension contract in a mode manager without an engine: each mode
+ * gets a `ModeContext` over the Store and the map given, and `route` is the input route to
+ * pass to an input router
+ */
+export function createModeHarness(options: {
+  store: Store;
+  map: MapLibreMap;
+  /** The mode manager the modes run in (a context only needs its setMode) */
+  modeManager: ModeManager;
+  /** The writable layer (the first layer of the Store when omitted) */
+  getWritableLayerId?: () => string;
+  /** Whether new features get their created zoom */
+  scaleWithZoom?: boolean;
+  /** The automatic names of new features */
+  autoName?: boolean;
+  /** The result of `ctx.snap` */
+  snapPoint?: (point: { x: number; y: number }) => SnapResult;
+}) {
+  const { store, map, modeManager } = options;
+  const deps = createResourceDeps(store);
+  const autoNameGenerator = new AutoNameGenerator(store, options.autoName !== false);
+  const collections = {} as ExtensionsCollections;
+  const draw = createStandaloneDraw(map, deps, modeManager, collections);
+  const services: ModeServices = {
+    map,
+    store,
+    terrain: {} as TerrainContext,
+    pixelRatio: { resolve: () => 1, getRenderScale: () => 1 },
+    autoNameGenerator,
+    selectionExtensions: createSelectionExtensionRegistry(),
+    spatialIndex: { invalidate: () => {}, invalidateType: () => {} },
+    modeManager,
+    getDraw: () => draw,
+    collections,
+    hitTestTopmost: () => null,
+    distanceToFeaturePx: () => 0,
+    snapPoint: options.snapPoint ?? ((point) => ({ lngLat: map.unproject([point.x, point.y]) })),
+    listTraceRows: () => [],
+    getWritableLayerId:
+      options.getWritableLayerId ??
+      (() => store.listLayers().find((l) => l.visible && !l.locked)?.id ?? ''),
+    generateId: deps.generateId,
+    scaleWithZoom: options.scaleWithZoom ?? false,
+    selectionStyle: DEFAULT_SELECTION_CONFIG,
+    features: createFeatures(deps),
+  };
+  const screen = createScreenContext({
+    map,
+    pixelRatio: services.pixelRatio,
+    selectionExtensions: services.selectionExtensions,
+  });
+  return {
+    draw,
+    route: createInputRoute(() => []),
+    /** A new context of a mode */
+    modeContext: () => createModeContext(services, screen).context,
+    /** Registers a mode of the contract with the mode manager */
+    register(name: string, factory: ModeFactory): () => void {
+      return modeManager.registerMode(name, () => {
+        const handle = createModeContext(services, screen);
+        return bridgeMode(name, factory(handle.context), handle.dispose);
+      });
+    },
   };
 }
