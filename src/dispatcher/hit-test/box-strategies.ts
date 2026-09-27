@@ -23,7 +23,7 @@ import {
 } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getImageProperties } from '../../shared/utils/property.js';
-import type { BoundingBox, Coordinate, Feature, ImageStyle } from '../../store/types.js';
+import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
 import type { BoxSelectionStrategy } from './box-strategy.js';
 
 /**
@@ -175,13 +175,12 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
 
     const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
-    const style = feature.style as ImageStyle | undefined;
 
     const imageWidth = properties.imageWidth || 100;
     const imageHeight = properties.imageHeight || 100;
 
-    const displayWidth = style?.width || imageWidth;
-    const displayHeight = style?.height || imageHeight;
+    const displayWidth = imageWidth;
+    const displayHeight = imageHeight;
 
     const createdZoom = properties.createdZoom || 14;
     const scale = properties.scale || 1;
@@ -194,7 +193,7 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
     const widthDeg = metersToDegreesLng(widthMeters, latitude);
     const heightDeg = metersToDegreesLat(heightMeters);
 
-    const rotation = (style?.rotation || 0) + (properties.rotation || 0);
+    const rotation = properties.rotation || 0;
 
     return createOBB(coord[0], coord[1], widthDeg, heightDeg, rotation);
   }

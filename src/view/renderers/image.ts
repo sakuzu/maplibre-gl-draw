@@ -18,26 +18,9 @@ import {
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getTileSize } from '../../shared/utils/map.js';
 import { getImageProperties } from '../../shared/utils/property.js';
-import type { Coordinate, Feature, FileData, ImageStyle } from '../../store/types.js';
+import type { Coordinate, Feature, FileData } from '../../store/types.js';
 import type { TextureCache } from '../cache/texture.js';
 import { computeQuadVertices, type QuadShader } from '../shaders/quad.js';
-
-/** The keys of an image style that drawing an image reads, with their defaults applied */
-type ResolvedImageStyle = Required<
-  Pick<ImageStyle, 'width' | 'height' | 'rotation' | 'opacity' | 'imageOpacity'>
->;
-
-/**
- * The default image style
- * width/height: 0 = use the original size
- */
-const DEFAULT_IMAGE_STYLE: ResolvedImageStyle = {
-  width: 0,
-  height: 0,
-  rotation: 0,
-  opacity: 1.0,
-  imageOpacity: 1,
-};
 
 /**
  * The type of the function that obtains file data
@@ -124,7 +107,6 @@ export class ImageRenderer {
 
     const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
-    const style = this.getImageStyle(feature.style as ImageStyle | undefined);
 
     // The texture is keyed by the dataURL. While the image is decoding nothing is drawn; the
     // decode (shared per dataURL) requests a redraw when it finishes, and that frame uploads it
@@ -146,13 +128,9 @@ export class ImageRenderer {
       return;
     }
 
-    // Determine the size (use the size stored in ImageProperties)
-    const imageWidth = properties.imageWidth || textureInfo.width;
-    const imageHeight = properties.imageHeight || textureInfo.height;
-
-    // Use the size specified by the style, or the original size
-    const displayWidth = style.width || imageWidth;
-    const displayHeight = style.height || imageHeight;
+    // The size in pixels at the created zoom: the size of the feature, or else of the image
+    const displayWidth = properties.imageWidth || textureInfo.width;
+    const displayHeight = properties.imageHeight || textureInfo.height;
 
     // Scale relative to how it is displayed at createdZoom
     // At createdZoom the image is displayed at its original pixel size
@@ -170,19 +148,16 @@ export class ImageRenderer {
     const heightDeg = metersToDegreesLat(heightMeters);
 
     // Rotation angle (degrees -> radians)
-    const rotationRad = (((style.rotation || 0) + (properties.rotation || 0)) * Math.PI) / 180;
+    const rotationRad = ((properties.rotation || 0) * Math.PI) / 180;
 
     // Compute the quad vertices
     const vertices = computeQuadVertices(coord[0], coord[1], widthDeg, heightDeg, rotationRad);
 
-    // Draw (imageOpacity takes precedence; otherwise opacity is used)
-    const opacity = (style.imageOpacity ?? style.opacity ?? 1.0) * opacityFactor;
+    // Draw
+    const opacity = (feature.style.imageOpacity ?? 1.0) * opacityFactor;
     this.quadShader.draw(vertices, textureInfo.texture, opacity, projectionData, zoom);
   }
 
-  /**
-   * Merge the image style
-   */
   /**
    * Records a feature whose image is not drawn: reports it at once when the image has failed,
    * otherwise waits for the decode (the cache tells only the caller that started it)
@@ -215,13 +190,6 @@ export class ImageRenderer {
     this.onError?.(featureId, error);
   }
 
-  private getImageStyle(style: ImageStyle | undefined): ResolvedImageStyle {
-    return {
-      ...DEFAULT_IMAGE_STYLE,
-      ...style,
-    };
-  }
-
   /**
    * Compute the bounding box of an image (in degrees)
    *
@@ -240,13 +208,10 @@ export class ImageRenderer {
 
     const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
-    const style = this.getImageStyle(feature.style as ImageStyle | undefined);
 
-    // Determine the size
-    const imageWidth = properties.imageWidth || style.width;
-    const imageHeight = properties.imageHeight || style.height;
-    const displayWidth = style.width || imageWidth;
-    const displayHeight = style.height || imageHeight;
+    // The size in pixels at the created zoom
+    const displayWidth = properties.imageWidth;
+    const displayHeight = properties.imageHeight;
 
     // Scale relative to how it is displayed at createdZoom
     const createdZoom = properties.createdZoom || zoom;
@@ -263,7 +228,7 @@ export class ImageRenderer {
     const heightDeg = metersToDegreesLat(heightMeters);
 
     // Rotation angle
-    const rotationRad = (((style.rotation || 0) + (properties.rotation || 0)) * Math.PI) / 180;
+    const rotationRad = ((properties.rotation || 0) * Math.PI) / 180;
 
     // Compute the quad vertices
     const vertices = computeQuadVertices(coord[0], coord[1], widthDeg, heightDeg, rotationRad);

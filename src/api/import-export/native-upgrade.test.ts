@@ -171,6 +171,46 @@ describe('upgradeNativeData', () => {
     });
   });
 
+  it('folds the size, the rotation and the opacity in the style of an Image', () => {
+    const data = document2();
+    data.features[2] = feature2(
+      'i',
+      'Image',
+      [5, 6],
+      { imageFileId: 'file-1', imageWidth: 64, imageHeight: 64, createdZoom: 10, rotation: 30 },
+      { style: { width: 400, height: 160, rotation: 15, opacity: 0.5, fillColor: '#ff0000' } },
+    );
+
+    const { features } = upgrade(data);
+
+    expect(features[2].properties).toEqual({
+      'maplibre-gl-draw:imageFileId': 'file-1',
+      'maplibre-gl-draw:imageWidth': 400,
+      'maplibre-gl-draw:imageHeight': 160,
+      'maplibre-gl-draw:createdZoom': 10,
+      'maplibre-gl-draw:rotation': 45,
+    });
+    expect(features[2].style).toEqual({ imageOpacity: 0.5, fillColor: '#ff0000' });
+  });
+
+  it('keeps imageOpacity over the opacity of an Image, and leaves other types alone', () => {
+    const data = document2();
+    data.features[2] = feature2(
+      'i',
+      'Image',
+      [5, 6],
+      {},
+      { style: { opacity: 0.5, imageOpacity: 0.8 } },
+    );
+    data.features[0] = feature2('p', 'Point', [1, 2], {}, { style: { width: 3 } });
+
+    const { features } = upgrade(data);
+
+    expect(features[2].style).toEqual({ imageOpacity: 0.8 });
+    // A key of an extension on another type is not the size of an image
+    expect(features[0].style).toEqual({ width: 3 });
+  });
+
   it('keeps a prefixed value that is already there over the plain one', () => {
     const data = document2();
     data.features[0].properties = {

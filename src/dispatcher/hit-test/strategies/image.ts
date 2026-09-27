@@ -18,25 +18,8 @@ import {
 } from '../../../shared/math/index.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getImageProperties } from '../../../shared/utils/property.js';
-import type { Coordinate, Feature, ImageStyle } from '../../../store/types.js';
+import type { Coordinate, Feature } from '../../../store/types.js';
 import type { HitTestStrategy } from './base.js';
-
-/** The keys of an image style that drawing an image reads, with their defaults applied */
-type ResolvedImageStyle = Required<
-  Pick<ImageStyle, 'width' | 'height' | 'rotation' | 'opacity' | 'imageOpacity'>
->;
-
-/**
- * Default image style
- * width/height: 0 = use the original size (the same as ImageRenderer)
- */
-const DEFAULT_IMAGE_STYLE: ResolvedImageStyle = {
-  width: 0,
-  height: 0,
-  rotation: 0,
-  opacity: 1.0,
-  imageOpacity: 1,
-};
 
 /**
  * ImageHitTestStrategy
@@ -116,7 +99,6 @@ export class ImageHitTestStrategy implements HitTestStrategy {
 
     const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
-    const style = { ...DEFAULT_IMAGE_STYLE, ...(feature.style as ImageStyle) };
 
     // Get the image size (the same logic as ImageRenderer)
     // The size stored in ImageProperties takes precedence
@@ -124,9 +106,8 @@ export class ImageHitTestStrategy implements HitTestStrategy {
     const imageWidth = properties.imageWidth || 100;
     const imageHeight = properties.imageHeight || 100;
 
-    // Use the size specified by the style, or the original size
-    const displayWidth = style.width || imageWidth;
-    const displayHeight = style.height || imageHeight;
+    const displayWidth = imageWidth;
+    const displayHeight = imageHeight;
 
     // Compute the size based on the display at createdZoom
     const createdZoom = properties.createdZoom || 14;
@@ -142,8 +123,8 @@ export class ImageHitTestStrategy implements HitTestStrategy {
     const widthDeg = metersToDegreesLng(widthMeters, latitude);
     const heightDeg = metersToDegreesLat(heightMeters);
 
-    // Rotation angle (the sum of both the style and the properties)
-    const rotation = (style.rotation || 0) + (properties.rotation || 0);
+    // Rotation angle
+    const rotation = properties.rotation || 0;
 
     return { center: coord, widthDeg, heightDeg, rotation };
   }

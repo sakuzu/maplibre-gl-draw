@@ -45,6 +45,7 @@ const STYLE_CHECK_TABLE: Readonly<Record<keyof FeatureStyle, Check>> = {
   pointRadius: isNonNegative,
   pointColor: isHexColor,
   pointShape: oneOf('circle', 'square', 'triangle', 'star'),
+  pointOpacity: isOpacity,
   imageOpacity: isOpacity,
 };
 

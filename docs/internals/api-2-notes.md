@@ -98,18 +98,31 @@ another layer, the group is updated to that layer.
 ## Styles
 
 `Feature.style` is always present, `{}` when the feature has no style of
-its own. The keys of `ImageStyle` other than those of `FeatureStyle`
-(`width`, `height`, `rotation` and `opacity`) have no place in the 2.0
-`FeatureStyle`, so `ImageStyle` is kept as it is for now and an image still
-reads them.
+its own, and is a `FeatureStyle`. `ImageStyle` is gone: the keys it added
+to the style of an Image are folded into the model.
+
+| Key of `ImageStyle` in 1.0 | In 2.0 |
+| --- | --- |
+| `width`, `height` | `maplibre-gl-draw:imageWidth`, `imageHeight` |
+| `rotation` | added to `maplibre-gl-draw:rotation` |
+| `opacity` | `imageOpacity`, when the style has none |
+
+`imageWidth` and `imageHeight` are the size the image is drawn at, at the
+created zoom. The renderer falls back to the size of the decoded image
+when they are absent. The fold (`legacy-image-style.ts`) runs on the
+native data of version 2 and on the GeoJSON import of an Image.
+
+`pointOpacity` is new: the point renderer multiplies it into the opacity
+of the fill and of the outline of the marker (1 when unset).
 
 ## The native format
 
 The version of the native format goes from `2.0.0` to `3.0.0`. Data of
 version 2 is upgraded on load (`src/api/import-export/native-upgrade.ts`):
 `coordinates` becomes `geometry`, the values of the library in
-`properties` get their prefix, `order` becomes `items`, and each group
-gets the `layerId` of the layer that lists it (or of its first member).
+`properties` get their prefix, the style keys of an Image are folded (see
+above), `order` becomes `items`, and each group gets the `layerId` of the
+layer that lists it (or of its first member).
 Data of version 1 is still rejected, as before.
 
 ## GeoJSON

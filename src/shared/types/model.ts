@@ -139,10 +139,10 @@ export interface VertexSelection {
  *
  * | Feature types | Keys |
  * | --- | --- |
- * | Point, MultiPoint | pointColor, pointRadius, pointShape |
+ * | Point, MultiPoint | pointColor, pointRadius, pointShape, pointOpacity |
  * | LineString, MultiLineString, Freehand | strokeColor, strokeOpacity, strokeWidth, lineStyle |
  * | Polygon, MultiPolygon, Circle | the stroke keys, fillColor, fillOpacity |
- * | Image | imageOpacity and the keys of {@link ImageStyle} |
+ * | Image | imageOpacity |
  *
  * On import each key is validated and a key that fails is dropped.
  *
@@ -243,47 +243,21 @@ export interface FeatureStyle {
    * @defaultValue the shape of the `style` option (`'circle'` unless it is changed)
    */
   pointShape?: 'circle' | 'square' | 'triangle' | 'star';
+  /**
+   * The opacity of the marker of a point, from 0 to 1, multiplied into the opacity of its
+   * fill and of its outline
+   *
+   * @defaultValue `1`
+   */
+  pointOpacity?: number;
 
   // Image
   /**
-   * The opacity of an image, from 0 to 1 (it takes precedence over {@link ImageStyle.opacity})
+   * The opacity of an image, from 0 to 1
    *
    * @defaultValue `1`
    */
   imageOpacity?: number;
-}
-
-/**
- * The style of an Image feature: {@link FeatureStyle} plus its size, rotation and opacity
- *
- * The image is drawn at its size at the zoom it was created at (`maplibre-gl-draw:createdZoom`
- * in `properties`) and scales with the map from there, like a picture laid on the ground.
- */
-export interface ImageStyle extends FeatureStyle {
-  /**
-   * The width in pixels at the created zoom
-   *
-   * @defaultValue the width of the image (`maplibre-gl-draw:imageWidth` in `properties`)
-   */
-  width?: number;
-  /**
-   * The height in pixels at the created zoom
-   *
-   * @defaultValue the height of the image (`maplibre-gl-draw:imageHeight` in `properties`)
-   */
-  height?: number;
-  /**
-   * A rotation in degrees, added to `maplibre-gl-draw:rotation` in `properties`
-   *
-   * @defaultValue `0`
-   */
-  rotation?: number;
-  /**
-   * The opacity from 0 to 1, used when {@link FeatureStyle.imageOpacity} is unset
-   *
-   * @defaultValue `1`
-   */
-  opacity?: number;
 }
 
 /**
@@ -296,9 +270,9 @@ export interface ImageStyle extends FeatureStyle {
 export interface ImageProperties {
   /** The ID of the {@link FileData} that holds the image */
   imageFileId: string;
-  /** The width of the image in pixels */
+  /** The width in pixels the image is drawn at, at the created zoom */
   imageWidth: number;
-  /** The height of the image in pixels */
+  /** The height in pixels the image is drawn at, at the created zoom */
   imageHeight: number;
   /** The zoom the image was placed at; at this zoom it is drawn at its size in pixels */
   createdZoom: number;
@@ -367,9 +341,9 @@ export interface Feature {
   properties: Record<string, unknown>;
   /**
    * The style of this feature, `{}` when it has none of its own (the defaults and the layer's
-   * style rule apply to the keys it leaves out); an Image takes an {@link ImageStyle}
+   * style rule apply to the keys it leaves out)
    */
-  style: FeatureStyle | ImageStyle;
+  style: FeatureStyle;
   /**
    * Whether the feature is locked
    *
@@ -406,7 +380,7 @@ export interface FeatureInput {
   /** Properties (an empty object when omitted) */
   properties?: Record<string, unknown>;
   /** Style */
-  style?: FeatureStyle | ImageStyle;
+  style?: FeatureStyle;
   /** Locked state (false when omitted) */
   locked?: boolean;
   /** Visible state (true when omitted) */

@@ -452,11 +452,6 @@ describe('ImageHitTestStrategy', () => {
       'maplibre-gl-draw:createdZoom': 14,
       'maplibre-gl-draw:scale': 1,
     },
-    style: {
-      width: 100,
-      height: 100,
-      rotation: 0,
-    },
   });
 
   it('has geometryType Image', () => {

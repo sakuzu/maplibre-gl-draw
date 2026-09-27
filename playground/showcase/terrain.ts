@@ -73,10 +73,10 @@ function createDocument() {
               name: 'Survey map',
               'maplibre-gl-draw:createdZoom': 13,
               'maplibre-gl-draw:imageFileId': 'file-survey',
-              'maplibre-gl-draw:imageWidth': 512,
-              'maplibre-gl-draw:imageHeight': 400,
+              'maplibre-gl-draw:imageWidth': 480,
+              'maplibre-gl-draw:imageHeight': 375,
             },
-            style: { width: 480, height: 375, imageOpacity: 0.9 },
+            style: { imageOpacity: 0.9 },
           },
           {
             id: 'forest-plot',

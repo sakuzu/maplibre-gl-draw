@@ -122,7 +122,6 @@ const LAYER_1 = [
   'Hooks',
   'HoverEvent',
   'ImageProperties',
-  'ImageStyle',
   'InputOperations',
   'InteractionGateStore',
   'isFeatureLocked',

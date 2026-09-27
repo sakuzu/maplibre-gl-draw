@@ -22,7 +22,7 @@ import {
   getImageProperties,
 } from '../../../shared/utils/property.js';
 import { getBoundingBox } from '../../../store/spatial/index.js';
-import type { Coordinate, Feature, ImageStyle } from '../../../store/types.js';
+import type { Coordinate, Feature } from '../../../store/types.js';
 import type { SelectionExtensionRegistry } from './extension-registry.js';
 import type { BoundingBoxCoords } from './types.js';
 
@@ -136,10 +136,9 @@ function computeOrientedBoundingBox(feature: Feature): BoundingBoxCoords | null 
   const tileSize = 512;
 
   const props = getImageProperties(feature);
-  const style = feature.style as ImageStyle | undefined;
 
-  const imageWidth = style?.width || props.imageWidth || 100;
-  const imageHeight = style?.height || props.imageHeight || 100;
+  const imageWidth = props.imageWidth || 100;
+  const imageHeight = props.imageHeight || 100;
   const scale = props.scale ?? 1;
   // getImageProperties().createdZoom returns 0 when it is missing, so ?? does not work.
   // getCreatedZoom(number|undefined) is used so that 14 is the default when it is missing.

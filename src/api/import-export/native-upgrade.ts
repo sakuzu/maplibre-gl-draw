@@ -15,6 +15,7 @@ import { DRAW_PROPERTY_NAMES, drawPropertyKey } from '../../shared/properties.js
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { FeatureCoordinates } from '../../store/types.js';
 import { NATIVE_VERSION } from './constants.js';
+import { foldLegacyImageStyle } from './legacy-image-style.js';
 
 type Json = Record<string, unknown>;
 
@@ -40,6 +41,8 @@ function majorOf(version: unknown): number | null {
  * - a feature holds a GeoJSON `geometry` instead of `coordinates`
  * - the values of the library in `properties` get the `maplibre-gl-draw:` prefix
  * - the `order` of a layer becomes `items`
+ * - the size, the rotation and the opacity in the style of an Image move to the prefixed
+ *   `imageWidth`, `imageHeight` and `rotation` in `properties` and to `imageOpacity`
  * - a group gets the `layerId` of the layer whose items list it (or of its first member, and
  *   `''` when it has neither)
  */
@@ -115,6 +118,10 @@ function upgradeFeature(feature: Json): Json {
       }
     }
     result = { ...result, properties };
+    if (feature.type === 'Image' && isRecord(feature.style)) {
+      const style: Json = { ...feature.style };
+      if (foldLegacyImageStyle(properties, style)) result = { ...result, style };
+    }
   }
   return result;
 }

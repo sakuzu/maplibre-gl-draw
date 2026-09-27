@@ -10,13 +10,7 @@
 
 import { circleBoundingBox } from '../../geometry/circle.js';
 import { pixelsToDegreesLat, pixelsToDegreesLng, rotateCoordinateOnSphere } from '../math/index.js';
-import type {
-  BoundingBox,
-  Coordinate,
-  Feature,
-  FeatureCoordinates,
-  ImageStyle,
-} from '../types/model.js';
+import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../types/model.js';
 import { coordinatesOf, forEachCoordinateDeep } from './coordinates.js';
 import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.js';
 
@@ -34,10 +28,9 @@ function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
     const coord = coordinates as Coordinate;
     const [lng, lat] = coord;
     const props = getImageProperties(feature);
-    const style = feature.style as ImageStyle | undefined;
 
-    const imageWidth = style?.width || props.imageWidth || 100;
-    const imageHeight = style?.height || props.imageHeight || 100;
+    const imageWidth = props.imageWidth || 100;
+    const imageHeight = props.imageHeight || 100;
     const scale = props.scale ?? 1;
     // createdZoom defaults to 14 when missing. getImageProperties().createdZoom returns 0 when
     // missing, so ?? does not work; therefore getCreatedZoom(number|undefined) is used.

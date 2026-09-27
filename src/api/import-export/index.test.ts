@@ -1986,6 +1986,39 @@ describe('createImportExportAPI', () => {
     });
   });
 
+  describe('GeoJSON import of an Image written by 1.0', () => {
+    it('reads the size, the rotation and the opacity of its style', async () => {
+      const api = createImportExportAPI(context);
+      const result = await api.load({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [0, 0] },
+            properties: {
+              'maplibre-gl-draw:featureType': 'Image',
+              'maplibre-gl-draw:imageFileId': 'file-1',
+              'maplibre-gl-draw:imageWidth': 64,
+              'maplibre-gl-draw:imageHeight': 64,
+              'maplibre-gl-draw:rotation': 10,
+              'maplibre-gl-draw:style': { width: 200, height: 100, rotation: 20, opacity: 0.4 },
+            },
+          },
+        ],
+      });
+
+      const image = context.store.getFeature(result.featureIds[0]);
+      expect(image?.type).toBe('Image');
+      expect(image?.properties).toEqual({
+        'maplibre-gl-draw:imageFileId': 'file-1',
+        'maplibre-gl-draw:imageWidth': 200,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:rotation': 30,
+      });
+      expect(image?.style).toEqual({ imageOpacity: 0.4 });
+    });
+  });
+
   describe('the version of native data', () => {
     function nativeData(version: string) {
       return {

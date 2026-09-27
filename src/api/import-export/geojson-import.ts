@@ -27,6 +27,7 @@ import type {
 } from '../../store/types.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
+import { foldLegacyImageStyle } from './legacy-image-style.js';
 import { setOwnProperty } from './own-property.js';
 import { isHexColor, sanitizeFeatureStyle } from './style-validation.js';
 import type { ConvertedFeatureResult, GeoJSONImportOptions } from './types.js';
@@ -509,6 +510,12 @@ export function convertGeoJSONToFeature(
         delete userProperties[name];
       }
     }
+  }
+
+  // The style of an Image written by an earlier export can carry its size, a rotation and an
+  // opacity of its own; they are read as the values of this library and imageOpacity
+  if (geometry.type === 'Point' && resolveFeatureType('Point', featureType) === 'Image') {
+    foldLegacyImageStyle(userProperties, style as Record<string, unknown>);
   }
 
   // When there is image data on a single Image point, create the FileData and set a new

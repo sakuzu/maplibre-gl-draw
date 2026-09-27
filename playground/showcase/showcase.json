@@ -965,14 +965,12 @@
         "maplibre-gl-draw:createdZoom": 15.0,
         "maplibre-gl-draw:rotation": -6,
         "maplibre-gl-draw:imageFileId": "file-station",
-        "maplibre-gl-draw:imageWidth": 240,
-        "maplibre-gl-draw:imageHeight": 160
+        "maplibre-gl-draw:imageWidth": 120,
+        "maplibre-gl-draw:imageHeight": 80
       },
       "visible": true,
       "locked": false,
       "style": {
-        "width": 120,
-        "height": 80,
         "imageOpacity": 1
       }
     },

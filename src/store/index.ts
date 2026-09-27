@@ -32,7 +32,6 @@ export type {
   FileData,
   Group,
   ImageProperties,
-  ImageStyle,
   Layer,
   LoadOptions,
   LoadResult,

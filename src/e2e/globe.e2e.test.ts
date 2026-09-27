@@ -307,10 +307,11 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
               properties: {
                 'maplibre-gl-draw:createdZoom': 1,
                 'maplibre-gl-draw:imageFileId': 'file-magenta',
-                'maplibre-gl-draw:imageWidth': 64,
-                'maplibre-gl-draw:imageHeight': 64,
+                // Drawn at 400 x 160 px at the created zoom, whatever the size of the file
+                'maplibre-gl-draw:imageWidth': 400,
+                'maplibre-gl-draw:imageHeight': 160,
               },
-              style: { width: 400, height: 160, imageOpacity: 1 },
+              style: { imageOpacity: 1 },
             },
           ],
           files: {

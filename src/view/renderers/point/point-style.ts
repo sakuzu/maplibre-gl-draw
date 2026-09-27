@@ -30,11 +30,21 @@ function featurePointShape(style: FeatureStyle): PointShape | undefined {
 }
 
 /**
+ * The opacity of the marker a feature names, from 0 to 1 (1 when it names none or a value
+ * outside the range)
+ */
+function featurePointOpacity(style: FeatureStyle): number {
+  const opacity = style.pointOpacity;
+  return typeof opacity === 'number' && opacity >= 0 && opacity <= 1 ? opacity : 1;
+}
+
+/**
  * Merges the style of a point feature (already carrying the rule color) into the default
  *
  * The keys of the feature win key by key: `pointColor` becomes the fill, `pointRadius` the
- * size (a diameter), `pointShape` the shape. A key left unset (or a shape that is not one of
- * the four a feature may name) keeps the default.
+ * size (a diameter), `pointShape` the shape. `pointOpacity` is multiplied into the opacity of
+ * the fill and of the outline of the marker. A key left unset (or a shape that is not one of
+ * the four a feature may name, or an opacity outside 0 to 1) keeps the default.
  *
  * @param style The style of the feature (undefined when it has none)
  * @param defaults The point style of the `style` option of the instance
@@ -46,11 +56,14 @@ export function resolvePointStyle(
   defaults: PointStyle,
 ): PointStyle {
   if (!style) return defaults;
+  const opacity = featurePointOpacity(style);
 
   return {
     ...defaults,
     shape: featurePointShape(style) ?? defaults.shape,
     fillColor: style.pointColor ? hexToColor(style.pointColor, 1) : defaults.fillColor,
     size: style.pointRadius ? style.pointRadius * 2 : defaults.size,
+    fillOpacity: defaults.fillOpacity * opacity,
+    strokeOpacity: defaults.strokeOpacity * opacity,
   };
 }
