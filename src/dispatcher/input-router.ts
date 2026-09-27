@@ -29,7 +29,7 @@ import type { ModeContext, ModeHandler, SnapInputType } from '../modes/handler.j
 import type { ModeManager } from '../modes/manager.js';
 import type { PluginManager } from '../plugins/plugin-manager.js';
 import { nearestLongitude, wrapLongitude } from '../shared/math/longitude.js';
-import type { SnapContext, SnapService } from '../snapping/types.js';
+import type { SnapContext, SnapResult, SnapService } from '../snapping/types.js';
 import type { Coordinate, TentativeState } from '../store/types.js';
 import type { InputNormalizer } from './normalizer.js';
 import type {
@@ -111,6 +111,42 @@ export interface InputRouterDeps {
    * mousemove / dragstart / dragmove / dragend just before delivery to the mode.
    */
   snapService?: SnapService;
+  /**
+   * The input of the extensions: the receivers of the plugins, called before everything else,
+   * and the modes written to the extension contract. When omitted, only the modes and plugins
+   * of the first version of the API receive the input.
+   */
+  extensionInput?: ExtensionInputRoute;
+}
+
+/**
+ * Where the router hands the input to the extensions
+ *
+ * Every method receives the event as it came (after the longitude was brought onto the stored
+ * copy of the world), the same event after snapping, and the snapping result (null when the
+ * position was not snapped).
+ *
+ * @internal
+ */
+export interface ExtensionInputRoute {
+  /**
+   * Gives the event to the receivers of the plugins
+   *
+   * @returns True when one consumed it: nothing after it receives the event
+   */
+  toPlugins(event: NormalizedEvent, snapped: NormalizedEvent, snap: SnapResult | null): boolean;
+  /**
+   * Gives the event to the mode when the mode is written to the extension contract
+   *
+   * @returns Whether the mode consumed it, or undefined when the mode is not such a mode (the
+   *   router then calls the methods of the mode itself)
+   */
+  toMode(
+    handler: ModeHandler,
+    event: NormalizedEvent,
+    snapped: NormalizedEvent,
+    snap: SnapResult | null,
+  ): boolean | undefined;
 }
 
 /**
@@ -197,6 +233,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     displayInteractions,
     notifyMapClick,
     snapService,
+    extensionInput,
   } = deps;
 
   let boundHandleEvent: ((event: NormalizedEvent) => void) | null = null;
@@ -265,9 +302,11 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
   function applySnap<E extends MouseNormalizedEvent | DragNormalizedEvent>(
     event: E,
     inputType: SnapInputType,
-  ): E {
-    if (!snapService || event.snap === false) return event;
-    if (modeManager.getHandler()?.isSnapEnabledFor?.(inputType) === false) return event;
+  ): { event: E; result: SnapResult | null } {
+    if (!snapService || event.snap === false) return { event, result: null };
+    if (modeManager.getHandler()?.isSnapEnabledFor?.(inputType) === false) {
+      return { event, result: null };
+    }
 
     const result = snapService.resolve(
       event.lngLat,
@@ -275,9 +314,53 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       buildSnapContext(event.modifiers),
     );
     if (result.lngLat.lng === event.lngLat.lng && result.lngLat.lat === event.lngLat.lat) {
-      return event;
+      return { event, result: result.target ? result : null };
     }
-    return { ...event, lngLat: { lng: result.lngLat.lng, lat: result.lngLat.lat } };
+    return {
+      event: { ...event, lngLat: { lng: result.lngLat.lng, lat: result.lngLat.lat } },
+      result,
+    };
+  }
+
+  /**
+   * What a consumed event stops besides the receivers after it: a consumed press does not
+   * reach the map (no pan starts) and a consumed double click does not zoom it
+   */
+  function stopConsumed(event: NormalizedEvent): void {
+    if (event.type === 'mousedown') {
+      const original = event.originalEvent;
+      original.stopPropagation();
+      if (!('touches' in original)) original.preventDefault();
+    } else if (event.type === 'dblclick') {
+      event.originalEvent.preventDefault();
+    }
+  }
+
+  /**
+   * Hands the event to the plugins of the extensions, then to a mode written to the extension
+   * contract
+   *
+   * @returns 'consumed' when the event goes no further, 'mode' when a mode of the contract
+   *   received it, 'legacy' when the mode has to be called by the router
+   */
+  function toExtensions(
+    handler: ModeHandler,
+    event: NormalizedEvent,
+    snapped: NormalizedEvent,
+    snap: SnapResult | null,
+  ): 'consumed' | 'mode' | 'legacy' {
+    if (!extensionInput) return 'legacy';
+    if (extensionInput.toPlugins(event, snapped, snap)) {
+      stopConsumed(event);
+      return 'consumed';
+    }
+    const consumed = extensionInput.toMode(handler, event, snapped, snap);
+    if (consumed === undefined) return 'legacy';
+    if (consumed) {
+      stopConsumed(event);
+      return 'consumed';
+    }
+    return 'mode';
   }
 
   function handleEvent(input: NormalizedEvent, options: HandleEventOptions = {}): void {
@@ -295,8 +378,10 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       case 'click': {
         // Deliver to the mode with the snapped coordinates (if nothing snapped,
         // the original event is used unchanged)
-        const snapped = applySnap(event, 'click');
-        handleClick(handler, snapped);
+        const { event: snapped, result } = applySnap(event, 'click');
+        const route = toExtensions(handler, event, snapped, result);
+        if (route === 'consumed') break;
+        if (route === 'legacy') handleClick(handler, snapped);
         // Delivery to datasets happens only in select mode. A click
         // in a drawing mode places a vertex, and delivering that same click as a
         // click on the data as well would make the host application's "click to
@@ -320,19 +405,26 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
         break;
       }
       case 'dblclick':
-        handler.onDoubleClick?.(event);
+        if (toExtensions(handler, event, event, null) === 'legacy') {
+          handler.onDoubleClick?.(event);
+        }
         break;
       case 'mousedown':
-        handleMouseDown(handler, event);
+        if (toExtensions(handler, event, event, null) === 'legacy') {
+          handleMouseDown(handler, event);
+        }
         break;
       case 'mouseup':
-        handler.onMouseUp?.(event);
+        if (toExtensions(handler, event, event, null) === 'legacy') handler.onMouseUp?.(event);
         break;
       case 'mousemove': {
-        const snapped = applySnap(event, 'mousemove');
+        const { event: snapped, result } = applySnap(event, 'mousemove');
+        if (extensionInput?.toPlugins(event, snapped, result)) break;
         // Call the onMouseMove of the plugins (they do not consume it)
         pluginManager?.handleMouseMove(snapped);
-        handler.onMouseMove?.(snapped);
+        const consumed = extensionInput?.toMode(handler, event, snapped, result);
+        if (consumed === true) break;
+        if (consumed === undefined) handler.onMouseMove?.(snapped);
         // The hover of datasets is likewise limited to select mode,
         // by the same rule as click. When switching to a drawing mode, a hover that
         // is still held is discarded (so that it does not fire on the stale target
@@ -353,39 +445,51 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       // dragStartLngLat (the press position from before the threshold was exceeded)
       // as their start position, so they are unaffected by the replacement here.
       case 'dragstart': {
-        const snapped = applySnap(event, 'dragstart');
-        handler.onDragStart?.(snapped);
+        const { event: snapped, result } = applySnap(event, 'dragstart');
+        if (toExtensions(handler, event, snapped, result) === 'legacy') {
+          handler.onDragStart?.(snapped);
+        }
         break;
       }
       case 'dragmove': {
-        const snapped = applySnap(event, 'dragmove');
+        const { event: snapped, result } = applySnap(event, 'dragmove');
+        if (extensionInput?.toPlugins(event, snapped, result)) break;
         // Call the onDragMove of the plugins (they do not consume it; the
         // counterpart of onMouseMove)
         pluginManager?.handleDragMove(snapped);
-        handler.onDragMove?.(snapped);
+        if (extensionInput?.toMode(handler, event, snapped, result) === undefined) {
+          handler.onDragMove?.(snapped);
+        }
         break;
       }
       case 'dragend': {
-        const snapped = applySnap(event, 'dragend');
-        handler.onDragEnd?.(snapped);
+        const { event: snapped, result } = applySnap(event, 'dragend');
+        if (toExtensions(handler, event, snapped, result) === 'legacy') {
+          handler.onDragEnd?.(snapped);
+        }
         break;
       }
       // A press ended without a release (a second finger, or the browser cancelled the
       // touch). No coordinates are decided, so it does not go through snapping, and it
       // is never held: the mode must always get the chance to abort the press.
       case 'dragcancel':
-        handler.onDragCancel?.(event);
+        if (toExtensions(handler, event, event, null) === 'legacy') {
+          handler.onDragCancel?.(event);
+        }
         break;
       case 'keydown':
+        if (extensionInput?.toPlugins(event, event, null)) break;
         // Call the onKeyDown of the plugins first
         if (pluginManager?.handleKeyDown(event)) {
           // Handled by a plugin
           break;
         }
-        handler.onKeyDown?.(event);
+        if (extensionInput?.toMode(handler, event, event, null) === undefined) {
+          handler.onKeyDown?.(event);
+        }
         break;
       case 'keyup':
-        handler.onKeyUp?.(event);
+        if (toExtensions(handler, event, event, null) === 'legacy') handler.onKeyUp?.(event);
         break;
     }
   }

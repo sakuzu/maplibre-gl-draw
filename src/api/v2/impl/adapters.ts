@@ -1,0 +1,479 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The custom feature types and the providers of the extension contract, put into the
+ * registries the engine reads
+ *
+ * The select mode, the hit testing, the snapping and the drawing of the engine look up their
+ * own registries. Each extension of the contract is installed there as an adapter, so the
+ * engine finds it in the same lookups as its built-in pieces. As the contract says, the handles
+ * and the snapping candidates of a custom type are installed as a provider that applies only to
+ * that type.
+ */
+
+import type { Geometry } from 'geojson';
+import type { Map as MapLibreMap } from 'maplibre-gl';
+import type {
+  BoxSelectionStrategy,
+  BoxSelectionStrategyRegistry,
+} from '../../../dispatcher/hit-test/box-strategy.js';
+import { toleranceDegrees } from '../../../dispatcher/hit-test/local-frame.js';
+import type { HitTestService } from '../../../dispatcher/hit-test/service.js';
+import type { HitTestStrategy } from '../../../dispatcher/hit-test/strategies/index.js';
+import {
+  LineHitTestStrategy,
+  MultiLineStringHitTestStrategy,
+  MultiPointHitTestStrategy,
+  MultiPolygonHitTestStrategy,
+  PointHitTestStrategy,
+  PolygonHitTestStrategy,
+} from '../../../dispatcher/hit-test/strategies/index.js';
+import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
+import type { SnapTargetsRegistry } from '../../../snapping/custom-targets.js';
+import type {
+  SnapCandidate as EngineSnapCandidate,
+  SnapProvider as EngineSnapProvider,
+  SnapProviderContext,
+  SnapTargetKind,
+} from '../../../snapping/types.js';
+import type { Store } from '../../../store/store.js';
+import type { Coordinate, Feature as StoredFeature } from '../../../store/types.js';
+import type {
+  FeatureCompanionProvider,
+  FeatureCompanionRegistry,
+} from '../../../view/feature-companion.js';
+import type { CustomLayerInterface } from '../../../view/layer/index.js';
+import type {
+  AuxiliaryHandle,
+  AuxiliaryHandleProvider,
+  AuxiliaryHandleRegistry,
+} from '../../../view/ui/auxiliary-handles.js';
+import type { SelectionExtensionRegistry } from '../../../view/ui/selection-ui/extension-registry.js';
+import type { ScreenPoint } from '../events.js';
+import type { HitTestContext, ScreenContext, SnapContext } from '../extension/context.js';
+import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js';
+import type {
+  CompanionProvider,
+  HandleProvider,
+  Hit,
+  SnapCandidate,
+  SnapProvider,
+} from '../extension/provider.js';
+import type { Feature, FeaturePatch } from '../model.js';
+import { toPosition, toScreenPoint } from './contexts.js';
+import { toPointerEvent } from './input.js';
+import type { RenderAdapterDeps } from './render-context.js';
+import { adaptFeatureRenderer, createCompanionDrawer } from './render-context.js';
+
+/**
+ * The registries and services of the engine the adapters are installed into
+ *
+ * @internal
+ */
+export interface AdapterDeps extends RenderAdapterDeps {
+  readonly map: MapLibreMap;
+  readonly store: Store;
+  readonly screen: ScreenContext;
+  /** The click tolerance of the instance, in pixels */
+  readonly clickTolerancePx: number;
+  readonly hitTestService: HitTestService;
+  readonly boxSelectionRegistry: BoxSelectionStrategyRegistry;
+  readonly selectionExtensions: SelectionExtensionRegistry;
+  readonly auxiliaryHandles: AuxiliaryHandleRegistry;
+  readonly featureCompanions: FeatureCompanionRegistry;
+  readonly snapTargets: SnapTargetsRegistry;
+  readonly customLayer: CustomLayerInterface;
+  /** Registers a provider of snapping candidates with the snapping of the instance */
+  registerSnapProvider(provider: EngineSnapProvider): () => void;
+  /** Applies a patch of a handle drag to a feature; `final` is false while the drag goes on */
+  applyPatch(featureId: string, patch: FeaturePatch, final: boolean): void;
+}
+
+// ============================================================================
+// Screen and map
+// ============================================================================
+
+/** The pixels per degree of longitude around a point, measured on the screen */
+function degreesPerPixel(map: MapLibreMap, point: { x: number; y: number }): number {
+  return toleranceDegrees((p) => map.unproject([p.x, p.y]), point, 1) || 1;
+}
+
+/** What a hit test of the contract receives, for a position and a tolerance in degrees */
+function hitContextAt(
+  deps: AdapterDeps,
+  coordinate: Coordinate,
+  toleranceLngLat: number,
+): { ctx: HitTestContext; degPerPx: number } {
+  const at = deps.map.project([coordinate[0], coordinate[1]]);
+  const degPerPx = degreesPerPixel(deps.map, at);
+  return {
+    ctx: {
+      point: toScreenPoint(at),
+      lngLat: [coordinate[0], coordinate[1]],
+      tolerancePx: toleranceLngLat / degPerPx,
+      screen: deps.screen,
+    },
+    degPerPx,
+  };
+}
+
+// ============================================================================
+// Custom feature types
+// ============================================================================
+
+/** The hit testing of the engine for each kind of GeoJSON geometry */
+function geometryStrategy(kind: Geometry['type']): HitTestStrategy | null {
+  switch (kind) {
+    case 'Point':
+      return new PointHitTestStrategy();
+    case 'LineString':
+      return new LineHitTestStrategy();
+    case 'Polygon':
+      return new PolygonHitTestStrategy();
+    case 'MultiPoint':
+      return new MultiPointHitTestStrategy();
+    case 'MultiLineString':
+      return new MultiLineStringHitTestStrategy();
+    case 'MultiPolygon':
+      return new MultiPolygonHitTestStrategy();
+    default:
+      return null;
+  }
+}
+
+/** The hit testing of a custom type, in the terms of the engine (degrees) */
+function hitTestStrategyOf(definition: FeatureTypeDefinition, deps: AdapterDeps): HitTestStrategy {
+  const { type } = definition;
+  const own = definition.hitTest?.bind(definition);
+  if (!own) {
+    const byGeometry = geometryStrategy(definition.geometry);
+    return {
+      geometryType: type,
+      test: (feature, coordinate, tolerance) =>
+        byGeometry?.test(feature, coordinate, tolerance) ?? false,
+      distance: (feature, coordinate) =>
+        byGeometry?.distance(feature, coordinate) ?? Number.POSITIVE_INFINITY,
+      ...(byGeometry?.testDistance && {
+        testDistance: (feature: StoredFeature, coordinate: Coordinate, tolerance: number) =>
+          byGeometry.testDistance?.(feature, coordinate, tolerance) ?? null,
+      }),
+    };
+  }
+  const testDistance = (
+    feature: StoredFeature,
+    coordinate: Coordinate,
+    toleranceLngLat: number,
+  ): number | null => {
+    const { ctx, degPerPx } = hitContextAt(deps, coordinate, toleranceLngLat);
+    const hit = own(feature as Feature, ctx);
+    return hit ? Math.max(0, hit.distancePx) * degPerPx : null;
+  };
+  return {
+    geometryType: type,
+    test: (feature, coordinate, tolerance) => testDistance(feature, coordinate, tolerance) !== null,
+    distance: (feature, coordinate) =>
+      testDistance(feature, coordinate, Number.MAX_SAFE_INTEGER) ?? Number.POSITIVE_INFINITY,
+    testDistance,
+  };
+}
+
+/** The box selection of a custom type, in the terms of the engine */
+function boxSelectionOf(
+  definition: FeatureTypeDefinition,
+  deps: AdapterDeps,
+): BoxSelectionStrategy | null {
+  const own = definition.boxSelect?.bind(definition);
+  if (!own) {
+    const byGeometry = deps.boxSelectionRegistry.get(definition.geometry);
+    return byGeometry
+      ? {
+          featureType: definition.type,
+          intersects: (feature, rect) => byGeometry.intersects(feature, rect),
+        }
+      : null;
+  }
+  return {
+    featureType: definition.type,
+    intersects(feature, rect) {
+      const corners = [
+        deps.map.project([rect.minX, rect.minY]),
+        deps.map.project([rect.maxX, rect.maxY]),
+      ];
+      const min: ScreenPoint = [
+        Math.min(corners[0].x, corners[1].x),
+        Math.min(corners[0].y, corners[1].y),
+      ];
+      const max: ScreenPoint = [
+        Math.max(corners[0].x, corners[1].x),
+        Math.max(corners[0].y, corners[1].y),
+      ];
+      const center: Coordinate = [(rect.minX + rect.maxX) / 2, (rect.minY + rect.maxY) / 2];
+      const { ctx } = hitContextAt(deps, center, 0);
+      return own(feature as Feature, { min, max }, { ...ctx, tolerancePx: 0 });
+    },
+  };
+}
+
+/** A handle of the contract as a handle of the engine */
+function toEngineHandle(handle: Handle): AuxiliaryHandle {
+  return {
+    id: handle.id,
+    position: [handle.position[0], handle.position[1]],
+    ...(handle.cursor !== undefined && { cursor: handle.cursor }),
+  };
+}
+
+/**
+ * Installs a custom feature type into the engine
+ *
+ * @returns The function that uninstalls it
+ * @internal
+ */
+export function installFeatureType(
+  definition: FeatureTypeDefinition,
+  deps: AdapterDeps,
+): () => void {
+  const { type } = definition;
+  const cancels: Array<() => void> = [];
+  const add = (cancel: (() => void) | undefined): void => {
+    if (cancel) cancels.push(cancel);
+  };
+  const uninstall = (): void => {
+    for (let i = cancels.length - 1; i >= 0; i--) cancels[i]();
+  };
+
+  try {
+    add(
+      deps.customLayer.registerFeatureRenderer(
+        type,
+        adaptFeatureRenderer(type, definition.renderer, deps),
+      ),
+    );
+    add(deps.hitTestService.registerStrategy?.(hitTestStrategyOf(definition, deps)));
+    const box = boxSelectionOf(definition, deps);
+    if (box) add(deps.boxSelectionRegistry.register(box));
+
+    const bounds = definition.bounds?.bind(definition);
+    if (bounds) {
+      if (definition.geometry === 'Point') {
+        // A point keeps its point frame; the extent gives its size
+        add(
+          deps.selectionExtensions.registerPointFrameExtent(type, (feature) => {
+            const box = bounds(feature as Feature, deps.screen);
+            if (!box) return null;
+            const center = deps.screen.project((feature.geometry as GeoJSON.Point).coordinates);
+            return {
+              halfWidth: Math.max(center[0] - box.min[0], box.max[0] - center[0]),
+              halfHeight: Math.max(center[1] - box.min[1], box.max[1] - center[1]),
+            };
+          }),
+        );
+      } else {
+        add(
+          deps.selectionExtensions.registerBoundingBox(type, (feature) => {
+            const box = bounds(feature as Feature, deps.screen);
+            const at = (x: number, y: number): Coordinate => {
+              const p = deps.screen.unproject([x, y]);
+              return [p[0], p[1]];
+            };
+            if (!box) {
+              const c = at(0, 0);
+              return { topLeft: c, topRight: c, bottomRight: c, bottomLeft: c, center: c };
+            }
+            return {
+              topLeft: at(box.min[0], box.min[1]),
+              topRight: at(box.max[0], box.min[1]),
+              bottomRight: at(box.max[0], box.max[1]),
+              bottomLeft: at(box.min[0], box.max[1]),
+              center: at((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2),
+            };
+          }),
+        );
+      }
+    }
+
+    const handles = definition.handles?.bind(definition);
+    if (handles) {
+      const onHandleDrag = definition.onHandleDrag?.bind(definition);
+      add(
+        deps.auxiliaryHandles.register(
+          adaptHandleProvider(
+            {
+              name: `\u0000type:${type}`,
+              handles: (feature, screen) => (feature.type === type ? handles(feature, screen) : []),
+              onDrag: (feature, handle, event) =>
+                feature && onHandleDrag ? onHandleDrag(feature, handle, event) : null,
+            },
+            deps,
+          ),
+        ),
+      );
+    }
+
+    const snapCandidates = definition.snapCandidates?.bind(definition);
+    if (snapCandidates) {
+      add(
+        deps.snapTargets.register(type, (feature, ctx) =>
+          snapCandidates(feature as Feature, toSnapContext(ctx, deps.screen)).map((candidate) =>
+            toEngineCandidate(candidate, feature.id),
+          ),
+        ),
+      );
+    }
+
+    if (definition.hitPaddingPx !== undefined) {
+      add(deps.hitTestService.registerCandidateReach?.(type, definition.hitPaddingPx));
+    }
+  } catch (error) {
+    uninstall();
+    throw error;
+  }
+
+  // What the Store already holds of the type is measured and drawn again
+  deps.map.triggerRepaint();
+  return uninstall;
+}
+
+// ============================================================================
+// Providers
+// ============================================================================
+
+/** The kinds of snapping target the engine knows */
+const ENGINE_KINDS: ReadonlySet<string> = new Set<SnapTargetKind>([
+  'vertex',
+  'edge',
+  'intersection',
+  'guide',
+]);
+
+/** What a provider of snapping candidates of the contract receives */
+function toSnapContext(ctx: SnapProviderContext, screen: ScreenContext): SnapContext {
+  const excludeIds = new Set<string>(ctx.excludeFeatureIds ?? []);
+  if (ctx.excludeFeatureId !== undefined) excludeIds.add(ctx.excludeFeatureId);
+  return {
+    point: toScreenPoint(ctx.point),
+    lngLat: toPosition(ctx.lngLat),
+    tolerancePx: ctx.tolerancePx,
+    screen,
+    excludeIds,
+  };
+}
+
+/** A snapping candidate of the contract as a candidate of the engine (a point) */
+function toEngineCandidate(candidate: SnapCandidate, featureId?: string): EngineSnapCandidate {
+  const kind = ENGINE_KINDS.has(candidate.kind) ? (candidate.kind as SnapTargetKind) : 'vertex';
+  return {
+    kind,
+    coordinate: [candidate.position[0], candidate.position[1]],
+    ...(featureId !== undefined && { featureId }),
+    ...(candidate.source !== undefined && { description: candidate.source }),
+    ...(candidate.priority !== undefined && { priority: candidate.priority }),
+  };
+}
+
+/**
+ * A provider of snapping candidates of the contract as one of the engine
+ *
+ * @internal
+ */
+export function adaptSnapProvider(
+  provider: SnapProvider,
+  screen: ScreenContext,
+): EngineSnapProvider {
+  return {
+    name: provider.name,
+    candidates: (_bbox, ctx) =>
+      provider
+        .candidates(toSnapContext(ctx, screen))
+        .map((candidate) => toEngineCandidate(candidate)),
+  };
+}
+
+/**
+ * A provider of handles of the contract as a provider of auxiliary handles of the engine
+ *
+ * The drag of a handle calls `onDrag` for every move, and applies its patch as an
+ * intermediate update; the patch of the end of the drag is applied as the final one.
+ *
+ * @internal
+ */
+export function adaptHandleProvider(
+  provider: HandleProvider,
+  deps: Pick<AdapterDeps, 'store' | 'screen' | 'applyPatch'>,
+): AuxiliaryHandleProvider {
+  let active: { featureId: string; handle: Handle } | null = null;
+  const handlesOf = (featureId: string, global: boolean | undefined): Handle[] => {
+    if (global) return provider.globalHandles?.(deps.screen) ?? [];
+    const feature = deps.store.getFeature(featureId);
+    return feature ? provider.handles(feature as Feature, deps.screen) : [];
+  };
+  const drag = (event: DragNormalizedEvent, final: boolean): void => {
+    if (!active) return;
+    const feature = active.featureId ? deps.store.getFeature(active.featureId) : undefined;
+    const patch = provider.onDrag(
+      (feature as Feature | undefined) ?? null,
+      active.handle,
+      toPointerEvent(event),
+    );
+    if (patch && feature) deps.applyPatch(feature.id, patch, final);
+  };
+  return {
+    id: provider.name,
+    getHandles: (feature) => provider.handles(feature as Feature, deps.screen).map(toEngineHandle),
+    ...(provider.globalHandles && {
+      getGlobalHandles: () => provider.globalHandles?.(deps.screen).map(toEngineHandle) ?? [],
+    }),
+    onHandleDragStart(hit) {
+      const handle = handlesOf(hit.featureId, hit.global).find((h) => h.id === hit.handleId);
+      if (!handle) return false;
+      active = { featureId: hit.featureId, handle };
+      return true;
+    },
+    onHandleDragMove(event) {
+      drag(event, false);
+    },
+    onHandleDragEnd(event) {
+      drag(event, true);
+      active = null;
+    },
+  };
+}
+
+/**
+ * A provider of companions of the contract as one of the engine
+ *
+ * The hit the provider returns is kept with the hit of the engine, so that `onClick` and the
+ * hit testing of a mode get it back as it was.
+ *
+ * @internal
+ */
+export function adaptCompanionProvider(
+  provider: CompanionProvider,
+  deps: AdapterDeps,
+): FeatureCompanionProvider {
+  const drawCompanion = createCompanionDrawer(deps, () => deps.customLayer.getGL());
+  const draw = provider.draw.bind(provider);
+  return {
+    id: provider.name,
+    has: (feature) => provider.has(feature as Feature),
+    draw(feature, projectionData, zoom, context) {
+      drawCompanion(draw, feature, projectionData, zoom, context);
+    },
+    hitTest(feature, point, context) {
+      const hit = provider.hitTest(feature as Feature, {
+        point: toScreenPoint(point),
+        lngLat: toPosition(context.unproject(point)),
+        tolerancePx: context.tolerancePx,
+        screen: deps.screen,
+      });
+      return hit ? ({ id: hit.id, contractHit: hit } as { id: string; contractHit: Hit }) : null;
+    },
+    onCompanionClick(featureId, hit, event?: unknown) {
+      const feature = deps.store.getFeature(featureId);
+      const own = (hit as { contractHit?: Hit }).contractHit;
+      if (!feature || !own || !provider.onClick || !event) return;
+      provider.onClick(feature as Feature, own, toPointerEvent(event as DragNormalizedEvent));
+    },
+  };
+}

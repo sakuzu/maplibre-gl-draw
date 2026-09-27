@@ -104,7 +104,7 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     metadata: createMetadata(deps),
     options: pending('options'),
     document: createDocument(deps),
-    extensions: pending('extensions'),
+    extensions: engine.extensions.collections,
 
     getMap: () => map,
     getStore: () => view,
@@ -138,5 +138,6 @@ export const createDraw: CreateDraw = (map, options = {}) => {
 
     destroy: () => engine.destroy(),
   };
+  engine.extensions.attach(draw);
   return draw;
 };

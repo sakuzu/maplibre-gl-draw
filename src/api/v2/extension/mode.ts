@@ -91,7 +91,7 @@ export interface InputHandlers {
 export interface ModeHandler extends Partial<InputHandlers> {
   /**
    * Whether the mode writes new features. Such a mode is entered only while a layer can be
-   * written, and never while the document is read-only; false when it is left out.
+   * written; false when it is left out.
    */
   readonly writes?: boolean;
   /** How the mode wants the positions of its input snapped; every input snaps when left out */

@@ -134,7 +134,6 @@ describe('the parts later steps provide', () => {
     expect(() => draw.debug.terrain()).toThrow(message);
     expect(() => draw.options.get()).toThrow(message);
     expect(() => draw.datasets.list()).toThrow(message);
-    expect(() => draw.extensions.plugins.list()).toThrow(message);
   });
 });
 

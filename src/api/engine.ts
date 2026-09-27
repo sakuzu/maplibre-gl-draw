@@ -52,6 +52,8 @@ import type { Context, Options } from './context.js';
 import { createContext } from './context.js';
 import type { ImportExportAPI } from './import-export/index.js';
 import { createImportExportAPI } from './import-export/index.js';
+import type { ExtensionHost } from './v2/impl/extension-host.js';
+import { createExtensionHost } from './v2/impl/extension-host.js';
 
 /**
  * The releases of one draw instance, run in the reverse order of the acquisitions
@@ -107,6 +109,8 @@ export interface Engine {
   readonly importExport: ImportExportAPI;
   /** The datasets */
   readonly datasets: DatasetManager;
+  /** The extensions of the extension contract: plugins, modes, feature types and the rest */
+  readonly extensions: ExtensionHost;
   /**
    * The public object of the first version of the API, built on this engine. The plugins
    * reach the instance through it until they have a context of their own
@@ -209,7 +213,7 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
   const featureCompanions = createFeatureCompanionRegistry();
 
   const unproject = (p: { x: number; y: number }) => map.unproject([p.x, p.y]);
-  const hitTestTopmost = createTopmostHitTester({
+  const topmostDeps: Parameters<typeof createTopmostHitTester>[0] = {
     store,
     hitTestService,
     unproject,
@@ -226,7 +230,8 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     getZoom: () => map.getZoom(),
     clickTolerancePx: context.options.clickTolerance,
     companions: featureCompanions,
-  });
+  };
+  const hitTestTopmost = createTopmostHitTester(topmostDeps);
 
   // 2.7 Snapping to data (datasets).
   // Adds the vertices, edges and intersections of the displayed datasets as
@@ -301,6 +306,25 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     }
     return pluginContext;
   }, modeManager);
+
+  // 6.5 Create the host of the extensions of the extension contract
+  const extensions = createExtensionHost({
+    map,
+    context,
+    customLayer,
+    modeManager,
+    pluginManager,
+    featureCompanions,
+    hitTestTopmost,
+    hitTestTopmostWith: (tolerancePx) =>
+      createTopmostHitTester({
+        ...topmostDeps,
+        toleranceLngLat: (point) => toleranceDegrees(unproject, point, tolerancePx),
+        clickTolerancePx: tolerancePx,
+      }),
+    listTraceRows: (bbox) =>
+      snapService.isDatasetsEnabled() ? displaySnap.queryFeatures(bbox) : [],
+  });
 
   // 7. Create the import/export API
   const importExportAPI = createImportExportAPI(context);
@@ -415,6 +439,7 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     // Emit a click in select mode as a public event (draw.map.click)
     notifyMapClick: (payload) => eventEmitter.emit('map.click', payload),
     snapService,
+    extensionInput: extensions.input,
   });
 
   // 7. Set up
@@ -430,6 +455,7 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
 
   inputNormalizer.attach();
   inputRouter.start();
+  extensions.start();
   modeManager.start();
 
   // Disable the boxZoom of MapLibre (because Shift + drag is used for box
@@ -460,6 +486,8 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
   // The public API releases what it created itself (the input, the modes, the rendering, the
   // plugins and the layers on the map) first, then the rest goes in the reverse order
   teardown.add(drawApi.destroy);
+  // The extensions of the extension contract go first, while everything they use is there
+  teardown.add(() => extensions.destroy());
   drawApi.destroy = () => teardown.run();
   ignoreRegistrationsAfterDestroy(drawApi, () => teardown.done);
 
@@ -471,6 +499,7 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     pluginManager,
     importExport: importExportAPI,
     datasets,
+    extensions,
     facade: drawApi,
     isDestroyed: () => teardown.done,
     destroy: () => teardown.run(),
