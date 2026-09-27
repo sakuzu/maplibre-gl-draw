@@ -21,12 +21,6 @@ import type { Feature, ImageProperties } from '../types/model.js';
  *
  * @returns The zoom, or undefined when the feature has none (it then keeps the same width on
  *   the screen)
- *
- * @example
- * ```ts
- * const feature = draw.getFeature(id);
- * const zoom = feature ? getCreatedZoom(feature) : undefined;
- * ```
  */
 export function getCreatedZoom(feature: Feature): number | undefined {
   return getDrawProperty(feature, 'createdZoom');
@@ -35,25 +29,8 @@ export function getCreatedZoom(feature: Feature): number | undefined {
 /**
  * Sets the zoom at which a feature was created, in a `properties` object
  *
- * Use it on the properties of a {@link FeatureInput} before `addFeature`, so that the new
+ * Use it on the properties of a {@link FeatureInput} before it is created, so that the new
  * feature scales with the map from the current zoom like a drawn one.
- *
- * @example
- * ```ts
- * const properties: Record<string, unknown> = {};
- * setCreatedZoom(properties, map.getZoom());
- * draw.addFeature({
- *   type: 'LineString',
- *   geometry: {
- *     type: 'LineString',
- *     coordinates: [
- *       [139.76, 35.68],
- *       [139.78, 35.69],
- *     ],
- *   },
- *   properties,
- * });
- * ```
  */
 export function setCreatedZoom(properties: Record<string, unknown>, zoom: number): void {
   setDrawProperty(properties, 'createdZoom', zoom);

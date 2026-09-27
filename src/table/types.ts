@@ -194,7 +194,7 @@ export type Column =
  *     visitors: new Float64Array([3.5, 0.7, 3.0]),
  *   },
  * };
- * draw.addDataset({ id: 'places', table: places });
+ * draw.datasets.add({ id: 'places', table: places });
  * ```
  */
 export interface Table {

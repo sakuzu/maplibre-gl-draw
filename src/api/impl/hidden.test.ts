@@ -7,14 +7,14 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
-import type { StateChanges } from '../../store/types.js';
+import type { StoreChange } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { HiddenCollection } from '../hidden.js';
 import { createHidden } from './hidden.js';
 
 let store: MemoryStore;
 let hidden: HiddenCollection;
-let notifications: StateChanges[];
+let notifications: StoreChange[];
 
 function codeOf(fn: () => unknown): string | undefined {
   try {

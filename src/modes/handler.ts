@@ -110,7 +110,7 @@ export interface EngineModeContext {
    * Trace configuration (whether edge tracing is enabled or disabled)
    *
    * When omitted, it is treated as the default value (enabled). It is the same object that
-   * draw.tracing rewrites, so a switch at runtime takes effect on the very next input.
+   * `draw.options.update` rewrites, so a switch at runtime takes effect on the very next input.
    */
   trace?: import('../shared/config/trace.js').TraceConfig;
   /**

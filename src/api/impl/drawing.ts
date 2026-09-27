@@ -30,7 +30,7 @@ export function createDrawing(
     getLayerStack(): readonly LayerStackEntry[] {
       return Object.freeze(
         customLayer
-          .getRenderSlots()
+          .getStackSlots()
           .map(({ layerId, from, to }) => Object.freeze({ layerId, from, to })),
       );
     },

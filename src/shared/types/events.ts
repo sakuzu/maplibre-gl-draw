@@ -126,10 +126,10 @@ export interface SnapResult {
  *
  * When the `isExternalEntry` option marks entries of the layer order as external, the draw
  * instance draws each run between them in a maplibre custom layer of its own, so the host can
- * place its own maplibre layers between the frames. `getRenderSlots()` lists the frames, and
- * the `draw.renderslots.change` event announces a change of them.
+ * place its own maplibre layers between the frames. `draw.getLayerStack()` lists the frames,
+ * and the `layerStack.changed` event announces a change of them.
  */
-export interface RenderSlot {
+export interface StackSlot {
   /** The maplibre layer ID of the custom layer that draws this run */
   readonly layerId: string;
   /** The index in the layer order where the run starts (inclusive) */

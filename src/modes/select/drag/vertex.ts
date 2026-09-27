@@ -20,7 +20,7 @@ import { dragStartLngLat } from './operation.js';
 /**
  * Whether the modifier key that temporarily disables shared-vertex following is held down
  *
- * The temporary-disable key is shared with snapping (options.snap.disableKey, 'alt' by default).
+ * The temporary-disable key is shared with snapping (`snapping.disableKey` of the options, 'alt' by default).
  * Holding it down when starting a drag escapes to a solitary move for that one drag only.
  *
  * The decision looks only at the normalized modifier keys of the drag start event (core does not

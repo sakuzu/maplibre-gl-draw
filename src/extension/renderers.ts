@@ -156,7 +156,7 @@ export interface EngineOverlayRenderer {
    * change what it draws (resources it prepares over several frames, say). Optional: a renderer
    * without it has none
    *
-   * `MapLibreGLDraw.hasPendingWork` asks every overlay renderer, so a host that waits for a
+   * `draw.hasPendingWork()` asks every overlay renderer, so a host that waits for a
    * complete picture waits for this renderer too. A renderer that returns true requests the
    * repaints that finish the work itself. With `timeSlicing: false` in the rendering settings,
    * a renderer should finish in the frame what it would otherwise spread over frames.

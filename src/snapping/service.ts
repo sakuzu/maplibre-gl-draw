@@ -17,8 +17,8 @@
  *   3. The priority order of the kinds is vertex > intersection > edge > guide
  *   4. Within the same priority, the closer one wins
  *
- * 'snap.change' is emitted only when the result changed (the public name is
- * 'draw.snap.change'). When the snap comes off, it is emitted once without a target.
+ * 'snap.change' is emitted only when the result changed (the event of the instance is
+ * 'snap.changed'). When the snap comes off, it is emitted once without a target.
  */
 
 import type { ModifierKeys } from '../dispatcher/types.js';

@@ -70,7 +70,7 @@ export type DatasetRow = GeoJSONFeature<GeoJSONGeometry | null> & {
 export type DatasetOrder = 'below-store' | 'above-store' | 'layer-order';
 
 /**
- * The destination of {@link MapLibreGLDraw.moveDataset}: a side and a position
+ * The destination of a move of a dataset (`draw.datasets.move`): a side and a position
  * within it.
  *
  * order is the side (in front of or behind the Store) and index is the position within that
@@ -100,16 +100,6 @@ export interface DatasetPlacement {
  * causes no call; {@link Dataset.invalidateProviderCache} discards the cache. Only
  * the result of the last request is applied, and a rejected promise is logged with
  * `console.error` and leaves the rows shown as they are.
- *
- * @example
- * ```ts
- * const provider: DatasetFeatureProvider = async (bbox, zoom) => {
- *   const url = `/api/parcels?bbox=${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY}&z=${zoom}`;
- *   const response = await fetch(url);
- *   return (await response.json()).features; // DatasetRow[]
- * };
- * draw.addDataset({ id: 'parcels', provider });
- * ```
  */
 export type DatasetFeatureProvider = (bbox: BoundingBox, zoom: number) => Promise<DatasetRow[]>;
 
@@ -135,7 +125,7 @@ export type DatasetFeatureProvider = (bbox: BoundingBox, zoom: number) => Promis
 export type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
 
 /**
- * The options of {@link MapLibreGLDraw.addDataset}.
+ * The options of a dataset the engine adds (`draw.datasets.add` checks and translates them).
  *
  * Only `id` is required. Give at most one of `rows` (static GeoJSON features), `table`
  * (static, as columns of typed arrays) and `provider` (fetched for the displayed range).
@@ -143,7 +133,7 @@ export type DatasetZoomScale = (zoom: number) => { scale: number; opacity: numbe
 export interface DatasetOptions {
   /**
    * The dataset id. It must be unique among the datasets of the draw
-   * instance; a duplicate makes `addDataset` throw. With `order: 'layer-order'` it is
+   * instance; a duplicate makes the addition throw. With `order: 'layer-order'` it is
    * also the id placed in the layer order of the Store
    */
   id: string;
@@ -289,43 +279,10 @@ export interface DatasetEventMap {
  *
  * It is meant for overlaying tens of thousands of read-only records, such as parcels or a
  * table of places. The features never enter the Store, so none of the following applies to
- * them: editing, undo / redo, the `draw.feature.*` events, the selection UI, and
- * `getAllFeatures()` / `export()`. A caller who wants to edit one copies it into the Store with
- * `addFeature`; the library does not relate the two. Create one with
- * {@link MapLibreGLDraw.addDataset}.
- *
- * @example
- * ```ts
- * const parcels = draw.addDataset({
- *   id: 'parcels',
- *   rows: [
- *     {
- *       type: 'Feature',
- *       id: 'p1',
- *       geometry: {
- *         type: 'Polygon',
- *         coordinates: [[[139.76, 35.68], [139.77, 35.68], [139.77, 35.69], [139.76, 35.68]]],
- *       },
- *       properties: { population: 4200 },
- *     },
- *   ],
- *   styleRule: {
- *     kind: 'graduated',
- *     property: 'population',
- *     breaks: [1000, 5000],
- *     colors: ['#eff3ff', '#6baed6', '#2171b5'],
- *     other: '#cccccc',
- *   },
- *   interactive: true,
- * });
- *
- * const unsubscribe = parcels.on('click', ({ feature }) => {
- *   console.log(feature.id, feature.properties);
- * });
- *
- * parcels.setVisible(false); // hide without discarding the features
- * parcels.remove(); // the same as draw.removeDataset('parcels')
- * ```
+ * them: editing, undo / redo, the events of the features, the selection UI, and
+ * `draw.features.list()` / `draw.document`. A caller who wants to edit one copies it into the
+ * document with `draw.features.create`; the library does not relate the two. The public
+ * `Dataset` of `draw.datasets` is built on it.
  */
 export interface Dataset {
   /** The dataset id given at creation */
@@ -333,7 +290,7 @@ export interface Dataset {
   /**
    * Where it is drawn relative to the Store (the current side)
    *
-   * When the side is changed with `moveDataset`, this value becomes the new side.
+   * When the side is changed by a move, this value becomes the new side.
    */
   readonly order: DatasetOrder;
   /** Whether click / hover are fired (hits are blocked even with false) */
@@ -592,7 +549,7 @@ export interface Dataset {
 
   /**
    * Removes the dataset and releases its GPU resources; the same as
-   * {@link MapLibreGLDraw.removeDataset}, including the `draw.dataset.remove` event.
+   * `draw.datasets.remove`, including the `dataset.removed` event.
    * Calling it again does nothing
    */
   remove(): void;

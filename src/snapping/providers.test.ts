@@ -66,7 +66,7 @@ function makeLayer(id: string, visible = true): Layer {
   };
 }
 
-function addFeature(
+function putFeature(
   id: string,
   type: string,
   coordinates: FeatureCoordinates,
@@ -146,7 +146,7 @@ beforeEach(() => {
 
 describe('the built-in vertex provider', () => {
   it('lists every vertex of a LineString', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
       [0.1, 0.1],
@@ -165,13 +165,13 @@ describe('the built-in vertex provider', () => {
   });
 
   it('makes the coordinate of a Point a candidate as well', () => {
-    addFeature('p1', 'Point', [0.2, 0.2]);
+    putFeature('p1', 'Point', [0.2, 0.2]);
 
     expect(coordsOf(vertexCandidates())).toEqual([[0.2, 0.2]]);
   });
 
   it('lists the vertices of the outer ring and the inner ring (the hole) of a Polygon, without duplicating the closing point', () => {
-    addFeature('poly', 'Polygon', [
+    putFeature('poly', 'Polygon', [
       [
         [0, 0],
         [0.4, 0],
@@ -198,11 +198,11 @@ describe('the built-in vertex provider', () => {
   });
 
   it('lists the vertices of every part of the Multi variants with the part number', () => {
-    addFeature('mp', 'MultiPoint', [
+    putFeature('mp', 'MultiPoint', [
       [0, 0],
       [0.1, 0.1],
     ]);
-    addFeature('mls', 'MultiLineString', [
+    putFeature('mls', 'MultiLineString', [
       [
         [0.2, 0],
         [0.3, 0],
@@ -212,7 +212,7 @@ describe('the built-in vertex provider', () => {
         [0.3, 0.2],
       ],
     ]);
-    addFeature('mpoly', 'MultiPolygon', [
+    putFeature('mpoly', 'MultiPolygon', [
       [
         [
           [0.5, 0],
@@ -238,7 +238,7 @@ describe('the built-in vertex provider', () => {
   });
 
   it('excludes only the vertex being dragged and keeps the other vertices of the same feature', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
       [0.2, 0],
@@ -255,11 +255,11 @@ describe('the built-in vertex provider', () => {
   });
 
   it('applies the exclusion only to the feature that was given', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
     ]);
-    addFeature('f2', 'LineString', [
+    putFeature('f2', 'LineString', [
       [0, 0],
       [0.1, 0],
     ]);
@@ -273,7 +273,7 @@ describe('the built-in vertex provider', () => {
   });
 
   it('drops the feature of excludeFeatureId entirely', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
     ]);
@@ -282,11 +282,11 @@ describe('the built-in vertex provider', () => {
   });
 
   it('drops the features of excludeFeatureIds entirely (the features being moved in a drag)', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
     ]);
-    addFeature('f2', 'LineString', [
+    putFeature('f2', 'LineString', [
       [0, 0.1],
       [0.1, 0.1],
     ]);
@@ -298,9 +298,9 @@ describe('the built-in vertex provider', () => {
   });
 
   it('leaves out hidden features, layers and groups', () => {
-    addFeature('hidden', 'Point', [0, 0], { visible: false });
+    putFeature('hidden', 'Point', [0, 0], { visible: false });
     store.createLayer(makeLayer('l2', false));
-    addFeature('inHiddenLayer', 'Point', [0.1, 0], { layerId: 'l2' });
+    putFeature('inHiddenLayer', 'Point', [0.1, 0], { layerId: 'l2' });
     store.createGroup({
       id: 'g1',
       layerId: 'l1',
@@ -309,8 +309,8 @@ describe('the built-in vertex provider', () => {
       locked: false,
       visible: false,
     });
-    addFeature('inHiddenGroup', 'Point', [0.2, 0], { groupId: 'g1' });
-    addFeature('visible', 'Point', [0.3, 0]);
+    putFeature('inHiddenGroup', 'Point', [0.2, 0], { groupId: 'g1' });
+    putFeature('visible', 'Point', [0.3, 0]);
 
     const candidates = vertexCandidates();
 
@@ -318,14 +318,14 @@ describe('the built-in vertex provider', () => {
   });
 
   it('leaves out locally hidden features as well', () => {
-    addFeature('f1', 'Point', [0, 0]);
+    putFeature('f1', 'Point', [0, 0]);
     store.setLocallyHidden('f1', true);
 
     expect(vertexCandidates()).toHaveLength(0);
   });
 
   it('delegates a custom type to the registered getSnapTargets', () => {
-    addFeature('marker', 'Marker', [0.1, 0.1]);
+    putFeature('marker', 'Marker', [0.1, 0.1]);
     snapTargets.register('Marker', (feature) => {
       const coord = coordinatesOf(feature) as Coordinate;
       return [
@@ -347,7 +347,7 @@ describe('the built-in vertex provider', () => {
   });
 
   it('does not see the getSnapTargets registered in another draw instance', () => {
-    addFeature('marker', 'Marker', [0.1, 0.1]);
+    putFeature('marker', 'Marker', [0.1, 0.1]);
     const other = createSnapTargetsRegistry();
     other.register('Marker', () => [
       { kind: 'vertex', coordinate: [0.5, 0.5], description: 'other-instance' },
@@ -364,7 +364,7 @@ describe('the built-in vertex provider', () => {
   });
 
   it('applies the exclusion to the vertices returned by getSnapTargets as well', () => {
-    addFeature('marker', 'Marker', [0.1, 0.1]);
+    putFeature('marker', 'Marker', [0.1, 0.1]);
     snapTargets.register('Marker', (feature) => [
       {
         kind: 'vertex',
@@ -383,7 +383,7 @@ describe('the built-in vertex provider', () => {
 
 describe('the built-in edge provider', () => {
   it('lists the segments of a LineString', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
       [0.1, 0.1],
@@ -403,7 +403,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('attaches the vertex references of both ends to a segment candidate (the closing point is normalized to index 0)', () => {
-    addFeature('poly', 'Polygon', [
+    putFeature('poly', 'Polygon', [
       [
         [0, 0],
         [0.4, 0],
@@ -424,7 +424,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('attaches vertex references with the part number to the segment candidates of a MultiPolygon', () => {
-    addFeature('mpoly', 'MultiPolygon', [
+    putFeature('mpoly', 'MultiPolygon', [
       [
         [
           [0, 0],
@@ -442,7 +442,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('lists the edges of the outer ring and the inner ring of a Polygon, including the closing ones', () => {
-    addFeature('poly', 'Polygon', [
+    putFeature('poly', 'Polygon', [
       [
         [0, 0],
         [0.4, 0],
@@ -464,7 +464,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('lists a MultiPolygon across parts and rings', () => {
-    addFeature('mpoly', 'MultiPolygon', [
+    putFeature('mpoly', 'MultiPolygon', [
       [
         [
           [0, 0],
@@ -487,9 +487,9 @@ describe('the built-in edge provider', () => {
   });
 
   it('leaves points, circles and freehand curves out of the edges', () => {
-    addFeature('p1', 'Point', [0, 0]);
-    addFeature('c1', 'Circle', [0.1, 0], { properties: { 'maplibre-gl-draw:radiusMeters': 100 } });
-    addFeature('fh', 'Freehand', [
+    putFeature('p1', 'Point', [0, 0]);
+    putFeature('c1', 'Circle', [0.1, 0], { properties: { 'maplibre-gl-draw:radiusMeters': 100 } });
+    putFeature('fh', 'Freehand', [
       [0.2, 0],
       [0.3, 0],
     ]);
@@ -498,7 +498,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('excludes the edges touching the vertex being dragged (because they pass over the cursor)', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
       [0.2, 0],
@@ -515,7 +515,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('makes the closing point at the end of a closed ring count as the first vertex for the exclusion', () => {
-    addFeature('poly', 'Polygon', [
+    putFeature('poly', 'Polygon', [
       [
         [0, 0],
         [0.4, 0],
@@ -534,7 +534,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('does not return segments that fall outside the bbox', () => {
-    addFeature('f1', 'LineString', [
+    putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
       [5, 5],
@@ -550,7 +550,7 @@ describe('the built-in edge provider', () => {
   });
 
   it('does not handle a custom type in the edge provider', () => {
-    addFeature('marker', 'Marker', [
+    putFeature('marker', 'Marker', [
       [0, 0],
       [0.1, 0],
     ]);
@@ -563,11 +563,11 @@ describe('the built-in edge provider', () => {
 describe('the built-in intersection provider', () => {
   /** 2 lines that cross (the intersection is the origin) */
   function addCrossingLines(): void {
-    addFeature('h', 'LineString', [
+    putFeature('h', 'LineString', [
       [-0.1, 0],
       [0.1, 0],
     ]);
-    addFeature('v', 'LineString', [
+    putFeature('v', 'LineString', [
       [0, -0.1],
       [0, 0.1],
     ]);
@@ -617,7 +617,7 @@ describe('the built-in intersection provider', () => {
   });
 
   it('makes intersections with the edges of a Polygon as well', () => {
-    addFeature('poly', 'Polygon', [
+    putFeature('poly', 'Polygon', [
       [
         [0, 0],
         [0.2, 0],
@@ -627,7 +627,7 @@ describe('the built-in intersection provider', () => {
       ],
     ]);
     // A line crossing the left and right edges of the polygon
-    addFeature('line', 'LineString', [
+    putFeature('line', 'LineString', [
       [-0.1, 0.1],
       [0.3, 0.1],
     ]);
@@ -642,7 +642,7 @@ describe('the built-in intersection provider', () => {
   });
 
   it('does not make a self-intersection of the same feature into an intersection', () => {
-    addFeature('bowtie', 'LineString', [
+    putFeature('bowtie', 'LineString', [
       [-0.1, -0.1],
       [0.1, 0.1],
       [0.1, -0.1],
@@ -653,11 +653,11 @@ describe('the built-in intersection provider', () => {
   });
 
   it('does not make a candidate from a pair of edges that do not cross', () => {
-    addFeature('a', 'LineString', [
+    putFeature('a', 'LineString', [
       [-0.1, 0],
       [0.1, 0],
     ]);
-    addFeature('b', 'LineString', [
+    putFeature('b', 'LineString', [
       [-0.1, 0.1],
       [0.1, 0.1],
     ]);
@@ -691,13 +691,13 @@ describe('the built-in intersection provider', () => {
   });
 
   it('leaves points, circles, freehand curves and custom types out of the intersections', () => {
-    addFeature('line', 'LineString', [
+    putFeature('line', 'LineString', [
       [-0.1, 0],
       [0.1, 0],
     ]);
-    addFeature('p1', 'Point', [0, 0]);
-    addFeature('c1', 'Circle', [0, 0], { properties: { 'maplibre-gl-draw:radiusMeters': 100 } });
-    addFeature('marker', 'Marker', [
+    putFeature('p1', 'Point', [0, 0]);
+    putFeature('c1', 'Circle', [0, 0], { properties: { 'maplibre-gl-draw:radiusMeters': 100 } });
+    putFeature('marker', 'Marker', [
       [0, -0.1],
       [0, 0.1],
     ]);
@@ -715,15 +715,15 @@ describe('the built-in intersection provider', () => {
 
   it('merges the same point into one even when it comes out of several pairs', () => {
     // 3 lines cross at the same point (there are 3 pairs)
-    addFeature('a', 'LineString', [
+    putFeature('a', 'LineString', [
       [-0.1, 0],
       [0.1, 0],
     ]);
-    addFeature('b', 'LineString', [
+    putFeature('b', 'LineString', [
       [0, -0.1],
       [0, 0.1],
     ]);
-    addFeature('c', 'LineString', [
+    putFeature('c', 'LineString', [
       [-0.1, -0.1],
       [0.1, 0.1],
     ]);

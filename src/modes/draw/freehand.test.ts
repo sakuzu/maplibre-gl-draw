@@ -9,7 +9,7 @@
  * (dragstart) and the end point (dragend) are snapped as before.
  *
  * The assembly follows the same style as trace-mode.test.ts: instead of synthetic input, drag
- * events are fed from the normalizer (because draw.input does not synthesize drags).
+ * events are fed from the normalizer (because the synthetic input of the tests has no drags).
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';

@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { MemoryStore } from './memory.js';
-import type { Feature, Group, Layer, StateChanges, StyleRule } from './types.js';
+import type { Feature, Group, Layer, StoreChange, StyleRule } from './types.js';
 
 // Test helper functions
 function createTestLayer(overrides?: Partial<Layer>): Layer {
@@ -107,7 +107,7 @@ describe('MemoryStore', () => {
         expect(store.getGroup('group-1')?.featureIds).toContain('feature-1');
       });
 
-      it('notifies the listener with the correct StateChanges', () => {
+      it('notifies the listener with the correct StoreChange', () => {
         const listener = vi.fn();
         store.subscribe(listener);
 
@@ -118,7 +118,7 @@ describe('MemoryStore', () => {
         });
 
         expect(listener).toHaveBeenCalledTimes(1);
-        const changes: StateChanges = listener.mock.calls[0][0];
+        const changes: StoreChange = listener.mock.calls[0][0];
         expect(changes.features?.created).toHaveLength(1);
         expect(changes.features?.created?.[0].id).toBe('feature-1');
       });
@@ -168,7 +168,7 @@ describe('MemoryStore', () => {
 
         store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [5, 5] } });
 
-        const changes: StateChanges = listener.mock.calls[0][0];
+        const changes: StoreChange = listener.mock.calls[0][0];
         expect(coordinatesOf(changes.features?.updated?.[0].previous)).toEqual([0, 0]);
         expect(coordinatesOf(changes.features?.updated?.[0].feature)).toEqual([5, 5]);
       });
@@ -183,7 +183,7 @@ describe('MemoryStore', () => {
         expect(coordinatesOf(store.getFeature('feature-1'))).toEqual([5, 5]);
       });
 
-      it('isIntermediate is passed through to StateChanges', () => {
+      it('isIntermediate is passed through to StoreChange', () => {
         const listener = vi.fn();
         store.subscribe(listener);
 
@@ -193,7 +193,7 @@ describe('MemoryStore', () => {
           { isIntermediate: true },
         );
 
-        const changes: StateChanges = listener.mock.calls[0][0];
+        const changes: StoreChange = listener.mock.calls[0][0];
         expect(changes.features?.updated?.[0].isIntermediate).toBe(true);
       });
 
@@ -210,7 +210,7 @@ describe('MemoryStore', () => {
         );
 
         for (const call of listener.mock.calls) {
-          const changes: StateChanges = call[0];
+          const changes: StoreChange = call[0];
           expect(changes.features?.updated?.[0]).not.toHaveProperty('isIntermediate');
         }
       });
@@ -352,9 +352,9 @@ describe('MemoryStore', () => {
         expect(store.getLayer('layer-1')?.styleRule).toBeUndefined();
       });
 
-      it('a change of styleRule appears in layers.updated of StateChanges', () => {
+      it('a change of styleRule appears in layers.updated of StoreChange', () => {
         const rule: StyleRule = { kind: 'single', color: '#ff0000' };
-        const changes: StateChanges[] = [];
+        const changes: StoreChange[] = [];
         store.subscribe((c) => changes.push(c));
 
         store.updateLayer('layer-1', { styleRule: rule });
@@ -468,7 +468,7 @@ describe('MemoryStore', () => {
 
         store.setLayerOrder(['layer-2', 'layer-1', 'layer-3']);
 
-        const changes: StateChanges = listener.mock.calls[0][0];
+        const changes: StoreChange = listener.mock.calls[0][0];
         expect(changes.layers?.orderChanged?.order).toEqual(['layer-2', 'layer-1', 'layer-3']);
         expect(changes.layers?.orderChanged?.previous).toEqual(['layer-1', 'layer-2', 'layer-3']);
       });
@@ -575,7 +575,7 @@ describe('MemoryStore', () => {
         });
 
         expect(store.getGroup('group-1')?.layerId).toBe('layer-2');
-        const changes: StateChanges = listener.mock.calls[0][0];
+        const changes: StoreChange = listener.mock.calls[0][0];
         expect(changes.groups?.updated).toEqual([
           {
             id: 'group-1',
@@ -592,7 +592,7 @@ describe('MemoryStore', () => {
 
         store.updateLayer('layer-1', { items: [...(store.getLayer('layer-1')?.items ?? [])] });
 
-        const changes: StateChanges = listener.mock.calls[0][0];
+        const changes: StoreChange = listener.mock.calls[0][0];
         expect(changes.groups).toBeUndefined();
       });
     });
@@ -799,7 +799,7 @@ describe('MemoryStore', () => {
       store.createLayer(createTestLayer());
     });
 
-    it('several changes are combined into a single StateChanges', () => {
+    it('several changes are combined into a single StoreChange', () => {
       const listener = vi.fn();
       store.subscribe(listener);
 
@@ -809,7 +809,7 @@ describe('MemoryStore', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       expect(changes.features?.created).toHaveLength(2);
     });
 
@@ -827,7 +827,7 @@ describe('MemoryStore', () => {
         store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [2, 2] } });
       });
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.features?.updated ?? [];
       expect(updated).toHaveLength(2);
       expect(updated[0].isIntermediate).toBe(true);
@@ -850,7 +850,7 @@ describe('MemoryStore', () => {
 
       // Notified only once, when the outermost transaction ends
       expect(listener).toHaveBeenCalledTimes(1);
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       expect(changes.features?.created).toHaveLength(3);
     });
 
@@ -862,7 +862,7 @@ describe('MemoryStore', () => {
         store.createFeature(createTestFeature('feature-1'));
       }, 'undo');
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       expect(changes.source).toBe('undo');
     });
 
@@ -875,7 +875,7 @@ describe('MemoryStore', () => {
       }, 'silent');
 
       expect(listener).toHaveBeenCalledTimes(1);
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       expect(changes.source).toBe('silent');
     });
 
@@ -889,7 +889,7 @@ describe('MemoryStore', () => {
         store.createFeature(createTestFeature('feature-3'));
       });
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.layers?.updated ?? [];
       expect(updated).toHaveLength(1);
       // previous is the first state and layer is the last state
@@ -908,7 +908,7 @@ describe('MemoryStore', () => {
         store.createFeature(createTestFeature('feature-3'));
       });
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.layers?.updated ?? [];
       expect(updated.map((u) => u.id)).toEqual(['layer-1', 'layer-2']);
       expect(updated[0].layer.items).toEqual(['feature-1', 'feature-3']);
@@ -927,7 +927,7 @@ describe('MemoryStore', () => {
         store.updateFeature('feature-2', { groupId: 'group-1' });
       });
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.groups?.updated ?? [];
       expect(updated).toHaveLength(1);
       expect(updated[0].previous.featureIds).toEqual([]);
@@ -945,7 +945,7 @@ describe('MemoryStore', () => {
         }
       }, 'silent');
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.layers?.updated ?? [];
       // Before folding, each entry held two copies of the whole order, so the total was O(N^2).
       const retainedEntries = updated.reduce(
@@ -1079,7 +1079,7 @@ describe('MemoryStore', () => {
 
       store.setMode('draw_polygon');
 
-      const changes: StateChanges = listener.mock.calls[0][0];
+      const changes: StoreChange = listener.mock.calls[0][0];
       expect(changes.mode?.mode).toBe('draw_polygon');
       expect(changes.mode?.previous).toBe('select');
     });

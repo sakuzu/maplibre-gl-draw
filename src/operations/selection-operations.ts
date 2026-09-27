@@ -5,7 +5,7 @@
  * Selection operations
  *
  * Deletes what is selected. The Delete key of the select mode (modes/) and
- * `draw.deleteSelection()` (api/) both call this, so the two paths delete the same things.
+ * `draw.selection.delete()` (api/) both call this, so the two paths delete the same things.
  */
 
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
@@ -16,7 +16,7 @@ import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from './ver
 
 /**
  * Deletes what is selected, as one change. The Delete key of the select mode and
- * `draw.deleteSelection()` both run this.
+ * `draw.selection.delete()` both run this.
  *
  * - vertices selected: deletes those vertices
  * - feature: deletes the selected features

@@ -80,7 +80,7 @@ interface RenderCoordinator {
 }
 ```
 
-`shouldRepaint(changes)` is true when the `StateChanges` carry any of
+`shouldRepaint(changes)` is true when the `StoreChange` carry any of
 `features`, `layers` (including the order between layers), `groups`,
 `layerReorder`, `groupReorder`, `selection`, `tentative` (the in-progress
 geometry of a drawing mode) or `uiStateChanged` (drag state, box
@@ -265,8 +265,8 @@ created by one function, `buildGpuResources`, and dropped by one function,
 CPU-side state (the Store subscription, the triangulation and style rule
 caches, the collected drape elements) is outside the pair.
 
-- `onAdd` builds the pair and `onRemove` releases it. Custom feature
-  renderers and overlay renderers (`addOverlayRenderer`) stay registered
+- `onAdd` builds the pair and `onRemove` releases it. Feature type
+  renderers and overlay renderers (`draw.extensions.overlays`) stay registered
   across a removal and receive `onAdd` again when the layer comes back; an
   overlay added before the layer is on the map receives its `onAdd` when
   the engine is built
@@ -625,7 +625,7 @@ the draw calls, and the order within a layer must match
 `store.listFeaturesInOrder()` (see [Display order](#display-order)).
 
 Core features are accumulated and drawn together at `endFrame()`, whereas
-custom features registered with `registerFeatureHandler` are drawn at once
+features of the types added with `draw.extensions.featureTypes` are drawn at once
 by their own renderer. So `renderLayers` flushes the core batches with
 `batchManager.endFrame()` just before a custom feature, and reopens them
 with `beginFrame()` after it. Without that flush, every custom feature of a
@@ -634,8 +634,8 @@ putting core features on top regardless of the order.
 
 ### Companion drawing
 
-A feature companion (`view/feature-companion.ts`, registered with
-`registerFeatureCompanionProvider()`) lets an extension draw something that
+A feature companion (`view/feature-companion.ts`, added through
+`draw.extensions.companionProviders`) lets an extension draw something that
 belongs to a feature, at the same z position, and that can be grabbed at
 the same z order. The core does not know what a companion means; drawing is
 up to the provider.
@@ -910,7 +910,7 @@ The `immediate` kind covers:
   cutting depends on the zoom)
 - The point shape `icon` (no instancing)
 - Kinds retained mode does not handle, such as Image
-- Custom types registered with `registerFeatureHandler`
+- Feature types added with `draw.extensions.featureTypes`
 - Features with a companion, which need a hook right before the feature
 
 An immediate chunk owns no batch and is drawn with the same procedure as
@@ -1235,7 +1235,7 @@ while the camera is still:
 The rebuilds that wait for the camera to stop still wait; a capture is
 taken with the camera still.
 
-`MapLibreGLDraw.hasPendingWork()` reports the work later frames finish on
+`Draw.hasPendingWork()` reports the work later frames finish on
 their own. It asks the engine (`CustomLayerInterface.hasPendingWork`),
 which asks:
 
@@ -1248,7 +1248,8 @@ which asks:
   frame drew (a hidden one, or one on no side of the frame, has no work);
   a provider call waiting for its debounce or its response
 - the overlay renderers, through the optional
-  `CustomOverlayRenderer.hasPendingWork`
+  `EngineOverlayRenderer.hasPendingWork` (`OverlayRenderer.hasPendingWork`
+  of the extension contract)
 
 maplibre fires `idle` after a frame even when a custom layer asked for
 another frame while drawing it, so `idle` alone does not tell. The host
@@ -1365,7 +1366,7 @@ reaches the baked data, so a change of the opacity alone rebuilds nothing
 - The analytic drape gives each Store layer a factor source of its own
   (below)
 - Custom renderers and feature companions receive it as
-  `CustomRendererDrawContext.opacity` (`layerRendererContext` in
+  `RenderContext.opacity` (`layerRendererContext` in
   `render.ts`) and multiply it into their own alpha. Overlays, the
   tentative geometry and the selection UI are not content of a layer and
   get 1
@@ -1853,8 +1854,8 @@ batches, and the editing UI of the current selection is never ghosted.
 The terrain frame state, generation counters and caches live in a
 `TerrainContext` (`terrain/context.ts`), one per custom layer. There is no
 current context: renderers receive it at construction, extension renderers
-through `CustomRendererDrawContext.terrain`, and plugins use
-`PluginContext.projectAnchor`. Draw instances on one page (a main map, a
+through `RenderContext.terrain`, and plugins use
+`ExtensionContext.terrain.project`. Draw instances on one page (a main map, a
 thumbnail) must not share counters, or a retained batch could wrongly
 conclude that nothing changed.
 
@@ -1919,8 +1920,8 @@ to physical pixels when drawn. All reads of the ratio go through
 - Renderers and datasets receive the source itself
   (`PixelRatioInput = number | (() => number) | PixelRatioProvider`), so a
   change reaches every reader from the next frame on. Extension renderers
-  get the resolved value as `CustomRendererDrawContext.pixelRatio`
-- `draw.setRenderScale()` multiplies a factor on top (default 1). A host
+  get the resolved value as `RenderContext.pixelRatio`
+- `rendering.renderScale` of the options multiplies a factor on top (default 1). A host
   that shows the map scaled down uses it to shrink what is fixed in screen
   pixels by the same ratio
 - Retained batches bake the ratio and are rebuilt when it changes: the
@@ -2058,7 +2059,7 @@ sequence into segments and draws each with its own custom layer, a slot
 
 - One custom layer per segment. The first has the id
   `maplibre-gl-draw-layer` and the others `maplibre-gl-draw-layer:<n>`
-  (`renderSlotLayerId`). `SlotManager` follows changes of `layerOrder`,
+  (`slotLayerId`). `SlotManager` follows changes of `layerOrder`,
   creates and removes slots, and adds and removes them from the map
 - Each slot's `render` passes only its own segment to `renderLayers`. The
   preparation of the frame (projection, terrain state, shaders, viewport)
@@ -2068,8 +2069,8 @@ sequence into segments and draws each with its own custom layer, a slot
 - The foreground (overlays, selection handles, the drawing preview) is
   drawn by the last slot. Nothing in the foreground can be placed above a
   separator
-- `getRenderSlots()` returns the segments and the layer ids of the slots,
-  and `draw.renderslots.change` announces changes. The host moves each
+- `draw.getLayerStack()` returns the segments and the layer ids of the
+  frames, and the `layerStack.changed` event announces changes. The host moves each
   native layer to just after the slot of the preceding segment; placing
   native layers is the host's job
 - Retained batches stay per layer. A change of segments, or of the segment

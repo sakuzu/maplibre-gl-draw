@@ -9,7 +9,7 @@
  */
 
 import type { Store } from '../store/store.js';
-import type { Mode, StateChanges } from '../store/types.js';
+import type { Mode, StoreChange } from '../store/types.js';
 import type { EngineModeContext, EngineModeFactory, EngineModeHandler } from './handler.js';
 
 /**
@@ -199,7 +199,7 @@ export class ModeManagerImpl implements ModeManager {
    */
   start(): void {
     // Subscribe to the mode changes of the Store
-    this.unsubscribe = this.store.subscribe((changes: StateChanges) => {
+    this.unsubscribe = this.store.subscribe((changes: StoreChange) => {
       if (changes.mode) {
         this.handleModeChange(changes.mode.mode);
       }

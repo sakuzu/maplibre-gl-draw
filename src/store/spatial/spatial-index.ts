@@ -68,7 +68,7 @@ export interface SpatialIndex extends SpatialQuery {
   /**
    * Registers a custom bounding box calculation function
    *
-   * This is to support the custom feature types of an extension (registerFeatureHandler).
+   * This is to support the feature types of an extension (`draw.extensions.featureTypes`).
    * @param type the feature type
    * @param calculator the bounding box calculation function
    * @returns a function that cancels the registration (it does not remove a later

@@ -129,22 +129,6 @@ function graduatedIndex(breaks: number[], value: number): number {
  * @param rule The style rule
  * @param properties The attributes of the feature
  * @returns The color in `#RRGGBB` form
- *
- * @example
- * ```ts
- * import { evaluateStyleRule, type StyleRule } from '@sakuzu/maplibre-gl-draw';
- *
- * const rule: StyleRule = {
- *   kind: 'graduated',
- *   property: 'population',
- *   breaks: [1000, 10000],
- *   colors: ['#fee8c8', '#fdbb84', '#e34a33'],
- *   other: '#cccccc',
- * };
- * evaluateStyleRule(rule, { population: 5000 }); // '#fdbb84'
- * evaluateStyleRule(rule, { population: '5000' }); // '#cccccc' (not a number)
- * evaluateStyleRule(rule, {}); // '#cccccc'
- * ```
  */
 export function evaluateStyleRule(
   rule: StyleRule,
@@ -289,29 +273,6 @@ function graduatedLabel(breaks: number[], index: number, messages: Messages): st
  * @param messages The entries of the messages table to use (default: `MESSAGES_EN`;
  *   missing entries fall back to it)
  * @returns The legend rows, in the order to show them
- *
- * @example
- * ```ts
- * import { deriveLegend, type StyleRule } from '@sakuzu/maplibre-gl-draw';
- *
- * const rule: StyleRule = {
- *   kind: 'graduated',
- *   property: 'population',
- *   breaks: [1000, 10000],
- *   colors: ['#fee8c8', '#fdbb84', '#e34a33'],
- *   other: '#cccccc',
- * };
- * deriveLegend(rule);
- * // [
- * //   { label: 'Below 1000', color: '#fee8c8' },
- * //   { label: '1000 to below 10000', color: '#fdbb84' },
- * //   { label: '10000 or more', color: '#e34a33' },
- * //   { label: 'Other', color: '#cccccc' },
- * // ]
- *
- * // In the language of the host application
- * deriveLegend(rule, { legendOther: 'Autres', legendBelow: (upper) => `Moins de ${upper}` });
- * ```
  */
 export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[] {
   const table = messages ? resolveMessages(messages) : MESSAGES_EN;

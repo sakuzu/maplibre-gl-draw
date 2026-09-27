@@ -150,8 +150,8 @@ export interface RadiusLineStyle {
 /**
  * How the selection UI looks: the box around the selection and its handles
  *
- * Give the parts to change through the `selectionStyle` option of `createMapLibreGLDraw`;
- * the parts left out keep their defaults. Sizes and widths are in CSS pixels and stay the
+ * The engine reads it from the `selectionStyle` option of `createDraw`, translated to this
+ * shape; the parts left out keep their defaults. Sizes and widths are in CSS pixels and stay the
  * same at every zoom.
  *
  * A single selection shows the box with the resize handles at its corners and the rotate
@@ -159,18 +159,6 @@ export interface RadiusLineStyle {
  * its center marker, radius line and radius handle. A multiple selection shows one box around
  * every selected feature, with the resize and rotate handles, and a box without handles around
  * each feature. A locked feature shows the box without handles.
- *
- * @example
- * ```ts
- * const draw = createMapLibreGLDraw(map, {
- *   selectionStyle: {
- *     boundingBox: {
- *       stroke: { width: 1, color: [0, 0.4, 1, 1], opacity: 1, lineStyle: 'solid' },
- *       margin: 6,
- *     },
- *   },
- * });
- * ```
  */
 export interface SelectionUIConfig {
   /**

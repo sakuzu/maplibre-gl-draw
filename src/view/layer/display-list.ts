@@ -16,7 +16,7 @@
  */
 
 import { type DisplayStore, getDisplayFeatures } from '../../store/local-visibility.js';
-import type { Feature, StateChanges } from '../../store/types.js';
+import type { Feature, StoreChange } from '../../store/types.js';
 
 /**
  * Above this share of the list, the ids in view are taken by walking the list (sorting that
@@ -76,7 +76,7 @@ export class DisplayListCache {
    * their order and the local visibility (reported as a change of the UI state). A change of the
    * selection alone, for example, keeps it.
    */
-  applyChanges(changes: StateChanges): void {
+  applyChanges(changes: StoreChange): void {
     if (
       changes.features !== undefined ||
       changes.layers !== undefined ||

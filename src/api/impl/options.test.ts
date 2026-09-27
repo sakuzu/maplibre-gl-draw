@@ -92,7 +92,7 @@ describe('the options at creation', () => {
     expect(context.topology.sharedVertexDrag).toBe(true);
     expect(context.options.clickTolerance).toBe(9);
     expect(context.options.dragThreshold).toBe(7);
-    expect(context.pixelRatioSource.getRenderScale()).toBe(0.5);
+    expect(context.pixelRatioSource.getScaleFactor()).toBe(0.5);
     expect(context.pixelRatioSource.resolve()).toBe(1);
     expect(context.renderingConfig.storeRetained).toBe(false);
     expect(context.renderingConfig.timeSlicing).toBe(false);
@@ -256,7 +256,7 @@ describe('options.update', () => {
     const { context } = engine;
     const refresh = vi.spyOn(engine.customLayer, 'refresh');
     options.update({ rendering: { renderScale: 2, pixelRatio: 1.5 } });
-    expect(context.pixelRatioSource.getRenderScale()).toBe(2);
+    expect(context.pixelRatioSource.getScaleFactor()).toBe(2);
     expect(context.pixelRatioSource.resolve()).toBe(3);
     expect(refresh).not.toHaveBeenCalled();
     expect(engine.map.triggerRepaint).toHaveBeenCalled();

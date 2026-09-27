@@ -291,7 +291,7 @@ export function createEngine(
 
   // 3.5 Add the snapping indicator as a built-in overlay
   // (it comes in front of the selection UI because order: 'overlay')
-  customLayer.addOverlayRenderer(new SnapIndicatorRenderer({ snapService }));
+  customLayer.addOverlay(new SnapIndicatorRenderer({ snapService }));
 
   // Repaint when the snapping result changes (the Store does not change, so
   // the RenderCoordinator does not run)

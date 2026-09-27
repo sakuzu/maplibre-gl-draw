@@ -11,7 +11,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
 import type { Store } from '../store/store.js';
-import type { StateChanges } from '../store/types.js';
+import type { StoreChange } from '../store/types.js';
 
 /**
  * RenderCoordinator interface
@@ -47,7 +47,7 @@ export interface RenderCoordinatorDeps {
 /**
  * Determines whether a change requires a repaint
  */
-function shouldRepaint(changes: StateChanges): boolean {
+function shouldRepaint(changes: StoreChange): boolean {
   // A repaint is required if any of the following changed
   return !!(
     (
@@ -82,7 +82,7 @@ export class RenderCoordinatorImpl implements RenderCoordinator {
       return;
     }
 
-    this.unsubscribe = this.store.subscribe((changes: StateChanges) => {
+    this.unsubscribe = this.store.subscribe((changes: StoreChange) => {
       if (shouldRepaint(changes)) {
         this.map.triggerRepaint();
       }

@@ -80,31 +80,9 @@ export interface AuxiliaryHandleHit {
  * A source of handles on the selected feature that are neither vertices nor resize handles,
  * and the receiver of their drags.
  *
- * Register one with `draw.registerAuxiliaryHandleProvider(provider)`. The library hit tests
+ * A `HandleProvider` of `draw.extensions.handleProviders` is installed as one. The engine hit tests
  * the handles and delegates their drags; drawing them is the provider's job (with an overlay
  * renderer, for example).
- *
- * @example
- * ```ts
- * import type { AuxiliaryHandleProvider } from '@sakuzu/maplibre-gl-draw';
- *
- * // A handle 20 px above the first vertex of the selected line, which logs its drag
- * const labelHandle: AuxiliaryHandleProvider = {
- *   id: 'label-handle',
- *   getHandles(feature, ctx) {
- *     if (feature.type !== 'LineString') return [];
- *     const first = (feature.geometry as GeoJSON.LineString).coordinates[0] as [number, number];
- *     const p = ctx.project(first);
- *     const { lng, lat } = ctx.unproject({ x: p.x, y: p.y - 20 });
- *     return [{ id: 'label', position: [lng, lat], cursor: 'move' }];
- *   },
- *   onHandleDragStart: () => true,
- *   onHandleDragMove: (event) => console.log(event.lngLat),
- *   onHandleDragEnd: () => {},
- * };
- *
- * const unregister = draw.registerAuxiliaryHandleProvider(labelHandle);
- * ```
  */
 export interface AuxiliaryHandleProvider {
   /** Identifier unique within the registry (re-registering with the same id overwrites) */

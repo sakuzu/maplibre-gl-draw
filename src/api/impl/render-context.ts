@@ -270,7 +270,7 @@ export function createCompanionDrawer(
 /** Where the overlays of the contract are put into the engine */
 export interface OverlayHost {
   /** Adds a renderer of the engine; returns the function that removes it */
-  addOverlayRenderer(renderer: EngineOverlayRenderer): () => void;
+  addOverlay(renderer: EngineOverlayRenderer): () => void;
 }
 
 /**
@@ -363,8 +363,8 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
       const entry = { overlay, seq: seq++ };
       overlays.push(entry);
       if (!removeRenderers) {
-        const removeAbove = host.addOverlayRenderer(above);
-        const removePerLayer = host.addOverlayRenderer(perLayer);
+        const removeAbove = host.addOverlay(above);
+        const removePerLayer = host.addOverlay(perLayer);
         removeRenderers = () => {
           removePerLayer();
           removeAbove();

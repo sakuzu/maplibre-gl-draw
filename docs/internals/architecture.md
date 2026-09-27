@@ -3,14 +3,15 @@
 This document describes how the core library is put together: the layers and
 the rules between them, the Store that holds all state, the path an input
 takes from the browser to a mode, the modes, the events, snapping, the
-geometry module, where locking and read-only are enforced, the plugin
-machinery and the public surface.
+geometry module, where locking and read-only are enforced, the
+extensions and the public surface.
 
 It is written for contributors who know maplibre-gl but not the internals of
 this library. Three topics have their own documents:
 
 - [rendering.md](./rendering.md): the WebGL2 pipeline, the renderers, the
-  retained batches, terrain, display order and render slots
+  retained batches, terrain, display order and the frames of the stacking
+  order
 - [hit-testing.md](./hit-testing.md): the two-stage hit test, the spatial
   index, the unified z traversal and the per-type strategies
 - [coordinate-precision.md](./coordinate-precision.md): coordinate systems,
@@ -63,7 +64,7 @@ Store and emits events, and provides pure geometry, snapping and mass
 display of data that is not edited.
 
 The host application owns toolbars, panels and the import and export UI.
-When the image mode needs a file, core emits `image.request` and the host
+When the image mode needs a file, core emits `image.requested` and the host
 answers. Keeping the UI out lets core run entirely under MapLibre's
 control and stay independent of frameworks.
 
@@ -110,19 +111,20 @@ vertex drag, edge tracing) are not modes; they live in `operations/`.
 
 ### Wiring
 
-The entry `createMapLibreGLDraw` (`src/maplibre-gl-draw.ts`) wires the
-pieces: it builds the context (`createContext` in `src/api/context.ts`,
-which creates the Store, the spatial index, the ModeManager, SnapService and
-the hit test services), then the EventBridge, the CustomLayer, the
-RenderCoordinator, the InputNormalizer and the InputRouter, and finally
-composes the public API.
+The entry `createDraw` (`src/api/draw.ts`, built in
+`src/api/impl/create-draw.ts`) wires the pieces. The engine (`createEngine`
+in `src/api/impl/engine.ts`) builds the context (`createContext` in
+`src/api/impl/engine-context.ts`, which creates the Store, the spatial
+index, the ModeManager, SnapService and the hit test services), then the
+datasets, the CustomLayer, the RenderCoordinator, the extension host, the
+InputNormalizer, the InputRouter and the emitter of the events. The
+collections and resources of the instance (`draw.features`, `draw.layers`
+and the rest, in `src/api/impl/`) are built on the engine.
 
 ## Dependency rules
 
 ```text
-               api/            public API and initialization
-                 |
-               plugins/
+               api/            public API, its implementation and the engine
                  |
                dispatcher/     input
                  |
@@ -155,7 +157,9 @@ composes the public API.
    `Layer`, `Group`, `UpdateSource` and the rest, re-exported by
    `store/types.ts`), the style types, the corners of a selection box and
    the payloads of the public events.
-3. `plugins/` reaches core only through `PluginContext`.
+3. An extension reaches core only through the contexts of the extension
+   contract (`api/extension/`), which the extension host of `api/impl/`
+   builds.
 4. `operations/` is called from `modes/` and `api/`. `dispatcher/` never
    calls `operations/`.
 5. `snapping/` is called from `dispatcher/`. To enumerate candidates it
@@ -176,8 +180,10 @@ composes the public API.
    types only and sits at the level of `shared/`, so `view/`, `snapping/`
    and `operations/` can read these types without importing `api/`. Its
    declarations may refer to types of the areas that consume them with
-   type-only imports, and nothing in it imports `api/`. The registration
-   functions stay on the instance (`api/extension-api.ts`).
+   type-only imports, and nothing in it imports `api/`. The extension
+   contract of the public API is in `api/extension/`; the host of
+   `api/impl/extension-host.ts` installs it into these contracts through
+   adapters.
 10. `webgl/` is the entry of layer 2 (`@sakuzu/maplibre-gl-draw/webgl`). It
     re-exports building blocks of `view/`, `dispatcher/` and `shared/`, and
     nothing inside the library imports it, not even a type, so a layer 1
@@ -192,8 +198,8 @@ Tests, `src/e2e/` and `src/test-utils.ts` are left out.
 Every area has a height. From the bottom: `geometry/`; `shared/` together
 with `src/messages.ts`; `extension/`; `store/`; `view/`; `dataset/`;
 `operations/` and `snapping/` at the same height; `modes/`; `dispatcher/`;
-`plugins/`; `api/`; and the entry files `src/index.ts` and
-`src/maplibre-gl-draw.ts`, with `src/webgl/` at the same height. An import
+`api/`; and the entry file `src/index.ts`, with `src/webgl/` at the same
+height. An import
 may point to a lower area or stay inside its own area, with the exceptions
 of rules 4, 5, 6, 9 and 10.
 
@@ -215,8 +221,9 @@ otherwise.
 There are no runtime violations and no runtime cycles. The type-only
 imports that point upward are few and deliberate: `modes/`, `snapping/`,
 `dataset/` and `view/ui/` read the normalized event and hit test types of
-`dispatcher/`; `modes/` and the router read the type `PluginManager`;
-`plugins/` reads the type `MapLibreGLDraw` for `PluginContext.draw`;
+`dispatcher/`; the drawing modes of `modes/draw/` read the types of the
+extension contract they are written to; the point hit test reads the public
+`Feature`; `view/shaders/` reads the shader types of the render context;
 `view/layer/` reads `DatasetManager` to draw datasets in the
 same pass; and the snap marker reads the line renderer's style type.
 `npm run check:layers` prints the current list.
@@ -259,7 +266,7 @@ it in a `DrawStore`.
 
 - Read-only is enforced at its write methods and nowhere else.
 - The notifications of the document are forwarded into the change bus of
-  the local state, so a listener gets one `StateChanges` per transaction
+  the local state, so a listener gets one `StoreChange` per transaction
   with both kinds of change.
 - When a feature, group or layer is deleted, by anything, its id leaves the
   selection, the ids being edited and the locally hidden set.
@@ -290,15 +297,15 @@ A few rules bind every `DocumentStore` implementation.
   names nothing, a duplicate id) throws and stores nothing. An
   implementation that receives changes from elsewhere may ignore an update
   to an id that a change from outside already removed.
-- `subscribe` delivers the document categories of `StateChanges` with their
+- `subscribe` delivers the document categories of `StoreChange` with their
   source; other categories are ignored by core.
 
 The full list of methods and their contracts is in the
 [generated reference](../api/index.md) under `DocumentStore`.
 
-### StateChanges
+### StoreChange
 
-Subscribers receive `StateChanges`, one object per flush. It has an
+Subscribers receive `StoreChange`, one object per flush. It has an
 optional category per kind of change:
 
 - `features`, `layers` and `groups`: `created`, `updated` (with `previous`)
@@ -350,15 +357,16 @@ host --> public API --> Store
        +------------------+------------------+
        |                  |                  |
        v                  v                  v
-RenderCoordinator    EventBridge       spatial index,
-       |                  |            mutation hooks,
-       v                  v            view caches
-map.triggerRepaint() EventEmitter --> draw.on() listeners
+RenderCoordinator    event hub         spatial index,
+       |                  |            view caches
+       v                  v
+map.triggerRepaint() draw.on() and extension listeners
 ```
 
 The internal consumers (the spatial index, the RenderCoordinator, the view
-caches, the plugin mutation hooks) subscribe to the Store directly. The
-EventBridge converts `StateChanges` into events for the outside. Anything
+caches) subscribe to the Store directly. The event hub
+(`connectStoreEvents` in `src/api/impl/events.ts`) turns each notification
+into the events of `DrawEvents` for the host and the extensions. Anything
 derived from the Store is derived by its subscriber alone; no write path
 updates a derived structure by hand.
 
@@ -372,7 +380,7 @@ updates a derived structure by hand.
 5. SelectMode: store.setSelection('feature', [id])
 6. Store: notifies { selection: {...} }
 7. RenderCoordinator: map.triggerRepaint()
-8. EventBridge: emits 'selection.change'
+8. The event hub: emits 'selection.changed'
 ```
 
 ### Dragging a feature
@@ -381,21 +389,22 @@ updates a derived structure by hand.
 1. InputNormalizer: mousedown, mousemove past the threshold -> dragstart
 2. SelectMode.onDragStart:
      store.startEditing(ids); store.setDragState({ operation: 'move' })
-     pluginManager.runHook('drag:start', { featureIds })
+     signals the start (drag.started)
 3. During the drag:
      store.updateFeature(id, changes, { isIntermediate: true })
 4. On dragend:
      the last difference is committed in one store.transact()
      (features following a shared vertex commit in the same step)
-     store.endEditing(ids); runHook('drag:end', { featureIds })
+     store.endEditing(ids); signals the end (drag.ended)
 5. On an abort that does not go through dragend:
      store.abortIntermediateUpdates?(ids)
 ```
 
-Dragging an auxiliary handle fires neither `drag:start` nor `drag:end`.
-Core writes nothing to the Store for such a drag; the provider commits in
-its own transaction. A hook that opened an editing scope on `drag:start`
-would otherwise fold the provider's commit into the scope and lose it.
+Dragging an auxiliary handle announces neither `drag.started` nor
+`drag.ended`. Core writes nothing to the Store for such a drag; the
+provider commits in its own transaction. A listener that opened an editing
+scope on `drag.started` would otherwise fold the provider's commit into the
+scope and lose it.
 
 These flows keep the Flux rules: input always passes the InputRouter, state
 changes always pass the Store, and the view updates from its subscription.
@@ -484,38 +493,44 @@ entrance for coordinates. For each event it:
 3. For `click`, `mousemove`, `dragstart`, `dragmove` and `dragend`, asks the
    mode `isSnapEnabledFor(type)` and, unless declined or the event carries
    `snap: false`, replaces `lngLat` with `SnapService.resolve()`.
-4. Delivers the event to the current handler. `keydown` goes to the plugins
-   first (`PluginManager.handleKeyDown`), and the mode sees it only when no
-   plugin consumed it. `mousemove` and `dragmove` are also handed to the
-   plugins, which cannot consume them.
+4. Delivers the event through the extension route
+   (`ExtensionInputRoute`): the input receivers of the plugins get it first
+   and consume it by returning `true`, then a mode written to the extension
+   contract; otherwise the router calls the handler of the engine mode.
 5. In select mode only, hands `click` and `mousemove` to the
-   interception by datasets and reports every click once as `map.click`.
+   interception by datasets and reports every click once (`map.clicked`).
    A hit on a Store feature always wins over a dataset, and that rule lives
    on the interception side.
 
 `dragcancel` never goes through snapping and is never held, so the mode
 always gets the chance to abort.
 
-`dispatch(event)` feeds a synthesized event into the same path; `draw.input`
-uses it, so numeric entry, automation and tests get snapping, plugin
-delivery and interception exactly as a real pointer does. Synthetic input is
+`dispatch(event)` feeds a synthesized event into the same path; the tests
+use it, so synthesized input gets snapping, delivery to the extensions and
+interception exactly as a real pointer does. Synthetic input is
 exempt from the pointer hold and is treated as `'mouse'`.
 
-Because snapping happens here, every mode, including a mode a plugin
-registers and the vertex drag of select mode, snaps without any code of its
+Because snapping happens here, every mode, including a mode an extension
+adds and the vertex drag of select mode, snaps without any code of its
 own.
 
 ## Modes
 
 ### Mode handlers
 
-A mode is a `ModeHandler` (`src/modes/handler.ts`) created by a
-`ModeFactory`. Core registers seven: `select`, `draw_point`, `draw_line`,
-`draw_polygon`, `draw_image`, `draw_circle` and `draw_freehand`. The `Mode`
-type accepts any other string for custom modes.
+The ModeManager runs `EngineModeHandler`s (`src/modes/handler.ts`), each
+created by an `EngineModeFactory`. Core has seven modes. `select` and
+`draw_image` run on the engine directly. `draw_point`, `draw_line`,
+`draw_polygon`, `draw_circle` and `draw_freehand` are written to the
+extension contract (`ModeHandler` and `ModeContext` of `src/api/extension/`)
+and added through `draw.extensions.modes`, like any mode an extension adds;
+`bridgeMode` (`src/api/impl/input.ts`) runs each as an engine handler and
+the extension route delivers its input. The `Mode` type accepts any other
+string for the modes of extensions.
 
-A handler receives its `ModeContext` once, in `onStart(context)`, and keeps
-it; the event methods take only the event. The methods are all optional:
+An engine handler receives its `EngineModeContext` once, in
+`onStart(context)`, and keeps it; the event methods take only the event.
+The methods are all optional:
 
 - Lifecycle: `onStart`, `onStop`, `onExternalStateChange` (state changed
   under the mode, for example by a change applied from outside) and
@@ -531,12 +546,15 @@ it; the event methods take only the event. The methods are all optional:
 - `writesFeatures`: the mode creates features, so it may be entered only
   while a layer can be written
 
-`ModeContext` hands a mode what it needs: the map, the Store, the spatial
-index queries, the hit test services and `hitTestTopmost`, the selection
-scope, the event emitter, the configuration, the plugin manager,
-`getCurrentLayerId` (the writable layer, or an empty string),
-`getSnapResult` and the ports to datasets. A mode never
-triggers a repaint; the RenderCoordinator does that from the Store.
+`EngineModeContext` hands an engine mode what it needs: the map, the
+Store, the spatial index queries, the hit test services and
+`hitTestTopmost`, the selection scope, the emitter of the engine signals,
+the configuration, the interaction hooks of the plugins and
+`getCurrentLayerId` (the writable layer, or an empty string). A mode of the
+extension contract gets a `ModeContext` from its factory instead, and
+declares its snapping with `snapPreference` and its writing with `writes`.
+A mode never triggers a repaint; the RenderCoordinator does that from the
+Store.
 
 Freehand is the reason `isSnapEnabledFor` exists. The snap tolerance
 assumes one decision per click; a stroke passes hundreds of points, and
@@ -548,22 +566,23 @@ a corner.
 
 `ModeManagerImpl` (`src/modes/manager.ts`) holds the factories and runs one
 handler at a time. The mode itself lives in the Store; the manager switches
-the handler only in its Store subscription, so the Store, the `mode.change`
+the handler only in its Store subscription, so the Store, the `mode.changed`
 event and the running handler always agree.
 
 `setMode(mode)` checks the request before touching the Store. Every refusal
 looks the same: the Store does not change, no event is emitted, the current
 handler keeps running, and `false` is returned. A request is refused when:
 
-- no factory is registered for the name (a warning is logged),
+- no factory is registered for the name (a warning is logged;
+  `draw.setMode` throws `not-found` before asking),
 - the interaction lock is on and the mode is not `select`, or
 - the `canEnter` predicate rejects the new handler. `createContext` sets it
   to refuse a mode that declares `writesFeatures` while no layer can be
   written.
 
 Asking for the current mode changes nothing and returns `true`.
-`registerMode` returns a function that removes the registration;
-`unregisterMode` enters `select` first when the removed mode is current.
+`registerMode` returns a function that removes the registration; removing
+the current mode enters `select` first.
 
 `writesFeatures` does not remove the check at commit time: a layer can stop
 being writable while the mode is active, and the mode then discards the
@@ -580,32 +599,27 @@ the Store and the pure math below them.
 
 ## Events
 
-`EventEmitter` (`src/shared/utils/event-emitter.ts`) is a typed emitter over
-`EventMap`. There are two names for each event:
+The events of the instance are `DrawEvents` (`src/api/events.ts`), emitted
+by one event hub per instance (`createEventHub` in
+`src/api/impl/events.ts`). The host subscribes with `draw.on`, an extension
+with `on` of its context, and the names carry no prefix
+(`feature.created`). The hub has two sources.
 
-- Internal names without a prefix, such as `feature.create`. The
-  EventBridge and SnapService emit these, and plugins subscribe with them
-  through `PluginContext`.
-- Public names with the `draw.` prefix, such as `draw.feature.create`.
-  `draw.on()` and `draw.off()` strip the prefix and delegate to the internal
-  emitter.
-
-The EventBridge (`src/store/event-bridge.ts`) emits the per-item events
-(create, update, delete of features, layers and groups) once per change,
-whatever the source. A `draw.load` of N features emits N `feature.create`,
-so a subscriber that mirrors the document sees every change.
-
-For every flush that changes features, it then emits `features.change` once,
-after the per-feature events, with every created, updated and deleted
-feature of the flush in order and the flush's `source`. A subscriber that
-rebuilds a view on any change listens to that instead, so a bulk change
-costs one rebuild rather than N.
-
-Some events come from elsewhere: `snap.change` from SnapService,
-`dataset.click` and `map.click` from the InputRouter, `geometry.applied`
-from `draw.geometry`, `renderslots.change` from the CustomLayer,
-`image.request` from the image mode and `load.error` when the image of an
-Image feature fails to decode.
+- The Store. `connectStoreEvents` turns each notification into the
+  per-item events (the created, updated, deleted and moved features, the
+  layers and groups, the reorders, the metadata, the selection, the vertex
+  selection and the mode), then emits `document.changed` once with the
+  whole change of the transaction. A load of N features emits N
+  `feature.created` and one `document.changed`, so a subscriber that
+  rebuilds a view on any change listens to `document.changed`.
+- The signals of the engine. The parts of the engine announce what the
+  Store does not record on an internal emitter (`EngineSignals` in
+  `src/shared/utils/event-emitter.ts`): `snap.change` from SnapService,
+  `dataset.click` and `map.click` from the InputRouter, the datasets that
+  come and go, `layerStack.change` from the CustomLayer, `image.request`
+  from the image mode, `load.error` when the image of an Image feature
+  fails to decode, and `drag.started` and `drag.ended` from the drag of
+  select mode. `connectEngineEvents` passes them on as events.
 
 The full list of events, their payloads and their order is in
 [events.md](../reference/events.md).
@@ -619,10 +633,11 @@ kinds above.
 
 - Candidates come from providers: the built-in ones for the Store's
   vertices, edges and intersections, the guide lines and the
-  datasets, plus those a host adds with `draw.snapping.register()` and
-  those a custom type returns from `getSnapTargets`.
+  datasets, plus those an extension adds through
+  `draw.extensions.snapProviders` and those a feature type returns from
+  `snapCandidates`.
 - SnapService, not the providers, chooses. It discards disabled kinds
-  (`options.snap.kinds`, `draw.snapping.setKindEnabled`) and candidates
+  (`snapping.kinds` of the options) and candidates
   outside the pixel tolerance, ranks vertex over intersection over edge over
   guide, and prefers the nearer within a rank. It also computes the nearest
   point on a segment, so a provider only puts candidates forward.
@@ -635,7 +650,8 @@ kinds above.
   drags start from `dragStartLngLat`, which is never snapped, so snapping
   `dragstart` and `dragend` does not shift them.
 - The marker is a built-in overlay renderer (`snapping/indicator.ts`).
-  Snapping does not change the Store, so it repaints on `snap.change`. The
+  Snapping does not change the Store, so it repaints on the `snap.change`
+  signal. The
   result carries the geometric reference of its target for edge tracing.
 - Only visible candidates take part: the shared visible flag over three
   levels and local hiding.
@@ -658,9 +674,11 @@ take and return GeoJSON geometries (`union`, `area`, `buffer`, `split` and
 so on); the modules underneath work on coordinate arrays and are used by the
 rest of the library directly.
 
-`draw.geometry` (`src/api/geometry-operations.ts` and `src/api/geometry/`)
-is the layer that ties these functions to the selection, transactions and
-the `geometry.applied` event. It holds no geometric computation of its own.
+The operations on areas of `draw.features` (`union`, `difference`,
+`intersection`, `split` and `buffer` in `src/api/impl/features.ts`, with
+the placement steps of `src/api/impl/geometry/`) tie these functions to the
+document and to transactions. They hold no geometric computation of their
+own.
 Crossing longitude 180 and the neighborhood of the poles are out of scope.
 The functions are documented in
 [snapping-geometry.md](../guides/snapping-geometry.md) and the generated
@@ -706,10 +724,9 @@ The shared predicates are pure functions next to each other in `store/`:
 - `isWritableLayer` and `resolveWritableLayerId` in
   `store/writable-layer.ts`
 
-Each takes a minimal store interface (`FeatureLockStore` and the like), so
-`PluginContext` satisfies it and an extension can use the same judgement.
-`isFeatureLocked`, `isGroupLocked` and `isInteractionBlocked` are public;
-`isLocallyHidden` and `getDisplayFeatures` are internal.
+Each takes a minimal store interface (`FeatureLockStore` and the like),
+which the Store satisfies. They are internal; the collections of the
+instance and the modes apply them.
 
 ### Lock
 
@@ -721,8 +738,8 @@ transforming, deleting and changing attributes are forbidden. The lock is
 inherited downward: a feature is effectively locked when it, its group or
 its layer is locked, and a group when it or its layer is locked.
 
-- `updateFeature`, `updateGroup` and `updateLayer` reject an update of an
-  effectively locked item that contains a key other than `locked` and
+- `features.update`, `groups.update` and `layers.update` refuse an update
+  of an effectively locked item that contains a key other than `locked` and
   `visible`.
 - Drags and the delete shortcut check the lock at their start, and box
   selection skips locked items.
@@ -739,8 +756,9 @@ The only gate is in `DrawStore`'s write methods. While read-only is on,
 They do not throw, even for an unknown id, so no caller breaks. The public
 methods that map onto one of these writes return the same boolean.
 
-Drawing modes, operations, the api layer, `PluginContext`, import, the
-shortcuts and everything built on top all end in these methods. A gate spread over
+Drawing modes, operations, the collections of the instance, the extension
+contexts, import, the shortcuts and everything built on top all end in
+these methods. A gate spread over
 the callers would miss one; a gate at the single layer they share leaks
 nothing.
 
@@ -762,7 +780,7 @@ subscriber, and a refused write notifies nothing.
 
 The interaction lock allows selection and stops the start of any edit that
 comes from user input, for every feature. It gates no Store write: writes
-from plugin initialization and from the system still pass (stopping writes
+from extensions and from the system still pass (stopping writes
 is read-only's job). The two are independent and can be on in any
 combination.
 
@@ -790,7 +808,7 @@ start of each interaction:
 - Cursor. `modes/select/cursor-handler.ts` shows no operation cursor for a
   blocked selection, so the cursor never promises a drag.
 - Mode changes. `ModeManager.setMode` refuses any mode but `select` while
-  the lock is on. `draw.setInteractionLock(true)` during drawing switches to
+  the lock is on. `draw.setInteractionLocked(true)` during drawing switches to
   `select`, and the drawing handler's `onStop` clears the tentative shape.
 
 ### Local visibility: where hiding applies
@@ -835,82 +853,73 @@ User drawing writes new features only into a writable layer: one that
 exists, is not locked, is visible in the document and is not locally hidden
 (`isWritableLayer`). `resolveWritableLayerId` returns the active layer when
 it is writable, otherwise the first writable layer, otherwise an empty
-string; it never changes the active layer. `ModeContext.getCurrentLayerId`
-exposes it. This is a rule for user drawing, not a write gate: the Store's
+string; it never changes the active layer.
+`EngineModeContext.getCurrentLayerId` and `ModeContext.writableLayer()`
+expose it. This is a rule for user drawing, not a write gate: the Store's
 write methods and the public API still accept any existing layer.
 
-## Plugins
+## Plugins and extensions
 
-`PluginManager` (`createPluginManager` in `src/plugins/plugin-manager.ts`)
-holds the plugins of one instance. The contracts are in
-`src/plugins/plugin.ts`; how to write a plugin is in
+The extension host (`createExtensionHost` in
+`src/api/impl/extension-host.ts`) holds the extensions of one instance
+behind `draw.extensions`: the plugins, the modes, the feature types, the
+overlays and the snap, handle and companion providers. The contracts are in
+`src/api/extension/`; how to write a plugin is in
 [plugins.md](../guides/plugins.md).
 
-A `Plugin` has a unique `name` and, optionally, `onInstall(context)` and
-`onUninstall()`; `hooks`; `modes` (custom mode factories registered on
-install); `api` (reached by the host with `draw.getPluginApi(name)`); global
-input handlers (`onKeyDown`, which runs before the mode and consumes the
-key by returning `true`, `onMouseMove`, `onDragMove`, `onMouseLeave`);
-`filterSelection`; and interaction hooks through which select mode
-delegates clicks and in-place editing to a plugin (`onFeatureClick`,
-`onFeatureDoubleClick`, `isInteracting`, `finishInteraction`,
-`cancelInteraction`, `getInteractionContainer`, `onFeatureCreated`).
+A `Plugin` has a unique `name`, `onAdd(ctx)` and optionally `onRemove()`;
+an `api`, which others reach with `draw.extensions.plugins.getApi(name)`;
+`input` receivers that run before the mode and consume an event by
+returning `true`; and `interaction` hooks through which select mode
+delegates clicks and in-place editing to it (`filterSelection`,
+`onFeatureClick`, `onFeatureDoubleClick`, `onDrawCommit`, `isBusy`,
+`finish`, `cancel` and `container`). The host answers select mode through
+`PluginInteractions` (`src/modes/handler.ts`), calling the plugins in the
+order they were added and reporting and skipping one that throws.
 
 `PluginContext` is the only way a plugin reaches core (rule 3). It offers
-the instance itself (`draw`, for the registration functions), the Store
-(`getStore()`, with its writes behind the same read-only gate), reads,
-mutations that take an optional `source`, layer and group operations, the
-internal event names, `batch`, mode control, vertex undo and redo,
-`invalidateFeatures(type)` for a custom type whose extent changed for a
-reason the Store cannot see, the terrain anchors of this instance and
-`computeBoundingBox`.
+the instance (`draw`), a read-only view of the Store (`store`), `on`, `off`
+and `once` for the events, the terrain anchors of this instance, the name
+generator, the screen, `invalidate` for a type whose extent changed for a
+reason the Store cannot see, the vertex undo and redo of the drawing, and
+`extensions`, the same collections as `draw.extensions`, which record what
+the plugin adds.
 
-### Lifecycle and hooks
+### Lifecycle
 
-1. `draw.addPlugin(plugin)` registers it and returns a function that
-   unregisters it. A second plugin with the same name is skipped.
-2. Its modes are registered and `onInstall` runs.
-3. Hooks fire as the Store changes and as drags start and end.
-4. Unregistering removes its modes and runs `onUninstall`.
-   `draw.destroy()` unregisters every plugin, so each can release timers
-   and subscriptions it holds outside the instance.
+1. `draw.extensions.plugins.add(plugin)` runs `onAdd` and returns a
+   function that removes the plugin. A name that is taken throws
+   `already-exists`.
+2. Removing it runs `onRemove`, then removes what it added through its
+   context and ends the event subscriptions it made there.
+3. `draw.destroy()` removes the extensions first, so each plugin can
+   release timers and subscriptions it holds outside the instance.
 
-The mutation hooks (`feature:afterCreate`, `feature:afterUpdate`,
-`feature:afterDelete`, the same three for groups and layers, and
-`selection:afterChange`) are fired by one Store subscriber that the api
-layer sets up (`subscribeMutationHooks` in `plugins/mutation-hooks.ts`).
-They therefore see every write, whatever made it: the public API, a mode, a
-drag, a shortcut, import, a plugin or a change applied to a replaced store.
-The hooks of one notification share its `source` and a `batchId`.
-Intermediate updates are not reported, only the commit that follows them,
-and a write refused by read-only fires nothing.
-
-There are no "before" hooks. Firing them would require the Store to call up
-into the plugins, against the layers, and a hook cannot veto or rewrite a
-mutation. `drag:start` and `drag:end` are fired by the drag of select mode.
-
-`PluginContext.batch(fn)` wraps `fn` in `store.transact`, so several writes
-become one notification, one set of hooks with one `batchId`, and one step
-for anything that records the notifications. A shared `batchId`
-alone does not open a transaction. Wrap an operation that spans several
-features in `batch`.
+The events a plugin subscribes to are the events of the instance: they
+follow the Store, so they see every write whatever made it, and
+`drag.started` and `drag.ended` come from the drag of select mode. There
+are no "before" hooks: a listener cannot veto or rewrite a write.
+`draw.transact(fn)` wraps `fn` in `store.transact`, so several writes
+become one notification and one `document.changed`.
 
 ### Extension points
 
-Besides plugins, the instance has registration functions:
-`registerMode`, `registerFeatureHandler`, `addOverlayRenderer`,
-`registerAuxiliaryHandleProvider` and `registerFeatureCompanionProvider`,
-plus `draw.snapping.register` for snap providers. Each returns a function
-that cancels the registration. Their use is described in
-[custom-types.md](../guides/custom-types.md).
+Besides the plugins, `draw.extensions` has a collection per kind: `modes`,
+`featureTypes`, `overlays`, `snapProviders`, `handleProviders` and
+`companionProviders`. Adding returns a function that removes what was
+added. Their use is described in [custom-types.md](../guides/custom-types.md).
+The host installs each into the registries the engine reads, through the
+adapters of `src/api/impl/adapters.ts` and `render-context.ts`: a feature
+type becomes a `FeatureTypeHandler` of `src/extension/`, whose renderer is
+handed a `RenderContext` made from the `FrameDrawContext` of the frame.
 
 Two of them have their core side here:
 
-- Auxiliary handles (`view/ui/auxiliary-handles.ts`). A provider returns
-  handles for the single selected feature, or selection-independent handles
-  through `getGlobalHandles()`. Core only hit tests them and delegates the
-  drag: `onHandleDragStart` must return `true` before core stops the map's
-  pan and sends the move and end to the same provider. Read-only, the
+- Auxiliary handles (`view/ui/auxiliary-handles.ts`). A handle provider
+  returns handles for the single selected feature, or handles tied to no
+  feature (`globalHandles`). Core only hit tests them and delegates the
+  drag: the provider must accept the start before core stops the map's pan
+  and sends the move and end to the same provider. Read-only, the
   interaction lock and (for a handle tied to a feature) the effective lock
   are checked first. The provider draws the handles; the selection UI does
   not.
@@ -918,8 +927,8 @@ Two of them have their core side here:
   below a feature in the render loop and hit tests it just after the
   feature misses in the z traversal, so what is seen and what can be
   grabbed stay at the same place in the stacking order. Core consumes the
-  click and returns it with `onCompanionClick` without touching the
-  selection.
+  click and returns it to the `onClick` of the provider without touching
+  the selection.
 
 The positions in the render loop and in the z traversal are described in
 [rendering.md](./rendering.md) and [hit-testing.md](./hit-testing.md).
@@ -934,20 +943,20 @@ that core holds no global state, applied to the extension points.
 The registries of custom type selection hooks, auxiliary handles and
 thinned handle sets live in the selection scope; the snap targets of custom
 types, the hit test and box selection strategies in their services (all
-built by `createContext`); renderers and overlays in the CustomLayer; and
-companions in the companion registry built by `createMapLibreGLDraw`.
+built by `createContext`); renderers and overlays in the CustomLayer;
+companions in the companion registry built by the engine; and the
+extensions themselves in the extension host.
 
 The selection scope (`view/ui/selection-scope.ts`) is created once per
 instance and handed both to the CustomLayer, which draws the selection UI,
-and to the modes (`ModeContext.selectionScope`), which hit test the
+and to the modes (`EngineModeContext.selectionScope`), which hit test the
 handles, so what is drawn and what can be grabbed come from one source.
 
 The render state is owned the same way. The CustomLayer creates a render
 scope (`view/layer/render-scope.ts`) holding the terrain state and the
 per-feature caches, and each renderer receives the parts it needs when it is
-built. A plugin reads the terrain of its own instance through
-`PluginContext.projectAnchor` and related methods; an extension renderer
-through `CustomRendererDrawContext.terrain`.
+built. An extension reads the terrain of its own instance through
+`terrain` of its context; a renderer through `RenderContext.terrain`.
 
 ## The public surface
 
@@ -957,17 +966,18 @@ the browser, and `./webgl` is layer 2 below; no other subpath is exported,
 because it would freeze the internal structure for the outside.
 `./package.json` is exported as metadata.
 
-`src/index.ts` and `src/webgl/index.ts` name every public symbol one by
-one, with no `export *`, in two layers.
+`src/index.ts`, `src/geometry/index.ts`, `src/table/index.ts` and
+`src/webgl/index.ts` name every public symbol one by one, with no
+`export *`, in two layers.
 
-- Layer 1, the public API. The factory `createMapLibreGLDraw`, the
-  `MapLibreGLDraw` instance and its `Options` with every type they refer
-  to, the data model, the event payloads, the extension points (`Plugin`,
-  `PluginContext`, `ModeHandler`, `ModeContext`, the normalized events,
-  `CustomFeatureHandler`, the overlay renderer, the snapping provider, the
-  hit test and box selection strategies, the auxiliary handle and companion
-  contracts), the store contracts and `MemoryStore`, and the pure functions.
-  It follows semver.
+- Layer 1, the public API. The main entry: `createDraw`, the `Draw`
+  instance with its collections and resources, `DrawOptions` and
+  `RuntimeOptions`, the document model, the inputs and filters, the state,
+  `DrawEvents`, `DrawError`, the datasets, the Store contracts, the
+  extension contract (`Plugin`, the contexts, `ModeHandler`,
+  `FeatureTypeDefinition`, the renderers and the providers) and the style
+  rule functions. The geometry and table entries belong to it too. It
+  follows semver.
 - Layer 2, the building blocks for custom shaders, in
   `src/webgl/index.ts`. Parts tied to the shaders and the terrain drawing
   of core: the GLSL snippet and the projection uniforms, `createProgram`,
@@ -980,17 +990,16 @@ one, with no `export *`, in two layers.
 The rules for deciding which layer a new symbol belongs to, and the steps
 for publishing it, are in "The public surface" of `CONTRIBUTING.md`.
 
-Everything else (renderer classes, managers, sub-API factories, built-in
-modes and strategies) is internal. A class that an extension context hands
+Everything else (renderer classes, managers, the engine and its contracts,
+built-in modes and strategies) is internal. A class that an extension context hands
 over, such as a shared renderer or the terrain context, is exported as a
 type only, and its members outside the contract carry the internal JSDoc
 tag, which `stripInternal` removes from the declarations.
 
-`src/index.test.ts` pins both lists (`LAYER_1` and `WEBGL`), checks that
-the runtime exports match, and emits the declarations to check that they
-type-check on their own and that every type a public declaration refers to
-is exported (a layer 1 declaration only by layer 1), apart from a pinned
-list of known gaps in layer 1.
+`src/index.test.ts` pins the four lists (`MAIN`, `GEOMETRY`, `TABLE` and
+`WEBGL`), checks that the runtime exports match, and emits the declarations
+to check that they type-check on their own and that every type a public
+declaration refers to is exported (a layer 1 declaration only by layer 1).
 
 ## Dependencies
 
@@ -1026,9 +1035,8 @@ part.
 | Directory | Contents |
 | --- | --- |
 | `index.ts` | Public entry; names every export |
-| `maplibre-gl-draw.ts` | `createMapLibreGLDraw`; wiring |
 | `messages.ts` | Default message table |
-| `api/` | Public API, sub-namespaces, context |
+| `api/` | Public API; `impl/` the engine and resources |
 | `store/` | Store contracts, DrawStore, index |
 | `dispatcher/` | Normalizer, router, hit testing |
 | `modes/` | ModeManager, select and draw modes |
@@ -1037,8 +1045,7 @@ part.
 | `view/` | CustomLayer, renderers, shaders, UI |
 | `dataset/` | Datasets |
 | `table/` | Tables of rows as columns (sub-entry) |
-| `plugins/` | PluginManager, context, hooks |
-| `extension/` | Contracts for extensions (types) |
+| `extension/` | Engine contracts for types, overlays |
 | `shared/` | Types, math, config, utils |
 | `geometry/` | Pure geometry (sub-entry) |
 | `e2e/` | Browser end-to-end tests |

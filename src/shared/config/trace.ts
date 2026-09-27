@@ -8,16 +8,16 @@
  * and takes in its vertex sequence (edge tracing). It is enabled by default; when disabled,
  * drawing behaves exactly as it did before tracing was introduced.
  *
- * The configuration object is shared as the same instance between Context and ModeContext.
- * When `draw.tracing.setEnabled()` rewrites this object, the drawing modes run with the new
+ * The configuration object is shared as the same instance between the context of the engine
+ * and the modes. When `draw.options.update` rewrites this object, the drawing modes run with the new
  * value from the next click or move onward.
  */
 
 /**
  * The setting of edge tracing: following the boundary of an existing feature while drawing
  *
- * Give it through the `trace` option of `createMapLibreGLDraw`, or change it later with
- * `draw.tracing.setEnabled()`.
+ * The engine reads it from the `tracing` option of `createDraw`, which
+ * `draw.options.update` changes later.
  */
 export interface TraceOptions {
   /**

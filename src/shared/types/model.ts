@@ -35,8 +35,8 @@ export type FeatureCoordinates = Position | Position[] | Position[][] | Position
  * The built-in types are Point, LineString, Polygon, MultiPoint, MultiLineString,
  * MultiPolygon, Image, Circle and Freehand. The type decides the kind of `Feature.geometry`:
  * a Circle and an Image hold the Point of their center and their anchor, and a Freehand holds
- * a LineString. Any other string names a custom type, which an extension adds with
- * `registerFeatureHandler` ({@link FeatureTypeHandler}).
+ * a LineString. Any other string names a custom type, which an extension adds through
+ * `draw.extensions.featureTypes` (the engine reads it as a {@link FeatureTypeHandler}).
  *
  * The Multi types come from imports and from the results of geometry operations; no drawing
  * mode creates them.
@@ -151,13 +151,6 @@ export interface VertexSelection {
  * extension or a host gives features style keys of its own this way. It declares them with
  * declaration merging and checks their values where it reads them, since a value can also
  * arrive through `updateFeature` or a replaced store without an import.
- *
- * @example
- * ```ts
- * draw.updateFeature(id, {
- *   style: { strokeColor: '#0055ff', strokeWidth: 4, lineStyle: 'dashed' },
- * });
- * ```
  *
  * @example A style key of an extension
  * ```ts
@@ -301,9 +294,8 @@ export interface FileData {
  * A feature of the document: its GeoJSON geometry, the layer and group it belongs to, its
  * attributes and its style
  *
- * The draw instance returns features from `getFeature`, `getAllFeatures` and the events, and
- * creates them from a {@link FeatureInput}. What the instance returns is read-only: change a
- * feature with `updateFeature`, which stores a new object.
+ * The draw instance returns features from `draw.features` and the events, and creates them
+ * from an input. What the instance returns is read-only: a change stores a new object.
  *
  * The stacking order of the features is not a property of the feature: it is the position of
  * its ID in `Layer.items`, or in `Group.featureIds` when it belongs to a group.
@@ -362,7 +354,7 @@ export interface Feature {
 }
 
 /**
- * The input for adding a feature with `addFeature`: a {@link Feature} whose other fields
+ * The input for adding a feature to the Store: a {@link Feature} whose other fields
  * may be omitted
  *
  * Only `type` and `geometry` are required; the other fields take the defaults written on
@@ -411,20 +403,6 @@ export interface FeatureInput {
  * for `graduated`, say), takes `other` rather than the default color, so a rule that does not
  * apply can be told apart from a missing value. {@link evaluateStyleRule} evaluates a rule and
  * {@link deriveLegend} lists its legend entries; the library does not draw the legend.
- *
- * @example
- * ```ts
- * draw.updateLayer(layerId, {
- *   styleRule: {
- *     kind: 'graduated',
- *     property: 'population',
- *     breaks: [1000, 10000],
- *     colors: ['#fee8c8', '#fdbb84', '#e34a33'],
- *     other: '#cccccc',
- *   },
- * });
- * // population 500 -> #fee8c8, 5000 -> #fdbb84, 20000 -> #e34a33, missing -> #cccccc
- * ```
  */
 export type StyleRule =
   | { kind: 'single'; color: string }
@@ -528,7 +506,7 @@ export interface Group {
  * A drawing mode keeps it in the Store while the user draws, and it is cleared when the
  * feature is committed or the drawing is cancelled. It is local state of this instance; a
  * subscriber that wants the drawing in progress reads it from the notifications of the Store
- * ({@link StateChanges.tentative}).
+ * ({@link StoreChange.tentative}).
  */
 export interface TentativeState {
   /** The type of the feature being drawn */
@@ -613,7 +591,7 @@ export interface UpdateFeatureOptions {
    * An intermediate state is always overwritten by the committing update that follows
    * (the one without options).
    * MemoryStore ignores it and applies the update as usual, and passes it through to
-   * isIntermediate of StateChanges.features.updated. An external store can look at this
+   * isIntermediate of StoreChange.features.updated. An external store can look at this
    * flag to decide whether to keep the update or to hold it apart until the commit.
    */
   isIntermediate?: boolean;
@@ -626,16 +604,8 @@ export interface UpdateFeatureOptions {
  * one). Each category is present only when the transaction changed it. The document
  * categories (features, layers, groups, layerReorder, groupReorder, metadata) are what a
  * {@link DocumentStore} notifies; the others are local state of this client.
- *
- * @example
- * ```ts
- * draw.getStore().subscribe((changes) => {
- *   if (changes.source === 'remote') return;
- *   for (const feature of changes.features?.created ?? []) console.log('created', feature.id);
- * });
- * ```
  */
-export interface StateChanges {
+export interface StoreChange {
   /**
    * The source of the operation
    *
@@ -729,7 +699,7 @@ export interface StateChanges {
   };
   /**
    * A flag indicating that the UI state (dragState, boxSelection) has changed
-   * These are not included in the details of StateChanges, but they are notified in order
+   * These are not included in the details of StoreChange, but they are notified in order
    * to trigger a redraw
    */
   uiStateChanged?: boolean;
@@ -762,17 +732,6 @@ export interface BoundingBox {
  * It declares a title and a description. An application keeps settings of its own here (the
  * basemap it shows, a default view) by adding keys to this interface with declaration
  * merging; the keys are stored and exported like the declared ones.
- *
- * @example
- * ```ts
- * declare module '@sakuzu/maplibre-gl-draw' {
- *   interface Metadata {
- *     basemap?: string;
- *   }
- * }
- *
- * draw.setMetadata({ basemap: 'https://example.com/style.json' });
- * ```
  */
 export interface Metadata {
   /** The title of the document */

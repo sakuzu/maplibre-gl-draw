@@ -25,7 +25,7 @@ import type { SnapDisableKey } from '../../snapping/types.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
-import type { Coordinate, Feature, StateChanges, VertexRef } from '../../store/types.js';
+import type { Coordinate, Feature, StoreChange, VertexRef } from '../../store/types.js';
 import type {
   AuxiliaryHandleHit,
   AuxiliaryHandleProvider,
@@ -109,7 +109,7 @@ let map: ReturnType<typeof makeMap>;
 let context: EngineModeContext;
 let handler: SelectModeDragHandler;
 
-function addFeature(feature: Feature): void {
+function putFeature(feature: Feature): void {
   store.createFeature(feature);
 }
 
@@ -180,7 +180,7 @@ beforeEach(() => {
     store,
     spatialIndex,
     map,
-    pluginManager: undefined,
+    plugins: undefined,
     selectionScope: createSelectionScope(),
   } as unknown as EngineModeContext;
   handler = new SelectModeDragHandler();
@@ -189,8 +189,8 @@ beforeEach(() => {
 describe('simultaneous movement of shared vertices: adjacent polygons', () => {
   beforeEach(() => {
     // Two polygons sharing the edge x = 10
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 10, 0));
     enableSharedVertexDrag(true);
   });
 
@@ -265,9 +265,9 @@ describe('simultaneous movement of shared vertices: adjacent polygons', () => {
 
 describe('simultaneous movement of shared vertices: first and last of a closed ring', () => {
   it('both the first point and the closing point of the follower move by the same amount', () => {
-    addFeature(square('f1', 0, 0));
+    putFeature(square('f1', 0, 0));
     // The first point of f2 (= its closing point) matches [10,10] of f1
-    addFeature(square('f2', 10, 10));
+    putFeature(square('f2', 10, 10));
     enableSharedVertexDrag(true);
 
     dragVertex('f1', { ring: 0, index: 2 }, [10, 10], [12, 13]);
@@ -280,8 +280,8 @@ describe('simultaneous movement of shared vertices: first and last of a closed r
   });
 
   it('the closing point of the main feature (dragging index 0) keeps the ring closed', () => {
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 10, 0));
     enableSharedVertexDrag(true);
 
     dragVertex('f1', { ring: 0, index: 0 }, [0, 0], [-1, -2]);
@@ -294,7 +294,7 @@ describe('simultaneous movement of shared vertices: first and last of a closed r
 
 describe('simultaneous movement of shared vertices: Multi geometries and rings', () => {
   it('vertices of a MultiPolygon part and of an inner ring (a hole) follow along', () => {
-    addFeature(square('f1', 0, 0));
+    putFeature(square('f1', 0, 0));
     const multi: Feature = {
       id: 'mp',
       type: 'MultiPolygon',
@@ -334,7 +334,7 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
       visible: true,
       style: {},
     };
-    addFeature(multi);
+    putFeature(multi);
     enableSharedVertexDrag(true);
 
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
@@ -357,8 +357,8 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
   });
 
   it('a vertex of the second line of a MultiLineString follows along', () => {
-    addFeature(square('f1', 0, 0));
-    addFeature({
+    putFeature(square('f1', 0, 0));
+    putFeature({
       id: 'ml',
       type: 'MultiLineString',
       geometry: {
@@ -426,7 +426,7 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
       visible: true,
       style: {},
     };
-    addFeature(donut);
+    putFeature(donut);
     enableSharedVertexDrag(true);
 
     dragVertex('donut', { ring: 0, index: 1 }, [10, 0], [11, 2]);
@@ -440,12 +440,12 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
 
 describe('simultaneous movement of shared vertices: excluding locked and hidden', () => {
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
+    putFeature(square('f1', 0, 0));
     enableSharedVertexDrag(true);
   });
 
   it('a locked feature does not follow along', () => {
-    addFeature({ ...square('f2', 10, 0), locked: true });
+    putFeature({ ...square('f2', 10, 0), locked: true });
     const before = coordinatesOf('f2');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
     expect(coordinatesOf('f2')).toEqual(before);
@@ -462,14 +462,14 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       styleRule: undefined,
       metadata: undefined,
     });
-    addFeature({ ...square('f2', 10, 0), layerId: 'locked-layer' });
+    putFeature({ ...square('f2', 10, 0), layerId: 'locked-layer' });
     const before = coordinatesOf('f2');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
     expect(coordinatesOf('f2')).toEqual(before);
   });
 
   it('a feature whose group is locked does not follow along (effective lock)', () => {
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f2', 10, 0));
     store.createGroup({
       id: 'g1',
       layerId: 'l1',
@@ -485,14 +485,14 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
   });
 
   it('a hidden feature does not follow along', () => {
-    addFeature({ ...square('f2', 10, 0), visible: false });
+    putFeature({ ...square('f2', 10, 0), visible: false });
     const before = coordinatesOf('f2');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
     expect(coordinatesOf('f2')).toEqual(before);
   });
 
   it('a locally hidden feature does not follow along', () => {
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f2', 10, 0));
     store.setLocallyHidden('f2', true);
     const before = coordinatesOf('f2');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
@@ -510,7 +510,7 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       styleRule: undefined,
       metadata: undefined,
     });
-    addFeature({ ...square('f2', 10, 0), layerId: 'hidden-layer' });
+    putFeature({ ...square('f2', 10, 0), layerId: 'hidden-layer' });
     const before = coordinatesOf('f2');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
     expect(coordinatesOf('f2')).toEqual(before);
@@ -519,8 +519,8 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
 
 describe('simultaneous movement of shared vertices: geometries out of scope', () => {
   it('a Circle, which has no vertex movement, does not follow even at the same coordinate', () => {
-    addFeature(square('f1', 0, 0));
-    addFeature({
+    putFeature(square('f1', 0, 0));
+    putFeature({
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [10, 0] },
@@ -542,13 +542,13 @@ describe('simultaneous movement of shared vertices: geometries out of scope', ()
 
 describe('simultaneous movement of shared vertices: commit transaction granularity', () => {
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 10, 0));
     enableSharedVertexDrag(true);
   });
 
-  it('on commit, the updates of the 2 features ride on a single StateChanges', () => {
-    const batches: StateChanges[] = [];
+  it('on commit, the updates of the 2 features ride on a single StoreChange', () => {
+    const batches: StoreChange[] = [];
     store.subscribe((changes) => {
       if (changes.features?.updated) batches.push(changes);
     });
@@ -569,7 +569,7 @@ describe('simultaneous movement of shared vertices: commit transaction granulari
 
   it('even with the option disabled, one commit batch follows the intermediate updates', () => {
     enableSharedVertexDrag(false);
-    const batches: StateChanges[] = [];
+    const batches: StoreChange[] = [];
     store.subscribe((changes) => {
       if (changes.features?.updated) batches.push(changes);
     });
@@ -588,8 +588,8 @@ describe('simultaneous movement of shared vertices: commit transaction granulari
 describe('simultaneous movement of shared vertices: temporary disabling by modifier key', () => {
   beforeEach(() => {
     // Two polygons sharing the edge x = 10
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 10, 0));
     enableSharedVertexDrag(true);
   });
 
@@ -665,8 +665,8 @@ describe('simultaneous movement of shared vertices: temporary disabling by modif
 
 describe('simultaneous movement of shared vertices: follower highlight (UI state)', () => {
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 10, 0));
     enableSharedVertexDrag(true);
   });
 
@@ -716,7 +716,7 @@ describe('simultaneous movement of shared vertices: follower highlight (UI state
   });
 
   it('writing the UI state is notified as uiStateChanged', () => {
-    const uiChanges: StateChanges[] = [];
+    const uiChanges: StoreChange[] = [];
     store.subscribe((changes) => {
       if (changes.uiStateChanged) uiChanges.push(changes);
     });
@@ -748,9 +748,9 @@ describe('simultaneous movement of shared vertices: follower highlight (UI state
 });
 
 describe('intermediate updates during a drag and the commit in endDrag', () => {
-  type FeatureUpdate = NonNullable<NonNullable<StateChanges['features']>['updated']>[number];
+  type FeatureUpdate = NonNullable<NonNullable<StoreChange['features']>['updated']>[number];
 
-  let batches: StateChanges[];
+  let batches: StoreChange[];
 
   /** Start collecting and recording only the batches that contain features.updated */
   function watchFeatureBatches(): void {
@@ -760,12 +760,12 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
     });
   }
 
-  function updatesOf(changes: StateChanges): FeatureUpdate[] {
+  function updatesOf(changes: StoreChange): FeatureUpdate[] {
     return changes.features?.updated ?? [];
   }
 
   /** The commit batches (batches where not a single entry carries isIntermediate) */
-  function commitBatches(): StateChanges[] {
+  function commitBatches(): StoreChange[] {
     return batches.filter((changes) => updatesOf(changes).every((u) => !u.isIntermediate));
   }
 
@@ -784,11 +784,11 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
   }
 
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
+    putFeature(square('f1', 0, 0));
   });
 
   it('a move drag DragState carries the moving features (used for snap self-exclusion)', () => {
-    addFeature(square('f2', 20, 0));
+    putFeature(square('f2', 20, 0));
 
     startMoveDrag(['f1', 'f2'], [0, 0]);
 
@@ -821,7 +821,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
 
     const commits = commitBatches();
     expect(commits).toHaveLength(1);
-    // The commit is emitted last (before the drag:end notification) in one transaction
+    // The commit is emitted last (before the drag.ended signal) in one transaction
     expect(batches[batches.length - 1]).toBe(commits[0]);
     expect(updatesOf(commits[0]).map((u) => u.id)).toEqual(['f1']);
   });
@@ -857,7 +857,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
   });
 
   it('a move drag also goes intermediate -> commit, with several features in 1 transaction', () => {
-    addFeature(square('f2', 100, 100));
+    putFeature(square('f2', 100, 100));
     watchFeatureBatches();
 
     startMoveDrag(['f1', 'f2'], [0, 0]);
@@ -876,7 +876,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
   });
 
   it('a radius drag goes intermediate -> commit, the committed value is the last radius', () => {
-    addFeature({
+    putFeature({
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
@@ -909,7 +909,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
 
   it('the radius handle lands on the pointer at a high latitude (60 deg, 100 km, 45 deg)', () => {
     const center: Coordinate = [10, 60];
-    addFeature({
+    putFeature({
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: center },
@@ -936,7 +936,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
   });
 
   it('shared-vertex followers ride on the same commit transaction', () => {
-    addFeature(square('f2', 10, 0));
+    putFeature(square('f2', 10, 0));
     enableSharedVertexDrag(true);
     watchFeatureBatches();
 
@@ -985,8 +985,8 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
 
 describe('a feature that disappears during a drag', () => {
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 100, 100));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 100, 100));
   });
 
   function startMoveDrag(featureIds: string[], from: Coordinate): void {
@@ -1048,7 +1048,7 @@ describe('a feature that disappears during a drag', () => {
   });
 
   it('updates after the feature vanished and endDrag do not throw (radius)', () => {
-    addFeature({
+    putFeature({
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
@@ -1084,7 +1084,7 @@ describe('a feature that disappears during a drag', () => {
       expect(() => handler.updateDrag(dragEvent(130, 80, [110, 100]), context)).not.toThrow();
       expect(() => handler.endDrag(context)).not.toThrow();
       expectDragCleanedUp();
-      addFeature(square('f2', 100, 100));
+      putFeature(square('f2', 100, 100));
     }
   });
 
@@ -1139,7 +1139,7 @@ describe('drag delegation for auxiliary handles', () => {
   }
 
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
+    putFeature(square('f1', 0, 0));
   });
 
   afterEach(() => {
@@ -1239,7 +1239,7 @@ describe('drag delegation for auxiliary handles', () => {
     });
 
     it('core writes nothing to the Store (the provider owns the meaning of coordinates)', () => {
-      const batches: StateChanges[] = [];
+      const batches: StoreChange[] = [];
       store.subscribe((changes) => {
         if (changes.features?.updated) batches.push(changes);
       });
@@ -1378,7 +1378,7 @@ describe('drag delegation for selection-independent auxiliary handles', () => {
   }
 
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
+    putFeature(square('f1', 0, 0));
   });
 
   afterEach(() => {
@@ -1456,8 +1456,8 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
   }
 
   beforeEach(() => {
-    addFeature(square('f1', 0, 0));
-    addFeature(square('f2', 100, 100));
+    putFeature(square('f1', 0, 0));
+    putFeature(square('f2', 100, 100));
   });
 
   it('puts the features back where the drag started', () => {
@@ -1490,7 +1490,7 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
   });
 
   it('restores the properties a resize or radius drag changed', () => {
-    addFeature({
+    putFeature({
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },

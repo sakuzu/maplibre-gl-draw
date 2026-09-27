@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DisplayStore } from '../../store/local-visibility.js';
-import type { Feature, StateChanges } from '../../store/types.js';
+import type { Feature, StoreChange } from '../../store/types.js';
 import { DisplayListCache } from './display-list.js';
 
 function feature(id: string): Feature {
@@ -74,7 +74,7 @@ describe('DisplayListCache', () => {
     const cache = new DisplayListCache(s.store);
     cache.inOrder(new Set(['f1']));
     cache.inOrder(new Set(['f2']));
-    cache.applyChanges({ selection: {} } as unknown as StateChanges);
+    cache.applyChanges({ selection: {} } as unknown as StoreChange);
     cache.inOrder(new Set(['f3']));
     expect(s.reads()).toBe(1);
 
@@ -84,7 +84,7 @@ describe('DisplayListCache', () => {
     expect(s.reads()).toBe(2);
 
     s.features.reverse();
-    cache.applyChanges({ layerReorder: {} } as unknown as StateChanges);
+    cache.applyChanges({ layerReorder: {} } as unknown as StoreChange);
     expect(cache.inOrder(new Set(['f0', 'f9'])).map((f) => f.id)).toEqual(['f9', 'f0']);
   });
 });

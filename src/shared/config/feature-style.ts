@@ -112,22 +112,11 @@ export interface TentativeStyle {
  * The default look of the features, and of the geometry being drawn
  *
  * A key the style of a feature ({@link FeatureStyle}) leaves unset takes its value from here,
- * unless the style rule of the layer gives the color. Give the parts to change through the
- * `style` option of `createMapLibreGLDraw`; the parts left out keep their defaults.
+ * unless the style rule of the layer gives the color. The engine reads it from the `style`
+ * option of `createDraw`, translated to this shape; the parts left out keep their defaults.
  *
  * The selection does not change how a feature is drawn; it is shown by the box and the
  * handles of {@link SelectionUIConfig}.
- *
- * @example
- * ```ts
- * const draw = createMapLibreGLDraw(map, {
- *   style: {
- *     lineString: {
- *       stroke: { width: 3, color: [0, 0.33, 1, 1], opacity: 1, lineStyle: 'solid' },
- *     },
- *   },
- * });
- * ```
  */
 export interface FeatureStyleConfig {
   /**

@@ -9,7 +9,7 @@
 import type { Polygon } from 'geojson';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
-import type { StateChanges } from '../../store/types.js';
+import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -18,7 +18,7 @@ import { createFeatures } from './features.js';
 
 let store: MemoryStore;
 let features: FeaturesCollection;
-let notifications: StateChanges[];
+let notifications: StoreChange[];
 
 function layer(id: string, extra: { locked?: boolean; visible?: boolean } = {}) {
   store.createLayer({

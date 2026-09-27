@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it } from 'vitest';
-import { partitionLayerOrder, renderSlotLayerId, sameSegments } from './slots.js';
+import { partitionLayerOrder, sameSegments, slotLayerId } from './slots.js';
 
 const isExternal = (id: string): boolean => id.startsWith('ext:');
 
@@ -35,10 +35,10 @@ describe('partitionLayerOrder', () => {
   });
 });
 
-describe('renderSlotLayerId / sameSegments', () => {
+describe('slotLayerId / sameSegments', () => {
   it('the first slot keeps the previous id and later ones are numbered', () => {
-    expect(renderSlotLayerId(0)).toBe('maplibre-gl-draw-layer');
-    expect(renderSlotLayerId(2)).toBe('maplibre-gl-draw-layer:2');
+    expect(slotLayerId(0)).toBe('maplibre-gl-draw-layer');
+    expect(slotLayerId(2)).toBe('maplibre-gl-draw-layer:2');
   });
 
   it('equality of segment lists', () => {

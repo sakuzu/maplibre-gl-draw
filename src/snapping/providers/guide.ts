@@ -20,8 +20,7 @@
  *
  * Only the north-based guide works from the very first segment. The built-in provider
  * reads the step angle from SnapOptions.guideStepDegrees at every query (through a
- * getter), so a change at runtime takes effect without rebuilding the provider. A
- * provider made with createGuideSnapProvider keeps the step it was built with.
+ * getter), so a change at runtime takes effect without rebuilding the provider.
  *
  * A guide is not an infinite line; it is cut off at the equivalent of 4096 pixels on
  * screen. The priority order stays SNAP_KIND_PRIORITY, so a real vertex,
@@ -51,18 +50,18 @@ const GUIDE_MODES = new Set(['draw_line', 'draw_polygon']);
 const GUIDE_LENGTH_PIXELS = 4096;
 
 /**
- * The dependencies of {@link createGuideSnapProvider}.
+ * The dependencies of {@link createSteppedGuideSnapProvider}.
  *
  * The guides are built from the vertices committed so far in the drawing in progress, so the
  * Store alone is enough.
  */
 export interface GuideSnapProviderDeps {
-  /** The Store of the draw instance, such as `ctx.getStore()` of a plugin */
+  /** The Store of the draw instance */
   store: Store;
 }
 
 /**
- * The options of {@link createGuideSnapProvider}.
+ * The options of {@link createSteppedGuideSnapProvider}.
  */
 export interface GuideSnapProviderOptions {
   /**

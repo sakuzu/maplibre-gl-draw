@@ -627,7 +627,7 @@ export function createOptions(
     const rendering = patch.rendering;
     if (rendering) {
       if (rendering.renderScale !== undefined) {
-        if (context.pixelRatioSource.setRenderScale(rendering.renderScale)) redraw = true;
+        if (context.pixelRatioSource.setScaleFactor(rendering.renderScale)) redraw = true;
       }
       if (rendering.pixelRatio !== undefined) {
         context.pixelRatio = rendering.pixelRatio;
@@ -672,7 +672,7 @@ export function createOptions(
         topology: { sharedVertexDrag: topology.sharedVertexDrag },
         rendering: {
           ...current.rendering,
-          renderScale: pixelRatioSource.getRenderScale(),
+          renderScale: pixelRatioSource.getScaleFactor(),
           cacheGeometry: renderingConfig.storeRetained !== false,
           timeSlicing: renderingConfig.timeSlicing !== false,
         },

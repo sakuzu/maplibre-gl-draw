@@ -7,8 +7,8 @@
  * A mechanism for the custom feature types of extension implementations to provide their own
  * boundingBox computation / resize handles / resize strategy / point frame extent.
  *
- * One registry belongs to one draw instance (it is created by createMapLibreGLDraw and handed
- * to the CustomLayer, the modes and the extension API). Two draw instances on the same page
+ * One registry belongs to one draw instance (it is created by its engine and handed to the
+ * CustomLayer, the modes and the extension host). Two draw instances on the same page
  * never see each other's registrations, and destroying an instance clears its registry.
  * The tile size of the instance's map is held here as well, because the custom bounding box
  * calculators take it as an argument.

@@ -12,8 +12,8 @@
 /**
  * Settings that keep a boundary shared by adjacent features intact while it is edited
  *
- * Give them through the `topology` option of `createMapLibreGLDraw`, or change them later
- * through `draw.topology`. Everything is off by default.
+ * The engine reads them from the `topology` option of `createDraw`, which
+ * `draw.options.update` changes later. Everything is off by default.
  */
 export interface TopologyConfig {
   /**

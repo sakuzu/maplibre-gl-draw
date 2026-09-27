@@ -72,7 +72,7 @@ import { buildFrameState, type FrameState, StyleZoom } from './frame-state.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers, type Renderers } from './renderers.js';
 import { SlotManager } from './slot-manager.js';
-import { type RenderSlot, renderSlotLayerId } from './slots.js';
+import { type StackSlot, slotLayerId } from './slots.js';
 import { StoreRetainedCache } from './store-retained.js';
 import { isOpacityOnlyLayersChange } from './store-retained-invalidation.js';
 import { TerrainResolver } from './terrain-resolver.js';
@@ -134,7 +134,7 @@ export interface CustomLayerDeps {
    * On receiving it, the host places the native layers that correspond to the separators back
    * between the slots.
    */
-  onSlotsChange?: (slots: RenderSlot[]) => void;
+  onSlotsChange?: (slots: StackSlot[]) => void;
   /**
    * Where the failure to load the image of an Image feature is reported (once per image that
    * fails; the draw instance turns it into the load.error event)
@@ -152,11 +152,11 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   /**
    * Adds an overlay renderer
    *
-   * @returns the function that removes it again (removeOverlayRenderer)
+   * @returns the function that removes it again (removeOverlay)
    */
-  addOverlayRenderer(renderer: EngineOverlayRenderer): () => void;
+  addOverlay(renderer: EngineOverlayRenderer): () => void;
   /** Removes an overlay renderer; it gets its onRemove when the GPU side exists */
-  removeOverlayRenderer(renderer: EngineOverlayRenderer): void;
+  removeOverlay(renderer: EngineOverlayRenderer): void;
   /**
    * Registers the renderer of a custom feature type
    *
@@ -165,7 +165,7 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    */
   registerFeatureRenderer(type: string, renderer: FeatureTypeHandler['renderer']): () => void;
   /** The list of slots (the first = the backmost). Just itself when there is no separator */
-  getRenderSlots(): RenderSlot[];
+  getStackSlots(): StackSlot[];
   /**
    * The list of CustomLayers that should be added to maplibre (first = backmost; the first is
    * this one)
@@ -182,7 +182,7 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   getGL(): WebGL2RenderingContext | null;
   /**
    * Whether work remains that later frames finish without the host doing anything (see
-   * `MapLibreGLDraw.hasPendingWork`)
+   * `draw.hasPendingWork()`)
    */
   hasPendingWork(): boolean;
   /**
@@ -584,7 +584,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     );
 
     // Follow the changes of the rendering pixel ratio (moving to another display, or
-    // draw.setRenderScale()). The widths of the already baked retained batches no longer match
+    // draw.setScaleFactor()). The widths of the already baked retained batches no longer match
     // when the ratio changes, so they are discarded.
     const dpr = resolvePixelRatio(pixelRatio);
     if (engine.builtPixelRatio !== dpr) {
@@ -656,7 +656,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   /** Creates the CustomLayer of the slot at `index` (the first one is customLayer itself) */
   function makeSlotLayer(index: number): BaseCustomLayerInterface {
     return {
-      id: renderSlotLayerId(index),
+      id: slotLayerId(index),
       type: 'custom',
       renderingMode: '3d',
       onAdd(mapInstance: MapLibreMap, glContext: WebGL2RenderingContext): void {
@@ -680,7 +680,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   }
 
   const customLayer: CustomLayerInterface = {
-    id: renderSlotLayerId(0),
+    id: slotLayerId(0),
     type: 'custom',
     renderingMode: '3d',
 
@@ -711,7 +711,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engineRemove();
     },
 
-    addOverlayRenderer(renderer: EngineOverlayRenderer): () => void {
+    addOverlay(renderer: EngineOverlayRenderer): () => void {
       dynamicOverlayRenderers.push(renderer);
       // An element involved in the rendering was added, so the prepared retained batches are
       // rebuilt
@@ -720,10 +720,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       if (engine.renderers && engine.gl && engine.mapInstance) {
         renderer.onAdd(engine.gl, engine.mapInstance);
       }
-      return () => customLayer.removeOverlayRenderer(renderer);
+      return () => customLayer.removeOverlay(renderer);
     },
 
-    removeOverlayRenderer(renderer: EngineOverlayRenderer): void {
+    removeOverlay(renderer: EngineOverlayRenderer): void {
       const index = dynamicOverlayRenderers.indexOf(renderer);
       if (index === -1) return;
       dynamicOverlayRenderers.splice(index, 1);
@@ -754,8 +754,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       };
     },
 
-    getRenderSlots(): RenderSlot[] {
-      return slots.getRenderSlots();
+    getStackSlots(): StackSlot[] {
+      return slots.getStackSlots();
     },
 
     getSlotLayers(): BaseCustomLayerInterface[] {

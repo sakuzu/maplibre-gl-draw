@@ -216,11 +216,11 @@ describe('WebGL context loss and restore', () => {
   it('keeps the overlay renderers when maplibre removes the layer and adds it back', () => {
     const { gl, map, layer } = setup();
     const before = createOverlaySpy();
-    layer.addOverlayRenderer(before);
+    layer.addOverlay(before);
 
     layer.onAdd?.(map, gl);
     const after = createOverlaySpy();
-    layer.addOverlayRenderer(after);
+    layer.addOverlay(after);
 
     // maplibre 6.6 on a context loss: the style is destroyed and every layer gets onRemove
     layer.onRemove?.(map, gl);
@@ -234,7 +234,7 @@ describe('WebGL context loss and restore', () => {
   it('drops the GPU resources on the loss and creates them again on the restore', () => {
     const { gl, stats, map, canvas, layer } = setup();
     const overlay = createOverlaySpy();
-    layer.addOverlayRenderer(overlay);
+    layer.addOverlay(overlay);
     layer.onAdd?.(map, gl);
     const createdAtAdd = stats.created;
     expect(createdAtAdd).toBeGreaterThan(0);

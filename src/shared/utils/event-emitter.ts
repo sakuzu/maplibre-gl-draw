@@ -14,8 +14,8 @@
 import type {
   DatasetClickEventPayload,
   MapClickEventPayload,
-  RenderSlot,
   SnapResult,
+  StackSlot,
 } from '../types/events.js';
 
 /**
@@ -78,7 +78,7 @@ export interface EngineSignals {
    * Addition or removal of frames (the CustomLayer per interval) and changes of the intervals
    * of the stacking order
    */
-  'layerStack.change': { slots: RenderSlot[] };
+  'layerStack.change': { slots: StackSlot[] };
   /**
    * Failure of an asynchronous load that no call returns
    *

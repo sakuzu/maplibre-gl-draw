@@ -268,7 +268,7 @@ export function createModeHarness(options: {
     map,
     store,
     terrain: {} as TerrainContext,
-    pixelRatio: { resolve: () => 1, getRenderScale: () => 1 },
+    pixelRatio: { resolve: () => 1, getScaleFactor: () => 1 },
     autoNameGenerator,
     selectionExtensions: createSelectionExtensionRegistry(),
     spatialIndex: { invalidate: () => {}, invalidateType: () => {} },

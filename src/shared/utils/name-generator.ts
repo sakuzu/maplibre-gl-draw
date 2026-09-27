@@ -12,7 +12,7 @@
  * writes such a word inline.
  */
 
-import type { Feature, FeatureType, Group, Layer, StateChanges } from '../types/model.js';
+import type { Feature, FeatureType, Group, Layer, StoreChange } from '../types/model.js';
 
 /**
  * What the generator reads from the Store: the current contents and the change notifications.
@@ -23,7 +23,7 @@ interface NameSource {
   listFeatures(): Feature[];
   listLayers(): Layer[];
   listGroups(): Group[];
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  subscribe(listener: (changes: StoreChange) => void): () => void;
 }
 
 /**
@@ -34,8 +34,8 @@ export type AutoNameType = FeatureType | 'Layer' | 'Group';
 /**
  * How new features, layers and groups are named automatically ("Point 1", "Layer 2")
  *
- * Give it through the `autoName` option of `createMapLibreGLDraw` (`true`, the default, turns
- * it on with these defaults, and `false` turns it off). Each type counts on its own, and a
+ * The engine reads it from the `autoName` option of `createDraw` (left out, it is on with
+ * these defaults, and `false` turns it off). Each type counts on its own, and a
  * number is never reused: after "Point 1" and "Point 2" are created and "Point 2" is deleted,
  * the next point is "Point 3". Existing names of the form "<word> <number>" move the count on
  * as well, however they arrived (a load, an import).
@@ -50,18 +50,6 @@ export type AutoNameType = FeatureType | 'Layer' | 'Group';
  * A layer or a group always has a name. When one is created without a name while `enabled`
  * is false, it gets the word of its type alone, without a number ("Layer", or the
  * `typeNames.Layer` of the host); features get no name then.
- *
- * @example
- * ```ts
- * const draw = createMapLibreGLDraw(map, {
- *   autoName: {
- *     enabled: true,
- *     typeNames: { Point: 'Pin', Layer: 'Sheet' },
- *     formatter: (typeName, n) => `${typeName} #${n}`,
- *   },
- * });
- * // The first point is named "Pin #1"
- * ```
  */
 export interface AutoNameConfig {
   /**
@@ -177,7 +165,7 @@ export class AutoNameGenerator {
       listFeatures(): Feature[];
       listLayers(): Layer[];
       listGroups(): Group[];
-      subscribe(listener: (changes: StateChanges) => void): () => void;
+      subscribe(listener: (changes: StoreChange) => void): () => void;
     },
     config: AutoNameConfig | boolean = true,
   ) {
@@ -299,7 +287,7 @@ export class AutoNameGenerator {
    * everything on every generation.
    * Deletions are ignored (because a number used once is not reused).
    */
-  private observeChanges(changes: StateChanges): void {
+  private observeChanges(changes: StoreChange): void {
     for (const feature of changes.features?.created ?? []) {
       this.observeFeatureName(feature);
     }

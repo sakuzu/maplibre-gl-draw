@@ -12,8 +12,8 @@
  * segment. The design is in docs/internals/rendering.md, "Slots and separators".
  */
 
-// RenderSlot is defined in shared/ because the renderslots.change event carries it
-export type { RenderSlot } from '../../shared/types/events.js';
+// StackSlot is defined in shared/ because the layerStack.change signal carries it
+export type { StackSlot } from '../../shared/types/events.js';
 
 /** A segment ([from, to) in layerOrder) */
 export interface RenderSegment {
@@ -25,7 +25,7 @@ export interface RenderSegment {
 export const PRIMARY_RENDER_LAYER_ID = 'maplibre-gl-draw-layer';
 
 /** Layer id of the slot at `index` */
-export function renderSlotLayerId(index: number): string {
+export function slotLayerId(index: number): string {
   return index === 0 ? PRIMARY_RENDER_LAYER_ID : `${PRIMARY_RENDER_LAYER_ID}:${index}`;
 }
 

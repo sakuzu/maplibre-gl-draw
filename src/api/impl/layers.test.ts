@@ -8,7 +8,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
-import type { StateChanges } from '../../store/types.js';
+import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { LayersCollection } from '../layers.js';
@@ -16,7 +16,7 @@ import { createLayers } from './layers.js';
 
 let store: MemoryStore;
 let layers: LayersCollection;
-let notifications: StateChanges[];
+let notifications: StoreChange[];
 
 function codeOf(fn: () => unknown): string | undefined {
   try {

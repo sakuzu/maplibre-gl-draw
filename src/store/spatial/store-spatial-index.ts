@@ -5,7 +5,7 @@
  * StoreSpatialIndex
  *
  * The spatial index as a value derived from the Store. It subscribes to the Store and
- * re-derives the entry of every feature a StateChanges names (created / updated / deleted)
+ * re-derives the entry of every feature a StoreChange names (created / updated / deleted)
  * from the Store itself, so it holds exactly the features the Store holds, with the extent
  * they have now:
  *
@@ -23,7 +23,7 @@
  */
 
 import type { Store } from '../store.js';
-import type { BoundingBox, Coordinate, Feature, StateChanges } from '../types.js';
+import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
 import {
   type CustomBoundingBoxCalculator,
   RBushSpatialIndex,
@@ -113,7 +113,7 @@ export class StoreSpatialIndex implements SpatialIndex {
     this.#index.clear();
   }
 
-  #apply(changes: StateChanges): void {
+  #apply(changes: StoreChange): void {
     const features = changes.features;
     if (!features) return;
 

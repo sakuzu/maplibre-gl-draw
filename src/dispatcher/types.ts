@@ -27,7 +27,7 @@ export interface ModifierKeys {
  * `'touch'` is one finger of a touch screen, `'pen'` a stylus (reported either through
  * the touch events, as on iPadOS, or through the mouse events the browser emits for
  * it), and `'mouse'` everything else. Input with no `pointerType` (synthetic input
- * through `draw.input`, for example) is treated as `'mouse'`.
+ * of the tests, for example) is treated as `'mouse'`.
  */
 export type PointerType = 'mouse' | 'touch' | 'pen';
 

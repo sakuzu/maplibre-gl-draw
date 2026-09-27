@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../memory.js';
 import type { Store } from '../store.js';
-import type { Feature, StateChanges } from '../types.js';
+import type { Feature, StoreChange } from '../types.js';
 import { StoreSpatialIndex } from './store-spatial-index.js';
 
 function point(id: string, lng: number, lat: number): Feature {
@@ -46,14 +46,14 @@ function memoryStore(): MemoryStore {
  */
 function stubStore() {
   const features = new Map<string, Feature>();
-  const listeners = new Set<(changes: StateChanges) => void>();
-  const emit = (changes: StateChanges) => {
+  const listeners = new Set<(changes: StoreChange) => void>();
+  const emit = (changes: StoreChange) => {
     for (const listener of listeners) listener(changes);
   };
   const store = {
     getFeature: (id: string) => features.get(id),
     listFeatures: () => [...features.values()],
-    subscribe: (listener: (changes: StateChanges) => void) => {
+    subscribe: (listener: (changes: StoreChange) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

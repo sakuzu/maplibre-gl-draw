@@ -269,7 +269,7 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
   });
 });
 
-describe('draw.deleteSelection runs the same deletion as the Delete key', () => {
+describe('deleteSelection runs the same deletion as the Delete key', () => {
   /** Builds a store, selects, runs the deletion and returns the state and the notifications */
   function run(deleteWith: (s: MemoryStore) => boolean | undefined) {
     const s = new MemoryStore();
@@ -389,7 +389,7 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
   });
 });
 
-describe('the group shortcut places the group where draw.groupSelection does', () => {
+describe('the group shortcut places the group where groupSelection does', () => {
   function build(): MemoryStore {
     const s = new MemoryStore();
     s.createLayer({

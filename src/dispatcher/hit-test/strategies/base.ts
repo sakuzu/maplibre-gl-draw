@@ -73,24 +73,6 @@ export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = {
  * difference, divide it by cos φ of the click latitude (or multiply the tolerance by cos φ):
  * one degree of latitude is 1 / cos φ times longer on screen than one degree of longitude.
  * Distances are returned in the same unit.
- *
- * @example
- * ```ts
- * import type { HitTestStrategy } from '@sakuzu/maplibre-gl-draw';
- *
- * // A marker type hit within the tolerance around its single position
- * const markerHitTest: HitTestStrategy = {
- *   geometryType: 'Marker',
- *   test(feature, [lng, lat], tolerance) {
- *     return this.distance(feature, [lng, lat]) <= tolerance;
- *   },
- *   distance(feature, [lng, lat]) {
- *     const [x, y] = feature.coordinates as [number, number];
- *     const cos = Math.cos((lat * Math.PI) / 180);
- *     return Math.hypot(x - lng, (y - lat) / cos);
- *   },
- * };
- * ```
  */
 export interface HitTestStrategy {
   /** The feature type this strategy tests; a registration replaces the one for the type */

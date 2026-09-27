@@ -49,8 +49,8 @@ export interface BoxSelectionStyleConfig {
 /**
  * Rendering settings: the look of the box selection and two switches of the renderer
  *
- * Give the settings to change through the `renderingStyle` option of `createMapLibreGLDraw`;
- * the ones left out keep their defaults.
+ * The engine reads them from the `rendering` and `selectionStyle` options of `createDraw`,
+ * translated to this shape; the ones left out keep their defaults.
  */
 export interface RenderingConfig {
   /**
@@ -91,7 +91,7 @@ export interface RenderingConfig {
    *
    * A complete frame is not yet a complete picture: the map's tiles and the DEM arrive
    * asynchronously. Wait for the map's `idle`, then for
-   * {@link MapLibreGLDraw.hasPendingWork} to return false, which also covers the work that no
+   * `draw.hasPendingWork()` to return false, which also covers the work that no
    * setting can make synchronous (the responses of a provider, an overlay renderer that
    * prepares resources over several frames).
    *

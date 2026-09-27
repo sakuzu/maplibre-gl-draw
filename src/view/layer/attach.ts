@@ -16,7 +16,7 @@ function styleAcceptsLayers(map: MapLibreMap): boolean {
 }
 
 /**
- * Keeps the render slots of Draw on the map for as long as the returned detach function has not
+ * Keeps the frames of the stacking order on the map for as long as the returned detach function has not
  * been called
  *
  * One rule covers every timing: the slots are added whenever the style accepts layers and a slot

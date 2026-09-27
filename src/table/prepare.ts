@@ -23,7 +23,7 @@ import type { Column, PreparedTable, Table, TableGeometry } from './types.js';
  *
  * It is the work that the dataset would otherwise do on the main thread when it is given the
  * table. Call it where the table is read (in a Worker), send the result to the main thread and
- * pass it as `table` to `addDataset` or to `Dataset.setTable`. It uses neither maplibre nor
+ * pass it as `table` to `draw.datasets.add` or to `Dataset.setTable`. It uses neither maplibre nor
  * WebGL, so it runs in any Worker.
  *
  * @param table The table

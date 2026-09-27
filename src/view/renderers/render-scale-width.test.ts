@@ -222,7 +222,7 @@ function polygonData(strokeWidth: number): SDFPolygonBatchData {
 /** The a_extra.y baked into the line batch (the first instance) */
 function bakedLineWidth(scale: number, strokeWidth: number): number {
   const source = createPixelRatioSource(BASE_DPR);
-  source.setRenderScale(scale);
+  source.setScaleFactor(scale);
   const mock = createRecordingGL();
   const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, source);
   renderer.ensureShader(SHADER_DATA);
@@ -237,7 +237,7 @@ function bakedLineWidth(scale: number, strokeWidth: number): number {
 /** The a_extra.y baked into the polygon batch (the first vertex of the outline) */
 function bakedPolygonWidth(scale: number, strokeWidth: number): number {
   const source = createPixelRatioSource(BASE_DPR);
-  source.setRenderScale(scale);
+  source.setScaleFactor(scale);
   const mock = createRecordingGL();
   const renderer = new SDFPolygonRenderer(mock.gl, source);
   renderer.ensureShader(SHADER_DATA);

@@ -278,7 +278,7 @@ describe('the overlays', () => {
     const removed: EngineOverlayRenderer[] = [];
     const stack = createOverlayStack(
       {
-        addOverlayRenderer(renderer) {
+        addOverlay(renderer) {
           added.push(renderer);
           return () => removed.push(renderer);
         },

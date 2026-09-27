@@ -25,7 +25,7 @@
  *
  * // main.ts
  * worker.onmessage = (e) =>
- *   draw.addDataset({ id: 'places', table: e.data });
+ *   draw.datasets.add({ id: 'places', table: e.data });
  * ```
  *
  * @module table

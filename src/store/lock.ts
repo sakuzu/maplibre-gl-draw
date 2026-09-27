@@ -33,12 +33,6 @@ export interface FeatureLockStore {
  *
  * A lock is inherited top-down. A locked feature can still be selected; it cannot be moved,
  * resized, rotated, reshaped or deleted by the user.
- *
- * @example
- * ```ts
- * const feature = draw.getFeature(id);
- * if (feature && !isFeatureLocked(feature, draw.getStore())) draw.deleteFeature(id);
- * ```
  */
 export function isFeatureLocked(feature: Feature, store: FeatureLockStore): boolean {
   if (feature.locked) return true;

@@ -116,7 +116,7 @@ export interface CommitParams {
  * Creates one result feature, deletes the inputs and places it.
  *
  * It does not open a transaction. Because the caller wraps it in store.transact, even a case
- * with several results, such as the buffer, is gathered into one StateChanges.
+ * with several results, such as the buffer, is gathered into one StoreChange.
  */
 export function applyResult(deps: GeometryDeps, params: CommitParams): string {
   const { store, generateFeatureId } = deps;

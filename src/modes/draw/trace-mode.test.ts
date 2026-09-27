@@ -4,7 +4,7 @@
 /**
  * Integration tests for the tracing of the drawing modes
  *
- * Synthetic input (draw.input) is fed into a whole engine on a map stub that projects
+ * Synthetic input (`createSyntheticInput` of the test helpers) is fed into a whole engine on a map stub that projects
  * linearly, and through the real InputRouter, SnapService and the line and polygon drawing
  * modes this checks that the sequence of boundary vertices is inserted between clicks snapped
  * to the boundary of an existing feature or of a dataset.
@@ -270,7 +270,7 @@ describe('tracing of the line drawing mode', () => {
 
 describe('preference of the trace anchor', () => {
   /** Puts one piece of data on (at a position away from the rings of the Store) */
-  function addDataset(): void {
+  function putDataset(): void {
     draw.datasets.add({
       id: 'data',
       rows: [
@@ -299,7 +299,7 @@ describe('preference of the trace anchor', () => {
   });
 
   it('also returns datasetId for a snap target originating from data', () => {
-    addDataset();
+    putDataset();
     modeManager.setMode('draw_line');
 
     input.click(D0);
@@ -308,7 +308,7 @@ describe('preference of the trace anchor', () => {
   });
 
   it('the trace also holds between boundaries of data', () => {
-    addDataset();
+    putDataset();
     modeManager.setMode('draw_line');
 
     input.click(D0);

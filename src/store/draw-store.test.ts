@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { toStore } from './draw-store.js';
 import { MemoryDocumentStore, MemoryStore } from './memory.js';
-import type { Feature, Layer, StateChanges } from './types.js';
+import type { Feature, Layer, StoreChange } from './types.js';
 
 function layer(id: string): Layer {
   return {
@@ -196,7 +196,7 @@ describe('a DocumentStore of the host', () => {
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.setReadOnly(true);
-    const notified: StateChanges[] = [];
+    const notified: StoreChange[] = [];
     store.subscribe((changes) => notified.push(changes));
 
     document.transact(() => document.createFeature(point('r1')), 'remote');
@@ -218,7 +218,7 @@ describe('a DocumentStore of the host', () => {
     store.setLocallyHidden('f2', false);
     store.setLocallyHidden('f1', true);
     store.setSelection('feature', ['f1', 'f2']);
-    const notified: StateChanges[] = [];
+    const notified: StoreChange[] = [];
     store.subscribe((changes) => notified.push(changes));
 
     document.transact(() => document.deleteFeature('f1'), 'remote');
@@ -256,7 +256,7 @@ describe('a DocumentStore of the host', () => {
   it('notifies the document and the local state of one transaction together', () => {
     const store = new MemoryStore();
     store.createLayer(layer('l1'));
-    const notified: StateChanges[] = [];
+    const notified: StoreChange[] = [];
     store.subscribe((changes) => notified.push(changes));
 
     store.transact(() => {
@@ -291,7 +291,7 @@ describe('the notifications', () => {
   it('keeps and notifies what a failing transaction wrote before the throw', () => {
     const store = new MemoryStore();
     store.createLayer(layer('l1'));
-    const notified: StateChanges[] = [];
+    const notified: StoreChange[] = [];
     store.subscribe((changes) => notified.push(changes));
 
     expect(() =>

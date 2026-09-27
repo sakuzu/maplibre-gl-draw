@@ -136,7 +136,7 @@ beforeEach(() => {
     // A stub for the unified z traversal (it returns only Store features). Select mode looks at
     // this rather than at hitTestService.hitTest.
     hitTestTopmost: () => (hit ? { kind: 'store', feature: hit.feature } : null),
-    pluginManager: undefined,
+    plugins: undefined,
     selectionScope: createSelectionScope(),
   } as unknown as EngineModeContext;
   mode = new SelectMode();

@@ -3,7 +3,7 @@
 These notes record how the document model of 1.0 maps onto the model of
 2.0: the geometry of each feature type, the keys the library keeps in
 `properties`, and the order of the items of a layer. The 2.0 shapes are
-declared in `src/api/v2/model.ts`; the internal types in
+declared in `src/api/model.ts`; the internal types in
 `src/shared/types/model.ts` follow them.
 
 ## Feature types and their geometry
@@ -118,7 +118,7 @@ of the fill and of the outline of the marker (1 when unset).
 ## The native format
 
 The version of the native format goes from `2.0.0` to `3.0.0`. Data of
-version 2 is upgraded on load (`src/api/import-export/native-upgrade.ts`):
+version 2 is upgraded on load (`src/api/impl/import-export/native-upgrade.ts`):
 `coordinates` becomes `geometry`, the values of the library in
 `properties` get their prefix, the style keys of an Image are folded (see
 above), `order` becomes `items`, and each group gets the `layerId` of the

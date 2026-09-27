@@ -30,7 +30,7 @@ import type {
   Mode,
   Selection,
   SelectionType,
-  StateChanges,
+  StoreChange,
   TentativeState,
   UpdateFeatureOptions,
   UpdateSource,
@@ -85,19 +85,12 @@ import type {
  * id that such a change has already removed (the caller cannot know about the removal
  * yet); the notification then carries nothing for that id.
  *
- * Notifications: `subscribe` delivers the document categories of StateChanges (features,
+ * Notifications: `subscribe` delivers the document categories of StoreChange (features,
  * layers, groups, layerReorder, groupReorder, metadata) with their source, and `transact`
  * groups the changes of a function into one notification. Any other category a notification
  * carries is ignored by core. A change applied from elsewhere is notified like a local one,
  * with the source `'remote'`, and core follows it: a deleted item leaves the selection, the
  * vertex selection ends when its feature changed, and the hooks of the plugins fire.
- *
- * @example
- * ```ts
- * // A document kept elsewhere: wrap it in a DocumentStore and hand it to the draw instance
- * const document: DocumentStore = createSyncedDocument(roomId);
- * const draw = createMapLibreGLDraw(map, { store: document });
- * ```
  */
 export interface DocumentStore {
   // Features
@@ -227,9 +220,9 @@ export interface DocumentStore {
    *
    * @returns The unsubscribe function
    */
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  subscribe(listener: (changes: StoreChange) => void): () => void;
   /**
-   * Runs fn and notifies its changes together as a single StateChanges
+   * Runs fn and notifies its changes together as a single StoreChange
    *
    * Not atomic: when fn throws, the writes made before the throw stay applied, they are
    * notified, and the exception is rethrown.
@@ -332,19 +325,6 @@ export interface UiState {
  * Writes go through the methods of the draw instance (or, in a plugin, the PluginContext),
  * so a host cannot reach past the checks those methods make. `transact` groups the writes
  * made through them into one notification.
- *
- * @example
- * ```ts
- * const store = draw.getStore();
- * const unsubscribe = store.subscribe((changes) => {
- *   if (changes.features) saveLater(store.listFeatures());
- * });
- * // Two writes, one notification
- * store.transact(() => {
- *   draw.updateFeature(a, { visible: false });
- *   draw.updateFeature(b, { visible: false });
- * });
- * ```
  */
 export interface StoreView {
   // The document
@@ -408,9 +388,9 @@ export interface StoreView {
    *
    * @returns The unsubscribe function
    */
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  subscribe(listener: (changes: StoreChange) => void): () => void;
   /**
-   * Runs fn and notifies every change it makes as a single StateChanges
+   * Runs fn and notifies every change it makes as a single StoreChange
    *
    * Not atomic: when fn throws, the writes made before the throw stay applied, they are
    * notified, and the exception is rethrown.

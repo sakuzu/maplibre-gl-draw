@@ -75,7 +75,8 @@ export interface CompanionHitContext {
  * Draws something that accompanies a feature (a label, a callout) right below it in the
  * draw order, and makes it clickable in the same order.
  *
- * Register one with `draw.registerFeatureCompanionProvider(provider)`. What is drawn and what
+ * A `CompanionProvider` of `draw.extensions.companionProviders` is installed as one. What is
+ * drawn and what
  * is hit are resolved at the same position of the z order, so what is visible is what can be
  * grabbed. A click on a companion does not change the selection; it is handed to
  * `onCompanionClick`.

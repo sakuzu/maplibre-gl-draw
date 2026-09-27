@@ -639,3 +639,59 @@ describe('features.list and count by extent', () => {
     expect(errorOf(() => draw.features.list({ bbox: [0, 0] as never })).code).toBe('invalid-input');
   });
 });
+
+describe('the extensions of two draw instances', () => {
+  const card: FeatureTypeDefinition = {
+    type: 'Card',
+    geometry: 'Polygon',
+    renderer: { onAdd() {}, draw() {}, onRemove() {} },
+    bounds: () => ({ min: [0, 0], max: [10, 10] }),
+  };
+  const handles = (name: string): HandleProvider => ({
+    name,
+    handles: () => [],
+    onDrag: () => null,
+  });
+
+  it('keep what is added to one instance out of the other', () => {
+    const editor = engineWithDraw();
+    const preview = engineWithDraw();
+
+    preview.extensions.collections.featureTypes.add(card);
+    const editorHandles = handles('aux');
+    editor.extensions.collections.handleProviders.add(editorHandles);
+    // The same name on the other instance is a registration of its own
+    preview.extensions.collections.handleProviders.add(handles('aux'));
+
+    expect(preview.extensions.collections.featureTypes.has('Card')).toBe(true);
+    expect(editor.extensions.collections.featureTypes.has('Card')).toBe(false);
+    const extensionsOf = (engine: Engine) => engine.context.selectionScope.extensions;
+    expect(extensionsOf(preview).getBoundingBoxCalculator('Card')).toBeDefined();
+    expect(extensionsOf(editor).getBoundingBoxCalculator('Card')).toBeUndefined();
+    expect(editor.extensions.collections.handleProviders.get('aux')).toBe(editorHandles);
+    expect(editor.context.selectionScope.auxiliaryHandles.list()).toHaveLength(1);
+    expect(preview.context.selectionScope.auxiliaryHandles.list()).toHaveLength(1);
+
+    editor.destroy();
+    preview.destroy();
+  });
+
+  it('leave the other instance alone when one is destroyed', () => {
+    const editor = engineWithDraw();
+    const preview = engineWithDraw();
+    editor.extensions.collections.featureTypes.add(card);
+    preview.extensions.collections.featureTypes.add(card);
+    editor.extensions.collections.handleProviders.add(handles('aux'));
+    preview.extensions.collections.handleProviders.add(handles('aux'));
+
+    preview.destroy();
+
+    expect(preview.context.selectionScope.auxiliaryHandles.list()).toEqual([]);
+    expect(
+      preview.context.selectionScope.extensions.getBoundingBoxCalculator('Card'),
+    ).toBeUndefined();
+    expect(editor.context.selectionScope.auxiliaryHandles.list()).toHaveLength(1);
+    expect(editor.context.selectionScope.extensions.getBoundingBoxCalculator('Card')).toBeDefined();
+    editor.destroy();
+  });
+});

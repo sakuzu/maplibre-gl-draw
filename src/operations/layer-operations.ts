@@ -28,7 +28,7 @@ function deleteGroupIfEmpty(store: Store, groupId: string): void {
  *
  * @internal
  */
-export function removeFeatureFromGroup(store: Store, featureId: string): void {
+export function takeOutOfGroup(store: Store, featureId: string): void {
   const feature = store.getFeature(featureId);
   if (!feature?.groupId) return;
 
@@ -204,7 +204,7 @@ function dissolveGroup(store: Store, groupId: string): void {
  *   original position)
  * - When a member feature of a group is selected -> only that feature is taken out of the
  *   group (the group is kept; the member is placed right after the group by
- *   removeFeatureFromGroup, and the group is deleted automatically when it becomes empty).
+ *   takeOutOfGroup, and the group is deleted automatically when it becomes empty).
  *   The group is not dissolved as a whole
  * - Otherwise (a feature that is not a member / no selection) -> nothing is done
  *
@@ -233,7 +233,7 @@ export function ungroupSelection(store: Store): void {
 
     store.transact(() => {
       for (const id of memberIds) {
-        removeFeatureFromGroup(store, id);
+        takeOutOfGroup(store, id);
       }
     });
   }

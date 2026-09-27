@@ -418,7 +418,7 @@ function emptyGeometry(type: GeometryType, length: number): TableGeometry {
  * import { tableFromFeatures } from '@sakuzu/maplibre-gl-draw/table';
  *
  * const table = tableFromFeatures(collection.features, { columns: ['name', 'visitors'] });
- * draw.addDataset({ id: 'places', table });
+ * draw.datasets.add({ id: 'places', table });
  * ```
  */
 export function tableFromFeatures(

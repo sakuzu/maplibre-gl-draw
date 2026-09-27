@@ -15,7 +15,7 @@
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type {
-  StateChanges,
+  StoreChange,
   Feature as StoredFeature,
   VertexSelection as StoredVertexSelection,
 } from '../../store/types.js';
@@ -132,7 +132,7 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
 }
 
 /** The events of each resource of one notification */
-function emitResourceEvents(hub: EventHub, store: Store, changes: StateChanges): void {
+function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): void {
   const source = changes.source ?? 'local';
 
   const { features, layers, groups } = changes;
@@ -224,7 +224,7 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StateChanges):
  */
 function describeMove(
   store: Store,
-  changes: StateChanges,
+  changes: StoreChange,
   previous: StoredFeature,
   feature: StoredFeature,
 ): { from: MoveTarget; to: MoveTarget } | null {
@@ -298,7 +298,7 @@ const CHANGE_KEYS = [
   'editing',
   'mode',
   'metadata',
-] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StateChanges>;
+] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
 
 /**
  * The change a notification carries, without the state that only the drawing reads (the
@@ -306,7 +306,7 @@ const CHANGE_KEYS = [
  *
  * @internal
  */
-export function toDocumentChange(changes: StateChanges): DocumentChange | null {
+export function toDocumentChange(changes: StoreChange): DocumentChange | null {
   const change: DocumentChange = {};
   let any = false;
   for (const key of CHANGE_KEYS) {

@@ -66,8 +66,7 @@ export interface SnapExcludeVertex {
 /**
  * The state of one snapping resolution: the zoom, the exclusions and the modifier keys.
  *
- * The library builds it for every input; a caller passes part of it to
- * `draw.snapping.resolve()` when it snaps a coordinate made outside the library.
+ * The library builds it for every input.
  */
 export interface SnapContext {
   /** The current zoom level (used to convert the pixel tolerance into degrees) */
@@ -211,27 +210,6 @@ export function isSegmentCandidate(candidate: SnapCandidate): candidate is SnapS
  * (vertex > intersection > edge > guide) and then by distance to the cursor. Candidates of a
  * kind disabled in `options.snap.kinds` are ignored. `candidates` runs on every mouse move,
  * so it should answer from an index rather than scan all the data.
- *
- * @example
- * ```ts
- * import type { SnapProvider } from '@sakuzu/maplibre-gl-draw';
- *
- * const stations: [number, number][] = [[139.767, 35.681], [139.7, 35.69]];
- *
- * const stationProvider: SnapProvider = {
- *   name: 'stations',
- *   candidates: (bbox) =>
- *     stations
- *       .filter(([lng, lat]) =>
- *         lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY,
- *       )
- *       .map((coordinate) => ({ kind: 'vertex', coordinate, description: 'station' })),
- * };
- *
- * const unregister = draw.snapping.register(stationProvider);
- * // later
- * unregister();
- * ```
  */
 export interface SnapProvider {
   /** The provider name (for debugging and for detecting duplicate registrations) */
@@ -263,22 +241,11 @@ export type SnapTargetsProvider = (feature: Feature, ctx: SnapProviderContext) =
 export type SnapDisableKey = 'alt' | 'shift' | 'ctrl' | 'meta' | 'none';
 
 /**
- * The snapping options, given as `options.snap` of `createMapLibreGLDraw`.
+ * The snapping options of the engine (`createDraw` translates its `snapping` option).
  *
  * Every field can be omitted. Snapping applies to the pointer input of every drawing mode,
  * of custom modes and of vertex dragging. Everything except `tolerancePx` and `disableKey`
  * can be switched at runtime through `draw.snapping`.
- *
- * @example
- * ```ts
- * const draw = createMapLibreGLDraw(map, {
- *   snap: {
- *     tolerancePx: 12,
- *     disableKey: 'shift',
- *     kinds: { guide: false }, // vertices, edges and intersections only
- *   },
- * });
- * ```
  */
 export interface SnapOptions {
   /** Whether snapping is enabled (default: true). Switch it with `draw.snapping.setEnabled` */

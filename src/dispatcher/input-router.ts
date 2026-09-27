@@ -53,9 +53,8 @@ export interface InputRouter {
    * Feeds a normalized event directly (the entry point for synthetic input)
    *
    * It takes exactly the same path as an event arriving from InputNormalizer.
-   * Snapping, delivery to plugins and the interception by datasets
-   * all take effect in the same way. `draw.input` uses this to advance drawing from
-   * numeric input, tests or automation.
+   * Snapping, delivery to the extensions and the interception by datasets
+   * all take effect in the same way. The tests use this to drive the modes.
    */
   dispatch(event: NormalizedEvent): void;
 

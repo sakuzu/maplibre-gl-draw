@@ -99,8 +99,8 @@ spatial index is queried once.
 ### Companions
 
 A feature can have companions: things drawn with it and grabbed with it,
-supplied by a provider registered through
-`draw.registerFeatureCompanionProvider()` (`src/view/feature-companion.ts`).
+supplied by a provider added through
+`draw.extensions.companionProviders` (`src/view/feature-companion.ts`).
 A companion is drawn one z step below its feature, so the traversal asks
 the companions of a feature right after the test of the feature itself
 fails, and before it moves on to the next feature behind. The order in
@@ -183,7 +183,7 @@ with a large icon, for instance) would drop out of the candidates before
 it ever reached the precise test.
 
 A type can therefore register, in CSS pixels, how far from its indexed
-extent a hit is possible: `candidateReachPx` in `registerFeatureHandler`,
+extent a hit is possible: `hitPaddingPx` of a `FeatureTypeDefinition`,
 which reaches `HitTestService.registerCandidateReach`. The value may be a
 function when it changes with the zoom or with settings; it is evaluated
 on every query. With registrations in place the radius grows by the
@@ -330,7 +330,7 @@ subscription writes to it.
 `StoreSpatialIndex` subscribes to the Store when the draw instance is
 created, before any other subscriber, so a listener that queries the index
 during a notification already sees the change. It loads what the Store
-already holds, and for every feature a `StateChanges` names in
+already holds, and for every feature a `StoreChange` names in
 `features.created`, `updated` or `deleted` it re-derives the entry from the
 Store: a feature that is present is measured again, an absent one is
 dropped. Because the final state is read from the Store, the order of the
@@ -348,8 +348,8 @@ entries within one notification does not matter.
 - The intermediate updates of a drag (`isIntermediate`) are Store updates,
   so the index follows the shape being dragged. The tentative geometry of a
   drawing mode is not a feature and is not indexed
-- A type registered with `registerFeatureHandler` is measured with its
-  `getBoundingBox`, and registering it re-measures the features of that
+- A type added with `draw.extensions.featureTypes` is measured with the
+  `getBoundingBox` of its engine handler, and adding it re-measures the features of that
   type. When its extent changes for a reason the Store does not see (a
   font that arrives later, for example), the plugin calls
   `ctx.invalidateFeatures(type)`, which reaches `invalidateType(type)`
@@ -546,7 +546,7 @@ be seen is what can be operated.
 
 Auxiliary handles let an extension put out handles that are neither
 vertices nor resize handles (`src/view/ui/auxiliary-handles.ts`,
-registered through `draw.registerAuxiliaryHandleProvider()`). They use the
+added through `draw.extensions.handleProviders`). They use the
 same screen rectangle test as the other handles, sized like the vertex
 handles. When one overlaps a vertex or a midpoint, the auxiliary handle
 wins; moving it aside and then grabbing the vertex is enough. With no
@@ -567,7 +567,7 @@ only difference is that there is no owning feature, which is expressed by
 When the bounding box of a single selection has zero area (a Point, a
 MultiPoint with one point), no rotate or resize handles are shown and the
 whole inside of the frame means move. The size of that frame can be
-registered per type (`getPointFrameExtent` in `registerFeatureHandler`,
+registered per type (`getPointFrameExtent` of the engine handler of the type,
 resolved by `resolvePointFrameExtent()` of the instance's
 `SelectionExtensionRegistry` in
 `src/view/ui/selection-ui/extension-registry.ts`). An unregistered type

@@ -605,7 +605,7 @@ describe('the invalidation and release of retained mode', () => {
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
 
-    source.setRenderScale(0.5);
+    source.setScaleFactor(0.5);
     drawFrame(manager, probe);
     expect(probe.disposed).toHaveLength(1);
     expect(probe.built).toHaveLength(2);

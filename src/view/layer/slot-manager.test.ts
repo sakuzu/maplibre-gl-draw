@@ -9,10 +9,10 @@
 import type { CustomLayerInterface } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { SlotManager } from './slot-manager.js';
-import { renderSlotLayerId } from './slots.js';
+import { slotLayerId } from './slots.js';
 
 function slotLayer(index: number): CustomLayerInterface {
-  return { id: renderSlotLayerId(index), type: 'custom', render: () => {} };
+  return { id: slotLayerId(index), type: 'custom', render: () => {} };
 }
 
 function setup(initialOrder: string[]) {
@@ -57,9 +57,9 @@ describe('SlotManager allocation', () => {
     const layers = slots.getSlotLayers();
     expect(layers).toHaveLength(2);
     expect(layers[0]).toBe(primary);
-    expect(slots.getRenderSlots()).toEqual([
-      { layerId: renderSlotLayerId(0), from: 0, to: 1 },
-      { layerId: renderSlotLayerId(1), from: 2, to: 4 },
+    expect(slots.getStackSlots()).toEqual([
+      { layerId: slotLayerId(0), from: 0, to: 1 },
+      { layerId: slotLayerId(1), from: 2, to: 4 },
     ]);
   });
 
@@ -72,15 +72,15 @@ describe('SlotManager allocation', () => {
     expect(slots.getSlotLayers()).toHaveLength(2);
     expect(onSlotsChange).toHaveBeenCalledTimes(1);
 
-    onMap.add(renderSlotLayerId(0));
+    onMap.add(slotLayerId(0));
     setOrder(['a', 'ext:mvt', 'b', 'ext:raster', 'c']);
     slots.sync();
     expect(map.addLayer).toHaveBeenCalledTimes(1);
-    expect(onMap.has(renderSlotLayerId(2))).toBe(true);
+    expect(onMap.has(slotLayerId(2))).toBe(true);
     expect(onSlotsChange).toHaveBeenLastCalledWith([
-      { layerId: renderSlotLayerId(0), from: 0, to: 1 },
-      { layerId: renderSlotLayerId(1), from: 2, to: 3 },
-      { layerId: renderSlotLayerId(2), from: 4, to: 5 },
+      { layerId: slotLayerId(0), from: 0, to: 1 },
+      { layerId: slotLayerId(1), from: 2, to: 3 },
+      { layerId: slotLayerId(2), from: 4, to: 5 },
     ]);
   });
 
@@ -90,9 +90,9 @@ describe('SlotManager allocation', () => {
     setOrder(['a', 'b', 'c']);
     slots.sync();
     expect(slots.getSlotLayers()).toHaveLength(1);
-    expect(map.removeLayer).toHaveBeenCalledWith(renderSlotLayerId(2));
-    expect(map.removeLayer).toHaveBeenCalledWith(renderSlotLayerId(1));
-    expect(onMap.has(renderSlotLayerId(0))).toBe(true);
+    expect(map.removeLayer).toHaveBeenCalledWith(slotLayerId(2));
+    expect(map.removeLayer).toHaveBeenCalledWith(slotLayerId(1));
+    expect(onMap.has(slotLayerId(0))).toBe(true);
   });
 
   it('does nothing when the segments did not change', () => {

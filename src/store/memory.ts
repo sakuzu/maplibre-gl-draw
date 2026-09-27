@@ -28,7 +28,7 @@ import type {
   Group,
   Layer,
   Metadata,
-  StateChanges,
+  StoreChange,
   UpdateFeatureOptions,
   UpdateSource,
 } from './types.js';
@@ -37,19 +37,12 @@ import type {
  * The in-memory Store, the default
  *
  * `new MemoryStore()` is a complete Store (the document and the local state); it is what
- * `createMapLibreGLDraw` uses when no store is given.
+ * `createDraw` uses when no store is given.
  *
  * It keeps its own copy of what it is given and freezes what it returns. A feature, a layer
  * or a group it has returned or notified never changes afterwards (a change replaces it), and
  * writing into one throws a `TypeError` instead of changing the store behind its
  * notifications.
- *
- * @example
- * ```ts
- * // Create the store yourself to keep a reference to it (to read it in a test, say)
- * const store = new MemoryStore();
- * const draw = createMapLibreGLDraw(map, { store });
- * ```
  */
 export interface MemoryStore extends Store {}
 
@@ -149,7 +142,7 @@ export class MemoryDocumentStore implements DocumentStore {
    *
    * options.isIntermediate has no effect on the application of the update (an intermediate
    * state is applied as usual). Only when it is set is it passed through to
-   * StateChanges.features.updated, so that the receiver can tell an intermediate update from
+   * StoreChange.features.updated, so that the receiver can tell an intermediate update from
    * a final one.
    *
    * When layerId or groupId changes the container of the feature (its group, or else its
@@ -558,7 +551,7 @@ export class MemoryDocumentStore implements DocumentStore {
   // Subscribe / Transaction (delegated to ChangeBus)
   // ============================================================================
 
-  subscribe(listener: (changes: StateChanges) => void): () => void {
+  subscribe(listener: (changes: StoreChange) => void): () => void {
     return this.#bus.subscribe(listener);
   }
 

@@ -30,7 +30,7 @@ export interface Plugin<Api = unknown> {
    * event, so that the mode does not get it.
    */
   readonly input?: Partial<InputHandlers>;
-  /** Hooks into the select mode, and an exclusive interaction of the plugin */
+  /** The hooks of the select mode, and an exclusive interaction of the plugin */
   readonly interaction?: {
     /** Narrows the candidates of a selection to the IDs it returns */
     filterSelection?(candidateIds: readonly string[]): string[];

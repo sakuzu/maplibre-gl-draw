@@ -9,7 +9,7 @@
  * the terrain. They are checked once per frame, and any change discards the whole cache.
  */
 
-import type { Layer, StateChanges } from '../../store/types.js';
+import type { Layer, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { getAnchorElevationGeneration } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
@@ -170,7 +170,7 @@ export function isOpacityOnlyLayerChange(previous: Layer, layer: Layer): boolean
  * Whether a change of the layers consists only of opacity updates (nothing created, deleted or
  * reordered, and every update is {@link isOpacityOnlyLayerChange})
  */
-export function isOpacityOnlyLayersChange(layers: NonNullable<StateChanges['layers']>): boolean {
+export function isOpacityOnlyLayersChange(layers: NonNullable<StoreChange['layers']>): boolean {
   if (layers.created?.length || layers.deleted?.length || layers.orderChanged) return false;
   const updated = layers.updated ?? [];
   if (updated.length === 0) return false;

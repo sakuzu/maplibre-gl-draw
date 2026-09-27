@@ -119,7 +119,7 @@ beforeEach(() => {
     map: makeMap(),
     hitTestTopmost: () => top,
     featureCompanions: companions,
-    pluginManager: undefined,
+    plugins: undefined,
     selectionScope: createSelectionScope(),
   } as unknown as EngineModeContext;
 });

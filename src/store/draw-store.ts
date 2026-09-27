@@ -11,7 +11,7 @@
  *     returns false and touches nothing. The DocumentStore never sees the gate, so changes
  *     applied to the document from elsewhere are not stopped by it.
  *   - The notifications of the document are forwarded into the ChangeBus of the local state,
- *     so a listener gets one StateChanges per transaction with both kinds of change.
+ *     so a listener gets one StoreChange per transaction with both kinds of change.
  *   - Deletions reach the local state: the id of a deleted feature, group or layer leaves the
  *     selection, the features being edited and the locally hidden set, whatever deleted it.
  *   - The selection holds only what can be seen: a change that hides a selected item (its own
@@ -36,7 +36,7 @@ import type {
   Mode,
   Selection,
   SelectionType,
-  StateChanges,
+  StoreChange,
   TentativeState,
   UpdateFeatureOptions,
   UpdateSource,
@@ -261,7 +261,7 @@ export class DrawStore implements Store {
   // Subscription and transactions
   // ============================================================================
 
-  subscribe(listener: (changes: StateChanges) => void): () => void {
+  subscribe(listener: (changes: StoreChange) => void): () => void {
     return this.#bus.subscribe(listener);
   }
 
@@ -285,7 +285,7 @@ export class DrawStore implements Store {
    * the local state it changes (one notification with the document's source when it did not
    * come from a transaction of this Store)
    */
-  #receive(changes: StateChanges): void {
+  #receive(changes: StoreChange): void {
     this.#bus.transact(() => {
       this.#bus.merge(documentPart(changes));
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
@@ -325,7 +325,7 @@ export class DrawStore implements Store {
    * by a local drag (a change from elsewhere, an edit through the API): the indices it holds
    * would name other vertices
    */
-  #pruneVertices(changes: StateChanges): void {
+  #pruneVertices(changes: StoreChange): void {
     const vertices = this.#ui.getVertexSelection();
     if (!vertices) return;
     const featureId = vertices.featureId;
@@ -350,7 +350,7 @@ export class DrawStore implements Store {
  * of a feature, or of its place (a feature moved into a hidden layer or group), and any
  * update of a group or a layer
  */
-function mayHide(changes: StateChanges): boolean {
+function mayHide(changes: StoreChange): boolean {
   if (changes.layers?.updated?.length || changes.groups?.updated?.length) return true;
   for (const { feature, previous } of changes.features?.updated ?? []) {
     if (feature.visible !== previous.visible) return true;
@@ -426,8 +426,8 @@ function sameCoordinates(a: unknown, b: unknown): boolean {
 }
 
 /** The categories of a notification that belong to the document */
-function documentPart(changes: StateChanges): StateChanges {
-  const part: StateChanges = {};
+function documentPart(changes: StoreChange): StoreChange {
+  const part: StoreChange = {};
   if (changes.features) part.features = changes.features;
   if (changes.layers) part.layers = changes.layers;
   if (changes.groups) part.groups = changes.groups;

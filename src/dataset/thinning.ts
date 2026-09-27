@@ -76,16 +76,6 @@ const MAX_MERCATOR_LAT = 85.0511287798066;
  * polygons and MultiPoint are always drawn. The overlap is tested with the size actually drawn
  * (the radius + the outline + `marginPx`), and the winners are picked greedily from the front
  * of the draw order for each integer zoom band, so panning does not swap them.
- *
- * @example
- * ```ts
- * const places = draw.addDataset({
- *   id: 'places',
- *   features,
- *   collisionThinning: { enabled: true, fullDisplayZoom: 17, marginPx: 2 },
- * });
- * const { total, visible } = places.getThinningStats(); // "showing 1,200 of 50,000"
- * ```
  */
 export interface DatasetCollisionThinning {
   /** Whether the thinning is enabled (false by default = everything is drawn as before) */
