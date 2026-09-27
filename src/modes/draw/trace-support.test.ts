@@ -13,8 +13,8 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { DrawPointerEvent } from '../../api/v2/extension/mode.js';
-import type { SnapResult } from '../../api/v2/state.js';
+import type { DrawPointerEvent } from '../../api/extension/mode.js';
+import type { SnapResult } from '../../api/state.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import { createModeHarness, pointerInput } from '../../test-utils.js';

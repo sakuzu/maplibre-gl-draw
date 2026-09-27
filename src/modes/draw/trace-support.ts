@@ -19,9 +19,9 @@
  */
 
 import type { Geometry } from 'geojson';
-import type { ModeContext } from '../../api/v2/extension/context.js';
-import type { DrawPointerEvent } from '../../api/v2/extension/mode.js';
-import type { Feature as PublicFeature } from '../../api/v2/model.js';
+import type { ModeContext } from '../../api/extension/context.js';
+import type { DrawPointerEvent } from '../../api/extension/mode.js';
+import type { Feature as PublicFeature } from '../../api/model.js';
 import { resolveVertexCoordinates } from '../../operations/shared-vertex.js';
 import type { TraceGraphEndpoint } from '../../operations/trace-graph.js';
 import { buildTraceGraph, findTracePath } from '../../operations/trace-graph.js';

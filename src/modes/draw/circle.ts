@@ -9,7 +9,7 @@
  */
 
 import type { Position } from 'geojson';
-import type { ModeFactory } from '../../api/v2/extension/mode.js';
+import type { ModeFactory } from '../../api/extension/mode.js';
 import { haversineDistanceMeters, initialBearingDegrees } from '../../geometry/distance.js';
 import { drawProperties } from '../../shared/properties.js';
 

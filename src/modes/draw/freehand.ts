@@ -9,8 +9,8 @@
  */
 
 import type { Position } from 'geojson';
-import type { ModeFactory } from '../../api/v2/extension/mode.js';
-import type { SnapPreference } from '../../api/v2/state.js';
+import type { ModeFactory } from '../../api/extension/mode.js';
+import type { SnapPreference } from '../../api/state.js';
 
 /** Minimum distance for adding a position (in degrees) */
 const MIN_DISTANCE_DEGREES = 0.00001;

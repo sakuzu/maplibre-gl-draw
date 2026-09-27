@@ -385,7 +385,7 @@ describe('the export list of src/api/v2/index.ts', () => {
   });
 
   it('exports at runtime exactly the value names of the list', async () => {
-    const runtime = Object.keys(await import('./api/v2/index.js')).sort(byName);
+    const runtime = Object.keys(await import('./api/index.js')).sort(byName);
     expect(runtime).toEqual(readExports('src/api/v2/index.ts').values.sort(byName));
   });
 });

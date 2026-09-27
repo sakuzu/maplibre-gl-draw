@@ -14,7 +14,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { bridgeMode } from '../../api/v2/impl/input.js';
+import { bridgeMode } from '../../api/impl/input.js';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import type { DragNormalizedEvent, NormalizedEvent } from '../../dispatcher/types.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';

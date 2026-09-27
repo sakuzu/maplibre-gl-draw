@@ -11,10 +11,10 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Engine } from '../../api/engine.js';
-import { createEngine } from '../../api/engine.js';
-import type { Draw } from '../../api/v2/draw.js';
-import { createDrawOnEngine } from '../../api/v2/impl/create-draw.js';
+import type { Draw } from '../../api/draw.js';
+import { createDrawOnEngine } from '../../api/impl/create-draw.js';
+import type { Engine } from '../../api/impl/engine.js';
+import { createEngine } from '../../api/impl/engine.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature } from '../../store/types.js';

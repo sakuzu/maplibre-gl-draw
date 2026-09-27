@@ -16,7 +16,7 @@ import type {
   ModeHandler as ContractModeHandler,
   DrawPointerEvent,
   ModeFactory,
-} from '../../api/v2/extension/mode.js';
+} from '../../api/extension/mode.js';
 import { MemoryStore } from '../../store/memory.js';
 import { createModeHarness, keyInput } from '../../test-utils.js';
 import { ModeManagerImpl } from '../manager.js';

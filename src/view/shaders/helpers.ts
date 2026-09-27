@@ -10,7 +10,7 @@
 
 // The shader prelude and the offset values are the types of the extension contract, so that the
 // renderers and the second layer of the API name the same types as the main entry
-import type { OffsetUniforms, ShaderData } from '../../api/v2/extension/render.js';
+import type { OffsetUniforms, ShaderData } from '../../api/extension/render.js';
 
 export type { OffsetUniforms, ShaderData };
 

@@ -38,7 +38,6 @@ const RANK = {
   snapping: 4,
   modes: 5,
   dispatcher: 6,
-  plugins: 7,
   api: 8,
   entry: 9,
   // The layer 2 entry: an entry like src/index.ts, and imported by nothing (rule 10)
@@ -48,7 +47,6 @@ const RANK = {
 /** Files at the root of src/ belong to the area given here */
 const ROOT_FILES = {
   'index.ts': 'entry',
-  'maplibre-gl-draw.ts': 'entry',
   'messages.ts': 'shared',
 };
 

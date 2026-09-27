@@ -11,10 +11,10 @@
  * the extension contract, through the `ModeContext` alone.
  */
 
-import type { ModeContext } from '../../api/v2/extension/context.js';
-import type { DrawPointerEvent, ModeHandler } from '../../api/v2/extension/mode.js';
-import type { FeatureInput } from '../../api/v2/model.js';
-import type { SnapPreference } from '../../api/v2/state.js';
+import type { ModeContext } from '../../api/extension/context.js';
+import type { DrawPointerEvent, ModeHandler } from '../../api/extension/mode.js';
+import type { FeatureInput } from '../../api/model.js';
+import type { SnapPreference } from '../../api/state.js';
 import type { Coordinate } from '../../store/types.js';
 import type { TraceAnchor } from './trace-support.js';
 import { computeTracePath, readTraceAnchor, traceSourceOf } from './trace-support.js';

@@ -22,8 +22,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createDocument } from '../api/v2/impl/document.js';
-import { connectStoreEvents, createEventHub } from '../api/v2/impl/events.js';
+import { createDocument } from '../api/impl/document.js';
+import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createResourceDeps } from '../test-utils.js';

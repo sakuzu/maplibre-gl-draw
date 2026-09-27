@@ -7,7 +7,7 @@
  * It is written to the extension contract, through the `ModeContext` alone.
  */
 
-import type { ModeFactory } from '../../api/v2/extension/mode.js';
+import type { ModeFactory } from '../../api/extension/mode.js';
 
 /**
  * The factory of the point drawing mode

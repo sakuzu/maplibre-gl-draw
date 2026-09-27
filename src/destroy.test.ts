@@ -16,8 +16,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createDraw } from './api/v2/draw.js';
-import type { Plugin } from './api/v2/extension/plugin.js';
+import { createDraw } from './api/draw.js';
+import type { Plugin } from './api/extension/plugin.js';
 import { createMapStub } from './test-utils.js';
 
 describe('draw.destroy()', () => {

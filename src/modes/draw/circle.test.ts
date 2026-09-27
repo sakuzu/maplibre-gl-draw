@@ -11,7 +11,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { DrawPointerEvent } from '../../api/v2/extension/mode.js';
+import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate } from '../../store/types.js';

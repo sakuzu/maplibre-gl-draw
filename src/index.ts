@@ -7,4 +7,4 @@
  * @module maplibre-gl-draw
  */
 
-export * from './api/v2/index.js';
+export * from './api/index.js';
