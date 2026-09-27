@@ -40,8 +40,10 @@ you need the other two.
   the instance, its options, the data model, the events, datasets and
   the extension points.
 - `@sakuzu/maplibre-gl-draw/geometry` ({@link geometry | the reference}):
-  geometry functions that need no map, so they also run in Node and in
-  workers.
+  geometry calculations that need no map: measure lengths and areas,
+  build circles and buffers, combine polygons, test whether a point lies
+  in a polygon, and tidy shapes. They also work in code that does not use
+  the drawing engine (workers, servers, tests).
 - `@sakuzu/maplibre-gl-draw/columnar` ({@link columnar | the reference}):
   the preparation of a columnar table for a dataset, importable in a
   Worker.

@@ -8,7 +8,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
-import { destinationPoint } from '../../geometry/index.js';
+import { destinationPoint } from '../../geometry/distance.js';
 import type { TentativeStyle } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
 import type { Coordinate, TentativeState } from '../../store/types.js';

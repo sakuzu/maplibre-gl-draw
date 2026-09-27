@@ -6,7 +6,7 @@
 // vertices can move together; selected features are merged, subtracted, buffered and split.
 
 import { type Coordinate, createMapLibreGLDraw, type Feature } from '@sakuzu/maplibre-gl-draw';
-import { sphericalArea } from '@sakuzu/maplibre-gl-draw/geometry';
+import { area as polygonArea } from '@sakuzu/maplibre-gl-draw/geometry';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -101,7 +101,9 @@ draw.on('draw.geometry.applied', ({ operation, status, inputIds, resultIds }) =>
 /** The area of a polygon feature in square meters (0 for the other types) */
 function areaOf(feature: Feature): number {
   if (feature.type !== 'Polygon' && feature.type !== 'MultiPolygon') return 0;
-  return sphericalArea(feature.coordinates as Parameters<typeof sphericalArea>[0]);
+  return polygonArea({ type: feature.type, coordinates: feature.coordinates } as Parameters<
+    typeof polygonArea
+  >[0]);
 }
 
 draw.on('draw.selection.change', () => {

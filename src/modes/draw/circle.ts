@@ -9,7 +9,7 @@
  */
 
 import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
-import { haversineDistanceMeters, initialBearingDegrees } from '../../geometry/index.js';
+import { haversineDistanceMeters, initialBearingDegrees } from '../../geometry/distance.js';
 import type { Coordinate, Feature, Mode } from '../../store/types.js';
 import type { ModeContext, ModeHandler } from '../handler.js';
 import { createdZoomProperty, resolveCommitLayer } from './commit-layer.js';

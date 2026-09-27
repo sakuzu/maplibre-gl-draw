@@ -59,15 +59,6 @@ export function normalizeCircleSegments(
  * @returns The ring, `segments + 1` positions `[lng, lat]` with the first repeated at the
  *   end. An empty array for a center that is not finite and for a radius that is negative
  *   or not finite
- *
- * @example
- * ```ts
- * import { generateCirclePolygon } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const ring = generateCirclePolygon([139.767, 35.681], 500, 32);
- * ring.length; // 33
- * const polygon = [ring]; // Polygon coordinates
- * ```
  */
 export function generateCirclePolygon(
   center: Coordinate,

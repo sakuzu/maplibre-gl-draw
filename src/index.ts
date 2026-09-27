@@ -377,24 +377,11 @@ export {
   distanceToOBB,
   getOBBAABB,
   lngLatToMercator,
-  metersToDegreesLat,
-  metersToDegreesLng,
   pixelsToDegreesLat,
   pixelsToDegreesLng,
   rectangleIntersectsOBB,
 } from './shared/math/index.js';
 export { getContrastColor } from './shared/utils/index.js';
-
-import { generateCirclePolygon as generateCirclePolygonOfGeometry } from './geometry/index.js';
-
-/**
- * Approximates a geodesic circle with a polygon
- *
- * @deprecated Import `generateCirclePolygon` from `@sakuzu/maplibre-gl-draw/geometry`, where
- * the geometry functions live; it is the same function. This export will be removed in the next
- * major release.
- */
-export const generateCirclePolygon = generateCirclePolygonOfGeometry;
 
 // Selection UI, hit testing and viewport helpers
 export { PointHitTestStrategy } from './dispatcher/index.js';

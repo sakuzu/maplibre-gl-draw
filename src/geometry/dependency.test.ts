@@ -8,7 +8,8 @@
  *
  * Confirms mechanically, from the import statements in the sources, that
  * src/geometry/ does not depend on maplibre, the DOM, wasm, the Store or events.
- * Only polygon-clipping and relative imports within geometry are allowed.
+ * Only polygon-clipping and relative imports within geometry are allowed at runtime, plus
+ * the GeoJSON type definitions, which are erased at compile time.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -20,6 +21,12 @@ const GEOMETRY_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** Packages allowed as runtime dependencies */
 const ALLOWED_PACKAGES = ['polygon-clipping'];
+
+/** Packages allowed in `import type` statements only */
+const ALLOWED_TYPE_PACKAGES = ['geojson'];
+
+/** Regular expression that removes an `import type` statement from a package allowed for types */
+const TYPE_IMPORT_PATTERN = /\bimport\s+type\s+\{[^}]*\}\s+from\s+'([^']+)';?/g;
 
 /** Regular expression that picks up the from clause of an import / export statement */
 const MODULE_SPECIFIER_PATTERN = /\bfrom\s+'([^']+)'/g;
@@ -43,10 +50,11 @@ const BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
  * Lists the module specifiers referenced by a file, ignoring the block comments
  */
 function listModuleSpecifiers(fileName: string): string[] {
-  const source = readFileSync(join(GEOMETRY_DIR, fileName), 'utf8').replace(
-    BLOCK_COMMENT_PATTERN,
-    '',
-  );
+  const source = readFileSync(join(GEOMETRY_DIR, fileName), 'utf8')
+    .replace(BLOCK_COMMENT_PATTERN, '')
+    .replace(TYPE_IMPORT_PATTERN, (statement, specifier: string) =>
+      ALLOWED_TYPE_PACKAGES.includes(specifier) ? '' : statement,
+    );
   const specifiers: string[] = [];
   for (const pattern of [MODULE_SPECIFIER_PATTERN, DYNAMIC_IMPORT_PATTERN]) {
     pattern.lastIndex = 0;

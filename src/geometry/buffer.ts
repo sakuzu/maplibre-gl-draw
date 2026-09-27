@@ -195,32 +195,6 @@ function isAreaGeometry(
  *   shrunk polygon vanishes. `null` when the operation is not defined for the input
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import { buffer } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // The area within 100 m of a line
- * const corridor = buffer(
- *   { type: 'LineString', coordinates: [[139.76, 35.68], [139.77, 35.69]] },
- *   100,
- *   { segments: 32 },
- * );
- *
- * // Shrink a polygon by 50 m
- * const shrunk = buffer(
- *   {
- *     type: 'Polygon',
- *     coordinates: [[[139.76, 35.68], [139.77, 35.68], [139.77, 35.69], [139.76, 35.68]]],
- *   },
- *   -50,
- * );
- * if (shrunk === null) {
- *   // Not defined for the input
- * } else if (shrunk.length === 0) {
- *   // The whole area vanished
- * }
- * ```
  */
 export function buffer(
   geometry: GeometryInput,

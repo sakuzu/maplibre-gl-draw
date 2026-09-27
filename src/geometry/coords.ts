@@ -23,15 +23,6 @@ import type { AreaCoordinates, Coordinate, MultiPolygonCoordinates, Ring } from 
  * @param coordinates Polygon or MultiPolygon coordinates
  * @returns `true` for MultiPolygon coordinates (a type guard). `false` for Polygon
  *   coordinates and for coordinates with no position
- *
- * @example
- * ```ts
- * import { isMultiPolygonCoordinates } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const ring: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 0]];
- * isMultiPolygonCoordinates([ring]); // false (Polygon)
- * isMultiPolygonCoordinates([[ring]]); // true (MultiPolygon)
- * ```
  */
 export function isMultiPolygonCoordinates(
   coordinates: AreaCoordinates,
@@ -129,13 +120,6 @@ export function isRingClosed(ring: Ring): boolean {
  *
  * @param ring A coordinate sequence
  * @returns A new closed array. The input itself when it is already closed or empty
- *
- * @example
- * ```ts
- * import { closeRing } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * closeRing([[0, 0], [1, 0], [1, 1]]); // [[0, 0], [1, 0], [1, 1], [0, 0]]
- * ```
  */
 export function closeRing(ring: Ring): Ring {
   if (ring.length === 0 || isRingClosed(ring)) {

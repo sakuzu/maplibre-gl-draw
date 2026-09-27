@@ -9,4 +9,4 @@
 
 // The actual generation of a geodesic circle lives in the geometry module (single
 // implementation)
-export { generateCirclePolygon } from '../../geometry/index.js';
+export { generateCirclePolygon } from '../../geometry/circle.js';

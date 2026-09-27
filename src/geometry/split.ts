@@ -70,14 +70,6 @@ const NODE_QUANTUM = 1e-9;
  * @param b2 The end of segment B, `[lng, lat]` in degrees
  * @returns The intersection `[lng, lat]`, taken on segment A. `null` when they do not
  *   cross, are parallel or collinear, or either has length 0
- *
- * @example
- * ```ts
- * import { segmentIntersection } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * segmentIntersection([0, 0], [2, 2], [0, 2], [2, 0]); // [1, 1]
- * segmentIntersection([0, 0], [1, 0], [0, 1], [1, 1]); // null (parallel)
- * ```
  */
 export function segmentIntersection(
   a1: Coordinate,
@@ -132,18 +124,6 @@ export function segmentIntersection(
  *   input normalized) when it is not split. An empty array when the input has no area
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import { splitArea } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const square: [number, number][][] = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
- * const parts = splitArea(square, [[0.5, -1], [0.5, 2]]);
- * parts.length; // 2: the halves west and east of longitude 0.5
- * if (parts.length === 1) {
- *   // Not split: the line does not cross the polygon
- * }
- * ```
  */
 export function splitArea(area: AreaCoordinates, line: Coordinate[]): MultiPolygonCoordinates[] {
   const normalized = normalizeArea(area);

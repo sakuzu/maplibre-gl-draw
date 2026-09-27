@@ -11,7 +11,7 @@
  */
 
 // buffer is imported under an alias so that the name reads as the geometry module's function.
-import { buffer as computeBuffer } from '../../geometry/index.js';
+import { buffer as computeBuffer } from '../../geometry/buffer.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
 import { applyResult, emitApplied } from './apply.js';

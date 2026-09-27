@@ -644,6 +644,10 @@ polygon-clipping. The same inputs give the same results in Node, Bun, a
 worker or the browser, which is why it is published as the sub-entry
 `@sakuzu/maplibre-gl-draw/geometry`.
 `src/geometry/dependency.test.ts` checks that its imports stay closed.
+The sub-entry exports only the functions of the `public-*.ts` files, which
+take and return GeoJSON geometries (`union`, `area`, `buffer`, `split` and
+so on); the modules underneath work on coordinate arrays and are used by the
+rest of the library directly.
 
 `draw.geometry` (`src/api/geometry-operations.ts` and `src/api/geometry/`)
 is the layer that ties these functions to the selection, transactions and
@@ -665,7 +669,7 @@ area conservation; and a performance suite
 (`src/geometry/performance.test.ts`) at the scale of ten thousand features.
 Both pass with the pure implementation. The one failure mode found, a
 single union of many circles and bands that polygon-clipping cannot close,
-is avoided by folding the inputs of `unionAll` as a binary tree, which stays
+is avoided by folding the inputs of `union` as a binary tree, which stays
 deterministic. If the suites stop passing, limited measures such as snap
 rounding come first, and GEOS is reconsidered only with the failing case in
 hand.
