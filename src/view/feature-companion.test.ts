@@ -42,6 +42,8 @@ const LAYER: Layer = {
   locked: false,
   opacity: 1,
   items: [],
+  styleRule: undefined,
+  metadata: undefined,
 };
 
 function point(id: string, lng = 0, lat = 0): Feature {
@@ -50,6 +52,7 @@ function point(id: string, lng = 0, lat = 0): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [lng, lat] as Coordinate },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

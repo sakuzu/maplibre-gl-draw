@@ -107,6 +107,8 @@ function createTestContext(): Context {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   let idCounter = 0;
   return {

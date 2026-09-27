@@ -77,6 +77,7 @@ const card: Feature = {
   type: 'Card',
   geometry: { type: 'Point', coordinates: [10, 10] },
   layerId: 'default-layer',
+  groupId: undefined,
   properties: {},
   locked: false,
   visible: true,

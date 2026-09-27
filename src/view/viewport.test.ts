@@ -28,6 +28,7 @@ function point(id: string, lng: number, lat: number): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

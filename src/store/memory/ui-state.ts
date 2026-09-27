@@ -164,7 +164,7 @@ export class MemoryUiState implements UiState {
 
   // VertexSelection
 
-  getSelectedVertices(): VertexSelection | null {
+  getVertexSelection(): VertexSelection | null {
     return this.#selectedVertices;
   }
 
@@ -172,7 +172,7 @@ export class MemoryUiState implements UiState {
     this.#selectedVertices = selection
       ? {
           featureId: selection.featureId,
-          vertexIndices: selection.vertexIndices.map((ref) => ({ ...ref })),
+          vertices: selection.vertices.map((ref) => ({ ...ref })),
         }
       : null;
     this.#bus.merge({ uiStateChanged: true });
@@ -195,7 +195,7 @@ export class MemoryUiState implements UiState {
       selections && selections.length > 0
         ? selections.map((selection) => ({
             featureId: selection.featureId,
-            vertexIndices: selection.vertexIndices.map((ref) => ({ ...ref })),
+            vertices: selection.vertices.map((ref) => ({ ...ref })),
           }))
         : null;
     this.#bus.merge({ uiStateChanged: true });
@@ -243,11 +243,11 @@ export class MemoryUiState implements UiState {
 
   // LocallyHidden
 
-  isLocallyHidden(id: string): boolean {
+  isHidden(id: string): boolean {
     return this.#locallyHidden.has(id);
   }
 
-  getLocallyHidden(): ReadonlySet<string> {
+  listHidden(): ReadonlySet<string> {
     return this.#locallyHidden;
   }
 

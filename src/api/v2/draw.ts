@@ -14,6 +14,7 @@ import type { ExtensionsCollections } from './extensions.js';
 import type { FeaturesCollection } from './features.js';
 import type { GroupsCollection } from './groups.js';
 import type { HiddenCollection } from './hidden.js';
+import { createDraw as createDrawInstance } from './impl/create-draw.js';
 import type { LayersCollection } from './layers.js';
 import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
@@ -137,4 +138,4 @@ export interface Draw {
 export type CreateDraw = (map: MaplibreMap, options?: DrawOptions) => Draw;
 
 /** Puts a draw instance on a map and returns it. */
-export declare const createDraw: CreateDraw;
+export const createDraw: CreateDraw = (map, options) => createDrawInstance(map, options);

@@ -17,6 +17,7 @@ function point(id: string, lng: number, lat: number): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -26,7 +27,16 @@ function point(id: string, lng: number, lat: number): Feature {
 
 function memoryStore(): MemoryStore {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l',
+    name: 'l',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   return store;
 }
 
@@ -42,7 +52,7 @@ function stubStore() {
   };
   const store = {
     getFeature: (id: string) => features.get(id),
-    getAllFeatures: () => [...features.values()],
+    listFeatures: () => [...features.values()],
     subscribe: (listener: (changes: StateChanges) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -125,7 +135,16 @@ describe('StoreSpatialIndex', () => {
   it('drops the features of a deleted layer', () => {
     const store = memoryStore();
     const index = new StoreSpatialIndex(store);
-    store.createLayer({ id: 'm', name: 'm', visible: true, locked: false, opacity: 1, items: [] });
+    store.createLayer({
+      id: 'm',
+      name: 'm',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
     store.createFeature({ ...point('a', 1, 1), layerId: 'm' });
 
     store.deleteLayer('m');

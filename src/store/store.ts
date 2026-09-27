@@ -104,7 +104,7 @@ export interface DocumentStore {
   /** Returns the feature with this ID, or undefined */
   getFeature(id: string): Feature | undefined;
   /** Every feature, in no particular order */
-  getAllFeatures(): Feature[];
+  listFeatures(): Feature[];
   /**
    * Creates a feature and lists it in its container
    *
@@ -145,19 +145,20 @@ export interface DocumentStore {
    */
   deleteFeature(id: string): void;
   /**
-   * Gets the array of features in display order
+   * Every feature in stacking order
    *
    * Iterates in layer order -> order within the layer -> featureIds order within the
-   * group, skipping what the shared visible flag hides at any of the three levels.
-   * The head of the array is the backmost and the end is the foreground.
+   * group, whatever the visible flags say. A layer that is not on the stacking order is not
+   * drawn, and its features are not listed. The head of the array is the backmost and the
+   * end is the foreground.
    */
-  getOrderedFeatures(): Feature[];
+  listFeaturesInOrder(): Feature[];
 
   // Layers
   /** Returns the layer with this ID, or undefined */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */
-  getAllLayers(): Layer[];
+  listLayers(): Layer[];
   /**
    * Creates a layer and appends it to the stacking order (as the frontmost entry), unless the
    * order already holds its id, which then keeps its position
@@ -190,7 +191,7 @@ export interface DocumentStore {
   /** Returns the group with this ID, or undefined */
   getGroup(id: string): Group | undefined;
   /** Every group, in no particular order */
-  getAllGroups(): Group[];
+  listGroups(): Group[];
   /**
    * Creates a group and sets `groupId` on its existing members, which leave the order of
    * their layer. A group that no layer lists by the end of the operation takes the place of
@@ -211,7 +212,7 @@ export interface DocumentStore {
   /** Returns the file with this ID, or undefined */
   getFile(id: string): FileData | undefined;
   /** Every file */
-  getAllFiles(): FileData[];
+  listFiles(): FileData[];
   /** Deletes a file (the features that refer to it are not changed) */
   deleteFile(id: string): void;
 
@@ -281,7 +282,7 @@ export interface UiState {
 
   // Vertex selection
   /** The selected vertices, or null when no vertex is selected */
-  getSelectedVertices(): VertexSelection | null;
+  getVertexSelection(): VertexSelection | null;
   /** Sets or clears the selected vertices */
   setSelectedVertices(selection: VertexSelection | null): void;
 
@@ -317,9 +318,9 @@ export interface UiState {
   setInteractionLock(value: boolean): void;
 
   /** Local visibility: the ids (feature / group / layer) hidden on this client only */
-  isLocallyHidden(id: string): boolean;
+  isHidden(id: string): boolean;
   /** Every ID hidden on this client only */
-  getLocallyHidden(): ReadonlySet<string>;
+  listHidden(): ReadonlySet<string>;
   /** Hides or shows a feature, a group or a layer on this client only */
   setLocallyHidden(id: string, hidden: boolean): void;
 }
@@ -336,7 +337,7 @@ export interface UiState {
  * ```ts
  * const store = draw.getStore();
  * const unsubscribe = store.subscribe((changes) => {
- *   if (changes.features) saveLater(store.getAllFeatures());
+ *   if (changes.features) saveLater(store.listFeatures());
  * });
  * // Two writes, one notification
  * store.transact(() => {
@@ -350,23 +351,23 @@ export interface StoreView {
   /** Returns the feature with this ID, or undefined */
   getFeature(id: string): Feature | undefined;
   /** Every feature, in no particular order */
-  getAllFeatures(): Feature[];
-  /** The visible features in drawing order, back to front */
-  getOrderedFeatures(): Feature[];
+  listFeatures(): Feature[];
+  /** Every feature in stacking order, back to front, whatever the visible flags say */
+  listFeaturesInOrder(): Feature[];
   /** Returns the layer with this ID, or undefined */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */
-  getAllLayers(): Layer[];
+  listLayers(): Layer[];
   /** The stacking order of the layers, back to front */
   getLayerOrder(): readonly string[];
   /** Returns the group with this ID, or undefined */
   getGroup(id: string): Group | undefined;
   /** Every group, in no particular order */
-  getAllGroups(): Group[];
+  listGroups(): Group[];
   /** Returns the file with this ID, or undefined */
   getFile(id: string): FileData | undefined;
   /** Every file */
-  getAllFiles(): FileData[];
+  listFiles(): FileData[];
   /** Returns the metadata of the document */
   getMetadata(): Metadata;
 
@@ -382,7 +383,7 @@ export interface StoreView {
   /** The drag in progress, or null */
   getDragState(): DragState | null;
   /** The selected vertices, or null when no vertex is selected */
-  getSelectedVertices(): VertexSelection | null;
+  getVertexSelection(): VertexSelection | null;
   /**
    * The vertices that follow along when shared vertices move together (null except during a
    * drag)
@@ -395,9 +396,9 @@ export interface StoreView {
   /** Whether the interaction lock is on */
   isInteractionLocked(): boolean;
   /** Whether this feature, group or layer is hidden on this client only */
-  isLocallyHidden(id: string): boolean;
+  isHidden(id: string): boolean;
   /** Every ID hidden on this client only */
-  getLocallyHidden(): ReadonlySet<string>;
+  listHidden(): ReadonlySet<string>;
 
   /**
    * Subscribes to the changes of the document and of the local state

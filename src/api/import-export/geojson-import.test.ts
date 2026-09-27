@@ -52,6 +52,8 @@ describe('loadGeoJSON', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     let counter = 0;
     deps = {
@@ -134,7 +136,7 @@ describe('loadGeoJSON', () => {
         expect(result.skipped[0].index).toBe(1);
         expect(result.skipped[0].reason).toEqual(expect.any(String));
         expect(result.skipped[0].reason).not.toBe('');
-        expect(store.getAllFeatures()).toHaveLength(2);
+        expect(store.listFeatures()).toHaveLength(2);
       });
     }
 
@@ -313,6 +315,7 @@ describe('loadGeoJSON', () => {
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'default-layer',
+      groupId: undefined,
       properties: {},
       visible: true,
       locked: false,
@@ -329,7 +332,7 @@ describe('loadGeoJSON', () => {
         deps,
       ),
     ).rejects.toThrow();
-    expect(store.getAllFeatures().map((f) => f.id)).toEqual(['taken']);
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['taken']);
   });
 
   it('stores only well-formed coordinates for every accepted feature', async () => {

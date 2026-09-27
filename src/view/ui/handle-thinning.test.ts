@@ -46,6 +46,7 @@ function makeFeature(type: string, coordinates: FeatureCoordinates, id = 'f1'): 
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

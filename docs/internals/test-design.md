@@ -57,8 +57,8 @@ and deleting features, layers and groups keeps the layer order, group
 membership, selection and editing state consistent (an empty group is
 removed, a deleted feature leaves the selection). Transactions gather
 changes into one `StateChanges`, nest, carry their source and clear on an
-exception. `getOrderedFeatures` returns the drawing order with hidden
-features, layers and groups left out.
+exception. `listFeaturesInOrder` returns every feature in the drawing
+order, hidden ones included.
 
 ### 2. ChangeMerger
 

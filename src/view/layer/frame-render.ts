@@ -279,7 +279,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
       copy.projectionData,
       selectionUIDeps,
       store.getDragState(),
-      store.getSelectedVertices(),
+      store.getVertexSelection(),
       selectionLocked,
     );
 

@@ -194,11 +194,11 @@ export function createInstanceApi(deps: InstanceApiDeps): InstanceApi {
     },
 
     isLocallyHidden(id: string): boolean {
-      return store.isLocallyHidden(id);
+      return store.isHidden(id);
     },
 
     getLocallyHidden(): ReadonlySet<string> {
-      return store.getLocallyHidden();
+      return store.listHidden();
     },
 
     setLocallyHidden(id: string, hidden: boolean): void {

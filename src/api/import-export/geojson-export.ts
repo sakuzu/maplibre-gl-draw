@@ -24,6 +24,7 @@ import {
   normalizePolygonOrientation,
 } from '../../geometry/simplify.js';
 import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../shared/properties.js';
+import { listShownFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { ExportOptions, Feature } from '../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS } from './constants.js';
@@ -199,12 +200,12 @@ export function exportGeoJSON(
   options?: ExportOptions,
 ): GeoJSON.FeatureCollection<GeoJSON.Geometry> {
   // In addition to the draw order (visible), hidden features are also included at the end
-  // of the export. getOrderedFeatures returns only the visible features, so on its own it
+  // of the export. listShownFeatures returns only the visible features, so on its own it
   // would lose visible:false across the GeoJSON round trip. Including the hidden ones
   // preserves it across the round trip.
-  const visibleOrdered = store.getOrderedFeatures();
+  const visibleOrdered = listShownFeatures(store);
   const visibleIds = new Set(visibleOrdered.map((f) => f.id));
-  const hiddenFeatures = store.getAllFeatures().filter((f) => !visibleIds.has(f.id));
+  const hiddenFeatures = store.listFeatures().filter((f) => !visibleIds.has(f.id));
   let features = [...visibleOrdered, ...hiddenFeatures];
 
   if (options?.featureIds && options.featureIds.length > 0) {

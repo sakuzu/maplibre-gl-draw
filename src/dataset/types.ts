@@ -633,6 +633,7 @@ export function normalizeDisplayFeature(input: DatasetRow, index: number): Featu
       type: 'Point',
       geometry: { type: 'Point', coordinates: [Number.NaN, Number.NaN] },
       layerId: '',
+      groupId: undefined,
       properties,
       style: input.style ?? {},
       locked: false,
@@ -647,6 +648,7 @@ export function normalizeDisplayFeature(input: DatasetRow, index: number): Featu
       ? ({ type: geometry.type, coordinates: truncatePositions(coords) } as GeoJSONGeometry)
       : geometry,
     layerId: '',
+    groupId: undefined,
     properties,
     style: input.style ?? {},
     locked: false,

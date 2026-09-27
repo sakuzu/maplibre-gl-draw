@@ -379,6 +379,18 @@ describe('the export list of src/webgl/index.ts', () => {
   });
 });
 
+// The main entry of 2.0, until it replaces src/index.ts
+describe('the export list of src/api/v2/index.ts', () => {
+  it('names every export, with no export *', () => {
+    expect(readExports('src/api/v2/index.ts').star).toBe(0);
+  });
+
+  it('exports at runtime exactly the value names of the list', async () => {
+    const runtime = Object.keys(await import('./api/v2/index.js')).sort(byName);
+    expect(runtime).toEqual(readExports('src/api/v2/index.ts').values.sort(byName));
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The emitted declarations
 // ---------------------------------------------------------------------------
@@ -534,7 +546,8 @@ describe('the emitted declarations', () => {
   const geometry = resolve(outDir, 'geometry/index.d.ts');
   const table = resolve(outDir, 'table/index.d.ts');
   const webgl = resolve(outDir, 'webgl/index.d.ts');
-  const entries = [main, geometry, table, webgl];
+  const next = resolve(outDir, 'api/v2/index.d.ts');
+  const entries = [main, geometry, table, webgl, next];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -566,5 +579,14 @@ describe('the emitted declarations', () => {
   it('export every named type that a layer 2 declaration refers to', () => {
     setup();
     expect(findForgottenExports(program, files, entries, [webgl])).toEqual([]);
+  }, 60_000);
+
+  it('export every named type that a declaration of the 2.0 main entry refers to', () => {
+    setup();
+    // The stand-ins of the table types, until the datasets use the types of the table entry
+    expect(findForgottenExports(program, files, [next, geometry, table], [next])).toEqual([
+      'PreparedTable',
+      'Table',
+    ]);
   }, 60_000);
 });

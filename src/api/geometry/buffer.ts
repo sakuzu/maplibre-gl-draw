@@ -80,11 +80,13 @@ function planBuffer(input: Feature, options: GeometryBufferOptions): BufferPlan 
  * gathered into one store.transact, so a single undo removes all of them.
  *
  * @param inputs The targets ordered in z order (the tail is the frontmost)
+ * @param select Whether the results become the selection
  */
 export function runBuffer(
   deps: GeometryApiDeps,
   inputs: Feature[],
   options: GeometryBufferOptions,
+  select = true,
 ): string[] {
   const { store } = deps;
   const plans: BufferPlan[] = [];
@@ -115,7 +117,7 @@ export function runBuffer(
         properties: plan.properties,
       }),
     );
-    store.setSelection('feature', ids);
+    if (select) store.setSelection('feature', ids);
     return ids;
   });
 

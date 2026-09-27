@@ -148,6 +148,8 @@ function setup(): void {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   spatialIndex = new RBushSpatialIndex();
 
@@ -156,6 +158,7 @@ function setup(): void {
     type: 'Polygon',
     geometry: { type: 'Polygon', coordinates: [RING] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -228,7 +231,7 @@ const EXISTING_IDS = new Set(['target', 'neighbor']);
 
 /** The feature produced by the drawing (excluding the snap target polygons) */
 function drawnFeature(): Feature {
-  const features = store.getAllFeatures().filter((f) => !EXISTING_IDS.has(f.id));
+  const features = store.listFeatures().filter((f) => !EXISTING_IDS.has(f.id));
   expect(features).toHaveLength(1);
   return features[0];
 }
@@ -240,6 +243,7 @@ function addNeighbor(): void {
     type: 'Polygon',
     geometry: { type: 'Polygon', coordinates: [NEIGHBOR_RING] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

@@ -111,6 +111,7 @@ function makePoint(id: string, coord: [number, number], style?: FeatureStyle): F
     type: 'Point',
     geometry: { type: 'Point', coordinates: coord },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     style: style ?? {},
     locked: false,
@@ -214,6 +215,7 @@ describe('BatchManager iteration over the parts of the Multi kinds', () => {
       type: 'MultiPoint',
       geometry: { type: 'MultiPoint', coordinates: coords },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -293,6 +295,7 @@ describe('BatchManager iteration over the parts of the Multi kinds', () => {
         ],
       },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -449,6 +452,7 @@ describe('BatchManager line batches', () => {
       type: 'LineString',
       geometry: { type: 'LineString', coordinates: coords },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       style: style ?? {},
       locked: false,
@@ -549,6 +553,7 @@ describe('BatchManager line batches', () => {
       type: 'MultiLineString',
       geometry: { type: 'MultiLineString', coordinates: [coordsA, coordsB] },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       style: { strokeColor: '#ff0000' },
       locked: false,
@@ -626,6 +631,7 @@ describe('BatchManager line batches', () => {
           ],
         },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         style: { strokeColor: color, lineStyle: 'dashed' },
         locked: false,
@@ -666,6 +672,7 @@ describe('BatchManager style rules of a layer', () => {
   };
 
   const layer: Layer = {
+    metadata: undefined,
     id: 'layer-1',
     name: 'Layer 1',
     visible: true,
@@ -790,6 +797,8 @@ describe('BatchManager the opacity of the layer', () => {
     locked: false,
     opacity: 0.5,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   } as Layer;
 
   function createOpacityManager(drawer: FeatureDrawer = createDrawer()) {
@@ -835,6 +844,7 @@ describe('BatchManager the opacity of the layer', () => {
       ],
     },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     style: style ?? {},
     locked: false,
@@ -857,6 +867,7 @@ describe('BatchManager the opacity of the layer', () => {
           ],
         },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,

@@ -14,7 +14,16 @@ import { MemoryDocumentStore, MemoryStore } from './memory.js';
 import type { Feature, Layer, StateChanges } from './types.js';
 
 function layer(id: string): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, items: [] };
+  return {
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  };
 }
 
 function point(id: string, coordinates: [number, number] = [0, 0]): Feature {
@@ -23,6 +32,7 @@ function point(id: string, coordinates: [number, number] = [0, 0]): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: coordinates },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -46,6 +56,7 @@ function polygon(id: string): Feature {
       ],
     },
     layerId: 'l1',
+    groupId: undefined,
     properties: { name: 'a' },
     locked: false,
     visible: true,
@@ -145,7 +156,7 @@ describe('the read-only gate', () => {
     expect(store.createLayer(layer('l2'))).toBe(false);
     expect(store.setLayerOrder([])).toBe(false);
     expect(store.setMetadata({ title: 'x' })).toBe(false);
-    expect(store.getAllFeatures().map((f) => f.id)).toEqual(['f1']);
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['f1']);
     expect(store.getLayerOrder()).toEqual(['l1']);
 
     store.setReadOnly(false);
@@ -214,7 +225,7 @@ describe('a DocumentStore of the host', () => {
 
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
     expect(store.getEditingIds()).toEqual([]);
-    expect(store.isLocallyHidden('f1')).toBe(false);
+    expect(store.isHidden('f1')).toBe(false);
     // The deletion and what it changed in the local state arrive together
     expect(notified).toHaveLength(1);
     expect(notified[0].features?.deleted?.map((f) => f.id)).toEqual(['f1']);
@@ -361,21 +372,21 @@ describe('the invariants of the selection', () => {
 
   it('ends the vertex selection when its feature is deleted', () => {
     const store = setup();
-    store.setSelectedVertices({ featureId: 'f1', vertexIndices: [{ ring: 0, index: 0 }] });
+    store.setSelectedVertices({ featureId: 'f1', vertices: [{ ring: 0, index: 0 }] });
 
     store.deleteFeature('f1');
 
-    expect(store.getSelectedVertices()).toBeNull();
+    expect(store.getVertexSelection()).toBeNull();
   });
 
   it('ends the vertex selection when the coordinates change other than by a drag', () => {
     const store = setup();
-    const vertices = { featureId: 'f1', vertexIndices: [{ ring: 0, index: 0 }] };
+    const vertices = { featureId: 'f1', vertices: [{ ring: 0, index: 0 }] };
     store.setSelectedVertices(vertices);
 
     // A property change keeps it
     store.updateFeature('f1', { properties: { name: 'x' } });
-    expect(store.getSelectedVertices()).not.toBeNull();
+    expect(store.getVertexSelection()).not.toBeNull();
 
     // A drag (its frames and its commit) keeps it
     store.setDragState({ operation: 'vertex' });
@@ -386,11 +397,11 @@ describe('the invariants of the selection', () => {
     );
     store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [1, 1] } });
     store.setDragState(null);
-    expect(store.getSelectedVertices()).not.toBeNull();
+    expect(store.getVertexSelection()).not.toBeNull();
 
     // An edit that is not a drag ends it
     store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [2, 2] } });
-    expect(store.getSelectedVertices()).toBeNull();
+    expect(store.getVertexSelection()).toBeNull();
   });
 
   it('ends the vertex selection on a change of the coordinates from elsewhere during a drag', () => {
@@ -398,7 +409,7 @@ describe('the invariants of the selection', () => {
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.createFeature(point('f1'));
-    store.setSelectedVertices({ featureId: 'f1', vertexIndices: [{ ring: 0, index: 0 }] });
+    store.setSelectedVertices({ featureId: 'f1', vertices: [{ ring: 0, index: 0 }] });
     store.setDragState({ operation: 'move' });
 
     document.transact(
@@ -406,6 +417,6 @@ describe('the invariants of the selection', () => {
       'remote',
     );
 
-    expect(store.getSelectedVertices()).toBeNull();
+    expect(store.getVertexSelection()).toBeNull();
   });
 });

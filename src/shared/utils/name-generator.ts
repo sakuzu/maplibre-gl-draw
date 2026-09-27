@@ -20,9 +20,9 @@ import type { Feature, FeatureType, Group, Layer, StateChanges } from '../types/
  * spells the same shape out, because AutoNameGenerator is public and this name is not.
  */
 interface NameSource {
-  getAllFeatures(): Feature[];
-  getAllLayers(): Layer[];
-  getAllGroups(): Group[];
+  listFeatures(): Feature[];
+  listLayers(): Layer[];
+  listGroups(): Group[];
   subscribe(listener: (changes: StateChanges) => void): () => void;
 }
 
@@ -174,9 +174,9 @@ export class AutoNameGenerator {
 
   constructor(
     store: {
-      getAllFeatures(): Feature[];
-      getAllLayers(): Layer[];
-      getAllGroups(): Group[];
+      listFeatures(): Feature[];
+      listLayers(): Layer[];
+      listGroups(): Group[];
       subscribe(listener: (changes: StateChanges) => void): () => void;
     },
     config: AutoNameConfig | boolean = true,
@@ -342,7 +342,7 @@ export class AutoNameGenerator {
    * Gets the largest number from the existing Features
    */
   private getMaxNumberFromFeatures(featureType: FeatureType, typeName: string): number {
-    const features = this.store.getAllFeatures();
+    const features = this.store.listFeatures();
     let maxNumber = 0;
 
     for (const feature of features) {
@@ -393,7 +393,7 @@ export class AutoNameGenerator {
   private findNextLayerNumber(typeName: string): number {
     this.scanOnce(LAYER_COUNTER_KEY, () => {
       let maxNumber = 0;
-      for (const layer of this.store.getAllLayers()) {
+      for (const layer of this.store.listLayers()) {
         const number = extractNumberFromName(layer.name, typeName);
         if (number !== null && number > maxNumber) {
           maxNumber = number;
@@ -434,7 +434,7 @@ export class AutoNameGenerator {
   private findNextGroupNumber(typeName: string): number {
     this.scanOnce(GROUP_COUNTER_KEY, () => {
       let maxNumber = 0;
-      for (const group of this.store.getAllGroups()) {
+      for (const group of this.store.listGroups()) {
         const number = extractNumberFromName(group.name, typeName);
         if (number !== null && number > maxNumber) {
           maxNumber = number;

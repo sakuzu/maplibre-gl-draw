@@ -107,17 +107,17 @@ export function startVertexDrag(
   const startLngLat = dragStartLngLat(event);
 
   // Check the currently selected vertices
-  const selectedVertices = store.getSelectedVertices();
+  const selectedVertices = store.getVertexSelection();
   let vertexRefsToMove: VertexRef[];
 
   if (
     selectedVertices &&
     selectedVertices.featureId === featureId &&
-    hasVertexRef(selectedVertices.vertexIndices, vertexRef)
+    hasVertexRef(selectedVertices.vertices, vertexRef)
   ) {
     // If the vertex being dragged is one of the selected vertices, move every selected vertex
     // (a multiple selection spanning rings and parts can be moved as-is too)
-    vertexRefsToMove = selectedVertices.vertexIndices;
+    vertexRefsToMove = selectedVertices.vertices;
   } else {
     // Otherwise move only the vertex being dragged
     vertexRefsToMove = [vertexRef];
@@ -148,7 +148,7 @@ export function startVertexDrag(
   store.setFollowedVertices?.(
     sharedVertexStates.map((followerState) => ({
       featureId: followerState.featureId,
-      vertexIndices: followerState.vertexIndices,
+      vertices: followerState.vertices,
     })),
   );
 

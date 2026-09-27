@@ -232,6 +232,7 @@ export class DrawLineMode implements ModeHandler {
 
     // Create a new line feature
     const feature: Feature = {
+      groupId: undefined,
       id: featureId,
       type: 'LineString',
       geometry: { type: 'LineString', coordinates: [...this.coordinates] },

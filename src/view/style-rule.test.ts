@@ -40,6 +40,7 @@ function makeFeature(
       ],
     ]),
     layerId: 'layer-1',
+    groupId: undefined,
     properties,
     style: style ?? {},
     locked: false,

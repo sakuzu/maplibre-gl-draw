@@ -29,6 +29,8 @@ function createTestLayer(overrides?: Partial<Layer>): Layer {
     locked: false,
     opacity: 1.0,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
     ...overrides,
   };
 }
@@ -39,6 +41,7 @@ function createTestFeature(id: string, overrides?: Partial<Feature>): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [139.7, 35.6] as [number, number] },
     layerId: 'default-layer',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -1207,7 +1210,7 @@ describe('createImportExportAPI', () => {
           }),
         ).rejects.toThrow('Invalid native data');
 
-        expect(context.store.getAllFeatures().map((f) => f.id)).toEqual(['existing-1']);
+        expect(context.store.listFeatures().map((f) => f.id)).toEqual(['existing-1']);
         expect(context.store.getLayer('default-layer')?.items).toEqual(['existing-1']);
       });
     }
@@ -1230,7 +1233,7 @@ describe('createImportExportAPI', () => {
       await api.load(data);
       await api.load(data);
 
-      expect(context.store.getAllFiles().map((f) => f.id)).toEqual(['file-1']);
+      expect(context.store.listFiles().map((f) => f.id)).toEqual(['file-1']);
       expect(context.store.getFeature('img-1')).toBeDefined();
     });
   });
@@ -1249,7 +1252,7 @@ describe('createImportExportAPI', () => {
       expect(result.featureIds).toHaveLength(2);
       expect(result.featureIds).not.toContain('f0');
       expect(result.featureIds).not.toContain('f1');
-      expect(context.store.getAllFeatures()).toHaveLength(4);
+      expect(context.store.listFeatures()).toHaveLength(4);
       expect(coordinatesOf(context.store.getFeature(result.featureIds[1]))).toEqual([140, 36]);
     });
 
@@ -1265,7 +1268,7 @@ describe('createImportExportAPI', () => {
 
       expect(result.featureIds[0]).toBe('dup');
       expect(result.featureIds[1]).not.toBe('dup');
-      expect(context.store.getAllFeatures()).toHaveLength(2);
+      expect(context.store.listFeatures()).toHaveLength(2);
     });
 
     it('normalizes a numeric id into a string', async () => {
@@ -1343,8 +1346,8 @@ describe('createImportExportAPI', () => {
       await expect(api.load(imageFeature('https://example.com/pixel.png'))).rejects.toThrow(
         'Invalid GeoJSON',
       );
-      expect(context.store.getAllFeatures()).toHaveLength(0);
-      expect(context.store.getAllFiles()).toHaveLength(0);
+      expect(context.store.listFeatures()).toHaveLength(0);
+      expect(context.store.listFiles()).toHaveLength(0);
     });
 
     it('rejects an SVG data URL', async () => {

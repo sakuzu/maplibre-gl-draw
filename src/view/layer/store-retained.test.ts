@@ -293,9 +293,18 @@ function createStore(features: Feature[]): StubStore {
 
   const store = {
     getFeature: (id: string): Feature | undefined => list.find((f) => f.id === id),
-    getOrderedFeatures: (): Feature[] => list.filter((f) => f.visible),
-    isLocallyHidden: (id: string): boolean => hidden.has(id),
-    getLocallyHidden: (): ReadonlySet<string> => hidden,
+    listFeaturesInOrder: (): Feature[] => [...list],
+    getLayer: (id: string) => ({
+      id,
+      name: id,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+    }),
+    getGroup: (): undefined => undefined,
+    isHidden: (id: string): boolean => hidden.has(id),
+    listHidden: (): ReadonlySet<string> => hidden,
   } as unknown as Store;
 
   return { store, features: list, hidden };

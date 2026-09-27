@@ -47,7 +47,16 @@ let spatialIndex: RBushSpatialIndex;
 let snapTargets: SnapTargetsRegistry;
 
 function makeLayer(id: string, visible = true): Layer {
-  return { id, name: id, visible, locked: false, opacity: 1, items: [] };
+  return {
+    id,
+    name: id,
+    visible,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  };
 }
 
 function addFeature(
@@ -61,6 +70,7 @@ function addFeature(
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

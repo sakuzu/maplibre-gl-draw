@@ -17,6 +17,7 @@ import { createLayerApi, type LayerApi } from './layer-api.js';
 
 function feature(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
@@ -36,7 +37,16 @@ let idSeq: number;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatial = new StoreSpatialIndex(store);
   activeLayerId = 'l1';
   idSeq = 0;
@@ -89,7 +99,7 @@ describe('LayerApi.addLayer', () => {
   it('returns null and adds nothing while read-only', () => {
     store.setReadOnly(true);
     expect(api.addLayer('refused')).toBeNull();
-    expect(store.getAllLayers().map((l) => l.id)).toEqual(['l1']);
+    expect(store.listLayers().map((l) => l.id)).toEqual(['l1']);
   });
 });
 

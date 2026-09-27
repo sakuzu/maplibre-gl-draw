@@ -27,6 +27,7 @@ import { handleSelectClick } from './click-handler.js';
 
 function polygon(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
     geometry: {
@@ -100,7 +101,16 @@ function click(): void {
 beforeEach(() => {
   companions = createFeatureCompanionRegistry();
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   store.createFeature(polygon('f1', 'l1'));
   store.createFeature(polygon('f2', 'l1'));
   top = null;

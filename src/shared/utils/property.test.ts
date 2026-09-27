@@ -31,6 +31,7 @@ function featureWith(properties: Record<string, unknown>): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'l1',
+    groupId: undefined,
     properties,
     locked: false,
     visible: true,

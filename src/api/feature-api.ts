@@ -8,7 +8,9 @@
  * It is composed into createDrawAPI by spreading.
  */
 
+import { listShownFeatures } from '../store/local-visibility.js';
 import { isFeatureLocked } from '../store/lock.js';
+import { listEveryFeatureInOrder } from '../store/ordering.js';
 import type { Store } from '../store/store.js';
 import type { Feature, FeatureInput } from '../store/types.js';
 import type { MapLibreGLDraw } from './api.js';
@@ -40,6 +42,7 @@ export function createFeatureApi(deps: FeatureApiDeps): FeatureApi {
         type: input.type,
         geometry: input.geometry,
         layerId: input.layerId ?? getActiveLayerId(),
+        groupId: undefined,
         properties: input.properties ?? {},
         style: input.style ?? {},
         locked: input.locked ?? false,
@@ -54,11 +57,11 @@ export function createFeatureApi(deps: FeatureApiDeps): FeatureApi {
     },
 
     getAllFeatures(): Feature[] {
-      return featuresInDisplayOrder(store);
+      return listEveryFeatureInOrder(store);
     },
 
     getVisibleFeatures(): Feature[] {
-      return store.getOrderedFeatures();
+      return listShownFeatures(store);
     },
 
     updateFeature(id: string, updates: Partial<Feature>): boolean {
@@ -78,7 +81,7 @@ export function createFeatureApi(deps: FeatureApiDeps): FeatureApi {
     },
 
     deleteAllFeatures(): boolean {
-      const features = store.getAllFeatures();
+      const features = store.listFeatures();
       return store.transact(() => {
         let applied = true;
         for (const feature of features) {
@@ -94,35 +97,4 @@ export function createFeatureApi(deps: FeatureApiDeps): FeatureApi {
 /** Whether an update changes nothing but `locked` / `visible` (what a lock still allows) */
 export function onlyLockOrVisibility(updates: object): boolean {
   return Object.keys(updates).every((key) => key === 'locked' || key === 'visible');
-}
-
-/**
- * Every feature in display order (layer order -> order within the layer -> order within the
- * group), whatever the visible flags say. A feature that no container lists (which the
- * Store's containment invariant rules out) is appended at the end.
- */
-function featuresInDisplayOrder(store: Store): Feature[] {
-  const result: Feature[] = [];
-  const seen = new Set<string>();
-  const push = (id: string): void => {
-    const feature = store.getFeature(id);
-    if (feature && !seen.has(id)) {
-      seen.add(id);
-      result.push(feature);
-    }
-  };
-  for (const layerId of store.getLayerOrder()) {
-    const layer = store.getLayer(layerId);
-    if (!layer) continue;
-    for (const itemId of layer.items) {
-      const group = store.getGroup(itemId);
-      if (group) {
-        for (const featureId of group.featureIds) push(featureId);
-      } else {
-        push(itemId);
-      }
-    }
-  }
-  for (const feature of store.getAllFeatures()) push(feature.id);
-  return result;
 }

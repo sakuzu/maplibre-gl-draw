@@ -22,6 +22,8 @@ function makeStore(): MemoryStore {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   };
   const lockedLayer: Layer = {
     id: 'lLocked',
@@ -30,6 +32,8 @@ function makeStore(): MemoryStore {
     locked: true,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   };
   store.createLayer(layer);
   store.createLayer(lockedLayer);
@@ -38,6 +42,7 @@ function makeStore(): MemoryStore {
 
 function makeFeature(id: string, layerId: string, locked = false): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
@@ -125,7 +130,7 @@ describe('isInteractionBlocked', () => {
 
 describe('isGroupLocked', () => {
   const findLayerOfGroup = (store: MemoryStore) => (groupId: string) =>
-    store.getAllLayers().find((l) => l.items.includes(groupId));
+    store.listLayers().find((l) => l.items.includes(groupId));
 
   it('is true if the group itself is locked', () => {
     const store = makeStore();

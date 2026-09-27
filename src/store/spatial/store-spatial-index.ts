@@ -42,7 +42,7 @@ export class StoreSpatialIndex implements SpatialIndex {
     this.#store = store;
     this.#unsubscribe = store.subscribe((changes) => this.#apply(changes));
     // A Store handed in from outside can already hold features
-    this.#index.load(store.getAllFeatures());
+    this.#index.load(store.listFeatures());
   }
 
   findNear(coordinate: Coordinate, tolerance: number): string[] {
@@ -87,7 +87,7 @@ export class StoreSpatialIndex implements SpatialIndex {
    * For a type whose extent changed for a reason the Store does not see.
    */
   invalidateType(type: string): void {
-    for (const feature of this.#store.getAllFeatures()) {
+    for (const feature of this.#store.listFeatures()) {
       if (feature.type === type) {
         this.#index.update(feature.id, feature);
       }
@@ -149,6 +149,6 @@ export class StoreSpatialIndex implements SpatialIndex {
 
   #rebuild(): void {
     this.#index.clear();
-    this.#index.load(this.#store.getAllFeatures());
+    this.#index.load(this.#store.listFeatures());
   }
 }

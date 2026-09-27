@@ -943,7 +943,7 @@ export interface MapLibreGLDraw {
    * ```typescript
    * const selection = draw.getSelectedVertices();
    * if (selection) {
-   *   draw.deleteVertices(selection.featureId, selection.vertexIndices);
+   *   draw.deleteVertices(selection.featureId, selection.vertices);
    * }
    * ```
    */

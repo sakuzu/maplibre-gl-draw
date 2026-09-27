@@ -73,7 +73,7 @@ export function createSelectionApi(deps: SelectionApiDeps): SelectionApi {
     },
 
     selectVertices(featureId: string, vertices: VertexRef[]): void {
-      store.setSelectedVertices({ featureId, vertexIndices: vertices });
+      store.setSelectedVertices({ featureId, vertices: vertices });
     },
 
     deselectVertices(): void {
@@ -81,7 +81,7 @@ export function createSelectionApi(deps: SelectionApiDeps): SelectionApi {
     },
 
     getSelectedVertices(): VertexSelection | null {
-      return store.getSelectedVertices();
+      return store.getVertexSelection();
     },
 
     deleteVertices(featureId: string, vertices: VertexRef[]): number {
@@ -115,7 +115,7 @@ export function createSelectionApi(deps: SelectionApiDeps): SelectionApi {
             geometry: geometryFromCoordinates(feature.type, coords),
           });
           // If the deleted vertices were selected, clear the selection
-          const selectedVertices = store.getSelectedVertices();
+          const selectedVertices = store.getVertexSelection();
           if (selectedVertices?.featureId === featureId) {
             store.setSelectedVertices(null);
           }

@@ -124,7 +124,7 @@ export interface VertexSelection {
   /** The ID of the feature whose vertices are selected */
   featureId: string;
   /** The selected vertices */
-  vertexIndices: VertexRef[];
+  vertices: VertexRef[];
 }
 
 /**
@@ -328,7 +328,7 @@ export interface Feature {
    *
    * A feature in a group is listed in `Group.featureIds` instead of `Layer.items`.
    */
-  groupId?: string;
+  groupId: string | undefined;
   /**
    * The GeoJSON properties: the attributes of the user and the values of the library
    *
@@ -484,14 +484,14 @@ export interface Layer {
    */
   items: string[];
   /** Free-form data of the host, saved and exported with the layer */
-  metadata?: Record<string, unknown>;
+  metadata: Record<string, unknown> | undefined;
   /**
    * Style rule (no rule when omitted)
    *
    * Because it is an ordinary field it is subject to saving, subscription and undo, and
    * it is updated with `updateLayer(id, { styleRule })`.
    */
-  styleRule?: StyleRule;
+  styleRule: StyleRule | undefined;
 }
 
 /**

@@ -137,7 +137,7 @@ export function handleEscapeShortcut(context: ModeContext): void {
   }
 
   // Clear the vertex selection when vertices are selected
-  const selectedVertices = store.getSelectedVertices();
+  const selectedVertices = store.getVertexSelection();
   if (selectedVertices) {
     store.setSelectedVertices(null);
     return;

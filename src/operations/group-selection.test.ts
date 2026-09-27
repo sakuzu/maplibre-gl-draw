@@ -21,6 +21,7 @@ function feature(id: string): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -36,7 +37,16 @@ const nameGen = {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   idSeq = 0;
   store.createFeature(feature('f1'));
   store.createFeature(feature('f2'));

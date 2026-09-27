@@ -185,7 +185,7 @@ Backspace で、選んだ頂点を削除します。コードからも同じこ�
 
 ```ts
 draw.selectVertices(featureId, [{ ring: 0, index: 2 }]);
-draw.getSelectedVertices(); // { featureId, vertexIndices: [...] }
+draw.getSelectedVertices(); // { featureId, vertices: [...] }
 const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 ```
 

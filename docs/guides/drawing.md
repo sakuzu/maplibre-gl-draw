@@ -187,7 +187,7 @@ selected vertices. The same can be done from code:
 
 ```ts
 draw.selectVertices(featureId, [{ ring: 0, index: 2 }]);
-draw.getSelectedVertices(); // { featureId, vertexIndices: [...] }
+draw.getSelectedVertices(); // { featureId, vertices: [...] }
 const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 ```
 

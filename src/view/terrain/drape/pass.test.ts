@@ -83,10 +83,12 @@ function fakeStore(
   opacity: Record<string, number> = {},
 ) {
   return {
-    getOrderedFeatures: () => features,
-    isLocallyHidden: () => false,
+    listFeaturesInOrder: () => features,
+    isHidden: () => false,
     getLayerOrder: () => layerOrder,
-    getLayer: (id: string) => (layerIds.has(id) ? { id, opacity: opacity[id] ?? 1 } : undefined),
+    getLayer: (id: string) =>
+      layerIds.has(id) ? { id, visible: true, opacity: opacity[id] ?? 1 } : undefined,
+    getGroup: () => undefined,
   } as unknown as Parameters<typeof collectDrapeElements>[0];
 }
 

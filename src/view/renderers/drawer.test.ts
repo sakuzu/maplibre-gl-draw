@@ -78,6 +78,7 @@ function polygonWith(style: FeatureStyle): Feature {
       ],
     },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     style: style ?? {},
     locked: false,
@@ -190,6 +191,7 @@ describe('FeatureDrawer#drawFeature iteration over the parts of the Multi kinds'
       type,
       geometry: geometryFromCoordinates(type, coordinates),
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -275,6 +277,7 @@ describe('FeatureDrawer evaluation of style rules', () => {
 
   function makeLayer(styleRule?: StyleRule): Layer {
     return {
+      metadata: undefined,
       id: 'layer-1',
       name: 'Layer 1',
       visible: true,
@@ -296,6 +299,7 @@ describe('FeatureDrawer evaluation of style rules', () => {
       type,
       geometry: geometryFromCoordinates(type, type === 'Point' ? [0, 0] : [[0, 0]]),
       layerId: 'layer-1',
+      groupId: undefined,
       properties,
       style: style ?? {},
       locked: false,
@@ -462,6 +466,7 @@ describe('FeatureDrawer#getPointStyle and the shape of a point', () => {
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       style: style ?? {},
       locked: false,

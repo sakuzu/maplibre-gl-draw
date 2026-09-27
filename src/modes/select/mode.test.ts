@@ -29,6 +29,7 @@ import { SelectMode } from './mode.js';
 
 function polygon(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
     geometry: {
@@ -115,7 +116,16 @@ let mode: SelectMode;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   store.createFeature(polygon('f1', 'l1'));
   map = makeMap();
   hit = null;

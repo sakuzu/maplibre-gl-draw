@@ -67,6 +67,7 @@ function feature(id: string, type: Feature['type'], coordinates: FeatureCoordina
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -76,7 +77,16 @@ function feature(id: string, type: Feature['type'], coordinates: FeatureCoordina
 
 function serviceWith(features: Feature[]): HitTestServiceImpl {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   const index = new RBushSpatialIndex();
   for (const f of features) {
     store.createFeature(f);

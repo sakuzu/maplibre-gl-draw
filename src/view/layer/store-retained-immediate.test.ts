@@ -30,8 +30,8 @@ function setup(features: Feature[], hidden: string[] = []) {
   const log: string[] = [];
   const store = {
     getFeature: (id: string) => features.find((f) => f.id === id),
-    isLocallyHidden: (id: string) => hidden.includes(id),
-    getLocallyHidden: () => new Set(hidden),
+    isHidden: (id: string) => hidden.includes(id),
+    listHidden: () => new Set(hidden),
   } as unknown as Store;
   let restored = 0;
   const deps: StoreRetainedDrawDeps = {

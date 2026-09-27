@@ -42,7 +42,7 @@ export function createLayerApi(deps: LayerApiDeps): LayerApi {
 
   return {
     getAllLayers(): Layer[] {
-      return store.getAllLayers();
+      return store.listLayers();
     },
 
     getLayer(id: string): Layer | undefined {
@@ -59,6 +59,8 @@ export function createLayerApi(deps: LayerApiDeps): LayerApi {
         locked: false,
         opacity: 1,
         items: [],
+        styleRule: undefined,
+        metadata: undefined,
       };
       // A write refused because the Store is read-only returns null
       return store.createLayer(layer) ? id : null;

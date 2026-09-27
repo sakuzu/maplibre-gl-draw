@@ -16,6 +16,12 @@ import type {
   Position,
 } from 'geojson';
 import type { Messages } from '../../messages.js';
+import { isDrawProperty as isLibraryKey } from '../../shared/properties.js';
+import {
+  deriveLegend as deriveRuleLegend,
+  evaluateStyleRule as evaluateRule,
+  getStyleRuleChannel as getRuleChannel,
+} from '../../view/style-rule.js';
 
 // ============================================================================
 // Features
@@ -118,7 +124,9 @@ export type DrawProperties = Record<string, unknown> & {
  * @param key - A key of `properties`
  * @returns True when the key starts with {@link DRAW_PROPERTY_PREFIX}
  */
-export declare function isDrawProperty(key: string): boolean;
+export function isDrawProperty(key: string): boolean {
+  return isLibraryKey(key);
+}
 
 /**
  * A shape that can be drawn and edited, with its layer, group, attributes and look.
@@ -487,10 +495,12 @@ export interface LoadResult {
  * @param properties - The properties of the feature
  * @returns The color, as `#rrggbb`
  */
-export declare function evaluateStyleRule(
+export function evaluateStyleRule(
   rule: StyleRule,
   properties: Record<string, unknown> | undefined,
-): string;
+): string {
+  return evaluateRule(rule, properties);
+}
 
 /**
  * The legend rows of a style rule, in the order to show them.
@@ -499,7 +509,9 @@ export declare function evaluateStyleRule(
  * @param messages - The words of the labels, to show them in another language
  * @returns The legend rows
  */
-export declare function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[];
+export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[] {
+  return deriveRuleLegend(rule, messages);
+}
 
 /**
  * The part of the look a style rule colors for a type: the point, the stroke or the fill.
@@ -507,4 +519,6 @@ export declare function deriveLegend(rule: StyleRule, messages?: Partial<Message
  * @param type - The type of the feature
  * @returns `point` for points, `stroke` for lines and `fill` for areas
  */
-export declare function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill';
+export function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill' {
+  return getRuleChannel(type);
+}

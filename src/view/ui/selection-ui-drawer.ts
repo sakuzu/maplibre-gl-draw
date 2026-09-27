@@ -113,7 +113,7 @@ export function renderSelectionUI(
     // Get the selected vertex reference (only for the target feature)
     const selectedVertexRefs =
       selectedVertices?.featureId === selectedFeatures[0].id
-        ? selectedVertices.vertexIndices
+        ? selectedVertices.vertices
         : undefined;
 
     renderSingleSelectionHandles(
@@ -256,7 +256,7 @@ export function renderFollowedVertices(
     const feature = store.getFeature(followed.featureId);
     // The handles of features that disappeared or were hidden during the drag are not drawn
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
-    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertexIndices, zoom);
+    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertices, zoom);
   }
 }
 

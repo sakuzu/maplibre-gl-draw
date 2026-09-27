@@ -49,6 +49,9 @@ export interface ModeManager {
    */
   unregisterMode(mode: Mode): void;
 
+  /** Whether a factory is registered for the mode */
+  hasMode(mode: Mode): boolean;
+
   /** Gets the current mode handler */
   getHandler(): ModeHandler | null;
 
@@ -174,6 +177,10 @@ export class ModeManagerImpl implements ModeManager {
     return () => {
       if (this.factories.get(mode) === factory) this.unregisterMode(mode);
     };
+  }
+
+  hasMode(mode: Mode): boolean {
+    return this.factories.has(mode);
   }
 
   unregisterMode(mode: Mode): void {

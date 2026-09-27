@@ -55,7 +55,16 @@ let context: ModeContext;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new RBushSpatialIndex();
   datasets = new Map();
   snapResult = null;
@@ -85,6 +94,7 @@ function addStoreLine(id: string, coordinates: Coordinate[], visible = true): vo
     type: 'LineString',
     geometry: { type: 'LineString', coordinates: coordinates },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible,
@@ -103,6 +113,7 @@ function addDisplayLine(datasetId: string, id: string, coordinates: Coordinate[]
     type: 'LineString',
     geometry: { type: 'LineString', coordinates: coordinates },
     layerId: '',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

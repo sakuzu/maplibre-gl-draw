@@ -154,6 +154,7 @@ function addFeature(id: string, type: string, coordinates: FeatureCoordinates): 
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -230,6 +231,8 @@ beforeEach(() => {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   };
   store.createLayer(layer);
   normalizer = new FakeNormalizer();

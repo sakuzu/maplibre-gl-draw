@@ -37,6 +37,8 @@ function createContext(
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   const ctx = createPluginContext({
     store,
@@ -166,6 +168,8 @@ describe('PluginContext.setLayerItemOrder', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     for (const [id, lid] of [
       ['a', layerId],
@@ -178,6 +182,7 @@ describe('PluginContext.setLayerItemOrder', () => {
         type: 'Point',
         geometry: { type: 'Point', coordinates: [0, 0] },
         layerId: lid,
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
@@ -214,7 +219,16 @@ describe('PluginContext.setLayerItemOrder', () => {
 describe('PluginContext.invalidateFeatures', () => {
   it('re-measures the features of the type with their bounding box calculator', () => {
     const store = new MemoryStore();
-    store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, items: [] });
+    store.createLayer({
+      id: 'l',
+      name: 'l',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
     const spatialIndex = new StoreSpatialIndex(store);
     const ctx = createPluginContext({
       store,
@@ -313,6 +327,7 @@ describe('the terrain anchors and selection extents of PluginContext', () => {
       type: 'Card',
       geometry: { type: 'Point', coordinates: [5, 5] },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       style: {},
       locked: false,
@@ -332,6 +347,7 @@ describe('PluginContext.getStore / on', () => {
 
     store.setReadOnly(true);
     const feature = {
+      groupId: undefined,
       id: 'f1',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },

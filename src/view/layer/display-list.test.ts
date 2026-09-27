@@ -26,11 +26,25 @@ function createStore(count: number) {
   const hidden = new Set<string>();
   let reads = 0;
   const store: DisplayStore = {
-    getOrderedFeatures: () => {
+    listFeaturesInOrder: () => {
       reads++;
       return [...features];
     },
-    isLocallyHidden: (id) => hidden.has(id),
+    isHidden: (id) => hidden.has(id),
+    getLayer: (id) =>
+      id === 'l'
+        ? {
+            id,
+            name: id,
+            visible: true,
+            locked: false,
+            opacity: 1,
+            items: [],
+            styleRule: undefined,
+            metadata: undefined,
+          }
+        : undefined,
+    getGroup: () => undefined,
   };
   return { store, features, hidden, reads: () => reads };
 }

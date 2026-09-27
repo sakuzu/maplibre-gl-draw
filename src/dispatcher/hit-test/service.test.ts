@@ -35,6 +35,7 @@ function polygon(id: string, rings: Coordinate[][]): Feature {
     type: 'Polygon',
     geometry: { type: 'Polygon', coordinates: rings },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -59,6 +60,7 @@ function point(id: string, coord: Coordinate): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -72,7 +74,16 @@ let service: HitTestServiceImpl;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new RBushSpatialIndex();
   // A 5px tolerance (0.5 degrees on the test map) keeps the numbers below round
   service = new HitTestServiceImpl(store, spatialIndex, { clickTolerance: 5 });
@@ -276,6 +287,7 @@ describe('the single scan of hitTestAll', () => {
         ] as Coordinate[],
       },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,

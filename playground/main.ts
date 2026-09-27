@@ -95,7 +95,7 @@ function updateDeleteButtonState() {
   const selection = draw.getSelection();
 
   deleteBtn.disabled = !(
-    (selectedVertices && selectedVertices.vertexIndices.length > 0) ||
+    (selectedVertices && selectedVertices.vertices.length > 0) ||
     (selection.type === 'feature' && selection.ids.length > 0)
   );
 }

@@ -121,7 +121,7 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#features.get(id);
   }
 
-  getAllFeatures(): Feature[] {
+  listFeatures(): Feature[] {
     return Array.from(this.#features.values());
   }
 
@@ -215,23 +215,21 @@ export class MemoryDocumentStore implements DocumentStore {
     this.#bus.merge({ features: { deleted: [feature] } });
   }
 
-  getOrderedFeatures(): Feature[] {
+  listFeaturesInOrder(): Feature[] {
     const result: Feature[] = [];
     for (const layerId of this.#layerOrder) {
       const layer = this.#layers.get(layerId);
-      if (!layer?.visible) continue;
-
+      if (!layer) continue;
       for (const itemId of layer.items) {
         const group = this.#groups.get(itemId);
         if (group) {
-          if (!group.visible) continue;
           for (const featureId of group.featureIds) {
             const feature = this.#features.get(featureId);
-            if (feature?.visible) result.push(feature);
+            if (feature) result.push(feature);
           }
         } else {
           const feature = this.#features.get(itemId);
-          if (feature?.visible) result.push(feature);
+          if (feature) result.push(feature);
         }
       }
     }
@@ -246,7 +244,7 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#layers.get(id);
   }
 
-  getAllLayers(): Layer[] {
+  listLayers(): Layer[] {
     return Array.from(this.#layers.values());
   }
 
@@ -401,7 +399,7 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#groups.get(id);
   }
 
-  getAllGroups(): Group[] {
+  listGroups(): Group[] {
     return Array.from(this.#groups.values());
   }
 
@@ -529,7 +527,7 @@ export class MemoryDocumentStore implements DocumentStore {
   getFile(id: string): FileData | undefined {
     return this.#fileStore.get(id);
   }
-  getAllFiles(): FileData[] {
+  listFiles(): FileData[] {
     return this.#fileStore.getAll();
   }
   deleteFile(id: string): void {

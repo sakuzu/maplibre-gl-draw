@@ -36,7 +36,17 @@ const DRAWING_MODES: Mode[] = [
 ];
 
 function layer(id: string, overrides: Partial<Layer> = {}): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, items: [], ...overrides };
+  return {
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+    ...overrides,
+  };
 }
 
 function click(lng: number, lat: number): MouseNormalizedEvent {
@@ -157,7 +167,7 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('a'));
     manager.setMode('draw_point');
     manager.getHandler()?.onClick?.(click(1, 1));
-    const [feature] = store.getAllFeatures();
+    const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('a');
   });
 
@@ -167,7 +177,7 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('c'));
     manager.setMode('draw_point');
     manager.getHandler()?.onClick?.(click(1, 1));
-    const [feature] = store.getAllFeatures();
+    const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('c');
     // The active layer itself is not changed
     expect(activeLayerId).toBe('a');
@@ -190,7 +200,7 @@ describe('losing the layer while drawing', () => {
 
     expect(() => manager.getHandler()?.onClick?.(click(1, 1))).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
   });
 
   it('discards a line and returns to select when the layer was locked', () => {
@@ -207,7 +217,7 @@ describe('losing the layer while drawing', () => {
       >[0]),
     ).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
     expect(store.getTentative()).toBeNull();
   });
 
@@ -218,7 +228,7 @@ describe('losing the layer while drawing', () => {
 
     expect(() => manager.getHandler()?.onClick?.(click(1, 1))).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
   });
 
   it('discards a polygon and returns to select when the layer was hidden', () => {
@@ -236,7 +246,7 @@ describe('losing the layer while drawing', () => {
       >[0]),
     ).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
   });
 
   it('commits into another writable layer when one remains', () => {
@@ -249,7 +259,7 @@ describe('losing the layer while drawing', () => {
     store.deleteLayer('a');
 
     handler?.onKeyDown?.({ key: 'Enter' } as Parameters<NonNullable<typeof handler.onKeyDown>>[0]);
-    const [feature] = store.getAllFeatures();
+    const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('b');
   });
 });

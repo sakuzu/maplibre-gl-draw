@@ -75,3 +75,22 @@ export function sanitizeFeatureStyle(value: unknown): FeatureStyle | undefined {
   }
   return kept > 0 ? (style as FeatureStyle) : undefined;
 }
+
+/**
+ * Describes the first key of a style whose value fails its check
+ *
+ * A key given as `undefined` is not checked (it removes the key in a patch), and a key this
+ * library does not define is not checked either.
+ *
+ * @param value The style
+ * @returns A short description of the problem, or null when there is none
+ */
+export function describeStyleProblem(value: unknown): string | null {
+  if (!isRecord(value)) return 'a style that is not an object';
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry === undefined) continue;
+    const check = STYLE_CHECKS.get(key);
+    if (check && !check(entry)) return `a style whose ${key} is not valid`;
+  }
+  return null;
+}

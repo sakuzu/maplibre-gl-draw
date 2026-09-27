@@ -56,6 +56,8 @@ function generate(count: number): Data {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   }));
   const features: Feature[] = [];
   const perLayer: string[][] = Array.from({ length: layerCount }, () => []);
@@ -79,6 +81,7 @@ function generate(count: number): Data {
       type,
       geometry: geometryFromCoordinates(type, coordinates),
       layerId: `layer-${li}`,
+      groupId: undefined,
       properties: { ...extra, name: `n ${i}` },
       locked: false,
       visible: true,
@@ -132,6 +135,8 @@ function measureLoadOnce(data: Data): number {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   let c = 0;
   const context = {
@@ -150,7 +155,7 @@ function measureLoadOnce(data: Data): number {
   // the folding breaks it is called N times and becomes quadratic.
   const emitLike = () => {
     let acc = 0;
-    for (const f of store.getAllFeatures()) acc += f.id.length;
+    for (const f of store.listFeatures()) acc += f.id.length;
     if (acc < 0) throw new Error('unreachable');
   };
   for (const ev of [
@@ -232,6 +237,8 @@ function measureSpreadMs(layerCount: number): number {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
   }
 
@@ -243,6 +250,7 @@ function measureSpreadMs(layerCount: number): number {
         type: 'Point',
         geometry: { type: 'Point', coordinates: [0, 0] },
         layerId: `L${i % layerCount}`,
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,

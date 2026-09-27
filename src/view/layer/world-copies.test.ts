@@ -194,6 +194,7 @@ function probe(id: string, lng: number): Feature {
     type: 'Probe',
     geometry: geometryFromCoordinates('Probe', [lng, 0]),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -205,7 +206,16 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
   const { gl } = createGlStub();
   const map = createMapStub(center, halfWidth);
   const store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   for (const [id, lng] of Object.entries(lngs)) store.createFeature(probe(id, lng));
 
   const draws: ProbeDraw[] = [];
