@@ -11,9 +11,8 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../dispatcher/types.js';
-import { DrawLineMode } from '../modes/draw/line.js';
-import type { ModeContext } from '../modes/handler.js';
+import { drawLineMode } from '../modes/draw/line.js';
+import { createModeHarness, keyInput, pointerInput } from '../test-utils.js';
 import { createContext } from './context.js';
 import { createFeatureApi } from './feature-api.js';
 import { createImportExportAPI } from './import-export/index.js';
@@ -26,23 +25,6 @@ const map = {
   project: (c: [number, number]) => ({ x: c[0] * 1000, y: c[1] * 1000 }),
   dragPan: { enable: () => {}, disable: () => {} },
 } as unknown as MapLibreMap;
-
-function click(lng: number, lat: number): MouseNormalizedEvent {
-  return {
-    type: 'click',
-    point: { x: lng * 1000, y: lat * 1000 },
-    lngLat: { lng, lat },
-    originalEvent: {} as unknown as MouseEvent,
-    modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-  } as unknown as MouseNormalizedEvent;
-}
-
-const enter = {
-  type: 'keydown',
-  key: 'Enter',
-  originalEvent: {} as unknown as KeyboardEvent,
-  modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-} as unknown as KeyNormalizedEvent;
 
 describe('the spatial index derived from the Store', () => {
   it('stays empty when GeoJSON is loaded while read-only', async () => {
@@ -89,23 +71,20 @@ describe('the spatial index derived from the Store', () => {
   it('does not index a line that is finished while read-only', () => {
     const context = createContext(map);
     context.store.setReadOnly(true);
-    const mode = new DrawLineMode();
-    const modeContext = {
-      map,
+    const harness = createModeHarness({
       store: context.store,
-      eventEmitter: { emit: () => {} },
-      autoNameGenerator: { generateName: () => undefined },
-      generateFeatureId: () => 'line-1',
-      getCurrentLayerId: context.getWritableLayerId,
-      setMode: () => {},
-    } as unknown as ModeContext;
-    mode.onStart?.(modeContext);
+      map,
+      modeManager: context.modeManager,
+      getWritableLayerId: context.getWritableLayerId,
+    });
+    const mode = drawLineMode(harness.modeContext());
+    mode.onEnter?.();
 
-    mode.onClick?.(click(0, 0));
-    mode.onClick?.(click(1, 1));
-    mode.onKeyDown?.(enter);
+    mode.onClick?.(pointerInput(0, 0));
+    mode.onClick?.(pointerInput(1, 1));
+    mode.onKeyDown?.(keyInput('Enter'));
 
-    expect(context.store.getFeature('line-1')).toBeUndefined();
+    expect(context.store.listFeatures()).toEqual([]);
     expect(context.spatialIndex.findNear([0.5, 0.5], 0.001)).toEqual([]);
   });
 

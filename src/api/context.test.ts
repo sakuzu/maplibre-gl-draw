@@ -7,7 +7,6 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import { DrawPolygonMode } from '../modes/draw/polygon.js';
 import type { Layer } from '../store/types.js';
 import { createContext } from './context.js';
 
@@ -34,7 +33,10 @@ function createTestContext(options: Parameters<typeof createContext>[1] = {}) {
     modeName: 'draw_point',
     writesFeatures: true,
   }));
-  context.modeManager.registerMode('draw_polygon', () => new DrawPolygonMode());
+  context.modeManager.registerMode('draw_polygon', () => ({
+    modeName: 'draw_polygon',
+    writesFeatures: true,
+  }));
   return context;
 }
 

@@ -23,11 +23,11 @@ import { createInputRouter } from '../dispatcher/input-router.js';
 import { createInputNormalizer } from '../dispatcher/normalizer.js';
 import {
   DrawImageMode,
-  DrawLineMode,
-  DrawPolygonMode,
   drawCircleMode,
   drawFreehandMode,
+  drawLineMode,
   drawPointMode,
+  drawPolygonMode,
 } from '../modes/draw/index.js';
 import type { ModeContext } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
@@ -322,8 +322,6 @@ export function createEngine(
 
   // 5. Set up the ModeManager
   modeManager.registerMode('select', () => new SelectMode());
-  modeManager.registerMode('draw_line', () => new DrawLineMode());
-  modeManager.registerMode('draw_polygon', () => new DrawPolygonMode());
   modeManager.registerMode('draw_image', () => new DrawImageMode());
 
   // 6. Create the PluginManager.
@@ -363,6 +361,8 @@ export function createEngine(
   });
   extensions.collections.modes.addMany([
     { name: 'draw_point', factory: drawPointMode },
+    { name: 'draw_line', factory: drawLineMode },
+    { name: 'draw_polygon', factory: drawPolygonMode },
     { name: 'draw_circle', factory: drawCircleMode },
     { name: 'draw_freehand', factory: drawFreehandMode },
   ]);

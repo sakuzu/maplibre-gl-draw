@@ -24,9 +24,9 @@ import { ModeManagerImpl } from '../manager.js';
 import { drawCircleMode } from './circle.js';
 import { drawFreehandMode } from './freehand.js';
 import { DrawImageMode } from './image.js';
-import { DrawLineMode } from './line.js';
+import { drawLineMode } from './line.js';
 import { drawPointMode } from './point.js';
-import { DrawPolygonMode } from './polygon.js';
+import { drawPolygonMode } from './polygon.js';
 
 const DRAWING_MODES: Mode[] = [
   'draw_point',
@@ -67,6 +67,8 @@ let activeLayerId: string;
 let imageRequests: unknown[];
 /** Clicks in the current mode, through the input route of the modes of the contract */
 let clickAt: (lng: number, lat: number) => void;
+/** Presses a key in the current mode, through the same route */
+let pressKey: (key: string) => void;
 
 beforeEach(() => {
   store = new MemoryStore();
@@ -93,14 +95,25 @@ beforeEach(() => {
   });
   manager.registerMode('select', () => ({ modeName: 'select' }));
   harness.register('draw_point', drawPointMode);
-  manager.registerMode('draw_line', () => new DrawLineMode());
-  manager.registerMode('draw_polygon', () => new DrawPolygonMode());
+  harness.register('draw_line', drawLineMode);
+  harness.register('draw_polygon', drawPolygonMode);
   harness.register('draw_circle', drawCircleMode);
   harness.register('draw_freehand', drawFreehandMode);
   manager.registerMode('draw_image', () => new DrawImageMode());
   clickAt = (lng, lat) => {
     const handler = manager.getHandler();
     if (handler) harness.route.toMode(handler, click(lng, lat), click(lng, lat), null);
+  };
+  pressKey = (key) => {
+    const handler = manager.getHandler();
+    const event = {
+      type: 'keydown',
+      key,
+      code: key,
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      originalEvent: {} as KeyboardEvent,
+    } as const;
+    if (handler) harness.route.toMode(handler, event, event, null);
   };
   manager.setContext({
     map,
@@ -219,16 +232,11 @@ describe('losing the layer while drawing', () => {
   it('discards a line and returns to select when the layer was locked', () => {
     store.createLayer(layer('a'));
     manager.setMode('draw_line');
-    const handler = manager.getHandler();
-    handler?.onClick?.(click(1, 1));
-    handler?.onClick?.(click(2, 2));
+    clickAt(1, 1);
+    clickAt(2, 2);
     store.updateLayer('a', { locked: true });
 
-    expect(() =>
-      handler?.onKeyDown?.({ key: 'Enter' } as Parameters<
-        NonNullable<typeof handler.onKeyDown>
-      >[0]),
-    ).not.toThrow();
+    expect(() => pressKey('Enter')).not.toThrow();
     expect(store.getMode()).toBe('select');
     expect(store.listFeatures()).toEqual([]);
     expect(store.getTentative()).toBeNull();
@@ -247,17 +255,12 @@ describe('losing the layer while drawing', () => {
   it('discards a polygon and returns to select when the layer was hidden', () => {
     store.createLayer(layer('a'));
     manager.setMode('draw_polygon');
-    const handler = manager.getHandler();
-    handler?.onClick?.(click(1, 1));
-    handler?.onClick?.(click(2, 1));
-    handler?.onClick?.(click(2, 2));
+    clickAt(1, 1);
+    clickAt(2, 1);
+    clickAt(2, 2);
     store.updateLayer('a', { visible: false });
 
-    expect(() =>
-      handler?.onKeyDown?.({ key: 'Enter' } as Parameters<
-        NonNullable<typeof handler.onKeyDown>
-      >[0]),
-    ).not.toThrow();
+    expect(() => pressKey('Enter')).not.toThrow();
     expect(store.getMode()).toBe('select');
     expect(store.listFeatures()).toEqual([]);
   });
@@ -266,12 +269,11 @@ describe('losing the layer while drawing', () => {
     store.createLayer(layer('a'));
     store.createLayer(layer('b'));
     manager.setMode('draw_line');
-    const handler = manager.getHandler();
-    handler?.onClick?.(click(1, 1));
-    handler?.onClick?.(click(2, 2));
+    clickAt(1, 1);
+    clickAt(2, 2);
     store.deleteLayer('a');
 
-    handler?.onKeyDown?.({ key: 'Enter' } as Parameters<NonNullable<typeof handler.onKeyDown>>[0]);
+    pressKey('Enter');
     const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('b');
   });

@@ -2,372 +2,39 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * DrawLineMode
+ * The line drawing mode: clicks add vertices, and a click on the last vertex or Enter creates
+ * the line. A click snapped to a boundary after one snapped to the same boundary network takes
+ * in the vertices between them (tracing).
  *
- * Line drawing mode. Vertices are added by clicking, and it is confirmed by clicking the last
- * vertex or by pressing Enter.
+ * It is written to the extension contract, through the `ModeContext` alone.
  */
 
-import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
-import type { Feature, Mode } from '../../store/types.js';
-import type { ModeContext, ModeHandler } from '../handler.js';
-import { createdZoomProperty, resolveCommitLayer } from './commit-layer.js';
-import type { TraceAnchor } from './trace-support.js';
-import { computeTracePath, isTraceEnabled, readTraceAnchor } from './trace-support.js';
-
-/** Tolerance for deciding a vertex click (in pixels) */
-const VERTEX_CLICK_TOLERANCE = 10;
+import type { ModeFactory } from '../../api/v2/extension/mode.js';
+import type { Coordinate } from '../../store/types.js';
+import { createVertexDrawing } from './vertex-drawing.js';
 
 /**
- * DrawLineMode implementation
+ * The factory of the line drawing mode
  *
  * @internal
  */
-export class DrawLineMode implements ModeHandler {
-  readonly modeName: Mode = 'draw_line';
-  readonly writesFeatures = true;
-
-  private context!: ModeContext;
-
-  private coordinates: [number, number][] = [];
-  private isNearLastVertex = false;
-
-  /** The redo stack (holds the undone vertices) */
-  private redoStack: [number, number][] = [];
-
-  /** The last mouse coordinate (for displaying the dashed line on undo/redo) */
-  private lastMouseCoord: [number, number] | null = null;
-
-  /** The Feature ID that is going to be created */
-  private pendingFeatureId: string | null = null;
-
-  /**
-   * The snap target of the previously confirmed click (the start point of the trace)
-   *
-   * It is reset to null for a click that did not snap and for a snap that cannot be traced.
-   */
-  private traceAnchor: TraceAnchor | null = null;
-
-  /**
-   * The trace path up to the cursor position (the unconfirmed vertices for the preview)
-   *
-   * They are inserted between the confirmed coordinates and the cursor point and drawn as
-   * tentative.
-   */
-  private tracePreview: [number, number][] | null = null;
-
-  onStart(context: ModeContext): void {
-    this.context = context;
-    // Change the cursor to a crosshair
-    this.context.map.getCanvas().style.cursor = 'crosshair';
-    // Clear the selection (not notified as a change)
-    this.context.store.transact(() => {
-      this.context.store.setSelection(null, []);
-    }, 'silent');
-    // Reset the state
-    this.coordinates = [];
-    this.isNearLastVertex = false;
-    this.redoStack = [];
-    this.lastMouseCoord = null;
-    this.traceAnchor = null;
-    this.tracePreview = null;
-    // Generate the Feature ID in advance
-    this.pendingFeatureId = this.context.generateFeatureId();
-  }
-
-  onStop(): void {
-    // Restore the cursor
-    this.context.map.getCanvas().style.cursor = '';
-    // Clear the tentative state
-    this.context.store.setTentative(null);
-    this.coordinates = [];
-  }
-
-  /**
-   * Called after an external state change
-   *
-   * Resets the state of the drawing in progress so that the next drawing operation can start
-   * normally.
-   */
-  onExternalStateChange(): void {
-    // Reset the state
-    this.coordinates = [];
-    this.redoStack = [];
-    this.lastMouseCoord = null;
-    this.pendingFeatureId = null;
-    this.isNearLastVertex = false;
-    this.traceAnchor = null;
-    this.tracePreview = null;
-
-    // Clear the tentative state
-    this.context.store.setTentative(null);
-  }
-
-  /**
-   * A double click while drawing is two clicks of the drawing; it never zooms the map
-   * (consumed by preventing its default action)
-   */
-  onDoubleClick(event: MouseNormalizedEvent): void {
-    event.originalEvent.preventDefault();
-  }
-
-  onClick(event: MouseNormalizedEvent): void {
-    // Complete when there are at least two points and the click is near the last vertex
-    if (this.coordinates.length >= 2 && this.isNearLastVertex) {
-      this.finishLine();
-      return;
-    }
-
-    // Read the snap target of this click and first take in the sequence of boundary vertices
-    // between it and the previously confirmed click (tracing)
-    const anchor = readTraceAnchor(this.context, event);
-    const path = computeTracePath(this.context, this.traceAnchor, anchor);
-    if (path) {
-      this.coordinates.push(...path);
-    }
-    this.traceAnchor = anchor;
-    this.tracePreview = null;
-
-    // Add the vertex
-    const coord: [number, number] = [event.lngLat.lng, event.lngLat.lat];
-    this.coordinates.push(coord);
-
-    // Clear the redo stack when a new vertex is added
-    this.redoStack = [];
-
-    // Update the tentative state
-    // Note: the redraw is triggered automatically by RenderCoordinator subscribing to Store changes
-    this.updateTentative();
-  }
-
-  onMouseMove(event: MouseNormalizedEvent): void {
-    // Save the last mouse coordinate (for displaying the dashed line on undo/redo)
-    this.lastMouseCoord = [event.lngLat.lng, event.lngLat.lat];
-
-    // Check whether it is near the last vertex
-    this.isNearLastVertex = this.checkNearLastVertex(event.point);
-
-    // When the snap target of the cursor is the same feature as the previously confirmed
-    // click, hold the path that is going to be inserted as a preview
-    this.tracePreview = computeTracePath(
-      this.context,
-      this.traceAnchor,
-      readTraceAnchor(this.context, event),
-    );
-
-    // Update the cursor
-    if (this.coordinates.length >= 2 && this.isNearLastVertex) {
-      this.context.map.getCanvas().style.cursor = 'pointer';
-    } else {
-      this.context.map.getCanvas().style.cursor = 'crosshair';
-    }
-
-    // When there is at least one vertex, display the line up to the mouse position
-    if (this.coordinates.length > 0) {
-      this.updateTentative(this.lastMouseCoord);
-    }
-  }
-
-  onKeyDown(event: KeyNormalizedEvent): void {
-    if (event.key === 'Escape') {
-      // Cancel
-      this.cancelLine();
-    } else if (event.key === 'Enter') {
-      // Confirm
-      this.finishLine();
-    } else if (event.key === 'Backspace' || event.key === 'Delete') {
-      // Remove the last vertex
-      this.removeLastVertex();
-    }
-  }
-
-  /**
-   * The feature to prefer when snapping candidates are tied (the boundary that tracing started
-   * along)
-   */
-  getSnapPreference(): { featureId: string; datasetId?: string } | null {
-    if (!this.traceAnchor || !isTraceEnabled(this.context)) return null;
-    return {
-      featureId: this.traceAnchor.featureId,
-      datasetId: this.traceAnchor.datasetId,
-    };
-  }
-
-  /**
-   * Checks whether it is near the last vertex
-   */
-  private checkNearLastVertex(screenPoint: { x: number; y: number }): boolean {
-    if (this.coordinates.length === 0) return false;
-
-    const lastCoord = this.coordinates[this.coordinates.length - 1];
-    const lastScreenPoint = this.context.map.project(lastCoord);
-
-    const dx = screenPoint.x - lastScreenPoint.x;
-    const dy = screenPoint.y - lastScreenPoint.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    return distance <= VERTEX_CLICK_TOLERANCE;
-  }
-
-  /**
-   * Confirms the line
-   */
-  private finishLine(): void {
-    // At least two points are required
-    if (this.coordinates.length < 2) {
-      return;
-    }
-
-    const { store, autoNameGenerator } = this.context;
-
-    // Discard the drawing when no layer can be written any more
-    const layerId = resolveCommitLayer(this.context);
-    if (layerId === null) return;
-
-    // Generate the automatic name
-    const autoName = autoNameGenerator.generateName('LineString');
-
-    // Use the ID generated in advance (generate a new one if there is none)
-    const featureId = this.pendingFeatureId ?? this.context.generateFeatureId();
-
-    // Create a new line feature
-    const feature: Feature = {
-      groupId: undefined,
-      id: featureId,
+export const drawLineMode: ModeFactory = (ctx) =>
+  createVertexDrawing(ctx, {
+    minVertices: 2,
+    // The last vertex finishes the line
+    closingVertex: (vertices) => vertices.length - 1,
+    preview(vertices, pointer, closable) {
+      const coordinates: Coordinate[] = pointer ? [...vertices, ...pointer] : [...vertices];
+      return {
+        feature: { type: 'LineString', geometry: { type: 'LineString', coordinates } },
+        options: {
+          confirmedVertices: vertices.length,
+          ...(closable && { highlightVertex: vertices.length - 1 }),
+        },
+      };
+    },
+    feature: (vertices) => ({
       type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [...this.coordinates] },
-      layerId,
-      properties: {
-        ...createdZoomProperty(this.context),
-        ...(autoName !== undefined && { name: autoName }),
-      },
-      locked: false,
-      visible: true,
-      style: {},
-    };
-
-    // Bundle the feature creation and the selection into a single transaction
-    // (so that both are undone at once on undo)
-    store.transact(() => {
-      store.createFeature(feature);
-
-      // Clear the tentative state
-      store.setTentative(null);
-
-      // Select the created feature
-      store.setSelection('feature', [feature.id]);
-    });
-
-    // Reset the state
-    this.coordinates = [];
-    this.isNearLastVertex = false;
-    this.pendingFeatureId = null;
-    this.traceAnchor = null;
-    this.tracePreview = null;
-
-    // Return to the select mode
-    this.context.setMode('select');
-  }
-
-  /**
-   * Cancels the creation of the line
-   */
-  private cancelLine(): void {
-    if (this.coordinates.length > 0) {
-      this.coordinates = [];
-      this.pendingFeatureId = null;
-      this.traceAnchor = null;
-      this.tracePreview = null;
-      this.context.store.setTentative(null);
-    } else {
-      // Return to the select mode if drawing is not in progress
-      this.context.setMode('select');
-    }
-  }
-
-  /**
-   * Removes the last vertex
-   */
-  private removeLastVertex(): void {
-    if (this.coordinates.length > 0) {
-      this.coordinates.pop();
-      // A vertex removed with Backspace/Delete cannot be redone
-      this.redoStack = [];
-      // The previously confirmed click changes, so the start point of the trace is discarded too
-      this.clearTrace();
-      this.updateTentative();
-    }
-  }
-
-  /**
-   * Undoes a vertex while drawing
-   */
-  undoVertex(): boolean {
-    if (this.coordinates.length === 0) {
-      return false;
-    }
-    const removed = this.coordinates.pop()!;
-    this.redoStack.push(removed);
-    this.clearTrace();
-    // Pass the mouse coordinate to keep the dashed line
-    this.updateTentative(this.lastMouseCoord ?? undefined);
-    return true;
-  }
-
-  /**
-   * Redoes a vertex that was undone
-   */
-  redoVertex(): boolean {
-    if (this.redoStack.length === 0) {
-      return false;
-    }
-    const restored = this.redoStack.pop()!;
-    this.coordinates.push(restored);
-    this.clearTrace();
-    // Pass the mouse coordinate to keep the dashed line
-    this.updateTentative(this.lastMouseCoord ?? undefined);
-    return true;
-  }
-
-  /**
-   * Discards the state of the trace
-   *
-   * On an undo / redo of a vertex the "previously confirmed click" changes, so the snap target
-   * that was held as the start point is not kept in use as it is.
-   */
-  private clearTrace(): void {
-    this.traceAnchor = null;
-    this.tracePreview = null;
-  }
-
-  /**
-   * Updates the tentative state
-   */
-  private updateTentative(mouseCoord?: [number, number]): void {
-    if (this.coordinates.length === 0) {
-      this.context.store.setTentative(null);
-      return;
-    }
-
-    // The coordinate array including the mouse position and the trace path up to it
-    // (the confirmed ones remain the leading coordinates.length entries)
-    const coords = mouseCoord
-      ? [...this.coordinates, ...(this.tracePreview ?? []), mouseCoord]
-      : [...this.coordinates];
-
-    // Highlight it when the cursor is near the last vertex
-    const highlightedVertexIndex =
-      this.coordinates.length >= 2 && this.isNearLastVertex
-        ? this.coordinates.length - 1
-        : undefined;
-
-    this.context.store.setTentative({
-      type: 'LineString',
-      coordinates: coords,
-      layerId: this.context.getCurrentLayerId(),
-      confirmedCount: this.coordinates.length, // The number of confirmed coordinates
-      highlightedVertexIndex,
-      pendingFeatureId: this.pendingFeatureId ?? undefined,
-    });
-  }
-}
+      geometry: { type: 'LineString', coordinates: [...vertices] },
+    }),
+  });

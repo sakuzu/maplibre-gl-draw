@@ -17,10 +17,10 @@ import type { InputRouter } from '../dispatcher/input-router.js';
 import { createInputRouter } from '../dispatcher/input-router.js';
 import type { NormalizedEvent } from '../dispatcher/types.js';
 import {
-  DrawLineMode,
-  DrawPolygonMode,
   drawCircleMode,
+  drawLineMode,
   drawPointMode,
+  drawPolygonMode,
 } from '../modes/draw/index.js';
 import type { ModeContext } from '../modes/handler.js';
 import { ModeManagerImpl } from '../modes/manager.js';
@@ -139,8 +139,8 @@ function setup(snapService?: SnapService): void {
   });
   modeManager.registerMode('select', () => ({ modeName: 'select' }));
   harness.register('draw_point', drawPointMode);
-  modeManager.registerMode('draw_line', () => new DrawLineMode());
-  modeManager.registerMode('draw_polygon', () => new DrawPolygonMode());
+  harness.register('draw_line', drawLineMode);
+  harness.register('draw_polygon', drawPolygonMode);
   harness.register('draw_circle', drawCircleMode);
 
   let idCounter = 0;

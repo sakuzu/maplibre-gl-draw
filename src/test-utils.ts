@@ -305,3 +305,28 @@ export function createModeHarness(options: {
     },
   };
 }
+
+/**
+ * A pointer input as a mode of the extension contract receives it, snapped to where it is
+ *
+ * @param point - The point on the screen; `[lng * 1000, lat * 1000]` when omitted
+ */
+export function pointerInput(lng: number, lat: number, point?: [number, number]) {
+  return {
+    point: point ?? ([lng * 1000, lat * 1000] as [number, number]),
+    lngLat: [lng, lat],
+    snapped: { lngLat: [lng, lat] },
+    modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+    pointerType: 'mouse' as const,
+    original: {} as PointerEvent,
+  };
+}
+
+/** A key input as a mode of the extension contract receives it */
+export function keyInput(key: string) {
+  return {
+    key,
+    modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+    original: {} as KeyboardEvent,
+  };
+}

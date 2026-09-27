@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What a drawing mode writes when it commits: the layer, and the created zoom
+ * The layer a drawing mode of the engine commits into
  */
 
-import { drawProperties } from '../../shared/properties.js';
 import type { ModeContext } from '../handler.js';
 
 /**
@@ -24,16 +23,4 @@ export function resolveCommitLayer(context: ModeContext): string | null {
   context.store.setTentative(null);
   context.setMode('select');
   return null;
-}
-
-/**
- * The created zoom a drawing mode writes into the properties of a new feature
- *
- * When the instance lets line widths follow the zoom (`ModeContext.scaleWithZoom`), it is the
- * zoom at the time of the commit, from which the widths grow and shrink with the map. Otherwise
- * nothing is written, and the feature keeps its widths on the screen like one added through
- * the API.
- */
-export function createdZoomProperty(context: ModeContext): Record<string, number | string> {
-  return context.scaleWithZoom ? drawProperties({ createdZoom: context.map.getZoom() }) : {};
 }
