@@ -13,7 +13,7 @@ per-type strategy makes the precise decision.
 
 The types, interfaces and options named here (`HitTestStrategy`,
 `HitTestService`, `HitTestOptions` and so on) are documented one by one in
-the [generated API reference](../reference/api/index.html). How a custom
+the [generated API reference](../api/index.md). How a custom
 feature type registers its own strategy is described in
 [Custom feature types](../guides/custom-types.md). This document explains
 the design behind them.
@@ -136,7 +136,7 @@ cursor all use the same entry point.
 A `companion` hit does not even clear the selection the way a click on
 empty space would. The core does not know what a companion is, so its job
 ends at consuming the click and reporting it. The interception of
-datasets (`src/display/interaction.ts`) does nothing for a
+datasets (`src/dataset/interaction.ts`) does nothing for a
 `companion` or `store` result either: neither the dataset's `click` nor
 a no-hit notification is emitted.
 
@@ -650,7 +650,7 @@ The intersection test per type is a `BoxSelectionStrategy`
 
 ## Datasets
 
-Datasets (`src/display/`) do not enter the Store, so they
+Datasets (`src/dataset/`) do not enter the Store, so they
 never reach `HitTestService` through the index above. They are hit-tested
 where input is dispatched: the InputRouter intercepts the click and the
 `mousemove` and asks the unified z traversal.
@@ -670,7 +670,7 @@ where input is dispatched: the InputRouter intercepts the click and the
   feature later in the array is in front
 - Candidates come from the spatial index of each dataset (a static
   R-tree over the bboxes of its rows, packed into typed arrays:
-  `display/packed-rtree.ts`), and the precise test borrows
+  `dataset/packed-rtree.ts`), and the precise test borrows
   `HitTestService.hitTestFeature()`. The test is the same as for Store
   features, including the Multi types and holes. A dataset given as a
   columnar table builds the features of the candidate rows only, and the

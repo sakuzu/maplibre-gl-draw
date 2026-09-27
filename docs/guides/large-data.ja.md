@@ -672,13 +672,13 @@ async function whenPictureComplete(): Promise<void> {
 
 ## リファレンス
 
-- `MapLibreGLDraw` の [addDataset](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- `MapLibreGLDraw` の [addDataset](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   をはじめとするデータセットのメソッド
-- [Dataset](../reference/api/interfaces/index.Dataset.html)
-- [DatasetOptions](../reference/api/interfaces/index.DatasetOptions.html)
-- [DatasetColumnarInput](../reference/api/interfaces/index.DatasetColumnarInput.html)
-  と [prepareDatasetColumnar](../reference/api/functions/columnar.prepareDatasetColumnar.html)
-- [DatasetCollisionThinning](../reference/api/interfaces/index.DatasetCollisionThinning.html)
-- [DatasetChangePayload](../reference/api/interfaces/index.DatasetChangePayload.html)
+- [Dataset](../api/maplibre-gl-draw/interfaces/Dataset.md)
+- [DatasetOptions](../api/maplibre-gl-draw/interfaces/DatasetOptions.md)
+- [DatasetColumnarInput](../api/maplibre-gl-draw/interfaces/DatasetColumnarInput.md)
+  と [prepareDatasetColumnar](../api/columnar/functions/prepareDatasetColumnar.md)
+- [DatasetCollisionThinning](../api/maplibre-gl-draw/interfaces/DatasetCollisionThinning.md)
+- [DatasetChangePayload](../api/maplibre-gl-draw/interfaces/DatasetChangePayload.md)
 - `draw.dataset.click`、`draw.dataset.add`、`draw.dataset.remove`、
   `draw.dataset.reorder` については [イベント](../reference/events.md)

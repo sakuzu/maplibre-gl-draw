@@ -11,7 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDatasetManager, type DatasetManager } from '../../display/manager.js';
+import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';

@@ -263,10 +263,10 @@ draw.on('draw.renderslots.change', placeNativeLayers);
 
 ## リファレンス
 
-- [`MapLibreGLDraw`](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   (レイヤー、グループ、並びのメソッドと `getRenderSlots`)
-- [`Layer`](../reference/api/interfaces/index.Layer.html) と
-  [`Group`](../reference/api/interfaces/index.Group.html)
-- [`RenderSlot`](../reference/api/interfaces/index.RenderSlot.html)
-- [`isFeatureLocked`](../reference/api/functions/index.isFeatureLocked.html)
+- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) と
+  [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)
+- [`RenderSlot`](../api/maplibre-gl-draw/interfaces/RenderSlot.md)
+- [`isFeatureLocked`](../api/maplibre-gl-draw/functions/isFeatureLocked.md)
 - [イベント](../reference/events.md)

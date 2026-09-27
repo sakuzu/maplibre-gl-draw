@@ -50,7 +50,7 @@ export default defineConfig({
       },
       {
         find: /^@sakuzu\/maplibre-gl-draw\/columnar$/,
-        replacement: resolve(root, '../src/display/columnar/index.ts'),
+        replacement: resolve(root, '../src/dataset/columnar/index.ts'),
       },
       { find: /^@sakuzu\/maplibre-gl-draw$/, replacement: resolve(root, '../src/index.ts') },
     ],

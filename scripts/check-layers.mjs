@@ -30,7 +30,7 @@ const RANK = {
   extension: 1.5,
   store: 2,
   view: 3,
-  display: 3.5,
+  dataset: 3.5,
   operations: 4,
   snapping: 4,
   modes: 5,
@@ -80,8 +80,8 @@ function brokenRule(from, to, typeOnly) {
   if (a === 'extension' && typeOnly && b !== 'api' && b !== 'entry') return null;
   // Rule 4: dispatcher/ does not call operations/
   if (a === 'dispatcher' && b === 'operations') return 'rule 4 (dispatcher -> operations)';
-  // Rule 6: display/ does not depend on store/
-  if (a === 'display' && b === 'store') return 'rule 6 (display -> store)';
+  // Rule 6: dataset/ does not depend on store/
+  if (a === 'dataset' && b === 'store') return 'rule 6 (dataset -> store)';
   // Rule 5: snapping/ refers to view/ only for the vertex handle computation of view/ui
   if (a === 'snapping' && b === 'view' && !to.startsWith(join('view', 'ui', 'handles'))) {
     return 'rule 5 (snapping -> view other than view/ui/handles)';

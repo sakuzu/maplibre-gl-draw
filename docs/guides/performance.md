@@ -201,8 +201,8 @@ browser.
 
 ## Reference
 
-- [Options](../reference/api/interfaces/index.Options.html) for
+- [Options](../api/maplibre-gl-draw/interfaces/Options.md) for
   `pixelRatio` and `renderingStyle`
-- [RenderingConfig](../reference/api/interfaces/index.RenderingConfig.html)
-- [MapLibreGLDraw](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [RenderingConfig](../api/maplibre-gl-draw/interfaces/RenderingConfig.md)
+- [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   for `setRenderScale`, `getRenderScale` and `getPixelRatio`

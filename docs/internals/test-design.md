@@ -94,7 +94,7 @@ when the result changes.
 
 ### 6. Dataset
 
-`src/display/`. Chunking by count and vertex weight with the draw order
+`src/dataset/`. Chunking by count and vertex weight with the draw order
 kept, viewport culling, retained batches that rebuild only on the
 triggers that matter, the tile-range provider (no calls for movement
 inside the same range, stale responses ignored), hit arbitration against

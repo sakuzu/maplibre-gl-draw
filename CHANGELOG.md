@@ -6,6 +6,11 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+- Deprecated: `generateCirclePolygon` from `@sakuzu/maplibre-gl-draw`.
+  Import it from `@sakuzu/maplibre-gl-draw/geometry`, where it is the same
+  function; the export from the main entry will be removed in the next
+  major release.
+
 ## [1.0.0] - 2026-09-27
 
 First public release, under AGPL-3.0-only. A commercial license is

@@ -41,7 +41,7 @@ The code lives in these directories of `src/`:
 - `view/shaders/` - shader sources and helpers
 - `view/cache/` - triangulation, style rule and texture caches
 - `view/terrain/` - terrain support
-- `display/` - datasets. They borrow the renderers of
+- `dataset/` - datasets. They borrow the renderers of
   `view/` but share no state with the Store path
 
 ## The flow of a frame
@@ -1022,11 +1022,11 @@ same in both modes and an off-screen selection still gets its box.
 ## Retained mode for datasets
 
 The data of a dataset never enters the Store, so it is not part of the Store's
-retained batches. `Dataset` (`display/`) has its own retained
+retained batches. `Dataset` (`dataset/`) has its own retained
 mode. The data is assumed never to be edited and never to change order, so
 chunks are cut by space rather than by draw order.
 
-`DatasetImpl` (`display/dataset.ts`) is a thin surface holding
+`DatasetImpl` (`dataset/dataset.ts`) is a thin surface holding
 the public API, the events and the contents, and delegates to:
 
 - `DisplaySource` (`source.ts`): the contents, whatever form they were
@@ -1068,13 +1068,13 @@ so a new input form is one more implementation.
   renderers with a feature that carries only that color. The packed arrays
   hold the same values as the arrays of objects, so both forms draw the
   same picture (`view/renderers/packed.test.ts`,
-  `display/columnar/dataset.test.ts` and `e2e/columnar.e2e.test.ts`
+  `dataset/columnar/dataset.test.ts` and `e2e/columnar.e2e.test.ts`
   compare them)
 - The bboxes, the chunks and the spatial index of a table come from
   `prepareDatasetColumnar` (`columnar/prepare.ts`), a pure function that
   runs in a Worker. The public subpath `@sakuzu/maplibre-gl-draw/columnar`
   exports only it and `columnarTransferables`, and its runtime imports are
-  checked to stay pure (`display/columnar/index.test.ts`). Without it,
+  checked to stay pure (`dataset/columnar/index.test.ts`). Without it,
   `setColumnar` computes the same arrays on the main thread
 - A table builds a feature for a row only when one is asked for: a hit,
   the selection, `getFeatures`, `collectVisible`, `getRowFeature`, the
@@ -1090,7 +1090,7 @@ so a new input form is one more implementation.
 
 ### Spatial chunks
 
-`partitionRows()` (`display/partition.ts`) splits the rows at the median
+`partitionRows()` (`dataset/partition.ts`) splits the rows at the median
 of the centers of their bboxes along the axis of the larger extent, the way
 a k-d tree is built, until a range is small enough. It reads only typed
 arrays (the bboxes and the vertex counts), so the same function splits an
@@ -1114,12 +1114,12 @@ numbers of its rows, not the features.
   of the spatial index
 - Culling at draw time is an AABB test between the chunk bbox and the view.
   Hit testing uses the spatial index of the rows instead, a static R-tree
-  packed into typed arrays (`display/packed-rtree.ts`), built in one pass
+  packed into typed arrays (`dataset/packed-rtree.ts`), built in one pass
   when the contents are replaced
 
 ### Chunk batches
 
-`buildChunkBatches()` (`display/retained.ts`) builds the GPU resources of
+`buildChunkBatches()` (`dataset/retained.ts`) builds the GPU resources of
 one chunk: polygon, line and point retained batches, plus the features that
 cannot be retained, drawn in immediate mode.
 
@@ -1398,7 +1398,7 @@ type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
 
 With hundreds of thousands of points in a dataset, the
 markers overlap at low zoom and the picture turns to mush.
-`collisionThinning` (`display/thinning.ts`) stops drawing point markers
+`collisionThinning` (`dataset/thinning.ts`) stops drawing point markers
 that overlap on screen. It is off by default, and when off, rendering does
 not change at all.
 
@@ -1550,10 +1550,10 @@ externalPointRender?: (feature: Feature) => boolean;
 The test is one helper, `isExternallyRenderedPoint` on
 `DatasetImpl`, and every path that can draw a point calls it:
 
-- The retained path (`collectPoint` in `display/retained.ts`) neither
+- The retained path (`collectPoint` in `dataset/retained.ts`) neither
   batches the point nor sends it to the immediate list
 - The immediate path (`drawImmediate`) removes it from the targets
-- The selection path (`display/selection.ts`) still draws the halo (the
+- The selection path (`dataset/selection.ts`) still draws the halo (the
   key color, radius plus 3 pixels) and skips only the redraw of the point
   on top, so the external picture sits on the halo
 

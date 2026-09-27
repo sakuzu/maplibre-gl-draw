@@ -117,9 +117,9 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 
 ## Reference
 
-- [`getTerrainDiagnostics`](../reference/api/interfaces/index.MapLibreGLDraw.html#getterraindiagnostics)
+- [`getTerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md#getterraindiagnostics)
   on `MapLibreGLDraw`
-- [`TerrainDiagnostics`](../reference/api/interfaces/index.TerrainDiagnostics.html),
-  [`TerrainRenderState`](../reference/api/interfaces/index.TerrainRenderState.html)
+- [`TerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/TerrainDiagnostics.md),
+  [`TerrainRenderState`](../api/maplibre-gl-draw/interfaces/TerrainRenderState.md)
   and
-  [`TerrainDrapeDebug`](../reference/api/interfaces/index.TerrainDrapeDebug.html)
+  [`TerrainDrapeDebug`](../api/maplibre-gl-draw/interfaces/TerrainDrapeDebug.md)

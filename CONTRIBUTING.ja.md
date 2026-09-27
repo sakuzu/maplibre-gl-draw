@@ -186,7 +186,7 @@ npm run build      # dist/ を生成
 npm run lint       # biome lint のあと check:layers と check:terms
 npm run check:layers  # 層の規則と import の循環
 npm run check:terms   # 特定の拡張を指す語が無いこと
-npm run docs:api   # API リファレンスを docs/reference/api/ に生成
+npm run docs:api   # API リファレンスを docs/api/ に生成 (サイト用の Markdown)
 npm run docs:check # ドキュメントの門 (docs/internals/releasing.md)
 npm run build:site # GitHub Pages のサイトを site-dist/ に組み立てる
 npm run lint:fix   # biome auto-fix
@@ -251,5 +251,5 @@ npm run deploy:pages -- --remote upstream  # 別の remote へ push
 - `scripts/` には `npm run lint` と `npm run docs:check` が実行する
   検査と、GitHub Pages のサイトを組み立てて公開するスクリプトがあります
 
-生成した API リファレンス (`docs/reference/api/`) はコミットしません。
+生成した API リファレンス (`docs/api/`) はコミットしません。
 利用者が気づく変更は `CHANGELOG.md` に記録します。

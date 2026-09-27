@@ -174,8 +174,8 @@ export interface DrapePlannerDataset extends DrapeDatasetSource {
 /**
  * The datasets as the planner sees them
  *
- * The manager in `display/manager.ts` satisfies this shape. Only the structure is declared here,
- * so that the planner does not read a type from display/ (which sits above view/).
+ * The manager in `dataset/manager.ts` satisfies this shape. Only the structure is declared here,
+ * so that the planner does not read a type from dataset/ (which sits above view/).
  */
 export interface DrapePlannerDatasets {
   listInternal(): readonly DrapePlannerDataset[];

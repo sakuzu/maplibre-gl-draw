@@ -18,7 +18,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import { createDatasetManager } from '../../display/manager.js';
+import { createDatasetManager } from '../../dataset/manager.js';
 import type {
   CustomFeatureHandler,
   CustomRendererDrawContext,

@@ -241,7 +241,7 @@ const draw = createMapLibreGLDraw(map, { store });
 (どの地物もちょうど 1 つの入れ物に並ぶこと、通知に載せた
 オブジェクトを後から変えないこと、`transact` は 1 つの通知にまとめる
 ことなど) は
-[`DocumentStore`](../reference/api/interfaces/index.DocumentStore.html)
+[`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md)
 に書いてあります。自前のストアがインスタンスの外から適用した変更も、ローカルの変更と
 同じように描画され、通知されます。読み取り専用でも止められません。その
 通知には更新元 `'remote'` を付けてください。core は頂点の選択をそれに
@@ -281,13 +281,13 @@ core は変更の履歴を持ちません。`draw.getStore().subscribe` の購�
 
 ## リファレンス
 
-- [`LoadOptions`](../reference/api/interfaces/index.LoadOptions.html)、
-  [`LoadResult`](../reference/api/interfaces/index.LoadResult.html)、
-  [`SkippedFeature`](../reference/api/interfaces/index.SkippedFeature.html)
-- [`ExportOptions`](../reference/api/interfaces/index.ExportOptions.html)
-  と [`ExportResult`](../reference/api/interfaces/index.ExportResult.html)
-- [`DocumentStore`](../reference/api/interfaces/index.DocumentStore.html)、
-  [`StoreView`](../reference/api/interfaces/index.StoreView.html)、
-  [`StateChanges`](../reference/api/interfaces/index.StateChanges.html)
+- [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md)、
+  [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md)、
+  [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)
+- [`ExportOptions`](../api/maplibre-gl-draw/interfaces/ExportOptions.md)
+  と [`ExportResult`](../api/maplibre-gl-draw/interfaces/ExportResult.md)
+- [`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md)、
+  [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md)、
+  [`StateChanges`](../api/maplibre-gl-draw/interfaces/StateChanges.md)
 - [データ形式](../reference/data-format.md) と
   [イベント](../reference/events.md)

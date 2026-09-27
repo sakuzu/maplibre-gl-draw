@@ -35,9 +35,9 @@
  * can be grabbed. When no provider at all is registered, this detour never happens.
  */
 
-import type { DisplayHitTestFn } from '../../display/dataset.js';
-import type { DatasetManager } from '../../display/manager.js';
-import type { Dataset } from '../../display/types.js';
+import type { DisplayHitTestFn } from '../../dataset/dataset.js';
+import type { DatasetManager } from '../../dataset/manager.js';
+import type { Dataset } from '../../dataset/types.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';

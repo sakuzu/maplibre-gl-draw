@@ -18,7 +18,7 @@ this library. Three topics have their own documents:
 
 For using the library rather than changing it, start with the
 [guides](../guides/drawing.md) and the
-[generated API reference](../reference/api/index.html).
+[generated API reference](../api/index.md).
 
 ## Overview
 
@@ -134,7 +134,7 @@ composes the public API.
        |                   |
        +---------+---------+
                  |
-   display/ --> view/          rendering (display/ borrows renderers)
+   dataset/ --> view/          rendering (dataset/ borrows renderers)
                  |  reads and subscribes
                store/          state
                  |
@@ -159,13 +159,13 @@ composes the public API.
 5. `snapping/` is called from `dispatcher/`. To enumerate candidates it
    reads `store/` and the vertex handle computation of `view/ui/handles`,
    and nothing else of `view/`. It does not depend on `modes/`.
-6. `display/` does not depend on `store/`. It only borrows the renderers of
+6. `dataset/` does not depend on `store/`. It only borrows the renderers of
    `view/`.
 7. `geometry/` is a set of pure functions that depends on nothing inside the
    library. It is also published as `@sakuzu/maplibre-gl-draw/geometry`.
    Its only runtime dependency is polygon-clipping, and it refers to neither
    maplibre, the DOM, the Store nor events.
-8. `store/` knows neither `view/` nor `display/`. `view/` reads the Store
+8. `store/` knows neither `view/` nor `dataset/`. `view/` reads the Store
    and subscribes to it (the RenderCoordinator for repaints, the CustomLayer
    for its caches), so a change reaches the screen through the subscription
    and never through a call from `store/` to `view/`.
@@ -184,7 +184,7 @@ reads the import statements of `src/` and checks them against the rules.
 Tests, `src/e2e/` and `src/test-utils.ts` are left out.
 
 Every area has a height. From the bottom: `geometry/`; `shared/` together
-with `src/messages.ts`; `extension/`; `store/`; `view/`; `display/`;
+with `src/messages.ts`; `extension/`; `store/`; `view/`; `dataset/`;
 `operations/` and `snapping/` at the same height; `modes/`; `dispatcher/`;
 `plugins/`; `api/`; and the entry files `src/index.ts` and
 `src/maplibre-gl-draw.ts`. An import may point to a lower area or stay
@@ -205,7 +205,7 @@ otherwise.
 
 There are no runtime violations and no runtime cycles. The type-only
 imports that point upward are few and deliberate: `modes/`, `snapping/`,
-`display/` and `view/ui/` read the normalized event and hit test types of
+`dataset/` and `view/ui/` read the normalized event and hit test types of
 `dispatcher/`; `modes/` and the router read the type `PluginManager`;
 `plugins/` reads the type `MapLibreGLDraw` for `PluginContext.draw`;
 `view/layer/` reads `DatasetManager` to draw datasets in the
@@ -285,7 +285,7 @@ A few rules bind every `DocumentStore` implementation.
   source; other categories are ignored by core.
 
 The full list of methods and their contracts is in the
-[generated reference](../reference/api/index.html) under `DocumentStore`.
+[generated reference](../api/index.md) under `DocumentStore`.
 
 ### StateChanges
 
@@ -981,7 +981,7 @@ The runtime dependencies are `earcut` (triangulation), `rbush` (the
 spatial index of the Store), `polygon-clipping` (boolean operations in
 `geometry/`, and the only dependency of that sub-entry), `ulid` (ids; the
 random bytes are drawn in batches, `shared/utils/id.ts`) and
-`@types/geojson`. The `columnar` sub-entry (`display/columnar/index.ts`)
+`@types/geojson`. The `columnar` sub-entry (`dataset/columnar/index.ts`)
 has no runtime dependency.
 
 - `@types/geojson` is a runtime dependency because the emitted declarations
@@ -1018,7 +1018,7 @@ part.
 | `operations/` | Resize, rotate, vertex, tracing |
 | `snapping/` | SnapService, providers, marker |
 | `view/` | CustomLayer, renderers, shaders, UI |
-| `display/` | Datasets, `columnar` sub-entry |
+| `dataset/` | Datasets, `columnar` sub-entry |
 | `plugins/` | PluginManager, context, hooks |
 | `extension/` | Contracts for extensions (types) |
 | `shared/` | Types, math, config, utils |

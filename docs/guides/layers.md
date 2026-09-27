@@ -257,10 +257,10 @@ draw.on('draw.renderslots.change', placeNativeLayers);
 
 ## Reference
 
-- [`MapLibreGLDraw`](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   (the layer, group and order methods, `getRenderSlots`)
-- [`Layer`](../reference/api/interfaces/index.Layer.html) and
-  [`Group`](../reference/api/interfaces/index.Group.html)
-- [`RenderSlot`](../reference/api/interfaces/index.RenderSlot.html)
-- [`isFeatureLocked`](../reference/api/functions/index.isFeatureLocked.html)
+- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) and
+  [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)
+- [`RenderSlot`](../api/maplibre-gl-draw/interfaces/RenderSlot.md)
+- [`isFeatureLocked`](../api/maplibre-gl-draw/functions/isFeatureLocked.md)
 - [Events](../reference/events.md)

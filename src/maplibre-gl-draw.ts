@@ -17,14 +17,14 @@ import { createDrawAPI } from './api/api.js';
 import type { Options } from './api/context.js';
 import { createContext } from './api/context.js';
 import { createImportExportAPI } from './api/import-export/index.js';
+import { createDisplayInteractions } from './dataset/interaction.js';
+import { createDatasetManager } from './dataset/manager.js';
+import { effectiveZoomForCamera } from './dataset/thinning.js';
+import { TriangulationScheduler } from './dataset/triangulation.js';
 import { toleranceDegrees } from './dispatcher/hit-test/local-frame.js';
 import { createTopmostHitTester } from './dispatcher/hit-test/topmost.js';
 import { createInputRouter } from './dispatcher/input-router.js';
 import { createInputNormalizer } from './dispatcher/normalizer.js';
-import { createDisplayInteractions } from './display/interaction.js';
-import { createDatasetManager } from './display/manager.js';
-import { effectiveZoomForCamera } from './display/thinning.js';
-import { TriangulationScheduler } from './display/triangulation.js';
 import {
   DrawCircleMode,
   DrawFreehandMode,

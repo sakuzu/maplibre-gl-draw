@@ -196,7 +196,7 @@ npm run build      # emit dist/
 npm run lint       # biome lint, then check:layers and check:terms
 npm run check:layers  # layer rules and import cycles
 npm run check:terms   # no word that names a particular extension
-npm run docs:api   # generate the API reference into docs/reference/api/
+npm run docs:api   # generate the API reference (Markdown) into docs/api/
 npm run docs:check # the documentation gate (docs/internals/releasing.md)
 npm run build:site # build the GitHub Pages site into site-dist/
 npm run lint:fix   # biome auto-fix
@@ -262,5 +262,5 @@ branch, root directory.
 - `scripts/` — the checks run by `npm run lint` and `npm run docs:check`,
   and the scripts that build and deploy the GitHub Pages site
 
-The generated API reference (`docs/reference/api/`) is not committed.
+The generated API reference (`docs/api/`) is not committed.
 Changes a user can notice are recorded in `CHANGELOG.md`.

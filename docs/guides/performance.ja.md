@@ -210,7 +210,7 @@ const textRenderer = new MyTextRenderer({
 ## リファレンス
 
 - `pixelRatio` と `renderingStyle` については
-  [Options](../reference/api/interfaces/index.Options.html)
-- [RenderingConfig](../reference/api/interfaces/index.RenderingConfig.html)
+  [Options](../api/maplibre-gl-draw/interfaces/Options.md)
+- [RenderingConfig](../api/maplibre-gl-draw/interfaces/RenderingConfig.md)
 - `setRenderScale`、`getRenderScale`、`getPixelRatio` については
-  [MapLibreGLDraw](../reference/api/interfaces/index.MapLibreGLDraw.html)
+  [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)

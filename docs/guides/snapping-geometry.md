@@ -355,16 +355,16 @@ if (shrunk === null) {
 
 ## Reference
 
-- [`SnapOptions`](../reference/api/interfaces/index.SnapOptions.html),
-  [`SnappingOperations`](../reference/api/interfaces/index.SnappingOperations.html),
-  [`SnapProvider`](../reference/api/interfaces/index.SnapProvider.html)
-  and [`SnapResult`](../reference/api/interfaces/index.SnapResult.html)
-- [`TracingOperations`](../reference/api/interfaces/index.TracingOperations.html)
+- [`SnapOptions`](../api/maplibre-gl-draw/interfaces/SnapOptions.md),
+  [`SnappingOperations`](../api/maplibre-gl-draw/interfaces/SnappingOperations.md),
+  [`SnapProvider`](../api/maplibre-gl-draw/interfaces/SnapProvider.md)
+  and [`SnapResult`](../api/maplibre-gl-draw/interfaces/SnapResult.md)
+- [`TracingOperations`](../api/maplibre-gl-draw/interfaces/TracingOperations.md)
   and
-  [`TopologyOperations`](../reference/api/interfaces/index.TopologyOperations.html)
-- [`GeometryOperations`](../reference/api/interfaces/index.GeometryOperations.html)
+  [`TopologyOperations`](../api/maplibre-gl-draw/interfaces/TopologyOperations.md)
+- [`GeometryOperations`](../api/maplibre-gl-draw/interfaces/GeometryOperations.md)
   and
-  [`GeometryAppliedPayload`](../reference/api/interfaces/index.GeometryAppliedPayload.html)
-- [The geometry module](../reference/api/modules/geometry.html), for
-  example [`buffer`](../reference/api/functions/geometry.buffer.html) and
-  [`GeometryError`](../reference/api/classes/geometry.GeometryError.html)
+  [`GeometryAppliedPayload`](../api/maplibre-gl-draw/interfaces/GeometryAppliedPayload.md)
+- [The geometry module](../api/geometry/index.md), for
+  example [`buffer`](../api/geometry/functions/buffer.md) and
+  [`GeometryError`](../api/geometry/classes/GeometryError.md)

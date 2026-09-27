@@ -343,12 +343,12 @@ draw.registerAuxiliaryHandleProvider({
 
 ## リファレンス
 
-- [CustomFeatureHandler](../reference/api/interfaces/index.CustomFeatureHandler.html)
-- [CustomFeatureRenderer](../reference/api/interfaces/index.CustomFeatureRenderer.html)
-  と [CustomRendererDrawContext](../reference/api/interfaces/index.CustomRendererDrawContext.html)
-- [HitTestStrategy](../reference/api/interfaces/index.HitTestStrategy.html)
-  と [BoxSelectionStrategy](../reference/api/interfaces/index.BoxSelectionStrategy.html)
-- [AuxiliaryHandleProvider](../reference/api/interfaces/index.AuxiliaryHandleProvider.html)
-- [FeatureCompanionProvider](../reference/api/interfaces/index.FeatureCompanionProvider.html)
-- [CustomOverlayRenderer](../reference/api/interfaces/index.CustomOverlayRenderer.html)
-- [SDFLineRenderer](../reference/api/interfaces/index.SDFLineRenderer.html)
+- [CustomFeatureHandler](../api/maplibre-gl-draw/interfaces/CustomFeatureHandler.md)
+- [CustomFeatureRenderer](../api/maplibre-gl-draw/interfaces/CustomFeatureRenderer.md)
+  と [CustomRendererDrawContext](../api/maplibre-gl-draw/interfaces/CustomRendererDrawContext.md)
+- [HitTestStrategy](../api/maplibre-gl-draw/interfaces/HitTestStrategy.md)
+  と [BoxSelectionStrategy](../api/maplibre-gl-draw/interfaces/BoxSelectionStrategy.md)
+- [AuxiliaryHandleProvider](../api/maplibre-gl-draw/interfaces/AuxiliaryHandleProvider.md)
+- [FeatureCompanionProvider](../api/maplibre-gl-draw/interfaces/FeatureCompanionProvider.md)
+- [CustomOverlayRenderer](../api/maplibre-gl-draw/interfaces/CustomOverlayRenderer.md)
+- [SDFLineRenderer](../api/maplibre-gl-draw/interfaces/SDFLineRenderer.md)

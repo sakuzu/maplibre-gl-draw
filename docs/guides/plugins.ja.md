@@ -300,11 +300,11 @@ Escape を押すまで、クリックするたびに現在のレイヤーへ点�
 
 ## リファレンス
 
-- [Plugin](../reference/api/interfaces/index.Plugin.html)
-- [PluginContext](../reference/api/interfaces/index.PluginContext.html)
-- [Hooks](../reference/api/interfaces/index.Hooks.html) と
-  [MutationContext](../reference/api/interfaces/index.MutationContext.html)
-- [ModeHandler](../reference/api/interfaces/index.ModeHandler.html) と
-  [ModeContext](../reference/api/interfaces/index.ModeContext.html)
+- [Plugin](../api/maplibre-gl-draw/interfaces/Plugin.md)
+- [PluginContext](../api/maplibre-gl-draw/interfaces/PluginContext.md)
+- [Hooks](../api/maplibre-gl-draw/interfaces/Hooks.md) と
+  [MutationContext](../api/maplibre-gl-draw/interfaces/MutationContext.md)
+- [ModeHandler](../api/maplibre-gl-draw/interfaces/ModeHandler.md) と
+  [ModeContext](../api/maplibre-gl-draw/interfaces/ModeContext.md)
 - 文脈のイベントの名前については
-  [EventMap](../reference/api/interfaces/index.EventMap.html)
+  [EventMap](../api/maplibre-gl-draw/interfaces/EventMap.md)

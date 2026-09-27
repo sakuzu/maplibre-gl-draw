@@ -68,11 +68,11 @@ describe('the columnar subpath', () => {
     expect(packages).toEqual([]);
     const files = [...seen].map((file) => relative(SRC, file)).sort();
     expect(files).toEqual([
-      'display/columnar/index.ts',
-      'display/columnar/prepare.ts',
-      'display/columnar/table.ts',
-      'display/packed-rtree.ts',
-      'display/partition.ts',
+      'dataset/columnar/index.ts',
+      'dataset/columnar/prepare.ts',
+      'dataset/columnar/table.ts',
+      'dataset/packed-rtree.ts',
+      'dataset/partition.ts',
     ]);
   });
 });

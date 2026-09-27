@@ -349,6 +349,19 @@ function readIndexExports(): {
   const values: string[] = [];
   let star = 0;
   for (const statement of source.statements) {
+    // An export written as a declaration, such as a deprecated alias (`export const`)
+    if (
+      ts.isVariableStatement(statement) &&
+      statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+    ) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name)) continue;
+        const name = declaration.name.text;
+        (boundary >= 0 && statement.getStart(source) > boundary ? layer2 : layer1).push(name);
+        values.push(name);
+      }
+      continue;
+    }
     if (!ts.isExportDeclaration(statement)) continue;
     const clause = statement.exportClause;
     if (!clause || !ts.isNamedExports(clause)) {

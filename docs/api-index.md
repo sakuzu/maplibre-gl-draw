@@ -1,33 +1,51 @@
-# @sakuzu/maplibre-gl-draw API reference
+# API reference
 
-A library for drawing and editing shapes on a
-[MapLibre GL JS](https://maplibre.org/maplibre-gl-js/docs/) map. It
-draws with its own WebGL2 renderer, so a drawing of 200,000 features
-stays editable, and it draws on 3D terrain and on the globe as it does
-on a flat map. Large data that is shown but not edited goes into a
-dataset, which draws tens of thousands of parcels or a million points
-fast.
+The reference of every public symbol of `@sakuzu/maplibre-gl-draw`,
+generated from the sources. To learn how to use the library, start with
+[Getting started](getting-started.md) and the guides.
 
-This is the reference of every public symbol, generated from the
-sources. To learn how to use the library, start with the guides.
+## Where to start
 
-- [Playground](https://sakuzu.github.io/maplibre-gl-draw/): every
-  feature in one editor
-- [Examples](https://sakuzu.github.io/maplibre-gl-draw/examples/): small
-  pages, one part of the library each
-- [Getting started](https://github.com/sakuzu/maplibre-gl-draw/blob/main/docs/getting-started.md)
-  and the
-  [guides](https://github.com/sakuzu/maplibre-gl-draw/blob/main/docs/README.md)
-- [Source on GitHub](https://github.com/sakuzu/maplibre-gl-draw)
+- To put a drawing on a map, start from
+  {@link maplibre-gl-draw!createMapLibreGLDraw | createMapLibreGLDraw}
+  and its {@link maplibre-gl-draw!Options | Options}.
+- To add, change and remove features, layers and groups, use the
+  instance, {@link maplibre-gl-draw!MapLibreGLDraw | MapLibreGLDraw}. Its
+  page is grouped by task.
+- A {@link maplibre-gl-draw!Feature | Feature},
+  a {@link maplibre-gl-draw!Layer | Layer} and
+  a {@link maplibre-gl-draw!Group | Group} are the data model.
+- To react to changes and clicks, see the events of
+  {@link maplibre-gl-draw!EventMap | EventMap}.
+- To style features, see
+  {@link maplibre-gl-draw!FeatureStyle | FeatureStyle} and
+  {@link maplibre-gl-draw!StyleRule | StyleRule}.
+- To show large data that is not edited, see
+  {@link maplibre-gl-draw!Dataset | Dataset} and
+  {@link maplibre-gl-draw!DatasetOptions | DatasetOptions}.
+- To save and load, see
+  {@link maplibre-gl-draw!ExportFormat | ExportFormat} and
+  {@link maplibre-gl-draw!LoadOptions | LoadOptions}.
+- To add a plugin, a mode or a feature type, see
+  {@link maplibre-gl-draw!Plugin | Plugin},
+  {@link maplibre-gl-draw!ModeHandler | ModeHandler} and
+  {@link maplibre-gl-draw!CustomFeatureHandler | CustomFeatureHandler}.
 
-## Modules
+## Entry points
 
-The package has three entry points, one module each.
+The package has three entry points. Import from the first one unless
+you need the other two.
 
-- {@link index} (`@sakuzu/maplibre-gl-draw`): the factory, the instance
-  and its options, the data model, the events, datasets and the
-  extension points
-- {@link geometry} (`@sakuzu/maplibre-gl-draw/geometry`): pure geometry
-  functions that need no map, so they also run in Node and in workers
-- {@link columnar} (`@sakuzu/maplibre-gl-draw/columnar`): the
-  preparation of a columnar table for a dataset, importable in a Worker
+- `@sakuzu/maplibre-gl-draw` ({@link maplibre-gl-draw | the reference}):
+  the instance, its options, the data model, the events, datasets and
+  the extension points.
+- `@sakuzu/maplibre-gl-draw/geometry` ({@link geometry | the reference}):
+  geometry functions that need no map, so they also run in Node and in
+  workers.
+- `@sakuzu/maplibre-gl-draw/columnar` ({@link columnar | the reference}):
+  the preparation of a columnar table for a dataset, importable in a
+  Worker.
+
+The symbols under Building blocks are for people who write plugins,
+modes and feature types. They may change in a minor release; everything
+else follows semantic versioning.

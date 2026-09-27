@@ -10,7 +10,7 @@
  *
  * Triangulating a huge polygon (a water body on the order of a million vertices)
  * takes more than ten seconds in one go, so the dataset path injects
- * an implementation that slices the work over time (display/triangulation.ts) here.
+ * an implementation that slices the work over time (dataset/triangulation.ts) here.
  * For a polygon whose triangulation has not finished yet, null is returned, and the
  * caller omits the fill of that polygon and puts it into the batch with the outline
  * only. Once the triangulation finishes, the injecting side prompts a rebuild.

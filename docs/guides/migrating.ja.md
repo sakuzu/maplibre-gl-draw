@@ -152,6 +152,6 @@ terra-draw の `finish` イベントは、描き終わりとドラッグの終�
 
 ## リファレンス
 
-- [MapLibreGLDraw](../reference/api/interfaces/index.MapLibreGLDraw.html)
-- [Feature](../reference/api/interfaces/index.Feature.html)
+- [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
+- [Feature](../api/maplibre-gl-draw/interfaces/Feature.md)
 - [イベント](../reference/events.md)

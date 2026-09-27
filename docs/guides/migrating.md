@@ -145,6 +145,6 @@ end of a drag is `draw.feature.update` (or the `drag:end` hook of a
 
 ## Reference
 
-- [MapLibreGLDraw](../reference/api/interfaces/index.MapLibreGLDraw.html)
-- [Feature](../reference/api/interfaces/index.Feature.html)
+- [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
+- [Feature](../api/maplibre-gl-draw/interfaces/Feature.md)
 - [events](../reference/events.md)

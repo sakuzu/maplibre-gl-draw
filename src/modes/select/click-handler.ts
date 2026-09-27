@@ -183,7 +183,7 @@ function handleFeatureClick(
 
   // When there is nothing, and when a dataset is in the foreground, Store
   // features are not grabbed. A dataset's click fires only when the intercepting side
-  // (display/interaction) is interactive.
+  // (dataset/interaction) is interactive.
   if (top?.kind !== 'store') {
     if (!event.modifiers.shift) {
       store.setSelection(null, []);

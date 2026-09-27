@@ -22,8 +22,8 @@
  * providers/intersection.ts).
  */
 
-import type { DatasetManager } from '../../display/manager.js';
-import type { Dataset } from '../../display/types.js';
+import type { DatasetManager } from '../../dataset/manager.js';
+import type { Dataset } from '../../dataset/types.js';
 import { segmentIntersection } from '../../geometry/split.js';
 import { MESSAGES_EN, type Messages } from '../../messages.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';

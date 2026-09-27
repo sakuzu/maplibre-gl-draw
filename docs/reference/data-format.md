@@ -6,7 +6,7 @@ tools read. It also lists the coordinates and properties of each feature
 type and the checks a load performs. For how to save and load in an
 application, see [Saving and loading](../guides/save-load.md). For the
 fields of `Feature`, `Layer` and `Group` one by one, see the
-[generated API reference](./api/index.html).
+[generated API reference](../api/index.md).
 
 ## Principles
 

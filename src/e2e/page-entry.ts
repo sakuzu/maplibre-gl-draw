@@ -14,7 +14,7 @@
  */
 
 import * as maplibregl from 'maplibre-gl';
-import { prepareDatasetColumnar } from '../display/columnar/index.js';
+import { prepareDatasetColumnar } from '../dataset/columnar/index.js';
 import { createMapLibreGLDraw } from '../index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';

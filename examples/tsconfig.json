@@ -19,7 +19,7 @@
     "paths": {
       "@sakuzu/maplibre-gl-draw": ["../src/index.ts"],
       "@sakuzu/maplibre-gl-draw/geometry": ["../src/geometry/index.ts"],
-      "@sakuzu/maplibre-gl-draw/columnar": ["../src/display/columnar/index.ts"]
+      "@sakuzu/maplibre-gl-draw/columnar": ["../src/dataset/columnar/index.ts"]
     }
   },
   "include": ["."],

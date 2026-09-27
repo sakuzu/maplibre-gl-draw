@@ -3,7 +3,7 @@
 Every event that `draw.on()` delivers, what it carries, when it fires and in
 which order. The payload types are exported from `@sakuzu/maplibre-gl-draw`
 (`EventPayloads` maps each event name to its payload). For the method
-signatures see the [generated API reference](./api/index.html).
+signatures see the [generated API reference](../api/index.md).
 
 ## Subscribing
 
