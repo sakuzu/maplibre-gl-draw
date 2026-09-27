@@ -39,8 +39,12 @@ features:
 ## Install
 
 ```sh
-npm install @sakuzu/maplibre-gl-draw maplibre-gl
+npm install @sakuzu/maplibre-gl-draw
 ```
+
+maplibre-gl is a peer dependency: the library uses the maplibre-gl your
+application already has, and npm 7 and later install it along if it is
+not there yet.
 
 Then follow [Getting started](getting-started.md) to draw your first
 polygon.
