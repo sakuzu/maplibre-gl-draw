@@ -13,6 +13,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate, Mode } from '../../store/types.js';
 import type { ModeContext } from '../handler.js';
@@ -92,7 +93,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
     expect(manager.redoVertex()).toBe(true);
     key('Enter');
 
-    expect(store.getAllFeatures().map((f) => f.coordinates)).toEqual([[A, B]]);
+    expect(store.getAllFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
   });
 
   it('returns false with nothing to undo or redo, and a new vertex drops the redo', () => {
@@ -107,7 +108,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
     expect(manager.redoVertex()).toBe(false);
     key('Enter');
 
-    expect(store.getAllFeatures().map((f) => f.coordinates)).toEqual([[A, C]]);
+    expect(store.getAllFeatures().map((f) => coordinatesOf(f))).toEqual([[A, C]]);
   });
 
   it('is false in a mode without a drawing (select)', () => {
@@ -126,7 +127,7 @@ describe('undoVertex / redoVertex while drawing a polygon', () => {
     expect(manager.undoVertex()).toBe(true);
     key('Enter');
 
-    const ring = (store.getAllFeatures()[0].coordinates as Coordinate[][])[0];
+    const ring = (coordinatesOf(store.getAllFeatures()[0]) as Coordinate[][])[0];
     expect(ring).toEqual([A, B, C, A]);
   });
 });

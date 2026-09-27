@@ -32,18 +32,25 @@ for (const [lng, lat] of [
   draw.addFeature({
     type: 'Polygon',
     layerId: parcels,
-    coordinates: [
-      [
-        [lng, lat],
-        [lng + 0.004, lat],
-        [lng + 0.004, lat + 0.0025],
-        [lng, lat + 0.0025],
-        [lng, lat],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [lng, lat],
+          [lng + 0.004, lat],
+          [lng + 0.004, lat + 0.0025],
+          [lng, lat + 0.0025],
+          [lng, lat],
+        ],
       ],
-    ],
+    },
   });
 }
-draw.addFeature({ type: 'Point', coordinates: [139.7615, 35.6835], locked: true });
+draw.addFeature({
+  type: 'Point',
+  geometry: { type: 'Point', coordinates: [139.7615, 35.6835] },
+  locked: true,
+});
 
 const output = document.getElementById('output') as HTMLPreElement;
 

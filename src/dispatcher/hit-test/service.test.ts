@@ -12,6 +12,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, FeatureType } from '../../store/types.js';
@@ -32,11 +33,12 @@ function polygon(id: string, rings: Coordinate[][]): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: rings,
+    geometry: { type: 'Polygon', coordinates: rings },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -55,11 +57,12 @@ function point(id: string, coord: Coordinate): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -147,7 +150,7 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   const wideStrategy: HitTestStrategy = {
     geometryType: 'Point',
     test: (feature, coordinate) => {
-      const [lng, lat] = feature.coordinates as Coordinate;
+      const [lng, lat] = coordinatesOf(feature) as Coordinate;
       return Math.hypot(coordinate[0] - lng, coordinate[1] - lat) <= 3;
     },
     distance: () => 0,
@@ -265,14 +268,18 @@ describe('the single scan of hitTestAll', () => {
     const line: Feature = {
       id: 'line',
       type: 'LineString',
-      coordinates: [
-        [0, 4],
-        [10, 4],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 4],
+          [10, 4],
+        ] as Coordinate[],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const ordered = load([
       polygon('poly', [square(0, 0, 10)]),

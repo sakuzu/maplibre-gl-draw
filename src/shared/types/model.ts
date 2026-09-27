@@ -8,35 +8,35 @@
  * re-exports them).
  */
 
+import type { Geometry, Position } from 'geojson';
+
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
  */
 export type Coordinate = [number, number];
 
 /**
- * The coordinates of a feature, nested as deep as its type needs
+ * The coordinates of a GeoJSON geometry, nested as deep as its kind needs
  *
- * The nesting depth of the array expresses the structure of the geometry. It follows the
- * `coordinates` of the GeoJSON geometry of the same name.
- *
- * - `Coordinate`: Point, Image (the anchor of the image) and Circle (the center; the radius
- *   is `properties.radiusMeters`)
- * - `Coordinate[]`: LineString, Freehand and MultiPoint (a sequence of coordinates)
- * - `Coordinate[][]`: Polygon (an array of rings: ring 0 is the outer ring, the rest are
- *   holes) and MultiLineString (an array of lines)
- * - `Coordinate[][][]`: MultiPolygon (an array of polygons, each an array of rings)
+ * - `Position`: Point (the geometry of a Point, the anchor of an Image and the center of a
+ *   Circle)
+ * - `Position[]`: LineString (also of a Freehand) and MultiPoint
+ * - `Position[][]`: Polygon (an array of rings: ring 0 is the outer ring, the rest are holes)
+ *   and MultiLineString (an array of lines)
+ * - `Position[][][]`: MultiPolygon (an array of polygons, each an array of rings)
  *
  * A ring of a Polygon is closed: its last coordinate repeats its first.
  */
-export type FeatureCoordinates = Coordinate | Coordinate[] | Coordinate[][] | Coordinate[][][];
+export type FeatureCoordinates = Position | Position[] | Position[][] | Position[][][];
 
 /**
  * The type of a feature: one of the nine built-in types, or the name of a custom type
  *
  * The built-in types are Point, LineString, Polygon, MultiPoint, MultiLineString,
- * MultiPolygon, Image, Circle and Freehand. The type decides the shape of
- * `Feature.coordinates` ({@link FeatureCoordinates}). Any other string names a custom type,
- * which an extension adds with `registerFeatureHandler` ({@link CustomFeatureHandler}).
+ * MultiPolygon, Image, Circle and Freehand. The type decides the kind of `Feature.geometry`:
+ * a Circle and an Image hold the Point of their center and their anchor, and a Freehand holds
+ * a LineString. Any other string names a custom type, which an extension adds with
+ * `registerFeatureHandler` ({@link CustomFeatureHandler}).
  *
  * The Multi types come from imports and from the results of geometry operations; no drawing
  * mode creates them.
@@ -256,8 +256,8 @@ export interface FeatureStyle {
 /**
  * The style of an Image feature: {@link FeatureStyle} plus its size, rotation and opacity
  *
- * The image is drawn at its size at the zoom it was created at (`properties.createdZoom`)
- * and scales with the map from there, like a picture laid on the ground.
+ * The image is drawn at its size at the zoom it was created at (`maplibre-gl-draw:createdZoom`
+ * in `properties`) and scales with the map from there, like a picture laid on the ground.
  */
 export interface ImageStyle extends FeatureStyle {
   /**
@@ -287,11 +287,11 @@ export interface ImageStyle extends FeatureStyle {
 }
 
 /**
- * The properties core keeps in `Feature.properties` of an Image feature
+ * The values core keeps in `Feature.properties` of an Image feature, read into one object
  *
- * The image mode and `load()` of an image file write them. The image data itself is a
- * {@link FileData} of the Store, which `imageFileId` names, so that several features can share
- * one image.
+ * The image mode and `load()` of an image file write them, under the keys that start with
+ * `maplibre-gl-draw:`. The image data itself is a {@link FileData} of the Store, which
+ * `imageFileId` names, so that several features can share one image.
  */
 export interface ImageProperties {
   /** The ID of the {@link FileData} that holds the image */
@@ -324,8 +324,8 @@ export interface FileData {
 }
 
 /**
- * A feature of the document: its geometry, the layer and group it belongs to, its attributes
- * and its style
+ * A feature of the document: its GeoJSON geometry, the layer and group it belongs to, its
+ * attributes and its style
  *
  * The draw instance returns features from `getFeature`, `getAllFeatures` and the events, and
  * creates them from a {@link FeatureInput}. What the instance returns is read-only: change a
@@ -337,10 +337,13 @@ export interface FileData {
 export interface Feature {
   /** The ID of the feature, unique within the document (a ULID when core generates it) */
   id: string;
-  /** The type of the feature, which decides the shape of `coordinates` */
+  /** The type of the feature, which decides the kind of `geometry` */
   type: FeatureType;
-  /** The geometry, nested as {@link FeatureCoordinates} describes for each type */
-  coordinates: FeatureCoordinates;
+  /**
+   * The GeoJSON geometry (a Circle and an Image hold the Point of their center and their
+   * anchor, and a Freehand holds a LineString)
+   */
+  geometry: Geometry;
   /**
    * The ID of the layer the feature belongs to (for a feature in a group, the layer of the
    * group)
@@ -353,20 +356,20 @@ export interface Feature {
    */
   groupId?: string;
   /**
-   * The attributes of the feature
+   * The GeoJSON properties: the attributes of the user and the values of the library
    *
-   * They are free-form, and GeoJSON export writes them as the GeoJSON properties. Core also
-   * reads and writes a few keys of its own here: `name` and `description`, `createdZoom`,
-   * `rotation` and `scale` (see {@link getCreatedZoom}, {@link getRotation} and
-   * {@link getScale}), `radiusMeters` and `radiusHandleAngle` of a Circle, and the keys of
-   * {@link ImageProperties} of an Image.
+   * A key that starts with `maplibre-gl-draw:` holds a value of the library: the created zoom,
+   * the rotation and the scale (see {@link getCreatedZoom}, {@link getRotation} and
+   * {@link getScale}), the radius of a Circle and the values of {@link ImageProperties} of an
+   * Image. Every other key is an attribute of the user, free-form; `name` and `description`
+   * are read as the name and the description. Exports write them as they are.
    */
   properties: Record<string, unknown>;
   /**
-   * The style of this feature (the defaults and the layer's style rule apply when omitted);
-   * an Image takes an {@link ImageStyle}
+   * The style of this feature, `{}` when it has none of its own (the defaults and the layer's
+   * style rule apply to the keys it leaves out); an Image takes an {@link ImageStyle}
    */
-  style?: FeatureStyle | ImageStyle;
+  style: FeatureStyle | ImageStyle;
   /**
    * Whether the feature is locked
    *
@@ -388,7 +391,7 @@ export interface Feature {
  * The input for adding a feature with `addFeature`: a {@link Feature} whose other fields
  * may be omitted
  *
- * Only `type` and `coordinates` are required; the other fields take the defaults written on
+ * Only `type` and `geometry` are required; the other fields take the defaults written on
  * them.
  */
 export interface FeatureInput {
@@ -396,8 +399,8 @@ export interface FeatureInput {
   id?: string;
   /** Feature type */
   type: FeatureType;
-  /** Coordinates */
-  coordinates: FeatureCoordinates;
+  /** The GeoJSON geometry, of the kind the type holds */
+  geometry: Geometry;
   /** Layer ID (the active layer when omitted) */
   layerId?: string;
   /** Properties (an empty object when omitted) */

@@ -7,6 +7,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeMultiPolygonOrientation } from '../../geometry/simplify.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature, Group, Layer, StyleRule } from '../../store/types.js';
 import type { Context } from '../context.js';
@@ -35,11 +37,12 @@ function createTestFeature(id: string, overrides?: Partial<Feature>): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [139.7, 35.6] as [number, number],
+    geometry: { type: 'Point', coordinates: [139.7, 35.6] as [number, number] },
     layerId: 'default-layer',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...overrides,
   };
 }
@@ -90,7 +93,9 @@ describe('createImportExportAPI', () => {
     it('includes every feature the store has', () => {
       const api = createImportExportAPI(context);
       const f1 = createTestFeature('f1');
-      const f2 = createTestFeature('f2', { coordinates: [140, 36] as [number, number] });
+      const f2 = createTestFeature('f2', {
+        geometry: { type: 'Point', coordinates: [140, 36] as [number, number] },
+      });
       context.store.createFeature(f1);
       context.store.createFeature(f2);
 
@@ -153,7 +158,7 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('m1', {
           type: 'Point',
-          coordinates: [139.7, 35.6],
+          geometry: { type: 'Point', coordinates: [139.7, 35.6] },
           properties: { name: 'Test Point' },
         }),
       );
@@ -178,7 +183,7 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('l1', {
           type: 'LineString',
-          coordinates: coords,
+          geometry: { type: 'LineString', coordinates: coords },
         }),
       );
 
@@ -204,7 +209,7 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('p1', {
           type: 'Polygon',
-          coordinates: coords,
+          geometry: { type: 'Polygon', coordinates: coords },
         }),
       );
 
@@ -272,7 +277,9 @@ describe('createImportExportAPI', () => {
         version: NATIVE_VERSION,
         features: [
           createTestFeature('imported-1'),
-          createTestFeature('imported-2', { coordinates: [140, 36] as [number, number] }),
+          createTestFeature('imported-2', {
+            geometry: { type: 'Point', coordinates: [140, 36] as [number, number] },
+          }),
         ],
         layers: [createTestLayer()],
         layerOrder: ['default-layer'],
@@ -615,7 +622,7 @@ describe('createImportExportAPI', () => {
 
         expect(result.featureIds).toHaveLength(1);
         const feature = context.store.getFeature(result.featureIds[0]);
-        expect(feature?.coordinates).toEqual(expected);
+        expect(coordinatesOf(feature)).toEqual(expected);
       }
     });
 
@@ -632,7 +639,7 @@ describe('createImportExportAPI', () => {
         expect(result.featureIds).toHaveLength(1);
         const feature = context.store.getFeature(result.featureIds[0]);
         expect(feature?.type).toBe(type);
-        expect(feature?.coordinates).toEqual(coordinates);
+        expect(coordinatesOf(feature)).toEqual(coordinates);
       }
     });
 
@@ -734,7 +741,7 @@ describe('createImportExportAPI', () => {
       expect(result.featureIds).toHaveLength(1);
       const feature = context.store.getFeature(result.featureIds[0]);
       expect(feature?.type).toBe('MultiPolygon');
-      expect((feature!.coordinates as unknown[]).length).toBe(3);
+      expect((coordinatesOf(feature!) as unknown[]).length).toBe(3);
     });
 
     it('folds a mixed GeometryCollection into at most three features, one per type', async () => {
@@ -770,8 +777,8 @@ describe('createImportExportAPI', () => {
       expect(result.featureIds).toHaveLength(2);
       const features = result.featureIds.map((id) => context.store.getFeature(id));
       expect(features.map((f) => f?.type)).toEqual(['MultiPoint', 'MultiPolygon']);
-      expect(features[0]?.coordinates).toEqual(multiPointCoords);
-      expect((features[1]!.coordinates as unknown[]).length).toBe(3);
+      expect(coordinatesOf(features[0])).toEqual(multiPointCoords);
+      expect((coordinatesOf(features[1]!) as unknown[]).length).toBe(3);
       // The properties are copied for each folded feature
       for (const feature of features) {
         expect(feature?.properties.category).toBe('mixed');
@@ -813,7 +820,7 @@ describe('createImportExportAPI', () => {
       expect(loaded.featureIds).toHaveLength(1);
       const feature = otherContext.store.getFeature(loaded.featureIds[0]);
       expect(feature?.type).toBe('MultiPolygon');
-      expect(feature?.coordinates).toEqual(multiPolygonCoords);
+      expect(coordinatesOf(feature)).toEqual(multiPolygonCoords);
     });
   });
 
@@ -905,22 +912,22 @@ describe('createImportExportAPI', () => {
       expect(feature?.style).toEqual({ strokeOpacity: 0.5 });
     });
 
-    it('leaves style undefined when every key is invalid', async () => {
+    it('leaves the style empty when every key is invalid', async () => {
       const api = createImportExportAPI(context);
       const result = await api.load(
         featureCollection(line, { stroke: 123, 'stroke-width': '3', 'fill-opacity': Number.NaN }),
       );
 
       const feature = context.store.getFeature(result.featureIds[0]);
-      expect(feature?.style).toBeUndefined();
+      expect(feature?.style).toEqual({});
     });
 
-    it('leaves style undefined for GeoJSON without simplestyle', async () => {
+    it('leaves the style empty for GeoJSON without simplestyle', async () => {
       const api = createImportExportAPI(context);
       const result = await api.load(featureCollection(point, { name: 'A' }));
 
       const feature = context.store.getFeature(result.featureIds[0]);
-      expect(feature?.style).toBeUndefined();
+      expect(feature?.style).toEqual({});
     });
 
     it('keeps the simplestyle keys in properties after copying (non-destructive)', async () => {
@@ -1031,11 +1038,11 @@ describe('createImportExportAPI', () => {
         [139.7, 35.6],
         [139.705, 35.605],
         [139.71, 35.61],
-      ] as unknown as Feature['coordinates'];
+      ] as unknown as FeatureCoordinates;
       context.store.createFeature(
         createTestFeature('ribbon-1', {
           type: 'Ribbon',
-          coordinates,
+          geometry: geometryFromCoordinates('Ribbon', coordinates),
           properties: { name: 'Ribbon 1', shape: 'curved', capStart: 'round' },
         }),
       );
@@ -1052,7 +1059,7 @@ describe('createImportExportAPI', () => {
       const result = await api2.load(doc);
       const restored = context2.store.getFeature(result.featureIds[0]);
       expect(restored?.type).toBe('Ribbon');
-      expect(restored?.coordinates).toEqual(coordinates);
+      expect(coordinatesOf(restored)).toEqual(coordinates);
       expect(restored?.properties.shape).toBe('curved');
       expect(restored?.properties.capStart).toBe('round');
     });
@@ -1062,10 +1069,13 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('line-1', {
           type: 'LineString',
-          coordinates: [
-            [139.7, 35.6],
-            [139.71, 35.61],
-          ] as unknown as Feature['coordinates'],
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [139.7, 35.6],
+              [139.71, 35.61],
+            ],
+          },
         }),
       );
       const doc = JSON.parse(api.export('geojson').data as string);
@@ -1113,7 +1123,11 @@ describe('createImportExportAPI', () => {
       [
         'a feature with malformed coordinates',
         {
-          features: [createTestFeature('n1', { coordinates: [0] as unknown as [number, number] })],
+          features: [
+            createTestFeature('n1', {
+              geometry: { type: 'Point', coordinates: [0] as unknown as [number, number] },
+            }),
+          ],
         },
       ],
       [
@@ -1122,17 +1136,24 @@ describe('createImportExportAPI', () => {
           features: [
             createTestFeature('n1', {
               type: 'Polygon',
-              coordinates: [
-                [0, 0],
-                [1, 1],
-              ] as unknown as Feature['coordinates'],
+              geometry: {
+                type: 'Polygon',
+                coordinates: [
+                  [0, 0],
+                  [1, 1],
+                ],
+              } as unknown as Feature['geometry'],
             }),
           ],
         },
       ],
       [
         'a feature with a non-finite coordinate',
-        { features: [createTestFeature('n1', { coordinates: [Number.NaN, 0] })] },
+        {
+          features: [
+            createTestFeature('n1', { geometry: { type: 'Point', coordinates: [Number.NaN, 0] } }),
+          ],
+        },
       ],
       [
         'a feature in a missing layer',
@@ -1213,7 +1234,9 @@ describe('createImportExportAPI', () => {
     it('loads its own export back into the same store with new ids', async () => {
       const api = createImportExportAPI(context);
       context.store.createFeature(createTestFeature('f0'));
-      context.store.createFeature(createTestFeature('f1', { coordinates: [140, 36] }));
+      context.store.createFeature(
+        createTestFeature('f1', { geometry: { type: 'Point', coordinates: [140, 36] } }),
+      );
 
       const doc = JSON.parse(api.export('geojson').data);
       const result = await api.load(doc);
@@ -1222,7 +1245,7 @@ describe('createImportExportAPI', () => {
       expect(result.featureIds).not.toContain('f0');
       expect(result.featureIds).not.toContain('f1');
       expect(context.store.getAllFeatures()).toHaveLength(4);
-      expect(context.store.getFeature(result.featureIds[1])?.coordinates).toEqual([140, 36]);
+      expect(coordinatesOf(context.store.getFeature(result.featureIds[1]))).toEqual([140, 36]);
     });
 
     it('re-ids a feature whose id repeats within the file', async () => {
@@ -1375,7 +1398,7 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('p1', {
           type: 'Polygon',
-          coordinates: [clockwiseSquare, counterClockwiseHole],
+          geometry: { type: 'Polygon', coordinates: [clockwiseSquare, counterClockwiseHole] },
         }),
       );
 
@@ -1384,7 +1407,7 @@ describe('createImportExportAPI', () => {
       expect(outer).toEqual([...clockwiseSquare].reverse());
       expect(hole).toEqual([...counterClockwiseHole].reverse());
       // The stored feature keeps the orientation it was drawn in
-      expect(context.store.getFeature('p1')?.coordinates).toEqual([
+      expect(coordinatesOf(context.store.getFeature('p1'))).toEqual([
         clockwiseSquare,
         counterClockwiseHole,
       ]);
@@ -1396,7 +1419,7 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('mp', {
           type: 'MultiPolygon',
-          coordinates: [[clockwiseSquare], [shifted]],
+          geometry: { type: 'MultiPolygon', coordinates: [[clockwiseSquare], [shifted]] },
         }),
       );
 
@@ -1408,15 +1431,20 @@ describe('createImportExportAPI', () => {
     it('rounds every position to 7 decimal places', () => {
       const api = createImportExportAPI(context);
       context.store.createFeature(
-        createTestFeature('m1', { coordinates: [139.123456789012, -35.000000049] }),
+        createTestFeature('m1', {
+          geometry: { type: 'Point', coordinates: [139.123456789012, -35.000000049] },
+        }),
       );
       context.store.createFeature(
         createTestFeature('l1', {
           type: 'LineString',
-          coordinates: [
-            [0.1 + 0.2, 1e-9],
-            [1, 2],
-          ],
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0.1 + 0.2, 1e-9],
+              [1, 2],
+            ],
+          },
         }),
       );
 
@@ -1428,14 +1456,19 @@ describe('createImportExportAPI', () => {
 
     it('gives the FeatureCollection a bbox of every exported position', () => {
       const api = createImportExportAPI(context);
-      context.store.createFeature(createTestFeature('m1', { coordinates: [139.7, 35.6] }));
+      context.store.createFeature(
+        createTestFeature('m1', { geometry: { type: 'Point', coordinates: [139.7, 35.6] } }),
+      );
       context.store.createFeature(
         createTestFeature('l1', {
           type: 'LineString',
-          coordinates: [
-            [139.5, 35.9],
-            [140, 35.2],
-          ],
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [139.5, 35.9],
+              [140, 35.2],
+            ],
+          },
         }),
       );
 
@@ -1485,14 +1518,19 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('l1', {
           type: 'LineString',
-          coordinates: [
-            [170, 10],
-            [180, 10],
-            [190.5, 12],
-          ],
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [170, 10],
+              [180, 10],
+              [190.5, 12],
+            ],
+          },
         }),
       );
-      context.store.createFeature(createTestFeature('m1', { coordinates: [-181.25, 5] }));
+      context.store.createFeature(
+        createTestFeature('m1', { geometry: { type: 'Point', coordinates: [-181.25, 5] } }),
+      );
 
       const data = JSON.parse(api.export('geojson').data);
 
@@ -1508,7 +1546,7 @@ describe('createImportExportAPI', () => {
       expect(data.features[1].geometry.coordinates).toEqual([178.75, 5]);
       expect(data.bbox).toEqual([-169.5, 5, 180, 12]);
       // The stored features keep their continuous longitudes
-      expect(context.store.getFeature('l1')?.coordinates).toEqual([
+      expect(coordinatesOf(context.store.getFeature('l1'))).toEqual([
         [170, 10],
         [180, 10],
         [190.5, 12],
@@ -1526,7 +1564,10 @@ describe('createImportExportAPI', () => {
         [179, 0],
       ];
       context.store.createFeature(
-        createTestFeature('p1', { type: 'Polygon', coordinates: [clockwise] }),
+        createTestFeature('p1', {
+          type: 'Polygon',
+          geometry: { type: 'Polygon', coordinates: [clockwise] },
+        }),
       );
 
       const [ring] = JSON.parse(api.export('geojson').data).features[0].geometry.coordinates;
@@ -1545,10 +1586,13 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('l1', {
           type: 'LineString',
-          coordinates: [
-            [175, 0],
-            [185, 0],
-          ],
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [175, 0],
+              [185, 0],
+            ],
+          },
         }),
       );
       const first = JSON.parse(api.export('geojson').data);
@@ -1556,7 +1600,7 @@ describe('createImportExportAPI', () => {
       const context2 = createTestContext();
       const api2 = createImportExportAPI(context2);
       const result = await api2.load(first);
-      expect(context2.store.getFeature(result.featureIds[0])?.coordinates).toEqual([
+      expect(coordinatesOf(context2.store.getFeature(result.featureIds[0]))).toEqual([
         [175, 0],
         [-175, 0],
       ]);
@@ -1570,10 +1614,13 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('l1', {
           type: 'LineString',
-          coordinates: [
-            [-180, 0],
-            [180, 0],
-          ],
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [-180, 0],
+              [180, 0],
+            ],
+          },
         }),
       );
 
@@ -1769,7 +1816,7 @@ describe('createImportExportAPI', () => {
       context.store.createFeature(
         createTestFeature('p1', {
           type: 'Point',
-          coordinates: [1, 2],
+          geometry: { type: 'Point', coordinates: [1, 2] },
           style: { pointShape: 'triangle', pointColor: '#00ff00' },
         }),
       );

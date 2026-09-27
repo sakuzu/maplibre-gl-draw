@@ -38,10 +38,10 @@ export function createFeatureApi(deps: FeatureApiDeps): FeatureApi {
       const feature: Feature = {
         id: input.id ?? generateFeatureId(),
         type: input.type,
-        coordinates: input.coordinates,
+        geometry: input.geometry,
         layerId: input.layerId ?? getActiveLayerId(),
         properties: input.properties ?? {},
-        style: input.style,
+        style: input.style ?? {},
         locked: input.locked ?? false,
         visible: input.visible ?? true,
       };

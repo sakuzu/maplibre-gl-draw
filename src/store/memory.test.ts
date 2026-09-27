@@ -8,6 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer, StateChanges, StyleRule } from './types.js';
 
@@ -28,11 +29,12 @@ function createTestFeature(id: string, overrides?: Partial<Feature>): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...overrides,
   };
 }
@@ -124,9 +126,9 @@ describe('MemoryStore', () => {
       });
 
       it('updates a feature', () => {
-        store.updateFeature('feature-1', { coordinates: [1, 1] });
+        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [1, 1] } });
 
-        expect(store.getFeature('feature-1')?.coordinates).toEqual([1, 1]);
+        expect(coordinatesOf(store.getFeature('feature-1'))).toEqual([1, 1]);
       });
 
       it('throws an error for an ID that does not exist', () => {
@@ -140,7 +142,7 @@ describe('MemoryStore', () => {
 
         const feature = store.getFeature('feature-1');
         expect(feature?.properties.name).toBe('Updated');
-        expect(feature?.coordinates).toEqual([0, 0]); // the other properties are kept
+        expect(coordinatesOf(feature)).toEqual([0, 0]); // the other properties are kept
       });
 
       it('changing groupId moves it between groups (an emptied group is auto-deleted)', () => {
@@ -160,24 +162,32 @@ describe('MemoryStore', () => {
         const listener = vi.fn();
         store.subscribe(listener);
 
-        store.updateFeature('feature-1', { coordinates: [5, 5] });
+        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [5, 5] } });
 
         const changes: StateChanges = listener.mock.calls[0][0];
-        expect(changes.features?.updated?.[0].previous.coordinates).toEqual([0, 0]);
-        expect(changes.features?.updated?.[0].feature.coordinates).toEqual([5, 5]);
+        expect(coordinatesOf(changes.features?.updated?.[0].previous)).toEqual([0, 0]);
+        expect(coordinatesOf(changes.features?.updated?.[0].feature)).toEqual([5, 5]);
       });
 
       it('is applied as usual even with isIntermediate', () => {
-        store.updateFeature('feature-1', { coordinates: [5, 5] }, { isIntermediate: true });
+        store.updateFeature(
+          'feature-1',
+          { geometry: { type: 'Point', coordinates: [5, 5] } },
+          { isIntermediate: true },
+        );
 
-        expect(store.getFeature('feature-1')?.coordinates).toEqual([5, 5]);
+        expect(coordinatesOf(store.getFeature('feature-1'))).toEqual([5, 5]);
       });
 
       it('isIntermediate is passed through to StateChanges', () => {
         const listener = vi.fn();
         store.subscribe(listener);
 
-        store.updateFeature('feature-1', { coordinates: [5, 5] }, { isIntermediate: true });
+        store.updateFeature(
+          'feature-1',
+          { geometry: { type: 'Point', coordinates: [5, 5] } },
+          { isIntermediate: true },
+        );
 
         const changes: StateChanges = listener.mock.calls[0][0];
         expect(changes.features?.updated?.[0].isIntermediate).toBe(true);
@@ -187,9 +197,13 @@ describe('MemoryStore', () => {
         const listener = vi.fn();
         store.subscribe(listener);
 
-        store.updateFeature('feature-1', { coordinates: [5, 5] });
-        store.updateFeature('feature-1', { coordinates: [6, 6] }, {});
-        store.updateFeature('feature-1', { coordinates: [7, 7] }, { isIntermediate: false });
+        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [5, 5] } });
+        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [6, 6] } }, {});
+        store.updateFeature(
+          'feature-1',
+          { geometry: { type: 'Point', coordinates: [7, 7] } },
+          { isIntermediate: false },
+        );
 
         for (const call of listener.mock.calls) {
           const changes: StateChanges = call[0];
@@ -744,8 +758,12 @@ describe('MemoryStore', () => {
       store.subscribe(listener);
 
       store.transact(() => {
-        store.updateFeature('feature-1', { coordinates: [1, 1] }, { isIntermediate: true });
-        store.updateFeature('feature-1', { coordinates: [2, 2] });
+        store.updateFeature(
+          'feature-1',
+          { geometry: { type: 'Point', coordinates: [1, 1] } },
+          { isIntermediate: true },
+        );
+        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [2, 2] } });
       });
 
       const changes: StateChanges = listener.mock.calls[0][0];
@@ -754,7 +772,7 @@ describe('MemoryStore', () => {
       expect(updated[0].isIntermediate).toBe(true);
       // The last (final) entry carries no flag, and its value is the final value
       expect(updated[1]).not.toHaveProperty('isIntermediate');
-      expect(updated[1].feature.coordinates).toEqual([2, 2]);
+      expect(coordinatesOf(updated[1].feature)).toEqual([2, 2]);
     });
 
     it('a nested transaction works correctly', () => {

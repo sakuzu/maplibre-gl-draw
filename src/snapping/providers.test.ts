@@ -13,6 +13,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initialBearingDegrees } from '../geometry/distance.js';
+import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type {
@@ -58,11 +59,12 @@ function addFeature(
   const feature: Feature = {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...overrides,
   };
   store.createFeature(feature);
@@ -307,7 +309,7 @@ describe('the built-in vertex provider', () => {
   it('delegates a custom type to the registered getSnapTargets', () => {
     addFeature('marker', 'Marker', [0.1, 0.1]);
     snapTargets.register('Marker', (feature) => {
-      const coord = feature.coordinates as Coordinate;
+      const coord = coordinatesOf(feature) as Coordinate;
       return [
         { kind: 'vertex', coordinate: coord, description: 'marker-center' },
         { kind: 'edge', start: coord, end: [coord[0] + 0.01, coord[1]] },
@@ -348,7 +350,7 @@ describe('the built-in vertex provider', () => {
     snapTargets.register('Marker', (feature) => [
       {
         kind: 'vertex',
-        coordinate: feature.coordinates as Coordinate,
+        coordinate: coordinatesOf(feature) as Coordinate,
         vertex: { ring: 0, index: 0 },
       },
     ]);

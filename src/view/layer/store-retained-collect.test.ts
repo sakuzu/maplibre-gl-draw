@@ -7,6 +7,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { drawPropertyKey } from '../../shared/properties.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Feature } from '../../store/types.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import { collectLineItems, collectPoints, collectPolygons } from './store-retained-collect.js';
@@ -14,17 +16,18 @@ import { collectLineItems, collectPoints, collectPolygons } from './store-retain
 function makeFeature(
   id: string,
   type: Feature['type'],
-  coordinates: unknown,
+  coordinates: FeatureCoordinates,
   properties: Record<string, unknown> = {},
 ): Feature {
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
     properties,
     locked: false,
     visible: true,
+    style: {},
   } as Feature;
 }
 

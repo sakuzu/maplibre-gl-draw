@@ -24,19 +24,23 @@ function polygon(id: string, layerId: string): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

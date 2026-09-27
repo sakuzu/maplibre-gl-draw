@@ -7,6 +7,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature } from '../../store/types.js';
@@ -255,7 +256,7 @@ describe('loadGeoJSON', () => {
         deps,
       );
 
-      expect(store.getFeature(result.featureIds[0])?.coordinates).toEqual([1, 2]);
+      expect(coordinatesOf(store.getFeature(result.featureIds[0]))).toEqual([1, 2]);
     });
 
     it('keeps the ring orientation as given', async () => {
@@ -282,7 +283,7 @@ describe('loadGeoJSON', () => {
         deps,
       );
 
-      const polygon = store.getFeature(result.featureIds[0])?.coordinates as number[][][];
+      const polygon = coordinatesOf(store.getFeature(result.featureIds[0])) as number[][][];
       expect(signedArea(polygon[0])).toBeLessThan(0);
       expect(signedArea(polygon[1])).toBeGreaterThan(0);
     });
@@ -310,11 +311,12 @@ describe('loadGeoJSON', () => {
     store.createFeature({
       id: 'taken',
       type: 'Point',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'default-layer',
       properties: {},
       visible: true,
       locked: false,
+      style: {},
     });
     deps.generateFeatureId = () => 'taken';
 

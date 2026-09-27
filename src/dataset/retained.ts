@@ -31,6 +31,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { generateCirclePolygon } from '../shared/math/index.js';
 import type { Coordinate, Feature } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../shared/utils/property.js';
 import { toLineBatchItem, toPointInstanceData } from '../view/renderers/batch-manager.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../view/renderers/draw-factors.js';
@@ -944,7 +945,7 @@ export function collectFeature(
     case 'Point':
       collectPoint(
         feature,
-        feature.coordinates as Coordinate,
+        coordinatesOf(feature) as Coordinate,
         draft,
         styles,
         isExternallyRenderedPoint,
@@ -953,24 +954,31 @@ export function collectFeature(
     case 'MultiPoint':
       // Whether the predicate applies to Point alone is up to the predicate itself (the test is
       // in one place)
-      for (const coord of feature.coordinates as Coordinate[]) {
+      for (const coord of coordinatesOf(feature) as Coordinate[]) {
         collectPoint(feature, coord, draft, styles, isExternallyRenderedPoint);
       }
       return;
     case 'LineString':
     case 'Freehand':
-      collectLine(feature, feature.coordinates as Coordinate[], draft, styles, skipSolid);
+      collectLine(feature, coordinatesOf(feature) as Coordinate[], draft, styles, skipSolid);
       return;
     case 'MultiLineString':
-      for (const coords of feature.coordinates as Coordinate[][]) {
+      for (const coords of coordinatesOf(feature) as Coordinate[][]) {
         collectLine(feature, coords, draft, styles, skipSolid);
       }
       return;
     case 'Polygon':
-      collectPolygon(feature, feature.coordinates as Coordinate[][], draft, styles, 0, skipSolid);
+      collectPolygon(
+        feature,
+        coordinatesOf(feature) as Coordinate[][],
+        draft,
+        styles,
+        0,
+        skipSolid,
+      );
       return;
     case 'MultiPolygon': {
-      const parts = feature.coordinates as Coordinate[][][];
+      const parts = coordinatesOf(feature) as Coordinate[][][];
       for (let i = 0; i < parts.length; i++) {
         collectPolygon(feature, parts[i], draft, styles, i, skipSolid);
       }
@@ -979,7 +987,7 @@ export function collectFeature(
     case 'Circle': {
       const radiusMeters = getCircleRadius(feature);
       if (!radiusMeters || radiusMeters <= 0) return;
-      const center = feature.coordinates as Coordinate;
+      const center = coordinatesOf(feature) as Coordinate;
       collectPolygon(feature, [generateCirclePolygon(center, radiusMeters)], draft, styles);
       return;
     }

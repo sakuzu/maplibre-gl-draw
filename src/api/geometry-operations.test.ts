@@ -18,6 +18,7 @@ import { unionAll } from '../geometry/boolean.js';
 import { pointInPolygon } from '../geometry/predicates.js';
 import type { AreaCoordinates } from '../geometry/types.js';
 import { generateCirclePolygon } from '../shared/math/index.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { GeometryAppliedPayload } from '../shared/utils/event-emitter.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
 import { MemoryStore } from '../store/memory.js';
@@ -58,6 +59,7 @@ function addFeature(input: FeatureInput & { id: string }): Feature {
     locked: false,
     visible: true,
     ...input,
+    style: input.style ?? {},
   };
   store.createFeature(feature);
   return feature;
@@ -69,12 +71,17 @@ function addSquare(
   bounds: [number, number, number, number],
   extra: Partial<Feature> = {},
 ): Feature {
-  return addFeature({ id, type: 'Polygon', coordinates: square(...bounds), ...extra });
+  return addFeature({
+    id,
+    type: 'Polygon',
+    geometry: { type: 'Polygon', coordinates: square(...bounds) },
+    ...extra,
+  });
 }
 
 /** The polygon coordinates of a result feature (accepts either Polygon or MultiPolygon). */
 function areaOf(feature: Feature): AreaCoordinates {
-  return feature.coordinates as AreaCoordinates;
+  return coordinatesOf(feature) as AreaCoordinates;
 }
 
 beforeEach(() => {
@@ -124,7 +131,7 @@ describe('draw.geometry.union', () => {
 
     const result = store.getFeature('geo-1');
     expect(result?.type).toBe('MultiPolygon');
-    expect((result!.coordinates as Coordinate[][][]).length).toBe(2);
+    expect((coordinatesOf(result!) as Coordinate[][][]).length).toBe(2);
     expect(pointInPolygon([5, 5], areaOf(result!))).toBe(true);
     expect(pointInPolygon([25, 5], areaOf(result!))).toBe(true);
     expect(pointInPolygon([15, 5], areaOf(result!))).toBe(false);
@@ -190,7 +197,7 @@ describe('draw.geometry.subtract', () => {
     const result = store.getFeature('geo-1');
     expect(result?.type).toBe('Polygon');
     // Two rings: the outer ring plus the inner ring
-    expect((result!.coordinates as Coordinate[][]).length).toBe(2);
+    expect((coordinatesOf(result!) as Coordinate[][]).length).toBe(2);
     expect(pointInPolygon([5, 5], areaOf(result!))).toBe(true);
     expect(pointInPolygon([15, 15], areaOf(result!))).toBe(false);
   });
@@ -332,7 +339,7 @@ describe('the handling of a Circle', () => {
     addFeature({
       id: 'circle',
       type: 'Circle',
-      coordinates: center,
+      geometry: { type: 'Point', coordinates: center },
       properties: { radiusMeters, radiusHandleAngle: 135, name: '円' },
     });
     addSquare('far', [20, 20, 30, 30]);
@@ -348,17 +355,22 @@ describe('the handling of a Circle', () => {
       [generateCirclePolygon(center, radiusMeters)],
       square(20, 20, 30, 30),
     ]);
-    expect(result?.coordinates).toEqual(expected);
+    expect(coordinatesOf(result)).toEqual(expected);
     // The part that came from the circle stays at 64 segments (65 points with the
     // closing point)
-    expect((result!.coordinates as Coordinate[][][])[0][0]).toHaveLength(65);
+    expect((coordinatesOf(result!) as Coordinate[][][])[0][0]).toHaveLength(65);
     // The parametric properties that came from the circle are lost
     expect(result?.properties.radiusMeters).toBeUndefined();
     expect(result?.properties.radiusHandleAngle).toBeUndefined();
   });
 
   it('does not include a Circle without a radius among the targets', () => {
-    addFeature({ id: 'circle', type: 'Circle', coordinates: [0, 0], properties: {} });
+    addFeature({
+      id: 'circle',
+      type: 'Circle',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: {},
+    });
     addSquare('a', [0, 0, 10, 10]);
     store.setSelection('feature', ['circle', 'a']);
 
@@ -391,10 +403,13 @@ describe('narrowing down the targets', () => {
     addFeature({
       id: 'line',
       type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [10, 10],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [10, 10],
+        ],
+      },
     });
     store.setSelection('feature', ['a', 'line']);
 
@@ -551,7 +566,12 @@ describe('the inheritance and placement of the result', () => {
 
 /** A shorthand for adding a line feature. */
 function addLine(id: string, coordinates: Coordinate[], extra: Partial<Feature> = {}): Feature {
-  return addFeature({ id, type: 'LineString', coordinates, ...extra });
+  return addFeature({
+    id,
+    type: 'LineString',
+    geometry: { type: 'LineString', coordinates: coordinates },
+    ...extra,
+  });
 }
 
 describe('draw.geometry.buffer', () => {
@@ -594,7 +614,7 @@ describe('draw.geometry.buffer', () => {
   });
 
   it('makes the buffer of a point a circle', () => {
-    addFeature({ id: 'p', type: 'Point', coordinates: [0, 0] });
+    addFeature({ id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
 
     geometry.buffer(['p'], { distanceMeters: 200 });
 
@@ -608,44 +628,47 @@ describe('draw.geometry.buffer', () => {
     addFeature({
       id: 'points',
       type: 'MultiPoint',
-      coordinates: [
-        [0, 0],
-        [1, 0],
-      ],
+      geometry: {
+        type: 'MultiPoint',
+        coordinates: [
+          [0, 0],
+          [1, 0],
+        ],
+      },
     });
 
     geometry.buffer(['points'], { distanceMeters: 100 });
 
     const result = store.getFeature('geo-1');
     expect(result?.type).toBe('MultiPolygon');
-    expect((result!.coordinates as Coordinate[][][]).length).toBe(2);
+    expect((coordinatesOf(result!) as Coordinate[][][]).length).toBe(2);
   });
 
   it('allows the number of segments to be specified', () => {
-    addFeature({ id: 'p', type: 'Point', coordinates: [0, 0] });
+    addFeature({ id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
 
     geometry.buffer(['p'], { distanceMeters: 100, segments: 8 });
 
     const result = store.getFeature('geo-1');
     // A circle of 8 segments (9 points with the closing point)
-    expect((result!.coordinates as Coordinate[][])[0]).toHaveLength(9);
+    expect((coordinatesOf(result!) as Coordinate[][])[0]).toHaveLength(9);
   });
 
   it('normalizes a number of segments that is not usable', () => {
-    addFeature({ id: 'p', type: 'Point', coordinates: [0, 0] });
-    addFeature({ id: 'q', type: 'Point', coordinates: [1, 0] });
+    addFeature({ id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
+    addFeature({ id: 'q', type: 'Point', geometry: { type: 'Point', coordinates: [1, 0] } });
 
     // NaN falls back to the default and Infinity is capped, instead of an empty result or
     // a loop that never ends
     geometry.buffer(['p'], { distanceMeters: 100, segments: Number.NaN });
     geometry.buffer(['q'], { distanceMeters: 100, segments: Number.POSITIVE_INFINITY });
 
-    expect((store.getFeature('geo-1')!.coordinates as Coordinate[][])[0]).toHaveLength(65);
-    expect((store.getFeature('geo-2')!.coordinates as Coordinate[][])[0]).toHaveLength(1025);
+    expect((coordinatesOf(store.getFeature('geo-1')!) as Coordinate[][])[0]).toHaveLength(65);
+    expect((coordinatesOf(store.getFeature('geo-2')!) as Coordinate[][])[0]).toHaveLength(1025);
   });
 
   it('creates nothing for an input out of scope (a buffer reaching a pole)', () => {
-    addFeature({ id: 'p', type: 'Point', coordinates: [0, 89.9999] });
+    addFeature({ id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [0, 89.9999] } });
     const listener = vi.fn();
     eventEmitter.on('geometry.applied', listener);
 
@@ -728,7 +751,7 @@ describe('a negative value for draw.geometry.buffer', () => {
   });
 
   it('skips a negative value applied to a point or a line', () => {
-    addFeature({ id: 'p', type: 'Point', coordinates: [0, 0] });
+    addFeature({ id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
     addLine('line', [
       [0, 1],
       [0.01, 1],
@@ -745,7 +768,7 @@ describe('a negative value for draw.geometry.buffer', () => {
   });
 
   it('changes nothing and reports status empty when every input was skipped', () => {
-    addFeature({ id: 'p', type: 'Point', coordinates: [0, 0] });
+    addFeature({ id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
     addLine('line', [
       [0, 1],
       [0.01, 1],
@@ -775,7 +798,7 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
     addFeature({
       id: 'circle',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       properties: { radiusMeters: 1000, radiusHandleAngle: 135, name: '円' },
       style: { fillColor: '#00ff00' },
     });
@@ -785,7 +808,7 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
     expect(resultIds).toEqual(['geo-1']);
     const result = store.getFeature('geo-1');
     expect(result?.type).toBe('Circle');
-    expect(result?.coordinates).toEqual([0, 0]);
+    expect(coordinatesOf(result)).toEqual([0, 0]);
     // It keeps the parametric nature (the Circle-specific properties carry over too)
     expect(result?.properties).toEqual({ radiusMeters: 1500, radiusHandleAngle: 135, name: '円' });
     expect(result?.style).toEqual({ fillColor: '#00ff00' });
@@ -795,7 +818,7 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
     addFeature({
       id: 'circle',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       properties: { radiusMeters: 1000 },
     });
 
@@ -808,7 +831,7 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
     addFeature({
       id: 'circle',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       properties: { radiusMeters: 1000 },
     });
     store.setSelection('feature', ['circle']);
@@ -823,7 +846,12 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
   });
 
   it('drops a Circle without a radius from the targets', () => {
-    addFeature({ id: 'circle', type: 'Circle', coordinates: [0, 0], properties: {} });
+    addFeature({
+      id: 'circle',
+      type: 'Circle',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: {},
+    });
     store.setSelection('feature', ['circle']);
 
     expect(geometry.buffer({ distanceMeters: 100 })).toEqual([]);
@@ -836,12 +864,15 @@ describe('narrowing down the targets of draw.geometry.buffer', () => {
     addFeature({
       id: 'freehand',
       type: 'Freehand',
-      coordinates: [
-        [0, 0],
-        [0.01, 0],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [0.01, 0],
+        ],
+      },
     });
-    addFeature({ id: 'image', type: 'Image', coordinates: [0, 1] });
+    addFeature({ id: 'image', type: 'Image', geometry: { type: 'Point', coordinates: [0, 1] } });
     addLine('line', [
       [0, 2],
       [0.01, 2],
@@ -855,7 +886,7 @@ describe('narrowing down the targets of draw.geometry.buffer', () => {
   });
 
   it('emits no event either when there is no target', () => {
-    addFeature({ id: 'image', type: 'Image', coordinates: [0, 0] });
+    addFeature({ id: 'image', type: 'Image', geometry: { type: 'Point', coordinates: [0, 0] } });
     store.setSelection('feature', ['image']);
 
     expect(geometry.buffer({ distanceMeters: 100 })).toEqual([]);
@@ -1133,7 +1164,7 @@ describe('draw.geometry.split', () => {
     addFeature({
       id: 'donut',
       type: 'Polygon',
-      coordinates: [...square(0, 0, 10, 10), ...square(4, 4, 6, 6)],
+      geometry: { type: 'Polygon', coordinates: [...square(0, 0, 10, 10), ...square(4, 4, 6, 6)] },
     });
     addLine('cut', [
       [-1, 9],
@@ -1144,7 +1175,7 @@ describe('draw.geometry.split', () => {
 
     expect(resultIds).toHaveLength(2);
     const rings = resultIds.map(
-      (id) => (store.getFeature(id)!.coordinates as Coordinate[][]).length,
+      (id) => (coordinatesOf(store.getFeature(id)!) as Coordinate[][]).length,
     );
     expect(rings.sort()).toEqual([1, 2]);
   });
@@ -1153,7 +1184,10 @@ describe('draw.geometry.split', () => {
     addFeature({
       id: 'islands',
       type: 'MultiPolygon',
-      coordinates: [square(0, 0, 10, 10), square(20, 0, 30, 10)],
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [square(0, 0, 10, 10), square(20, 0, 30, 10)],
+      },
     });
     addLine('cut', [
       [-1, 5],
@@ -1183,16 +1217,19 @@ describe('draw.geometry.split', () => {
     addFeature({
       id: 'cut',
       type: 'MultiLineString',
-      coordinates: [
-        [
-          [-1, 5],
-          [11, 5],
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [-1, 5],
+            [11, 5],
+          ],
+          [
+            [5, -1],
+            [5, 11],
+          ],
         ],
-        [
-          [5, -1],
-          [5, 11],
-        ],
-      ],
+      },
     });
 
     expect(geometry.split('area', 'cut')).toHaveLength(4);
@@ -1202,7 +1239,7 @@ describe('draw.geometry.split', () => {
     addFeature({
       id: 'circle',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       properties: { radiusMeters: 1000 },
     });
     addLine('cut', [
@@ -1306,7 +1343,7 @@ describe('draw.geometry.split', () => {
 
   it('does nothing even when something other than a polygon or a line is given', () => {
     addSquare('area', [0, 0, 10, 10]);
-    addFeature({ id: 'point', type: 'Point', coordinates: [5, 5] });
+    addFeature({ id: 'point', type: 'Point', geometry: { type: 'Point', coordinates: [5, 5] } });
     addLine('cut', [
       [-1, 5],
       [11, 5],

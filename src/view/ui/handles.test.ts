@@ -27,11 +27,12 @@ function makePolygon(...rings: Coordinate[][]): Feature {
   return {
     id: 'polygon-1',
     type: 'Polygon',
-    coordinates: rings,
+    geometry: { type: 'Polygon', coordinates: rings },
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -60,14 +61,18 @@ describe('computeVertexHandles', () => {
     const feature: Feature = {
       id: 'line-1',
       type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [10, 10],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [10, 10],
+        ],
+      },
       layerId: 'layer-1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     expect(computeVertexHandles(feature).map((h) => h.vertexRef)).toEqual([
       { ring: 0, index: 0 },
@@ -128,14 +133,18 @@ describe('computeMidpointHandles', () => {
     const line: Feature = {
       id: 'slanted',
       type: 'LineString',
-      coordinates: [
-        [-60, 0],
-        [60, 50],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-60, 0],
+          [60, 50],
+        ],
+      },
       layerId: 'layer-1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const [handle] = computeMidpointHandles(line);
     // Halfway across in longitude, on the straight line of the Mercator plane (not at 25)
@@ -148,71 +157,83 @@ describe('handles of the Multi types (scanning all parts)', () => {
   const multiPoint: Feature = {
     id: 'multi-point-1',
     type: 'MultiPoint',
-    coordinates: [
-      [0, 0],
-      [10, 10],
-      [20, 20],
-    ] as Coordinate[],
+    geometry: {
+      type: 'MultiPoint',
+      coordinates: [
+        [0, 0],
+        [10, 10],
+        [20, 20],
+      ] as Coordinate[],
+    },
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 
   const multiLineString: Feature = {
     id: 'multi-line-1',
     type: 'MultiLineString',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-      ],
-      [
-        [0, 10],
-        [10, 10],
-        [20, 10],
-      ],
-    ] as Coordinate[][],
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+        ],
+        [
+          [0, 10],
+          [10, 10],
+          [20, 10],
+        ],
+      ] as Coordinate[][],
+    },
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 
   /** A MultiPolygon whose part 0 has a hole and whose part 1 is a triangle */
   const multiPolygon: Feature = {
     id: 'multi-polygon-1',
     type: 'MultiPolygon',
-    coordinates: [
-      [
+    geometry: {
+      type: 'MultiPolygon',
+      coordinates: [
         [
-          [0, 0],
-          [20, 0],
-          [20, 20],
-          [0, 20],
-          [0, 0],
+          [
+            [0, 0],
+            [20, 0],
+            [20, 20],
+            [0, 20],
+            [0, 0],
+          ],
+          [
+            [5, 5],
+            [15, 5],
+            [15, 15],
+            [5, 15],
+            [5, 5],
+          ],
         ],
         [
-          [5, 5],
-          [15, 5],
-          [15, 15],
-          [5, 15],
-          [5, 5],
+          [
+            [100, 100],
+            [110, 100],
+            [110, 110],
+            [100, 100],
+          ],
         ],
-      ],
-      [
-        [
-          [100, 100],
-          [110, 100],
-          [110, 110],
-          [100, 100],
-        ],
-      ],
-    ] as Coordinate[][][],
+      ] as Coordinate[][][],
+    },
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 
   it('returns vertex handles where one coordinate = one part for a MultiPoint', () => {
@@ -309,11 +330,12 @@ describe('computeCircleRadiusHandle', () => {
       const circle: Feature = {
         id: 'circle-1',
         type: 'Circle',
-        coordinates: center,
+        geometry: { type: 'Point', coordinates: center },
         layerId: 'layer-1',
         properties: { radiusMeters, radiusHandleAngle: angle },
         locked: false,
         visible: true,
+        style: {},
       };
       const handle = computeCircleRadiusHandle(circle);
       expect(handle?.type).toBe('radius');

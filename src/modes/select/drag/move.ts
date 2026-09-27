@@ -6,7 +6,11 @@
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import { mapCoordinatesDeep } from '../../../shared/utils/coordinates.js';
+import {
+  coordinatesOf,
+  geometryFromCoordinates,
+  mapCoordinatesDeep,
+} from '../../../shared/utils/coordinates.js';
 import type { FeatureCoordinates } from '../../../store/types.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
@@ -53,7 +57,7 @@ export class MoveDrag implements DragOperation {
       const initialCoords = this.state.initialCoordinates.get(id);
       if (feature && initialCoords) {
         const newCoords = translateCoordinates(initialCoords, dx, dy);
-        writes.write(store, id, { coordinates: newCoords });
+        writes.write(store, id, { geometry: geometryFromCoordinates(feature.type, newCoords) });
       }
     }
   }
@@ -72,7 +76,7 @@ export function startMoveDrag(
   for (const id of featureIds) {
     const feature = store.getFeature(id);
     if (feature) {
-      initialCoordinates.set(id, JSON.parse(JSON.stringify(feature.coordinates)));
+      initialCoordinates.set(id, JSON.parse(JSON.stringify(coordinatesOf(feature))));
     }
   }
 

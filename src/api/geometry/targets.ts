@@ -12,6 +12,7 @@ import type {
   MultiPolygonCoordinates,
 } from '../../geometry/types.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import { isFeatureLocked } from '../../store/lock.js';
@@ -43,10 +44,10 @@ export function toAreaCoordinates(feature: Feature): AreaCoordinates | null {
   if (feature.type === 'Circle') {
     const radiusMeters = getCircleRadius(feature);
     if (radiusMeters === undefined || radiusMeters <= 0) return null;
-    return [generateCirclePolygon(feature.coordinates as Coordinate, radiusMeters)];
+    return [generateCirclePolygon(coordinatesOf(feature) as Coordinate, radiusMeters)];
   }
   if (feature.type === 'Polygon' || feature.type === 'MultiPolygon') {
-    return feature.coordinates as AreaCoordinates;
+    return coordinatesOf(feature) as AreaCoordinates;
   }
   return null;
 }
@@ -77,8 +78,8 @@ export function isSplitLineFeature(feature: Feature): boolean {
  * returns an empty array.
  */
 export function toSplitPaths(feature: Feature): Coordinate[][] {
-  if (feature.type === 'MultiLineString') return feature.coordinates as Coordinate[][];
-  if (isSplitLineFeature(feature)) return [feature.coordinates as Coordinate[]];
+  if (feature.type === 'MultiLineString') return coordinatesOf(feature) as Coordinate[][];
+  if (isSplitLineFeature(feature)) return [coordinatesOf(feature) as Coordinate[]];
   return [];
 }
 
@@ -129,7 +130,7 @@ export function toBufferGeometry(feature: Feature): GeometryInput | null {
     case 'MultiLineString':
     case 'Polygon':
     case 'MultiPolygon':
-      return { type: feature.type, coordinates: feature.coordinates } as GeometryInput;
+      return { type: feature.type, coordinates: coordinatesOf(feature) } as GeometryInput;
     default:
       return null;
   }

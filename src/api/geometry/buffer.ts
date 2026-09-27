@@ -13,6 +13,7 @@
 import { buffer as computeBuffer } from '../../geometry/buffer.js';
 // buffer is imported under an alias so that the name reads as the geometry module's function.
 import { drawProperties } from '../../shared/properties.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
 import { applyResult, emitApplied } from './apply.js';
@@ -43,7 +44,7 @@ function planCircleBuffer(input: Feature, distanceMeters: number): BufferPlan | 
 
   return {
     input,
-    geometry: { type: 'Circle', coordinates: input.coordinates },
+    geometry: { type: 'Circle', coordinates: coordinatesOf(input) },
     // It stays a Circle, so the properties including radiusHandleAngle are inherited and only
     // the radius is replaced.
     properties: { ...input.properties, ...drawProperties({ radiusMeters: nextRadius }) },

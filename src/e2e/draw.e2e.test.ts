@@ -14,6 +14,7 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Feature } from '../index.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
@@ -79,7 +80,7 @@ async function clearAll(page: Page): Promise<void> {
 
 /** The outer ring of a Polygon feature */
 function outerRing(feature: Feature): number[][] {
-  return (feature.coordinates as number[][][])[0];
+  return (coordinatesOf(feature) as number[][][])[0];
 }
 
 let browser: Browser;
@@ -106,7 +107,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(-50, 20));
     const [point] = await features(page);
     expect(point.type).toBe('Point');
-    expectNear(point.coordinates as number[], await lngLatOf(page, at(-50, 20)));
+    expectNear(coordinatesOf(point) as number[], await lngLatOf(page, at(-50, 20)));
     expect(await mode(page)).toBe('select');
 
     await setMode(page, 'draw_point');
@@ -125,8 +126,8 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(100, 0));
     const [line] = await features(page);
     expect(line.type).toBe('LineString');
-    expect(line.coordinates).toHaveLength(3);
-    expectNear((line.coordinates as number[][])[1], await lngLatOf(page, at(0, -60)));
+    expect(coordinatesOf(line)).toHaveLength(3);
+    expectNear((coordinatesOf(line) as number[][])[1], await lngLatOf(page, at(0, -60)));
     expect(await mode(page)).toBe('select');
 
     await setMode(page, 'draw_line');
@@ -190,7 +191,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await drag(page, at(-120, 80), at(120, 40), 16);
     const [stroke] = await features(page);
     expect(stroke.type).toBe('Freehand');
-    expect((stroke.coordinates as number[][]).length).toBeGreaterThan(2);
+    expect((coordinatesOf(stroke) as number[][]).length).toBeGreaterThan(2);
     expect(await mode(page)).toBe('draw_freehand');
 
     // Escape while the button is down cancels the drag (dragcancel), and the release that
@@ -248,7 +249,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(0, 0));
     await drag(page, at(0, 0), at(2, 0), 2);
     const [after] = await features(page);
-    expect(after.coordinates).toEqual(before.coordinates);
+    expect(coordinatesOf(after)).toEqual(coordinatesOf(before));
     expect(await selectedIds(page)).toEqual([before.id]);
   });
 

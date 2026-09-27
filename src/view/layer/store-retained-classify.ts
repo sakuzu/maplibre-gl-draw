@@ -9,6 +9,7 @@
  * identical to immediate mode.
  */
 
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { type PointShape, toInstancedPointShape } from '../renderers/point/point-instance.js';
@@ -86,29 +87,29 @@ export function featureOrigin(feature: Feature | undefined): [number, number] {
 
   switch (feature.type) {
     case 'MultiPoint': {
-      const coord = (feature.coordinates as Coordinate[])[0];
+      const coord = (coordinatesOf(feature) as Coordinate[])[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'LineString':
     case 'Freehand': {
-      const coord = (feature.coordinates as Coordinate[])[0];
+      const coord = (coordinatesOf(feature) as Coordinate[])[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'MultiLineString': {
-      const coord = (feature.coordinates as Coordinate[][])[0]?.[0];
+      const coord = (coordinatesOf(feature) as Coordinate[][])[0]?.[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'Polygon': {
-      const coord = (feature.coordinates as Coordinate[][])[0]?.[0];
+      const coord = (coordinatesOf(feature) as Coordinate[][])[0]?.[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'MultiPolygon': {
-      const coord = (feature.coordinates as Coordinate[][][])[0]?.[0]?.[0];
+      const coord = (coordinatesOf(feature) as Coordinate[][][])[0]?.[0]?.[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     default: {
       // A single coordinate, such as Point / Circle
-      const coord = feature.coordinates as Coordinate;
+      const coord = coordinatesOf(feature) as Coordinate;
       return Array.isArray(coord) && typeof coord[0] === 'number' ? [coord[0], coord[1]] : [0, 0];
     }
   }

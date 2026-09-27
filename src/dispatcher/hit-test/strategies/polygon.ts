@@ -9,6 +9,7 @@
  * The inside test is unaffected by that frame (it only scales the latitude axis).
  */
 
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
 import { latitudeScale, localPointToSegmentDistance } from '../local-frame.js';
 import { polylineDistanceWithin } from '../segment-grid.js';
@@ -21,17 +22,17 @@ export class PolygonHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'Polygon';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const rings = feature.coordinates as Coordinate[][];
+    const rings = coordinatesOf(feature) as Coordinate[][];
     return this.testRings(rings, coordinate, toleranceLngLat);
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const rings = feature.coordinates as Coordinate[][];
+    const rings = coordinatesOf(feature) as Coordinate[][];
     return this.distanceToRings(rings, coordinate);
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const rings = feature.coordinates as Coordinate[][];
+    const rings = coordinatesOf(feature) as Coordinate[][];
     return this.testDistanceRings(rings, coordinate, toleranceLngLat);
   }
 

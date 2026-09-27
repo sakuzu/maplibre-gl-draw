@@ -12,10 +12,12 @@
 import { describe, expect, it } from 'vitest';
 import type { MapLibreGLDraw } from '../maplibre-gl-draw.js';
 import type { ModeManager } from '../modes/manager.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
 import { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { MemoryStore } from '../store/memory.js';
 import { StoreSpatialIndex } from '../store/spatial/index.js';
+import type { Feature as StoreFeature } from '../store/types.js';
 import { setAnchorFrame } from '../view/terrain/anchor.js';
 import { TerrainContext } from '../view/terrain/context.js';
 import type { TerrainLike } from '../view/terrain/detect.js';
@@ -174,11 +176,12 @@ describe('PluginContext.setLayerItemOrder', () => {
       store.createFeature({
         id,
         type: 'Point',
-        coordinates: [0, 0],
+        geometry: { type: 'Point', coordinates: [0, 0] },
         layerId: lid,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       });
     }
     return context;
@@ -229,7 +232,7 @@ describe('PluginContext.invalidateFeatures', () => {
     // The extent depends on something outside the Store (a font that arrives later)
     let size = 0;
     spatialIndex.setCustomBoundingBoxCalculator('Point', (feature) => {
-      const [lng, lat] = feature.coordinates as [number, number];
+      const [lng, lat] = coordinatesOf(feature) as [number, number];
       return { minX: lng - size, minY: lat - size, maxX: lng + size, maxY: lat + size };
     });
     const [id] = ctx.addFeatures([
@@ -308,12 +311,13 @@ describe('the terrain anchors and selection extents of PluginContext', () => {
     const card = {
       id: 'c1',
       type: 'Card',
-      coordinates: [5, 5] as [number, number],
+      geometry: { type: 'Point', coordinates: [5, 5] },
       layerId: 'layer-1',
       properties: {},
+      style: {},
       locked: false,
       visible: true,
-    };
+    } satisfies StoreFeature;
 
     expect(ctx.computeBoundingBox(card)?.topLeft).toEqual([-1, 1]);
     // The other instance has no registration for the type, so it measures the coordinates
@@ -330,12 +334,13 @@ describe('PluginContext.getStore / on', () => {
     const feature = {
       id: 'f1',
       type: 'Point',
-      coordinates: [0, 0] as [number, number],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId,
       properties: {},
+      style: {},
       locked: false,
       visible: true,
-    };
+    } satisfies StoreFeature;
     expect(ctx.getStore().createFeature(feature)).toBe(false);
     expect(store.getFeature('f1')).toBeUndefined();
   });

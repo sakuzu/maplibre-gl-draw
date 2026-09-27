@@ -29,16 +29,21 @@ function point(id: string, coord: Coordinate): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function line(id: string, coords: Coordinate[]): Feature {
-  return { ...point(id, [0, 0]), type: 'LineString', coordinates: coords };
+  return {
+    ...point(id, [0, 0]),
+    type: 'LineString',
+    geometry: { type: 'LineString', coordinates: coords },
+  };
 }
 
 let store: MemoryStore;

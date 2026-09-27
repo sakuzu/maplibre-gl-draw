@@ -69,7 +69,7 @@ describe('the spatial index derived from the Store', () => {
       generateFeatureId: context.generateFeatureId,
       getActiveLayerId: context.getActiveLayerId,
     });
-    api.addFeature({ id: 'kept', type: 'Point', coordinates: [2, 2] });
+    api.addFeature({ id: 'kept', type: 'Point', geometry: { type: 'Point', coordinates: [2, 2] } });
     context.store.setReadOnly(true);
 
     await io.load({
@@ -119,7 +119,7 @@ describe('the spatial index derived from the Store', () => {
     api.addFeature({
       id: 'c1',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       properties: { radiusMeters: 100 },
     });
     expect(context.spatialIndex.findNear([0.5, 0], 0.001)).toEqual([]);

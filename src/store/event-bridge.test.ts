@@ -18,11 +18,12 @@ function makeFeature(id: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [139.7, 35.6],
+    geometry: { type: 'Point', coordinates: [139.7, 35.6] },
     layerId: 'default-layer',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

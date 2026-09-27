@@ -21,6 +21,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { browserTimeout } from '../test-utils.js';
 import { click, type E2EWindow, launchBrowser, type PagePoint, pageOf, settle } from './harness.js';
 
@@ -360,7 +361,7 @@ describe('the examples', () => {
       return all[all.length - 1];
     });
     expect(route.type).toBe('Route');
-    const [a, b] = route.coordinates as number[][];
+    const [a, b] = coordinatesOf(route) as number[][];
     const pt = await pageOf(page, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
     await click(page, pt);
     expect(
@@ -396,7 +397,8 @@ describe('the examples', () => {
       const dataset = (window as unknown as E2EWindow).draw.getDataset('places');
       const [feature] =
         dataset?.collectVisible({ minX: -180, minY: -85, maxX: 180, maxY: 85 }) ?? [];
-      return feature.coordinates as [number, number];
+      // In the page: the helpers of the library are not loaded here
+      return (feature.geometry as GeoJSON.Point).coordinates as [number, number];
     });
     await page.evaluate(
       (center) => (window as unknown as E2EWindow).map.jumpTo({ center, zoom: 18 }),

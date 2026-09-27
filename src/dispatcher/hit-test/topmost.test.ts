@@ -41,19 +41,23 @@ function polygon(id: string, layerId: string): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -271,19 +275,23 @@ describe('the z order and the consumption of the companions (feature companion)'
     return {
       id,
       type: 'Polygon',
-      coordinates: [
-        [
-          [100, 100],
-          [110, 100],
-          [110, 110],
-          [100, 110],
-          [100, 100],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [100, 100],
+            [110, 100],
+            [110, 110],
+            [100, 110],
+            [100, 100],
+          ],
         ],
-      ],
+      },
       layerId,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 

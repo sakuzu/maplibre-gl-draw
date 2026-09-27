@@ -27,7 +27,7 @@ function image(lng: number, lat: number, rotation: number): Feature {
   return {
     id: 'img',
     type: 'Image',
-    coordinates: [lng, lat],
+    geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l1',
     properties: {
       imageFileId: 'f',
@@ -38,6 +38,7 @@ function image(lng: number, lat: number, rotation: number): Feature {
     },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

@@ -10,7 +10,15 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { BoundingBox, Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
+import type {
+  BoundingBox,
+  Coordinate,
+  Feature,
+  FeatureCoordinates,
+  Layer,
+  StyleRule,
+} from '../shared/types/model.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
@@ -51,7 +59,7 @@ export interface DatasetFeatureInput {
   /** The geometry type, the same values as a feature of the Store */
   type: Feature['type'];
   /** The coordinates in `[lng, lat]` degrees, shaped as for `type` (holes and Multi included) */
-  coordinates: Feature['coordinates'];
+  coordinates: FeatureCoordinates;
   /** The attributes the style rule reads (`{}` when omitted) */
   properties?: Record<string, unknown>;
   /** The individual style; it wins over the rule color and the base style */
@@ -639,16 +647,16 @@ function truncatePositions(value: readonly unknown[]): unknown[] {
 export function normalizeDisplayFeature(input: DatasetFeatureInput): Feature {
   const coords = input.coordinates as readonly unknown[];
   const coordinates = hasExtraPositionElements(coords)
-    ? (truncatePositions(coords) as Feature['coordinates'])
+    ? (truncatePositions(coords) as FeatureCoordinates)
     : input.coordinates;
   return {
     id: input.id,
     type: input.type,
-    coordinates,
+    geometry: geometryFromCoordinates(input.type, coordinates),
     layerId: input.layerId ?? '',
     groupId: input.groupId,
     properties: input.properties ?? {},
-    style: input.style,
+    style: input.style ?? {},
     locked: input.locked ?? false,
     visible: input.visible !== false,
   };

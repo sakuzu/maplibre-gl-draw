@@ -13,7 +13,7 @@
 import type { Data, Feature, FileData, Group, Layer } from '../../store/types.js';
 import { NATIVE_VERSION } from './constants.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
-import { describeCoordinateProblem } from './geometry-validation.js';
+import { describeGeometryProblem } from './geometry-validation.js';
 import { sanitizeFeatureStyle } from './style-validation.js';
 
 function fail(message: string): never {
@@ -107,8 +107,8 @@ function validateFeature(
   const where = `feature "${feature.id}"`;
   if (!isNonEmptyString(feature.type)) fail(`${where} has no string type`);
 
-  const coordinateProblem = describeCoordinateProblem(feature.type, feature.coordinates);
-  if (coordinateProblem) fail(`${where} has ${coordinateProblem}`);
+  const geometryProblem = describeGeometryProblem(feature.type, feature.geometry);
+  if (geometryProblem) fail(`${where} has ${geometryProblem}`);
 
   if (typeof feature.layerId !== 'string' || !layerIds.has(feature.layerId)) {
     fail(`${where} refers to a layer that does not exist`);
@@ -127,11 +127,10 @@ function validateFeature(
   if (typeof feature.locked !== 'boolean') fail(`${where} has no boolean locked`);
 
   // A style key of the wrong type or form is dropped rather than rejecting the file: the
-  // store accepts any value through its API, so the library's own export can carry one
-  if (feature.style === undefined) return feature as unknown as Feature;
-  const { style: _style, ...rest } = feature;
-  const style = sanitizeFeatureStyle(feature.style);
-  return (style === undefined ? rest : { ...rest, style }) as unknown as Feature;
+  // store accepts any value through its API, so the library's own export can carry one. A
+  // feature without a usable style gets the empty style
+  const style = feature.style === undefined ? undefined : sanitizeFeatureStyle(feature.style);
+  return { ...feature, style: style ?? {} } as unknown as Feature;
 }
 
 async function validateFiles(files: unknown): Promise<FileData[]> {

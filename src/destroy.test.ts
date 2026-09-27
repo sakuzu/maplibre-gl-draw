@@ -154,7 +154,7 @@ describe('draw.destroy()', () => {
   it('leaves no timer running', () => {
     const stub = createMapStub();
     const draw = createMapLibreGLDraw(stub.map);
-    draw.addFeature({ type: 'Point', coordinates: [0, 0] } as never);
+    draw.addFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
     draw.destroy();
 
     expect(vi.getTimerCount()).toBe(0);
@@ -219,7 +219,7 @@ describe('draw.destroy()', () => {
     expect(() => {
       draw.setMode('draw_line');
       draw.setMode('select');
-      draw.addFeature({ type: 'Point', coordinates: [1, 1] } as never);
+      draw.addFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } });
       draw.getAllFeatures();
       draw.setReadOnly(true);
       draw.setReadOnly(false);

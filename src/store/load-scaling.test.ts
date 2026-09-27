@@ -25,6 +25,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Context } from '../api/context.js';
 import { createImportExportAPI } from '../api/import-export/index.js';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
 import { EventBridgeImpl } from './event-bridge.js';
 import { MemoryStore } from './memory.js';
@@ -62,7 +64,7 @@ function generate(count: number): Data {
     const type: Feature['type'] =
       r < 0.45 ? 'Point' : r < 0.7 ? 'LineString' : r < 0.9 ? 'Polygon' : 'Circle';
     const center: [number, number] = [139 + rand(), 35 + rand()];
-    let coordinates: Feature['coordinates'] = center;
+    let coordinates: FeatureCoordinates = center;
     const extra: Record<string, unknown> = {};
     if (type === 'LineString') coordinates = [center, [center[0] + 0.001, center[1]]];
     else if (type === 'Polygon')
@@ -75,11 +77,12 @@ function generate(count: number): Data {
     features.push({
       id,
       type,
-      coordinates,
+      geometry: geometryFromCoordinates(type, coordinates),
       layerId: `layer-${li}`,
       properties: { ...extra, name: `n ${i}` },
       locked: false,
       visible: true,
+      style: {},
     });
     perLayer[li].push(id);
   }
@@ -231,11 +234,12 @@ function measureSpreadMs(layerCount: number): number {
       store.createFeature({
         id: `f-${i}`,
         type: 'Point',
-        coordinates: [0, 0],
+        geometry: { type: 'Point', coordinates: [0, 0] },
         layerId: `L${i % layerCount}`,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       });
     }
   }, 'silent');

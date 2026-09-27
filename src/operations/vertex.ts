@@ -19,6 +19,7 @@
  * invalid reference.
  */
 
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { getVertexPart } from '../shared/utils/vertex-ref.js';
 import type { Coordinate, Feature, FeatureCoordinates, VertexRef } from '../store/types.js';
 
@@ -332,7 +333,7 @@ export function addVertex(
   const part = getVertexPart(after);
 
   if (feature.type === 'LineString') {
-    const lineCoords = (feature.coordinates as Coordinate[]).slice();
+    const lineCoords = (coordinatesOf(feature) as Coordinate[]).slice();
     // It has neither rings nor parts, so nothing is added other than ring 0 / part 0
     if (after.ring !== 0 || part !== 0) return lineCoords;
     lineCoords.splice(after.index + 1, 0, newCoord);
@@ -340,7 +341,7 @@ export function addVertex(
   }
 
   if (feature.type === 'Polygon') {
-    const initialRings = feature.coordinates as Coordinate[][];
+    const initialRings = coordinatesOf(feature) as Coordinate[][];
     const rings = initialRings.slice();
     if (part !== 0) return rings;
     if (after.ring < 0 || after.ring >= rings.length) return rings;
@@ -351,7 +352,7 @@ export function addVertex(
   }
 
   if (feature.type === 'MultiLineString') {
-    const initialParts = feature.coordinates as Coordinate[][];
+    const initialParts = coordinatesOf(feature) as Coordinate[][];
     const parts = initialParts.slice();
     if (after.ring !== 0) return parts;
     if (part < 0 || part >= parts.length) return parts;
@@ -362,7 +363,7 @@ export function addVertex(
   }
 
   if (feature.type === 'MultiPolygon') {
-    const initialParts = feature.coordinates as Coordinate[][][];
+    const initialParts = coordinatesOf(feature) as Coordinate[][][];
     const parts = initialParts.slice();
     if (part < 0 || part >= parts.length) return parts;
     const initialRings = initialParts[part];
@@ -375,7 +376,7 @@ export function addVertex(
     return parts;
   }
 
-  return copyTopLevelCoordinates(feature.coordinates);
+  return copyTopLevelCoordinates(coordinatesOf(feature));
 }
 
 /**
@@ -457,7 +458,7 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
     // It has neither rings nor parts, so anything other than ring 0 / part 0 is an
     // invalid reference
     if (ref.ring !== 0 || part !== 0) return null;
-    const initialCoords = feature.coordinates as Coordinate[];
+    const initialCoords = coordinatesOf(feature) as Coordinate[];
     // At least 2 points are needed
     if (initialCoords.length <= 2) return null;
     const lineCoords = initialCoords.slice();
@@ -467,13 +468,13 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
 
   if (feature.type === 'Polygon') {
     if (part !== 0) return null;
-    return deleteVertexFromRings(feature.coordinates as Coordinate[][], ref);
+    return deleteVertexFromRings(coordinatesOf(feature) as Coordinate[][], ref);
   }
 
   if (feature.type === 'MultiPoint') {
     // Deleting a vertex removes the part itself. The last remaining part cannot be
     // removed
-    const initialPoints = feature.coordinates as Coordinate[];
+    const initialPoints = coordinatesOf(feature) as Coordinate[];
     if (ref.ring !== 0 || ref.index !== 0) return null;
     if (part < 0 || part >= initialPoints.length) return null;
     if (initialPoints.length <= 1) return null;
@@ -483,7 +484,7 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
   }
 
   if (feature.type === 'MultiLineString') {
-    const initialParts = feature.coordinates as Coordinate[][];
+    const initialParts = coordinatesOf(feature) as Coordinate[][];
     if (ref.ring !== 0) return null;
     if (part < 0 || part >= initialParts.length) return null;
     const initialLine = initialParts[part];
@@ -497,7 +498,7 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
   }
 
   if (feature.type === 'MultiPolygon') {
-    const initialParts = feature.coordinates as Coordinate[][][];
+    const initialParts = coordinatesOf(feature) as Coordinate[][][];
     if (part < 0 || part >= initialParts.length) return null;
     const rings = deleteVertexFromRings(initialParts[part], ref);
     if (!rings) return null;
@@ -506,7 +507,7 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
     return parts;
   }
 
-  return copyTopLevelCoordinates(feature.coordinates);
+  return copyTopLevelCoordinates(coordinatesOf(feature));
 }
 
 /**
@@ -527,13 +528,13 @@ export function startVertexMove(
     const ref = vertexIndices[0];
     if (getVertexPart(ref) !== 0 || ref.ring !== 0 || ref.index !== 0) return null;
   } else if (feature.type === 'LineString') {
-    const coords = feature.coordinates as Coordinate[];
+    const coords = coordinatesOf(feature) as Coordinate[];
     const isValid = vertexIndices.every(
       (r) => getVertexPart(r) === 0 && r.ring === 0 && r.index >= 0 && r.index < coords.length,
     );
     if (!isValid) return null;
   } else if (feature.type === 'Polygon') {
-    const rings = feature.coordinates as Coordinate[][];
+    const rings = coordinatesOf(feature) as Coordinate[][];
     if (rings.length === 0) return null;
     const isValid = vertexIndices.every(
       (r) =>
@@ -545,7 +546,7 @@ export function startVertexMove(
     );
     if (!isValid) return null;
   } else if (feature.type === 'MultiPoint') {
-    const points = feature.coordinates as Coordinate[];
+    const points = coordinatesOf(feature) as Coordinate[];
     if (points.length === 0) return null;
     const isValid = vertexIndices.every((r) => {
       const part = getVertexPart(r);
@@ -553,7 +554,7 @@ export function startVertexMove(
     });
     if (!isValid) return null;
   } else if (feature.type === 'MultiLineString') {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     if (parts.length === 0) return null;
     const isValid = vertexIndices.every((r) => {
       const part = getVertexPart(r);
@@ -562,7 +563,7 @@ export function startVertexMove(
     });
     if (!isValid) return null;
   } else if (feature.type === 'MultiPolygon') {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     if (parts.length === 0) return null;
     const isValid = vertexIndices.every((r) => {
       const part = getVertexPart(r);
@@ -585,6 +586,6 @@ export function startVertexMove(
     // new array every time and swaps it in.
     // So holding a reference from the start is enough: the contents do not change
     // afterwards and no copy is needed
-    initialCoordinates: feature.coordinates,
+    initialCoordinates: coordinatesOf(feature),
   };
 }

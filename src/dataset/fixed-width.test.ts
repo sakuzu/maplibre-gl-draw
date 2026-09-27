@@ -42,6 +42,7 @@ function feature(partial: Partial<Feature> & Pick<Feature, 'id' | 'type'>): Feat
     visible: true,
     coordinates: [],
     properties: {},
+    style: {},
     ...partial,
   } as Feature;
 }
@@ -109,7 +110,13 @@ describe('the declaration of a fixed line width (the negative convention)', () =
   it('a line without createdZoom is pushed with a negative value', () => {
     const { renderers, lines } = createCapturingRenderers();
     buildChunkBatches(
-      [feature({ id: 'a', type: 'LineString', coordinates: LINE_COORDS })],
+      [
+        feature({
+          id: 'a',
+          type: 'LineString',
+          geometry: { type: 'LineString', coordinates: LINE_COORDS },
+        }),
+      ],
       renderers,
       [0, 0],
     );
@@ -125,7 +132,7 @@ describe('the declaration of a fixed line width (the negative convention)', () =
         feature({
           id: 'a',
           type: 'LineString',
-          coordinates: LINE_COORDS,
+          geometry: { type: 'LineString', coordinates: LINE_COORDS },
           properties: { createdZoom: 12 },
         }),
       ],
@@ -140,7 +147,7 @@ describe('the declaration of a fixed line width (the negative convention)', () =
   it('the outline of a polygon without createdZoom is pushed with a negative value', () => {
     const { renderers, polygons } = createCapturingRenderers();
     buildChunkBatches(
-      [feature({ id: 'p', type: 'Polygon', coordinates: [RING] })],
+      [feature({ id: 'p', type: 'Polygon', geometry: { type: 'Polygon', coordinates: [RING] } })],
       renderers,
       [0, 0],
     );
@@ -156,7 +163,7 @@ describe('the declaration of a fixed line width (the negative convention)', () =
         feature({
           id: 'p',
           type: 'Polygon',
-          coordinates: [RING],
+          geometry: { type: 'Polygon', coordinates: [RING] },
           properties: { createdZoom: 10 },
         }),
       ],

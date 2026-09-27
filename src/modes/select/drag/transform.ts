@@ -12,6 +12,7 @@ import type { RotateState } from '../../../operations/rotate.js';
 import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
 import type { HandleType } from '../../../shared/config/constants.js';
 import { drawProperties } from '../../../shared/properties.js';
+import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import type { Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
@@ -43,7 +44,9 @@ export class ResizeDrag implements DragOperation {
       const result = resizeResults.get(feature.id);
 
       if (result) {
-        const updates: Partial<Feature> = { coordinates: result.coordinates };
+        const updates: Partial<Feature> = {
+          geometry: geometryFromCoordinates(feature.type, result.coordinates),
+        };
 
         // Update the scale property when there is one (Text, Image, etc.)
         if (result.scale !== undefined) {
@@ -118,7 +121,9 @@ export class RotateDrag implements DragOperation {
     for (const [id, result] of rotateResults) {
       const feature = store.getFeature(id);
       if (feature) {
-        const updates: Partial<Feature> = { coordinates: result.coordinates };
+        const updates: Partial<Feature> = {
+          geometry: geometryFromCoordinates(feature.type, result.coordinates),
+        };
 
         // Update the rotation property when there is one (Text, Image, Note, etc.)
         if (result.rotation !== undefined) {

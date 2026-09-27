@@ -17,6 +17,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { DisplayInteractions } from '../dataset/interaction.js';
 import type { ModeContext, ModeHandler, SnapInputType } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createSnapService } from '../snapping/service.js';
 import type { SnapContext, SnapService } from '../snapping/types.js';
 import { MemoryStore } from '../store/memory.js';
@@ -146,15 +148,16 @@ function makeDragMoveEvent(
   return makeDragEvent('dragmove', lng, lat, overrides);
 }
 
-function addFeature(id: string, type: string, coordinates: Feature['coordinates']): void {
+function addFeature(id: string, type: string, coordinates: FeatureCoordinates): void {
   const feature: Feature = {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');

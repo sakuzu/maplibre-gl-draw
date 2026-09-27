@@ -213,10 +213,13 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await show(page, [
       {
         type: 'LineString',
-        coordinates: [
-          [-60, 45],
-          [60, 45],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-60, 45],
+            [60, 45],
+          ],
+        },
         style: { strokeColor: '#00FF00', strokeWidth: 4, strokeOpacity: 1 },
       },
     ]);
@@ -233,15 +236,18 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await show(page, [
       {
         type: 'Polygon',
-        coordinates: [
-          [
-            [-40, 20],
-            [40, 20],
-            [40, 50],
-            [-40, 50],
-            [-40, 20],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-40, 20],
+              [40, 20],
+              [40, 50],
+              [-40, 50],
+              [-40, 20],
+            ],
           ],
-        ],
+        },
         style: { fillColor: '#FF00FF', fillOpacity: 1, strokeOpacity: 0, strokeWidth: 0 },
       },
     ]);
@@ -356,10 +362,13 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await show(page, [
       {
         type: 'LineString',
-        coordinates: [
-          [-60, 0],
-          [60, 50],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-60, 0],
+            [60, 50],
+          ],
+        },
         style: { strokeColor: '#00FF00', strokeWidth: 4, strokeOpacity: 1, lineStyle: 'dashed' },
       },
     ]);
@@ -399,10 +408,13 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
       {
         id: 'slanted',
         type: 'LineString',
-        coordinates: [
-          [-60, 0],
-          [60, 50],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-60, 0],
+            [60, 50],
+          ],
+        },
         style: { strokeColor: '#00FF00', strokeWidth: 4, strokeOpacity: 1 },
       },
     ]);
@@ -471,7 +483,7 @@ describe('the points near the edge of the sphere', () => {
       map.removeLayer('reference');
       draw.addFeature({
         type: 'Point',
-        coordinates: coord,
+        geometry: { type: 'Point', coordinates: coord },
         style: { pointColor: '#00FF00', pointRadius: 6 },
       });
     }, coordinate);

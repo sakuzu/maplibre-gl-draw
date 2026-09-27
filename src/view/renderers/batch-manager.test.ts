@@ -109,10 +109,10 @@ function makePoint(id: string, coord: [number, number], style?: FeatureStyle): F
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'layer-1',
     properties: {},
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   };
@@ -212,11 +212,12 @@ describe('BatchManager iteration over the parts of the Multi kinds', () => {
     return {
       id,
       type: 'MultiPoint',
-      coordinates: coords,
+      geometry: { type: 'MultiPoint', coordinates: coords },
       layerId: 'layer-1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 
@@ -270,28 +271,32 @@ describe('BatchManager iteration over the parts of the Multi kinds', () => {
     const multiPolygon: Feature = {
       id: 'mpoly',
       type: 'MultiPolygon',
-      coordinates: [
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [0, 0],
-            [10, 0],
-            [10, 10],
-            [0, 0],
+            [
+              [0, 0],
+              [10, 0],
+              [10, 10],
+              [0, 0],
+            ],
+          ],
+          [
+            [
+              [100, 100],
+              [110, 100],
+              [110, 110],
+              [100, 100],
+            ],
           ],
         ],
-        [
-          [
-            [100, 100],
-            [110, 100],
-            [110, 110],
-            [100, 100],
-          ],
-        ],
-      ],
+      },
       layerId: 'layer-1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
 
     manager.processFeature(multiPolygon, false);
@@ -442,10 +447,10 @@ describe('BatchManager line batches', () => {
     return {
       id,
       type: 'LineString',
-      coordinates: coords,
+      geometry: { type: 'LineString', coordinates: coords },
       layerId: 'layer-1',
       properties: {},
-      style,
+      style: style ?? {},
       locked: false,
       visible: true,
     };
@@ -542,7 +547,7 @@ describe('BatchManager line batches', () => {
     const multi: Feature = {
       id: 'ml',
       type: 'MultiLineString',
-      coordinates: [coordsA, coordsB],
+      geometry: { type: 'MultiLineString', coordinates: [coordsA, coordsB] },
       layerId: 'layer-1',
       properties: {},
       style: { strokeColor: '#ff0000' },
@@ -609,14 +614,17 @@ describe('BatchManager line batches', () => {
       return {
         id,
         type: 'Polygon',
-        coordinates: [
-          [
-            [offset, 0],
-            [offset + 0.05, 0],
-            [offset + 0.05, 0.05],
-            [offset, 0],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [offset, 0],
+              [offset + 0.05, 0],
+              [offset + 0.05, 0.05],
+              [offset, 0],
+            ],
           ],
-        ],
+        },
         layerId: 'layer-1',
         properties: {},
         style: { strokeColor: color, lineStyle: 'dashed' },
@@ -815,17 +823,20 @@ describe('BatchManager the opacity of the layer', () => {
   const polygon = (id: string, style?: FeatureStyle): Feature => ({
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId: 'layer-1',
     properties: {},
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   });
@@ -838,14 +849,18 @@ describe('BatchManager the opacity of the layer', () => {
       {
         id: 'l',
         type: 'LineString',
-        coordinates: [
-          [0, 0],
-          [1, 1],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
         layerId: 'layer-1',
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       },
       false,
     );

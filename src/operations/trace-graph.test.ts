@@ -37,11 +37,12 @@ function cell(id: string, x: number, y: number): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [ring],
+    geometry: { type: 'Polygon', coordinates: [ring] },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -54,11 +55,12 @@ function line(id: string, coordinates: Coordinate[]): Feature {
   return {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -111,11 +113,12 @@ describe('buildTraceGraph', () => {
     const point: Feature = {
       id: 'p1',
       type: 'Point',
-      coordinates: at(0, 0),
+      geometry: { type: 'Point', coordinates: at(0, 0) },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
 
     expect(buildTraceGraph([point], WIDE).nodes.size).toBe(0);
@@ -145,9 +148,22 @@ describe('findTracePath', () => {
     // boundaries before and after a merger
     const merged: Feature = {
       ...cell('merged', 0, 0),
-      coordinates: [
-        [at(0, 0), at(1, 0), at(2, 0), at(2, 1), at(2, 2), at(1, 2), at(0, 2), at(0, 1), at(0, 0)],
-      ],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            at(0, 0),
+            at(1, 0),
+            at(2, 0),
+            at(2, 1),
+            at(2, 2),
+            at(1, 2),
+            at(0, 2),
+            at(0, 1),
+            at(0, 0),
+          ],
+        ],
+      },
     };
     const path = pathBetween([...grid(), merged], atNode(at(0, 0)), atNode(at(2, 0)));
 

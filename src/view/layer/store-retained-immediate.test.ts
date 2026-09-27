@@ -18,7 +18,7 @@ function makeFeature(id: string, type: string, visible = true): Feature {
   return {
     id,
     type,
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'layer-1',
     properties: {},
     locked: false,

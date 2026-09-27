@@ -13,6 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { Feature } from '../store/types.js';
 import type { BoundingBoxCoords } from '../view/ui/selection-ui/index.js';
 import { computeResize, startResize } from './resize.js';
@@ -55,18 +56,22 @@ function polygon(): Feature {
   return {
     id: 'poly',
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ],
       ],
-    ],
+    },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -75,7 +80,7 @@ describe('startResize', () => {
     const poly = polygon();
     const state = startResize('resize-se', { lng: 10, lat: 0 }, bbox, [poly]);
     // Destroy the coordinates of the original feature
-    (poly.coordinates as number[][][])[0][0][0] = 999;
+    (coordinatesOf(poly) as number[][][])[0][0][0] = 999;
     const captured = state.initialCoordinates.get('poly') as number[][][];
     expect(captured[0][0][0]).toBe(0);
   });
@@ -84,11 +89,12 @@ describe('startResize', () => {
     const circle: Feature = {
       id: 'c',
       type: 'Circle',
-      coordinates: [5, 5],
+      geometry: { type: 'Point', coordinates: [5, 5] },
       layerId: 'l1',
       properties: { radiusMeters: 100 },
       locked: false,
       visible: true,
+      style: {},
     };
     const state = startResize('resize-se', { lng: 10, lat: 0 }, bbox, [circle]);
     expect(state.initialRadiusMeters.get('c')).toBe(100);
@@ -133,11 +139,12 @@ describe('computeResize on a Circle (radius scaling)', () => {
     const circle: Feature = {
       id: 'c',
       type: 'Circle',
-      coordinates: [0, 10],
+      geometry: { type: 'Point', coordinates: [0, 10] },
       layerId: 'l1',
       properties: { radiusMeters: 100 },
       locked: false,
       visible: true,
+      style: {},
     };
     // anchor=topLeft[0,10]. startLngLat is the se corner [10,0], and current is twice as far away.
     const state = startResize('resize-se', { lng: 10, lat: 0 }, bbox, [circle]);
@@ -156,32 +163,36 @@ describe('computeResize on the Multi variants (preservation of the part structur
     const multiPolygon: Feature = {
       id: 'mpoly',
       type: 'MultiPolygon',
-      coordinates: [
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [0, 0],
-            [10, 0],
-            [10, 10],
-            [0, 10],
+            [
+              [0, 0],
+              [10, 0],
+              [10, 10],
+              [0, 10],
+            ],
+            [
+              [2, 2],
+              [4, 2],
+              [4, 4],
+            ],
           ],
           [
-            [2, 2],
-            [4, 2],
-            [4, 4],
+            [
+              [20, 0],
+              [30, 0],
+              [30, 10],
+            ],
           ],
         ],
-        [
-          [
-            [20, 0],
-            [30, 0],
-            [30, 10],
-          ],
-        ],
-      ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
 
     const state = startResize('resize-se', { lng: 10, lat: 0 }, bbox, [multiPolygon]);
@@ -221,32 +232,40 @@ describe('computeResize on the Multi variants (preservation of the part structur
     const multiPoint: Feature = {
       id: 'mp',
       type: 'MultiPoint',
-      coordinates: [
-        [0, 0],
-        [10, 10],
-      ],
+      geometry: {
+        type: 'MultiPoint',
+        coordinates: [
+          [0, 0],
+          [10, 10],
+        ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const multiLine: Feature = {
       id: 'ml',
       type: 'MultiLineString',
-      coordinates: [
-        [
-          [0, 0],
-          [10, 0],
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [0, 0],
+            [10, 0],
+          ],
+          [
+            [0, 10],
+            [10, 10],
+          ],
         ],
-        [
-          [0, 10],
-          [10, 10],
-        ],
-      ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
 
     const features = [multiPoint, multiLine];
@@ -284,18 +303,22 @@ describe('computeResize: the minimum extent and the plane', () => {
     return {
       id: 'small',
       type: 'Polygon',
-      coordinates: [
-        [
-          [139, 35],
-          [139.00005, 35],
-          [139.00005, 35.00005],
-          [139, 35.00005],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [139, 35],
+            [139.00005, 35],
+            [139.00005, 35.00005],
+            [139, 35.00005],
+          ],
         ],
-      ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 

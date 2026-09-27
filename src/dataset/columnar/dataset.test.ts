@@ -18,9 +18,11 @@ import type {
   BoundingBox,
   Coordinate,
   Feature,
+  FeatureCoordinates,
   FeatureStyle,
   StyleRule,
 } from '../../shared/types/model.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { FeatureDrawer } from '../../view/renderers/drawer.js';
 import type { ImageRenderer } from '../../view/renderers/image.js';
 import { toLineInstanceColor } from '../../view/renderers/line/line-geometry.js';
@@ -286,7 +288,7 @@ function toFeatures(type: DatasetColumnarGeometryType, rows: Row[]): DatasetFeat
     features.push({
       id: `r${i}`,
       type: row.type ?? type,
-      coordinates: row.geometry as Feature['coordinates'],
+      coordinates: row.geometry as FeatureCoordinates,
       properties,
     });
   });
@@ -489,7 +491,7 @@ describe('the columnar input draws what the same features draw', () => {
 describe('reading the rows back', () => {
   /** A test that hits a feature whose bbox holds the position */
   const insideBbox = (feature: Feature, coordinate: Coordinate): boolean => {
-    const flat = (feature.coordinates as unknown as number[]).flat(3) as number[];
+    const flat = (coordinatesOf(feature) as unknown as number[]).flat(3) as number[];
     const xs = flat.filter((_, i) => i % 2 === 0);
     const ys = flat.filter((_, i) => i % 2 === 1);
     return (
@@ -764,7 +766,7 @@ describe('a mixed geometry column behaves as the same features', () => {
     columnar.add({ id: 'c', columnar: toMixed(rows), interactive: true });
     /** A test that hits a feature whose bbox, grown by 0.25, holds the position */
     const nearBbox = (feature: Feature, coordinate: Coordinate): boolean => {
-      const flat = (feature.coordinates as unknown as number[]).flat(3) as number[];
+      const flat = (coordinatesOf(feature) as unknown as number[]).flat(3) as number[];
       const xs = flat.filter((_, i) => i % 2 === 0);
       const ys = flat.filter((_, i) => i % 2 === 1);
       return (
@@ -925,7 +927,7 @@ describe('reading by row matches the features', () => {
   };
   /** The bbox of the coordinates of a feature */
   const bboxOf = (feature: Feature): BoundingBox => {
-    const flat = (feature.coordinates as unknown as number[]).flat(3) as number[];
+    const flat = (coordinatesOf(feature) as unknown as number[]).flat(3) as number[];
     const xs = flat.filter((_, i) => i % 2 === 0);
     const ys = flat.filter((_, i) => i % 2 === 1);
     return {
@@ -965,7 +967,7 @@ describe('reading by row matches the features', () => {
           expect(dataset.getRowType(row)).toBe(feature.type);
           expect(dataset.getRowBounds(row)).toEqual(bboxOf(feature));
           expect(dataset.getRowPoint(row)).toEqual(
-            feature.type === 'Point' ? feature.coordinates : null,
+            feature.type === 'Point' ? coordinatesOf(feature) : null,
           );
         }
       });

@@ -214,9 +214,12 @@ function createCity(map: maplibregl.Map): Data {
         buildings.push({
           id: `park-${buildings.length}`,
           type: 'Polygon',
-          coordinates: [
-            rectangle(frame, west + 0.006, south + 0.006, east - 0.006, north - 0.006, 3),
-          ],
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              rectangle(frame, west + 0.006, south + 0.006, east - 0.006, north - 0.006, 3),
+            ],
+          },
           properties: { use: 'Park' },
           style: BUILDING_STYLE,
         });
@@ -290,7 +293,7 @@ function street(
   return {
     id: `street-${index}`,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     properties: { class: avenue ? 'Avenue' : 'Street' },
     style: { strokeWidth: avenue ? 5 : 2.5, strokeOpacity: 1 },
   };
@@ -328,9 +331,12 @@ function fillBlock(
       buildings.push({
         id: `building-${buildings.length}`,
         type: 'Polygon',
-        coordinates: [
-          rectangle(frame, x + 0.0012, houseSouth, x + width - 0.0012, houseSouth + depth),
-        ],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            rectangle(frame, x + 0.0012, houseSouth, x + width - 0.0012, houseSouth + depth),
+          ],
+        },
         properties: { use },
         style: BUILDING_STYLE,
       });
@@ -339,7 +345,10 @@ function fillBlock(
         places.push({
           id: `place-${places.length}`,
           type: 'Point',
-          coordinates: frame.toLngLat(x + width / 2, houseSouth + depth / 2),
+          geometry: {
+            type: 'Point',
+            coordinates: frame.toLngLat(x + width / 2, houseSouth + depth / 2),
+          },
           properties: { kind: kind.name },
           style: { pointShape: kind.shape, pointRadius: 4.5 },
         });
@@ -387,7 +396,7 @@ function selectedPark(
   return {
     id: SELECTED_FEATURE,
     type: 'Polygon',
-    coordinates: [ring],
+    geometry: { type: 'Polygon', coordinates: [ring] },
     properties: { use: 'Park', name: 'Park' },
     style: BUILDING_STYLE,
   };

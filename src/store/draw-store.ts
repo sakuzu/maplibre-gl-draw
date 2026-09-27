@@ -21,6 +21,7 @@
  *     modes and the public API rely on it.
  */
 
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryUiState } from './memory/ui-state.js';
 import type { DocumentStore, Store } from './store.js';
@@ -337,7 +338,7 @@ export class DrawStore implements Store {
       if (entry.id !== featureId) continue;
       // The frames and the commit of a local drag keep the vertices being dragged selected
       if (local && (entry.isIntermediate || this.#ui.getDragState() !== null)) continue;
-      if (sameCoordinates(entry.feature.coordinates, entry.previous.coordinates)) continue;
+      if (sameCoordinates(coordinatesOf(entry.feature), coordinatesOf(entry.previous))) continue;
       this.#ui.setSelectedVertices(null);
       return;
     }

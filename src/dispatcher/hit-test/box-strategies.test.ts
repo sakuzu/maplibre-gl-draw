@@ -10,6 +10,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { BoundingBox, Feature } from '../../store/types.js';
 import {
   CircleBoxSelectionStrategy,
@@ -23,11 +25,12 @@ function circle(center: [number, number], radiusMeters: number): Feature {
   return {
     id: 'c',
     type: 'Circle',
-    coordinates: center,
+    geometry: { type: 'Point', coordinates: center },
     layerId: 'l1',
     properties: { radiusMeters },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -65,15 +68,16 @@ describe('CircleBoxSelectionStrategy', () => {
 });
 
 describe('box selection of the Multi geometries', () => {
-  function multi(type: string, coordinates: Feature['coordinates']): Feature {
+  function multi(type: string, coordinates: FeatureCoordinates): Feature {
     return {
       id: 'm',
       type,
-      coordinates,
+      geometry: geometryFromCoordinates(type, coordinates),
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 

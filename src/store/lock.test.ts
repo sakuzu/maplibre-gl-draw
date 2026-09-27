@@ -40,11 +40,12 @@ function makeFeature(id: string, layerId: string, locked = false): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId,
     properties: {},
     locked,
     visible: true,
+    style: {},
   };
 }
 

@@ -21,7 +21,7 @@ import {
   THINNING_REFRESH_DEBOUNCE_MS,
 } from '../../shared/config/selection.js';
 import { mercatorMidpoint } from '../../shared/math/globe-subdivision.js';
-import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
+import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isSameVertexRef } from '../../shared/utils/vertex-ref.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
 
@@ -78,13 +78,13 @@ function collectHandleRuns(feature: Feature): HandleRun[] {
   const runs: HandleRun[] = [];
 
   if (feature.type === 'LineString') {
-    pushLineRun(runs, feature.coordinates as Coordinate[]);
+    pushLineRun(runs, coordinatesOf(feature) as Coordinate[]);
   } else if (feature.type === 'Polygon') {
-    pushPolygonRuns(runs, feature.coordinates as Coordinate[][]);
+    pushPolygonRuns(runs, coordinatesOf(feature) as Coordinate[][]);
   } else if (feature.type === 'MultiPoint') {
     // Splitting a MultiPoint per part would adopt every point and defeat the thinning, so
     // all parts are scanned as a single sequence
-    const points = feature.coordinates as Coordinate[];
+    const points = coordinatesOf(feature) as Coordinate[];
     runs.push({
       coords: points,
       vertexCount: points.length,
@@ -93,12 +93,12 @@ function collectHandleRuns(feature: Feature): HandleRun[] {
       makeRef: (index) => ({ part: index, ring: 0, index: 0 }),
     });
   } else if (feature.type === 'MultiLineString') {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     for (let part = 0; part < parts.length; part++) {
       pushLineRun(runs, parts[part], part);
     }
   } else if (feature.type === 'MultiPolygon') {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (let part = 0; part < parts.length; part++) {
       pushPolygonRuns(runs, parts[part], part);
     }
@@ -164,25 +164,25 @@ export function countPotentialHandles(feature: Feature): number {
   if (feature.type === 'Point') return 1;
 
   if (feature.type === 'LineString') {
-    return countLineHandles((feature.coordinates as Coordinate[]).length);
+    return countLineHandles((coordinatesOf(feature) as Coordinate[]).length);
   }
   if (feature.type === 'Polygon') {
-    return countPolygonHandles(feature.coordinates as Coordinate[][]);
+    return countPolygonHandles(coordinatesOf(feature) as Coordinate[][]);
   }
   if (feature.type === 'MultiPoint') {
     // Each coordinate is the vertex handle of one part. There are no edges
-    return (feature.coordinates as Coordinate[]).length;
+    return (coordinatesOf(feature) as Coordinate[]).length;
   }
   if (feature.type === 'MultiLineString') {
     let total = 0;
-    for (const part of feature.coordinates as Coordinate[][]) {
+    for (const part of coordinatesOf(feature) as Coordinate[][]) {
       total += countLineHandles(part.length);
     }
     return total;
   }
   if (feature.type === 'MultiPolygon') {
     let total = 0;
-    for (const part of feature.coordinates as Coordinate[][][]) {
+    for (const part of coordinatesOf(feature) as Coordinate[][][]) {
       total += countPolygonHandles(part);
     }
     return total;
@@ -329,23 +329,23 @@ function getRefCoords(feature: Feature, ref: VertexRef): Coordinate[] | null {
   const part = ref.part ?? 0;
 
   if (feature.type === 'Point') {
-    return [feature.coordinates as Coordinate];
+    return [coordinatesOf(feature) as Coordinate];
   }
   if (feature.type === 'LineString') {
-    return feature.coordinates as Coordinate[];
+    return coordinatesOf(feature) as Coordinate[];
   }
   if (feature.type === 'Polygon') {
-    return (feature.coordinates as Coordinate[][])[ref.ring] ?? null;
+    return (coordinatesOf(feature) as Coordinate[][])[ref.ring] ?? null;
   }
   if (feature.type === 'MultiPoint') {
-    const point = (feature.coordinates as Coordinate[])[part];
+    const point = (coordinatesOf(feature) as Coordinate[])[part];
     return point ? [point] : null;
   }
   if (feature.type === 'MultiLineString') {
-    return (feature.coordinates as Coordinate[][])[part] ?? null;
+    return (coordinatesOf(feature) as Coordinate[][])[part] ?? null;
   }
   if (feature.type === 'MultiPolygon') {
-    return (feature.coordinates as Coordinate[][][])[part]?.[ref.ring] ?? null;
+    return (coordinatesOf(feature) as Coordinate[][][])[part]?.[ref.ring] ?? null;
   }
   return null;
 }

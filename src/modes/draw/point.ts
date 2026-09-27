@@ -60,7 +60,7 @@ export class DrawPointMode implements ModeHandler {
     const feature: Feature = {
       id: generateFeatureId(),
       type: 'Point',
-      coordinates: [event.lngLat.lng, event.lngLat.lat],
+      geometry: { type: 'Point', coordinates: [event.lngLat.lng, event.lngLat.lat] },
       layerId,
       properties: {
         ...createdZoomProperty(this.context),
@@ -68,6 +68,7 @@ export class DrawPointMode implements ModeHandler {
       },
       locked: false,
       visible: true,
+      style: {},
     };
 
     // Create the feature (notified as a change)

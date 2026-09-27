@@ -10,6 +10,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import { densifyPathForGlobe } from '../globe-subdivision.js';
@@ -362,7 +363,7 @@ export class BatchManager {
   // === Point processing ===
 
   private processPoint(feature: Feature): void {
-    this.processPointCoord(feature, feature.coordinates as Coordinate);
+    this.processPointCoord(feature, coordinatesOf(feature) as Coordinate);
   }
 
   /**
@@ -372,7 +373,7 @@ export class BatchManager {
    * feature, so it is shared across all parts.
    */
   private processMultiPoint(feature: Feature): void {
-    const parts = feature.coordinates as Coordinate[];
+    const parts = coordinatesOf(feature) as Coordinate[];
     for (const coord of parts) {
       this.processPointCoord(feature, coord);
     }
@@ -439,7 +440,7 @@ export class BatchManager {
   // === LineString processing ===
 
   private processLineString(feature: Feature): void {
-    this.processLineCoords(feature, feature.coordinates as Coordinate[]);
+    this.processLineCoords(feature, coordinatesOf(feature) as Coordinate[]);
   }
 
   /**
@@ -448,7 +449,7 @@ export class BatchManager {
    * The coordinates are `Coordinate[][]` (a part = one polyline).
    */
   private processMultiLineString(feature: Feature): void {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     for (const coords of parts) {
       if (coords.length < 2) continue;
       this.processLineCoords(feature, coords);
@@ -568,7 +569,7 @@ export class BatchManager {
   // === Polygon processing ===
 
   private processPolygon(feature: Feature): void {
-    const rings = feature.coordinates as Coordinate[][];
+    const rings = coordinatesOf(feature) as Coordinate[][];
     const outerRing = rings[0];
     if (!outerRing || outerRing.length < 3) return;
 
@@ -583,7 +584,7 @@ export class BatchManager {
    * The key of the earcut cache includes the part index as well.
    */
   private processMultiPolygon(feature: Feature): void {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (let partIndex = 0; partIndex < parts.length; partIndex++) {
       const rings = parts[partIndex];
       const outerRing = rings?.[0];
@@ -596,7 +597,7 @@ export class BatchManager {
   // === Circle processing ===
 
   private processCircle(feature: Feature): void {
-    const center = feature.coordinates as Coordinate;
+    const center = coordinatesOf(feature) as Coordinate;
     const radiusMeters = getCircleRadius(feature);
 
     if (!radiusMeters || radiusMeters <= 0) return;

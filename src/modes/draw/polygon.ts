@@ -232,7 +232,7 @@ export class DrawPolygonMode implements ModeHandler {
     const feature: Feature = {
       id: featureId,
       type: 'Polygon',
-      coordinates: [ring],
+      geometry: { type: 'Polygon', coordinates: [ring] },
       layerId,
       properties: {
         ...createdZoomProperty(this.context),
@@ -240,6 +240,7 @@ export class DrawPolygonMode implements ModeHandler {
       },
       locked: false,
       visible: true,
+      style: {},
     };
 
     // Bundle the feature creation and the selection into a single transaction

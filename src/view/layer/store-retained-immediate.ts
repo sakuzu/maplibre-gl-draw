@@ -11,6 +11,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
@@ -114,7 +115,7 @@ export function drawFeaturesImmediate(
         {
           id: feature.id,
           type: feature.type,
-          coordinates: feature.coordinates,
+          coordinates: coordinatesOf(feature),
           properties: feature.properties,
           style: feature.style,
         },

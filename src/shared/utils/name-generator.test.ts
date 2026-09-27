@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature, FeatureType } from '../../store/types.js';
+import { geometryFromCoordinates } from './coordinates.js';
 import { AutoNameGenerator, normalizeAutoNameConfig } from './name-generator.js';
 
 let store: MemoryStore;
@@ -21,11 +22,12 @@ function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Featur
   const feature: Feature = {
     id: `f-${++idSeq}`,
     type,
-    coordinates: [0, 0],
+    geometry: geometryFromCoordinates(type, [0, 0]),
     layerId,
     properties: name === undefined ? {} : { name },
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(feature);
   return feature;

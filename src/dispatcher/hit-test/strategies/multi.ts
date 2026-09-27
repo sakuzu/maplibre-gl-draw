@@ -10,6 +10,7 @@
  * of hit testing (local-frame.ts).
  */
 
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
 import { latitudeScale, localDistance, localPointToPolylineDistance } from '../local-frame.js';
 import { polylineDistanceWithin } from '../segment-grid.js';
@@ -25,7 +26,7 @@ export class MultiPointHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'MultiPoint';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const parts = feature.coordinates as Coordinate[];
+    const parts = coordinatesOf(feature) as Coordinate[];
     const latScale = latitudeScale(coordinate[1]);
     for (const part of parts) {
       if (localDistance(coordinate, part, latScale) <= toleranceLngLat) {
@@ -36,7 +37,7 @@ export class MultiPointHitTestStrategy implements HitTestStrategy {
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const parts = feature.coordinates as Coordinate[];
+    const parts = coordinatesOf(feature) as Coordinate[];
     const latScale = latitudeScale(coordinate[1]);
     let min = Number.POSITIVE_INFINITY;
     for (const part of parts) {
@@ -55,7 +56,7 @@ export class MultiLineStringHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'MultiLineString';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     const latScale = latitudeScale(coordinate[1]);
     for (const part of parts) {
       if (part.length === 0) continue;
@@ -67,7 +68,7 @@ export class MultiLineStringHitTestStrategy implements HitTestStrategy {
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     const latScale = latitudeScale(coordinate[1]);
     let min = Number.POSITIVE_INFINITY;
     for (const part of parts) {
@@ -78,7 +79,7 @@ export class MultiLineStringHitTestStrategy implements HitTestStrategy {
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     const latScale = latitudeScale(coordinate[1]);
     let min = Number.POSITIVE_INFINITY;
     for (const part of parts) {
@@ -104,7 +105,7 @@ export class MultiPolygonHitTestStrategy implements HitTestStrategy {
   private readonly polygonStrategy = new PolygonHitTestStrategy();
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (const rings of parts) {
       if (this.polygonStrategy.testRings(rings, coordinate, toleranceLngLat)) {
         return true;
@@ -114,7 +115,7 @@ export class MultiPolygonHitTestStrategy implements HitTestStrategy {
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     let min = Number.POSITIVE_INFINITY;
     for (const rings of parts) {
       min = Math.min(min, this.polygonStrategy.distanceToRings(rings, coordinate));
@@ -123,7 +124,7 @@ export class MultiPolygonHitTestStrategy implements HitTestStrategy {
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     let min = Number.POSITIVE_INFINITY;
     for (const rings of parts) {
       const distance = this.polygonStrategy.testDistanceRings(rings, coordinate, toleranceLngLat);

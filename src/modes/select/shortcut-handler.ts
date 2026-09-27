@@ -9,7 +9,11 @@
 
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
-import { mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
+import {
+  coordinatesOf,
+  geometryFromCoordinates,
+  mapCoordinatesDeep,
+} from '../../shared/utils/coordinates.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
@@ -86,7 +90,7 @@ export function handleNudgeShortcut(
 
   // One offset in degrees for every feature, taken at a point of the selection, so the
   // features keep their relative placement (the same translation as a move drag)
-  const reference = firstCoordinate(features[0].coordinates);
+  const reference = firstCoordinate(coordinatesOf(features[0]));
   if (!reference) return false;
   const step = modifiers.shift ? NUDGE_LARGE : NUDGE_SMALL;
   const from = map.project(reference);
@@ -96,8 +100,10 @@ export function handleNudgeShortcut(
 
   store.transact(() => {
     for (const feature of features) {
-      const coordinates = mapCoordinatesDeep(feature.coordinates, (c) => [c[0] + dx, c[1] + dy]);
-      store.updateFeature(feature.id, { coordinates });
+      const coordinates = mapCoordinatesDeep(coordinatesOf(feature), (c) => [c[0] + dx, c[1] + dy]);
+      store.updateFeature(feature.id, {
+        geometry: geometryFromCoordinates(feature.type, coordinates),
+      });
     }
   });
   return true;

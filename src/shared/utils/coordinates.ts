@@ -11,7 +11,84 @@
  * traversal is collected here.
  */
 
+import type { Geometry } from 'geojson';
 import type { Coordinate, FeatureCoordinates, FeatureType } from '../types/model.js';
+
+/** The kind of a GeoJSON geometry that has coordinates */
+export type GeometryKind = Exclude<Geometry['type'], 'GeometryCollection'>;
+
+/**
+ * The kind of geometry of each built-in feature type
+ *
+ * A Circle and an Image are held as the Point of their center and their anchor.
+ */
+const BUILT_IN_GEOMETRY_KINDS: ReadonlyMap<string, GeometryKind> = new Map<string, GeometryKind>([
+  ['Point', 'Point'],
+  ['Circle', 'Point'],
+  ['Image', 'Point'],
+  ['LineString', 'LineString'],
+  ['Freehand', 'LineString'],
+  ['Polygon', 'Polygon'],
+  ['MultiPoint', 'MultiPoint'],
+  ['MultiLineString', 'MultiLineString'],
+  ['MultiPolygon', 'MultiPolygon'],
+]);
+
+/**
+ * The kind of geometry of a built-in feature type, or undefined for a custom type
+ */
+export function builtInGeometryKind(type: FeatureType): GeometryKind | undefined {
+  return BUILT_IN_GEOMETRY_KINDS.get(type);
+}
+
+/** The kind of geometry of coordinates of each nesting depth, for a custom type */
+const KINDS_BY_DEPTH: readonly GeometryKind[] = ['Point', 'LineString', 'Polygon', 'MultiPolygon'];
+
+/**
+ * The kind of geometry a feature type holds
+ *
+ * A built-in type has a fixed kind. A custom type is read from its coordinates as they come:
+ * a single position is a Point, a list of positions a LineString, a list of lists a Polygon
+ * and one level deeper a MultiPolygon.
+ */
+export function geometryKindOf(type: FeatureType, coordinates: FeatureCoordinates): GeometryKind {
+  const builtIn = BUILT_IN_GEOMETRY_KINDS.get(type);
+  if (builtIn) return builtIn;
+  let depth = 0;
+  let value: unknown = coordinates;
+  while (Array.isArray(value) && Array.isArray(value[0])) {
+    depth++;
+    value = value[0];
+  }
+  return KINDS_BY_DEPTH[Math.min(depth, KINDS_BY_DEPTH.length - 1)];
+}
+
+/**
+ * The GeoJSON geometry of a feature type with the given coordinates (the kind follows
+ * {@link geometryKindOf}; the coordinates are used as they are, not copied)
+ */
+export function geometryFromCoordinates(
+  type: FeatureType,
+  coordinates: FeatureCoordinates,
+): Geometry {
+  return { type: geometryKindOf(type, coordinates), coordinates } as Geometry;
+}
+
+/**
+ * The coordinates of the geometry of a feature, nested as deep as its kind (an empty array
+ * for a GeometryCollection, which has none of its own)
+ */
+export function coordinatesOf(feature: { readonly geometry: Geometry }): FeatureCoordinates;
+export function coordinatesOf(
+  feature: { readonly geometry: Geometry } | null | undefined,
+): FeatureCoordinates | undefined;
+export function coordinatesOf(
+  feature: { readonly geometry: Geometry } | null | undefined,
+): FeatureCoordinates | undefined {
+  if (feature == null) return undefined;
+  const { geometry } = feature;
+  return geometry.type === 'GeometryCollection' ? [] : (geometry.coordinates as FeatureCoordinates);
+}
 
 /**
  * The Multi family of feature types
@@ -46,7 +123,7 @@ export function mapCoordinatesDeep<T extends FeatureCoordinates>(
   transform: (coord: Coordinate) => Coordinate,
 ): T {
   if (isCoordinate(coords)) {
-    return transform(coords) as T;
+    return transform(coords) as unknown as T;
   }
   if (Array.isArray(coords)) {
     return (coords as FeatureCoordinates[]).map((child) =>

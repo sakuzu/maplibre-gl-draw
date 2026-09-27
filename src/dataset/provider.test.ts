@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Feature } from '../store/types.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import {
@@ -466,7 +467,7 @@ describe('DisplayProviderLoader', () => {
     expect(provider).toHaveBeenCalledTimes(1);
     expect(applied).toHaveLength(1);
     // The elevation of the input is dropped by the normalization
-    expect(applied[0][0].coordinates).toEqual([139.75, 35.65]);
+    expect(coordinatesOf(applied[0][0])).toEqual([139.75, 35.65]);
   });
 
   it('a range in the cache is applied at once, and the range applied is not fetched again', async () => {

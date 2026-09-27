@@ -6,6 +6,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import {
   bboxIntersects,
@@ -17,17 +19,18 @@ import {
 function makeFeature(
   id: string,
   type: Feature['type'],
-  coordinates: unknown,
+  coordinates: FeatureCoordinates,
   properties: Record<string, unknown> = {},
 ): Feature {
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
     properties,
     locked: false,
     visible: true,
+    style: {},
   } as Feature;
 }
 

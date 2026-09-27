@@ -15,6 +15,7 @@ import {
   type Feature,
   type HitTestStrategy,
 } from '@sakuzu/maplibre-gl-draw';
+import type { LineString } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -51,7 +52,7 @@ function segmentDistance(p: Coordinate, a: Coordinate, b: Coordinate): number {
 }
 
 function routeDistance(feature: Feature, p: Coordinate): number {
-  const c = feature.coordinates as Coordinate[];
+  const c = (feature.geometry as LineString).coordinates as Coordinate[];
   let best = Number.POSITIVE_INFINITY;
   for (let i = 1; i < c.length; i++) {
     best = Math.min(best, segmentDistance(p, c[i - 1], c[i]));
@@ -71,14 +72,14 @@ const routeHitTest: HitTestStrategy = {
 const routeBoxSelection: BoxSelectionStrategy = {
   featureType: 'Route',
   intersects: (feature, rect) =>
-    (feature.coordinates as Coordinate[]).some(
+    ((feature.geometry as LineString).coordinates as Coordinate[]).some(
       ([x, y]) => x >= rect.minX && x <= rect.maxX && y >= rect.minY && y <= rect.maxY,
     ),
 };
 
 /** The extent of the vertices */
 function extentOf(feature: Feature): BoundingBox {
-  const c = feature.coordinates as Coordinate[];
+  const c = (feature.geometry as LineString).coordinates as Coordinate[];
   const xs = c.map((p) => p[0]);
   const ys = c.map((p) => p[1]);
   return {
@@ -120,11 +121,14 @@ const unregister = draw.registerFeatureHandler(routeHandler);
 
 draw.addFeature({
   type: 'Route',
-  coordinates: [
-    [139.7, 35.68],
-    [139.72, 35.69],
-    [139.74, 35.68],
-  ],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [139.7, 35.68],
+      [139.72, 35.69],
+      [139.74, 35.68],
+    ],
+  },
 });
 
 // Another route across the center of the view, selected so its frame shows
@@ -135,11 +139,14 @@ document.getElementById('add-route')?.addEventListener('click', () => {
   const h = (bounds.getNorth() - bounds.getSouth()) / 6;
   const id = draw.addFeature({
     type: 'Route',
-    coordinates: [
-      [lng - w, lat - h],
-      [lng, lat + h],
-      [lng + w, lat - h],
-    ],
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [lng - w, lat - h],
+        [lng, lat + h],
+        [lng + w, lat - h],
+      ],
+    },
   });
   // null when the write was refused because the drawing is read-only
   if (id !== null) draw.select(id);

@@ -8,6 +8,7 @@
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { haversineDistanceMeters, initialBearingDegrees } from '../../../geometry/distance.js';
 import { drawProperties } from '../../../shared/properties.js';
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
@@ -60,5 +61,5 @@ export function startRadiusDrag(featureId: string, store: DragStore): RadiusDrag
   const feature = store.getFeature(featureId);
   if (feature?.type !== 'Circle') return null;
 
-  return new RadiusDrag({ featureId, center: feature.coordinates as Coordinate });
+  return new RadiusDrag({ featureId, center: coordinatesOf(feature) as Coordinate });
 }

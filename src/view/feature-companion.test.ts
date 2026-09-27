@@ -48,11 +48,12 @@ function point(id: string, lng = 0, lat = 0): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [lng, lat] as Coordinate,
+    geometry: { type: 'Point', coordinates: [lng, lat] as Coordinate },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

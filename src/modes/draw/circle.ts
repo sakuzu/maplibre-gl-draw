@@ -159,7 +159,7 @@ export class DrawCircleMode implements ModeHandler {
     const feature: Feature = {
       id: featureId,
       type: 'Circle',
-      coordinates: this.center,
+      geometry: { type: 'Point', coordinates: this.center },
       layerId,
       properties: {
         ...drawProperties({
@@ -172,6 +172,7 @@ export class DrawCircleMode implements ModeHandler {
       },
       locked: false,
       visible: true,
+      style: {},
     };
 
     // Bundle the feature creation and the selection into a single transaction

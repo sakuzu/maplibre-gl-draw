@@ -16,6 +16,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import type { DragNormalizedEvent, NormalizedEvent } from '../../dispatcher/types.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { createSnapService } from '../../snapping/service.js';
 import type { SnapService } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
@@ -119,11 +120,12 @@ function setup(): void {
   const boundary: Feature = {
     id: 'boundary',
     type: 'LineString',
-    coordinates: BOUNDARY,
+    geometry: { type: 'LineString', coordinates: BOUNDARY },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(boundary);
   spatialIndex.insert(boundary);
@@ -222,7 +224,7 @@ describe('snapping of freehand', () => {
     // The intermediate points (excluding the first and the last) keep the input coordinates.
     // If they were snapped, they would fall onto the boundary line (ORIGIN.lat) and become a
     // bent polyline
-    const coordinates = drawnFeature().coordinates as Coordinate[];
+    const coordinates = coordinatesOf(drawnFeature()) as Coordinate[];
     const middle = coordinates.slice(1, -1);
     expect(middle).toEqual(path.slice(1, -1));
     for (const coord of middle) {
@@ -236,7 +238,7 @@ describe('snapping of freehand', () => {
     const path = straightStroke(6);
     stroke(path);
 
-    const coordinates = drawnFeature().coordinates as Coordinate[];
+    const coordinates = coordinatesOf(drawnFeature()) as Coordinate[];
     const first = coordinates[0];
     const last = coordinates[coordinates.length - 1];
 

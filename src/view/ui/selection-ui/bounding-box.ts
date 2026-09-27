@@ -15,6 +15,7 @@
 import { circleBoundingBox } from '../../../geometry/circle.js';
 import { pixelsToDegreesLat, pixelsToDegreesLng } from '../../../shared/math/index.js';
 import { fromPlane, toPlane } from '../../../shared/math/mercator-plane.js';
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import {
   getCircleRadius,
   getCreatedZoom,
@@ -60,7 +61,7 @@ export function computeBoundingBox(
   }
 
   if (feature.type === 'Point') {
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     return {
       topLeft: coord,
       topRight: coord,
@@ -99,7 +100,7 @@ export function computeBoundingBox(
  * The frame of a Circle: the extent of the geodesic circle as it is drawn, around its center
  */
 function computeCircleBoundingBox(feature: Feature): BoundingBoxCoords {
-  const center = feature.coordinates as Coordinate;
+  const center = coordinatesOf(feature) as Coordinate;
   const radiusMeters = getCircleRadius(feature);
   const extent = radiusMeters && radiusMeters > 0 ? circleBoundingBox(center, radiusMeters) : null;
 
@@ -130,7 +131,7 @@ function computeCircleBoundingBox(feature: Feature): BoundingBoxCoords {
  * (the same method as computeQuadVertices in quad-shader.ts).
  */
 function computeOrientedBoundingBox(feature: Feature): BoundingBoxCoords | null {
-  const coord = feature.coordinates as Coordinate;
+  const coord = coordinatesOf(feature) as Coordinate;
   const [lng, lat] = coord;
   const tileSize = 512;
 

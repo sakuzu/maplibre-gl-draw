@@ -16,15 +16,14 @@ import { PolygonHitTestStrategy } from './polygon.js';
 /**
  * A helper that creates a Feature for the tests
  */
-function createFeature(
-  overrides: Partial<Feature> & Pick<Feature, 'type' | 'coordinates'>,
-): Feature {
+function createFeature(overrides: Partial<Feature> & Pick<Feature, 'type' | 'geometry'>): Feature {
   return {
     id: 'test-feature',
     layerId: 'test-layer',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...overrides,
   };
 }
@@ -57,7 +56,7 @@ describe('PointHitTestStrategy', () => {
 
   const point = createFeature({
     type: 'Point',
-    coordinates: [10, 20] as Coordinate,
+    geometry: { type: 'Point', coordinates: [10, 20] as Coordinate },
   });
 
   it('has geometryType Point', () => {
@@ -103,11 +102,14 @@ describe('LineHitTestStrategy', () => {
 
   const line = createFeature({
     type: 'LineString',
-    coordinates: [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-    ] as Coordinate[],
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ] as Coordinate[],
+    },
   });
 
   it('has geometryType LineString', () => {
@@ -153,7 +155,10 @@ describe('LineHitTestStrategy', () => {
       { length: SEGMENT_INDEX_THRESHOLD * 2 },
       (_, i) => [i * 0.001, Math.sin(i * 0.01)] as Coordinate,
     );
-    const denseLine = createFeature({ type: 'LineString', coordinates: denseCoords });
+    const denseLine = createFeature({
+      type: 'LineString',
+      geometry: { type: 'LineString', coordinates: denseCoords },
+    });
 
     it('holds the invariant below the threshold too', () => {
       for (const coord of [
@@ -194,15 +199,18 @@ describe('PolygonHitTestStrategy', () => {
   // A simple square polygon (only the outer ring)
   const square = createFeature({
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
-      ],
-    ] as Coordinate[][],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ] as Coordinate[][],
+    },
   });
 
   it('has geometryType Polygon', () => {
@@ -243,24 +251,27 @@ describe('PolygonHitTestStrategy', () => {
   describe('a polygon with a hole', () => {
     const polygonWithHole = createFeature({
       type: 'Polygon',
-      coordinates: [
-        // The outer ring
-        [
-          [0, 0],
-          [20, 0],
-          [20, 20],
-          [0, 20],
-          [0, 0],
-        ],
-        // The hole
-        [
-          [5, 5],
-          [15, 5],
-          [15, 15],
-          [5, 15],
-          [5, 5],
-        ],
-      ] as Coordinate[][],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          // The outer ring
+          [
+            [0, 0],
+            [20, 0],
+            [20, 20],
+            [0, 20],
+            [0, 0],
+          ],
+          // The hole
+          [
+            [5, 5],
+            [15, 5],
+            [15, 15],
+            [5, 15],
+            [5, 5],
+          ],
+        ] as Coordinate[][],
+      },
     });
 
     it('does not treat a point inside the hole as being inside the polygon', () => {
@@ -283,27 +294,33 @@ describe('PolygonHitTestStrategy', () => {
       const angle = (i / (SEGMENT_INDEX_THRESHOLD * 2 - 1)) * Math.PI * 2;
       return [Math.cos(angle) * 10, Math.sin(angle) * 10] as Coordinate;
     });
-    const densePolygon = createFeature({ type: 'Polygon', coordinates: [denseRing] });
+    const densePolygon = createFeature({
+      type: 'Polygon',
+      geometry: { type: 'Polygon', coordinates: [denseRing] },
+    });
 
     // A polygon with an outer ring of 0..20 and a hole of 5..15
     const holed = createFeature({
       type: 'Polygon',
-      coordinates: [
-        [
-          [0, 0],
-          [20, 0],
-          [20, 20],
-          [0, 20],
-          [0, 0],
-        ],
-        [
-          [5, 5],
-          [15, 5],
-          [15, 15],
-          [5, 15],
-          [5, 5],
-        ],
-      ] as Coordinate[][],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [20, 0],
+            [20, 20],
+            [0, 20],
+            [0, 0],
+          ],
+          [
+            [5, 5],
+            [15, 5],
+            [15, 15],
+            [5, 15],
+            [5, 5],
+          ],
+        ] as Coordinate[][],
+      },
     });
 
     it('returns 0 inside', () => {
@@ -320,7 +337,10 @@ describe('PolygonHitTestStrategy', () => {
     });
 
     it('returns null when the rings are empty', () => {
-      const empty = createFeature({ type: 'Polygon', coordinates: [] as Coordinate[][] });
+      const empty = createFeature({
+        type: 'Polygon',
+        geometry: { type: 'Polygon', coordinates: [] as Coordinate[][] },
+      });
       expect(strategy.testDistance(empty, [0, 0], 1)).toBeNull();
     });
 
@@ -357,7 +377,7 @@ describe('CircleHitTestStrategy', () => {
   // A circle with a radius of 1000 m at the origin on the equator
   const circle = createFeature({
     type: 'Circle',
-    coordinates: [0, 0] as Coordinate,
+    geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
     properties: { radiusMeters: 1000 },
   });
 
@@ -385,7 +405,7 @@ describe('CircleHitTestStrategy', () => {
   it('returns false when radiusMeters is undefined', () => {
     const noRadius = createFeature({
       type: 'Circle',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {},
     });
     expect(strategy.test(noRadius, [0, 0], 0)).toBe(false);
@@ -394,7 +414,7 @@ describe('CircleHitTestStrategy', () => {
   it('returns false when radiusMeters is 0 or less', () => {
     const zeroRadius = createFeature({
       type: 'Circle',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: { radiusMeters: 0 },
     });
     expect(strategy.test(zeroRadius, [0, 0], 0)).toBe(false);
@@ -408,7 +428,7 @@ describe('CircleHitTestStrategy', () => {
   it('gives Infinity from distance when radiusMeters is undefined', () => {
     const noRadius = createFeature({
       type: 'Circle',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {},
     });
     expect(strategy.distance(noRadius, [0, 0])).toBe(Number.POSITIVE_INFINITY);
@@ -424,7 +444,7 @@ describe('ImageHitTestStrategy', () => {
   // A 100x100 pixel image on the equator (without rotation)
   const image = createFeature({
     type: 'Image',
-    coordinates: [0, 0] as Coordinate,
+    geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
     properties: {
       imageFileId: 'test-image',
       imageWidth: 100,
@@ -457,7 +477,7 @@ describe('ImageHitTestStrategy', () => {
   it('returns false for a type other than Image', () => {
     const notImage = createFeature({
       type: 'Point',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
     });
     expect(strategy.test(notImage, [0, 0], 0)).toBe(false);
   });
@@ -465,7 +485,7 @@ describe('ImageHitTestStrategy', () => {
   it('returns false when there is no imageFileId', () => {
     const noFile = createFeature({
       type: 'Image',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {},
     });
     expect(strategy.test(noFile, [0, 0], 0)).toBe(false);
@@ -474,7 +494,7 @@ describe('ImageHitTestStrategy', () => {
   it('returns Infinity from distance for a type other than Image', () => {
     const notImage = createFeature({
       type: 'Point',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
     });
     expect(strategy.distance(notImage, [0, 0])).toBe(Infinity);
   });
@@ -503,16 +523,19 @@ describe('testDistance of the Multi geometries', () => {
     const strategy = new MultiLineStringHitTestStrategy();
     const multiLine = createFeature({
       type: 'MultiLineString',
-      coordinates: [
-        [
-          [0, 0],
-          [10, 0],
-        ],
-        [
-          [0, 5],
-          [10, 5],
-        ],
-      ] as Coordinate[][],
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [0, 0],
+            [10, 0],
+          ],
+          [
+            [0, 5],
+            [10, 5],
+          ],
+        ] as Coordinate[][],
+      },
     });
 
     // 1 from the second one and 4 from the first one -> the minimum is 1 (in degrees of
@@ -531,13 +554,16 @@ describe('testDistance of the Multi geometries', () => {
     );
     const multiLine = createFeature({
       type: 'MultiLineString',
-      coordinates: [
-        densePart,
-        [
-          [0, 100],
-          [10, 100],
-        ],
-      ] as Coordinate[][],
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          densePart,
+          [
+            [0, 100],
+            [10, 100],
+          ],
+        ] as Coordinate[][],
+      },
     });
 
     for (const coord of [[5, 0.05] as Coordinate, [5, 3] as Coordinate, [5, 99.9] as Coordinate]) {
@@ -549,26 +575,29 @@ describe('testDistance of the Multi geometries', () => {
     const strategy = new MultiPolygonHitTestStrategy();
     const multiPolygon = createFeature({
       type: 'MultiPolygon',
-      coordinates: [
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [0, 0],
-            [10, 0],
-            [10, 10],
-            [0, 10],
-            [0, 0],
+            [
+              [0, 0],
+              [10, 0],
+              [10, 10],
+              [0, 10],
+              [0, 0],
+            ],
           ],
-        ],
-        [
           [
-            [20, 0],
-            [30, 0],
-            [30, 10],
-            [20, 10],
-            [20, 0],
+            [
+              [20, 0],
+              [30, 0],
+              [30, 10],
+              [20, 10],
+              [20, 0],
+            ],
           ],
-        ],
-      ] as Coordinate[][][],
+        ] as Coordinate[][][],
+      },
     });
 
     // Inside the first part

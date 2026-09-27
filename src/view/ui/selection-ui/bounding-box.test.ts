@@ -19,11 +19,12 @@ function makeCircle(center: Coordinate, radiusMeters: number): Feature {
   return {
     id: 'circle-1',
     type: 'Circle',
-    coordinates: center,
+    geometry: { type: 'Point', coordinates: center },
     layerId: 'layer-1',
     properties: { radiusMeters },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -67,11 +68,12 @@ describe('rotateBoundingBox', () => {
     const polygon: Feature = {
       id: 'polygon-1',
       type: 'Polygon',
-      coordinates: [[...corners, corners[0]]],
+      geometry: { type: 'Polygon', coordinates: [[...corners, corners[0]]] },
       layerId: 'layer-1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const bbox = computeBoundingBox(polygon);
     expect(bbox).not.toBeNull();
@@ -95,19 +97,23 @@ describe('rotateBoundingBox', () => {
     const bbox = computeBoundingBox({
       id: 'polygon-1',
       type: 'Polygon',
-      coordinates: [
-        [
-          [0, 40],
-          [20, 40],
-          [20, 60],
-          [0, 60],
-          [0, 40],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 40],
+            [20, 40],
+            [20, 60],
+            [0, 60],
+            [0, 40],
+          ],
         ],
-      ],
+      },
       layerId: 'layer-1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     });
     if (!bbox) throw new Error('no bbox');
     const frame = rotateBoundingBox(bbox, 1.2);

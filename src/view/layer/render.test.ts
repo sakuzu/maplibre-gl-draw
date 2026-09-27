@@ -24,6 +24,7 @@ import type {
   CustomRendererDrawContext,
   LayerAwareOverlayRenderer,
 } from '../../extension/index.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -35,7 +36,8 @@ function makeFeature(id: string, type: Feature['type'], layerId: string): Featur
   return {
     id,
     type,
-    coordinates:
+    geometry: geometryFromCoordinates(
+      type,
       type === 'Polygon'
         ? [
             [
@@ -46,10 +48,12 @@ function makeFeature(id: string, type: Feature['type'], layerId: string): Featur
             ],
           ]
         : [0, 0],
+    ),
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

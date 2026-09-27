@@ -12,6 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { getDisplayFeatures, isLocallyHidden } from './local-visibility.js';
 import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer } from './types.js';
@@ -20,12 +21,13 @@ function makeFeature(id: string, layerId: string, groupId?: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId,
     groupId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -48,8 +50,8 @@ describe('read-only', () => {
     const store = makeStore();
     store.createFeature(makeFeature('f1', 'l1'));
     store.setReadOnly(true);
-    store.updateFeature('f1', { coordinates: [10, 10] });
-    expect(store.getFeature('f1')?.coordinates).toEqual([0, 0]);
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [10, 10] } });
+    expect(coordinatesOf(store.getFeature('f1'))).toEqual([0, 0]);
   });
 
   it('makes createFeature / deleteFeature / setMetadata no-ops while read-only', () => {
@@ -81,8 +83,8 @@ describe('read-only', () => {
     store.createFeature(makeFeature('f1', 'l1'));
     store.setReadOnly(true);
     store.setReadOnly(false);
-    store.updateFeature('f1', { coordinates: [5, 5] });
-    expect(store.getFeature('f1')?.coordinates).toEqual([5, 5]);
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [5, 5] } });
+    expect(coordinatesOf(store.getFeature('f1'))).toEqual([5, 5]);
   });
 });
 
@@ -102,10 +104,10 @@ describe('the interaction lock', () => {
     store.setInteractionLock(true);
     // Writes are not gated by the interaction lock (that is the job of readOnly).
     store.createFeature(makeFeature('f2', 'l1'));
-    store.updateFeature('f1', { coordinates: [10, 10] });
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [10, 10] } });
     store.setMetadata({ description: 'x' });
     expect(store.getFeature('f2')).toBeDefined();
-    expect(store.getFeature('f1')?.coordinates).toEqual([10, 10]);
+    expect(coordinatesOf(store.getFeature('f1'))).toEqual([10, 10]);
     expect(store.getMetadata().description).toBe('x');
   });
 

@@ -234,7 +234,7 @@ export class DrawLineMode implements ModeHandler {
     const feature: Feature = {
       id: featureId,
       type: 'LineString',
-      coordinates: [...this.coordinates],
+      geometry: { type: 'LineString', coordinates: [...this.coordinates] },
       layerId,
       properties: {
         ...createdZoomProperty(this.context),
@@ -242,6 +242,7 @@ export class DrawLineMode implements ModeHandler {
       },
       locked: false,
       visible: true,
+      style: {},
     };
 
     // Bundle the feature creation and the selection into a single transaction

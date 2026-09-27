@@ -51,19 +51,23 @@ function square(id: string, minX: number, minY: number, size = 10): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [minX, minY],
-        [minX + size, minY],
-        [minX + size, minY + size],
-        [minX, minY + size],
-        [minX, minY],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [minX, minY],
+          [minX + size, minY],
+          [minX + size, minY + size],
+          [minX, minY + size],
+          [minX, minY],
+        ],
       ],
-    ],
+    },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -71,11 +75,12 @@ function point(id: string, lng: number, lat: number): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [lng, lat],
+    geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

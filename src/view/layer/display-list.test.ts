@@ -11,7 +11,14 @@ import type { Feature, StateChanges } from '../../store/types.js';
 import { DisplayListCache } from './display-list.js';
 
 function feature(id: string): Feature {
-  return { id, type: 'Point', coordinates: [0, 0], layerId: 'l', visible: true } as Feature;
+  return {
+    id,
+    type: 'Point',
+    geometry: { type: 'Point', coordinates: [0, 0] },
+    layerId: 'l',
+    visible: true,
+    style: {},
+  } as Feature;
 }
 
 function createStore(count: number) {

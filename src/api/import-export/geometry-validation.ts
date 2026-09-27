@@ -9,6 +9,7 @@
  * or the renderers. The rules follow docs/reference/data-format.md.
  */
 
+import { builtInGeometryKind } from '../../shared/utils/coordinates.js';
 import type { Coordinate } from '../../store/types.js';
 
 /**
@@ -118,4 +119,43 @@ export function describeCoordinateProblem(type: string, coordinates: unknown): s
     default:
       return null;
   }
+}
+
+/** The kinds of GeoJSON geometry a feature can hold */
+const GEOMETRY_KINDS: ReadonlySet<string> = new Set([
+  'Point',
+  'LineString',
+  'Polygon',
+  'MultiPoint',
+  'MultiLineString',
+  'MultiPolygon',
+]);
+
+/**
+ * Returns why a GeoJSON geometry cannot be used for a feature of the type, or null when it
+ * can
+ *
+ * The geometry must be an object of one of the six kinds with coordinates (a
+ * GeometryCollection is not a geometry of a feature), a built-in type must hold its own kind
+ * (a Circle and an Image a Point, a Freehand a LineString), and the coordinates must pass
+ * {@link describeCoordinateProblem} for the kind. A custom type may hold any of the kinds.
+ *
+ * @param type - the feature type
+ * @param geometry - the geometry to check
+ * @returns a short phrase that reads after "has", or null
+ */
+export function describeGeometryProblem(type: string, geometry: unknown): string | null {
+  if (typeof geometry !== 'object' || geometry === null || Array.isArray(geometry)) {
+    return 'no geometry object';
+  }
+  const { type: kind, coordinates } = geometry as Record<string, unknown>;
+  if (typeof kind !== 'string' || !GEOMETRY_KINDS.has(kind)) {
+    return `a geometry of the unsupported type "${String(kind)}"`;
+  }
+  const expected = builtInGeometryKind(type);
+  if (expected !== undefined && kind !== expected) {
+    return `a ${kind} geometry that does not match the type ${type}`;
+  }
+  const problem = describeCoordinateProblem(kind, coordinates);
+  return problem ? `a ${kind} geometry with ${problem}` : null;
 }

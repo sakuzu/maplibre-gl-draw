@@ -13,6 +13,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TopHit } from '../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
 import { createDisplayInteractions, type DisplayInteractions } from './interaction.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
@@ -41,7 +42,7 @@ function mouseEvent(lng: number, lat: number): MouseNormalizedEvent {
 
 /** A simple test that counts a matching coordinate as a hit */
 const exactHit = (feature: Feature, coordinate: Coordinate): boolean => {
-  const coord = feature.coordinates as Coordinate;
+  const coord = coordinatesOf(feature) as Coordinate;
   return coord[0] === coordinate[0] && coord[1] === coordinate[1];
 };
 
@@ -49,11 +50,12 @@ const exactHit = (feature: Feature, coordinate: Coordinate): boolean => {
 const STORE_FEATURE: Feature = {
   id: 'store-1',
   type: 'Point',
-  coordinates: [0, 0],
+  geometry: { type: 'Point', coordinates: [0, 0] },
   layerId: 'l1',
   properties: {},
   locked: false,
   visible: true,
+  style: {},
 };
 
 function setup(): {

@@ -22,6 +22,7 @@ import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../exte
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
@@ -191,11 +192,12 @@ function probe(id: string, lng: number): Feature {
   return {
     id,
     type: 'Probe',
-    coordinates: [lng, 0],
+    geometry: geometryFromCoordinates('Probe', [lng, 0]),
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -230,7 +232,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
 
   const spatialIndex = new StoreSpatialIndex(store);
   spatialIndex.setCustomBoundingBoxCalculator('Probe', (feature) => {
-    const [lng, lat] = feature.coordinates as [number, number];
+    const [lng, lat] = coordinatesOf(feature) as [number, number];
     return { minX: lng, minY: lat, maxX: lng, maxY: lat };
   });
   const layer = createCustomLayer({

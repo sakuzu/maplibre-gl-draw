@@ -9,6 +9,7 @@
 
 import { deleteSelection } from '../operations/selection-operations.js';
 import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from '../operations/vertex.js';
+import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Store } from '../store/store.js';
 import type {
   Feature,
@@ -94,11 +95,14 @@ export function createSelectionApi(deps: SelectionApiDeps): SelectionApi {
       // disappears, so parts are in descending order too)
       const sortedRefs = sortVertexRefsForDeletion(vertices);
 
-      let coords: FeatureCoordinates = JSON.parse(JSON.stringify(feature.coordinates));
+      let coords: FeatureCoordinates = JSON.parse(JSON.stringify(coordinatesOf(feature)));
       let deletedCount = 0;
 
       for (const ref of sortedRefs) {
-        const result = deleteVertexOp({ ...feature, coordinates: coords }, ref);
+        const result = deleteVertexOp(
+          { ...feature, geometry: geometryFromCoordinates(feature.type, coords) },
+          ref,
+        );
         if (result !== null) {
           coords = result;
           deletedCount++;
@@ -107,7 +111,9 @@ export function createSelectionApi(deps: SelectionApiDeps): SelectionApi {
 
       if (deletedCount > 0) {
         store.transact(() => {
-          store.updateFeature(featureId, { coordinates: coords });
+          store.updateFeature(featureId, {
+            geometry: geometryFromCoordinates(feature.type, coords),
+          });
           // If the deleted vertices were selected, clear the selection
           const selectedVertices = store.getSelectedVertices();
           if (selectedVertices?.featureId === featureId) {

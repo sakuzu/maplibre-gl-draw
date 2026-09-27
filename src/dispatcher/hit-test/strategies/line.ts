@@ -8,6 +8,7 @@
  * Distances are measured in the local frame of hit testing (local-frame.ts).
  */
 
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
 import { latitudeScale, localPointToPolylineDistance } from '../local-frame.js';
 import { polylineDistanceWithin } from '../segment-grid.js';
@@ -24,14 +25,14 @@ export class LineHitTestStrategy implements HitTestStrategy {
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const lineCoords = feature.coordinates as Coordinate[];
+    const lineCoords = coordinatesOf(feature) as Coordinate[];
     // The nearest distance without a tolerance cannot be answered by the index, so this
     // stays a full scan
     return localPointToPolylineDistance(coordinate, lineCoords, latitudeScale(coordinate[1]));
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const lineCoords = feature.coordinates as Coordinate[];
+    const lineCoords = coordinatesOf(feature) as Coordinate[];
     return polylineDistanceWithin(
       lineCoords,
       coordinate,

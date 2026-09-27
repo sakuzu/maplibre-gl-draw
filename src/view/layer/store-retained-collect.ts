@@ -9,6 +9,7 @@
  */
 
 import { generateCirclePolygon } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import { toLineBatchItem, toPointInstanceData } from '../renderers/batch-manager.js';
@@ -56,9 +57,9 @@ export function collectLineItems(
     };
 
     if (feature.type === 'MultiLineString') {
-      for (const part of feature.coordinates as Coordinate[][]) push(part);
+      for (const part of coordinatesOf(feature) as Coordinate[][]) push(part);
     } else {
-      push(feature.coordinates as Coordinate[]);
+      push(coordinatesOf(feature) as Coordinate[]);
     }
   }
 
@@ -110,14 +111,14 @@ export function collectPolygons(
     };
 
     if (feature.type === 'MultiPolygon') {
-      const parts = feature.coordinates as Coordinate[][][];
+      const parts = coordinatesOf(feature) as Coordinate[][][];
       for (let i = 0; i < parts.length; i++) push(parts[i], i);
     } else if (feature.type === 'Circle') {
       const radiusMeters = getCircleRadius(feature);
       if (!radiusMeters || radiusMeters <= 0) continue;
-      push([generateCirclePolygon(feature.coordinates as Coordinate, radiusMeters)], 0);
+      push([generateCirclePolygon(coordinatesOf(feature) as Coordinate, radiusMeters)], 0);
     } else {
-      push(feature.coordinates as Coordinate[][], 0);
+      push(coordinatesOf(feature) as Coordinate[][], 0);
     }
   }
 
@@ -138,11 +139,11 @@ export function collectPoints(
     const style = styles.getPointStyle(feature, layer);
 
     if (feature.type === 'MultiPoint') {
-      for (const coord of feature.coordinates as Coordinate[]) {
+      for (const coord of coordinatesOf(feature) as Coordinate[]) {
         points.push(toPointInstanceData(coord, style));
       }
     } else {
-      points.push(toPointInstanceData(feature.coordinates as Coordinate, style));
+      points.push(toPointInstanceData(coordinatesOf(feature) as Coordinate, style));
     }
   }
 

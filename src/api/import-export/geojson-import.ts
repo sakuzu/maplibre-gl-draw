@@ -7,6 +7,7 @@
  */
 
 import { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { createId } from '../../shared/utils/id.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { Store } from '../../store/store.js';
@@ -71,7 +72,11 @@ function convertSingleGeometry(
     case 'Point': {
       const type = resolveFeatureType('Point', featureType);
       return {
-        feature: { ...base, type, coordinates: geometry.coordinates as [number, number] },
+        feature: {
+          ...base,
+          type,
+          geometry: geometryFromCoordinates(type, geometry.coordinates as [number, number]),
+        },
         // The embedded image belongs only to a feature that really is an Image
         fileData: type === 'Image' ? fileData : undefined,
       };
@@ -86,7 +91,7 @@ function convertSingleGeometry(
         feature: {
           ...base,
           type,
-          coordinates: geometry.coordinates as [number, number][],
+          geometry: geometryFromCoordinates(type, geometry.coordinates as [number, number][]),
         },
       };
     }
@@ -96,7 +101,7 @@ function convertSingleGeometry(
         feature: {
           ...base,
           type: 'Polygon',
-          coordinates: geometry.coordinates as Coordinate[][],
+          geometry: { type: 'Polygon', coordinates: geometry.coordinates as Coordinate[][] },
         },
       };
 
@@ -129,7 +134,10 @@ function convertMultiGeometry(
         locked: meta.locked,
         visible: meta.visible,
         type: geometry.type,
-        coordinates: geometry.coordinates as Coordinate[] | Coordinate[][] | Coordinate[][][],
+        geometry: geometryFromCoordinates(
+          geometry.type,
+          geometry.coordinates as Coordinate[] | Coordinate[][] | Coordinate[][][],
+        ),
       },
     },
   ];
@@ -248,7 +256,7 @@ function convertGeometryCollection(
         locked: meta.locked,
         visible: meta.visible,
         type,
-        coordinates,
+        geometry: geometryFromCoordinates(type, coordinates),
       },
     });
   };
@@ -450,9 +458,9 @@ export function convertGeoJSONToFeature(
   // from simplestyle-spec (they are not merged). Either way the keys are validated.
   const roundTripStyle = properties?.[`${DRAW_PROPERTY_PREFIX}style`];
   const style: Feature['style'] =
-    roundTripStyle !== undefined && roundTripStyle !== null
+    (roundTripStyle !== undefined && roundTripStyle !== null
       ? sanitizeFeatureStyle(roundTripStyle)
-      : simplestyleToFeatureStyle(properties);
+      : simplestyleToFeatureStyle(properties)) ?? {};
   const featureType: unknown = properties?.[`${DRAW_PROPERTY_PREFIX}featureType`];
   // visible is hidden only when it is explicitly false, and locked is treated as locked
   // only when it is explicitly true

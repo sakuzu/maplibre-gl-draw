@@ -11,6 +11,8 @@ import {
   DEFAULT_FEATURE_STYLE_CONFIG,
   type FeatureStyleConfig,
 } from '../../shared/config/feature-style.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Feature, FeatureStyle } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { FeatureDrawer } from '../renderers/drawer.js';
@@ -19,8 +21,15 @@ import type { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../renderers/point/point-shape.js';
 import { classifyFeature, featureOrigin } from './store-retained-classify.js';
 
-function makeFeature(type: Feature['type'], coordinates: unknown): Feature {
-  return { id: 'f', type, coordinates, layerId: 'layer-1', properties: {} } as Feature;
+function makeFeature(type: Feature['type'], coordinates: FeatureCoordinates): Feature {
+  return {
+    id: 'f',
+    type,
+    geometry: geometryFromCoordinates(type, coordinates),
+    layerId: 'layer-1',
+    properties: {},
+    style: {},
+  } as Feature;
 }
 
 describe('featureOrigin', () => {
@@ -37,7 +46,9 @@ describe('featureOrigin', () => {
   it('falls back to the origin of the world without a coordinate', () => {
     expect(featureOrigin(undefined)).toEqual([0, 0]);
     expect(featureOrigin(makeFeature('LineString', []))).toEqual([0, 0]);
-    expect(featureOrigin(makeFeature('Point', 'bad'))).toEqual([0, 0]);
+    expect(featureOrigin(makeFeature('Point', 'bad' as unknown as FeatureCoordinates))).toEqual([
+      0, 0,
+    ]);
   });
 });
 
@@ -63,7 +74,7 @@ describe('classifyFeature with the style resolution of the renderer', () => {
   }
 
   function pointWith(style?: FeatureStyle): Feature {
-    return { ...makeFeature('Point', [0, 0]), style };
+    return { ...makeFeature('Point', [0, 0]), style: style ?? {} };
   }
 
   const customTypes = new Map<string, unknown>();

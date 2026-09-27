@@ -24,11 +24,12 @@ beforeEach(() => {
     store.createFeature({
       id,
       type: 'Point',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     });
   }
   idSeq = 0;

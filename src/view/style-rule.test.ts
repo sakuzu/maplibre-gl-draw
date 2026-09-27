@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { MESSAGES_EN } from '../messages.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Feature, FeatureStyle, StyleRule } from '../store/types.js';
 import {
   applyRuleColor,
@@ -30,17 +31,17 @@ function makeFeature(
   return {
     id: 'f1',
     type,
-    coordinates: [
+    geometry: geometryFromCoordinates(type, [
       [
         [0, 0],
         [1, 0],
         [1, 1],
         [0, 0],
       ],
-    ],
+    ]),
     layerId: 'layer-1',
     properties,
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   };

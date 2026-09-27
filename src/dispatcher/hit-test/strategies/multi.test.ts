@@ -16,15 +16,14 @@ import {
   MultiPolygonHitTestStrategy,
 } from './multi.js';
 
-function createFeature(
-  overrides: Partial<Feature> & Pick<Feature, 'type' | 'coordinates'>,
-): Feature {
+function createFeature(overrides: Partial<Feature> & Pick<Feature, 'type' | 'geometry'>): Feature {
   return {
     id: 'test-feature',
     layerId: 'test-layer',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...overrides,
   };
 }
@@ -37,10 +36,13 @@ describe('MultiPointHitTestStrategy', () => {
 
   const multiPoint = createFeature({
     type: 'MultiPoint',
-    coordinates: [
-      [0, 0],
-      [100, 0],
-    ] as Coordinate[],
+    geometry: {
+      type: 'MultiPoint',
+      coordinates: [
+        [0, 0],
+        [100, 0],
+      ] as Coordinate[],
+    },
   });
 
   it('has geometryType MultiPoint', () => {
@@ -69,16 +71,19 @@ describe('MultiLineStringHitTestStrategy', () => {
 
   const multiLine = createFeature({
     type: 'MultiLineString',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-      ],
-      [
-        [0, 60],
-        [10, 60],
-      ],
-    ] as Coordinate[][],
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+        ],
+        [
+          [0, 60],
+          [10, 60],
+        ],
+      ] as Coordinate[][],
+    },
   });
 
   it('has geometryType MultiLineString', () => {
@@ -111,33 +116,36 @@ describe('MultiPolygonHitTestStrategy', () => {
   // is a detached part in a distant place
   const multiPolygon = createFeature({
     type: 'MultiPolygon',
-    coordinates: [
-      [
+    geometry: {
+      type: 'MultiPolygon',
+      coordinates: [
         [
-          [0, 0],
-          [10, 0],
-          [10, 10],
-          [0, 10],
-          [0, 0],
+          [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+            [0, 0],
+          ],
+          [
+            [2, 2],
+            [8, 2],
+            [8, 8],
+            [2, 8],
+            [2, 2],
+          ],
         ],
         [
-          [2, 2],
-          [8, 2],
-          [8, 8],
-          [2, 8],
-          [2, 2],
+          [
+            [100, 100],
+            [110, 100],
+            [110, 110],
+            [100, 110],
+            [100, 100],
+          ],
         ],
-      ],
-      [
-        [
-          [100, 100],
-          [110, 100],
-          [110, 110],
-          [100, 110],
-          [100, 100],
-        ],
-      ],
-    ] as Coordinate[][][],
+      ] as Coordinate[][][],
+    },
   });
 
   it('has geometryType MultiPolygon', () => {

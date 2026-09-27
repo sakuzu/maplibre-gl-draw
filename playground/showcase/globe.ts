@@ -52,7 +52,7 @@ function createDocument() {
           {
             id: 'monsoon-box',
             type: 'Polygon',
-            coordinates: [lngLatBox(50, 5, 100, 38)],
+            geometry: { type: 'Polygon', coordinates: [lngLatBox(50, 5, 100, 38)] },
             properties: { name: 'Box from 50°E to 100°E, 5°N to 38°N' },
             style: {
               fillColor: '#FF7B00',
@@ -65,7 +65,7 @@ function createDocument() {
           {
             id: 'tokyo-range',
             type: 'Circle',
-            coordinates: PLACES.tokyo,
+            geometry: { type: 'Point', coordinates: PLACES.tokyo },
             properties: { name: '2,500 km from Tokyo', radiusMeters: 2_500_000 },
             style: {
               fillColor: '#3A86FF',
@@ -78,7 +78,7 @@ function createDocument() {
           {
             id: 'storm',
             type: 'Image',
-            coordinates: [131, 16],
+            geometry: { type: 'Point', coordinates: [131, 16] },
             properties: {
               name: 'Storm',
               createdZoom: 3,
@@ -109,7 +109,7 @@ function createDocument() {
         features: Object.entries(PLACES).map(([name, coordinates]) => ({
           id: `place-${name}`,
           type: 'Point' as const,
-          coordinates,
+          geometry: { type: 'Point' as const, coordinates },
           properties: { name },
           style:
             name === 'tokyo'
@@ -151,7 +151,7 @@ function route(
   return {
     id,
     type: 'LineString' as const,
-    coordinates,
+    geometry: { type: 'LineString' as const, coordinates },
     properties: { name: id },
     style: { strokeColor, strokeWidth: 4, strokeOpacity: 1, lineStyle },
   };

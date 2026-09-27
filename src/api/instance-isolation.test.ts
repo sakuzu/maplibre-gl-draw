@@ -17,6 +17,7 @@ import { PointHitTestStrategy } from '../dispatcher/hit-test/strategies/point.js
 import type { CustomFeatureHandler } from '../extension/index.js';
 import type { ModeManager } from '../modes/manager.js';
 import type { PluginManager } from '../plugins/plugin-manager.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { Feature } from '../store/types.js';
 import { createFeatureCompanionRegistry } from '../view/feature-companion.js';
 import type { CustomLayerInterface } from '../view/layer/index.js';
@@ -56,7 +57,7 @@ const HANDLER: CustomFeatureHandler = {
   hitTest: Object.assign(new PointHitTestStrategy(), { geometryType: 'Card' }),
   resizeStrategy: 'scale',
   getSelectionBoundingBox: (feature) => {
-    const [lng, lat] = feature.coordinates as [number, number];
+    const [lng, lat] = coordinatesOf(feature) as [number, number];
     return {
       topLeft: [lng - 1, lat + 1],
       topRight: [lng + 1, lat + 1],
@@ -74,11 +75,12 @@ const HANDLER: CustomFeatureHandler = {
 const card: Feature = {
   id: 'c1',
   type: 'Card',
-  coordinates: [10, 10],
+  geometry: { type: 'Point', coordinates: [10, 10] },
   layerId: 'default-layer',
   properties: {},
   locked: false,
   visible: true,
+  style: {},
 };
 
 function provider(id: string): AuxiliaryHandleProvider {

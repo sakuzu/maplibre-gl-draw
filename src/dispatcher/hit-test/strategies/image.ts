@@ -16,6 +16,7 @@ import {
   metersToDegreesLat,
   metersToDegreesLng,
 } from '../../../shared/math/index.js';
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getImageProperties } from '../../../shared/utils/property.js';
 import type { Coordinate, Feature, ImageStyle } from '../../../store/types.js';
 import type { HitTestStrategy } from './base.js';
@@ -113,7 +114,7 @@ export class ImageHitTestStrategy implements HitTestStrategy {
     const properties = getImageProperties(feature);
     if (!properties.imageFileId) return null;
 
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
     const style = { ...DEFAULT_IMAGE_STYLE, ...(feature.style as ImageStyle) };
 

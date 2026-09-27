@@ -29,11 +29,12 @@ function line(id: string, coordinates: Coordinate[]): Feature {
   return {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

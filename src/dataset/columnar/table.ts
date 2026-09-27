@@ -15,7 +15,8 @@
  * A pure module (it imports only types), so it runs in a Worker as well.
  */
 
-import type { Coordinate, Feature } from '../../shared/types/model.js';
+import type { Geometry } from 'geojson';
+import type { Coordinate, Feature, FeatureCoordinates } from '../../shared/types/model.js';
 import type {
   DatasetColumn,
   DatasetColumnarGeometry,
@@ -174,7 +175,7 @@ export class ColumnarGeometryColumn {
   }
 
   /** The coordinates of a row, shaped as for its geometry type */
-  coordinatesOf(row: number): Feature['coordinates'] {
+  coordinatesOf(row: number): FeatureCoordinates {
     const o = this.offsets;
     switch (this.type) {
       case 'Point':
@@ -373,7 +374,7 @@ export class ColumnarTable {
   }
 
   /** The coordinates of a row, shaped as for its geometry type (a NaN point without a geometry) */
-  coordinatesOf(row: number): Feature['coordinates'] {
+  coordinatesOf(row: number): FeatureCoordinates {
     const column = this.columnOf(row);
     return column === undefined
       ? [Number.NaN, Number.NaN]
@@ -397,14 +398,17 @@ export class ColumnarTable {
    * @param hasGeometry Whether the row has a geometry (a row without one is not visible)
    */
   featureAt(row: number, hasGeometry: boolean): Feature {
+    const type = this.columnOf(row)?.type ?? 'Point';
     return {
       id: this.idOf(row),
-      type: this.columnOf(row)?.type ?? 'Point',
-      coordinates: this.coordinatesOf(row),
+      type,
+      // The type of a column is a GeoJSON geometry type, so it is the kind of the geometry
+      geometry: { type, coordinates: this.coordinatesOf(row) } as Geometry,
       layerId: '',
       properties: this.propertiesOf(row),
       locked: false,
       visible: hasGeometry,
+      style: {},
     };
   }
 }

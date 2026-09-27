@@ -8,6 +8,7 @@
  * `draw.deleteSelection()` (api/) both call this, so the two paths delete the same things.
  */
 
+import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { isFeatureLocked, isGroupLocked } from '../store/lock.js';
 import type { Store } from '../store/store.js';
 import type { FeatureCoordinates, VertexSelection } from '../store/types.js';
@@ -146,11 +147,14 @@ function deleteSelectedVertices(store: Store, selection: VertexSelection): numbe
   // deleteVertex does not mutate its input and returns a new coordinate structure
   // (copy-on-write), so no upfront copy is needed. Successive deletions only need the return
   // value fed into the next input
-  let coords: FeatureCoordinates = feature.coordinates;
+  let coords: FeatureCoordinates = coordinatesOf(feature);
   let deletedCount = 0;
 
   for (const ref of sortedRefs) {
-    const result = deleteVertexOp({ ...feature, coordinates: coords }, ref);
+    const result = deleteVertexOp(
+      { ...feature, geometry: geometryFromCoordinates(feature.type, coords) },
+      ref,
+    );
     if (result !== null) {
       coords = result;
       deletedCount++;
@@ -159,7 +163,9 @@ function deleteSelectedVertices(store: Store, selection: VertexSelection): numbe
 
   if (deletedCount > 0) {
     store.transact(() => {
-      store.updateFeature(selection.featureId, { coordinates: coords });
+      store.updateFeature(selection.featureId, {
+        geometry: geometryFromCoordinates(feature.type, coords),
+      });
       store.setSelectedVertices(null);
     });
   }

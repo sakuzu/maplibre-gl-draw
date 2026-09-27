@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { DEFAULT_TOPOLOGY_CONFIG } from '../../shared/config/topology.js';
+import { coordinatesOf as featureCoordinates } from '../../shared/utils/coordinates.js';
 import type { SnapDisableKey } from '../../snapping/types.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
@@ -40,19 +41,23 @@ function square(id: string, minX: number, minY: number, size = 10): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [minX, minY],
-        [minX + size, minY],
-        [minX + size, minY + size],
-        [minX, minY + size],
-        [minX, minY],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [minX, minY],
+          [minX + size, minY],
+          [minX + size, minY + size],
+          [minX, minY + size],
+          [minX, minY],
+        ],
       ],
-    ],
+    },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -149,7 +154,7 @@ function dragVertex(
 }
 
 function coordinatesOf(id: string): unknown {
-  return store.getFeature(id)?.coordinates;
+  return featureCoordinates(store.getFeature(id));
 }
 
 beforeEach(() => {
@@ -283,36 +288,40 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
     const multi: Feature = {
       id: 'mp',
       type: 'MultiPolygon',
-      coordinates: [
-        // part 0: has no shared vertex
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
+          // part 0: has no shared vertex
           [
-            [100, 100],
-            [110, 100],
-            [110, 110],
-            [100, 100],
+            [
+              [100, 100],
+              [110, 100],
+              [110, 110],
+              [100, 100],
+            ],
+          ],
+          // part 1: both the outer ring (ring 0) and the inner ring (ring 1) have [10,0]
+          [
+            [
+              [10, 0],
+              [30, 0],
+              [30, 20],
+              [10, 0],
+            ],
+            [
+              [10, 0],
+              [15, 2],
+              [15, 5],
+              [10, 0],
+            ],
           ],
         ],
-        // part 1: both the outer ring (ring 0) and the inner ring (ring 1) have [10,0]
-        [
-          [
-            [10, 0],
-            [30, 0],
-            [30, 20],
-            [10, 0],
-          ],
-          [
-            [10, 0],
-            [15, 2],
-            [15, 5],
-            [10, 0],
-          ],
-        ],
-      ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     addFeature(multi);
     enableSharedVertexDrag(true);
@@ -341,20 +350,24 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
     addFeature({
       id: 'ml',
       type: 'MultiLineString',
-      coordinates: [
-        [
-          [50, 50],
-          [60, 60],
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [50, 50],
+            [60, 60],
+          ],
+          [
+            [10, 0],
+            [20, -10],
+          ],
         ],
-        [
-          [10, 0],
-          [20, -10],
-        ],
-      ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     });
     enableSharedVertexDrag(true);
 
@@ -376,25 +389,29 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
     const donut: Feature = {
       id: 'donut',
       type: 'Polygon',
-      coordinates: [
-        [
-          [0, 0],
-          [10, 0],
-          [10, 10],
-          [0, 10],
-          [0, 0],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+            [0, 0],
+          ],
+          [
+            [10, 0],
+            [8, 2],
+            [8, 4],
+            [10, 0],
+          ],
         ],
-        [
-          [10, 0],
-          [8, 2],
-          [8, 4],
-          [10, 0],
-        ],
-      ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     addFeature(donut);
     enableSharedVertexDrag(true);
@@ -482,11 +499,12 @@ describe('simultaneous movement of shared vertices: geometries out of scope', ()
     addFeature({
       id: 'c1',
       type: 'Circle',
-      coordinates: [10, 0],
+      geometry: { type: 'Point', coordinates: [10, 0] },
       layerId: 'l1',
       properties: { radiusMeters: 1000 },
       locked: false,
       visible: true,
+      style: {},
     });
     enableSharedVertexDrag(true);
 
@@ -568,7 +586,7 @@ describe('simultaneous movement of shared vertices: temporary disabling by modif
 
   it('a modifier key other than the disable key (Shift) still follows along', () => {
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2], { shift: true });
-    expect(coordinatesOf('f2')).not.toEqual(square('f2', 10, 0).coordinates);
+    expect(coordinatesOf('f2')).not.toEqual(featureCoordinates(square('f2', 10, 0)));
   });
 
   it('changing disableKey makes that key the temporary disable key', () => {
@@ -582,13 +600,13 @@ describe('simultaneous movement of shared vertices: temporary disabling by modif
   it('after changing disableKey, Alt no longer disables temporarily', () => {
     setSnapDisableKey('shift');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2], { alt: true });
-    expect(coordinatesOf('f2')).not.toEqual(square('f2', 10, 0).coordinates);
+    expect(coordinatesOf('f2')).not.toEqual(featureCoordinates(square('f2', 10, 0)));
   });
 
   it("when disableKey is 'none', no modifier key disables it", () => {
     setSnapDisableKey('none');
     dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2], { alt: true });
-    expect(coordinatesOf('f2')).not.toEqual(square('f2', 10, 0).coordinates);
+    expect(coordinatesOf('f2')).not.toEqual(featureCoordinates(square('f2', 10, 0)));
   });
 
   it('the decision happens only once at drag start (pressing mid-drag does not change it)', () => {
@@ -800,7 +818,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
         [0, 0],
       ],
     ];
-    expect(updatesOf(commitBatches()[0])[0].feature.coordinates).toEqual(expected);
+    expect(featureCoordinates(updatesOf(commitBatches()[0])[0].feature)).toEqual(expected);
     expect(coordinatesOf('f1')).toEqual(expected);
   });
 
@@ -828,19 +846,20 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
     const intermediates = batches.filter((c) => updatesOf(c).some((u) => u.isIntermediate));
     expect(intermediates).toHaveLength(1);
     expect(updatesOf(intermediates[0]).map((u) => u.id)).toEqual(['f1', 'f2']);
-    expect(coordinatesOf('f1')).toEqual(square('f1', 3, 4).coordinates);
-    expect(coordinatesOf('f2')).toEqual(square('f2', 103, 104).coordinates);
+    expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
+    expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 103, 104)));
   });
 
   it('a radius drag goes intermediate -> commit, the committed value is the last radius', () => {
     addFeature({
       id: 'c1',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
       properties: { radiusMeters: 1000 },
       locked: false,
       visible: true,
+      style: {},
     });
     watchFeatureBatches();
 
@@ -867,11 +886,12 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
     addFeature({
       id: 'c1',
       type: 'Circle',
-      coordinates: center,
+      geometry: { type: 'Point', coordinates: center },
       layerId: 'l1',
       properties: { radiusMeters: 1000 },
       locked: false,
       visible: true,
+      style: {},
     });
     const pointer = destinationPoint(center, 100_000, 45);
 
@@ -961,7 +981,7 @@ describe('a feature that disappears during a drag', () => {
 
     expect(() => handler.endDrag(context)).not.toThrow();
 
-    expect(coordinatesOf('f1')).toEqual(square('f1', 3, 4).coordinates);
+    expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
     expect(store.getFeature('f2')).toBeUndefined();
     expectDragCleanedUp();
   });
@@ -1004,11 +1024,12 @@ describe('a feature that disappears during a drag', () => {
     addFeature({
       id: 'c1',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
       properties: { radiusMeters: 1000 },
       locked: false,
       visible: true,
+      style: {},
     });
     store.setSelection('feature', ['c1']);
     const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
@@ -1200,7 +1221,7 @@ describe('drag delegation for auxiliary handles', () => {
       handler.endDrag(context);
 
       expect(batches).toHaveLength(0);
-      expect(coordinatesOf('f1')).toEqual(square('f1', 0, 0).coordinates);
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
     });
   });
 
@@ -1418,8 +1439,8 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
 
     handler.reset(store);
 
-    expect(coordinatesOf('f1')).toEqual(square('f1', 0, 0).coordinates);
-    expect(coordinatesOf('f2')).toEqual(square('f2', 100, 100).coordinates);
+    expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+    expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 100, 100)));
   });
 
   it('restores with an intermediate update before announcing the discard', () => {
@@ -1444,11 +1465,12 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
     addFeature({
       id: 'c1',
       type: 'Circle',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
       properties: { radiusMeters: 1000 },
       locked: false,
       visible: true,
+      style: {},
     });
     store.setSelection('feature', ['c1']);
     const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
@@ -1464,12 +1486,12 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
     startMoveDrag(['f1', 'f2'], [0, 0]);
     handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
     // An edit from outside lands on f2 while the drag is in progress
-    store.updateFeature('f2', { coordinates: square('f2', 50, 50).coordinates });
+    store.updateFeature('f2', { geometry: square('f2', 50, 50).geometry });
 
     handler.reset(store);
 
-    expect(coordinatesOf('f1')).toEqual(square('f1', 0, 0).coordinates);
-    expect(coordinatesOf('f2')).toEqual(square('f2', 50, 50).coordinates);
+    expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+    expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 50, 50)));
   });
 
   it('pairs drag:start with drag:end carrying the dragged features', () => {
@@ -1509,6 +1531,6 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
       { featureIds: ['f1'] },
       { source: 'local' },
     );
-    expect(coordinatesOf('f1')).toEqual(square('f1', 3, 4).coordinates);
+    expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
   });
 });

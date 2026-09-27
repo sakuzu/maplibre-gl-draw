@@ -98,15 +98,12 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
         const drawFeature: Feature = {
           id,
           type: feature.geometry.type as Feature['type'],
-          coordinates:
-            feature.geometry.type === 'Point'
-              ? ((feature.geometry as GeoJSON.Point).coordinates as [number, number])
-              : ((feature.geometry as GeoJSON.LineString | GeoJSON.Polygon)
-                  .coordinates as Feature['coordinates']),
+          geometry: feature.geometry,
           layerId,
           properties: feature.properties ?? {},
           locked: false,
           visible: true,
+          style: {},
         };
 
         // Note: adding to layer.order happens automatically inside createFeature().

@@ -103,10 +103,13 @@ async function clear(): Promise<void> {
     // it, in the same frame
     draw.addFeature({
       type: 'LineString',
-      coordinates: [
-        [138.74, 35.333],
-        [138.75, 35.335],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [138.74, 35.333],
+          [138.75, 35.335],
+        ],
+      },
       properties: { createdZoom: 13 },
       style: { strokeColor: '#00AA00', strokeWidth: 3 },
     });
@@ -318,7 +321,7 @@ async function addFeature(feature: FeatureInput): Promise<string> {
 function lineOf(path: LngLat[], color: string, stroke: Stroke): FeatureInput {
   return {
     type: 'LineString',
-    coordinates: path,
+    geometry: { type: 'LineString', coordinates: path },
     properties: { createdZoom: 13 },
     style: { strokeColor: color, strokeWidth: 4, lineStyle: stroke },
   };
@@ -327,7 +330,7 @@ function lineOf(path: LngLat[], color: string, stroke: Stroke): FeatureInput {
 function polygonOf(ring: LngLat[], color: string, stroke: Stroke): FeatureInput {
   return {
     type: 'Polygon',
-    coordinates: [ring],
+    geometry: { type: 'Polygon', coordinates: [ring] },
     properties: { createdZoom: 13 },
     style: {
       fillColor: color,
@@ -399,15 +402,10 @@ describe('the terrain hides what lies behind the peak', () => {
           draw.addDataset({ id: 'dataset', features });
         },
         {
-          features: [BEHIND, IN_FRONT].map(
-            (ring, i): DatasetFeatureInput => ({
-              id: `area-${i}`,
-              ...(polygonOf(ring, RED, stroke) as Pick<
-                DatasetFeatureInput,
-                'type' | 'coordinates' | 'properties' | 'style'
-              >),
-            }),
-          ),
+          features: [BEHIND, IN_FRONT].map((ring, i): DatasetFeatureInput => {
+            const { type, properties, style } = polygonOf(ring, RED, stroke);
+            return { id: `area-${i}`, type, coordinates: [ring], properties, style };
+          }),
         },
       );
       await capture();
@@ -450,7 +448,7 @@ describe('the symbols and the selection stay in front of the terrain', () => {
     ] as const) {
       await addFeature({
         type: 'Point',
-        coordinates: coord,
+        geometry: { type: 'Point', coordinates: coord },
         style: { pointColor: RED, pointRadius: 9, pointShape: shape },
       } as FeatureInput);
     }

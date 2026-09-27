@@ -16,11 +16,12 @@ function point(id: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'l',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -48,7 +49,7 @@ describe('the mutation hooks', () => {
     });
 
     store.createFeature(point('a'));
-    store.updateFeature('a', { coordinates: [1, 1] });
+    store.updateFeature('a', { geometry: { type: 'Point', coordinates: [1, 1] } });
     store.deleteFeature('a');
 
     expect(afterCreate).toHaveBeenCalledWith(
@@ -56,8 +57,8 @@ describe('the mutation hooks', () => {
       expect.objectContaining({ source: 'local' }),
     );
     expect(afterUpdate).toHaveBeenCalledWith(
-      [expect.objectContaining({ coordinates: [1, 1] })],
-      [expect.objectContaining({ coordinates: [0, 0] })],
+      [expect.objectContaining({ geometry: { type: 'Point', coordinates: [1, 1] } })],
+      [expect.objectContaining({ geometry: { type: 'Point', coordinates: [0, 0] } })],
       expect.anything(),
     );
     expect(afterDelete).toHaveBeenCalledWith(
@@ -71,10 +72,14 @@ describe('the mutation hooks', () => {
     const { store } = setup({ name: 'p', hooks: { 'feature:afterUpdate': afterUpdate } });
     store.createFeature(point('a'));
 
-    store.updateFeature('a', { coordinates: [1, 1] }, { isIntermediate: true });
+    store.updateFeature(
+      'a',
+      { geometry: { type: 'Point', coordinates: [1, 1] } },
+      { isIntermediate: true },
+    );
     expect(afterUpdate).not.toHaveBeenCalled();
 
-    store.updateFeature('a', { coordinates: [2, 2] });
+    store.updateFeature('a', { geometry: { type: 'Point', coordinates: [2, 2] } });
     expect(afterUpdate).toHaveBeenCalledTimes(1);
   });
 

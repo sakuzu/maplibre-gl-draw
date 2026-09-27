@@ -24,6 +24,7 @@ import {
 } from '../modes/draw/index.js';
 import type { ModeContext } from '../modes/handler.js';
 import { ModeManagerImpl } from '../modes/manager.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { SnapLngLat, SnapService } from '../snapping/types.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
@@ -175,7 +176,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('LineString');
-    expect(features[0].coordinates).toEqual([A, B, C]);
+    expect(coordinatesOf(features[0])).toEqual([A, B, C]);
     // After committing it returns to the select mode, and the provisional geometry is gone
     expect(store.getMode()).toBe('select');
     expect(store.getTentative()).toBeNull();
@@ -193,7 +194,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('Polygon');
     // A Polygon is an array of rings, and its first and last points are closed
-    const ring = (features[0].coordinates as Coordinate[][])[0];
+    const ring = (coordinatesOf(features[0]) as Coordinate[][])[0];
     expect(ring[0]).toEqual(A);
     expect(ring[ring.length - 1]).toEqual(A);
     expect(store.getMode()).toBe('select');
@@ -212,7 +213,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('Polygon');
-    expect((features[0].coordinates as Coordinate[][])[0]).toHaveLength(4);
+    expect((coordinatesOf(features[0]) as Coordinate[][])[0]).toHaveLength(4);
   });
 
   it('creates a Circle from two clicks', () => {
@@ -237,7 +238,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
 
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
-    expect(features[0].coordinates).toEqual(B);
+    expect(coordinatesOf(features[0])).toEqual(B);
   });
 });
 
@@ -281,7 +282,7 @@ describe('draw.input.key', () => {
 
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
-    expect(features[0].coordinates).toEqual([A, B]);
+    expect(coordinatesOf(features[0])).toEqual([A, B]);
   });
 
   it('infers the equivalent of KeyboardEvent.code in key', () => {
@@ -315,7 +316,7 @@ describe('draw.input and snapping', () => {
     expect(stub.calls.length).toBeGreaterThan(0);
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
-    expect(features[0].coordinates).toEqual([snapped.lng, snapped.lat]);
+    expect(coordinatesOf(features[0])).toEqual([snapped.lng, snapped.lat]);
   });
 
   it('skips snapping with snap: false and draws with the raw coordinate', () => {
@@ -328,7 +329,7 @@ describe('draw.input and snapping', () => {
     expect(stub.calls).toHaveLength(0);
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
-    expect(features[0].coordinates).toEqual(A);
+    expect(coordinatesOf(features[0])).toEqual(A);
   });
 
   it('makes move go through snapping by default too, and pass through with snap: false', () => {

@@ -10,6 +10,7 @@
  */
 
 import type { ScreenPoint } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature } from '../../store/types.js';
@@ -442,8 +443,8 @@ export class HitTestServiceImpl implements HitTestService {
       const reachPx = tolerancePx + this.candidateReachPx(feature.type);
       const parts =
         feature.type === 'MultiPoint'
-          ? (feature.coordinates as Coordinate[])
-          : [feature.coordinates as Coordinate];
+          ? (coordinatesOf(feature) as Coordinate[])
+          : [coordinatesOf(feature) as Coordinate];
 
       let nearest = Number.POSITIVE_INFINITY;
       for (const coord of parts) {

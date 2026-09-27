@@ -46,7 +46,7 @@ export async function loadImage(
   const feature: Feature = {
     id: featureId,
     type: 'Image',
-    coordinates: options.coordinate,
+    geometry: { type: 'Point', coordinates: options.coordinate },
     layerId,
     properties: {
       ...drawProperties({
@@ -59,6 +59,7 @@ export async function loadImage(
     },
     locked: false,
     visible: true,
+    style: {},
   };
 
   // Create the file and the feature in a transaction

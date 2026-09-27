@@ -14,6 +14,7 @@ import type {
   CustomRendererDrawContext,
   LayerAwareOverlayRenderer,
 } from '../../extension/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -209,7 +210,7 @@ export function renderLayers(
             {
               id: feature.id,
               type: feature.type,
-              coordinates: feature.coordinates,
+              coordinates: coordinatesOf(feature),
               properties: feature.properties,
               style: feature.style,
             },

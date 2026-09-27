@@ -91,7 +91,7 @@ export class DisplayFeatureStyler {
     const channel = getStyleRuleChannel(feature.type);
     const ruleColor = this.styleCache.resolve(feature, this.styleRule);
     const style = this.effectiveStyle(feature.style, ruleColor, channel);
-    const prepared = style === feature.style ? feature : { ...feature, style };
+    const prepared = style === feature.style ? feature : { ...feature, style: style ?? {} };
     this.preparedCache.set(feature.id, prepared);
     return prepared;
   }

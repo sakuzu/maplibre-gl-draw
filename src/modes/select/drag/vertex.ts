@@ -9,6 +9,7 @@ import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { collectSharedVertexMoves } from '../../../operations/shared-vertex.js';
 import type { VertexState } from '../../../operations/vertex.js';
 import { addVertex, computeVertexMove, startVertexMove } from '../../../operations/vertex.js';
+import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import { hasVertexRef } from '../../../shared/utils/vertex-ref.js';
 import type { Coordinate, VertexRef } from '../../../store/types.js';
 import type { ModeContext } from '../../handler.js';
@@ -46,7 +47,9 @@ function applyVertexMove(
   if (!feature) return;
 
   const newCoords = computeVertexMove(state, lngLat, feature);
-  writes.write(store, state.featureId, { coordinates: newCoords });
+  writes.write(store, state.featureId, {
+    geometry: geometryFromCoordinates(feature.type, newCoords),
+  });
 }
 
 /**
@@ -74,7 +77,9 @@ export class VertexDrag implements DragOperation {
     if (!feature) return;
 
     const newCoords = computeVertexMove(this.state, event.lngLat, feature);
-    writes.write(store, this.state.featureId, { coordinates: newCoords });
+    writes.write(store, this.state.featureId, {
+      geometry: geometryFromCoordinates(feature.type, newCoords),
+    });
 
     // Preview update for the features following along through a shared vertex. They are written
     // one at a time in the same manner as the main one (an intermediate updateFeature).
@@ -176,7 +181,7 @@ export function startMidpointDrag(
   const newCoord: Coordinate = [startLngLat.lng, startLngLat.lat];
   const newCoords = addVertex(feature, after, newCoord);
 
-  store.updateFeature(featureId, { coordinates: newCoords });
+  store.updateFeature(featureId, { geometry: geometryFromCoordinates(feature.type, newCoords) });
 
   // The added vertex is afterIndex + 1 in the same part and same ring
   const newVertexRef: VertexRef = { ...after, index: after.index + 1 };

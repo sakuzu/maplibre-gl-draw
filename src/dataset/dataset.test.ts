@@ -13,6 +13,8 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Feature, StyleRule } from '../store/types.js';
 import { createBatchManager } from '../view/renderers/batch-manager.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
@@ -427,7 +429,7 @@ describe('the style rules of a Dataset', () => {
     expect(drawOnce(manager)[0][0].style?.fillColor).toBe('#111111');
 
     dataset.setStyleRule(undefined);
-    expect(drawOnce(manager)[0][0].style).toBeUndefined();
+    expect(drawOnce(manager)[0][0].style).toEqual({});
   });
 
   it('graduated and continuous are evaluated too', () => {
@@ -558,7 +560,7 @@ describe('the base style of a Dataset', () => {
     expect(drawOnce(manager)[0][0].style).toEqual({ fillColor: '#00ff00', fillOpacity: 1 });
 
     dataset.setBaseStyle(undefined);
-    expect(drawOnce(manager)[0][0].style).toBeUndefined();
+    expect(drawOnce(manager)[0][0].style).toEqual({});
   });
 
   it('hitTest returns the effective style even with only a base style', () => {
@@ -589,7 +591,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
    * rounded here.
    */
   function pointTest(feature: Feature, coordinate: [number, number], tolerance: number): boolean {
-    const [x, y] = feature.coordinates as [number, number];
+    const [x, y] = coordinatesOf(feature) as [number, number];
     return Math.hypot(x - coordinate[0], y - coordinate[1]) <= tolerance;
   }
 
@@ -1056,9 +1058,9 @@ describe('the coordinate normalization of normalizeDisplayFeature', () => {
           [139.7, 35.6, 9.41],
           [139.8, 35.7, 10.2],
         ],
-      ] as unknown as Feature['coordinates'],
+      ] as unknown as FeatureCoordinates,
     });
-    expect(f.coordinates).toEqual([
+    expect(coordinatesOf(f)).toEqual([
       [
         [139.7, 35.6],
         [139.8, 35.7],
@@ -1072,6 +1074,6 @@ describe('the coordinate normalization of normalizeDisplayFeature', () => {
       [1, 1],
     ] as [number, number][];
     const f = normalizeDisplayFeature({ id: 'p2', type: 'LineString', coordinates: coords });
-    expect(f.coordinates).toBe(coords);
+    expect(coordinatesOf(f)).toBe(coords);
   });
 });

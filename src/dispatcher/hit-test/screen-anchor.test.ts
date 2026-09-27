@@ -32,11 +32,12 @@ function point(id: string, coord: Coordinate): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -129,14 +130,18 @@ describe('screen space hit testing of symbols', () => {
     const line: Feature = {
       id: 'line',
       type: 'LineString',
-      coordinates: [
-        [10, 0],
-        [10.5, 0],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10, 0],
+          [10.5, 0],
+        ],
+      },
       layerId: 'l1',
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const features = load([line]);
 

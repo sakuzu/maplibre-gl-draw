@@ -339,7 +339,8 @@ async function clickRow(
         id: feature.id,
         row,
         properties: feature.properties,
-        coordinates: feature.coordinates,
+        // In the page: the helpers of the library are not loaded here
+        coordinates: (feature.geometry as { coordinates: unknown }).coordinates,
       };
     });
   });

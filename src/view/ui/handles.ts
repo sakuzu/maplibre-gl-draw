@@ -14,6 +14,7 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { mercatorMidpoint } from '../../shared/math/globe-subdivision.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
 import { applyMarginToBoundingBox, clampLatitude } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getRadiusHandleAngle } from '../../shared/utils/property.js';
 import { hasVertexRef, isSameVertexRef } from '../../shared/utils/vertex-ref.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
@@ -247,15 +248,15 @@ export function computeVertexHandles(
 
   if (feature.type === 'Point') {
     // A Point is a single vertex
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     handles.push({ type: 'vertex', position: coord, vertexRef: { ring: 0, index: 0 } });
   } else if (feature.type === 'LineString') {
-    collectLineVertexHandles(feature.coordinates as Coordinate[], handles);
+    collectLineVertexHandles(coordinatesOf(feature) as Coordinate[], handles);
   } else if (feature.type === 'Polygon') {
-    collectPolygonVertexHandles(feature.coordinates as Coordinate[][], handles);
+    collectPolygonVertexHandles(coordinatesOf(feature) as Coordinate[][], handles);
   } else if (feature.type === 'MultiPoint') {
     // Each coordinate is one part. ring / index are always 0
-    const points = feature.coordinates as Coordinate[];
+    const points = coordinatesOf(feature) as Coordinate[];
     for (let part = 0; part < points.length; part++) {
       handles.push({
         type: 'vertex',
@@ -264,12 +265,12 @@ export function computeVertexHandles(
       });
     }
   } else if (feature.type === 'MultiLineString') {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     for (let part = 0; part < parts.length; part++) {
       collectLineVertexHandles(parts[part], handles, part);
     }
   } else if (feature.type === 'MultiPolygon') {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (let part = 0; part < parts.length; part++) {
       collectPolygonVertexHandles(parts[part], handles, part);
     }
@@ -289,7 +290,7 @@ export function computeCircleRadiusHandle(feature: Feature): HandleInfo | null {
     return null;
   }
 
-  const center = feature.coordinates as Coordinate;
+  const center = coordinatesOf(feature) as Coordinate;
   const radiusMeters = getCircleRadius(feature);
   const radiusHandleAngle = getRadiusHandleAngle(feature);
 
@@ -313,7 +314,7 @@ export function computeCircleCenterHandle(feature: Feature): HandleInfo | null {
     return null;
   }
 
-  const center = feature.coordinates as Coordinate;
+  const center = coordinatesOf(feature) as Coordinate;
 
   return {
     type: 'center',
@@ -392,16 +393,16 @@ export function computeMidpointHandles(
   const handles: HandleInfo[] = [];
 
   if (feature.type === 'LineString') {
-    collectLineMidpointHandles(feature.coordinates as Coordinate[], handles);
+    collectLineMidpointHandles(coordinatesOf(feature) as Coordinate[], handles);
   } else if (feature.type === 'Polygon') {
-    collectPolygonMidpointHandles(feature.coordinates as Coordinate[][], handles);
+    collectPolygonMidpointHandles(coordinatesOf(feature) as Coordinate[][], handles);
   } else if (feature.type === 'MultiLineString') {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     for (let part = 0; part < parts.length; part++) {
       collectLineMidpointHandles(parts[part], handles, part);
     }
   } else if (feature.type === 'MultiPolygon') {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (let part = 0; part < parts.length; part++) {
       collectPolygonMidpointHandles(parts[part], handles, part);
     }

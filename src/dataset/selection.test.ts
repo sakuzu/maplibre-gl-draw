@@ -117,7 +117,7 @@ describe('highlightFeature', () => {
     expect(lit.style?.pointColor).toBe(SELECTION_HIGHLIGHT_COLOR);
     expect(lit.style?.pointRadius).toBeGreaterThan(6);
     // The original is not rewritten
-    expect(POINT.style).toBeUndefined();
+    expect(POINT.style).toEqual({});
   });
 
   it('a line and a polygon are painted in the key color with a wider stroke', () => {

@@ -38,15 +38,27 @@ function square(lng: number, lat: number, size: number): Coordinate[][] {
 }
 
 // Two squares that share an edge, a third that overlaps them, and a line across the first
-draw.addFeature({ type: 'Polygon', coordinates: square(139.758, 35.679, 0.004) });
-draw.addFeature({ type: 'Polygon', coordinates: square(139.762, 35.679, 0.004) });
-draw.addFeature({ type: 'Polygon', coordinates: square(139.765, 35.682, 0.003) });
+draw.addFeature({
+  type: 'Polygon',
+  geometry: { type: 'Polygon', coordinates: square(139.758, 35.679, 0.004) },
+});
+draw.addFeature({
+  type: 'Polygon',
+  geometry: { type: 'Polygon', coordinates: square(139.762, 35.679, 0.004) },
+});
+draw.addFeature({
+  type: 'Polygon',
+  geometry: { type: 'Polygon', coordinates: square(139.765, 35.682, 0.003) },
+});
 draw.addFeature({
   type: 'LineString',
-  coordinates: [
-    [139.757, 35.6805],
-    [139.763, 35.6815],
-  ],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [139.757, 35.6805],
+      [139.763, 35.6815],
+    ],
+  },
 });
 
 const output = document.getElementById('output') as HTMLPreElement;
@@ -101,9 +113,7 @@ draw.on('draw.geometry.applied', ({ operation, status, inputIds, resultIds }) =>
 /** The area of a polygon feature in square meters (0 for the other types) */
 function areaOf(feature: Feature): number {
   if (feature.type !== 'Polygon' && feature.type !== 'MultiPolygon') return 0;
-  return polygonArea({ type: feature.type, coordinates: feature.coordinates } as Parameters<
-    typeof polygonArea
-  >[0]);
+  return polygonArea(feature.geometry as Parameters<typeof polygonArea>[0]);
 }
 
 draw.on('draw.selection.change', () => {

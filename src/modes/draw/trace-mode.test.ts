@@ -22,6 +22,7 @@ import { createDatasetManager, type DatasetManager } from '../../dataset/manager
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import type { NormalizedEvent } from '../../dispatcher/types.js';
 import type { TraceConfig } from '../../shared/config/trace.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
 import { createSnapService } from '../../snapping/service.js';
 import type { SnapService } from '../../snapping/types.js';
@@ -152,11 +153,12 @@ function setup(): void {
   const target: Feature = {
     id: 'target',
     type: 'Polygon',
-    coordinates: [RING],
+    geometry: { type: 'Polygon', coordinates: [RING] },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(target);
   spatialIndex.insert(target);
@@ -235,11 +237,12 @@ function addNeighbor(): void {
   const neighbor: Feature = {
     id: 'neighbor',
     type: 'Polygon',
-    coordinates: [NEIGHBOR_RING],
+    geometry: { type: 'Polygon', coordinates: [NEIGHBOR_RING] },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(neighbor);
   spatialIndex.insert(neighbor);
@@ -257,7 +260,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P1, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P1, P2]);
   });
 
   it('continues the trace onto the adjoining feature connected by a shared vertex', () => {
@@ -269,7 +272,7 @@ describe('tracing of draw_line', () => {
     input.click(N0);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P1, P2, N0]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P1, P2, N0]);
   });
 
   it('can trace from a click snapped to the middle of an edge as well', () => {
@@ -282,7 +285,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([mid, P1, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([mid, P1, P2]);
   });
 
   it('inserts nothing when both points are snapped onto the same edge', () => {
@@ -294,7 +297,7 @@ describe('tracing of draw_line', () => {
     input.click(b);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([a, b]);
+    expect(coordinatesOf(drawnFeature())).toEqual([a, b]);
   });
 
   it('does not trace when a click that does not snap is inserted in between', () => {
@@ -305,7 +308,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, AWAY, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, AWAY, P2]);
   });
 
   it('previews the trace path on a mouse move', () => {
@@ -338,7 +341,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P2]);
   });
 
   it('does not trace on the click right after going back with Backspace', () => {
@@ -351,7 +354,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P2]);
   });
 });
 
@@ -395,7 +398,7 @@ describe('preference of the trace anchor (getSnapPreference)', () => {
     input.click(D2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([D0, D1, D2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([D0, D1, D2]);
   });
 
   it('goes back to null after a click that does not snap', () => {
@@ -454,7 +457,7 @@ describe('tracing of draw_polygon', () => {
     input.click(AWAY);
     input.key('Enter');
 
-    const ring = (drawnFeature().coordinates as Coordinate[][])[0];
+    const ring = (coordinatesOf(drawnFeature()) as Coordinate[][])[0];
     // P0 -> (takes in P1) -> P2 -> AWAY -> the closing point
     expect(ring).toEqual([P0, P1, P2, AWAY, P0]);
   });

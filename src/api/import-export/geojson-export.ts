@@ -24,6 +24,7 @@ import {
   normalizePolygonOrientation,
 } from '../../geometry/simplify.js';
 import { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { ExportOptions, Feature } from '../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS, LIBRARY_PROPERTIES } from './constants.js';
@@ -143,7 +144,7 @@ export function convertFeatureToGeoJSON(
   if (feature.locked) {
     properties[`${DRAW_PROPERTY_PREFIX}locked`] = true;
   }
-  if (feature.style) {
+  if (Object.keys(feature.style).length > 0) {
     properties[`${DRAW_PROPERTY_PREFIX}style`] = feature.style;
   }
 
@@ -151,29 +152,35 @@ export function convertFeatureToGeoJSON(
 
   switch (feature.type) {
     case 'Point':
-      geometry = { type: 'Point', coordinates: exportPosition(feature.coordinates as Position) };
+      geometry = { type: 'Point', coordinates: exportPosition(coordinatesOf(feature) as Position) };
       break;
 
     case 'LineString':
-      geometry = { type: 'LineString', coordinates: exportLine(feature.coordinates as Position[]) };
+      geometry = {
+        type: 'LineString',
+        coordinates: exportLine(coordinatesOf(feature) as Position[]),
+      };
       break;
 
     case 'Polygon':
       geometry = {
         type: 'Polygon',
-        coordinates: exportPolygon(feature.coordinates as Position[][]),
+        coordinates: exportPolygon(coordinatesOf(feature) as Position[][]),
       };
       break;
 
     // The Multi types are written out to GeoJSON with their part structure preserved
     case 'MultiPoint':
-      geometry = { type: 'MultiPoint', coordinates: exportLine(feature.coordinates as Position[]) };
+      geometry = {
+        type: 'MultiPoint',
+        coordinates: exportLine(coordinatesOf(feature) as Position[]),
+      };
       break;
 
     case 'MultiLineString':
       geometry = {
         type: 'MultiLineString',
-        coordinates: (feature.coordinates as Position[][]).map(exportLine),
+        coordinates: (coordinatesOf(feature) as Position[][]).map(exportLine),
       };
       break;
 
@@ -181,14 +188,14 @@ export function convertFeatureToGeoJSON(
       geometry = {
         type: 'MultiPolygon',
         coordinates: normalizeMultiPolygonOrientation(
-          (feature.coordinates as Position[][][]).map((rings) => rings.map(roundLine)),
+          (coordinatesOf(feature) as Position[][][]).map((rings) => rings.map(roundLine)),
         ).map(wrapRings),
       };
       break;
 
     case 'Image': {
       // An Image is written out as a Point geometry and identified by featureType
-      geometry = { type: 'Point', coordinates: exportPosition(feature.coordinates as Position) };
+      geometry = { type: 'Point', coordinates: exportPosition(coordinatesOf(feature) as Position) };
       properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
 
       // Embed the image data as Base64
@@ -210,13 +217,16 @@ export function convertFeatureToGeoJSON(
       // A type with a single point is written out as a Point, and a type with a sequence of
       // points as a LineString. In both cases the import side restores
       // the original type from the same marker.
-      if (isCoordinatePair(feature.coordinates)) {
-        geometry = { type: 'Point', coordinates: exportPosition(feature.coordinates as Position) };
+      if (isCoordinatePair(coordinatesOf(feature))) {
+        geometry = {
+          type: 'Point',
+          coordinates: exportPosition(coordinatesOf(feature) as Position),
+        };
         properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
-      } else if (isCoordinatePairArray(feature.coordinates)) {
+      } else if (isCoordinatePairArray(coordinatesOf(feature))) {
         geometry = {
           type: 'LineString',
-          coordinates: exportLine(feature.coordinates as Position[]),
+          coordinates: exportLine(coordinatesOf(feature) as Position[]),
         };
         properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
       } else {

@@ -21,11 +21,12 @@ function point(id: string, layerId: string, coord: [number, number], visible = t
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId,
     properties: {},
     locked: false,
     visible,
+    style: {},
   };
 }
 

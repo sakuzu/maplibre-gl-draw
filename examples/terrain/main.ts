@@ -29,23 +29,29 @@ const draw = createMapLibreGLDraw(map);
 // A line across the valley and an area on the slope, to see them follow the ground
 draw.addFeature({
   type: 'LineString',
-  coordinates: [
-    [11.36, 47.255],
-    [11.39, 47.275],
-    [11.42, 47.3],
-  ],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [11.36, 47.255],
+      [11.39, 47.275],
+      [11.42, 47.3],
+    ],
+  },
 });
 draw.addFeature({
   type: 'Polygon',
-  coordinates: [
-    [
-      [11.4, 47.25],
-      [11.43, 47.25],
-      [11.43, 47.265],
-      [11.4, 47.265],
-      [11.4, 47.25],
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [11.4, 47.25],
+        [11.43, 47.25],
+        [11.43, 47.265],
+        [11.4, 47.265],
+        [11.4, 47.25],
+      ],
     ],
-  ],
+  },
 });
 
 const TERRAIN = { source: 'dem', exaggeration: 1.5 };

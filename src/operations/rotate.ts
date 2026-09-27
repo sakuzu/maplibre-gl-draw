@@ -13,7 +13,7 @@
 import { fromPlane, toPlane } from '../shared/math/mercator-plane.js';
 import { getDrawProperty, hasDrawProperty } from '../shared/properties.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
-import { mapCoordinatesDeep } from '../shared/utils/coordinates.js';
+import { coordinatesOf, mapCoordinatesDeep } from '../shared/utils/coordinates.js';
 import { getImageProperties } from '../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../store/types.js';
 
@@ -209,7 +209,7 @@ export function startRotation(
   const initialRotations = new Map<string, number>();
 
   for (const feature of features) {
-    initialCoordinates.set(feature.id, JSON.parse(JSON.stringify(feature.coordinates)));
+    initialCoordinates.set(feature.id, JSON.parse(JSON.stringify(coordinatesOf(feature))));
 
     // For a feature that has a rotation property, store the initial rotation angle
     if (hasRotationProperty(feature, extensions)) {

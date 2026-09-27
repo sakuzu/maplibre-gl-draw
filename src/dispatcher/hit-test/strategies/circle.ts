@@ -9,6 +9,7 @@
  */
 
 import { haversineDistanceMeters, metersToLng } from '../../../shared/math/index.js';
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
 import type { HitTestStrategy } from './base.js';
@@ -20,7 +21,7 @@ export class CircleHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'Circle';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const center = feature.coordinates as Coordinate;
+    const center = coordinatesOf(feature) as Coordinate;
     const radiusMeters = getCircleRadius(feature);
 
     if (radiusMeters === undefined || radiusMeters <= 0) {
@@ -45,7 +46,7 @@ export class CircleHitTestStrategy implements HitTestStrategy {
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const center = feature.coordinates as Coordinate;
+    const center = coordinatesOf(feature) as Coordinate;
     const radiusMeters = getCircleRadius(feature);
 
     if (radiusMeters === undefined || radiusMeters <= 0) {

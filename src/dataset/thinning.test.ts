@@ -14,6 +14,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
@@ -670,7 +671,7 @@ describe('the application to a dataset', () => {
 
     const at = (coord: Coordinate): string | null => {
       const hit = manager.hitTestSide('below-store', coord, pxDeg(10) * 2, (feature, position) => {
-        const [x, y] = feature.coordinates as Coordinate;
+        const [x, y] = coordinatesOf(feature) as Coordinate;
         return Math.hypot(x - position[0], y - position[1]) <= pxDeg(10) * 2;
       });
       return hit?.feature?.id ?? null;
@@ -700,7 +701,7 @@ describe('the application to a dataset', () => {
       [0, 0],
       pxDeg(10),
       (feature, position, tolerance) => {
-        const [x, y] = feature.coordinates as Coordinate;
+        const [x, y] = coordinatesOf(feature) as Coordinate;
         return Math.hypot(x - position[0], y - position[1]) <= tolerance;
       },
     );

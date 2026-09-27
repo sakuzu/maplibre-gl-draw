@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSelectionApi } from '../../api/selection-api.js';
 import { groupSelection } from '../../operations/layer-operations.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
@@ -34,11 +35,12 @@ function feature(id: string, layerId: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -290,17 +292,20 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
     store.createFeature({
       ...feature('line', 'l1'),
       type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [1, 0],
-        [2, 0],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+        ],
+      },
     });
     store.setSelection('feature', ['line']);
     store.setSelectedVertices({ featureId: 'line', vertexIndices: [{ ring: 0, index: 1 }] });
 
     expect(createSelectionApi({ store }).deleteSelection()).toBe(true);
-    expect(store.getFeature('line')?.coordinates).toEqual([
+    expect(coordinatesOf(store.getFeature('line'))).toEqual([
       [0, 0],
       [2, 0],
     ]);

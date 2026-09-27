@@ -17,7 +17,7 @@ import type {
   FeatureCoordinates,
   ImageStyle,
 } from '../types/model.js';
-import { forEachCoordinateDeep } from './coordinates.js';
+import { coordinatesOf, forEachCoordinateDeep } from './coordinates.js';
 import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.js';
 
 /**
@@ -26,7 +26,8 @@ import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.
  * For an Image, the size at createdZoom is converted into geographic coordinates
  */
 function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
-  const { type, coordinates } = feature;
+  const { type } = feature;
+  const coordinates = coordinatesOf(feature);
 
   // For an Image
   if (type === 'Image') {
@@ -106,7 +107,8 @@ const coordinateBoundingBoxCache = new WeakMap<object, BoundingBox>();
  * cache hit it does not traverse and only returns a copy of the value.
  */
 function computeCoordinateBoundingBox(feature: Feature): BoundingBox {
-  const { type, coordinates } = feature;
+  const { type } = feature;
+  const coordinates = coordinatesOf(feature);
 
   if (type === 'Point') {
     const [lng, lat] = coordinates as Coordinate;

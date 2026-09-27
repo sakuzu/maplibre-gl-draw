@@ -68,11 +68,12 @@ function imageFeature(id: string, fileId: string): Feature {
   return {
     id,
     type: 'Image',
-    coordinates: [139.7, 35.7],
+    geometry: { type: 'Point', coordinates: [139.7, 35.7] },
     layerId: 'l1',
     properties: { imageFileId: fileId, imageWidth: 10, imageHeight: 10, createdZoom: 12 },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

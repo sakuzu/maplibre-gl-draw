@@ -224,7 +224,7 @@ export class DrawFreehandMode implements ModeHandler {
     const feature: Feature = {
       id: featureId,
       type: 'Freehand',
-      coordinates: [...this.currentCoordinates],
+      geometry: { type: 'LineString', coordinates: [...this.currentCoordinates] },
       layerId,
       properties: {
         ...createdZoomProperty(this.context),

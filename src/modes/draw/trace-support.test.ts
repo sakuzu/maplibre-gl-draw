@@ -83,11 +83,12 @@ function addStoreLine(id: string, coordinates: Coordinate[], visible = true): vo
   const feature: Feature = {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible,
+    style: {},
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
@@ -100,11 +101,12 @@ function addDisplayLine(datasetId: string, id: string, coordinates: Coordinate[]
   const feature: Feature = {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     layerId: '',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   const features = datasets.get(datasetId) ?? [];
   features.push(feature);

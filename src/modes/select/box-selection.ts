@@ -7,6 +7,7 @@
  * Responsible for handling box selection in select mode
  */
 
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Feature } from '../../store/types.js';
 import type { ModeContext } from '../handler.js';
@@ -135,7 +136,7 @@ export function fallbackBoxSelection(
     );
   };
 
-  const coords = feature.coordinates;
+  const coords = coordinatesOf(feature);
 
   // When the coordinates are a single point
   if (

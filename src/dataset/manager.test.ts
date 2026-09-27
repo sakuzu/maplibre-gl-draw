@@ -11,6 +11,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
@@ -56,7 +57,7 @@ function point(id: string, coord: [number, number] = [0, 0]): DatasetFeatureInpu
 
 /** A simple test that counts a matching coordinate as a hit */
 const exactHit = (feature: Feature, coordinate: Coordinate): boolean => {
-  const coord = feature.coordinates as Coordinate;
+  const coord = coordinatesOf(feature) as Coordinate;
   return coord[0] === coordinate[0] && coord[1] === coordinate[1];
 };
 

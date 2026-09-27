@@ -22,8 +22,9 @@
  * are drawn in the order of the table whatever the order within the children.
  */
 
-import type { Feature } from '../../shared/types/model.js';
+import type { Feature, FeatureCoordinates } from '../../shared/types/model.js';
 import type { Color } from '../../shared/types/style.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { toPackedPointStyle } from '../../view/renderers/batch-manager.js';
 import { toLineInstanceColor } from '../../view/renderers/line/line-geometry.js';
 import type { SDFStrokeStyle } from '../../view/renderers/line/line-types.js';
@@ -201,10 +202,10 @@ class ColumnarStyleSlots {
     return {
       id: '',
       type,
-      coordinates: [] as unknown as Feature['coordinates'],
+      geometry: geometryFromCoordinates(type, [] as unknown as FeatureCoordinates),
       layerId: '',
       properties: {},
-      style: this.styler.effectiveStyle(undefined, color, getStyleRuleChannel(type)),
+      style: this.styler.effectiveStyle(undefined, color, getStyleRuleChannel(type)) ?? {},
       locked: false,
       visible: true,
     };

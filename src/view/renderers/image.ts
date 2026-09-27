@@ -15,6 +15,7 @@ import {
   metersToDegreesLat,
   metersToDegreesLng,
 } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getTileSize } from '../../shared/utils/map.js';
 import { getImageProperties } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, FileData, ImageStyle } from '../../store/types.js';
@@ -121,7 +122,7 @@ export class ImageRenderer {
     // its file), so the feature is drawn without its image and nothing is logged.
     if (!fileData) return;
 
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
     const style = this.getImageStyle(feature.style as ImageStyle | undefined);
 
@@ -237,7 +238,7 @@ export class ImageRenderer {
     const properties = getImageProperties(feature);
     if (!properties.imageFileId) return null;
 
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
     const style = this.getImageStyle(feature.style as ImageStyle | undefined);
 

@@ -8,6 +8,7 @@
  * Distances are measured in the local frame of hit testing (local-frame.ts).
  */
 
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
 import { latitudeScale, localDistance } from '../local-frame.js';
 import type { HitTestStrategy } from './base.js';
@@ -23,13 +24,13 @@ export class PointHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'Point';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const pointCoord = feature.coordinates as Coordinate;
+    const pointCoord = coordinatesOf(feature) as Coordinate;
     const dist = localDistance(coordinate, pointCoord, latitudeScale(coordinate[1]));
     return dist <= toleranceLngLat;
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const pointCoord = feature.coordinates as Coordinate;
+    const pointCoord = coordinatesOf(feature) as Coordinate;
     return localDistance(coordinate, pointCoord, latitudeScale(coordinate[1]));
   }
 }

@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
 import type { Dataset, DatasetFeatureInput } from '../../dataset/types.js';
 import { resolveMessages } from '../../messages.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
@@ -68,11 +69,12 @@ function addStoreFeature(id: string, type: string, coordinates: FeatureCoordinat
   const feature: Feature = {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
@@ -435,7 +437,7 @@ describe('getting features for tracing', () => {
     const feature = providers.getFeature('data', 'line');
 
     expect(feature?.id).toBe('line');
-    expect(feature?.coordinates).toEqual(H_LINE);
+    expect(coordinatesOf(feature)).toEqual(H_LINE);
   });
 
   it('can look up a feature of a hidden dataset as well', () => {

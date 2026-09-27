@@ -15,6 +15,7 @@
  */
 
 import type { Feature } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { computeFeatureBounds, type DisplayChunk, partitionIntoChunks } from './chunk.js';
 import { chunkTargetSizeFor } from './partition.js';
 import type { ChunkCollector, CollectOptions } from './retained.js';
@@ -150,7 +151,7 @@ export class FeatureArraySource implements DisplaySource {
   }
 
   pointOf(row: number): readonly [number, number] {
-    return this.list[row].coordinates as [number, number];
+    return coordinatesOf(this.list[row]) as [number, number];
   }
 
   styleRadiusOf(row: number): number | undefined {

@@ -8,6 +8,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { toStore } from './draw-store.js';
 import { MemoryDocumentStore, MemoryStore } from './memory.js';
 import type { Feature, Layer, StateChanges } from './types.js';
@@ -20,11 +21,12 @@ function point(id: string, coordinates: [number, number] = [0, 0]): Feature {
   return {
     id,
     type: 'Point',
-    coordinates,
+    geometry: { type: 'Point', coordinates: coordinates },
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -32,23 +34,27 @@ function polygon(id: string): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId: 'l1',
     properties: { name: 'a' },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function ringStart(feature: Feature | undefined): number[] | undefined {
-  return (feature?.coordinates as number[][][] | undefined)?.[0]?.[0];
+  return (coordinatesOf(feature) as number[][][] | undefined)?.[0]?.[0];
 }
 
 afterEach(() => {
@@ -62,7 +68,7 @@ describe('the objects the in-memory store returns', () => {
     store.createFeature(polygon('f1'));
 
     const feature = store.getFeature('f1') as Feature;
-    const ring = (feature.coordinates as [number, number][][])[0];
+    const ring = (coordinatesOf(feature) as [number, number][][])[0];
     expect(() => {
       ring[0] = [50, 50];
     }).toThrow(TypeError);
@@ -79,7 +85,7 @@ describe('the objects the in-memory store returns', () => {
     const input = polygon('f1');
     store.createFeature(input);
 
-    (input.coordinates as number[][][])[0][0][0] = 50;
+    (coordinatesOf(input) as number[][][])[0][0][0] = 50;
 
     expect(ringStart(store.getFeature('f1'))).toEqual([0, 0]);
   });
@@ -131,7 +137,9 @@ describe('the read-only gate', () => {
     store.setReadOnly(true);
 
     expect(store.createFeature(point('f2'))).toBe(false);
-    expect(store.updateFeature('f1', { coordinates: [1, 1] })).toBe(false);
+    expect(store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [1, 1] } })).toBe(
+      false,
+    );
     expect(store.deleteFeature('f1')).toBe(false);
     expect(store.deleteFeature('missing')).toBe(false);
     expect(store.createLayer(layer('l2'))).toBe(false);
@@ -141,7 +149,9 @@ describe('the read-only gate', () => {
     expect(store.getLayerOrder()).toEqual(['l1']);
 
     store.setReadOnly(false);
-    expect(store.updateFeature('f1', { coordinates: [1, 1] })).toBe(true);
+    expect(store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [1, 1] } })).toBe(
+      true,
+    );
   });
 
   it('throws for an argument that cannot apply once writable', () => {
@@ -362,13 +372,17 @@ describe('the invariants of the selection', () => {
 
     // A drag (its frames and its commit) keeps it
     store.setDragState({ operation: 'vertex' });
-    store.updateFeature('f1', { coordinates: [1, 1] }, { isIntermediate: true });
-    store.updateFeature('f1', { coordinates: [1, 1] });
+    store.updateFeature(
+      'f1',
+      { geometry: { type: 'Point', coordinates: [1, 1] } },
+      { isIntermediate: true },
+    );
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [1, 1] } });
     store.setDragState(null);
     expect(store.getSelectedVertices()).not.toBeNull();
 
     // An edit that is not a drag ends it
-    store.updateFeature('f1', { coordinates: [2, 2] });
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [2, 2] } });
     expect(store.getSelectedVertices()).toBeNull();
   });
 
@@ -380,7 +394,10 @@ describe('the invariants of the selection', () => {
     store.setSelectedVertices({ featureId: 'f1', vertexIndices: [{ ring: 0, index: 0 }] });
     store.setDragState({ operation: 'move' });
 
-    document.transact(() => document.updateFeature('f1', { coordinates: [3, 3] }), 'remote');
+    document.transact(
+      () => document.updateFeature('f1', { geometry: { type: 'Point', coordinates: [3, 3] } }),
+      'remote',
+    );
 
     expect(store.getSelectedVertices()).toBeNull();
   });

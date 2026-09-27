@@ -18,6 +18,7 @@
  */
 
 import type { BoundingBox, Feature } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import { CHUNK_TARGET_SIZE, type PartitionedRows, partitionRows } from './partition.js';
 
@@ -58,7 +59,7 @@ export function boundsIntersect(a: BoundingBox, b: BoundingBox): boolean {
  * @internal
  */
 export function countVertices(feature: Feature): number {
-  const geometry = feature as { type: string; coordinates?: unknown };
+  const geometry = { type: feature.type, coordinates: coordinatesOf(feature) };
   const walk = (value: unknown, depth: number): number => {
     if (!Array.isArray(value)) return 0;
     if (depth === 0) return 1;

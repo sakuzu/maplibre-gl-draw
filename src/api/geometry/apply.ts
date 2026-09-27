@@ -12,6 +12,7 @@
 
 import type { DrawPropertyName } from '../../shared/properties.js';
 import { setDrawProperty } from '../../shared/properties.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EventEmitter, GeometryAppliedPayload } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
@@ -128,11 +129,11 @@ export function applyResult(deps: GeometryApiDeps, params: CommitParams): string
   const result: Feature = {
     id: generateFeatureId(),
     type: geometry.type,
-    coordinates: geometry.coordinates,
+    geometry: geometryFromCoordinates(geometry.type, geometry.coordinates),
     layerId: placement.layerId,
     groupId: placement.groupId,
     properties: params.properties ?? inheritProperties(anchor),
-    style: anchor.style ? { ...anchor.style } : undefined,
+    style: { ...anchor.style },
     locked: false,
     visible: true,
   };

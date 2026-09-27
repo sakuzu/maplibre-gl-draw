@@ -21,13 +21,14 @@ const transform: CoordinateTransform = {
   unproject: (point) => ({ lng: point.x / 100, lat: -point.y / 100 }),
 };
 
-function makeFeature(partial: Pick<Feature, 'type' | 'coordinates'>): Feature {
+function makeFeature(partial: Pick<Feature, 'type' | 'geometry'>): Feature {
   return {
     id: 'feature-1',
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...partial,
   };
 }
@@ -45,14 +46,20 @@ function expectFiniteBbox(bbox: ReturnType<typeof computeFeatureGeoBoundingBox>)
 
 describe('computeFeatureGeoBoundingBox the zero-area path', () => {
   it('returns a finite bbox centered on the coordinate for a Point', () => {
-    const feature = makeFeature({ type: 'Point', coordinates: [139.7, 35.7] });
+    const feature = makeFeature({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [139.7, 35.7] },
+    });
     const bbox = computeFeatureGeoBoundingBox(feature, transform, DEFAULT_SELECTION_CONFIG);
     expectFiniteBbox(bbox);
     expect(bbox?.center).toEqual([139.7, 35.7]);
   });
 
   it('emits no NaN for a MultiPoint with a single point and centers on that point', () => {
-    const feature = makeFeature({ type: 'MultiPoint', coordinates: [[139.74, 35.73]] });
+    const feature = makeFeature({
+      type: 'MultiPoint',
+      geometry: { type: 'MultiPoint', coordinates: [[139.74, 35.73]] },
+    });
     const bbox = computeFeatureGeoBoundingBox(feature, transform, DEFAULT_SELECTION_CONFIG);
     expectFiniteBbox(bbox);
     expect(bbox?.center).toEqual([139.74, 35.73]);
@@ -61,10 +68,13 @@ describe('computeFeatureGeoBoundingBox the zero-area path', () => {
   it('emits no NaN for a LineString whose vertices are all the same coordinate', () => {
     const feature = makeFeature({
       type: 'LineString',
-      coordinates: [
-        [10, 20],
-        [10, 20],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10, 20],
+          [10, 20],
+        ],
+      },
     });
     const bbox = computeFeatureGeoBoundingBox(feature, transform, DEFAULT_SELECTION_CONFIG);
     expectFiniteBbox(bbox);
@@ -74,13 +84,19 @@ describe('computeFeatureGeoBoundingBox the zero-area path', () => {
 
 describe('computeCombinedGeoBoundingBox', () => {
   it('returns a finite bbox for a multi-selection including a single-point MultiPoint', () => {
-    const multiPoint = makeFeature({ type: 'MultiPoint', coordinates: [[139.74, 35.73]] });
+    const multiPoint = makeFeature({
+      type: 'MultiPoint',
+      geometry: { type: 'MultiPoint', coordinates: [[139.74, 35.73]] },
+    });
     const line = makeFeature({
       type: 'LineString',
-      coordinates: [
-        [139.7, 35.7],
-        [139.72, 35.72],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [139.7, 35.7],
+          [139.72, 35.72],
+        ],
+      },
     });
     const bbox = computeCombinedGeoBoundingBox(
       [multiPoint, line],

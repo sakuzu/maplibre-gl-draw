@@ -16,11 +16,12 @@ function createTestFeature(id: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -391,8 +392,8 @@ describe('mergeChanges', () => {
 
     it('when both sides have an update of the same feature (both are kept)', () => {
       const f1 = createTestFeature('f1');
-      const f1Updated = { ...f1, coordinates: [1, 1] as [number, number] };
-      const f1Updated2 = { ...f1, coordinates: [2, 2] as [number, number] };
+      const f1Updated: Feature = { ...f1, geometry: { type: 'Point', coordinates: [1, 1] } };
+      const f1Updated2: Feature = { ...f1, geometry: { type: 'Point', coordinates: [2, 2] } };
 
       const pending: StateChanges = {
         features: { updated: [{ id: 'f1', feature: f1Updated, previous: f1 }] },

@@ -19,6 +19,7 @@ import type {
   KeyNormalizedEvent,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature } from '../../store/types.js';
 import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
@@ -30,19 +31,23 @@ function polygon(id: string, layerId: string): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -275,7 +280,7 @@ describe('SelectMode.onDragCancel (a second finger ends the press)', () => {
   }
 
   function firstVertex(): number[] {
-    return (store.getFeature('f1')!.coordinates as number[][][])[0][0];
+    return (coordinatesOf(store.getFeature('f1')!) as number[][][])[0][0];
   }
 
   it('abandons a move drag: no drag state is left, dragPan comes back, later moves do nothing', () => {
@@ -342,7 +347,7 @@ describe('SelectMode: cancelling a drag', () => {
   }
 
   it('returns the dragged feature to where it started', () => {
-    const before = store.getFeature('f1')!.coordinates;
+    const before = coordinatesOf(store.getFeature('f1')!);
     hit = { feature: store.getFeature('f1')!, distance: 0 };
     mode.onMouseDown(mouseEvent());
     mode.onDragStart(dragAt('dragstart', 5, 5));
@@ -350,11 +355,11 @@ describe('SelectMode: cancelling a drag', () => {
 
     mode.onDragCancel();
 
-    expect(store.getFeature('f1')!.coordinates).toEqual(before);
+    expect(coordinatesOf(store.getFeature('f1')!)).toEqual(before);
   });
 
   it('a synthetic Escape during a drag cancels the drag and keeps the selection', () => {
-    const before = store.getFeature('f1')!.coordinates;
+    const before = coordinatesOf(store.getFeature('f1')!);
     hit = { feature: store.getFeature('f1')!, distance: 0 };
     mode.onMouseDown(mouseEvent());
     mode.onDragStart(dragAt('dragstart', 5, 5));
@@ -362,12 +367,12 @@ describe('SelectMode: cancelling a drag', () => {
 
     mode.onKeyDown(key('Escape'));
 
-    expect(store.getFeature('f1')!.coordinates).toEqual(before);
+    expect(coordinatesOf(store.getFeature('f1')!)).toEqual(before);
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
     expect(store.getDragState()).toBeNull();
     // The release that follows commits nothing
     mode.onDragEnd(dragAt('dragend', 9, 9));
-    expect(store.getFeature('f1')!.coordinates).toEqual(before);
+    expect(coordinatesOf(store.getFeature('f1')!)).toEqual(before);
   });
 });
 
@@ -414,7 +419,7 @@ describe('SelectMode: arrow keys and double clicks', () => {
   }
 
   function firstVertex(): number[] {
-    return (store.getFeature('f1')!.coordinates as number[][][])[0][0];
+    return (coordinatesOf(store.getFeature('f1')!) as number[][][])[0][0];
   }
 
   it('moves the selection by one pixel (ten with Shift) and uses the key', () => {

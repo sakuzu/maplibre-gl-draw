@@ -16,6 +16,8 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
@@ -348,7 +350,7 @@ const RING: Coordinate[] = [
 ];
 
 function makeFeature(id: string, type: Feature['type'], extra: Partial<Feature> = {}): Feature {
-  let coordinates: Feature['coordinates'];
+  let coordinates: FeatureCoordinates;
   switch (type) {
     case 'LineString':
     case 'Freehand':
@@ -376,11 +378,12 @@ function makeFeature(id: string, type: Feature['type'], extra: Partial<Feature> 
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...extra,
   } as Feature;
 }
@@ -685,10 +688,13 @@ describe('run splitting', () => {
   it('the origin of a chunk is the center of its extent', () => {
     const h = createHarness([
       makeFeature('l1', 'LineString', {
-        coordinates: [
-          [10, 20],
-          [11, 21],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [10, 20],
+            [11, 21],
+          ],
+        },
       }),
     ]);
 
@@ -704,16 +710,22 @@ describe('the origin of a chunk seen at high zoom', () => {
   /** Tokyo and Osaka in one chunk: the extent is about 4 degrees wide */
   const tokyoOsaka = (): Feature[] => [
     makeFeature('tokyo', 'LineString', {
-      coordinates: [
-        [139.7, 35.68],
-        [139.71, 35.69],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [139.7, 35.68],
+          [139.71, 35.69],
+        ],
+      },
     }),
     makeFeature('osaka', 'LineString', {
-      coordinates: [
-        [135.5, 34.69],
-        [135.51, 34.7],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [135.5, 34.69],
+          [135.51, 34.7],
+        ],
+      },
     }),
   ];
   /** A view of about 1000 px around Osaka at zoom 22 */
@@ -1212,7 +1224,9 @@ describe('viewport thinning', () => {
   it('the chunk bbox is computed at build time and non-intersecting chunks skipped', () => {
     const h = createHarness([
       makeFeature('near-line', 'LineString'),
-      makeFeature('far-poly', 'Polygon', { coordinates: [FAR_RING] }),
+      makeFeature('far-poly', 'Polygon', {
+        geometry: geometryFromCoordinates('Polygon', [FAR_RING]),
+      }),
     ]);
 
     h.draw(NEAR);
@@ -1232,7 +1246,9 @@ describe('viewport thinning', () => {
   it('every chunk is drawn when no viewport is passed', () => {
     const h = createHarness([
       makeFeature('near-line', 'LineString'),
-      makeFeature('far-poly', 'Polygon', { coordinates: [FAR_RING] }),
+      makeFeature('far-poly', 'Polygon', {
+        geometry: geometryFromCoordinates('Polygon', [FAR_RING]),
+      }),
     ]);
 
     h.draw();
@@ -1242,7 +1258,11 @@ describe('viewport thinning', () => {
 
   it('a chunk without a bbox (no coordinates) is always drawn', () => {
     const h = createHarness(
-      [makeFeature('marker', 'Marker', { coordinates: [] as unknown as Coordinate })],
+      [
+        makeFeature('marker', 'Marker', {
+          geometry: geometryFromCoordinates('Marker', [] as unknown as Coordinate),
+        }),
+      ],
       {},
       { customTypes: ['Marker'] },
     );
@@ -1256,7 +1276,9 @@ describe('viewport thinning', () => {
     const h = createHarness(
       [
         makeFeature('near-line', 'LineString'),
-        makeFeature('far-dashed', 'LineString', { coordinates: FAR_RING }),
+        makeFeature('far-dashed', 'LineString', {
+          geometry: geometryFromCoordinates('LineString', FAR_RING),
+        }),
       ],
       { 'far-dashed': { lineStyle: 'dashed' } },
     );
@@ -1275,7 +1297,7 @@ describe('viewport thinning', () => {
 
     const target = h.stub.features[0];
     const previous = { ...target };
-    target.coordinates = FAR_RING;
+    target.geometry = geometryFromCoordinates(target.type, FAR_RING);
 
     h.cache.applyChanges({ features: { updated: [{ id: target.id, feature: target, previous }] } });
 
@@ -1314,7 +1336,7 @@ describe('viewport thinning', () => {
 
   // Register a calculator that returns a rectangle spreading 2 degrees in each direction
   harnessExtensions.registerBoundingBox(ANCHORED_TYPE, (feature): BoundingBoxCoords => {
-    const [lng, lat] = feature.coordinates as Coordinate;
+    const [lng, lat] = coordinatesOf(feature) as Coordinate;
     return {
       topLeft: [lng - 2, lat + 2],
       topRight: [lng + 2, lat + 2],
@@ -1372,7 +1394,7 @@ describe('viewport thinning', () => {
 
     const spatialIndex = new RBushSpatialIndex();
     spatialIndex.setCustomBoundingBoxCalculator(ANCHORED_TYPE, (feature) => {
-      const [lng, lat] = feature.coordinates as Coordinate;
+      const [lng, lat] = coordinatesOf(feature) as Coordinate;
       return {
         minX: lng - halfDeg,
         minY: lat - halfDeg,
@@ -1381,7 +1403,9 @@ describe('viewport thinning', () => {
       };
     });
 
-    const marker = makeFeature('marker', ANCHORED_TYPE, { coordinates: anchor });
+    const marker = makeFeature('marker', ANCHORED_TYPE, {
+      geometry: geometryFromCoordinates(ANCHORED_TYPE, anchor),
+    });
     spatialIndex.insert(marker);
 
     const h = createHarness([marker], {}, { customTypes: [ANCHORED_TYPE], spatialIndex });
@@ -1437,8 +1461,12 @@ describe('per-feature thinning of the immediate chunks', () => {
 
   /** Two dashed lines that go into the same chunk (both touch viewportBounds) */
   const dashedPair = (): Feature[] => [
-    makeFeature('d-visible', 'LineString', { coordinates: NEAR_COORDS }),
-    makeFeature('d-offscreen', 'LineString', { coordinates: OFF_COORDS }),
+    makeFeature('d-visible', 'LineString', {
+      geometry: geometryFromCoordinates('LineString', NEAR_COORDS),
+    }),
+    makeFeature('d-offscreen', 'LineString', {
+      geometry: geometryFromCoordinates('LineString', OFF_COORDS),
+    }),
   ];
   const DASHED_SPECS: Record<string, StyleSpec> = {
     'd-visible': { lineStyle: 'dashed' },
@@ -1456,8 +1484,12 @@ describe('per-feature thinning of the immediate chunks', () => {
   it('an immediate chunk of a custom type is thinned too', () => {
     const h = createHarness(
       [
-        makeFeature('t-visible', 'Sticker', { coordinates: [0, 0] as unknown as Coordinate }),
-        makeFeature('t-offscreen', 'Sticker', { coordinates: [3, 3] as unknown as Coordinate }),
+        makeFeature('t-visible', 'Sticker', {
+          geometry: { type: 'Point', coordinates: [0, 0] as unknown as Coordinate },
+        }),
+        makeFeature('t-offscreen', 'Sticker', {
+          geometry: { type: 'Point', coordinates: [3, 3] as unknown as Coordinate },
+        }),
       ],
       {},
       { customTypes: ['Sticker'], visibleIds: ['t-visible'] },
@@ -1488,8 +1520,12 @@ describe('per-feature thinning of the immediate chunks', () => {
   it('a retained chunk is not thinned by the visible set (a batch cannot be split)', () => {
     const h = createHarness(
       [
-        makeFeature('r-visible', 'LineString', { coordinates: NEAR_COORDS }),
-        makeFeature('r-offscreen', 'LineString', { coordinates: OFF_COORDS }),
+        makeFeature('r-visible', 'LineString', {
+          geometry: geometryFromCoordinates('LineString', NEAR_COORDS),
+        }),
+        makeFeature('r-offscreen', 'LineString', {
+          geometry: geometryFromCoordinates('LineString', OFF_COORDS),
+        }),
       ],
       {},
       { visibleIds: ['r-visible'] },
@@ -1503,8 +1539,12 @@ describe('per-feature thinning of the immediate chunks', () => {
   it('getVisibleIds is not called in a frame that draws no immediate chunk', () => {
     const h = createHarness(
       [
-        makeFeature('solid', 'LineString', { coordinates: NEAR_COORDS }),
-        makeFeature('dashed', 'LineString', { coordinates: OFF_COORDS }),
+        makeFeature('solid', 'LineString', {
+          geometry: geometryFromCoordinates('LineString', NEAR_COORDS),
+        }),
+        makeFeature('dashed', 'LineString', {
+          geometry: geometryFromCoordinates('LineString', OFF_COORDS),
+        }),
       ],
       { dashed: { lineStyle: 'dashed' } },
       { visibleIds: ['solid', 'dashed'] },
@@ -1591,7 +1631,9 @@ describe('computeLineCoordSlots', () => {
 
   it('LineString / Freehand are recorded with the running coordinate count as offset', () => {
     const slots = computeLineCoordSlots([
-      makeFeature('l1', 'LineString', { coordinates: threeCoords }),
+      makeFeature('l1', 'LineString', {
+        geometry: geometryFromCoordinates('LineString', threeCoords),
+      }),
       makeFeature('l2', 'Freehand'),
       makeFeature('l3', 'LineString'),
     ]);
@@ -1603,7 +1645,9 @@ describe('computeLineCoordSlots', () => {
 
   it('a MultiLineString is not recorded, but the offset advances by its coordinates', () => {
     const slots = computeLineCoordSlots([
-      makeFeature('m1', 'MultiLineString', { coordinates: [threeCoords, threeCoords] }),
+      makeFeature('m1', 'MultiLineString', {
+        geometry: geometryFromCoordinates('MultiLineString', [threeCoords, threeCoords]),
+      }),
       makeFeature('l1', 'LineString'),
     ]);
 
@@ -1613,8 +1657,12 @@ describe('computeLineCoordSlots', () => {
 
   it('a feature with fewer than 2 vertices is not pushed, so the offset stays', () => {
     const slots = computeLineCoordSlots([
-      makeFeature('short', 'LineString', { coordinates: [[0, 0]] as Coordinate[] }),
-      makeFeature('empty', 'LineString', { coordinates: [] as Coordinate[] }),
+      makeFeature('short', 'LineString', {
+        geometry: { type: 'LineString', coordinates: [[0, 0]] as Coordinate[] },
+      }),
+      makeFeature('empty', 'LineString', {
+        geometry: geometryFromCoordinates('LineString', [] as Coordinate[]),
+      }),
       makeFeature('l1', 'LineString'),
     ]);
 
@@ -1636,9 +1684,9 @@ describe('incremental update of a vertex drag', () => {
     // Just like updateFeature of the Store, the feature before the change is passed as previous
     // (the array elements of the vertices that do not move share their references)
     const previous = { ...target };
-    const coords = [...(target.coordinates as Coordinate[])];
+    const coords = [...(coordinatesOf(target) as Coordinate[])];
     for (const [index, coord] of moves) coords[index] = coord;
-    target.coordinates = coords;
+    target.geometry = geometryFromCoordinates(target.type, coords);
     Object.assign(target, extra);
 
     h.cache.applyChanges({ features: { updated: [{ id, feature: target, previous }] } });
@@ -1648,7 +1696,7 @@ describe('incremental update of a vertex drag', () => {
   function longLine(id: string, n: number): Feature {
     const coords: Coordinate[] = [];
     for (let i = 0; i < n; i++) coords.push([i * 0.001, i * 0.001]);
-    return makeFeature(id, 'LineString', { coordinates: coords });
+    return makeFeature(id, 'LineString', { geometry: { type: 'LineString', coordinates: coords } });
   }
 
   it('moving one vertex rewrites a texel before drawing instead of rebuilding', () => {
@@ -1721,7 +1769,10 @@ describe('incremental update of a vertex drag', () => {
 
     const target = h.stub.features[0];
     const previous = { ...target };
-    target.coordinates = [...(target.coordinates as Coordinate[]), [2, 2]];
+    target.geometry = geometryFromCoordinates(target.type, [
+      ...(coordinatesOf(target) as Coordinate[]),
+      [2, 2],
+    ]);
 
     h.probe.reset();
     h.cache.applyChanges({ features: { updated: [{ id: 'l1', feature: target, previous }] } });
@@ -1753,12 +1804,12 @@ describe('incremental update of a vertex drag', () => {
 
     const target = h.stub.features[0];
     const previous = { ...target };
-    target.coordinates = [
+    target.geometry = geometryFromCoordinates(target.type, [
       [
         [0, 0],
         [3, 3],
       ],
-    ];
+    ]);
 
     h.probe.reset();
     h.cache.applyChanges({ features: { updated: [{ id: 'm1', feature: target, previous }] } });
@@ -1831,7 +1882,10 @@ describe('incremental update of a vertex drag', () => {
     // Another feature of the same chunk gets a change that cannot be a diff (a vertex added)
     const other = h.stub.features[1];
     const previous = { ...other };
-    other.coordinates = [...(other.coordinates as Coordinate[]), [4, 4]];
+    other.geometry = geometryFromCoordinates(other.type, [
+      ...(coordinatesOf(other) as Coordinate[]),
+      [4, 4],
+    ]);
     h.cache.applyChanges({
       features: { updated: [{ id: 'l2', feature: other, previous }] },
     });

@@ -40,18 +40,20 @@ beforeEach(() => {
   extent = null;
 });
 
-function makeFeature(partial: Pick<Feature, 'type' | 'coordinates'>): Feature {
+function makeFeature(partial: Pick<Feature, 'type' | 'geometry'>): Feature {
   return {
     id: 'f1',
     layerId: 'l1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...partial,
   };
 }
 
-const pointFeature = (): Feature => makeFeature({ type: 'Point', coordinates: [0, 0] });
+const pointFeature = (): Feature =>
+  makeFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
 
 /** Take out the half width and half height of the frame in screen pixels */
 function framePx(feature: Feature): { halfWidth: number; halfHeight: number } {
@@ -77,7 +79,12 @@ function hit(x: number, y: number, feature: Feature) {
 describe('resolving the extent of the selection box of a point', () => {
   it('keeps the former 12px square + margin for a type with no provider registered', () => {
     // There is no registration for MultiPoint (with a single point it takes the zero-area path)
-    const frame = framePx(makeFeature({ type: 'MultiPoint', coordinates: [[10, 20]] }));
+    const frame = framePx(
+      makeFeature({
+        type: 'MultiPoint',
+        geometry: { type: 'MultiPoint', coordinates: [[10, 20]] },
+      }),
+    );
 
     expect(frame.halfWidth).toBeCloseTo(DEFAULT_HALF + MARGIN, 6);
     expect(frame.halfHeight).toBeCloseTo(DEFAULT_HALF + MARGIN, 6);

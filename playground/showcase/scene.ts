@@ -49,7 +49,7 @@ export interface ShowcaseScene {
 }
 
 /** A feature of a scene's document: the fields a scene sets */
-export type SceneFeature = Pick<Feature, 'id' | 'type' | 'coordinates' | 'style' | 'properties'>;
+export type SceneFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
 
 /** A layer of a scene's document, with its features from the back */
 export interface SceneLayer {

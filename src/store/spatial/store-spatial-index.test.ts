@@ -15,11 +15,12 @@ function point(id: string, lng: number, lat: number): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [lng, lat],
+    geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -86,7 +87,7 @@ describe('StoreSpatialIndex', () => {
     store.createFeature(point('a', 1, 1));
     expect(index.findNear([1, 1], 0)).toEqual(['a']);
 
-    store.updateFeature('a', { coordinates: [2, 2] });
+    store.updateFeature('a', { geometry: { type: 'Point', coordinates: [2, 2] } });
     expect(index.findNear([1, 1], 0)).toEqual([]);
     expect(index.findNear([2, 2], 0)).toEqual(['a']);
 
@@ -99,7 +100,11 @@ describe('StoreSpatialIndex', () => {
     const index = new StoreSpatialIndex(store);
     store.createFeature(point('a', 1, 1));
 
-    store.updateFeature('a', { coordinates: [3, 3] }, { isIntermediate: true });
+    store.updateFeature(
+      'a',
+      { geometry: { type: 'Point', coordinates: [3, 3] } },
+      { isIntermediate: true },
+    );
 
     expect(index.findNear([3, 3], 0)).toEqual(['a']);
   });
@@ -109,7 +114,7 @@ describe('StoreSpatialIndex', () => {
     const index = new StoreSpatialIndex(store);
     store.transact(() => {
       store.createFeature(point('a', 1, 1));
-      store.updateFeature('a', { coordinates: [4, 4] });
+      store.updateFeature('a', { geometry: { type: 'Point', coordinates: [4, 4] } });
       store.createFeature(point('b', 5, 5));
       store.deleteFeature('b');
     });

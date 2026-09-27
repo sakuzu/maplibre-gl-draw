@@ -12,6 +12,7 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
 import { hexToColor } from '../../shared/utils/color.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureStyle, Layer } from '../../store/types.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
@@ -94,16 +95,16 @@ export class FeatureDrawer {
   drawFeature(feature: Feature, projectionData: ProjectionData, zoom: number, layer?: Layer): void {
     const opacity = layerDrawFactors(layer).opacity;
     if (feature.type === 'Point') {
-      const coord = feature.coordinates as Coordinate;
+      const coord = coordinatesOf(feature) as Coordinate;
       const pointStyle = pointWithOpacity(this.getPointStyle(feature, layer), opacity);
       this.drawPointShape(coord, pointStyle, zoom, feature.id);
     } else if (feature.type === 'LineString') {
-      const coords = feature.coordinates as Coordinate[];
+      const coords = coordinatesOf(feature) as Coordinate[];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const strokeStyle = strokeWithOpacity(this.getLineStringStrokeStyle(feature, layer), opacity);
       this.drawLineStringStroke(coords, strokeStyle, projectionData, zoom, createdZoom, feature.id);
     } else if (feature.type === 'Polygon') {
-      const rings = feature.coordinates as Coordinate[][];
+      const rings = coordinatesOf(feature) as Coordinate[][];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const { fillColor, strokeStyle } = polygonWithOpacity(
         this.getPolygonStyles(feature, layer),
@@ -120,14 +121,14 @@ export class FeatureDrawer {
       );
     } else if (feature.type === 'MultiPoint') {
       // Draw a point for each part (the style is shared across the feature)
-      const parts = feature.coordinates as Coordinate[];
+      const parts = coordinatesOf(feature) as Coordinate[];
       const pointStyle = pointWithOpacity(this.getPointStyle(feature, layer), opacity);
       for (const coord of parts) {
         this.drawPointShape(coord, pointStyle, zoom, feature.id);
       }
     } else if (feature.type === 'MultiLineString') {
       // Draw a line for each part
-      const parts = feature.coordinates as Coordinate[][];
+      const parts = coordinatesOf(feature) as Coordinate[][];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const strokeStyle = strokeWithOpacity(this.getLineStringStrokeStyle(feature, layer), opacity);
       for (let i = 0; i < parts.length; i++) {
@@ -142,7 +143,7 @@ export class FeatureDrawer {
       }
     } else if (feature.type === 'MultiPolygon') {
       // Draw a hole-aware polygon for each part
-      const parts = feature.coordinates as Coordinate[][][];
+      const parts = coordinatesOf(feature) as Coordinate[][][];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const { fillColor, strokeStyle } = polygonWithOpacity(
         this.getPolygonStyles(feature, layer),
@@ -171,7 +172,7 @@ export class FeatureDrawer {
       this.drawCircle(feature, projectionData, zoom, layer, opacity);
     } else if (feature.type === 'Freehand') {
       // Freehand uses the same rendering logic as LineString
-      const coords = feature.coordinates as Coordinate[];
+      const coords = coordinatesOf(feature) as Coordinate[];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const strokeStyle = strokeWithOpacity(this.getLineStringStrokeStyle(feature, layer), opacity);
       this.drawLineStringStroke(coords, strokeStyle, projectionData, zoom, createdZoom, feature.id);
@@ -388,7 +389,7 @@ export class FeatureDrawer {
     layer?: Layer,
     opacity = 1,
   ): void {
-    const center = feature.coordinates as Coordinate;
+    const center = coordinatesOf(feature) as Coordinate;
     const radiusMeters = getCircleRadius(feature);
 
     if (!radiusMeters || radiusMeters <= 0) return;

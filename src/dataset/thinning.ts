@@ -34,6 +34,7 @@
  */
 
 import type { Coordinate, Feature } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { DatasetBaseStyle } from './types.js';
 
@@ -620,7 +621,7 @@ export function selectCollisionWinners(input: CollisionThinningInput): Set<strin
   const rows: ThinningRows = {
     length: features.length,
     thinningRole: (row) => featureThinningRole(features[row]),
-    pointOf: (row) => features[row].coordinates as [number, number],
+    pointOf: (row) => coordinatesOf(features[row]) as [number, number],
     styleRadiusOf: (row) => features[row].style?.pointRadius,
     idOf: (row) => features[row].id,
   };
@@ -640,7 +641,7 @@ export function selectCollisionWinners(input: CollisionThinningInput): Set<strin
 export function featureThinningRole(feature: Feature): ThinningRole {
   if (!feature.visible) return 'skip';
   if (feature.type !== 'Point') return 'winner';
-  const coord = feature.coordinates as unknown;
+  const coord = coordinatesOf(feature) as unknown;
   if (!Array.isArray(coord) || typeof coord[0] !== 'number' || typeof coord[1] !== 'number') {
     return 'winner';
   }
