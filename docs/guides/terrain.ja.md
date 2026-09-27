@@ -10,7 +10,7 @@
 
 ```ts
 import * as maplibregl from 'maplibre-gl';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -29,7 +29,7 @@ map.on('load', () => {
   map.setTerrain({ source: 'dem', exaggeration: 1.5 });
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 draw.setMode('draw_polygon');
 ```
 
@@ -39,9 +39,8 @@ draw.setMode('draw_polygon');
 
 ## 何が変わるか
 
-ライブラリーはフレームごとに地図の地形を確かめます。地形の無い地図は
-これまでとまったく同じに描かれ、地形の有効と無効を切り替えるのに
-呼び出しは要りません。
+ライブラリーは描くときに地図の地形に従います。地形の無い地図は平らな
+地図として描かれ、地形の有効と無効を切り替えるのに呼び出しは要りません。
 
 - 面と線は、地表に持ち上げた三角形としてではなく、地表のピクセルとして
   塗ります。そのため、裂けたり沈んだりせずに、起伏の細かな折れ目にも
@@ -58,7 +57,7 @@ draw.setMode('draw_polygon');
 ライブラリーは、DEM の提供元、符号化の方式、カタログについては何も
 知りません。ホストが `setTerrain` に渡した DEM をそのまま読みます。
 
-## 点、ハンドル、ラベル
+## 点とハンドル
 
 点、頂点のハンドル、そのほかの記号は、アンカーの位置で地表の上に立ち、
 画面上の大きさを保ちます。深度テストをせずに描くので、記号が斜面に半分
@@ -77,21 +76,22 @@ draw.setMode('draw_polygon');
 
 ## 診断
 
-`draw.getTerrainDiagnostics()` は、最後のフレームがどのように描かれたかを
-数値で返します。デバッグや計測の道具のためのものです。型は API の層 2 に
-あるので、項目はマイナー版で変わることがあります。
+`draw.debug.terrain()` は、最後の描画がどのように行われたかを数値で
+返します。デバッグや計測の道具のためのものです。項目は描画の作りに
+従うので、API のほかの部分より約束が弱く、マイナー版で変わることが
+あります。
 
 ```ts
-const { render, drape } = draw.getTerrainDiagnostics();
+const { render, drape } = draw.debug.terrain();
 console.log(render.active, render.stepMeters, drape.used, drape.reason);
 ```
 
-- `render.active` は、地形の無い地図のときと、DEM がまだ使えない間は
+- `render.active` は、地形の無い地図のときと DEM がまだ使えない間は
   `false` です
-- `drape.used` は、そのフレームで面と線を地表に塗ったかどうかを示し、
+- `drape.used` は、その描画で面と線を地表に塗ったかどうかを示し、
   `drape.reason` は塗らなかった理由を示します。件数の項目
   (`featureCount`、`edgeCount`、`tileCount` など) で負荷が分かります
-- 値は、このインスタンスのその時点の写しです。後のフレームで、すでに
+- 値は、このインスタンスのその時点の写しです。後の描画で、すでに
   返したオブジェクトが変わることはありません。1 つのページにある複数の
   地図は、それぞれ自分の値を返します
 
@@ -114,12 +114,9 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 
 - [terrain](../../examples/terrain/) では、公開されている DEM で
   地形を有効にし、その上で描いたり選んだりして、
-  `getTerrainDiagnostics()` の結果を表示します
+  `draw.debug.terrain()` の結果を表示します
 
 ## リファレンス
 
-- `MapLibreGLDraw` の
-  [`getTerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md#getterraindiagnostics)
-- [`TerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/TerrainDiagnostics.md)、
-  [`TerrainRenderState`](../api/maplibre-gl-draw/interfaces/TerrainRenderState.md)、
-  [`TerrainDrapeDebug`](../api/maplibre-gl-draw/interfaces/TerrainDrapeDebug.md)
+- `debug.terrain` は [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md)
+- [`TerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/TerrainDiagnostics.md)

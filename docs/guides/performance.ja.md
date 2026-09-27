@@ -1,9 +1,10 @@
 # 性能
 
 この手引きは、データが増えたときに、データをどこに置き、どの
-設定に気を配ればよいかを決めるためのものです。Store と
-データセットがどれだけの量を扱えるか、頂点の多い線を編集できる
-状態に保つ仕組み、プレビューのために描画を縮める方法を説明し、
+設定に気を配ればよいかを決めるためのものです。文書とデータセットが
+どれだけの量を扱えるか、多くの地物をまとめて書き込む方法、頂点の
+多い線を編集できる状態に保つ仕組み、プレビューのために描画を縮める
+方法を説明し、
 最後に、測った例、パッケージの大きさ、自分のデータで測る方法を
 紹介します。
 
@@ -11,7 +12,7 @@
 
 | データ | 置き場所 | 理由 |
 | --- | --- | --- |
-| 利用者が描いて編集するもの | Store | 編集、イベント、書き出し |
+| 利用者が描いて編集するもの | 文書 | 編集、イベント、書き出し |
 | 大きな参照データ | データセット | 編集の負担が無い |
 | 一度に読み込めないほど大きなデータ | provider を使うデータセット | 範囲ごとに読む |
 | 100 万行の表 | 表 (`table`) で渡すデータセット | 行ごとのオブジェクトが要らない |
@@ -25,51 +26,77 @@ graduated のスタイル規則を付けた 5 万件の多角形のデータセ�
 数十万行の表は、型付き配列の列の表 (`table`) にして、Worker で
 読んで下ごしらえしてから渡すのが最適です。行は GPU の配列に直接
 詰められ、本体のスレッドは行ごとのオブジェクトを作りません
-([大量のデータ](large-data.ja.md#表を列の形で渡す))。
+([大量のデータを表示する](large-data.ja.md))。
 
-Store も保持型のバッチで描きますが、Store の地物はどれも、編集、
-当たり判定、イベント、書き出しの対象になります。測った場面の例を
-後に載せています。Store に数千件を超える地物を置く
-つもりなら、対象の端末で計測のページ (後述) を使って測って
-ください。
+文書の地物はどれも、編集、当たり判定、イベント、書き出しの対象に
+なります。測った場面の例を後に載せています。文書に数千件を超える
+地物を置くつもりなら、対象の端末で計測のページ (後述) を使って
+測ってください。
 
 大きなデータのうち一部の地物だけを編集するなら、データは
-データセットに置き、編集する地物だけを `addFeature` で Store へ
-写します。[大量のデータ](large-data.ja.md) を参照してください。
+データセットに置き、編集する行だけを `draw.features.create` で
+文書へ写します。[大量のデータを表示する](large-data.ja.md) を
+参照してください。
 
 ## 最小の設定
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map, {
-  renderingStyle: {
-    storeRetained: true, // the default
-    timeSlicing: true, // the default
+const draw = createDraw(map, {
+  rendering: {
+    cacheGeometry: true, // 既定
+    timeSlicing: true, // 既定
   },
 });
 ```
 
 画面に表示するなら、どちらも既定のままで適切です。変えるのは、
-以下で説明する場合だけです。
+以下で説明する場合だけです。作るときにも、後から
+`draw.options.update` でも変えられます。
 
-## 保持型の描画
+## 多くの地物を書き込む
 
-Store の地物は、レイヤーごとに保持している GPU のバッチから
-描くので、変わらない地物を次のフレームで作り直すことはありま
-せん。データセットは空間のチャンクごとにバッチを持ち、
-見えているチャンクだけを描きます。`storeRetained: false` にする
-と、Store を毎フレーム描き直します。描かれる絵は同じなので、
-描画の問題を調べるときに、保持型の経路が原因でないことを確かめる
-ためだけに使ってください。
+文書への書き込みは 1 回ごとに 1 つの変更になり、イベントも
+届きます。多くの地物を作る、変える、消すときは、まとめて受け取る
+メソッドを使います。`createMany`、`updateMany`、`deleteMany` は
+1 つの取引で行うので、描画と `document.changed` は全体に対して
+1 回で済みます。
+
+<!-- docs-check:
+declare const inputs: import('@sakuzu/maplibre-gl-draw').FeatureInput[];
+declare const hiddenIds: string[];
+-->
+
+```ts
+draw.features.createMany(inputs);
+
+// 種類の違う書き込みも transact で 1 つの変更にする
+draw.transact(() => {
+  draw.features.deleteMany(hiddenIds);
+  draw.layers.update(layerId, { opacity: 0.5 });
+});
+```
+
+GeoJSON のファイルは `draw.document.load` で 1 度に読めます。
+これもすべての地物を 1 つの変更で書き込みます
+([保存と読み込み](save-load.ja.md))。
+
+## 形を持ち続ける
+
+変わらない地物の形は、レイヤーごとに GPU の上に持ち続けるので、
+地図を動かしても作り直しません。データセットは地図の区画ごとに
+形を持ち、見えている区画だけを描きます。`cacheGeometry: false`
+にすると、描くたびに文書の形を作り直します。描かれる絵は同じ
+なので、描画の問題を調べるときに、持ち続けている形が原因で
+ないことを確かめるためだけに使ってください。
 
 1 フレームに収まらない仕事は、後のフレームに分けて進めます。その
 ため、タイルが順に届くように絵が埋まっていく間も、ページは止まり
-ません。分けて進めるのは、データセットのバッチを作る仕事 (フレーム
+ません。分けて進めるのは、データセットの形を作る仕事 (フレーム
 ごとに時間の上限があります)、データセットの中の頂点がとても多い
-多角形 (1 万を超えるもの) の三角形分割 (輪郭が先に表示され、塗りは
-分割が終わってから表示されます)、地形に貼る描画の索引を作る仕事
-です。
+多角形 (1 万を超えるもの) の塗り (輪郭が先に表示され、塗りは
+仕事が終わってから表示されます)、地形の準備です。
 
 ## 絵を取り出すための完全なフレーム
 
@@ -82,8 +109,8 @@ Store の地物は、レイヤーごとに保持している GPU のバッチか
 フレームが完全でも、絵が完全とは限りません。地図のタイルと DEM は
 非同期に届きますし、フレームの中では終えられない仕事もあります
 (provider の応答や、何フレームかかけて資源を用意するオーバーレイの
-描画)。そうした仕事が残っているかどうかは `hasPendingWork()` で
-わかります。地図は、このライブラリーが直前のフレームで次のフレームを
+描画)。そうした仕事が残っているかどうかは `draw.hasPendingWork()`
+でわかります。地図は、このライブラリーが直前のフレームで次のフレームを
 求めていても `idle` を発火するので、`idle` を待ったあと、フレームの
 後に `hasPendingWork()` が false になるまで待ちます。
 
@@ -124,43 +151,46 @@ GPS の軌跡のように頂点が数千ある線は、そのままでは頂点�
 
 線の太さ、点の大きさ、縁取りは CSS ピクセルで指定し、物理
 ピクセルで描きます。その比は地図の `getPixelRatio()` の値で、
-`pixelRatio` オプションを指定したときはその値です。
+`rendering.pixelRatio` を指定したときはその値です。
 `pixelRatio` を指定するのは、地図とは違う比で描きたいときだけに
 してください。
 
-`setRenderScale(k)` は、実行時にその比に掛ける係数を設定します。
-CSS の変形などで地図を拡大や縮小して見せるときに使います。
-ページのプレビューのように地図を 1/k の大きさで見せるときは、
-基図はカメラと一緒に縮むので、`setRenderScale(1 / k)` で、この
+`rendering.renderScale` は、その比に掛ける係数です。CSS の変形
+などで地図を拡大や縮小して見せるときに使います。ページの
+プレビューのように地図を 1/k の大きさで見せるときは、基図は
+カメラと一緒に縮むので、`renderScale` を 1/k にして、この
 ライブラリーが描くピクセルの大きさも合わせて縮めます。位置と、
 メートルで指定した大きさは変わりません。
 
 ```ts
-draw.setRenderScale(0.5); // the map is shown at half size
-draw.setRenderScale(1); // back to normal
+// 地図を半分の大きさで見せる
+draw.options.update({ rendering: { renderScale: 0.5 } });
+// 元に戻す
+draw.options.update({ rendering: { renderScale: 1 } });
 ```
 
-有限の正の数でない値は無視します。バッチは次のフレームで作り
-直します。すでにズームに応じて大きさが変わるもの (`createdZoom`
-を持つ地物の線) には、重ねて掛けません。`getPixelRatio()` は
-係数を含めた比を返すので、自分の描画器に渡せます。
-
-<!-- docs-check:
-declare class MyTextRenderer {
-  constructor(options: { pixelRatio: () => number });
-}
--->
+正の数でない値を渡すと、コード `invalid-input` の `DrawError` を
+投げ、何も変えません。描画はすぐに追随します。すでにズームに
+応じて大きさが変わるもの (基準のズームで描いた線) には、重ねて
+掛けません。自分で書いたオーバーレイや描画器は、係数を含めた
+その時点の比をコンテキストから読みます。
 
 ```ts
-const textRenderer = new MyTextRenderer({
-  pixelRatio: () => draw.getPixelRatio(),
+draw.extensions.overlays.add({
+  name: 'outline',
+  onAdd: () => {},
+  draw(ctx) {
+    const widthInDevicePixels = 2 * ctx.pixelRatio;
+    // その幅で描く
+  },
+  onRemove: () => {},
 });
 ```
 
 ## 測った例
 
-架空の街の 208,073 件の編集できる地物を、`draw.load` で Store に読み込み
-ました。多角形 174,435 件 (建物と公園)、線 24,328 件 (道)、点 9,310 件
+架空の街の 208,073 件の編集できる地物を、`draw.document.load` で文書に
+読み込みました。多角形 174,435 件 (建物と公園)、線 24,328 件 (道)、点 9,310 件
 (場所) で、レイヤーのスタイル規則で塗り分けています。README の最後の
 画像がこの場面です。
 
@@ -168,7 +198,7 @@ const textRenderer = new MyTextRenderer({
 バックエンドにより GPU で描いています。地図は 1280 × 760 CSS ピクセル、
 画素の比は 2 です。読み込みとパンは 4 回測りました。
 
-- 208,073 件の `draw.load` は 0.64〜0.66 秒でした
+- 208,073 件の `draw.document.load` は 0.64〜0.66 秒でした
 - 地図を 10 秒間パン、ズーム、回転したときのフレームは、中央値が
   8.4 ms、90 パーセンタイルが 13 ms、いちばん遅いもので 19 ms でした
 
@@ -180,8 +210,8 @@ const textRenderer = new MyTextRenderer({
 - 選んだ地物を矢印キーで動かすと、キーを押してから約 13 ms で描かれ
   ました (6〜14 ms)
 
-地物を 2 倍 (410,772 件、1 回) にすると、`draw.load` は 1.3 秒
-かかりました。端末が違えば結果も変わるので、次の節の方法で測って
+地物を 2 倍 (410,772 件、1 回) にすると、`draw.document.load` は
+1.3 秒かかりました。端末が違えば結果も変わるので、次の節の方法で測って
 ください。
 
 ## パッケージの大きさ
@@ -195,7 +225,7 @@ const textRenderer = new MyTextRenderer({
 
 リポジトリーには、貢献者向けの計測のページが 2 つあります。
 1 つはデータセットの上で、もう 1 つは `n` 件の地物を
-読み込んだ Store の上でパンとズームを行い、どちらもフレーム
+読み込んだ文書の上でパンとズームを行い、どちらもフレーム
 時間を表示します。動かし方と URL の引数は
 [bench/README.md](../../bench/README.md) で説明しています。
 数値は GPU とブラウザーによって変わるので、利用者が使う端末で
@@ -209,8 +239,12 @@ const textRenderer = new MyTextRenderer({
 
 ## リファレンス
 
-- `pixelRatio` と `renderingStyle` については
-  [Options](../api/maplibre-gl-draw/interfaces/Options.md)
-- [RenderingConfig](../api/maplibre-gl-draw/interfaces/RenderingConfig.md)
-- `setRenderScale`、`getRenderScale`、`getPixelRatio` については
-  [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
+- `renderScale`、`pixelRatio`、`cacheGeometry`、`timeSlicing` に
+  ついては
+  [RenderingOptions](../api/maplibre-gl-draw/interfaces/RenderingOptions.md)
+- `draw.options.update` については
+  [OptionsResource](../api/maplibre-gl-draw/interfaces/OptionsResource.md)
+- `hasPendingWork` と `transact` については
+  [Draw](../api/maplibre-gl-draw/interfaces/Draw.md)
+- `createMany`、`updateMany`、`deleteMany` については
+  [FeaturesCollection](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)

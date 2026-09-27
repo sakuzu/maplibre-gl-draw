@@ -1,8 +1,9 @@
 # Performance
 
 This guide helps you decide where to put your data and which settings
-matter when the data grows: how much the Store and a dataset hold, how
-dense lines stay editable, and how to scale the drawing for a preview.
+matter when the data grows: how much the document and a dataset hold,
+how to write many features at once, how dense lines stay editable, and
+how to scale the drawing for a preview.
 It ends with a measured example, the size of the package and how to
 measure on your own data.
 
@@ -10,7 +11,7 @@ measure on your own data.
 
 | Data | Put it in | Why |
 | --- | --- | --- |
-| What the user draws and edits | The Store | Editing, events, export |
+| What the user draws and edits | The document | Editing, events, export |
 | Large reference data | A dataset | No editing cost |
 | Data too large to load at once | A dataset with a provider | Per extent |
 | A table of a million rows | A table (`table`) | No object per row |
@@ -24,49 +25,74 @@ held, so the total size of the source does not matter.
 A table of hundreds of thousands of rows is best given as columns of
 typed arrays (`table`), read and prepared in a Worker: the rows are
 packed straight into the GPU arrays, and the main thread does not build
-an object per row ([large data](large-data.md#a-table-as-columns)).
+an object per row ([showing large data](large-data.md)).
 
-The Store is drawn from retained batches too, but every feature in it
-takes part in editing, hit testing, events and export. One measured
-scene is below. If you plan to keep many thousands of features in the
-Store, measure it with the bench page (below) on the devices you target.
+Every feature of the document takes part in editing, hit testing, events
+and export. One measured scene is below. If you plan to keep many
+thousands of features in the document, measure it with the bench page
+(below) on the devices you target.
 
 When the user edits only a few features of large data, keep the data
-in a dataset and copy the feature being edited into the Store
-with `addFeature`. See [large data](large-data.md).
+in a dataset and copy the row being edited into the document with
+`draw.features.create`. See [showing large data](large-data.md).
 
 ## Minimal settings
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map, {
-  renderingStyle: {
-    storeRetained: true, // the default
+const draw = createDraw(map, {
+  rendering: {
+    cacheGeometry: true, // the default
     timeSlicing: true, // the default
   },
 });
 ```
 
 Both defaults are what you want on screen. Change them only for the
-cases below.
+cases below, at creation or later with `draw.options.update`.
 
-## Retained rendering
+## Writing many features
 
-The features of the Store are drawn from GPU batches kept per layer, so
-a feature that does not change is not rebuilt in the next frame. A
-dataset keeps its batches per spatial chunk and draws
-only the chunks in view. `storeRetained: false` draws the Store again
-every frame. The picture is the same; use it only to rule out the
-retained path when you look into a rendering problem.
+Each write of the document is one change, with its events. To create,
+change or delete many features, use the methods that take several at
+once: `createMany`, `updateMany` and `deleteMany` run in one transaction,
+so the drawing and `document.changed` follow once for all of them.
+
+<!-- docs-check:
+declare const inputs: import('@sakuzu/maplibre-gl-draw').FeatureInput[];
+declare const hiddenIds: string[];
+-->
+
+```ts
+draw.features.createMany(inputs);
+
+// Writes of several kinds become one change with transact
+draw.transact(() => {
+  draw.features.deleteMany(hiddenIds);
+  draw.layers.update(layerId, { opacity: 0.5 });
+});
+```
+
+A GeoJSON file is read in one step with `draw.document.load`, which also
+writes all its features in one change ([save and load](save-load.md)).
+
+## Keeping the geometry
+
+The geometry of a feature that does not change is kept on the GPU
+between drawings, per layer, so it is not built again when the map moves.
+A dataset keeps its geometry per area of the map and draws only the
+areas in view. `cacheGeometry: false` builds the geometry of the document
+again on every drawing. The picture is the same; use it only to rule out
+the kept geometry when you look into a drawing problem.
 
 Work that does not fit in one frame is spread over the following
 frames, so the page never stalls while the picture fills in, much like
-tiles arriving: the batches of a dataset are built within a time budget
+tiles arriving: the geometry of a dataset is built within a time budget
 per frame, a polygon of a dataset with a very large number of vertices
-(more than 10,000) is triangulated over several frames (its outline
-appears first and its fill when the triangulation ends), and so is the
-index of the terrain drape.
+(more than 10,000) is filled in over several frames (its outline appears
+first and its fill when the work ends), and so is the preparation of the
+terrain.
 
 ## Complete frames for a picture
 
@@ -78,8 +104,8 @@ long that frame takes. Keep the default on an interactive map.
 A complete frame is not yet a complete picture: the tiles and the DEM of
 the map arrive asynchronously, and some work cannot be done in a frame
 at all (the answer of a provider, an overlay renderer that prepares its
-resources over several frames). `hasPendingWork()` tells whether such
-work remains. The map fires `idle` even when this library asked for
+resources over several frames). `draw.hasPendingWork()` tells whether
+such work remains. The map fires `idle` even when this library asked for
 another frame during the last one, so wait for `idle` and then for
 `hasPendingWork()` to be false after a frame:
 
@@ -118,43 +144,45 @@ Features with fewer handles are not affected.
 ## Scaling the drawing
 
 Line widths, point sizes and outlines are given in CSS pixels and drawn
-in device pixels. The ratio is the map's `getPixelRatio()`, or the
-`pixelRatio` option when you give one. Give it only to draw at another
+in device pixels. The ratio is the map's `getPixelRatio()`, or
+`rendering.pixelRatio` when you give one. Give it only to draw at another
 ratio than the map's.
 
-`setRenderScale(k)` multiplies that ratio at run time. Use it when the
-map is shown enlarged or reduced, for example with a CSS transform. For a
-map shown at 1/k, such as a page preview, the basemap shrinks with the
-camera, and `setRenderScale(1 / k)` shrinks this library's pixel sizes to
+`rendering.renderScale` multiplies that ratio. Use it when the map is
+shown enlarged or reduced, for example with a CSS transform. For a map
+shown at 1/k, such as a page preview, the basemap shrinks with the
+camera, and a `renderScale` of 1/k shrinks this library's pixel sizes to
 match. Positions and sizes in meters do not change.
 
 ```ts
-draw.setRenderScale(0.5); // the map is shown at half size
-draw.setRenderScale(1); // back to normal
+// The map is shown at half size
+draw.options.update({ rendering: { renderScale: 0.5 } });
+// Back to normal
+draw.options.update({ rendering: { renderScale: 1 } });
 ```
 
-A value that is not a finite positive number is ignored. The batches are
-rebuilt in the next frame. Sizes that already scale with the zoom (a line
-of a feature with a `createdZoom`) are not multiplied again.
-`getPixelRatio()` returns the resolved ratio, the scale included, for
-your own renderers:
-
-<!-- docs-check:
-declare class MyTextRenderer {
-  constructor(options: { pixelRatio: () => number });
-}
--->
+A value that is not a positive number throws a `DrawError` with the code
+`invalid-input` and changes nothing. The drawing follows at once. Sizes
+that already grow and shrink with the zoom (a line drawn at its reference
+zoom) are not multiplied again. An overlay or a renderer of your own
+reads the ratio in effect, the scale included, from its context:
 
 ```ts
-const textRenderer = new MyTextRenderer({
-  pixelRatio: () => draw.getPixelRatio(),
+draw.extensions.overlays.add({
+  name: 'outline',
+  onAdd: () => {},
+  draw(ctx) {
+    const widthInDevicePixels = 2 * ctx.pixelRatio;
+    // draw with that width
+  },
+  onRemove: () => {},
 });
 ```
 
 ## A measured example
 
-A made-up city of 208,073 editable features was loaded into the Store with
-`draw.load`: 174,435 polygons (buildings and parks), 24,328 lines
+A made-up city of 208,073 editable features was loaded into the document
+with `draw.document.load`: 174,435 polygons (buildings and parks), 24,328 lines
 (streets) and 9,310 points (places), colored by the style rules of their
 layers. It is the last picture of the README.
 
@@ -163,7 +191,7 @@ drawing on the GPU through ANGLE's Metal backend, with a map of 1280 ×
 760 CSS pixels at a pixel ratio of 2. Loading and panning were measured
 in four runs.
 
-- `draw.load` of the 208,073 features took 0.64 to 0.66 s
+- `draw.document.load` of the 208,073 features took 0.64 to 0.66 s
 - Panning, zooming and turning the map for 10 s drew frames of 8.4 ms
   at the median and 13 ms at the 90th percentile, 19 ms at the slowest
 
@@ -175,7 +203,8 @@ frame after the change was drawn, in three runs.
 - Moving the selected feature with an arrow key was drawn about 13 ms
   after the key press (6 to 14 ms)
 
-With twice as many features (410,772, one run), `draw.load` took 1.3 s.
+With twice as many features (410,772, one run), `draw.document.load`
+took 1.3 s.
 Other devices differ; measure yours as below.
 
 ## Package size
@@ -188,7 +217,7 @@ you import. Everything in the main entry, minified, is about 600 kB
 ## Measuring on your data
 
 The repository has two measurement pages for contributors: one pans and
-zooms over a dataset, the other over a Store loaded with
+zooms over a dataset, the other over a document loaded with
 `n` features, and both report the frame times. How to run them and their
 URL parameters are in [bench/README.md](../../bench/README.md). Run them
 on the devices your users have; the numbers depend on the GPU and the
@@ -201,8 +230,11 @@ browser.
 
 ## Reference
 
-- [Options](../api/maplibre-gl-draw/interfaces/Options.md) for
-  `pixelRatio` and `renderingStyle`
-- [RenderingConfig](../api/maplibre-gl-draw/interfaces/RenderingConfig.md)
-- [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
-  for `setRenderScale`, `getRenderScale` and `getPixelRatio`
+- [RenderingOptions](../api/maplibre-gl-draw/interfaces/RenderingOptions.md)
+  for `renderScale`, `pixelRatio`, `cacheGeometry` and `timeSlicing`
+- [OptionsResource](../api/maplibre-gl-draw/interfaces/OptionsResource.md)
+  for `draw.options.update`
+- [Draw](../api/maplibre-gl-draw/interfaces/Draw.md) for `hasPendingWork`
+  and `transact`
+- [FeaturesCollection](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
+  for `createMany`, `updateMany` and `deleteMany`

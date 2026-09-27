@@ -10,7 +10,7 @@ exaggeration, the diagnostics and the limits.
 
 ```ts
 import * as maplibregl from 'maplibre-gl';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -29,7 +29,7 @@ map.on('load', () => {
   map.setTerrain({ source: 'dem', exaggeration: 1.5 });
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 draw.setMode('draw_polygon');
 ```
 
@@ -39,9 +39,9 @@ drawing goes back to flat without any call to the library.
 
 ## What changes
 
-The library looks at the map's terrain on every frame. A map without
-terrain is drawn exactly as before, and switching the terrain on or off
-needs no call.
+The library follows the map's terrain as it draws. A map without terrain
+is drawn as a flat map, and switching the terrain on or off needs no
+call.
 
 - Areas and lines are painted as pixels of the ground rather than as
   triangles lifted onto it, so they follow every fold of the relief
@@ -58,7 +58,7 @@ needs no call.
 The library knows nothing of DEM sources, encodings or catalogues. It
 reads whatever DEM the host passed to `setTerrain`.
 
-## Points, handles and labels
+## Points and handles
 
 Points, vertex handles and the other symbols stand on the ground at their
 anchor position and keep their size on screen. They are drawn without
@@ -77,23 +77,24 @@ change it separately; for relief at true scale, leave `exaggeration` at 1.
 
 ## Diagnostics
 
-`draw.getTerrainDiagnostics()` reports how the last frame was drawn, as
-plain numbers. It is meant for debugging and measurement tools. Its type
-is in layer 2 of the API, so its fields may change in a minor release.
+`draw.debug.terrain()` reports how the last drawing was made, as plain
+numbers. It is meant for debugging and measurement tools. Its fields
+follow the drawing, so they carry a weaker promise than the rest of the
+API and may change in a minor release.
 
 ```ts
-const { render, drape } = draw.getTerrainDiagnostics();
+const { render, drape } = draw.debug.terrain();
 console.log(render.active, render.stepMeters, drape.used, drape.reason);
 ```
 
 - `render.active` is `false` on a map without terrain, or while the DEM is
   not usable yet
 - `drape.used` tells whether areas and lines were painted on the ground in
-  that frame, and `drape.reason` why not. The counters (`featureCount`,
+  that drawing, and `drape.reason` why not. The counters (`featureCount`,
   `edgeCount`, `tileCount` and so on) show the load
-- The values are snapshots of this instance: a later frame does not change
-  an object already returned, and several maps on a page each report their
-  own
+- The values are snapshots of this instance: a later drawing does not
+  change an object already returned, and several maps on a page each
+  report their own
 
 ## Limits
 
@@ -113,13 +114,9 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 ## Examples
 
 - [terrain](../../examples/terrain/) turns on terrain with a public
-  DEM, draws and selects on it, and prints `getTerrainDiagnostics()`
+  DEM, draws and selects on it, and prints `draw.debug.terrain()`
 
 ## Reference
 
-- [`getTerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md#getterraindiagnostics)
-  on `MapLibreGLDraw`
-- [`TerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/TerrainDiagnostics.md),
-  [`TerrainRenderState`](../api/maplibre-gl-draw/interfaces/TerrainRenderState.md)
-  and
-  [`TerrainDrapeDebug`](../api/maplibre-gl-draw/interfaces/TerrainDrapeDebug.md)
+- [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) for `debug.terrain`
+- [`TerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/TerrainDiagnostics.md)

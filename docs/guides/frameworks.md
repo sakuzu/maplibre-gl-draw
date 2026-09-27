@@ -3,7 +3,8 @@
 The library has no bindings for React, Svelte or Vue, and needs none. A
 component creates the map and the draw instance when it mounts and
 destroys both when it unmounts. This guide shows that in each framework,
-and how to keep the library out of server-side rendering.
+how to show the drawing in the state of a component, and how to keep the
+library out of server-side rendering.
 
 ## The rule
 
@@ -12,11 +13,11 @@ and how to keep the library out of server-side rendering.
 3. When the component unmounts, call `draw.destroy()` and then
    `map.remove()`
 
-`destroy()` removes the layers and listeners the instance added,
-unregisters its plugins, and gives the map back the settings it changed.
-A second call does nothing, and calls on a destroyed instance do not
-throw. `draw.on` returns the function that unsubscribes, so a component
-that subscribes to a longer-lived instance can clean up with it.
+`destroy()` removes the layers and listeners the instance added, removes
+its plugins and the other extensions, and gives the map back the
+settings it changed. A second call does nothing. `draw.on` returns the
+function that unsubscribes, so a component that subscribes to a
+longer-lived instance can clean up with it.
 
 ## React
 
@@ -24,14 +25,11 @@ that subscribes to a longer-lived instance can clean up with it.
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  createMapLibreGLDraw,
-  type MapLibreGLDraw,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
 
 export function DrawMap() {
   const container = useRef<HTMLDivElement>(null);
-  const drawRef = useRef<MapLibreGLDraw | null>(null);
+  const drawRef = useRef<Draw | null>(null);
 
   useEffect(() => {
     if (!container.current) return;
@@ -39,10 +37,10 @@ export function DrawMap() {
       container: container.current,
       style: 'https://demotiles.maplibre.org/style.json',
     });
-    const draw = createMapLibreGLDraw(map);
+    const draw = createDraw(map);
     drawRef.current = draw;
 
-    const off = draw.on('draw.feature.create', ({ feature }) => {
+    const off = draw.on('feature.created', ({ feature }) => {
       console.log(feature.id);
     });
 
@@ -77,20 +75,17 @@ The example uses the Svelte 5 syntax (`onclick`).
   import { onMount } from 'svelte';
   import * as maplibregl from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
-  import {
-    createMapLibreGLDraw,
-    type MapLibreGLDraw,
-  } from '@sakuzu/maplibre-gl-draw';
+  import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
 
   let container: HTMLDivElement;
-  let draw: MapLibreGLDraw | undefined;
+  let draw: Draw | undefined;
 
   onMount(() => {
     const map = new maplibregl.Map({
       container,
       style: 'https://demotiles.maplibre.org/style.json',
     });
-    draw = createMapLibreGLDraw(map);
+    draw = createDraw(map);
 
     return () => {
       draw?.destroy();
@@ -111,21 +106,18 @@ The example uses the Svelte 5 syntax (`onclick`).
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  createMapLibreGLDraw,
-  type MapLibreGLDraw,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
 
 const container = ref<HTMLDivElement>();
 let map: maplibregl.Map | undefined;
-let draw: MapLibreGLDraw | undefined;
+let draw: Draw | undefined;
 
 onMounted(() => {
   map = new maplibregl.Map({
     container: container.value as HTMLDivElement,
     style: 'https://demotiles.maplibre.org/style.json',
   });
-  draw = createMapLibreGLDraw(map);
+  draw = createDraw(map);
 });
 
 onBeforeUnmount(() => {
@@ -143,6 +135,35 @@ onBeforeUnmount(() => {
 `map` and `draw` are plain variables. Putting them in `ref` or
 `reactive` would wrap them in proxies, which they do not need; use
 `shallowRef` if the template must react to them.
+
+## Showing the drawing in the state
+
+A component that shows something of the drawing, such as the number of
+features or what is selected, copies it into its own state from the
+events. Keep plain values in the state (a count, a list of IDs), not the
+instance or its features.
+
+```ts
+let featureCount = 0;
+let selectedIds: readonly string[] = [];
+
+const stops = [
+  draw.on('document.changed', () => {
+    featureCount = draw.features.count();
+  }),
+  draw.on('selection.changed', ({ selection }) => {
+    selectedIds = selection.ids;
+  }),
+];
+
+// In the cleanup of the component
+for (const stop of stops) stop();
+```
+
+`document.changed` arrives once per transaction, so loading a file of
+thousands of features updates the state once. In React the assignments
+become calls of the setters of `useState`, in Svelte assignments to
+`$state` variables, and in Vue assignments to a `ref`.
 
 ## Server-side rendering
 
@@ -163,19 +184,19 @@ declare const style: string;
 ```ts
 import { onDestroy, onMount } from 'svelte';
 import type { Map } from 'maplibre-gl';
-import type { MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw } from '@sakuzu/maplibre-gl-draw';
 
 let map: Map | undefined;
-let draw: MapLibreGLDraw | undefined;
+let draw: Draw | undefined;
 let destroyed = false;
 
 onMount(async () => {
   const maplibregl = await import('maplibre-gl');
-  const { createMapLibreGLDraw } = await import('@sakuzu/maplibre-gl-draw');
+  const { createDraw } = await import('@sakuzu/maplibre-gl-draw');
   if (destroyed) return; // unmounted while importing
 
   map = new maplibregl.Map({ container, style });
-  draw = createMapLibreGLDraw(map);
+  draw = createDraw(map);
 });
 
 onDestroy(() => {
@@ -201,6 +222,8 @@ route.
 
 ## Reference
 
-- [createMapLibreGLDraw](../api/maplibre-gl-draw/functions/createMapLibreGLDraw.md)
-- [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
-  for `destroy`, `on` and `off`
+- [createDraw](../api/maplibre-gl-draw/functions/createDraw.md)
+- [Draw](../api/maplibre-gl-draw/interfaces/Draw.md) for `destroy`, `on`
+  and `off`
+- [DrawEvents](../api/maplibre-gl-draw/interfaces/DrawEvents.md) for the
+  events and their payloads

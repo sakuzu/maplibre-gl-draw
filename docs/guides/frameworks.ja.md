@@ -4,8 +4,9 @@
 ありませんが、無くても問題なく使えます。コンポーネントがマウント
 されたときに地図と draw のインスタンスを作り、アンマウントされる
 ときに両方を破棄するだけです。この手引きでは、その書き方を
-フレームワークごとに示し、サーバーサイドレンダリングから
-ライブラリーを外す方法も説明します。
+フレームワークごとに示します。描いたものをコンポーネントの状態に
+表す方法、サーバーサイドレンダリングからライブラリーを外す方法も
+説明します。
 
 ## 守ること
 
@@ -17,9 +18,8 @@
    `map.remove()` を呼びます
 
 `destroy()` は、インスタンスが追加したレイヤーとリスナーを
-取り除き、プラグインの登録を取り消し、地図に対して変えた設定を
-元に戻します。2 回目以降の呼び出しは何もせず、破棄した
-インスタンスのメソッドを呼んでも例外にはなりません。`draw.on`
+取り除き、プラグインとほかの拡張を外し、地図に対して変えた設定を
+元に戻します。2 回目以降の呼び出しは何もしません。`draw.on`
 は購読を解除する関数を返すので、コンポーネントより長く生きる
 インスタンスを購読するときは、その関数で後始末ができます。
 
@@ -29,14 +29,11 @@
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  createMapLibreGLDraw,
-  type MapLibreGLDraw,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
 
 export function DrawMap() {
   const container = useRef<HTMLDivElement>(null);
-  const drawRef = useRef<MapLibreGLDraw | null>(null);
+  const drawRef = useRef<Draw | null>(null);
 
   useEffect(() => {
     if (!container.current) return;
@@ -44,10 +41,10 @@ export function DrawMap() {
       container: container.current,
       style: 'https://demotiles.maplibre.org/style.json',
     });
-    const draw = createMapLibreGLDraw(map);
+    const draw = createDraw(map);
     drawRef.current = draw;
 
-    const off = draw.on('draw.feature.create', ({ feature }) => {
+    const off = draw.on('feature.created', ({ feature }) => {
       console.log(feature.id);
     });
 
@@ -83,20 +80,17 @@ export function DrawMap() {
   import { onMount } from 'svelte';
   import * as maplibregl from 'maplibre-gl';
   import 'maplibre-gl/dist/maplibre-gl.css';
-  import {
-    createMapLibreGLDraw,
-    type MapLibreGLDraw,
-  } from '@sakuzu/maplibre-gl-draw';
+  import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
 
   let container: HTMLDivElement;
-  let draw: MapLibreGLDraw | undefined;
+  let draw: Draw | undefined;
 
   onMount(() => {
     const map = new maplibregl.Map({
       container,
       style: 'https://demotiles.maplibre.org/style.json',
     });
-    draw = createMapLibreGLDraw(map);
+    draw = createDraw(map);
 
     return () => {
       draw?.destroy();
@@ -117,21 +111,18 @@ export function DrawMap() {
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import {
-  createMapLibreGLDraw,
-  type MapLibreGLDraw,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
 
 const container = ref<HTMLDivElement>();
 let map: maplibregl.Map | undefined;
-let draw: MapLibreGLDraw | undefined;
+let draw: Draw | undefined;
 
 onMounted(() => {
   map = new maplibregl.Map({
     container: container.value as HTMLDivElement,
     style: 'https://demotiles.maplibre.org/style.json',
   });
-  draw = createMapLibreGLDraw(map);
+  draw = createDraw(map);
 });
 
 onBeforeUnmount(() => {
@@ -150,6 +141,35 @@ onBeforeUnmount(() => {
 に入れると、必要のないプロキシで包まれてしまいます。テンプレート
 をこれらの変化に反応させたいときは、`shallowRef` を使って
 ください。
+
+## 描いたものを状態に表す
+
+地物の数や選んでいるものなど、描いたものの何かを表示する
+コンポーネントは、イベントからそれを自分の状態に写します。状態には
+インスタンスや地物ではなく、数や ID の一覧のようなふつうの値を
+入れます。
+
+```ts
+let featureCount = 0;
+let selectedIds: readonly string[] = [];
+
+const stops = [
+  draw.on('document.changed', () => {
+    featureCount = draw.features.count();
+  }),
+  draw.on('selection.changed', ({ selection }) => {
+    selectedIds = selection.ids;
+  }),
+];
+
+// コンポーネントの後始末で
+for (const stop of stops) stop();
+```
+
+`document.changed` は取引ごとに 1 回届くので、数千の地物を持つ
+ファイルを読み込んでも、状態の更新は 1 回で済みます。React では
+代入が `useState` の setter の呼び出しに、Svelte では `$state` の
+変数への代入に、Vue では `ref` への代入になります。
 
 ## サーバーサイドレンダリング
 
@@ -172,19 +192,19 @@ declare const style: string;
 ```ts
 import { onDestroy, onMount } from 'svelte';
 import type { Map } from 'maplibre-gl';
-import type { MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw } from '@sakuzu/maplibre-gl-draw';
 
 let map: Map | undefined;
-let draw: MapLibreGLDraw | undefined;
+let draw: Draw | undefined;
 let destroyed = false;
 
 onMount(async () => {
   const maplibregl = await import('maplibre-gl');
-  const { createMapLibreGLDraw } = await import('@sakuzu/maplibre-gl-draw');
+  const { createDraw } = await import('@sakuzu/maplibre-gl-draw');
   if (destroyed) return; // unmounted while importing
 
   map = new maplibregl.Map({ container, style });
-  draw = createMapLibreGLDraw(map);
+  draw = createDraw(map);
 });
 
 onDestroy(() => {
@@ -211,6 +231,8 @@ onDestroy(() => {
 
 ## リファレンス
 
-- [createMapLibreGLDraw](../api/maplibre-gl-draw/functions/createMapLibreGLDraw.md)
+- [createDraw](../api/maplibre-gl-draw/functions/createDraw.md)
 - `destroy`、`on`、`off` については
-  [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
+  [Draw](../api/maplibre-gl-draw/interfaces/Draw.md)
+- イベントとその中身については
+  [DrawEvents](../api/maplibre-gl-draw/interfaces/DrawEvents.md)
