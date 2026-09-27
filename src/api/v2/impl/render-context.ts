@@ -18,7 +18,7 @@ import type {
   CustomRendererDrawContext,
   LayerAwareOverlayRenderer,
 } from '../../../extension/index.js';
-import type { Color } from '../../../shared/types/style.js';
+import { toColor } from '../../../shared/color.js';
 import type { Feature as StoredFeature } from '../../../store/types.js';
 import { applyDrawBlendState } from '../../../view/layer/blend.js';
 import { calculateOffsetUniforms } from '../../../view/shaders/helpers.js';
@@ -34,54 +34,6 @@ import type {
   RenderContext,
 } from '../extension/render.js';
 import type { Feature } from '../model.js';
-
-// ============================================================================
-// Colors
-// ============================================================================
-
-/** The channels of `#rgb`, `#rgba`, `#rrggbb` and `#rrggbbaa` */
-function parseHex(hex: string): Color | null {
-  const digits = hex.slice(1);
-  if (!/^[0-9a-f]+$/i.test(digits)) return null;
-  const expanded =
-    digits.length === 3 || digits.length === 4
-      ? [...digits].map((d) => d + d).join('')
-      : digits.length === 6 || digits.length === 8
-        ? digits
-        : null;
-  if (!expanded) return null;
-  const channel = (i: number) => Number.parseInt(expanded.slice(i * 2, i * 2 + 2), 16) / 255;
-  return [channel(0), channel(1), channel(2), expanded.length === 8 ? channel(3) : 1];
-}
-
-/** The channels of `rgb(...)` and `rgba(...)`, with commas or spaces and an optional alpha */
-function parseRgb(value: string): Color | null {
-  const match = /^rgba?\(([^)]*)\)$/i.exec(value);
-  if (!match) return null;
-  const parts = match[1]
-    .split(/[\s,/]+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length < 3 || parts.length > 4) return null;
-  const number = (part: string, scale: number) =>
-    part.endsWith('%') ? Number.parseFloat(part) / 100 : Number.parseFloat(part) / scale;
-  const channels = parts.map((part, i) => number(part, i < 3 ? 255 : 1));
-  if (channels.some((c) => !Number.isFinite(c))) return null;
-  return [channels[0], channels[1], channels[2], channels[3] ?? 1];
-}
-
-/**
- * The RGBA channels, from 0 to 1, of a CSS color string. The hexadecimal forms, `rgb()`,
- * `rgba()` and `transparent` are read; any other string draws as opaque black.
- *
- * @internal
- */
-export function cssColorToRgba(color: string): Color {
-  const value = typeof color === 'string' ? color.trim() : '';
-  if (value.toLowerCase() === 'transparent') return [0, 0, 0, 0];
-  const parsed = value.startsWith('#') ? parseHex(value) : parseRgb(value);
-  return parsed ?? [0, 0, 0, 1];
-}
 
 // ============================================================================
 // Terrain anchors
@@ -148,7 +100,7 @@ export function createRenderContext(
       const coords = coordinates.map(pair);
       const stroke = {
         width: style.width,
-        color: cssColorToRgba(style.color),
+        color: toColor(style.color),
         opacity: style.opacity,
         lineStyle: style.lineStyle,
         ...(style.dashArray !== undefined && { dashArray: style.dashArray }),
@@ -166,7 +118,7 @@ export function createRenderContext(
   };
   const fill: FillRenderer = {
     draw(rings, style) {
-      const [r, g, b, a] = cssColorToRgba(style.color);
+      const [r, g, b, a] = toColor(style.color);
       base.fillShaderManager.drawPolygonRings(
         rings.map((ring) => ring.map(pair)),
         [r, g, b, a * style.opacity],
@@ -182,9 +134,9 @@ export function createRenderContext(
         {
           shape: style.shape,
           size: style.size,
-          fillColor: cssColorToRgba(style.fillColor),
+          fillColor: toColor(style.fillColor),
           fillOpacity: style.fillOpacity,
-          strokeColor: cssColorToRgba(style.strokeColor),
+          strokeColor: toColor(style.strokeColor),
           strokeWidth: style.strokeWidth,
           strokeOpacity: style.strokeOpacity,
         },

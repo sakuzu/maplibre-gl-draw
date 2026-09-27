@@ -2,51 +2,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Color conversion utilities
+ * Color utilities: the interpolation of the continuous color ramps and the contrast color
  *
- * Functions that convert between HEX color strings and RGBA arrays.
+ * The colors are read with the CSS color parser (`../color.ts`), so any CSS color works.
  */
 
-import type { Color } from '../types/style.js';
+import { parseColor } from '../color.js';
 
 /**
- * Extracts the RGB values from a HEX color string
+ * Reads the RGB values of a CSS color (black when it is not a color)
  *
- * @param hex - A color string in #RRGGBB or #RGB form
+ * @param color - A CSS color
  * @returns { r, g, b }, each value in 0-255
  */
-function parseHexToRgb(hex: string): { r: number; g: number; b: number } {
-  const cleanHex = hex.replace('#', '');
-
-  let r: number;
-  let g: number;
-  let b: number;
-
-  if (cleanHex.length === 3) {
-    // #RGB form
-    r = Number.parseInt(cleanHex[0] + cleanHex[0], 16);
-    g = Number.parseInt(cleanHex[1] + cleanHex[1], 16);
-    b = Number.parseInt(cleanHex[2] + cleanHex[2], 16);
-  } else {
-    // #RRGGBB form
-    r = Number.parseInt(cleanHex.substring(0, 2), 16);
-    g = Number.parseInt(cleanHex.substring(2, 4), 16);
-    b = Number.parseInt(cleanHex.substring(4, 6), 16);
-  }
-
-  return { r, g, b };
-}
-
-/**
- * Converts a HEX color string into an RGBA array
- *
- * @param hex - A color string in #RRGGBB or #RGB form
- * @param opacity - Opacity (0-1)
- * @returns An array in the form [r, g, b, a] (each value in 0-1)
- */
-export function hexToColor(hex: string, opacity = 1): Color {
-  const { r, g, b } = parseHexToRgb(hex);
-  return [r / 255, g / 255, b / 255, opacity];
+function parseRgb(color: string): { r: number; g: number; b: number } {
+  const [r, g, b] = parseColor(color) ?? [0, 0, 0, 1];
+  return { r: r * 255, g: g * 255, b: b * 255 };
 }
 
 /**
@@ -99,11 +70,11 @@ function linearToSrgb(c: number): number {
  * (https://bottosson.github.io/posts/oklab/). It maps in the order sRGB -> linear sRGB -> LMS
  * -> cube root -> OKLab.
  *
- * @param hex - A color string in #RRGGBB or #RGB form
+ * @param hex - A CSS color
  * @returns { L, a, b } OKLab coordinates
  */
 function hexToOklab(hex: string): { L: number; a: number; b: number } {
-  const rgb = parseHexToRgb(hex);
+  const rgb = parseRgb(hex);
   const r = srgbToLinear(rgb.r);
   const g = srgbToLinear(rgb.g);
   const b = srgbToLinear(rgb.b);
@@ -158,8 +129,8 @@ function oklabToHex(L: number, a: number, b: number): string {
  * component by component.
  * The interpolation position is clamped to 0-1.
  *
- * @param from - Color of the start point (#RRGGBB or #RGB)
- * @param to - Color of the end point (#RRGGBB or #RGB)
+ * @param from - Color of the start point (a CSS color)
+ * @param to - Color of the end point (a CSS color)
  * @param t - Interpolation position (0-1)
  * @returns A color string in #RRGGBB form
  */
@@ -180,11 +151,11 @@ export function interpolateHexColor(from: string, to: string, t: number): string
  * Based on the relative luminance formula of WCAG 2.0.
  * https://www.w3.org/TR/WCAG20/#relativeluminancedef
  *
- * @param hex - A color string in #RRGGBB or #RGB form
+ * @param hex - A CSS color
  * @returns Relative luminance (0-1)
  */
 export function getLuminance(hex: string): number {
-  const { r, g, b } = parseHexToRgb(hex);
+  const { r, g, b } = parseRgb(hex);
 
   // Convert from sRGB into a linear value
   const toLinear = (c: number): number => {
@@ -206,7 +177,7 @@ export function getLuminance(hex: string): number {
  * Returns a highly visible contrasting color based on the luminance of the given color.
  * Returns black for a light color and white for a dark color.
  *
- * @param hex - A color string in #RRGGBB or #RGB form
+ * @param hex - A CSS color
  * @returns The contrasting color (#000000 or #FFFFFF)
  */
 export function getContrastColor(hex: string): string {

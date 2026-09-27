@@ -76,6 +76,12 @@ const SCREEN_SPACE_TYPES = new Set(['Point', 'MultiPoint']);
  */
 export interface HitTestService {
   /**
+   * Changes how far from a feature a click still hits it, in CSS pixels
+   *
+   * @param px The new tolerance
+   */
+  setClickTolerance(px: number): void;
+  /**
    * Returns the frontmost feature that is hit, walking `orderedFeatures` from the end
    *
    * @param screenPoint The position in CSS px relative to the map container
@@ -179,6 +185,10 @@ export class HitTestServiceImpl implements HitTestService {
   private anchorScreen: AnchorScreenProjector | null;
   /** The shape a feature is drawn with (the stored shape when there is no resolver) */
   private drawnShape: DrawnShapeResolver;
+
+  setClickTolerance(px: number): void {
+    this.options = { ...this.options, clickTolerance: px };
+  }
 
   constructor(store: Store, spatialIndex: SpatialIndex, options: HitTestServiceImplOptions = {}) {
     this.store = store;

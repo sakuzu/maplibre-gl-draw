@@ -8,18 +8,22 @@
 import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { vi } from 'vitest';
+import type { Draw } from './api/v2/draw.js';
 import type { ModeFactory } from './api/v2/extension/mode.js';
 import type { ExtensionsCollections } from './api/v2/extensions.js';
 import type { ModeServices } from './api/v2/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/v2/impl/contexts.js';
 import { createFeatures } from './api/v2/impl/features.js';
+import { createGroups } from './api/v2/impl/groups.js';
 import { bridgeMode, createInputRoute } from './api/v2/impl/input.js';
+import { createLayers } from './api/v2/impl/layers.js';
+import { createSelection } from './api/v2/impl/selection.js';
 import type { ResourceDeps } from './api/v2/impl/shared.js';
-import { createStandaloneDraw } from './api/v2/impl/standalone-draw.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
+import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
 import type { Feature } from './shared/types/model.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
@@ -227,6 +231,8 @@ export function createModeHarness(options: {
   scaleWithZoom?: boolean;
   /** The automatic names of new features */
   autoName?: boolean;
+  /** Whether tracing is on (on when omitted) */
+  tracing?: boolean;
   /** The result of `ctx.snap` */
   snapPoint?: (point: { x: number; y: number }) => SnapResult;
 }) {
@@ -234,7 +240,29 @@ export function createModeHarness(options: {
   const deps = createResourceDeps(store);
   const autoNameGenerator = new AutoNameGenerator(store, options.autoName !== false);
   const collections = {} as ExtensionsCollections;
-  const draw = createStandaloneDraw(map, deps, modeManager, collections);
+  const features = createFeatures(deps);
+  const groups = createGroups(deps);
+  // The members of the draw instance the modes use; the rest is not needed without an engine
+  const draw = {
+    features,
+    groups,
+    layers: createLayers(deps),
+    selection: createSelection(deps, { features, groups }),
+    extensions: collections,
+    getMap: () => map,
+    getStore: () => store,
+    getMode: () => modeManager.getMode(),
+    setMode: (mode: string) => modeManager.setMode(mode),
+    transact: <T>(fn: () => T, options?: { source?: string }) =>
+      store.transact(fn, options?.source),
+    options: {
+      get: () => ({
+        tracing: { enabled: options.tracing !== false },
+        snapping: { tolerancePx: 10, datasets: true },
+      }),
+      update: () => {},
+    },
+  } as unknown as Draw;
   const services: ModeServices = {
     map,
     store,
@@ -256,7 +284,7 @@ export function createModeHarness(options: {
     generateId: deps.generateId,
     scaleWithZoom: options.scaleWithZoom ?? false,
     selectionStyle: DEFAULT_SELECTION_CONFIG,
-    features: createFeatures(deps),
+    boxSelectionStyle: DEFAULT_BOX_SELECTION_STYLE_CONFIG,
   };
   const screen = createScreenContext({
     map,

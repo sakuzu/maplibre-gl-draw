@@ -47,10 +47,16 @@ describe('createDraw', () => {
     other.destroy();
   });
 
-  it('throws for an option a later step provides', () => {
-    expect(() => createDraw(createMapStub().map, { snapping: { enabled: false } })).toThrow(
-      'not implemented (api-2)',
-    );
+  it('throws invalid-input for an unknown option or a value of the wrong type', () => {
+    const map = createMapStub().map;
+    for (const options of [{ unknown: 1 }, { snapping: { enabled: 'yes' } }, { style: 'red' }]) {
+      try {
+        createDraw(map, options as never);
+        expect.unreachable();
+      } catch (error) {
+        expect((error as DrawError).code).toBe('invalid-input');
+      }
+    }
   });
 });
 
@@ -120,20 +126,6 @@ describe('transact', () => {
     expect(notifications[0].features?.created).toHaveLength(1);
     expect(notifications[0].layers?.created).toHaveLength(1);
     expect(notifications[0].metadata?.metadata.title).toBe('Map');
-  });
-});
-
-describe('the parts later steps provide', () => {
-  it('throws when they are called', () => {
-    const message = 'not implemented (api-2)';
-    expect(() => draw.on('document.changed', () => {})).toThrow(message);
-    expect(() => draw.off('document.changed', () => {})).toThrow(message);
-    expect(() => draw.once('document.changed', () => {})).toThrow(message);
-    expect(() => draw.hasPendingWork()).toThrow(message);
-    expect(() => draw.getLayerStack()).toThrow(message);
-    expect(() => draw.debug.terrain()).toThrow(message);
-    expect(() => draw.options.get()).toThrow(message);
-    expect(() => draw.datasets.list()).toThrow(message);
   });
 });
 

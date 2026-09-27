@@ -20,6 +20,15 @@ import type { Plugin } from '../extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from '../extension/provider.js';
 import type { OverlayRenderer } from '../extension/render.js';
 import type { ExtensionsCollections } from '../extensions.js';
+import { createDrawOnEngine } from './create-draw.js';
+
+/** An engine with its draw instance attached, as the entries build it */
+function engineWithDraw(): Engine {
+  const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+  createDrawOnEngine(engine);
+  engine.enterDefaultMode();
+  return engine;
+}
 
 const renderer = { onAdd() {}, draw() {}, onRemove() {} };
 
@@ -193,9 +202,7 @@ describe('extensions.plugins', () => {
   });
 
   it('removes what a plugin added, and ends its subscriptions, when it is removed', () => {
-    const off = vi.fn();
-    draw.on = vi.fn(() => off) as Draw['on'];
-    draw.off = vi.fn() as Draw['off'];
+    const heard = vi.fn();
     const onRemove = vi.fn();
     draw.extensions.plugins.add(
       plugin('p', {
@@ -203,21 +210,45 @@ describe('extensions.plugins', () => {
           ctx.extensions.modes.add('plugin_mode', () => ({}));
           ctx.extensions.overlays.add(overlay('plugin_overlay'));
           ctx.extensions.featureTypes.add(featureType('pin'));
-          ctx.on('selection.changed', () => {});
+          ctx.on('mode.changed', heard);
         },
         onRemove,
       }),
     );
     expect(draw.extensions.modes.has('plugin_mode')).toBe(true);
     expect(draw.extensions.overlays.has('plugin_overlay')).toBe(true);
-    expect(draw.on).toHaveBeenCalledTimes(1);
+    draw.setMode('plugin_mode');
+    expect(heard).toHaveBeenCalledWith({ mode: 'plugin_mode', previous: 'select' });
 
     draw.extensions.plugins.remove('p');
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(draw.extensions.modes.has('plugin_mode')).toBe(false);
     expect(draw.extensions.overlays.has('plugin_overlay')).toBe(false);
     expect(draw.extensions.featureTypes.has('pin')).toBe(false);
-    expect(draw.off).toHaveBeenCalledWith('selection.changed', expect.any(Function));
+    heard.mockClear();
+    draw.setMode('draw_point');
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('ends a subscription with off and runs a once subscription one time', () => {
+    let ctx: PluginContext | null = null;
+    draw.extensions.plugins.add(
+      plugin('p', {
+        onAdd(context) {
+          ctx = context;
+        },
+      }),
+    );
+    const context = ctx as unknown as PluginContext;
+    const every = vi.fn();
+    const first = vi.fn();
+    context.on('mode.changed', every);
+    context.once('mode.changed', first);
+    draw.setMode('draw_point');
+    context.off('mode.changed', every);
+    draw.setMode('select');
+    expect(every).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
   });
 
   it('removes what it added when onAdd throws, and is not added', () => {
@@ -259,7 +290,7 @@ describe('the input of the plugins and the modes', () => {
   let engine: Engine;
 
   beforeEach(() => {
-    engine = createEngine(createMapStub().map);
+    engine = engineWithDraw();
   });
   afterEach(() => {
     engine.destroy();
@@ -379,7 +410,7 @@ describe('ModeContext.commitFeature', () => {
   let ctx: ModeContext;
 
   beforeEach(() => {
-    engine = createEngine(createMapStub().map);
+    engine = engineWithDraw();
     engine.extensions.collections.modes.add('probe', (context) => {
       ctx = context;
       return { writes: true };
@@ -447,6 +478,13 @@ describe('ModeContext.commitFeature', () => {
     expect(engine.modeManager.getMode()).toBe('select');
   });
 
+  it('gives the look of the selection with CSS colors, the options over the defaults', () => {
+    expect(ctx.selectionStyle.boundingBox.stroke.color).toMatch(/^#|^rgba\(/);
+    expect(ctx.selectionStyle.boxSelection.strokeWidth).toEqual(expect.any(Number));
+    ctx.draw.options.update({ selectionStyle: { boxSelection: { strokeColor: 'red' } } } as never);
+    expect(ctx.selectionStyle.boxSelection.strokeColor).toBe('red');
+  });
+
   it('refuses while the document is read-only', () => {
     engine.context.store.setReadOnly(true);
     expect(
@@ -460,7 +498,7 @@ describe('the built-in modes written to the contract', () => {
   let engine: Engine;
 
   beforeEach(() => {
-    engine = createEngine(createMapStub().map);
+    engine = engineWithDraw();
   });
   afterEach(() => {
     engine.destroy();

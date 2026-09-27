@@ -8,7 +8,7 @@
  */
 
 // Color conversion
-export { getContrastColor, hexToColor, interpolateHexColor } from './color.js';
+export { getContrastColor, interpolateHexColor } from './color.js';
 // Coordinate traversal
 export {
   flattenCoordinatesDeep,

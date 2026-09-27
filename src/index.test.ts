@@ -582,10 +582,6 @@ describe('the emitted declarations', () => {
 
   it('export every named type that a declaration of the 2.0 main entry refers to', () => {
     setup();
-    // The stand-ins of the table types, until the datasets use the types of the table entry
-    expect(findForgottenExports(program, files, [next, geometry, table], [next])).toEqual([
-      'PreparedTable',
-      'Table',
-    ]);
+    expect(findForgottenExports(program, files, [next, geometry, table], [next])).toEqual([]);
   }, 60_000);
 });

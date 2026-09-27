@@ -9,9 +9,9 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import { toColor } from '../../shared/color.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
-import { hexToColor } from '../../shared/utils/color.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureStyle, Layer } from '../../store/types.js';
@@ -161,12 +161,15 @@ export class FeatureDrawer {
         );
       }
     } else if (feature.type === 'Image') {
+      // An image without an opacity of its own takes the one of the instance
+      const imageOpacity =
+        feature.style.imageOpacity === undefined ? (this.featureStyle.image?.opacity ?? 1) : 1;
       this.imageRenderer.draw(
         feature,
         projectionData,
         zoom,
         () => this.map.triggerRepaint(),
-        opacity,
+        opacity * imageOpacity,
       );
     } else if (feature.type === 'Circle') {
       this.drawCircle(feature, projectionData, zoom, layer, opacity);
@@ -231,7 +234,7 @@ export class FeatureDrawer {
     // Apply strokeOpacity when it is specified, even if strokeColor is not set
     // strokeOpacity is set directly rather than multiplied into the default alpha value
     const color: Color = style.strokeColor
-      ? hexToColor(style.strokeColor, style.strokeOpacity ?? 1)
+      ? toColor(style.strokeColor, style.strokeOpacity ?? 1)
       : style.strokeOpacity !== undefined
         ? [defaultStyle.color[0], defaultStyle.color[1], defaultStyle.color[2], style.strokeOpacity]
         : defaultStyle.color;
@@ -262,8 +265,12 @@ export class FeatureDrawer {
     fillColor: Color;
     strokeStyle: SDFStrokeStyle;
   } {
-    const defaultFillColor = this.featureStyle.polygon.fill.color;
-    const defaultStrokeStyle = this.featureStyle.polygon.stroke;
+    const look =
+      feature?.type === 'Circle' && this.featureStyle.circle
+        ? this.featureStyle.circle
+        : this.featureStyle.polygon;
+    const defaultFillColor = look.fill.color;
+    const defaultStrokeStyle = look.stroke;
     const style = this.resolveStyle(feature, layer, 'fill');
 
     if (!style) {
@@ -276,7 +283,7 @@ export class FeatureDrawer {
     // So that a feature with only fillColor specified does not become opaque (alpha 1),
     // it follows the alpha component of the default color rather than a hardcoded 1.
     const fillColor: Color = style.fillColor
-      ? hexToColor(style.fillColor, style.fillOpacity ?? defaultFillColor[3])
+      ? toColor(style.fillColor, style.fillOpacity ?? defaultFillColor[3])
       : style.fillOpacity !== undefined
         ? [defaultFillColor[0], defaultFillColor[1], defaultFillColor[2], style.fillOpacity]
         : defaultFillColor;
@@ -284,7 +291,7 @@ export class FeatureDrawer {
     // Apply strokeOpacity when it is specified, even if strokeColor is not set
     // strokeOpacity is set directly rather than multiplied into the default alpha value
     const strokeColor: Color = style.strokeColor
-      ? hexToColor(style.strokeColor, style.strokeOpacity ?? 1)
+      ? toColor(style.strokeColor, style.strokeOpacity ?? 1)
       : style.strokeOpacity !== undefined
         ? [
             defaultStrokeStyle.color[0],

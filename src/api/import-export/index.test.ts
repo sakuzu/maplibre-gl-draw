@@ -1711,7 +1711,7 @@ describe('createImportExportAPI', () => {
     const broken = {
       fillColor: 123,
       strokeColor: null,
-      pointColor: 'red',
+      pointColor: 'reddish',
       fillOpacity: 5,
       strokeOpacity: 0.5,
       strokeWidth: 2,
@@ -1758,9 +1758,9 @@ describe('createImportExportAPI', () => {
       expect(context.store.getFeature(result.featureIds[0])?.style).toEqual(usable);
     });
 
-    it('accepts #rgb and #rrggbb colors', async () => {
+    it('accepts CSS colors', async () => {
       const api = createImportExportAPI(context);
-      const style = { fillColor: '#abc', strokeColor: '#A0B1C2' };
+      const style = { fillColor: '#abc', strokeColor: 'rgba(1, 2, 3, 0.5)', pointColor: 'red' };
       const result = await api.load({
         type: 'FeatureCollection',
         features: [
@@ -1775,7 +1775,7 @@ describe('createImportExportAPI', () => {
       expect(context.store.getFeature(result.featureIds[0])?.style).toEqual(style);
     });
 
-    it('ignores a simplestyle color that is not a hex color', async () => {
+    it('reads the CSS colors of simplestyle and ignores the rest', async () => {
       const api = createImportExportAPI(context);
       const result = await api.load({
         type: 'FeatureCollection',
@@ -1783,12 +1783,15 @@ describe('createImportExportAPI', () => {
           {
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [0, 0] },
-            properties: { 'marker-color': 'red', stroke: 'rgb(1,2,3)', 'stroke-width': 3 },
+            properties: { 'marker-color': 'red', stroke: 'rgb(1,2,3', 'stroke-width': 3 },
           },
         ],
       });
 
-      expect(context.store.getFeature(result.featureIds[0])?.style).toEqual({ strokeWidth: 3 });
+      expect(context.store.getFeature(result.featureIds[0])?.style).toEqual({
+        pointColor: 'red',
+        strokeWidth: 3,
+      });
     });
 
     it('drops the broken style keys of a native feature instead of rejecting the file', async () => {

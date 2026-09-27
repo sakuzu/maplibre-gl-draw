@@ -11,7 +11,7 @@
  * goes on, so resolving it anywhere else would split the z-order of the paths.
  */
 
-import { hexToColor } from '../../../shared/utils/color.js';
+import { toColor } from '../../../shared/color.js';
 import type { FeatureStyle } from '../../../store/types.js';
 import type { PointShape, PointStyle } from './point-shape.js';
 
@@ -61,7 +61,7 @@ export function resolvePointStyle(
   return {
     ...defaults,
     shape: featurePointShape(style) ?? defaults.shape,
-    fillColor: style.pointColor ? hexToColor(style.pointColor, 1) : defaults.fillColor,
+    fillColor: style.pointColor ? toColor(style.pointColor, 1) : defaults.fillColor,
     size: style.pointRadius ? style.pointRadius * 2 : defaults.size,
     fillOpacity: defaults.fillOpacity * opacity,
     strokeOpacity: defaults.strokeOpacity * opacity,

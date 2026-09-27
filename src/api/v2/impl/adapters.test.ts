@@ -29,7 +29,16 @@ import type { Feature } from '../model.js';
 import type { AdapterDeps } from './adapters.js';
 import { adaptCompanionProvider } from './adapters.js';
 import { createTerrainAnchors } from './contexts.js';
-import { createOverlayStack, cssColorToRgba } from './render-context.js';
+import { createDrawOnEngine } from './create-draw.js';
+import { createOverlayStack } from './render-context.js';
+
+/** An engine with its draw instance attached, as the entries build it */
+function engineWithDraw(): Engine {
+  const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+  createDrawOnEngine(engine);
+  engine.enterDefaultMode();
+  return engine;
+}
 
 const PROJECTION = { mainMatrix: new Float32Array(16) } as unknown as ProjectionData;
 const GL = {} as WebGL2RenderingContext;
@@ -84,7 +93,7 @@ describe('a custom feature type', () => {
   } satisfies FeatureTypeDefinition;
 
   beforeEach(() => {
-    engine = createEngine(createMapStub().map);
+    engine = engineWithDraw();
     registered = null;
     const register = engine.customLayer.registerFeatureRenderer.bind(engine.customLayer);
     vi.spyOn(engine.customLayer, 'registerFeatureRenderer').mockImplementation((type, r) => {
@@ -242,7 +251,7 @@ describe('a custom feature type', () => {
 
 describe('the providers of snapping candidates', () => {
   it('snaps to the candidate of the highest priority at the same distance', () => {
-    const engine = createEngine(createMapStub().map);
+    const engine = engineWithDraw();
     engine.extensions.collections.snapProviders.addMany([
       {
         name: 'low',
@@ -354,16 +363,5 @@ describe('a companion provider', () => {
     } as MouseNormalizedEvent;
     provider.onCompanionClick('f', hit as never, click);
     expect(onClick).toHaveBeenCalledWith(feature, own, expect.objectContaining({ lngLat: [1, 1] }));
-  });
-});
-
-describe('the CSS colors of the shared renderers', () => {
-  it('reads the hexadecimal forms, rgb(), rgba() and transparent', () => {
-    expect(cssColorToRgba('#f00')).toEqual([1, 0, 0, 1]);
-    expect(cssColorToRgba('#00ff0080')).toEqual([0, 1, 0, 128 / 255]);
-    expect(cssColorToRgba('rgb(0, 0, 255)')).toEqual([0, 0, 1, 1]);
-    expect(cssColorToRgba('rgba(255 255 255 / 0.5)')).toEqual([1, 1, 1, 0.5]);
-    expect(cssColorToRgba('transparent')).toEqual([0, 0, 0, 0]);
-    expect(cssColorToRgba('nonsense')).toEqual([0, 0, 0, 1]);
   });
 });

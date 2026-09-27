@@ -11,6 +11,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { MapLibreGLDraw } from './api/api.js';
 import type { Options } from './api/context.js';
 import { createEngine } from './api/engine.js';
+import { createDrawOnEngine } from './api/v2/impl/create-draw.js';
 
 // Re-export of the types
 export type { EventPayloads, MapLibreGLDraw } from './api/api.js';
@@ -50,5 +51,10 @@ export type { Data, LoadResult, Metadata } from './store/types.js';
  * ```
  */
 export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): MapLibreGLDraw {
-  return createEngine(map, options).facade;
+  const engine = createEngine(map, options, { deferDefaultMode: true });
+  // The extensions, and the built-in modes written to their contract, reach the instance
+  // through the public object of the extension contract
+  createDrawOnEngine(engine);
+  engine.enterDefaultMode();
+  return engine.facade;
 }

@@ -13,6 +13,8 @@ import type { BBox, Position } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { TopHit } from '../../../dispatcher/hit-test/topmost.js';
 import type { ModeManager } from '../../../modes/manager.js';
+import { formatColor } from '../../../shared/color.js';
+import type { BoxSelectionStyleConfig } from '../../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../../shared/config/selection.js';
 import { DRAW_PROPERTY_KEYS, getDrawProperty } from '../../../shared/properties.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
@@ -44,10 +46,10 @@ import type {
 } from '../extension/context.js';
 import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { FeaturesCollection } from '../features.js';
 import type { Feature, FeatureInput } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { SnapResult } from '../state.js';
+import { mergeOptions } from './options.js';
 
 // ============================================================================
 // Conversions
@@ -98,34 +100,40 @@ function isRgba(value: unknown): value is [number, number, number, number] {
   return Array.isArray(value) && value.length === 4 && value.every((v) => typeof v === 'number');
 }
 
-/** An RGBA color from 0 to 1 as a CSS color */
-function rgbaToCss([r, g, b, a]: [number, number, number, number]): string {
-  const channel = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
-  return `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${Math.min(1, Math.max(0, a))})`;
-}
-
 /** The internal look of the selection with its colors written as CSS colors */
 function withCssColors(value: unknown): unknown {
-  if (isRgba(value)) return rgbaToCss(value);
+  if (isRgba(value)) return formatColor(value);
   if (Array.isArray(value)) return value.map(withCssColors);
   if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, v]) => [
-        key,
-        /color$/i.test(key) && isRgba(v) ? rgbaToCss(v) : withCssColors(v),
-      ]),
-    );
+    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, withCssColors(v)]));
   }
   return value;
 }
 
 /**
- * The look of the selection in the shape of the contract
+ * The look of the selection in the shape of the contract: what the options give, over the
+ * look the engine resolved from the defaults
  *
+ * @param config - The look of the selection the engine draws with
+ * @param box - The look of the box selection the engine draws with
+ * @param given - The look of the selection the options give
  * @internal
  */
-export function toSelectionStyle(config: SelectionUIConfig): Required<SelectionStyleOptions> {
-  return withCssColors(config) as Required<SelectionStyleOptions>;
+export function toSelectionStyle(
+  config: SelectionUIConfig,
+  box: BoxSelectionStyleConfig,
+  given: SelectionStyleOptions | undefined,
+): Required<SelectionStyleOptions> {
+  const resolved = {
+    ...(withCssColors(config) as object),
+    boxSelection: {
+      fillColor: formatColor([box.fillColor[0], box.fillColor[1], box.fillColor[2], 1]),
+      fillOpacity: box.fillColor[3],
+      strokeColor: formatColor(box.strokeColor),
+      strokeWidth: box.strokeWidth,
+    },
+  };
+  return mergeOptions(resolved, (given ?? {}) as object) as Required<SelectionStyleOptions>;
 }
 
 /**
@@ -393,8 +401,8 @@ export interface ModeServices extends ContextServices {
   readonly scaleWithZoom: boolean;
   /** The resolved look of the selection */
   readonly selectionStyle: SelectionUIConfig;
-  /** Creates features with the checks of `draw.features` */
-  readonly features: FeaturesCollection;
+  /** The resolved look of the box selection */
+  readonly boxSelectionStyle: BoxSelectionStyleConfig;
 }
 
 /**
@@ -515,7 +523,7 @@ export function createModeContext(
       }
       const id = input.id ?? pendingId ?? undefined;
       return store.transact(() => {
-        const feature = services.features.create({
+        const feature = services.getDraw().features.create({
           ...input,
           ...(id !== undefined && { id }),
           layerId,
@@ -543,7 +551,11 @@ export function createModeContext(
       },
     },
     get selectionStyle() {
-      return toSelectionStyle(services.selectionStyle);
+      return toSelectionStyle(
+        services.selectionStyle,
+        services.boxSelectionStyle,
+        services.getDraw().options.get().selectionStyle,
+      );
     },
     listTraceRows: (bbox) => services.listTraceRows(bbox).map(toDatasetRow),
   };

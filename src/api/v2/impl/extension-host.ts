@@ -45,11 +45,9 @@ import {
 } from './contexts.js';
 import type { ExtensionRegistries, Installer } from './extensions.js';
 import { createExtensionsCollections, createRegistry } from './extensions.js';
-import { createFeatures, preparePatch } from './features.js';
+import { preparePatch } from './features.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { createOverlayStack, terrainAnchorsOf } from './render-context.js';
-import type { ResourceDeps } from './shared.js';
-import { createStandaloneDraw } from './standalone-draw.js';
 
 /** The feature types of the engine, which a custom type cannot take the name of */
 const BUILT_IN_TYPES: ReadonlySet<string> = new Set([
@@ -113,23 +111,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const terrain = customLayer.getTerrainContext();
   let destroyed = false;
 
-  const resourceDeps: ResourceDeps = {
-    store,
-    generateId: context.generateFeatureId,
-    autoNameGenerator: context.autoNameGenerator,
-    getActiveLayerId: context.getActiveLayerId,
-    setActiveLayerId: context.setActiveLayerId,
-    featureStyle: context.featureStyle,
-    eventEmitter: context.eventEmitter,
-  };
-  const features = createFeatures(resourceDeps);
-
   let attached: Draw | null = null;
-  let standalone: Draw | null = null;
   const getDraw = (): Draw => {
-    if (attached) return attached;
-    standalone ??= createStandaloneDraw(map, resourceDeps, modeManager, collections);
-    return standalone;
+    if (!attached) throw new Error('The draw instance is not attached to its extensions yet');
+    return attached;
   };
 
   const screen = createScreenContext({
@@ -309,7 +294,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     generateId: context.generateFeatureId,
     scaleWithZoom: context.options.scaleWithZoom,
     selectionStyle: context.selectionStyle,
-    features,
+    boxSelectionStyle: context.renderingConfig.boxSelectionStyle,
   };
 
   /**

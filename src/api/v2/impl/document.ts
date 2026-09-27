@@ -35,78 +35,96 @@ const GEOMETRY_TYPES: ReadonlySet<string> = new Set([
 /** A source after the files and the strings are read */
 type ReadSource = { kind: 'data'; data: unknown } | { kind: 'image'; file: File };
 
+/** The source of the writes of a load of each format, as its notification carries it */
+const LOAD_SOURCES: Readonly<Record<LoadResult['format'], string>> = {
+  native: 'silent',
+  geojson: 'batch',
+  image: 'local',
+};
+
 /**
  * Creates `draw.document`
  *
+ * @param onLoaded - Called after each load that read something, with the result and the source
+ *   its writes carried
  * @internal
  */
 export function createDocument(
   deps: Pick<ResourceDeps, 'store' | 'autoNameGenerator' | 'generateId' | 'getActiveLayerId'>,
+  onLoaded?: (result: LoadResult, source: string) => void,
 ): DocumentResource {
   const { store } = deps;
 
+  const load = async (source: LoadSource, options: LoadOptions = {}) => {
+    const result = await read(source, options);
+    if (result) onLoaded?.(result, LOAD_SOURCES[result.format]);
+    return result;
+  };
+
   return {
-    async load(source: LoadSource, options: LoadOptions = {}): Promise<LoadResult | null> {
-      if (!isRecord(options as unknown)) throw invalidInput('The options must be an object');
-      const mode = options.mode;
-      if (mode !== undefined && mode !== 'replace' && mode !== 'merge') {
-        throw invalidInput('mode must be replace or merge');
-      }
-      const layerId = options.layerId;
-      if (layerId !== undefined && !store.getLayer(layerId)) throw notFound('layer', layerId);
-      if (store.isReadOnly()) return null;
-
-      const read = await readSource(source);
-      const importDeps = {
-        store,
-        autoNameGenerator: deps.autoNameGenerator,
-        generateFeatureId: deps.generateId,
-        getCurrentLayerId: () => layerId ?? deps.getActiveLayerId(),
-      };
-
-      if (read.kind === 'image') {
-        if (!options.coordinate) throw invalidInput('An image needs the coordinate option');
-        return withReplace(store, mode === 'replace', () =>
-          loadImage(
-            read.file,
-            {
-              coordinate: options.coordinate as Coordinate,
-              zoom: options.zoom,
-              layerId,
-              flattenMulti: options.flattenMulti,
-            },
-            importDeps,
-          ),
-        );
-      }
-
-      const { data } = read;
-      if (isNativeFormat(data)) {
-        if (mode === 'merge') {
-          throw invalidInput('A document of the library can only replace the document');
-        }
-        try {
-          return await loadNative(data, { store });
-        } catch (error) {
-          throw asDrawError('invalid-input', error);
-        }
-      }
-      const collection = toFeatureCollection(data);
-      if (collection === null) {
-        throw new DrawError(
-          'unsupported-format',
-          'The source is neither a document of the library nor GeoJSON',
-        );
-      }
-      return withReplace(store, mode === 'replace', () =>
-        loadGeoJSON(collection, importDeps, { flattenMulti: options.flattenMulti }),
-      );
-    },
+    load,
 
     toJSON: (): DrawDocument => exportNative(store),
 
     toGeoJSON: (): FeatureCollection => exportGeoJSON(store),
   };
+
+  async function read(source: LoadSource, options: LoadOptions = {}): Promise<LoadResult | null> {
+    if (!isRecord(options as unknown)) throw invalidInput('The options must be an object');
+    const mode = options.mode;
+    if (mode !== undefined && mode !== 'replace' && mode !== 'merge') {
+      throw invalidInput('mode must be replace or merge');
+    }
+    const layerId = options.layerId;
+    if (layerId !== undefined && !store.getLayer(layerId)) throw notFound('layer', layerId);
+    if (store.isReadOnly()) return null;
+
+    const read = await readSource(source);
+    const importDeps = {
+      store,
+      autoNameGenerator: deps.autoNameGenerator,
+      generateFeatureId: deps.generateId,
+      getCurrentLayerId: () => layerId ?? deps.getActiveLayerId(),
+    };
+
+    if (read.kind === 'image') {
+      if (!options.coordinate) throw invalidInput('An image needs the coordinate option');
+      return withReplace(store, mode === 'replace', () =>
+        loadImage(
+          read.file,
+          {
+            coordinate: options.coordinate as Coordinate,
+            zoom: options.zoom,
+            layerId,
+            flattenMulti: options.flattenMulti,
+          },
+          importDeps,
+        ),
+      );
+    }
+
+    const { data } = read;
+    if (isNativeFormat(data)) {
+      if (mode === 'merge') {
+        throw invalidInput('A document of the library can only replace the document');
+      }
+      try {
+        return await loadNative(data, { store });
+      } catch (error) {
+        throw asDrawError('invalid-input', error);
+      }
+    }
+    const collection = toFeatureCollection(data);
+    if (collection === null) {
+      throw new DrawError(
+        'unsupported-format',
+        'The source is neither a document of the library nor GeoJSON',
+      );
+    }
+    return withReplace(store, mode === 'replace', () =>
+      loadGeoJSON(collection, importDeps, { flattenMulti: options.flattenMulti }),
+    );
+  }
 }
 
 /**

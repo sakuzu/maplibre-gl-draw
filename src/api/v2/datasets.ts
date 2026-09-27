@@ -6,9 +6,9 @@
  */
 
 import type { BBox, Feature as GeoJSONFeature, Position } from 'geojson';
+import type { PreparedTable, Table } from '../../table/index.js';
 import type { ScreenPoint } from './events.js';
 import type { FeatureStyle, FeatureType, StyleRule } from './model.js';
-import type { PreparedTable, Table } from './table-placeholders.js';
 
 /** A row of a dataset, given and read as a GeoJSON feature. */
 export type DatasetRow = GeoJSONFeature;

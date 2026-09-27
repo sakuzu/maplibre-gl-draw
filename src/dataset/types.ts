@@ -225,6 +225,8 @@ export interface DatasetClickPayload {
   row: number;
   /** The clicked position `[lng, lat]` in degrees */
   lngLat: Coordinate;
+  /** The clicked point on the screen, in CSS pixels */
+  point?: { x: number; y: number };
 }
 
 /**
@@ -242,6 +244,8 @@ export interface DatasetHoverPayload {
   row: number | null;
   /** The pointer position `[lng, lat]` in degrees */
   lngLat: Coordinate;
+  /** The pointer position on the screen, in CSS pixels */
+  point?: { x: number; y: number };
 }
 
 /**

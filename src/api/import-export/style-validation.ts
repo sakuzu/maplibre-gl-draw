@@ -6,24 +6,23 @@
  *
  * A style arrives from a file (the maplibre-gl-draw:style property of GeoJSON, the style of a
  * native feature, the simplestyle-spec keys) and reaches the renderer, which parses the
- * colors as #rgb / #rrggbb and uses the numbers as they are. A value of the wrong type or
- * form (a number or null for a color, `red`, an opacity of 5) would make the parsing throw or
- * produce NaN, so each known key is checked here and a key that fails is dropped. Keys this
+ * colors as CSS colors and uses the numbers as they are. A value of the wrong type or form (a
+ * number or null for a color, a string that is not a CSS color, an opacity of 5) would be
+ * drawn wrong, so each known key is checked here and a key that fails is dropped. Keys this
  * library does not define are kept unchanged, whatever their value: they belong to the host or
  * to an extension, which gives features keys of its own and checks their values where it reads
  * them (values reach the Store through updateFeature and a replaced store as well, without
  * passing here).
  */
 
+import { isColor } from '../../shared/color.js';
 import type { FeatureStyle } from '../../store/types.js';
 import { setOwnProperty } from './own-property.js';
 
-const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
-
 type Check = (value: unknown) => boolean;
 
-/** A #rgb or #rrggbb color */
-export const isHexColor: Check = (value) => typeof value === 'string' && HEX_COLOR.test(value);
+/** A CSS color */
+export const isCssColor: Check = isColor;
 
 const isFiniteNumber: Check = (value) => typeof value === 'number' && Number.isFinite(value);
 const isOpacity: Check = (value) =>
@@ -36,14 +35,14 @@ const oneOf =
 
 /** The check of every key of FeatureStyle */
 const STYLE_CHECK_TABLE: Readonly<Record<keyof FeatureStyle, Check>> = {
-  fillColor: isHexColor,
+  fillColor: isCssColor,
   fillOpacity: isOpacity,
-  strokeColor: isHexColor,
+  strokeColor: isCssColor,
   strokeWidth: isNonNegative,
   strokeOpacity: isOpacity,
   lineStyle: oneOf('solid', 'dashed', 'dotted'),
   pointRadius: isNonNegative,
-  pointColor: isHexColor,
+  pointColor: isCssColor,
   pointShape: oneOf('circle', 'square', 'triangle', 'star'),
   pointOpacity: isOpacity,
   imageOpacity: isOpacity,

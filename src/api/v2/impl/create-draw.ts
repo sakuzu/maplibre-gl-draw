@@ -5,79 +5,40 @@
  * `createDraw`: the draw instance on the engine, with its resources
  */
 
-import { DrawStore } from '../../../store/draw-store.js';
-import type { Options } from '../../context.js';
+import type { Engine } from '../../engine.js';
 import { createEngine } from '../../engine.js';
 import type { CreateDraw, Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawOptions } from '../options.js';
+import { createDatasets } from './datasets.js';
 import { createDocument } from './document.js';
+import { createDrawing } from './drawing.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createHidden } from './hidden.js';
 import { createLayers } from './layers.js';
 import { createMetadata } from './metadata.js';
+import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound } from './shared.js';
 
-/** The options the engine takes as they are */
-const ENGINE_OPTION_KEYS = [
-  'defaultMode',
-  'initDefaultLayer',
-  'messages',
-  'scaleWithZoom',
-  'clickTolerance',
-  'dragThreshold',
-  'isExternalEntry',
-] as const;
-
-/** Throws for a part of the API that a later step of the 2.0 work provides */
-function notImplemented(name: string): never {
-  throw new Error(`not implemented (api-2): ${name}`);
-}
-
 /**
- * A stand-in for a resource that is not built yet: reading a member gives a function that
- * throws when it is called
- */
-function pending<T>(name: string): T {
-  const target = () => notImplemented(name);
-  return new Proxy(target, {
-    get: (_, key) =>
-      typeof key === 'symbol' || key === 'then' ? undefined : pending(`${name}.${key}`),
-    apply: () => notImplemented(name),
-  }) as T;
-}
-
-/** The options of the engine for the options of `createDraw` */
-function toEngineOptions(options: DrawOptions): Options {
-  const result: Options = {};
-  for (const [key, value] of Object.entries(options)) {
-    if (value === undefined) continue;
-    if ((ENGINE_OPTION_KEYS as readonly string[]).includes(key)) {
-      (result as Record<string, unknown>)[key] = value;
-    } else if (key === 'store') {
-      // Only a Store of this library is taken until the option of a Store of the application
-      if (!(value instanceof DrawStore)) notImplemented('the store option with another Store');
-      result.store = value;
-    } else if (key === 'rendering' && Object.keys(value).every((k) => k === 'pixelRatio')) {
-      result.pixelRatio = (value as { pixelRatio?: number }).pixelRatio;
-    } else {
-      notImplemented(`the option ${key}`);
-    }
-  }
-  return result;
-}
-
-/**
- * Puts a draw instance on a map and returns it.
+ * Builds the draw instance on an engine and hands it to the extensions of the engine
  *
+ * @param options - The options the instance was created with
+ * @param setExternalEntry - Replaces the function that tells the entries from outside the
+ *   document, which the engine asks
  * @internal
  */
-export const createDraw: CreateDraw = (map, options = {}) => {
-  const engine = createEngine(map, toEngineOptions(options));
-  const { context, modeManager } = engine;
+export function createDrawOnEngine(
+  engine: Engine,
+  options: DrawOptions = {},
+  setExternalEntry: (fn: ((id: string) => boolean) | undefined) => void = () => {},
+): Draw {
+  const drawOptions = createOptions(engine, options, setExternalEntry);
+  drawOptions.applyCreation();
+  const { context, modeManager, events, map } = engine;
   const { store } = context;
   const view: StoreView = store;
 
@@ -97,13 +58,15 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     features,
     layers: createLayers(deps),
     groups,
-    datasets: pending('datasets'),
+    datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps),
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
     metadata: createMetadata(deps),
-    options: pending('options'),
-    document: createDocument(deps),
+    options: { get: drawOptions.get, update: drawOptions.update },
+    document: createDocument(deps, (result, source) =>
+      events.emit('document.loaded', { result, source }),
+    ),
     extensions: engine.extensions.collections,
 
     getMap: () => map,
@@ -128,16 +91,35 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     },
 
     transact: (fn, transactOptions) => store.transact(fn, transactOptions?.source),
-    on: () => notImplemented('on'),
-    off: () => notImplemented('off'),
-    once: () => notImplemented('once'),
+    on: (event, listener) => events.on(event, listener),
+    off: (event, listener) => events.off(event, listener),
+    once: (event, listener) => events.once(event, listener),
 
-    hasPendingWork: () => notImplemented('hasPendingWork'),
-    getLayerStack: () => notImplemented('getLayerStack'),
-    debug: { terrain: () => notImplemented('debug.terrain') },
+    ...createDrawing(engine),
 
     destroy: () => engine.destroy(),
   };
   engine.extensions.attach(draw);
+  return draw;
+}
+
+/**
+ * Puts a draw instance on a map and returns it.
+ *
+ * @internal
+ */
+export const createDraw: CreateDraw = (map, options = {}) => {
+  checkDrawOptions(options);
+  // The engine asks this function, so that the option can change while the instance runs
+  let isExternalEntry = options.isExternalEntry;
+  const engine = createEngine(
+    map,
+    toEngineOptions(options, (id) => isExternalEntry?.(id) === true),
+    { deferDefaultMode: true },
+  );
+  const draw = createDrawOnEngine(engine, options, (fn) => {
+    isExternalEntry = fn;
+  });
+  engine.enterDefaultMode();
   return draw;
 };

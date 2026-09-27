@@ -266,6 +266,17 @@ export interface SelectionStyleOptions {
       iconId?: string;
     };
   };
+  /** The rectangle of a box selection (Shift and a drag) */
+  boxSelection?: {
+    /** The fill color (a CSS color) */
+    fillColor: string;
+    /** The opacity of the fill, from 0 to 1 */
+    fillOpacity: number;
+    /** The color of the outline (a CSS color) */
+    strokeColor: string;
+    /** The width of the outline in CSS pixels */
+    strokeWidth: number;
+  };
   /** The line from the center of a circle to its radius handle */
   radiusLine?: {
     /** The line */
@@ -312,6 +323,11 @@ export interface RuntimeOptions {
     circle?: FeatureStyle;
     image?: FeatureStyle;
   };
+  /**
+   * The look of the geometry being drawn, with the keys of the style of a feature: the stroke
+   * keys give its lines and the outlines of its vertices, the point keys its vertices
+   */
+  previewStyle?: Partial<FeatureStyle>;
   /** The look of the box and the handles of the selection */
   selectionStyle?: SelectionStyleOptions;
   /**
