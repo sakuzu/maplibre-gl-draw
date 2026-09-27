@@ -29,4 +29,14 @@ export interface GeoJSONImportOptions {
    * Setting it to true expands them as before, assigning a new ID to each part.
    */
   flattenMulti?: boolean;
+  /**
+   * The layer every feature goes into, over the layer a feature names itself with
+   * `maplibre-gl-draw:layerId`. A group of another layer is then dropped from the feature
+   */
+  layerId?: string;
+  /**
+   * Whether the features and the groups of the document are replaced: they are deleted in the
+   * same transaction that writes the features of the file, and the layers stay
+   */
+  replace?: boolean;
 }

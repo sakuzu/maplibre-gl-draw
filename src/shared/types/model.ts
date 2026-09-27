@@ -562,8 +562,10 @@ export interface TentativeState {
  * - local: an operation of the user or a call of the API (the default)
  * - silent: a change that a subscriber recording changes leaves out: loading a native file, which replaces
  *   the whole document, and clearing the selection when a mode starts
- * - batch: loading a GeoJSON file, a bulk change recorded as one step (it is one transaction,
- *   which is what makes it one notification)
+ * - load: loading a GeoJSON file or replacing the features with one, recorded as one step (it
+ *   is one transaction, which is what makes it one notification)
+ * - batch: a bulk change of a host or an extension recorded as one step; core does not write
+ *   it
  * - remote: a change that came from outside the instance. A replaced {@link DocumentStore}
  *   writes it for the changes it applies from elsewhere, so that subscribers can tell them from
  *   local edits and core keeps the local editing state (a vertex selection) consistent with them
@@ -575,6 +577,7 @@ export interface TentativeState {
 export type UpdateSource =
   | 'local'
   | 'silent'
+  | 'load'
   | 'batch'
   | 'remote'
   | 'import'
@@ -610,7 +613,7 @@ export interface StoreChange {
    * The source of the operation
    *
    * Used by subscribers to identify the source of the operation. Core writes 'local',
-   * 'silent' and 'batch', and a replaced store writes 'remote' for the changes it applies
+   * 'silent' and 'load', and a replaced store writes 'remote' for the changes it applies
    * from outside (see {@link UpdateSource}); plugins and external store implementations can
    * use their own values.
    */

@@ -216,16 +216,17 @@ came from.
 | Source | Writes |
 | --- | --- |
 | `local` | The user's operations and the calls of the API: the default |
-| `batch` | A GeoJSON load, a bulk change meant to be one step |
+| `load` | A GeoJSON load, with the replacement of `mode: 'replace'` |
+| `batch` | A bulk change meant to be one step |
 | `silent` | A load of the native format; a recorder of changes leaves it out |
 | `remote` | A change a replaced Store applies from outside the instance |
 | `import` | Data an application or an extension loads by its own means |
 | any other | Given to `transact`, by an extension or by a replaced Store |
 
-The library itself writes `local`, `batch` and `silent`. A load of GeoJSON
-with `mode: 'replace'` adds the features with `batch` and then deletes the
-features and groups that were there before with `silent`, in a second
-transaction. An image file is loaded with `local`.
+The library itself writes `local`, `load` and `silent`. A load of GeoJSON
+is one transaction with `load`: with `mode: 'replace'`, deleting the
+features and groups that were there before is part of it, so it fires one
+`document.changed`. An image file is loaded with `local`.
 
 The library keeps no history of changes. `source` and the transaction
 boundary are what a listener that records changes goes by (see
@@ -277,7 +278,7 @@ stacking order, from the back, including the entries that are not layers.
 Fires after `draw.document.load()` read something, when every event of the
 load has fired. `result` is the `LoadResult` the promise resolves to, and
 `source` is the source of its writes: `silent` for the native format,
-`batch` for GeoJSON and `local` for an image. A load refused because the
+`load` for GeoJSON and `local` for an image. A load refused because the
 document is read-only, and a load that fails, fire nothing.
 
 ### selection.changed

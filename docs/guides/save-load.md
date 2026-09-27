@@ -132,9 +132,9 @@ input?.addEventListener('change', async () => {
   color, an opacity outside 0 to 1) is dropped, and the feature is kept
 - A GeoJSON feature whose ID is already taken gets a new ID, so a file
   written by `toGeoJSON()` can be loaded back into the same drawing
-- GeoJSON features go into the layer named by their
-  `maplibre-gl-draw:layerId` when it exists, otherwise into the layer of
-  `options.layerId`, otherwise into the active layer
+- GeoJSON features go into the layer of `options.layerId` when it is
+  given, otherwise into the layer named by their `maplibre-gl-draw:layerId`
+  when it exists, otherwise into the active layer
 - Multi geometries are kept as Multi features; `flattenMulti: true` splits
   them into single features. A `GeometryCollection` is folded into at most
   one Multi feature per geometry type
@@ -316,7 +316,7 @@ document, or to put an earlier state of it back, is in every
 - one transaction is one change, so a geometry operation, a group or a
   drag of several features comes as one step
 - `source` tells where it came from: `'local'` for edits and calls of the
-  API, `'batch'` for a GeoJSON load, `'silent'` for a load of a document
+  API, `'load'` for a GeoJSON load, `'silent'` for a load of a document
   of the library, `'remote'` for a store of your own, and any value you
   pass to `transact`
 - an update in the middle of a drag carries `isIntermediate: true`; the

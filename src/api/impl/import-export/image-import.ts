@@ -14,6 +14,9 @@ import { DrawError } from '../../errors.js';
 
 /**
  * Imports an image file and creates an Image feature
+ *
+ * @param beforeWrite - Runs first in the transaction that writes the image, such as the
+ *   deletion of a replace
  */
 export async function loadImage(
   file: File,
@@ -24,6 +27,7 @@ export async function loadImage(
     generateFeatureId: () => string;
     getCurrentLayerId: () => string;
   },
+  beforeWrite?: () => void,
 ): Promise<LoadResult> {
   if (!options.coordinate) {
     throw new DrawError('invalid-input', 'Image files require coordinate option');
@@ -74,6 +78,7 @@ export async function loadImage(
 
   // Create the file and the feature in a transaction
   store.transact(() => {
+    beforeWrite?.();
     store.createFile(fileData);
     store.createFeature(feature);
     store.setSelection('feature', [featureId]);

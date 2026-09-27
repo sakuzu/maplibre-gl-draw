@@ -129,9 +129,9 @@ input?.addEventListener('change', async () => {
 - ID がすでに使われている GeoJSON の地物には新しい ID を振り
   ます。そのため、`toGeoJSON()` で書き出したファイルを同じ描画に
   読み戻せます
-- GeoJSON の地物は、`maplibre-gl-draw:layerId` のレイヤーがあれば
-  そのレイヤーに、無ければ `options.layerId` のレイヤーに、それも無ければ
-  アクティブなレイヤーに入ります
+- GeoJSON の地物は、`options.layerId` を指定すればそのレイヤーに、
+  無ければ `maplibre-gl-draw:layerId` のレイヤーがあればそのレイヤーに、
+  それも無ければアクティブなレイヤーに入ります
 - Multi の形状は Multi の地物のまま保ちます。`flattenMulti: true`
   を指定すると単一の地物に分けます。`GeometryCollection` は、
   形状の型ごとに多くても 1 つの Multi の地物にまとめます
@@ -312,7 +312,7 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 - 1 つのトランザクションが 1 つの変更になるので、幾何演算、グループ化、
   複数の地物のドラッグは 1 つの手順として届きます
 - `source` は変更の出どころを示します。編集と API の呼び出しなら
-  `'local'`、GeoJSON の読み込みなら `'batch'`、ライブラリーの文書の
+  `'local'`、GeoJSON の読み込みなら `'load'`、ライブラリーの文書の
   読み込みなら `'silent'`、自前のストアなら `'remote'` で、`transact` に
   渡した任意の値も入ります
 - ドラッグの途中の更新には `isIntermediate: true` が付きます。その後に

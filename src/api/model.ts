@@ -461,7 +461,10 @@ export interface LoadOptions {
    * the library and `merge` for GeoJSON when it is left out
    */
   mode?: 'replace' | 'merge';
-  /** The layer to add the features to */
+  /**
+   * The layer to add the features to. It wins over the layer a GeoJSON feature names with
+   * `maplibre-gl-draw:layerId`; when it is left out, that layer is used, or else the active one
+   */
   layerId?: string;
   /** Where to place an image */
   coordinate?: Position;

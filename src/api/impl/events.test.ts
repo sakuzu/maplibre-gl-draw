@@ -279,10 +279,10 @@ describe('document.changed', () => {
         { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1, 2] } },
       ],
     });
-    expect(payloadsOf(events, 'document.loaded')).toEqual([{ result, source: 'batch' }]);
+    expect(payloadsOf(events, 'document.loaded')).toEqual([{ result, source: 'load' }]);
     // The features of the load arrive in one document.changed with the same source
     const changes = payloadsOf(events, 'document.changed');
-    expect(changes[changes.length - 1]?.source).toBe('batch');
+    expect(changes[changes.length - 1]?.source).toBe('load');
   });
 });
 

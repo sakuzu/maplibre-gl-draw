@@ -178,7 +178,7 @@ draw.on('document.changed', ({ features, source }) => {
 
 Each entry of `updated` holds the `feature` and its `previous` state.
 `source` says where the change came from, for example `'local'` for the
-user's edits and calls of the API, and `'batch'` for a GeoJSON load.
+user's edits and calls of the API, and `'load'` for a GeoJSON load.
 The same event covers layers, groups and the title of the document.
 
 A few rules make the API easy to reason about.
