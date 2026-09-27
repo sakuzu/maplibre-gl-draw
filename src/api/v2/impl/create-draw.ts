@@ -10,6 +10,7 @@ import type { CreateDraw, Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
 import { createDatasets } from './datasets.js';
 import { createDocument } from './document.js';
+import { createDrawing } from './drawing.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createHidden } from './hidden.js';
@@ -112,9 +113,7 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     off: (event, listener) => events.off(event, listener),
     once: (event, listener) => events.once(event, listener),
 
-    hasPendingWork: () => notImplemented('hasPendingWork'),
-    getLayerStack: () => notImplemented('getLayerStack'),
-    debug: { terrain: () => notImplemented('debug.terrain') },
+    ...createDrawing(engine),
 
     destroy: () => engine.destroy(),
   };
