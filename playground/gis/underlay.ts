@@ -20,8 +20,8 @@
 
 import type {
   Dataset,
-  DatasetFeatureInput,
   DatasetOrder,
+  DatasetRow,
   MapLibreGLDraw,
   StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
@@ -52,7 +52,7 @@ export interface UnderlayAddOptions {
   /** Display name shown in the list */
   name: string;
   /** Features to display */
-  features: DatasetFeatureInput[];
+  features: DatasetRow[];
   /** Style rule (the default color is used when omitted) */
   styleRule?: StyleRule;
 }
@@ -83,7 +83,7 @@ export class UnderlayRegistry {
   add(options: UnderlayAddOptions): Dataset {
     const dataset = this.draw.addDataset({
       id: options.id,
-      features: options.features,
+      rows: options.features,
       styleRule: options.styleRule,
       interactive: true,
       order: 'below-store',
@@ -281,12 +281,9 @@ export class UnderlayRegistry {
  * not collide between underlays). Unsupported geometries (GeometryCollection and null
  * geometry) are skipped.
  */
-export function geojsonToDisplayFeatures(
-  geojson: unknown,
-  datasetId: string,
-): DatasetFeatureInput[] {
+export function geojsonToDisplayFeatures(geojson: unknown, datasetId: string): DatasetRow[] {
   const features = toGeoJsonFeatures(geojson);
-  const result: DatasetFeatureInput[] = [];
+  const result: DatasetRow[] = [];
 
   for (const feature of features) {
     const geometry = feature.geometry;
@@ -300,9 +297,9 @@ export function geojsonToDisplayFeatures(
         : `${datasetId}-${result.length}`;
 
     result.push({
+      type: 'Feature',
       id,
-      type: geometry.type,
-      coordinates: geometry.coordinates as DatasetFeatureInput['coordinates'],
+      geometry: geometry as DatasetRow['geometry'],
       properties: (feature.properties ?? {}) as Record<string, unknown>,
     });
   }

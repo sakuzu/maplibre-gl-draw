@@ -28,6 +28,7 @@ import type { SnapService } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature, Mode } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import type { ModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
 import { DrawLineMode } from './line.js';
@@ -360,7 +361,7 @@ describe('preference of the trace anchor (getSnapPreference)', () => {
   function addDataset(): void {
     datasets.add({
       id: 'data',
-      features: [{ id: 'dpoly', type: 'Polygon', coordinates: [D_RING] }],
+      rows: [toRow({ id: 'dpoly', type: 'Polygon', coordinates: [D_RING] })],
     });
   }
 

@@ -42,9 +42,9 @@ you need the other two.
 - `@sakuzu/maplibre-gl-draw/geometry` ({@link geometry | the reference}):
   geometry functions that need no map, so they also run in Node and in
   workers.
-- `@sakuzu/maplibre-gl-draw/columnar` ({@link columnar | the reference}):
-  the preparation of a columnar table for a dataset, importable in a
-  Worker.
+- `@sakuzu/maplibre-gl-draw/table` ({@link table | the reference}):
+  the parts for reading a large table in a Worker and putting it on the
+  map as a dataset.
 
 The symbols under Building blocks are for people who write plugins,
 modes and feature types. They may change in a minor release; everything

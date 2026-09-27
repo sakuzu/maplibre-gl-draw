@@ -14,19 +14,20 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TopHit } from '../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import { createDisplayInteractions, type DisplayInteractions } from './interaction.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import type {
   DatasetClickEventPayload,
   DatasetClickPayload,
-  DatasetFeatureInput,
   DatasetHoverPayload,
+  DatasetRow,
 } from './types.js';
 
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
-function point(id: string, coord: [number, number]): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: coord };
+function point(id: string, coord: [number, number]): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: coord });
 }
 
 function mouseEvent(lng: number, lat: number): MouseNormalizedEvent {
@@ -105,7 +106,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetClickPayload) => void>();
@@ -122,7 +123,7 @@ describe('the click of a dataset', () => {
 
   it('a non-interactive one only blocks and fires nothing', () => {
     const { manager, interactions } = setup();
-    const dataset = manager.add({ id: 'c1', features: [point('a', [1, 1])] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a', [1, 1])] });
     const handler = vi.fn();
     dataset.on('click', handler);
 
@@ -144,7 +145,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions, setStoreHit } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn();
@@ -163,7 +164,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn();
@@ -178,7 +179,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn();
@@ -194,7 +195,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn();
@@ -210,7 +211,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn();
@@ -227,7 +228,7 @@ describe('the click of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const second = vi.fn();
@@ -249,7 +250,7 @@ describe('the hover of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1]), point('b', [2, 2])],
+      rows: [point('a', [1, 1]), point('b', [2, 2])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -271,7 +272,7 @@ describe('the hover of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -289,7 +290,7 @@ describe('the hover of a dataset', () => {
     const { manager, interactions, setStoreHit } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -306,12 +307,12 @@ describe('the hover of a dataset', () => {
     const { manager, interactions } = setup();
     const below = manager.add({
       id: 'below',
-      features: [point('b', [1, 1])],
+      rows: [point('b', [1, 1])],
       interactive: true,
     });
     const above = manager.add({
       id: 'above',
-      features: [point('a', [2, 2])],
+      rows: [point('a', [2, 2])],
       interactive: true,
       order: 'above-store',
     });
@@ -329,7 +330,7 @@ describe('the hover of a dataset', () => {
 
   it('no hover fires over a dataset that is not interactive', () => {
     const { manager, interactions } = setup();
-    const dataset = manager.add({ id: 'c1', features: [point('a', [1, 1])] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a', [1, 1])] });
     const handler = vi.fn();
     dataset.on('hover', handler);
 
@@ -342,12 +343,12 @@ describe('the hover of a dataset', () => {
     const { manager, interactions } = setup();
     const below = manager.add({
       id: 'below',
-      features: [point('b', [1, 1])],
+      rows: [point('b', [1, 1])],
       interactive: true,
     });
     manager.add({
       id: 'above',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       order: 'above-store',
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -362,7 +363,7 @@ describe('the hover of a dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -382,7 +383,7 @@ describe('the hit testing of a hidden dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetClickPayload) => void>();
@@ -403,7 +404,7 @@ describe('the hit testing of a hidden dataset', () => {
     const { manager, interactions } = setup();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     const handler = vi.fn<(payload: DatasetHoverPayload) => void>();
@@ -419,12 +420,12 @@ describe('the hit testing of a hidden dataset', () => {
     const { manager, interactions } = setup();
     const below = manager.add({
       id: 'below',
-      features: [point('b', [1, 1])],
+      rows: [point('b', [1, 1])],
       interactive: true,
     });
     const above = manager.add({
       id: 'above',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
       order: 'above-store',
     });
@@ -475,7 +476,7 @@ describe('the notification of the resolved click (the source of draw.dataset.cli
 
   it('a hit on a feature is reported with the dataset id and the feature', () => {
     const { manager, interactions, notified } = setupWithNotify();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
 
     interactions.handleClick(mouseEvent(1, 1));
 
@@ -486,7 +487,7 @@ describe('the notification of the resolved click (the source of draw.dataset.cli
 
   it('nothing hit is reported as null (the source of clearing on an empty click)', () => {
     const { manager, interactions, notified } = setupWithNotify();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
 
     interactions.handleClick(mouseEvent(5, 5));
 
@@ -498,7 +499,7 @@ describe('the notification of the resolved click (the source of draw.dataset.cli
 
   it('a mere block by a non-interactive dataset is reported as null too', () => {
     const { manager, interactions, notified } = setupWithNotify();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: false });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: false });
 
     interactions.handleClick(mouseEvent(1, 1));
 
@@ -508,7 +509,7 @@ describe('the notification of the resolved click (the source of draw.dataset.cli
 
   it('nothing is reported when a feature of the Store is in front (the domain of the Store selection)', () => {
     const { manager, interactions, notified, setStoreHit } = setupWithNotify();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
     setStoreHit(true);
 
     interactions.handleClick(mouseEvent(1, 1));

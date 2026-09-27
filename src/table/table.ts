@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The reading of a columnar table (`DatasetColumnarInput`)
+ * The reading of a table (`Table`)
  *
  * It checks the shape of the input once and then reads the arrays as they are: the vertex run of
  * a row, the value of a column at a row, the bbox of every row, and one row materialized as a
@@ -15,18 +15,18 @@
  * A pure module (it imports only types), so it runs in a Worker as well.
  */
 
-import type { Coordinate, Feature } from '../../shared/types/model.js';
+import type { Coordinate, Feature } from '../shared/types/model.js';
 import type {
-  DatasetColumn,
-  DatasetColumnarGeometry,
-  DatasetColumnarGeometryType,
-  DatasetColumnarInput,
-  DatasetColumnarMixedGeometry,
-  DatasetDictionaryColumn,
+  Column,
+  DictionaryColumn,
+  GeometryType,
+  Table,
+  TableGeometry,
+  TableMixedGeometry,
 } from './types.js';
 
 /** The number of offset arrays of each geometry type */
-const OFFSET_LEVELS: Readonly<Record<DatasetColumnarGeometryType, number>> = {
+const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = {
   Point: 0,
   LineString: 1,
   MultiPoint: 1,
@@ -40,7 +40,7 @@ const OFFSET_LEVELS: Readonly<Record<DatasetColumnarGeometryType, number>> = {
  *
  * @internal
  */
-export function isDictionaryColumn(column: DatasetColumn): column is DatasetDictionaryColumn {
+export function isDictionaryColumn(column: Column): column is DictionaryColumn {
   return (
     typeof column === 'object' &&
     column !== null &&
@@ -51,7 +51,7 @@ export function isDictionaryColumn(column: DatasetColumn): column is DatasetDict
 }
 
 /** The number of rows a column holds */
-function columnLength(column: DatasetColumn): number {
+function columnLength(column: Column): number {
   return isDictionaryColumn(column) ? column.codes.length : column.length;
 }
 
@@ -64,7 +64,7 @@ function columnLength(column: DatasetColumn): number {
  *
  * @internal
  */
-export function columnValue(column: DatasetColumn, row: number): unknown {
+export function columnValue(column: Column, row: number): unknown {
   if (isDictionaryColumn(column)) {
     const code = column.codes[row];
     return code >= 0 && code < column.dictionary.length ? column.dictionary[code] : null;
@@ -82,8 +82,8 @@ export function columnValue(column: DatasetColumn, row: number): unknown {
  *
  * @internal
  */
-export class ColumnarGeometryColumn {
-  readonly type: DatasetColumnarGeometryType;
+export class GeometryColumnReader {
+  readonly type: GeometryType;
   readonly coords: Float64Array;
   /** The number of values per coordinate (2 or 3) */
   readonly dimensions: number;
@@ -98,24 +98,24 @@ export class ColumnarGeometryColumn {
    *   error messages
    * @throws when the shape of the column does not add up
    */
-  constructor(geometry: DatasetColumnarGeometry, rows: number | undefined, path: string) {
+  constructor(geometry: TableGeometry, rows: number | undefined, path: string) {
     // The messages about the geometry of a table of one type keep their short form
     const at = rows === undefined ? `${path}: ` : '';
     if (!geometry || !(geometry.type in OFFSET_LEVELS)) {
-      throw new Error(`Columnar input: ${at}unknown geometry type "${geometry?.type}"`);
+      throw new Error(`Table: ${at}unknown geometry type "${geometry?.type}"`);
     }
     if (!(geometry.coords instanceof Float64Array)) {
-      throw new Error(`Columnar input: ${path}.coords must be a Float64Array`);
+      throw new Error(`Table: ${path}.coords must be a Float64Array`);
     }
     const dimensions = geometry.dimensions ?? 2;
     if (dimensions !== 2 && dimensions !== 3) {
-      throw new Error(`Columnar input: ${at}dimensions must be 2 or 3 (got ${dimensions})`);
+      throw new Error(`Table: ${at}dimensions must be 2 or 3 (got ${dimensions})`);
     }
     const offsets = geometry.offsets ?? [];
     const levels = OFFSET_LEVELS[geometry.type];
     if (offsets.length !== levels) {
       throw new Error(
-        `Columnar input: ${at}a ${geometry.type} ${rows === undefined ? 'column' : 'table'} has ${levels} offset arrays (got ${offsets.length})`,
+        `Table: ${at}a ${geometry.type} ${rows === undefined ? 'column' : 'table'} has ${levels} offset arrays (got ${offsets.length})`,
       );
     }
     const vertexCount = Math.floor(geometry.coords.length / dimensions);
@@ -131,18 +131,18 @@ export class ColumnarGeometryColumn {
     for (let level = 0; level < levels; level++) {
       const array = offsets[level];
       if (!(array instanceof Int32Array)) {
-        throw new Error(`Columnar input: ${at}offsets[${level}] must be an Int32Array`);
+        throw new Error(`Table: ${at}offsets[${level}] must be an Int32Array`);
       }
       if (array.length < elements + 1) {
         throw new Error(
-          `Columnar input: ${at}offsets[${level}] has ${array.length} entries for ${elements} elements`,
+          `Table: ${at}offsets[${level}] has ${array.length} entries for ${elements} elements`,
         );
       }
       elements = array[elements];
     }
     if (elements > vertexCount) {
       throw new Error(
-        `Columnar input: ${at}the offsets reach coordinate ${elements} of ${vertexCount} coordinates`,
+        `Table: ${at}the offsets reach coordinate ${elements} of ${vertexCount} coordinates`,
       );
     }
 
@@ -206,24 +206,22 @@ export class ColumnarGeometryColumn {
 }
 
 /** Whether a geometry column is the mixed form */
-function isMixedGeometry(
-  geometry: DatasetColumnarInput['geometry'],
-): geometry is DatasetColumnarMixedGeometry {
+function isMixedGeometry(geometry: Table['geometry']): geometry is TableMixedGeometry {
   return geometry?.type === 'Mixed';
 }
 
 /**
- * A validated columnar table
+ * A validated table
  *
  * @internal
  */
-export class ColumnarTable {
+export class TableReader {
   readonly length: number;
   /**
    * The geometry columns of a single type: the one column of a table of one type, or the children
    * of a mixed geometry column
    */
-  readonly children: readonly ColumnarGeometryColumn[];
+  readonly children: readonly GeometryColumnReader[];
   /** The child of every row (null for a table of one type: every row is in child 0) */
   readonly childTypes: Int8Array | null;
   /** The row within its child of every row (null for a table of one type: the same row) */
@@ -231,8 +229,8 @@ export class ColumnarTable {
   /** Whether every geometry of the table is a Point or a MultiPoint */
   readonly onlyPoints: boolean;
   readonly validity: Uint8Array | undefined;
-  readonly ids: DatasetColumn | undefined;
-  readonly columns: Readonly<Record<string, DatasetColumn>>;
+  readonly ids: Column | undefined;
+  readonly columns: Readonly<Record<string, Column>>;
   /** The names of the columns (the key order of `columns`) */
   readonly columnNames: readonly string[];
 
@@ -241,17 +239,17 @@ export class ColumnarTable {
    *   wrong length, a column shorter than the table, a row of a mixed column pointing outside its
    *   child)
    */
-  constructor(readonly input: DatasetColumnarInput) {
+  constructor(readonly input: Table) {
     const { length, geometry } = input;
     if (!Number.isInteger(length) || length < 0) {
-      throw new Error(`Columnar input: length must be a non-negative integer (got ${length})`);
+      throw new Error(`Table: length must be a non-negative integer (got ${length})`);
     }
     if (isMixedGeometry(geometry)) {
       this.children = readMixedChildren(geometry, length);
       this.childTypes = geometry.types;
       this.childRows = geometry.offsets;
     } else {
-      this.children = [new ColumnarGeometryColumn(geometry, length, 'geometry')];
+      this.children = [new GeometryColumnReader(geometry, length, 'geometry')];
       this.childTypes = null;
       this.childRows = null;
     }
@@ -260,15 +258,15 @@ export class ColumnarTable {
     );
 
     if (input.validity && input.validity.length < Math.ceil(length / 8)) {
-      throw new Error('Columnar input: validity is shorter than the table');
+      throw new Error('Table: validity is shorter than the table');
     }
     if (input.ids && columnLength(input.ids) < length) {
-      throw new Error('Columnar input: ids is shorter than the table');
+      throw new Error('Table: ids is shorter than the table');
     }
     const columns = input.columns ?? {};
     for (const [name, column] of Object.entries(columns)) {
       if (columnLength(column) < length) {
-        throw new Error(`Columnar input: column "${name}" is shorter than the table`);
+        throw new Error(`Table: column "${name}" is shorter than the table`);
       }
     }
 
@@ -299,7 +297,7 @@ export class ColumnarTable {
   }
 
   /** The geometry column of a row (undefined for a row without a geometry) */
-  columnOf(row: number): ColumnarGeometryColumn | undefined {
+  columnOf(row: number): GeometryColumnReader | undefined {
     const child = this.childOf(row);
     return child < 0 ? undefined : this.children[child];
   }
@@ -415,41 +413,38 @@ export class ColumnarTable {
  * @throws when an array has the wrong type or is shorter than the table, or when a row names a
  *   child that does not exist or a row past the end of its child
  */
-function readMixedChildren(
-  geometry: DatasetColumnarMixedGeometry,
-  length: number,
-): ColumnarGeometryColumn[] {
+function readMixedChildren(geometry: TableMixedGeometry, length: number): GeometryColumnReader[] {
   const { types, offsets, children } = geometry;
   if (!(types instanceof Int8Array)) {
-    throw new Error('Columnar input: geometry.types must be an Int8Array');
+    throw new Error('Table: geometry.types must be an Int8Array');
   }
   if (!(offsets instanceof Int32Array)) {
-    throw new Error('Columnar input: geometry.offsets must be an Int32Array');
+    throw new Error('Table: geometry.offsets must be an Int32Array');
   }
   if (!Array.isArray(children)) {
-    throw new Error('Columnar input: geometry.children must be an array');
+    throw new Error('Table: geometry.children must be an array');
   }
   if (types.length < length) {
-    throw new Error('Columnar input: geometry.types is shorter than the table');
+    throw new Error('Table: geometry.types is shorter than the table');
   }
   if (offsets.length < length) {
-    throw new Error('Columnar input: geometry.offsets is shorter than the table');
+    throw new Error('Table: geometry.offsets is shorter than the table');
   }
   const columns = children.map(
-    (child, k) => new ColumnarGeometryColumn(child, undefined, `geometry.children[${k}]`),
+    (child, k) => new GeometryColumnReader(child, undefined, `geometry.children[${k}]`),
   );
   for (let row = 0; row < length; row++) {
     const child = types[row];
     if (child < 0) continue;
     if (child >= columns.length) {
       throw new Error(
-        `Columnar input: geometry.types[${row}] is ${child}, but there are ${columns.length} children`,
+        `Table: geometry.types[${row}] is ${child}, but there are ${columns.length} children`,
       );
     }
     const at = offsets[row];
     if (at < 0 || at >= columns[child].length) {
       throw new Error(
-        `Columnar input: geometry.offsets[${row}] is ${at}, but geometry.children[${child}] has ${columns[child].length} rows`,
+        `Table: geometry.offsets[${row}] is ${at}, but geometry.children[${child}] has ${columns[child].length} rows`,
       );
     }
   }

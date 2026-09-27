@@ -59,18 +59,21 @@ const draw = createMapLibreGLDraw(map);
 
 const parcels = draw.addDataset({
   id: 'parcels',
-  features: [
+  rows: [
     {
+      type: 'Feature',
       id: 'p-1',
-      type: 'Polygon',
-      coordinates: [
-        [
-          [139.70, 35.68],
-          [139.71, 35.68],
-          [139.71, 35.69],
-          [139.70, 35.68],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [139.70, 35.68],
+            [139.71, 35.68],
+            [139.71, 35.69],
+            [139.70, 35.68],
+          ],
         ],
-      ],
+      },
       properties: { population: 4200 },
     },
   ],
@@ -99,25 +102,25 @@ two throws.
 
 | Your data | Option | Replace it with |
 | --- | --- | --- |
-| An array of features, such as GeoJSON | `features` | `setFeatures` |
-| A table from GeoParquet, Arrow or FlatGeobuf | `columnar` | `setColumnar` |
+| An array of GeoJSON features | `rows` | `setRows` |
+| A table from GeoParquet, Arrow or FlatGeobuf | `table` | `setTable` |
 | A server that answers for an extent | `provider` | `invalidateProviderCache` |
 
 ### An array of features
 
-A feature has the same shape as a drawn feature (`id`, `type`,
-`coordinates`, `properties`, `style`), polygons with holes and the Multi
-types included. `layerId`, `locked` and `visible` can be left out.
-Positions with a third element (an elevation from GeoJSON) are cut to
+A row is a GeoJSON feature (`id`, `geometry`, `properties`), polygons
+with holes and the Multi types included. It may also carry `style`, its
+own style. A row without a geometry keeps its place but is neither drawn
+nor hit. Positions with a third element (an elevation) are cut to
 longitude and latitude.
 
-`setFeatures` replaces the whole content. There is no partial update:
+`setRows` replaces the whole content. There is no partial update:
 build the new array and pass it.
 
 <!-- docs-check: with datasets -->
 
 ```ts
-parcels.setFeatures(nextFeatures);
+parcels.setRows(nextRows);
 ```
 
 ### A table as columns
@@ -125,14 +128,16 @@ parcels.setFeatures(nextFeatures);
 A table read from GeoParquet, Arrow or FlatGeobuf is already a set of
 columns. Turning every row into a feature object only to hand it over
 costs more than drawing it: for a million points, most of the time and
-most of the memory. `columnar` takes the rows as they are, in the layout
+most of the memory. `table` takes the rows as they are, in the layout
 of GeoArrow: the coordinates in one `Float64Array`, the offsets of the
 rows, parts and rings in `Int32Array`s, and the attributes as columns.
+`tableFromFeatures` and `createTableBuilder` from the subpath
+`@sakuzu/maplibre-gl-draw/table` build this layout from GeoJSON.
 
 ```ts
 const places = draw.addDataset({
   id: 'places',
-  columnar: {
+  table: {
     length: 3,
     geometry: {
       type: 'Point',
@@ -178,7 +183,7 @@ no style of its own.
 
 The dataset keeps the arrays and reads them; it does not copy them. Do
 not change them while it holds them, and replace the table with
-`setColumnar`. A row becomes a feature object only when something asks
+`setTable`. A row becomes a feature object only when something asks
 for one:
 
 - `click` and `hover` carry the feature of the row and its `row`. Read
@@ -203,7 +208,7 @@ above, and the geometry of row `i` is row `offsets[i]` of child
 ```ts
 draw.addDataset({
   id: 'network',
-  columnar: {
+  table: {
     length: 3,
     geometry: {
       type: 'Mixed',
@@ -228,35 +233,30 @@ draw.addDataset({
   order of the table
 - A row with a negative `types[i]` has no geometry. `validity` still
   applies on top
-- `prepareDatasetColumnar` and `columnarTransferables` take this form
-  too
+- `prepareTable` and `transferList` take this form too
 
 ### Reading the table in a Worker
 
 Before it can draw, the dataset computes the bounding box of every row,
 splits the rows into spatial chunks and builds the spatial index for
 clicks. For a large table this takes long enough to stop the page, so do
-it where the table is read. `prepareDatasetColumnar` from the subpath
-`@sakuzu/maplibre-gl-draw/columnar` does this work. The subpath imports
-neither maplibre nor WebGL, so a Worker can use it, and
-`columnarTransferables` lists the buffers to move without a copy.
+it where the table is read. `prepareTable` from the subpath
+`@sakuzu/maplibre-gl-draw/table` does this work and returns the table
+with it. The subpath imports neither maplibre nor WebGL, so a Worker can
+use it, and `transferList` lists the buffers to move without a copy.
 
 <!-- docs-check:
-declare function readTable(data: unknown): Promise<import('@sakuzu/maplibre-gl-draw').DatasetColumnarInput>;
+declare function readTable(data: unknown): Promise<import('@sakuzu/maplibre-gl-draw/table').Table>;
 -->
 
 ```ts
 // worker.ts
-import {
-  columnarTransferables,
-  prepareDatasetColumnar,
-} from '@sakuzu/maplibre-gl-draw/columnar';
+import { prepareTable, transferList } from '@sakuzu/maplibre-gl-draw/table';
 
 self.onmessage = async (event) => {
-  const input = await readTable(event.data); // your reader returns a DatasetColumnarInput
-  const prepared = prepareDatasetColumnar(input);
-  const transfer = columnarTransferables(input, prepared);
-  self.postMessage({ input, prepared }, { transfer });
+  const table = await readTable(event.data); // your reader returns a Table
+  const prepared = prepareTable(table);
+  self.postMessage(prepared, { transfer: transferList(prepared) });
 };
 ```
 
@@ -270,17 +270,15 @@ const worker = new Worker(new URL('./worker.ts', import.meta.url), {
   type: 'module',
 });
 worker.onmessage = (event) => {
-  const { input, prepared } = event.data;
-  places.setColumnar(input, prepared);
+  places.setTable(event.data);
 };
 worker.postMessage(file);
 ```
 
-With `prepared`, the main thread computes none of it again, and the
-first click finds the index ready. Without it, `setColumnar` computes
-the same arrays itself. `prepared` belongs to its table; one made for a
-table of another length throws. `addDataset` takes it too, as the
-`prepared` option next to `columnar`.
+With a prepared table, the main thread computes none of it again, and
+the first click finds the index ready. Given a bare table, `setTable`
+computes the same arrays itself. `addDataset` takes either as the
+`table` option.
 
 ### Fetching what is in view
 
@@ -293,7 +291,7 @@ draw.addDataset({
   provider: async (bbox, zoom) => {
     const query = `${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY}`;
     const res = await fetch(`/api/parcels?bbox=${query}&z=${zoom}`);
-    return res.json();
+    return (await res.json()).features;
   },
 });
 ```
@@ -385,7 +383,7 @@ order, and it is placed by that order alone:
 <!-- docs-check: with datasets -->
 
 ```ts
-draw.addDataset({ id: 'parcels', features, order: 'layer-order' });
+draw.addDataset({ id: 'parcels', rows, order: 'layer-order' });
 draw.setLayerOrder(['base', 'parcels', 'notes']);
 ```
 
@@ -405,13 +403,13 @@ two points overlap on screen, the one in front is drawn and the other is
 not. Zooming in spreads the points apart, so more of them are drawn.
 
 <!-- docs-check:
-declare const features: import('@sakuzu/maplibre-gl-draw').DatasetFeatureInput[];
+declare const rows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
 -->
 
 ```ts
 const places = draw.addDataset({
   id: 'places',
-  features,
+  rows,
   collisionThinning: { enabled: true, fullDisplayZoom: 17, marginPx: 2 },
 });
 
@@ -449,8 +447,8 @@ they changed.
 
 `click` and `hover` fire only with `interactive: true`. `hover` fires
 when the target changes, and once with `feature: null` when the pointer
-leaves it. Both carry the `row` of the feature: its index in the features
-given (or in the answer of the provider), or its row in a columnar table.
+leaves it. Both carry the `row` of the feature: its index in the rows
+given (or in the answer of the provider), or its row in a table.
 `on` returns the function that unsubscribes.
 
 <!-- docs-check: with datasets -->
@@ -537,7 +535,7 @@ The reads of one row do not build its feature either.
 | `getRowType(row)` | The geometry type |
 | `getRowBounds(row)` | The box the spatial index holds |
 | `getRowPoint(row)` | The `[lng, lat]` of a `Point` |
-| `getRowFeature(row)` | The feature, styled as `collectVisible` returns it |
+| `getRow(row)` | The feature, styled as `collectVisible` returns it |
 | `findRow(id)` | The row of an id, or `null` (the first call indexes) |
 
 A row is the `row` of `click` and `hover`, and the numbers hold until
@@ -556,7 +554,7 @@ for (const row of places.collectDrawnRows(extent)) {
   const cell = `${Math.floor(point[0] / 0.01)}:${Math.floor(point[1] / 0.01)}`;
   if (taken.has(cell)) continue;
   taken.add(cell);
-  const feature = places.getRowFeature(row);
+  const feature = places.getRow(row);
   if (feature) names.push(String(feature.properties.name));
 }
 ```
@@ -565,7 +563,7 @@ for (const row of places.collectDrawnRows(extent)) {
 
 `setVisible(false)` stops drawing and hit testing but keeps the features
 and the GPU resources, so `setVisible(true)` shows the dataset in the
-next frame. `setFeatures`, `setStyleRule` and a provider keep working
+next frame. `setRows`, `setStyleRule` and a provider keep working
 while it is hidden. `remove()` (or `removeDataset(id)`) lets go of
 everything.
 
@@ -614,7 +612,7 @@ behavior stays the same. `setExternalPointRender` replaces it later.
 ```ts
 draw.addDataset({
   id: 'stations',
-  features,
+  rows,
   externalPointRender: (feature) => feature.properties.kind === 'station',
 });
 ```
@@ -653,9 +651,9 @@ apply to it. Show and hide it with `setVisible` or by removing it.
 - Its contents are replaced as a whole; there is no partial update
 - It is not saved or exported. Keep the data, or the address it came
   from, yourself, and add the dataset again after a load
-- A row of a columnar table has no style of its own
+- A row of a table has no style of its own
 - The thinning applies to `Point` only
-- A columnar table is read in place: do not change its arrays while the
+- A table is read in place: do not change its arrays while the
   dataset holds them
 
 ## Examples
@@ -663,7 +661,7 @@ apply to it. Show and hide it with `setVisible` or by removing it.
 - [Datasets](../../examples/large-data/) adds 50,000 cells colored by a
   property and points fetched for the part of the map in view, with
   thinning, clicks and reordering
-- [A million points](../../examples/columnar-worker/) builds 200,000 or
+- [A million points](../../examples/table-worker/) builds 200,000 or
   1,000,000 points as columns in a Worker, prepares them there and hands
   them over without a copy
 
@@ -676,8 +674,8 @@ For the size at which to choose a dataset over drawn features, see
   and the other dataset methods of `MapLibreGLDraw`
 - [Dataset](../api/maplibre-gl-draw/interfaces/Dataset.md)
 - [DatasetOptions](../api/maplibre-gl-draw/interfaces/DatasetOptions.md)
-- [DatasetColumnarInput](../api/maplibre-gl-draw/interfaces/DatasetColumnarInput.md)
-  and [prepareDatasetColumnar](../api/columnar/functions/prepareDatasetColumnar.md)
+- [Table](../api/table/interfaces/Table.md)
+  and [prepareTable](../api/table/functions/prepareTable.md)
 - [DatasetCollisionThinning](../api/maplibre-gl-draw/interfaces/DatasetCollisionThinning.md)
 - [DatasetChangePayload](../api/maplibre-gl-draw/interfaces/DatasetChangePayload.md)
 - [events](../reference/events.md) for `draw.dataset.click`,

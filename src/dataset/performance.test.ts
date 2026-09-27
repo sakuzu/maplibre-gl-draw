@@ -18,6 +18,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, StyleRule } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
@@ -31,7 +32,7 @@ import type {
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager } from './manager.js';
-import type { DatasetFeatureInput } from './types.js';
+import type { DatasetRow } from './types.js';
 
 /**
  * A stub that has only the GL that StrokeRenderer / FillShaderManager call when FeatureDrawer is
@@ -63,8 +64,8 @@ const VISIBLE_ROWS = 100;
  *
  * The attribute pop is used to evaluate the style rule (graduated).
  */
-function createGrid(): DatasetFeatureInput[] {
-  const features: DatasetFeatureInput[] = new Array(TOTAL);
+function createGrid(): DatasetRow[] {
+  const features: DatasetRow[] = new Array(TOTAL);
   const half = STEP * 0.4;
 
   for (let i = 0; i < TOTAL; i++) {
@@ -73,7 +74,7 @@ function createGrid(): DatasetFeatureInput[] {
     const lng = col * STEP;
     const lat = row * STEP;
 
-    features[i] = {
+    features[i] = toRow({
       id: `f${i}`,
       type: 'Polygon',
       coordinates: [
@@ -86,7 +87,7 @@ function createGrid(): DatasetFeatureInput[] {
         ],
       ],
       properties: { pop: i % 1000 },
-    };
+    });
   }
 
   return features;
@@ -210,7 +211,7 @@ describe('the cost of a dataset', () => {
     });
 
     const probe = createRetainedTarget();
-    manager.add({ id: 'bulk', features: createGrid(), styleRule: rule });
+    manager.add({ id: 'bulk', rows: createGrid(), styleRule: rule });
 
     // The first frame (the retained batches of the visible chunks are built)
     manager.draw('below-store', probe.target, {} as ProjectionData, 10);
@@ -249,7 +250,7 @@ describe('the cost of a dataset', () => {
       onViewportChange: () => () => {},
       requestRepaint: () => {},
     });
-    manager.add({ id: 'bulk', features: createGrid(), styleRule: rule });
+    manager.add({ id: 'bulk', rows: createGrid(), styleRule: rule });
 
     const probe = createRetainedTarget();
     manager.draw('below-store', probe.target, {} as ProjectionData, 10);

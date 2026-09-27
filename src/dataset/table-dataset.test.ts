@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for a dataset given as a columnar table
+ * Tests for a dataset given as a table
  *
  * The same rows are given once as features and once as columns, and the two datasets are
  * compared: what goes onto the retained batches (the polygons, the lines and the points with
@@ -13,42 +13,44 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
+import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type {
   BoundingBox,
   Coordinate,
   Feature,
   FeatureStyle,
   StyleRule,
-} from '../../shared/types/model.js';
-import { FeatureDrawer } from '../../view/renderers/drawer.js';
-import type { ImageRenderer } from '../../view/renderers/image.js';
-import { toLineInstanceColor } from '../../view/renderers/line/line-geometry.js';
-import type { LineBatchItem, RetainedLineBatch } from '../../view/renderers/line/line-types.js';
-import type { SDFLineRenderer } from '../../view/renderers/line/sdf-line.js';
+} from '../shared/types/model.js';
+import { prepareTable } from '../table/prepare.js';
+import type {
+  Column,
+  GeometryType,
+  PreparedTable,
+  Table,
+  TableGeometry,
+  TableMixedGeometry,
+} from '../table/types.js';
+import { toRow } from '../test-utils.js';
+import { FeatureDrawer } from '../view/renderers/drawer.js';
+import type { ImageRenderer } from '../view/renderers/image.js';
+import { toLineInstanceColor } from '../view/renderers/line/line-geometry.js';
+import type { LineBatchItem, RetainedLineBatch } from '../view/renderers/line/line-types.js';
+import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
 import type {
   PackedPointInstances,
   PointInstanceDataFull,
   RetainedPointBatch,
-} from '../../view/renderers/point/point-instance.js';
-import type { PointShapeRenderer } from '../../view/renderers/point/point-shape.js';
+} from '../view/renderers/point/point-instance.js';
+import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
 import type {
   RetainedPolygonBatch,
   SDFPolygonBatchData,
-} from '../../view/renderers/polygon/sdf-polygon.js';
-import type { RetainedRendererSet } from '../../view/renderers/retained.js';
-import { TerrainContext } from '../../view/terrain/context.js';
-import type { DisplayBatchTarget } from '../dataset.js';
-import { createDatasetManager, type DatasetManager } from '../manager.js';
-import type { Dataset, DatasetFeatureInput, DatasetOptions } from '../types.js';
-import { prepareDatasetColumnar } from './prepare.js';
-import type {
-  DatasetColumn,
-  DatasetColumnarGeometry,
-  DatasetColumnarGeometryType,
-  DatasetColumnarInput,
-  DatasetColumnarMixedGeometry,
-} from './types.js';
+} from '../view/renderers/polygon/sdf-polygon.js';
+import type { RetainedRendererSet } from '../view/renderers/retained.js';
+import { TerrainContext } from '../view/terrain/context.js';
+import type { DisplayBatchTarget } from './dataset.js';
+import { createDatasetManager, type DatasetManager } from './manager.js';
+import type { Dataset, DatasetOptions, DatasetRow } from './types.js';
 
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
@@ -195,11 +197,11 @@ interface Row {
   geometry: Geometry | null;
   properties: Record<string, string | number>;
   /** The type of the row in a mixed table (the type of the table otherwise) */
-  type?: DatasetColumnarGeometryType;
+  type?: GeometryType;
 }
 
 /** The depth of the offsets of each type */
-const DEPTH: Record<DatasetColumnarGeometryType, number> = {
+const DEPTH: Record<GeometryType, number> = {
   Point: 0,
   LineString: 1,
   MultiPoint: 1,
@@ -209,10 +211,10 @@ const DEPTH: Record<DatasetColumnarGeometryType, number> = {
 };
 
 /** A table whose geometry column has one type */
-type SingleTypeInput = DatasetColumnarInput & { geometry: DatasetColumnarGeometry };
+type SingleTypeInput = Table & { geometry: TableGeometry };
 
 /** Encodes the rows as a GeoArrow table (a dictionary for strings, Float64 for numbers) */
-function toColumnar(type: DatasetColumnarGeometryType, rows: Row[]): SingleTypeInput {
+function toTable(type: GeometryType, rows: Row[]): SingleTypeInput {
   const coords: number[] = [];
   const depth = DEPTH[type];
   const offsets: number[][] = Array.from({ length: depth }, () => [0]);
@@ -253,8 +255,8 @@ function toColumnar(type: DatasetColumnarGeometryType, rows: Row[]): SingleTypeI
 }
 
 /** The ids and the attribute columns of the rows */
-function attributesOf(rows: Row[]): Pick<DatasetColumnarInput, 'ids' | 'columns'> {
-  const columns: Record<string, DatasetColumn> = {};
+function attributesOf(rows: Row[]): Pick<Table, 'ids' | 'columns'> {
+  const columns: Record<string, Column> = {};
   const names = [...new Set(rows.flatMap((row) => Object.keys(row.properties)))];
   for (const name of names) {
     const values = rows.map((row) => row.properties[name]);
@@ -276,19 +278,21 @@ function attributesOf(rows: Row[]): Pick<DatasetColumnarInput, 'ids' | 'columns'
  * The same rows as features (the rows without a geometry are left out; a property that a row
  * lacks is null, as a column reads it back)
  */
-function toFeatures(type: DatasetColumnarGeometryType, rows: Row[]): DatasetFeatureInput[] {
+function toFeatures(type: GeometryType, rows: Row[]): DatasetRow[] {
   const names = [...new Set(rows.flatMap((row) => Object.keys(row.properties)))];
-  const features: DatasetFeatureInput[] = [];
+  const features: DatasetRow[] = [];
   rows.forEach((row, i) => {
     if (row.geometry === null) return;
     const properties: Record<string, unknown> = {};
     for (const name of names) properties[name] = row.properties[name] ?? null;
-    features.push({
-      id: `r${i}`,
-      type: row.type ?? type,
-      coordinates: row.geometry as Feature['coordinates'],
-      properties,
-    });
+    features.push(
+      toRow({
+        id: `r${i}`,
+        type: row.type ?? type,
+        coordinates: row.geometry,
+        properties,
+      }),
+    );
   });
   return features;
 }
@@ -304,7 +308,7 @@ const square = (x: number, y: number, size: number): Coordinate[] => [
 const CLASSES = ['a', 'b', 'c'];
 
 /** The geometry of row `i` of a type (a grid of cells 2 degrees apart) */
-function geometryOf(type: DatasetColumnarGeometryType, i: number): Geometry {
+function geometryOf(type: GeometryType, i: number): Geometry {
   const x = (i % 6) * 2;
   const y = Math.floor(i / 6) * 2;
   switch (type) {
@@ -347,7 +351,7 @@ function propertiesOf(i: number): Record<string, string | number> {
 }
 
 /** Rows of every geometry type (a few without a geometry, some with createdZoom) */
-function rowsOf(type: DatasetColumnarGeometryType, count = 30): Row[] {
+function rowsOf(type: GeometryType, count = 30): Row[] {
   const rows: Row[] = [];
   for (let i = 0; i < count; i++) {
     rows.push({ geometry: i % 7 === 3 ? null : geometryOf(type, i), properties: propertiesOf(i) });
@@ -374,7 +378,7 @@ function drawDataset(
   return { recorded, manager };
 }
 
-const TYPES: DatasetColumnarGeometryType[] = [
+const TYPES: GeometryType[] = [
   'Point',
   'MultiPoint',
   'LineString',
@@ -383,7 +387,7 @@ const TYPES: DatasetColumnarGeometryType[] = [
   'MultiPolygon',
 ];
 
-describe('the columnar input draws what the same features draw', () => {
+describe('the table input draws what the same features draw', () => {
   for (const type of TYPES) {
     it(`${type}, with a rule on a dictionary column and a base style`, () => {
       const rows = rowsOf(type);
@@ -395,13 +399,13 @@ describe('the columnar input draws what the same features draw', () => {
           fill: { fillOpacity: 0.4 },
         },
       };
-      const features = drawDataset({ id: 'c', features: toFeatures(type, rows), ...style });
-      const columnar = drawDataset({ id: 'c', columnar: toColumnar(type, rows), ...style });
+      const features = drawDataset({ id: 'c', rows: toFeatures(type, rows), ...style });
+      const asTable = drawDataset({ id: 'c', table: toTable(type, rows), ...style });
 
-      expect(columnar.recorded.polygons).toEqual(features.recorded.polygons);
-      expect(columnar.recorded.lines).toEqual(features.recorded.lines);
-      expect(columnar.recorded.points).toEqual(features.recorded.points);
-      expect(columnar.recorded.immediate).toEqual(features.recorded.immediate);
+      expect(asTable.recorded.polygons).toEqual(features.recorded.polygons);
+      expect(asTable.recorded.lines).toEqual(features.recorded.lines);
+      expect(asTable.recorded.points).toEqual(features.recorded.points);
+      expect(asTable.recorded.immediate).toEqual(features.recorded.immediate);
       expect(
         features.recorded.polygons.length +
           features.recorded.lines.length +
@@ -412,9 +416,9 @@ describe('the columnar input draws what the same features draw', () => {
 
   it('without a rule or a base style, with the default styles', () => {
     const rows = rowsOf('Polygon');
-    const features = drawDataset({ id: 'c', features: toFeatures('Polygon', rows) });
-    const columnar = drawDataset({ id: 'c', columnar: toColumnar('Polygon', rows) });
-    expect(columnar.recorded.polygons).toEqual(features.recorded.polygons);
+    const features = drawDataset({ id: 'c', rows: toFeatures('Polygon', rows) });
+    const asTable = drawDataset({ id: 'c', table: toTable('Polygon', rows) });
+    expect(asTable.recorded.polygons).toEqual(features.recorded.polygons);
   });
 
   it('a dashed line goes to immediate mode as the same feature', () => {
@@ -422,18 +426,18 @@ describe('the columnar input draws what the same features draw', () => {
     const style = { styleRule: RULE, baseStyle: { stroke: { lineStyle: 'dashed' as const } } };
     const features = drawDataset({
       id: 'c',
-      features: toFeatures('LineString', rows),
+      rows: toFeatures('LineString', rows),
       ...style,
     });
-    const columnar = drawDataset({
+    const asTable = drawDataset({
       id: 'c',
-      columnar: toColumnar('LineString', rows),
+      table: toTable('LineString', rows),
       ...style,
     });
     expect(features.recorded.lines).toEqual([]);
-    expect(columnar.recorded.lines).toEqual([]);
-    expect(columnar.recorded.immediate.length).toBeGreaterThan(0);
-    expect(columnar.recorded.immediate).toEqual(features.recorded.immediate);
+    expect(asTable.recorded.lines).toEqual([]);
+    expect(asTable.recorded.immediate.length).toBeGreaterThan(0);
+    expect(asTable.recorded.immediate).toEqual(features.recorded.immediate);
   });
 
   it('a row that the predicate of an external renderer claims is not drawn', () => {
@@ -441,21 +445,21 @@ describe('the columnar input draws what the same features draw', () => {
     const externalPointRender = (feature: Feature): boolean => feature.properties.cls === 'a';
     const features = drawDataset({
       id: 'c',
-      features: toFeatures('Point', rows),
+      rows: toFeatures('Point', rows),
       externalPointRender,
     });
-    const columnar = drawDataset({
+    const asTable = drawDataset({
       id: 'c',
-      columnar: toColumnar('Point', rows),
+      table: toTable('Point', rows),
       externalPointRender,
     });
-    expect(columnar.recorded.points).toEqual(features.recorded.points);
+    expect(asTable.recorded.points).toEqual(features.recorded.points);
   });
 
   it('the points are packed without an object per point when the renderer can take them', () => {
     const rows = rowsOf('Point');
     const { recorded } = drawDataset(
-      { id: 'c', columnar: toColumnar('Point', rows), styleRule: RULE },
+      { id: 'c', table: toTable('Point', rows), styleRule: RULE },
       { packed: true },
     );
     expect(recorded.packedPointBuilds).toBeGreaterThan(0);
@@ -473,16 +477,16 @@ describe('the columnar input draws what the same features draw', () => {
       rows.push({ geometry: [i * 0.0001, 0], properties: { cls: CLASSES[i % 3], value: i } });
     }
     const options = { collisionThinning: { enabled: true }, styleRule: RULE };
-    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...options });
-    const columnar = drawDataset({ id: 'c', columnar: toColumnar('Point', rows), ...options });
+    const features = drawDataset({ id: 'c', rows: toFeatures('Point', rows), ...options });
+    const asTable = drawDataset({ id: 'c', table: toTable('Point', rows), ...options });
     const a = features.manager.get('c');
-    const b = columnar.manager.get('c');
+    const b = asTable.manager.get('c');
     expect(b?.getThinningStats()).toEqual(a?.getThinningStats());
     expect(a?.getThinningStats().visible).toBeLessThan(40);
     expect([...(b?.getVisibleFeatureIds() ?? [])].sort()).toEqual(
       [...(a?.getVisibleFeatureIds() ?? [])].sort(),
     );
-    expect(columnar.recorded.points).toEqual(features.recorded.points);
+    expect(asTable.recorded.points).toEqual(features.recorded.points);
   });
 });
 
@@ -504,9 +508,9 @@ describe('reading the rows back', () => {
     it(`${type}: a hit returns the same feature and its row`, () => {
       const rows = rowsOf(type);
       const manager = createManager();
-      manager.add({ id: 'f', features: toFeatures(type, rows), interactive: true });
-      const columnar = createManager();
-      columnar.add({ id: 'c', columnar: toColumnar(type, rows), interactive: true });
+      manager.add({ id: 'f', rows: toFeatures(type, rows), interactive: true });
+      const asTable = createManager();
+      asTable.add({ id: 'c', table: toTable(type, rows), interactive: true });
 
       for (const probe of [
         [0.2, 0.2],
@@ -514,7 +518,7 @@ describe('reading the rows back', () => {
         [4.1, 2.1],
       ] as Coordinate[]) {
         const a = manager.hitTestSide('below-store', probe, 0.3, insideBbox);
-        const b = columnar.hitTestSide('below-store', probe, 0.3, insideBbox);
+        const b = asTable.hitTestSide('below-store', probe, 0.3, insideBbox);
         expect(b?.feature).toEqual(a?.feature);
         // The row is the row of the table; the features left the rows without a geometry out
         if (b?.feature) expect(b.row).toBe(Number(b.feature.id.slice(1)));
@@ -525,8 +529,8 @@ describe('reading the rows back', () => {
   it('getFeatures, collectVisible and the selection match the features', () => {
     const rows = rowsOf('Polygon');
     const manager = createManager();
-    const a = manager.add({ id: 'f', features: toFeatures('Polygon', rows), styleRule: RULE });
-    const b = manager.add({ id: 'c', columnar: toColumnar('Polygon', rows), styleRule: RULE });
+    const a = manager.add({ id: 'f', rows: toFeatures('Polygon', rows), styleRule: RULE });
+    const b = manager.add({ id: 'c', table: toTable('Polygon', rows), styleRule: RULE });
 
     expect(b.getFeatures()).toEqual(a.getFeatures());
     const view: BoundingBox = { minX: 1, minY: 1, maxX: 5, maxY: 3 };
@@ -541,9 +545,9 @@ describe('reading the rows back', () => {
 
   it('the terrain drape gets the same features, and nothing from a table of points', () => {
     const manager = createManager();
-    manager.add({ id: 'f', features: toFeatures('Polygon', rowsOf('Polygon')), styleRule: RULE });
-    manager.add({ id: 'c', columnar: toColumnar('Polygon', rowsOf('Polygon')), styleRule: RULE });
-    manager.add({ id: 'p', columnar: toColumnar('Point', rowsOf('Point')) });
+    manager.add({ id: 'f', rows: toFeatures('Polygon', rowsOf('Polygon')), styleRule: RULE });
+    manager.add({ id: 'c', table: toTable('Polygon', rowsOf('Polygon')), styleRule: RULE });
+    manager.add({ id: 'p', table: toTable('Point', rowsOf('Point')) });
     const drape = (id: string) => manager.getInternal(id)?.drapeFeatures();
     expect(drape('c')).toEqual(drape('f'));
     expect(drape('c')?.length).toBeGreaterThan(0);
@@ -551,23 +555,22 @@ describe('reading the rows back', () => {
   });
 
   it('without an ids column the id of a row is its number', () => {
-    const input = toColumnar('Point', rowsOf('Point', 5));
+    const input = toTable('Point', rowsOf('Point', 5));
     delete input.ids;
     const manager = createManager();
-    const dataset = manager.add({ id: 'c', columnar: input });
+    const dataset = manager.add({ id: 'c', table: input });
     expect(dataset.getFeatures().map((f) => f.id)).toEqual(['0', '1', '2', '4']);
     dataset.setSelectedIds(['4', '3', '01']);
     expect(dataset.getSelectedIds()).toEqual(['4']);
   });
 });
 
-describe('setColumnar', () => {
+describe('setTable', () => {
   it('takes the prepared arrays of a Worker and computes nothing again', () => {
     const rows = rowsOf('LineString');
-    const input = toColumnar('LineString', rows);
-    const prepared = prepareDatasetColumnar(input);
-    const withPrepared = drawDataset({ id: 'c', columnar: input, prepared });
-    const without = drawDataset({ id: 'c', columnar: input });
+    const input = toTable('LineString', rows);
+    const withPrepared = drawDataset({ id: 'c', table: prepareTable(input) });
+    const without = drawDataset({ id: 'c', table: input });
     expect(withPrepared.recorded.lines).toEqual(without.recorded.lines);
     // The dataset reads the arrays it was given
     const dataset = withPrepared.manager.getInternal('c');
@@ -576,50 +579,48 @@ describe('setColumnar', () => {
 
   it('replaces the contents, keeps the selection of the ids that remain and says so', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c', columnar: toColumnar('Point', rowsOf('Point')) });
+    const dataset = manager.add({ id: 'c', table: toTable('Point', rowsOf('Point')) });
     dataset.setSelectedIds(['r1', 'r2']);
     const change = vi.fn();
     dataset.on('change', change);
 
-    dataset.setColumnar(toColumnar('Point', rowsOf('Point', 2)));
+    dataset.setTable(toTable('Point', rowsOf('Point', 2)));
     expect(change).toHaveBeenCalledWith({ reason: 'features' });
     expect(dataset.getSelectedIds()).toEqual(['r1']);
 
-    dataset.setFeatures([{ id: 'x', type: 'Point', coordinates: [0, 0] }]);
+    dataset.setRows([toRow({ id: 'x', type: 'Point', coordinates: [0, 0] })]);
     expect(dataset.getFeatures().map((f) => f.id)).toEqual(['x']);
   });
 
-  it('refuses a table that does not add up, and prepared arrays of another table', () => {
+  it('refuses a table that does not add up, and a prepared table that does not match', () => {
     const manager = createManager();
     const dataset = manager.add({ id: 'c' });
-    const input = toColumnar('LineString', rowsOf('LineString', 4));
+    const input = toTable('LineString', rowsOf('LineString', 4));
     expect(() =>
-      dataset.setColumnar({ ...input, geometry: { ...input.geometry, offsets: [] } }),
+      dataset.setTable({ ...input, geometry: { ...input.geometry, offsets: [] } }),
     ).toThrow(/offset arrays/);
-    const other = prepareDatasetColumnar(toColumnar('LineString', rowsOf('LineString', 5)));
-    expect(() => dataset.setColumnar(input, other)).toThrow(/prepared/);
+    const other = prepareTable(toTable('LineString', rowsOf('LineString', 5)));
+    expect(() => dataset.setTable({ ...other, table: input })).toThrow(/prepared/);
+    expect(() => dataset.setTable({ table: input } as PreparedTable)).toThrow(/prepareTable/);
   });
 
-  it('only one of features, columnar and provider can be given', () => {
+  it('only one of rows, table and provider can be given', () => {
     const manager = createManager();
-    const input = toColumnar('Point', rowsOf('Point', 2));
-    expect(() => manager.add({ id: 'a', features: [], columnar: input })).toThrow(/only one/);
-    expect(() => manager.add({ id: 'b', columnar: input, provider: async () => [] })).toThrow(
+    const input = toTable('Point', rowsOf('Point', 2));
+    expect(() => manager.add({ id: 'a', rows: [], table: input })).toThrow(/only one/);
+    expect(() => manager.add({ id: 'b', table: input, provider: async () => [] })).toThrow(
       /only one/,
-    );
-    expect(() => manager.add({ id: 'c', prepared: prepareDatasetColumnar(input) })).toThrow(
-      /without columnar/,
     );
   });
 });
 
 describe('the style of a row', () => {
   it('a row with no value for the rule column gets the other color', () => {
-    const input = toColumnar('Point', rowsOf('Point', 3));
+    const input = toTable('Point', rowsOf('Point', 3));
     const cls = input.columns?.cls as { codes: Int32Array; dictionary: string[] };
     cls.codes[1] = -1;
     const manager = createManager();
-    const dataset = manager.add({ id: 'c', columnar: input, styleRule: RULE });
+    const dataset = manager.add({ id: 'c', table: input, styleRule: RULE });
     const [, second] = dataset.collectVisible(WORLD);
     expect(second.properties.cls).toBeNull();
     expect((second.style as FeatureStyle).pointColor).toBe(
@@ -632,7 +633,7 @@ describe('the style of a row', () => {
 
 /** A row of a mixed table, and how a row without a geometry says so */
 interface MixedRow extends Row {
-  type: DatasetColumnarGeometryType;
+  type: GeometryType;
   /** No child (a negative type), or a geometry in its child hidden by a 0 bit of validity */
   missing?: 'type' | 'validity';
 }
@@ -654,7 +655,7 @@ function mixedRows(count = 36, typeOf = (i: number) => TYPES[i % TYPES.length]):
 }
 
 /** A geometry column with a z value after every coordinate */
-function withZ(geometry: DatasetColumnarGeometry): DatasetColumnarGeometry {
+function withZ(geometry: TableGeometry): TableGeometry {
   const xy = geometry.coords;
   const xyz = new Float64Array((xy.length / 2) * 3);
   for (let v = 0; v < xy.length / 2; v++) {
@@ -671,10 +672,10 @@ function withZ(geometry: DatasetColumnarGeometry): DatasetColumnarGeometry {
  * The children are filled from the last row to the first, so the order within a child is not the
  * order of the table. The MultiLineString child has z values.
  */
-function toMixed(rows: MixedRow[]): DatasetColumnarInput {
-  const childOfType = new Map<DatasetColumnarGeometryType, number>();
+function toMixed(rows: MixedRow[]): Table {
+  const childOfType = new Map<GeometryType, number>();
   const childRows: Row[][] = [];
-  const childTypes: DatasetColumnarGeometryType[] = [];
+  const childTypes: GeometryType[] = [];
   const types = new Int8Array(rows.length);
   const offsets = new Int32Array(rows.length);
   const validity = new Uint8Array(Math.ceil(rows.length / 8));
@@ -698,7 +699,7 @@ function toMixed(rows: MixedRow[]): DatasetColumnarInput {
     childRows[child].push({ geometry: row.geometry ?? geometryOf(row.type, i), properties: {} });
   }
   const children = childTypes.map((type, k) => {
-    const geometry = toColumnar(type, childRows[k]).geometry;
+    const geometry = toTable(type, childRows[k]).geometry;
     return type === 'MultiLineString' ? withZ(geometry) : geometry;
   });
   return {
@@ -721,13 +722,13 @@ describe('a mixed geometry column behaves as the same features', () => {
 
   it('draws the same polygons, lines and points in the order of the table', () => {
     const rows = mixedRows();
-    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...style });
-    const columnar = drawDataset({ id: 'c', columnar: toMixed(rows), ...style });
+    const features = drawDataset({ id: 'c', rows: toFeatures('Point', rows), ...style });
+    const asTable = drawDataset({ id: 'c', table: toMixed(rows), ...style });
 
-    expect(columnar.recorded.polygons).toEqual(features.recorded.polygons);
-    expect(columnar.recorded.lines).toEqual(features.recorded.lines);
-    expect(columnar.recorded.points).toEqual(features.recorded.points);
-    expect(columnar.recorded.immediate).toEqual(features.recorded.immediate);
+    expect(asTable.recorded.polygons).toEqual(features.recorded.polygons);
+    expect(asTable.recorded.lines).toEqual(features.recorded.lines);
+    expect(asTable.recorded.points).toEqual(features.recorded.points);
+    expect(asTable.recorded.immediate).toEqual(features.recorded.immediate);
     expect(features.recorded.polygons.length).toBeGreaterThan(0);
     expect(features.recorded.lines.length).toBeGreaterThan(0);
     expect(features.recorded.points.length).toBeGreaterThan(0);
@@ -736,32 +737,31 @@ describe('a mixed geometry column behaves as the same features', () => {
   it('sends the dashed lines and outlines to immediate mode as the same features', () => {
     const rows = mixedRows();
     const dashed = { styleRule: RULE, baseStyle: { stroke: { lineStyle: 'dashed' as const } } };
-    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...dashed });
-    const columnar = drawDataset({ id: 'c', columnar: toMixed(rows), ...dashed });
-    expect(columnar.recorded.immediate.length).toBeGreaterThan(0);
-    expect(columnar.recorded.immediate).toEqual(features.recorded.immediate);
-    expect(columnar.recorded.lines).toEqual(features.recorded.lines);
-    expect(columnar.recorded.points).toEqual(features.recorded.points);
+    const features = drawDataset({ id: 'c', rows: toFeatures('Point', rows), ...dashed });
+    const asTable = drawDataset({ id: 'c', table: toMixed(rows), ...dashed });
+    expect(asTable.recorded.immediate.length).toBeGreaterThan(0);
+    expect(asTable.recorded.immediate).toEqual(features.recorded.immediate);
+    expect(asTable.recorded.lines).toEqual(features.recorded.lines);
+    expect(asTable.recorded.points).toEqual(features.recorded.points);
   });
 
   it('draws the same with the prepared arrays of a Worker', () => {
     const input = toMixed(mixedRows());
     const withPrepared = drawDataset({
       id: 'c',
-      columnar: input,
-      prepared: prepareDatasetColumnar(input),
+      table: prepareTable(input),
       ...style,
     });
-    const without = drawDataset({ id: 'c', columnar: input, ...style });
+    const without = drawDataset({ id: 'c', table: input, ...style });
     expect(withPrepared.recorded).toEqual(without.recorded);
   });
 
   it('a hit returns the same feature and its row', () => {
     const rows = mixedRows();
     const manager = createManager();
-    manager.add({ id: 'f', features: toFeatures('Point', rows), interactive: true });
-    const columnar = createManager();
-    columnar.add({ id: 'c', columnar: toMixed(rows), interactive: true });
+    manager.add({ id: 'f', rows: toFeatures('Point', rows), interactive: true });
+    const asTable = createManager();
+    asTable.add({ id: 'c', table: toMixed(rows), interactive: true });
     /** A test that hits a feature whose bbox, grown by 0.25, holds the position */
     const nearBbox = (feature: Feature, coordinate: Coordinate): boolean => {
       const flat = (feature.coordinates as unknown as number[]).flat(3) as number[];
@@ -781,7 +781,7 @@ describe('a mixed geometry column behaves as the same features', () => {
       for (let x = 0; x < 6; x++) {
         const probe: Coordinate = [x * 2 + 0.2, y * 2 + 0.2];
         const a = manager.hitTestSide('below-store', probe, 0.3, nearBbox);
-        const b = columnar.hitTestSide('below-store', probe, 0.3, nearBbox);
+        const b = asTable.hitTestSide('below-store', probe, 0.3, nearBbox);
         expect(b?.feature).toEqual(a?.feature);
         if (b?.feature) {
           hits++;
@@ -798,8 +798,8 @@ describe('a mixed geometry column behaves as the same features', () => {
   it('getFeatures, collectVisible and the selection match the features', () => {
     const rows = mixedRows();
     const manager = createManager();
-    const a = manager.add({ id: 'f', features: toFeatures('Point', rows), styleRule: RULE });
-    const b = manager.add({ id: 'c', columnar: toMixed(rows), styleRule: RULE });
+    const a = manager.add({ id: 'f', rows: toFeatures('Point', rows), styleRule: RULE });
+    const b = manager.add({ id: 'c', table: toMixed(rows), styleRule: RULE });
 
     expect(b.getFeatures()).toEqual(a.getFeatures());
     expect(b.getFeatures().length).toBe(rows.filter((row) => row.geometry !== null).length);
@@ -820,27 +820,27 @@ describe('a mixed geometry column behaves as the same features', () => {
         : row,
     );
     const options = { collisionThinning: { enabled: true }, styleRule: RULE };
-    const features = drawDataset({ id: 'c', features: toFeatures('Point', rows), ...options });
-    const columnar = drawDataset({ id: 'c', columnar: toMixed(rows), ...options });
+    const features = drawDataset({ id: 'c', rows: toFeatures('Point', rows), ...options });
+    const asTable = drawDataset({ id: 'c', table: toMixed(rows), ...options });
     const a = features.manager.get('c');
-    const b = columnar.manager.get('c');
+    const b = asTable.manager.get('c');
     // The total of a table counts its rows without a geometry too (as for a table of one type)
     expect(b?.getThinningStats()).toEqual({ ...a?.getThinningStats(), total: rows.length });
     expect(a?.getThinningStats().visible).toBeLessThan(a?.getThinningStats().total ?? 0);
     expect([...(b?.getVisibleFeatureIds() ?? [])].sort()).toEqual(
       [...(a?.getVisibleFeatureIds() ?? [])].sort(),
     );
-    expect(columnar.recorded.points).toEqual(features.recorded.points);
-    expect(columnar.recorded.lines).toEqual(features.recorded.lines);
+    expect(asTable.recorded.points).toEqual(features.recorded.points);
+    expect(asTable.recorded.lines).toEqual(features.recorded.lines);
   });
 
   it('the terrain drape gets the same features, and nothing from points alone', () => {
     const rows = mixedRows();
     const points = mixedRows(12, (i) => (i % 2 === 0 ? 'Point' : 'MultiPoint'));
     const manager = createManager();
-    manager.add({ id: 'f', features: toFeatures('Point', rows), styleRule: RULE });
-    manager.add({ id: 'c', columnar: toMixed(rows), styleRule: RULE });
-    manager.add({ id: 'p', columnar: toMixed(points) });
+    manager.add({ id: 'f', rows: toFeatures('Point', rows), styleRule: RULE });
+    manager.add({ id: 'c', table: toMixed(rows), styleRule: RULE });
+    manager.add({ id: 'p', table: toMixed(points) });
     const drape = (id: string) => manager.getInternal(id)?.drapeFeatures();
     expect(drape('c')).toEqual(drape('f'));
     expect(drape('c')?.some((feature) => feature.type === 'MultiPolygon')).toBe(true);
@@ -849,14 +849,14 @@ describe('a mixed geometry column behaves as the same features', () => {
 
   it('an external point renderer claims the Point rows and never sees a MultiPoint', () => {
     for (const [name, rows, input] of [
-      ['one type', rowsOf('MultiPoint'), toColumnar('MultiPoint', rowsOf('MultiPoint'))],
+      ['one type', rowsOf('MultiPoint'), toTable('MultiPoint', rowsOf('MultiPoint'))],
       [
         'mixed',
         mixedRows(36, (i) => (i % 2 === 0 ? 'Point' : 'MultiPoint')),
         toMixed(mixedRows(36, (i) => (i % 2 === 0 ? 'Point' : 'MultiPoint'))),
       ],
     ] as const) {
-      const seen = { features: new Set<string>(), columnar: new Set<string>() };
+      const seen = { features: new Set<string>(), asTable: new Set<string>() };
       const predicate =
         (into: Set<string>) =>
         (feature: Feature): boolean => {
@@ -865,20 +865,20 @@ describe('a mixed geometry column behaves as the same features', () => {
         };
       const features = drawDataset({
         id: 'c',
-        features: toFeatures('MultiPoint', rows as Row[]),
+        rows: toFeatures('MultiPoint', rows as Row[]),
         externalPointRender: predicate(seen.features),
       });
-      const columnar = drawDataset({
+      const asTable = drawDataset({
         id: 'c',
-        columnar: input,
-        externalPointRender: predicate(seen.columnar),
+        table: input,
+        externalPointRender: predicate(seen.asTable),
       });
-      expect(columnar.recorded.points, name).toEqual(features.recorded.points);
-      expect(columnar.recorded.immediate, name).toEqual(features.recorded.immediate);
+      expect(asTable.recorded.points, name).toEqual(features.recorded.points);
+      expect(asTable.recorded.immediate, name).toEqual(features.recorded.immediate);
       expect(features.recorded.points.length, name).toBeGreaterThan(0);
       // Both paths hand the predicate the Point rows only
-      expect([...seen.columnar], name).toEqual([...seen.features]);
-      expect(seen.columnar.has('MultiPoint'), name).toBe(false);
+      expect([...seen.asTable], name).toEqual([...seen.features]);
+      expect(seen.asTable.has('MultiPoint'), name).toBe(false);
     }
   });
 
@@ -886,15 +886,15 @@ describe('a mixed geometry column behaves as the same features', () => {
     const manager = createManager();
     const dataset = manager.add({ id: 'c' });
     const input = toMixed(mixedRows(12));
-    const geometry = input.geometry as DatasetColumnarMixedGeometry;
+    const geometry = input.geometry as TableMixedGeometry;
     const types = geometry.types.slice();
     types[5] = 9;
-    expect(() => dataset.setColumnar({ ...input, geometry: { ...geometry, types } })).toThrow(
+    expect(() => dataset.setTable({ ...input, geometry: { ...geometry, types } })).toThrow(
       /geometry\.types\[5\] is 9/,
     );
     const offsets = geometry.offsets.slice();
     offsets[4] = 100;
-    expect(() => dataset.setColumnar({ ...input, geometry: { ...geometry, offsets } })).toThrow(
+    expect(() => dataset.setTable({ ...input, geometry: { ...geometry, offsets } })).toThrow(
       /geometry\.offsets\[4\] is 100/,
     );
   });
@@ -939,9 +939,9 @@ describe('reading by row matches the features', () => {
   for (const thinning of [false, true]) {
     const options = { ...style, collisionThinning: { enabled: thinning } };
     const forms: [string, DatasetOptions][] = [
-      ['features', { id: 'f', features: toFeatures('Point', denseRows()), ...options }],
-      ['a table of one type', { id: 'c', columnar: toColumnar('Point', densePoints()) }],
-      ['a mixed table', { id: 'm', columnar: toMixed(denseRows()), ...options }],
+      ['features', { id: 'f', rows: toFeatures('Point', denseRows()), ...options }],
+      ['a table of one type', { id: 'c', table: toTable('Point', densePoints()) }],
+      ['a mixed table', { id: 'm', table: toMixed(denseRows()), ...options }],
     ];
     for (const [name, input] of forms) {
       it(`${name}, thinning ${thinning ? 'on' : 'off'}: the drawn rows are the drawn features`, () => {
@@ -950,7 +950,7 @@ describe('reading by row matches the features', () => {
 
         expect(rows).toBeInstanceOf(Int32Array);
         expect([...rows]).toEqual([...rows].sort((a, b) => a - b));
-        const features = [...rows].map((row) => dataset.getRowFeature(row));
+        const features = [...rows].map((row) => dataset.getRow(row));
         expect(features).toEqual(drawnFeatures(dataset, VIEW));
         expect(features.length).toBeGreaterThan(0);
         if (thinning) {
@@ -960,7 +960,7 @@ describe('reading by row matches the features', () => {
 
         // The reads of one row agree with its feature
         for (const row of rows) {
-          const feature = dataset.getRowFeature(row) as Feature;
+          const feature = dataset.getRow(row) as Feature;
           expect(dataset.getRowId(row)).toBe(feature.id);
           expect(dataset.getRowType(row)).toBe(feature.type);
           expect(dataset.getRowBounds(row)).toEqual(bboxOf(feature));
@@ -974,10 +974,10 @@ describe('reading by row matches the features', () => {
     it(`thinning ${thinning ? 'on' : 'off'}: a table and its features draw the same rows`, () => {
       const rows = denseRows();
       const manager = createManager();
-      const a = manager.add({ id: 'f', features: toFeatures('Point', rows), ...options });
-      const b = manager.add({ id: 'm', columnar: toMixed(rows), ...options });
+      const a = manager.add({ id: 'f', rows: toFeatures('Point', rows), ...options });
+      const b = manager.add({ id: 'm', table: toMixed(rows), ...options });
       const read = (dataset: Dataset) =>
-        [...dataset.collectDrawnRows(VIEW)].map((row) => dataset.getRowFeature(row));
+        [...dataset.collectDrawnRows(VIEW)].map((row) => dataset.getRow(row));
 
       expect(read(b)).toEqual(read(a));
       // The row of a table is its row; the features left the rows without a geometry out
@@ -987,21 +987,21 @@ describe('reading by row matches the features', () => {
     });
   }
 
-  it('an extent outside everything gives no rows, and a hidden feature is not drawn', () => {
+  it('an extent outside everything gives no rows, and a row without a geometry is not drawn', () => {
     const manager = createManager();
     const features = toFeatures('Point', rowsOf('Point', 6));
-    features[1] = { ...features[1], visible: false };
-    const dataset = manager.add({ id: 'f', features });
+    features[1] = { ...features[1], geometry: null };
+    const dataset = manager.add({ id: 'f', rows: features });
 
     expect(dataset.collectDrawnRows({ minX: 100, minY: 60, maxX: 101, maxY: 61 })).toHaveLength(0);
     const ids = [...dataset.collectDrawnRows(WORLD)].map((row) => dataset.getRowId(row));
-    expect(ids).toEqual(features.filter((f) => f.visible !== false).map((f) => f.id));
-    // A hidden feature can still be read by its row
+    expect(ids).toEqual(features.filter((f) => f.geometry !== null).map((f) => f.id));
+    // A row without a geometry can still be read by its row
     expect(dataset.getRowId(1)).toBe(features[1].id);
   });
 
   it('a row without a geometry, and a number that is not a row', () => {
-    const dataset = createManager().add({ id: 'c', columnar: toMixed(mixedRows()) });
+    const dataset = createManager().add({ id: 'c', table: toMixed(mixedRows()) });
     // Row 3 names no child; row 10 is hidden by validity
     for (const row of [3, 10]) {
       expect(dataset.getRowType(row)).toBeNull();
@@ -1011,7 +1011,7 @@ describe('reading by row matches the features', () => {
     }
     expect([...dataset.collectDrawnRows(WORLD)]).not.toContain(3);
     for (const row of [-1, 36, 1.5, Number.NaN]) {
-      expect(dataset.getRowFeature(row)).toBeNull();
+      expect(dataset.getRow(row)).toBeUndefined();
       expect(dataset.getRowId(row)).toBeNull();
       expect(dataset.getRowType(row)).toBeNull();
       expect(dataset.getRowBounds(row)).toBeNull();
@@ -1022,8 +1022,8 @@ describe('reading by row matches the features', () => {
   it('findRow is the reverse of getRowId, for every form', () => {
     const rows = mixedRows();
     const manager = createManager();
-    const features = manager.add({ id: 'f', features: toFeatures('Point', rows) });
-    const table = manager.add({ id: 'm', columnar: toMixed(rows) });
+    const features = manager.add({ id: 'f', rows: toFeatures('Point', rows) });
+    const table = manager.add({ id: 'm', table: toMixed(rows) });
     for (const dataset of [features, table]) {
       let row = 0;
       for (let id = dataset.getRowId(row); id !== null; id = dataset.getRowId(++row)) {
@@ -1036,15 +1036,15 @@ describe('reading by row matches the features', () => {
     expect(table.findRow('r3')).toBe(3);
 
     // Without an ids column the id is the number of the row, written as it is
-    const input = toColumnar('Point', rowsOf('Point', 5));
+    const input = toTable('Point', rowsOf('Point', 5));
     delete input.ids;
-    const plain = manager.add({ id: 'p', columnar: input });
+    const plain = manager.add({ id: 'p', table: input });
     expect(plain.findRow('4')).toBe(4);
     expect(plain.findRow('04')).toBeNull();
     expect(plain.findRow('5')).toBeNull();
 
     // The index follows a replacement of the contents
-    features.setFeatures([{ id: 'x', type: 'Point', coordinates: [0, 0] }]);
+    features.setRows([toRow({ id: 'x', type: 'Point', coordinates: [0, 0] })]);
     expect(features.findRow('x')).toBe(0);
     expect(features.findRow(`r0`)).toBeNull();
   });
@@ -1053,13 +1053,13 @@ describe('reading by row matches the features', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c',
-      columnar: toMixed(mixedRows()),
+      table: toMixed(mixedRows()),
       interactive: true,
       ...style,
     });
     const hit = manager.hitTestSide('below-store', [4.1, 2.1], 0.3, () => true);
 
     expect(hit).not.toBeNull();
-    expect(dataset.getRowFeature(hit?.row ?? -1)).toEqual(hit?.feature);
+    expect(dataset.getRow(hit?.row ?? -1)).toEqual(hit?.feature);
   });
 });

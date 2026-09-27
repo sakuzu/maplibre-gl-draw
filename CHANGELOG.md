@@ -6,6 +6,20 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+- Changed: the subpath `@sakuzu/maplibre-gl-draw/columnar` is replaced by
+  `@sakuzu/maplibre-gl-draw/table`. Its types are `Table`, `TableGeometry`,
+  `TableMixedGeometry`, `GeometryType`, `Column`, `DictionaryColumn` and
+  `PreparedTable`, and they are no longer exported from the main entry.
+  `prepareTable(table)` returns the table with what it computed, and
+  `transferList(table | prepared)` lists the buffers to transfer.
+- Added: `tableFromFeatures` and `createTableBuilder` in
+  `@sakuzu/maplibre-gl-draw/table`, which build a table from GeoJSON.
+- Changed: a dataset takes its rows as GeoJSON features. `DatasetOptions`
+  has `rows` (for `features`) and `table`, which takes a `Table` or a
+  `PreparedTable` (for `columnar` and `prepared`). `Dataset.setRows`,
+  `Dataset.setTable` and `Dataset.getRow` replace `setFeatures`,
+  `setColumnar` and `getRowFeature`, and `DatasetRow` replaces
+  `DatasetFeatureInput`. A provider returns `DatasetRow[]`.
 - Deprecated: `generateCirclePolygon` from `@sakuzu/maplibre-gl-draw`.
   Import it from `@sakuzu/maplibre-gl-draw/geometry`, where it is the same
   function; the export from the main entry will be removed in the next

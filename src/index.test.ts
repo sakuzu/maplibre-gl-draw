@@ -65,17 +65,9 @@ const LAYER_1 = [
   'DatasetOrder',
   'DatasetPlacement',
   'DatasetCollisionThinning',
-  'DatasetColumn',
-  'DatasetColumnarGeometry',
-  'DatasetColumnarGeometryType',
-  'DatasetColumnarInput',
-  'DatasetColumnarMixedGeometry',
-  'DatasetColumnarPrepared',
-  'DatasetDictionaryCodes',
-  'DatasetDictionaryColumn',
-  'DatasetFeatureInput',
   'DatasetFeatureProvider',
   'DatasetHoverPayload',
+  'DatasetRow',
   'DatasetThinningStats',
   'DatasetZoomScale',
   'DocumentStore',
@@ -547,7 +539,11 @@ function findForgottenExports(program: ts.Program, files: Map<string, string>, e
 
 describe('the emitted declarations', () => {
   const outDir = resolve(ROOT, '__api_check__');
-  const entries = [resolve(outDir, 'index.d.ts'), resolve(outDir, 'geometry/index.d.ts')];
+  const entries = [
+    resolve(outDir, 'index.d.ts'),
+    resolve(outDir, 'geometry/index.d.ts'),
+    resolve(outDir, 'table/index.d.ts'),
+  ];
   let files: Map<string, string>;
   let program: ts.Program;
 

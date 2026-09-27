@@ -13,16 +13,6 @@
  */
 
 export type {
-  DatasetColumn,
-  DatasetColumnarGeometry,
-  DatasetColumnarGeometryType,
-  DatasetColumnarInput,
-  DatasetColumnarMixedGeometry,
-  DatasetColumnarPrepared,
-  DatasetDictionaryCodes,
-  DatasetDictionaryColumn,
-} from './columnar/types.js';
-export type {
   DatasetCollisionThinning,
   DatasetThinningStats,
   ResolvedCollisionThinning,
@@ -34,11 +24,11 @@ export type {
   DatasetClickEventPayload,
   DatasetClickPayload,
   DatasetEventMap,
-  DatasetFeatureInput,
   DatasetFeatureProvider,
   DatasetHoverPayload,
   DatasetOptions,
   DatasetOrder,
   DatasetPlacement,
+  DatasetRow,
   DatasetZoomScale,
 } from './types.js';

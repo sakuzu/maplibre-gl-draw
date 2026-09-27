@@ -17,7 +17,7 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { DatasetFeatureInput, FeatureInput } from '../index.js';
+import type { DatasetRow, FeatureInput } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
@@ -394,20 +394,21 @@ describe('the terrain hides what lies behind the peak', () => {
     async (stroke) => {
       await clear();
       await page.evaluate(
-        ({ features }) => {
+        ({ rows }) => {
           const { draw } = window as unknown as TestWindow;
-          draw.addDataset({ id: 'dataset', features });
+          draw.addDataset({ id: 'dataset', rows });
         },
         {
-          features: [BEHIND, IN_FRONT].map(
-            (ring, i): DatasetFeatureInput => ({
+          rows: [BEHIND, IN_FRONT].map((ring, i): DatasetRow => {
+            const polygon = polygonOf(ring, RED, stroke);
+            return {
+              type: 'Feature',
               id: `area-${i}`,
-              ...(polygonOf(ring, RED, stroke) as Pick<
-                DatasetFeatureInput,
-                'type' | 'coordinates' | 'properties' | 'style'
-              >),
-            }),
-          ),
+              geometry: { type: 'Polygon', coordinates: [ring] },
+              properties: polygon.properties ?? {},
+              style: polygon.style as DatasetRow['style'],
+            };
+          }),
         },
       );
       await capture();

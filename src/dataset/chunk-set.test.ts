@@ -13,6 +13,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, Feature } from '../shared/types/model.js';
+import { displayFeature } from '../test-utils.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
@@ -26,7 +27,6 @@ import { chunkTargetSizeFor, type DisplayChunk, partitionIntoChunks } from './ch
 import { type DisplayChunkFrame, DisplayChunkSet, type DisplayChunkSetHost } from './chunk-set.js';
 import { type ChunkCollector, collectFeatures } from './retained.js';
 import type { DrawnRowMask } from './thinning.js';
-import { normalizeDisplayFeature } from './types.js';
 
 const PROJECTION = {} as ProjectionData;
 
@@ -94,7 +94,7 @@ function createFeatures(): Feature[] {
   const features: Feature[] = [];
   for (let i = 0; i < 200; i++) {
     const lng = i < 100 ? i * 0.001 : 100 + i * 0.001;
-    features.push(normalizeDisplayFeature({ id: `p${i}`, type: 'Point', coordinates: [lng, 0] }));
+    features.push(displayFeature({ id: `p${i}`, type: 'Point', coordinates: [lng, 0] }));
   }
   return features;
 }
@@ -261,7 +261,7 @@ describe('DisplayChunkSet', () => {
 
   it('a change of the drawn rows rebuilds only the point part of the chunks drawn, while the camera moves too', () => {
     // The first group gets a polygon next to its points, so its chunks hold both
-    const square = normalizeDisplayFeature({
+    const square = displayFeature({
       id: 'square',
       type: 'Polygon',
       coordinates: [
@@ -329,7 +329,7 @@ describe('DisplayChunkSet', () => {
         getPolygonStyles: (feature) => styles.getPolygonStyles(feature),
       },
     };
-    const dashed = normalizeDisplayFeature({
+    const dashed = displayFeature({
       id: 'dashed',
       type: 'LineString',
       coordinates: [

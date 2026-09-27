@@ -267,8 +267,8 @@ describe('the dataset events of the instance', () => {
       },
     });
 
-    const parcels = draw.addDataset({ id: 'parcels', features: [] });
-    draw.addDataset({ id: 'roads', features: [] });
+    const parcels = draw.addDataset({ id: 'parcels', rows: [] });
+    draw.addDataset({ id: 'roads', rows: [] });
     draw.removeDataset('roads');
     parcels.remove();
 
@@ -284,8 +284,8 @@ describe('the dataset events of the instance', () => {
   it('emits draw.dataset.reorder when a move changes the order, to the host and to a plugin', () => {
     const stub = createMapStub();
     const draw = createMapLibreGLDraw(stub.map);
-    draw.addDataset({ id: 'parcels', features: [] });
-    draw.addDataset({ id: 'roads', features: [] });
+    draw.addDataset({ id: 'parcels', rows: [] });
+    draw.addDataset({ id: 'roads', rows: [] });
     const orders: string[][] = [];
     draw.on('draw.dataset.reorder', ({ order }) => orders.push(order));
     const pluginOrders: string[][] = [];
@@ -306,7 +306,7 @@ describe('the dataset events of the instance', () => {
   it('does not emit draw.dataset.remove when the instance is destroyed', () => {
     const stub = createMapStub();
     const draw = createMapLibreGLDraw(stub.map);
-    draw.addDataset({ id: 'parcels', features: [] });
+    draw.addDataset({ id: 'parcels', rows: [] });
     const removed = vi.fn();
     draw.on('draw.dataset.remove', removed);
 

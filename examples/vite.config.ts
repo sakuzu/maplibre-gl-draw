@@ -19,7 +19,7 @@ const PAGES = [
   'plugin',
   'custom-feature-type',
   'large-data',
-  'columnar-worker',
+  'table-worker',
 ];
 
 export default defineConfig({
@@ -49,8 +49,8 @@ export default defineConfig({
         replacement: resolve(root, '../src/geometry/index.ts'),
       },
       {
-        find: /^@sakuzu\/maplibre-gl-draw\/columnar$/,
-        replacement: resolve(root, '../src/dataset/columnar/index.ts'),
+        find: /^@sakuzu\/maplibre-gl-draw\/table$/,
+        replacement: resolve(root, '../src/table/index.ts'),
       },
       { find: /^@sakuzu\/maplibre-gl-draw$/, replacement: resolve(root, '../src/index.ts') },
     ],

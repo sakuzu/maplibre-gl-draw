@@ -13,7 +13,7 @@ measure on your own data.
 | What the user draws and edits | The Store | Editing, events, export |
 | Large reference data | A dataset | No editing cost |
 | Data too large to load at once | A dataset with a provider | Per extent |
-| A table of a million rows | Columns (`columnar`) | No object per row |
+| A table of a million rows | A table (`table`) | No object per row |
 
 A dataset is built for tens of thousands of features.
 A dataset of 50,000 polygons with a graduated style rule, panned and
@@ -22,7 +22,7 @@ display. With a provider, only the features of the visible extent are
 held, so the total size of the source does not matter.
 
 A table of hundreds of thousands of rows is best given as columns of
-typed arrays (`columnar`), read and prepared in a Worker: the rows are
+typed arrays (`table`), read and prepared in a Worker: the rows are
 packed straight into the GPU arrays, and the main thread does not build
 an object per row ([large data](large-data.md#a-table-as-columns)).
 

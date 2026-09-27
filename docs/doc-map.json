@@ -5,7 +5,7 @@
     "CHANGELOG.md": [
       "src/index.ts",
       "src/geometry/index.ts",
-      "src/dataset/columnar/index.ts",
+      "src/table/index.ts",
       "src/api/api.ts",
       "src/shared/types/**",
       "package.json"
@@ -75,9 +75,10 @@
     ],
     "docs/guides/large-data.md": [
       "src/dataset/**",
+      "src/table/**",
       "src/api/dataset-api.ts",
       "examples/large-data/**",
-      "examples/columnar-worker/**"
+      "examples/table-worker/**"
     ],
     "docs/guides/performance.md": [
       "src/shared/utils/pixel-ratio.ts",
@@ -86,7 +87,7 @@
     ],
     "docs/guides/frameworks.md": ["src/maplibre-gl-draw.ts"],
     "docs/guides/migrating.md": ["src/api/api.ts"],
-    "docs/reference/README.md": ["src/index.ts", "src/geometry/index.ts", "src/dataset/columnar/index.ts"],
+    "docs/reference/README.md": ["src/index.ts", "src/geometry/index.ts", "src/table/index.ts"],
     "docs/reference/events.md": ["src/api/event-api.ts", "src/shared/types/events.ts"],
     "docs/reference/data-format.md": [
       "src/api/import-export/native-format.ts",

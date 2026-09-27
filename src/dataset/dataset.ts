@@ -11,10 +11,10 @@
  * This class is the thin surface that ties the parts of a dataset together and holds its
  * public API, its events and its contents (a `DisplaySource`: the rows, their chunks and their
  * spatial index; and the selection). The contents are read only through that contract, whatever
- * form they were given in (an array of features, or a columnar table). The work is done by the
+ * form they were given in (an array of GeoJSON features, or a table). The work is done by the
  * parts:
  *
- * - `source.ts` (`FeatureArraySource`) and `columnar/source.ts` (`ColumnarSource`): the contents
+ * - `source.ts` (`FeatureArraySource`) and `table-source.ts` (`TableSource`): the contents
  * - `chunk-set.ts`: the retained chunks (building, drawing and invalidation)
  * - `provider.ts` (`DisplayProviderLoader`): the loading and the updates through a provider
  * - `thinning.ts` (`CollisionThinningState`): the collision thinning
@@ -30,12 +30,11 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, Coordinate, Feature, StyleRule } from '../shared/types/model.js';
+import type { PreparedTable, Table } from '../table/types.js';
 import { sanitizeDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import { TerrainContext } from '../view/terrain/context.js';
 import { DisplayChunkSet } from './chunk-set.js';
-import { ColumnarSource } from './columnar/source.js';
-import type { DatasetColumnarInput, DatasetColumnarPrepared } from './columnar/types.js';
 import { DisplayProviderLoader } from './provider.js';
 import type { CollectOptions } from './retained.js';
 import {
@@ -46,6 +45,7 @@ import {
 } from './selection.js';
 import { type DisplaySource, FeatureArraySource } from './source.js';
 import { DisplayFeatureStyler } from './style.js';
+import { TableSource } from './table-source.js';
 import type {
   DatasetCollisionThinning,
   DatasetThinningStats,
@@ -58,9 +58,9 @@ import type {
   DatasetBaseStyle,
   DatasetDeps,
   DatasetEventMap,
-  DatasetFeatureInput,
   DatasetOptions,
   DatasetOrder,
+  DatasetRow,
   DatasetZoomScale,
   DisplayBatchTarget,
   DisplayHitTestFn,
@@ -164,16 +164,11 @@ export class DatasetImpl implements Dataset {
     feature.type === 'Point' && this.externalPointRender?.(feature) === true;
 
   constructor(options: DatasetOptions, deps: DatasetDeps) {
-    const given = [options.features, options.columnar, options.provider].filter(
+    const given = [options.rows, options.table, options.provider].filter(
       (input) => input !== undefined,
     );
     if (given.length > 1) {
-      throw new Error(
-        `Dataset "${options.id}": only one of features, columnar and provider can be given`,
-      );
-    }
-    if (options.prepared && !options.columnar) {
-      throw new Error(`Dataset "${options.id}": prepared is given without columnar`);
+      throw new Error(`Dataset "${options.id}": only one of rows, table and provider can be given`);
     }
 
     this.id = options.id;
@@ -226,10 +221,10 @@ export class DatasetImpl implements Dataset {
         })
       : null;
 
-    if (options.features) {
-      this.setFeatures(options.features);
-    } else if (options.columnar) {
-      this.setColumnar(options.columnar, options.prepared);
+    if (options.rows) {
+      this.setRows(options.rows);
+    } else if (options.table) {
+      this.setTable(options.table);
     }
   }
 
@@ -272,13 +267,13 @@ export class DatasetImpl implements Dataset {
     this.deps.requestRepaint();
   }
 
-  setFeatures(features: DatasetFeatureInput[]): void {
-    this.applySource(new FeatureArraySource(features.map(normalizeDisplayFeature)));
+  setRows(rows: readonly DatasetRow[]): void {
+    this.applySource(new FeatureArraySource(rows.map(normalizeDisplayFeature)));
     this.deps.requestRepaint();
   }
 
-  setColumnar(input: DatasetColumnarInput, prepared?: DatasetColumnarPrepared): void {
-    this.applySource(new ColumnarSource(input, prepared));
+  setTable(table: Table | PreparedTable): void {
+    this.applySource(new TableSource(table));
     this.deps.requestRepaint();
   }
 
@@ -464,7 +459,7 @@ export class DatasetImpl implements Dataset {
     const source = this.source;
     // A table of points has nothing for it (and its rows are not built into features for
     // nothing)
-    if (source instanceof ColumnarSource && source.table.onlyPoints) return [];
+    if (source instanceof TableSource && source.table.onlyPoints) return [];
     const features: Feature[] = [];
     for (let row = 0; row < source.length; row++) {
       const type = source.typeOf(row);
@@ -513,9 +508,9 @@ export class DatasetImpl implements Dataset {
     );
   }
 
-  getRowFeature(row: number): Feature | null {
-    if (!this.hasRow(row)) return null;
-    return this.styler.prepareIfStyled(this.source.featureAt(row));
+  getRow(index: number): Feature | undefined {
+    if (!this.hasRow(index)) return undefined;
+    return this.styler.prepareIfStyled(this.source.featureAt(index));
   }
 
   getRowId(row: number): string | null {
@@ -755,8 +750,8 @@ export class DatasetImpl implements Dataset {
   /**
    * Applies new contents (the chunks, the index and the caches come with them)
    *
-   * The only triggers for rebuilding the retained batches are this path (setFeatures,
-   * setColumnar and applying a provider result) and setStyleRule / setBaseStyle.
+   * The only triggers for rebuilding the retained batches are this path (setRows,
+   * setTable and applying a provider result) and setStyleRule / setBaseStyle.
    */
   private applySource(source: DisplaySource): void {
     this.source = source;

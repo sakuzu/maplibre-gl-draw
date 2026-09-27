@@ -27,12 +27,12 @@ The package has three entry points.
   operations, buffer, splitting, predicates, measurement). They do not
   depend on maplibre-gl, the DOM or the instance, so they also run in
   Node and in workers
-- `@sakuzu/maplibre-gl-draw/columnar` — the preparation of a columnar
-  table for a dataset (`prepareDatasetColumnar`), whose rows have one
-  geometry type or several, and the list of its buffers for
-  `postMessage` (`columnarTransferables`). It
-  depends on neither maplibre-gl nor WebGL nor the DOM, so a Worker that
-  reads a file can use it
+- `@sakuzu/maplibre-gl-draw/table` — the building of a table for a
+  dataset from GeoJSON (`tableFromFeatures`, `createTableBuilder`), whose
+  rows have one geometry type or several, its preparation
+  (`prepareTable`) and the list of its buffers for `postMessage`
+  (`transferList`). It depends on neither maplibre-gl nor WebGL nor the
+  DOM, so a Worker that reads a file can use it
 
 Import only from these three. Paths inside the package (`dist/...`) are
 not public and may change in any release.
