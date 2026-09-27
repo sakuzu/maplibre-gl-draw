@@ -7,8 +7,8 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Feature, StyleRule } from '../shared/types/model.js';
+import { displayFeature } from '../test-utils.js';
 import { DisplayFeatureStyler } from './style.js';
-import { normalizeDisplayFeature } from './types.js';
 
 const RULE: StyleRule = {
   kind: 'categorical',
@@ -18,7 +18,7 @@ const RULE: StyleRule = {
 };
 
 function line(id: string, style?: Feature['style']): Feature {
-  return normalizeDisplayFeature({
+  return displayFeature({
     id,
     type: 'LineString',
     coordinates: [

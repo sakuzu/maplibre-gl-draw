@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The contents given as a columnar table (`ColumnarSource`)
+ * The contents given as a table (`TableSource`)
  *
  * It implements the contract of `source.ts` over the typed arrays of the table. What a draw and a
  * hit test need is read from the arrays as they are: the chunks and the spatial index come from
- * `prepareDatasetColumnar` (computed in a Worker, or here when it was not given), and the rows of
+ * `prepareTable` (computed in a Worker, or here when it was not given), and the rows of
  * a chunk are packed straight into the GPU arrays. A feature is built only for a row that is
  * asked for (a hit, the selection, `getFeatures`, the analytic drape, a row drawn in immediate
  * mode).
@@ -22,19 +22,24 @@
  * are drawn in the order of the table whatever the order within the children.
  */
 
-import type { Feature } from '../../shared/types/model.js';
-import type { Color } from '../../shared/types/style.js';
-import { toPackedPointStyle } from '../../view/renderers/batch-manager.js';
-import { toLineInstanceColor } from '../../view/renderers/line/line-geometry.js';
-import type { SDFStrokeStyle } from '../../view/renderers/line/line-types.js';
+import type { Feature } from '../shared/types/model.js';
+import type { Color } from '../shared/types/style.js';
+import { isPreparedTable, prepareTable } from '../table/prepare.js';
 import {
-  type PointShape,
-  toInstancedPointShape,
-} from '../../view/renderers/point/point-instance.js';
-import type { SDFPolygonStyle } from '../../view/renderers/polygon/sdf-polygon.js';
-import type { RetainedStyleResolver } from '../../view/renderers/retained.js';
-import { evaluateStyleRuleValue, getStyleRuleChannel } from '../../view/style-rule.js';
-import { type DisplayChunk, toDisplayChunks } from '../chunk.js';
+  columnValue,
+  type GeometryColumnReader,
+  isDictionaryColumn,
+  TableReader,
+} from '../table/table.js';
+import type { GeometryType, PreparedTable, Table } from '../table/types.js';
+import { toPackedPointStyle } from '../view/renderers/batch-manager.js';
+import { toLineInstanceColor } from '../view/renderers/line/line-geometry.js';
+import type { SDFStrokeStyle } from '../view/renderers/line/line-types.js';
+import { type PointShape, toInstancedPointShape } from '../view/renderers/point/point-instance.js';
+import type { SDFPolygonStyle } from '../view/renderers/polygon/sdf-polygon.js';
+import type { RetainedStyleResolver } from '../view/renderers/retained.js';
+import { evaluateStyleRuleValue, getStyleRuleChannel } from '../view/style-rule.js';
+import { type DisplayChunk, toDisplayChunks } from './chunk.js';
 import {
   type ChunkCollector,
   type ChunkDraft,
@@ -44,23 +49,11 @@ import {
   PackedLinesBuilder,
   PackedPointsBuilder,
   pushFallback,
-} from '../retained.js';
-import type { DisplaySource, SourceCollectContext } from '../source.js';
-import { DisplaySpatialIndex } from '../spatial.js';
-import type { DisplayFeatureStyler } from '../style.js';
-import type { ThinningRole } from '../thinning.js';
-import { prepareDatasetColumnar } from './prepare.js';
-import {
-  type ColumnarGeometryColumn,
-  ColumnarTable,
-  columnValue,
-  isDictionaryColumn,
-} from './table.js';
-import type {
-  DatasetColumnarGeometryType,
-  DatasetColumnarInput,
-  DatasetColumnarPrepared,
-} from './types.js';
+} from './retained.js';
+import type { DisplaySource, SourceCollectContext } from './source.js';
+import { DisplaySpatialIndex } from './spatial.js';
+import type { DisplayFeatureStyler } from './style.js';
+import type { ThinningRole } from './thinning.js';
 
 /** The column the zoom of creation of a row is read from (the same key as on a feature) */
 const CREATED_ZOOM_COLUMN = 'createdZoom';
@@ -95,10 +88,10 @@ interface PolygonSlot {
 }
 
 /** The slots of one kind of style, per geometry type and then per rule color */
-type SlotMaps<T> = Map<DatasetColumnarGeometryType, Map<string, T>>;
+type SlotMaps<T> = Map<GeometryType, Map<string, T>>;
 
 /** The slots of a geometry type (created on the first request) */
-function slotsOfType<T>(maps: SlotMaps<T>, type: DatasetColumnarGeometryType): Map<string, T> {
+function slotsOfType<T>(maps: SlotMaps<T>, type: GeometryType): Map<string, T> {
   let slots = maps.get(type);
   if (!slots) {
     slots = new Map();
@@ -110,7 +103,7 @@ function slotsOfType<T>(maps: SlotMaps<T>, type: DatasetColumnarGeometryType): M
 /**
  * The styles of the rows of a table, resolved once per geometry type and rule color
  */
-class ColumnarStyleSlots {
+class TableStyleSlots {
   private readonly points: SlotMaps<PointSlot> = new Map();
   private readonly lines: SlotMaps<LineSlot> = new Map();
   private readonly polygons: SlotMaps<PolygonSlot> = new Map();
@@ -118,7 +111,7 @@ class ColumnarStyleSlots {
   private readonly codeColors: (string | undefined)[] = [];
 
   constructor(
-    private readonly table: ColumnarTable,
+    private readonly table: TableReader,
     private readonly styler: DisplayFeatureStyler,
     private readonly resolver: RetainedStyleResolver,
   ) {}
@@ -146,7 +139,7 @@ class ColumnarStyleSlots {
     return evaluateStyleRuleValue(rule, columnValue(column, row));
   }
 
-  point(type: DatasetColumnarGeometryType, color: string | null): PointSlot {
+  point(type: GeometryType, color: string | null): PointSlot {
     const key = color ?? NO_RULE_COLOR;
     const slots = slotsOfType(this.points, type);
     let slot = slots.get(key);
@@ -158,7 +151,7 @@ class ColumnarStyleSlots {
     return slot;
   }
 
-  line(type: DatasetColumnarGeometryType, color: string | null): LineSlot {
+  line(type: GeometryType, color: string | null): LineSlot {
     const key = color ?? NO_RULE_COLOR;
     const slots = slotsOfType(this.lines, type);
     let slot = slots.get(key);
@@ -170,7 +163,7 @@ class ColumnarStyleSlots {
     return slot;
   }
 
-  polygon(type: DatasetColumnarGeometryType, color: string | null): PolygonSlot {
+  polygon(type: GeometryType, color: string | null): PolygonSlot {
     const key = color ?? NO_RULE_COLOR;
     const slots = slotsOfType(this.polygons, type);
     let slot = slots.get(key);
@@ -197,7 +190,7 @@ class ColumnarStyleSlots {
   }
 
   /** A feature of a geometry type carrying the style a row with this rule color gets */
-  private probe(type: DatasetColumnarGeometryType, color: string | null): Feature {
+  private probe(type: GeometryType, color: string | null): Feature {
     return {
       id: '',
       type,
@@ -212,12 +205,12 @@ class ColumnarStyleSlots {
 }
 
 /**
- * The contents of a dataset given as a columnar table
+ * The contents of a dataset given as a table
  *
  * @internal
  */
-export class ColumnarSource implements DisplaySource {
-  readonly table: ColumnarTable;
+export class TableSource implements DisplaySource {
+  readonly table: TableReader;
   readonly length: number;
   readonly bounds: Float64Array;
   readonly chunks: readonly DisplayChunk[];
@@ -230,21 +223,26 @@ export class ColumnarSource implements DisplaySource {
   /** The row of each id, built on the first request (only with an ids column) */
   private rowById: Map<string, number> | null = null;
   /** The resolved styles, and what they were resolved with */
-  private slots: ColumnarStyleSlots | null = null;
+  private slots: TableStyleSlots | null = null;
   private slotsKey: readonly [number, DisplayFeatureStyler, RetainedStyleResolver] | null = null;
 
   /**
-   * @param prepared The result of `prepareDatasetColumnar` for this table (computed here when
-   *   omitted)
-   * @throws when the table does not add up, or when `prepared` was made for another length
+   * @param given The table, or the result of `prepareTable` (the preparation is computed here
+   *   for a bare table)
+   * @throws when the table does not add up, or when a prepared table does not match its table
    */
-  constructor(input: DatasetColumnarInput, prepared?: DatasetColumnarPrepared) {
-    this.table = new ColumnarTable(input);
+  constructor(given: Table | PreparedTable) {
+    const prepared = isPreparedTable(given) ? given : null;
+    const input = prepared ? prepared.table : (given as Table);
+    this.table = new TableReader(input);
     this.length = this.table.length;
-    const ready = prepared ?? prepareDatasetColumnar(input);
+    const ready = prepared ?? prepareTable(input);
+    if (!(ready.bounds instanceof Float64Array) || !(ready.indexBoxes instanceof Float64Array)) {
+      throw new Error('Table: a prepared table must be made by prepareTable');
+    }
     if (ready.length !== this.length || ready.bounds.length !== this.length * 4) {
       throw new Error(
-        `Columnar input: prepared was made for ${ready.length} rows, the table has ${this.length}`,
+        `Table: the prepared table was made for ${ready.length} rows, the table has ${this.length}`,
       );
     }
     this.bounds = ready.bounds;
@@ -304,7 +302,7 @@ export class ColumnarSource implements DisplaySource {
   }
 
   pointOf(row: number): readonly [number, number] {
-    const column = this.table.columnOf(row) as ColumnarGeometryColumn;
+    const column = this.table.columnOf(row) as GeometryColumnReader;
     return column.position(this.table.childRowOf(row));
   }
 
@@ -432,7 +430,7 @@ export class ColumnarSource implements DisplaySource {
   private slotsFor(
     context: SourceCollectContext,
     resolver: RetainedStyleResolver,
-  ): ColumnarStyleSlots {
+  ): TableStyleSlots {
     const key = this.slotsKey;
     if (
       !this.slots ||
@@ -441,7 +439,7 @@ export class ColumnarSource implements DisplaySource {
       key[1] !== context.styler ||
       key[2] !== resolver
     ) {
-      this.slots = new ColumnarStyleSlots(this.table, context.styler, resolver);
+      this.slots = new TableStyleSlots(this.table, context.styler, resolver);
       this.slotsKey = [context.styleKey, context.styler, resolver];
     }
     return this.slots;
@@ -449,7 +447,7 @@ export class ColumnarSource implements DisplaySource {
 }
 
 /** Whether the analytic drape draws the rows of this type */
-function isDraped(type: DatasetColumnarGeometryType): boolean {
+function isDraped(type: GeometryType): boolean {
   return isDrapedGeometry({ type } as Feature);
 }
 
@@ -460,9 +458,9 @@ function isDraped(type: DatasetColumnarGeometryType): boolean {
  */
 class RowCollector {
   constructor(
-    private readonly source: ColumnarSource,
+    private readonly source: TableSource,
     private readonly draft: ChunkDraft,
-    private readonly slots: ColumnarStyleSlots,
+    private readonly slots: TableStyleSlots,
     private readonly fallback: (row: number) => void,
   ) {}
 
@@ -470,7 +468,7 @@ class RowCollector {
    * A point at coordinate `v` of the geometry column of the row (a shape without instancing
    * support goes to immediate mode)
    */
-  point(row: number, column: ColumnarGeometryColumn, v: number): void {
+  point(row: number, column: GeometryColumnReader, v: number): void {
     const slot = this.slots.point(column.type, this.slots.ruleColorOf(row));
     if (!slot.shape) {
       this.fallback(row);
@@ -491,7 +489,7 @@ class RowCollector {
    */
   line(
     row: number,
-    column: ColumnarGeometryColumn,
+    column: GeometryColumnReader,
     start: number,
     end: number,
     createdZoom: number | undefined,
@@ -535,7 +533,7 @@ class RowCollector {
    */
   polygon(
     row: number,
-    column: ColumnarGeometryColumn,
+    column: GeometryColumnReader,
     ringStart: number,
     ringEnd: number,
     ringOffsets: Int32Array,

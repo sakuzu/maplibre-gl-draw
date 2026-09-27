@@ -7,7 +7,7 @@
  * The rows are ordered along a Hilbert curve of the centers of their bboxes and grouped bottom up
  * into nodes of a fixed size. The whole tree is three typed arrays, so it is built in one pass
  * without an object per row, and it can be built in a Worker and sent to the main thread without
- * a copy (`prepareDatasetColumnar`). The contents of a dataset are replaced as a
+ * a copy (`prepareTable`). The contents of a dataset are replaced as a
  * whole, so a tree that cannot be updated in place is enough.
  *
  * A pure module: it depends on nothing.

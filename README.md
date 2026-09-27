@@ -144,7 +144,7 @@ Try them in the browser, with nothing to install.
 - [Datasets][ex-large-data]
   - 50,000 cells colored by a property, and points fetched for the part
     of the map in view
-- [A million points][ex-columnar-worker]
+- [A million points][ex-table-worker]
   - A million points read in a Worker
 
 ## Installation
@@ -252,4 +252,4 @@ The notices of the third-party code this package contains are in
 [ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
 [ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
 [ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
-[ex-columnar-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-worker/
+[ex-table-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/table-worker/

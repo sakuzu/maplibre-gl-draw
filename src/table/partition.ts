@@ -5,9 +5,9 @@
  * The splitting of the rows of a dataset into spatial chunks
  *
  * A pure function over typed arrays: it depends on neither the features, nor maplibre, nor
- * WebGL, so it runs in a Worker as well (`prepareDatasetColumnar` calls it there). Both kinds of
- * contents use it: the features (`chunk.ts` computes the per-row arrays from them) and the
- * columnar input (`columnar/prepare.ts`).
+ * WebGL, so it runs in a Worker as well (`prepareTable` calls it there). Both kinds of contents
+ * use it: the features (`dataset/chunk.ts` computes the per-row arrays from them) and the tables
+ * (`prepare.ts`).
  *
  * The rule: the rows are cut in half at the median of the centers of their bboxes (the way a k-d
  * tree is built) until a range holds at most the target number of rows and the target number of

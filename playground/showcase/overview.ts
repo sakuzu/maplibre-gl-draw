@@ -13,7 +13,7 @@
  * `style.pointShape`, so nothing needs to be registered on the draw instance.
  */
 
-import { type DatasetFeatureInput, deriveLegend, type StyleRule } from '@sakuzu/maplibre-gl-draw';
+import { type DatasetRow, deriveLegend, type StyleRule } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import { nextFrame, type ShowcaseContext, type ShowcaseScene } from './scene';
@@ -126,13 +126,13 @@ function escapeHtml(text: string): string {
 /**
  * Hexagonal cells over a round patch, with a smooth made-up density from 0 to 100
  */
-function createGrid(): DatasetFeatureInput[] {
+function createGrid(): DatasetRow[] {
   const [lng0, lat0] = GRID.center;
   const k = Math.cos((lat0 * Math.PI) / 180);
   const r = GRID.cell;
   const dx = Math.sqrt(3) * r;
   const dy = 1.5 * r;
-  const features: DatasetFeatureInput[] = [];
+  const features: DatasetRow[] = [];
   const n = Math.ceil(GRID.radius / dy) + 1;
 
   for (let row = -n; row <= n; row++) {
@@ -159,9 +159,9 @@ function createGrid(): DatasetFeatureInput[] {
         ring.push([lng0 + x + r * 0.94 * Math.cos(a), lat0 + (y + r * 0.94 * Math.sin(a)) * k]);
       }
       features.push({
+        type: 'Feature',
         id: `cell-${row}-${col}`,
-        type: 'Polygon',
-        coordinates: [ring],
+        geometry: { type: 'Polygon', coordinates: [ring] },
         properties: { density: Math.round(Math.min(100, Math.max(0, density))) },
         style: { fillOpacity: 0.8, strokeWidth: 0, strokeOpacity: 0 },
       });

@@ -1,18 +1,14 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// columnar-worker: a large table read in a Worker and drawn from its columns.
+// table-worker: a large table read in a Worker and drawn from its columns.
 // The Worker builds the rows as typed arrays in the layout of GeoArrow and prepares them
-// (the bboxes, the chunks and the spatial index of the hit testing), then sends both without a
+// (the bboxes, the chunks and the spatial index of the hit testing), then sends them without a
 // copy. The page hands them to a dataset, which draws the rows from the arrays
 // without building an object per row. A click reports the row, read from the same columns.
 
-import {
-  createMapLibreGLDraw,
-  type DatasetColumnarInput,
-  type DatasetColumnarPrepared,
-  type DatasetDictionaryColumn,
-} from '@sakuzu/maplibre-gl-draw';
+import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { DictionaryColumn, PreparedTable, Table } from '@sakuzu/maplibre-gl-draw/table';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -42,7 +38,7 @@ const places = draw.addDataset({
 });
 
 /** The table the dataset holds (the page reads its columns too) */
-let table: DatasetColumnarInput | null = null;
+let table: Table | null = null;
 
 /** Reads `count` points in the Worker and shows them */
 function load(count: number): Promise<void> {
@@ -50,23 +46,17 @@ function load(count: number): Promise<void> {
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   const started = performance.now();
   return new Promise((resolve) => {
-    worker.onmessage = (
-      event: MessageEvent<{
-        input: DatasetColumnarInput;
-        prepared: DatasetColumnarPrepared;
-        workerMs: number;
-      }>,
-    ) => {
+    worker.onmessage = (event: MessageEvent<{ prepared: PreparedTable; workerMs: number }>) => {
       worker.terminate();
-      const { input, prepared, workerMs } = event.data;
+      const { prepared, workerMs } = event.data;
       const handedOver = performance.now();
-      places.setColumnar(input, prepared);
-      table = input;
+      places.setTable(prepared);
+      table = prepared.table;
       const setMs = performance.now() - handedOver;
       output.textContent =
         `${count.toLocaleString()} points: ${Math.round(workerMs)} ms in the Worker, ` +
         `${Math.round(handedOver - started)} ms until they arrived, ` +
-        `${Math.round(setMs)} ms in setColumnar`;
+        `${Math.round(setMs)} ms in setTable`;
       resolve();
     };
     worker.postMessage({ count, center: CENTER });
@@ -76,7 +66,7 @@ function load(count: number): Promise<void> {
 // A click reports the row; the page reads the values from its own columns
 places.on('click', ({ row }) => {
   if (!table?.columns) return;
-  const kind = table.columns.kind as DatasetDictionaryColumn;
+  const kind = table.columns.kind as DictionaryColumn;
   const value = table.columns.value as Float64Array;
   output.textContent = `row ${row}: ${kind.dictionary[kind.codes[row]]}, value ${value[row]}`;
 });

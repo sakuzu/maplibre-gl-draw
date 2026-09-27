@@ -2,18 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the reading of a columnar table
+ * Tests for the reading of a table
  */
 
 import { describe, expect, it } from 'vitest';
-import { ColumnarTable, columnValue } from './table.js';
-import type {
-  DatasetColumnarGeometry,
-  DatasetColumnarInput,
-  DatasetColumnarMixedGeometry,
-} from './types.js';
+import { columnValue, TableReader } from './table.js';
+import type { Table, TableGeometry, TableMixedGeometry } from './types.js';
 
-const lines = (): DatasetColumnarInput & { geometry: DatasetColumnarGeometry } => ({
+const lines = (): Table & { geometry: TableGeometry } => ({
   length: 2,
   geometry: {
     type: 'LineString',
@@ -24,39 +20,39 @@ const lines = (): DatasetColumnarInput & { geometry: DatasetColumnarGeometry } =
 
 describe('the checks of the shape', () => {
   it('accepts a table that adds up', () => {
-    expect(() => new ColumnarTable(lines())).not.toThrow();
+    expect(() => new TableReader(lines())).not.toThrow();
   });
 
   it('refuses a wrong number of offset arrays', () => {
     const input = lines();
     input.geometry.offsets = [];
-    expect(() => new ColumnarTable(input)).toThrow(/offset arrays/);
+    expect(() => new TableReader(input)).toThrow(/offset arrays/);
   });
 
   it('refuses an offset array shorter than the rows', () => {
     const input = lines();
     input.geometry.offsets = [Int32Array.of(0, 2)];
-    expect(() => new ColumnarTable(input)).toThrow(/entries/);
+    expect(() => new TableReader(input)).toThrow(/entries/);
   });
 
   it('refuses offsets beyond the coordinates', () => {
     const input = lines();
     input.geometry.offsets = [Int32Array.of(0, 2, 6)];
-    expect(() => new ColumnarTable(input)).toThrow(/reach coordinate/);
+    expect(() => new TableReader(input)).toThrow(/reach coordinate/);
   });
 
   it('refuses coordinates that are not a Float64Array, and an unknown type', () => {
     const input = lines();
     expect(
       () =>
-        new ColumnarTable({
+        new TableReader({
           ...input,
           geometry: { ...input.geometry, coords: [0, 0] as unknown as Float64Array },
         }),
     ).toThrow(/Float64Array/);
     expect(
       () =>
-        new ColumnarTable({
+        new TableReader({
           ...input,
           geometry: { ...input.geometry, type: 'Circle' as never },
         }),
@@ -64,7 +60,7 @@ describe('the checks of the shape', () => {
   });
 
   it('refuses a column shorter than the table', () => {
-    expect(() => new ColumnarTable({ ...lines(), columns: { v: Float64Array.of(1) } })).toThrow(
+    expect(() => new TableReader({ ...lines(), columns: { v: Float64Array.of(1) } })).toThrow(
       /column "v"/,
     );
   });
@@ -72,7 +68,7 @@ describe('the checks of the shape', () => {
 
 describe('the rows', () => {
   it('reads the coordinates of every type, skipping z', () => {
-    const polygon = new ColumnarTable({
+    const polygon = new TableReader({
       length: 1,
       geometry: {
         type: 'MultiPolygon',
@@ -128,7 +124,7 @@ describe('the rows', () => {
   });
 
   it('a row without a geometry has NaN bounds (an empty run, a NaN point, a validity bit)', () => {
-    const table = new ColumnarTable({
+    const table = new TableReader({
       length: 3,
       geometry: { type: 'Point', coords: Float64Array.of(0, 0, Number.NaN, Number.NaN, 2, 2) },
       validity: Uint8Array.of(0b011),
@@ -141,7 +137,7 @@ describe('the rows', () => {
   });
 
   it('the values of the columns and the ids', () => {
-    const table = new ColumnarTable({
+    const table = new TableReader({
       ...lines(),
       ids: Int32Array.of(10, 20),
       columns: {
@@ -159,7 +155,7 @@ describe('the rows', () => {
 });
 
 /** A point, a line with z values and a polygon; the rows of the table in another order */
-const mixed = (): DatasetColumnarInput & { geometry: DatasetColumnarMixedGeometry } => ({
+const mixed = (): Table & { geometry: TableMixedGeometry } => ({
   length: 5,
   geometry: {
     type: 'Mixed',
@@ -184,7 +180,7 @@ const mixed = (): DatasetColumnarInput & { geometry: DatasetColumnarMixedGeometr
 
 describe('a mixed geometry column', () => {
   it('reads each row from its child, at its row within the child', () => {
-    const table = new ColumnarTable(mixed());
+    const table = new TableReader(mixed());
     expect(table.featureAt(0, true).type).toBe('Polygon');
     expect(table.coordinatesOf(0)).toEqual([
       [
@@ -210,7 +206,7 @@ describe('a mixed geometry column', () => {
   });
 
   it('validity still applies on top', () => {
-    const table = new ColumnarTable({ ...mixed(), validity: Uint8Array.of(0b11101) });
+    const table = new TableReader({ ...mixed(), validity: Uint8Array.of(0b11101) });
     const bounds = table.computeBounds();
     expect(Number.isNaN(bounds[4])).toBe(true);
     expect(Array.from(bounds.subarray(0, 4))).toEqual([3, 3, 4, 5]);
@@ -219,8 +215,8 @@ describe('a mixed geometry column', () => {
   it('refuses arrays of the wrong type or shorter than the table', () => {
     const input = mixed();
     const geometry = input.geometry;
-    const at = (patch: Partial<DatasetColumnarMixedGeometry>) => () =>
-      new ColumnarTable({ ...input, geometry: { ...geometry, ...patch } });
+    const at = (patch: Partial<TableMixedGeometry>) => () =>
+      new TableReader({ ...input, geometry: { ...geometry, ...patch } });
     expect(at({ types: Int32Array.of(0) as unknown as Int8Array })).toThrow(/types must be/);
     expect(at({ offsets: [0] as unknown as Int32Array })).toThrow(/offsets must be/);
     expect(at({ types: Int8Array.of(0, 0) })).toThrow(/types is shorter/);
@@ -230,8 +226,8 @@ describe('a mixed geometry column', () => {
   it('refuses a missing child, a row past the end of its child, and a broken child', () => {
     const input = mixed();
     const geometry = input.geometry;
-    const at = (patch: Partial<DatasetColumnarMixedGeometry>) => () =>
-      new ColumnarTable({ ...input, geometry: { ...geometry, ...patch } });
+    const at = (patch: Partial<TableMixedGeometry>) => () =>
+      new TableReader({ ...input, geometry: { ...geometry, ...patch } });
     expect(at({ types: Int8Array.of(2, 0, -1, 3, 0) })).toThrow(
       /geometry\.types\[3\] is 3, but there are 3 children/,
     );

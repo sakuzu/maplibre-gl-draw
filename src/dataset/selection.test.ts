@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import { SELECTION_HIGHLIGHT_COLOR } from '../shared/config/selection-highlight.js';
 import type { BoundingBox, Feature } from '../shared/types/model.js';
+import { toRow } from '../test-utils.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
@@ -27,36 +28,40 @@ import {
   type SelectionHighlightInput,
   sameFeatureIds,
 } from './selection.js';
-import type { DatasetFeatureInput, DisplayBatchTarget } from './types.js';
+import type { DatasetRow, DisplayBatchTarget } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
-function feature(input: DatasetFeatureInput): Feature {
-  return normalizeDisplayFeature(input);
+function feature(input: DatasetRow): Feature {
+  return normalizeDisplayFeature(input, 0);
 }
 
-const POINT = feature({ id: 'p', type: 'Point', coordinates: [0, 0] });
-const LINE = feature({
-  id: 'l',
-  type: 'LineString',
-  coordinates: [
-    [0, 0],
-    [1, 1],
-  ],
-});
-const POLYGON = feature({
-  id: 'g',
-  type: 'Polygon',
-  coordinates: [
-    [
+const POINT = feature(toRow({ id: 'p', type: 'Point', coordinates: [0, 0] }));
+const LINE = feature(
+  toRow({
+    id: 'l',
+    type: 'LineString',
+    coordinates: [
       [0, 0],
-      [1, 0],
       [1, 1],
-      [0, 0],
     ],
-  ],
-});
+  }),
+);
+const POLYGON = feature(
+  toRow({
+    id: 'g',
+    type: 'Polygon',
+    coordinates: [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ],
+    ],
+  }),
+);
 
 function createStyles(): FeatureDrawer {
   return new FeatureDrawer({
@@ -208,8 +213,8 @@ describe('hitTestDisplayFeatures', () => {
   };
 
   it('the frontmost candidate that passes the precise test wins', () => {
-    const a = feature({ id: 'a', type: 'Point', coordinates: [0, 0] });
-    const b = feature({ id: 'b', type: 'Point', coordinates: [0, 0] });
+    const a = feature(toRow({ id: 'a', type: 'Point', coordinates: [0, 0] }));
+    const b = feature(toRow({ id: 'b', type: 'Point', coordinates: [0, 0] }));
     const hit = hitTestDisplayFeatures({
       ...base,
       coordinate: [0, 0],
@@ -222,8 +227,8 @@ describe('hitTestDisplayFeatures', () => {
   });
 
   it('a thinned or hidden feature cannot be grabbed', () => {
-    const a = feature({ id: 'a', type: 'Point', coordinates: [0, 0] });
-    const b = feature({ id: 'b', type: 'Point', coordinates: [0, 0], visible: false });
+    const a = feature(toRow({ id: 'a', type: 'Point', coordinates: [0, 0] }));
+    const b = feature(toRow({ id: 'b', type: 'Point', coordinates: [0, 0], visible: false }));
     const hit = hitTestDisplayFeatures({
       ...base,
       coordinate: [0, 0],

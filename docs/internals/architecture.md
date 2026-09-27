@@ -140,6 +140,8 @@ composes the public API.
                  |
                extension/      contracts for extensions (types only)
                  |
+               table/          tables of rows as columns (a sub-entry)
+                 |
                shared/         types, math, config, utils
                  |
                geometry/       pure geometry, no dependencies
@@ -985,8 +987,8 @@ The runtime dependencies are `earcut` (triangulation), `rbush` (the
 spatial index of the Store), `polygon-clipping` (boolean operations in
 `geometry/`, and the only dependency of that sub-entry), `ulid` (ids; the
 random bytes are drawn in batches, `shared/utils/id.ts`) and
-`@types/geojson`. The `columnar` sub-entry (`dataset/columnar/index.ts`)
-has no runtime dependency.
+`@types/geojson`. The `table` sub-entry (`table/index.ts`) has no runtime
+dependency.
 
 - `@types/geojson` is a runtime dependency because the emitted declarations
   refer to the `geojson` types.
@@ -1022,7 +1024,8 @@ part.
 | `operations/` | Resize, rotate, vertex, tracing |
 | `snapping/` | SnapService, providers, marker |
 | `view/` | CustomLayer, renderers, shaders, UI |
-| `dataset/` | Datasets, `columnar` sub-entry |
+| `dataset/` | Datasets |
+| `table/` | Tables of rows as columns (sub-entry) |
 | `plugins/` | PluginManager, context, hooks |
 | `extension/` | Contracts for extensions (types) |
 | `shared/` | Types, math, config, utils |

@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BoundingBox, Feature } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import {
   DEFAULT_TILE_CACHE_SIZE,
@@ -22,7 +23,7 @@ import {
   toTileRange,
   toZoomStage,
 } from './provider.js';
-import type { DatasetFeatureInput, DatasetFeatureProvider } from './types.js';
+import type { DatasetFeatureProvider, DatasetRow } from './types.js';
 
 describe('the pure functions of the tile keys', () => {
   it('the zoom stage is floored to an integer and clamped into 0-22', () => {
@@ -112,11 +113,11 @@ describe('TileFeatureCache', () => {
 
 /** A controllable Promise */
 function deferred(): {
-  promise: Promise<DatasetFeatureInput[]>;
-  resolve: (features: DatasetFeatureInput[]) => void;
+  promise: Promise<DatasetRow[]>;
+  resolve: (features: DatasetRow[]) => void;
 } {
-  let resolve: (features: DatasetFeatureInput[]) => void = () => {};
-  const promise = new Promise<DatasetFeatureInput[]>((r) => {
+  let resolve: (features: DatasetRow[]) => void = () => {};
+  const promise = new Promise<DatasetRow[]>((r) => {
     resolve = r;
   });
   return { promise, resolve };
@@ -127,8 +128,8 @@ function around(lng: number, lat: number): BoundingBox {
   return { minX: lng - 0.01, minY: lat - 0.01, maxX: lng + 0.01, maxY: lat + 0.01 };
 }
 
-function feature(id: string): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: [0, 0] };
+function feature(id: string): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: [0, 0] });
 }
 
 describe('the calls of the provider', () => {
@@ -333,7 +334,7 @@ describe('the calls of the provider', () => {
   });
 
   it('a dataset without a provider does nothing when the displayed range changes', async () => {
-    const dataset = manager.add({ id: 'c1', features: [feature('a')] });
+    const dataset = manager.add({ id: 'c1', rows: [feature('a')] });
 
     bounds = around(20, 0);
     fireViewportChange();
@@ -416,7 +417,7 @@ describe('the calls of the provider', () => {
     });
 
     it('it does nothing for a dataset without a provider', async () => {
-      const dataset = manager.add({ id: 'c1', features: [feature('a')] });
+      const dataset = manager.add({ id: 'c1', rows: [feature('a')] });
 
       dataset.invalidateProviderCache();
       await vi.advanceTimersByTimeAsync(DEBOUNCE * 2);
@@ -447,12 +448,12 @@ describe('DisplayProviderLoader', () => {
     return { loader, applied };
   }
 
-  const result = (id: string): DatasetFeatureInput[] => [
-    {
+  const result = (id: string): DatasetRow[] => [
+    toRow({
       id,
       type: 'Point',
-      coordinates: [139.75, 35.65, 12] as unknown as DatasetFeatureInput['coordinates'],
-    },
+      coordinates: [139.75, 35.65, 12],
+    }),
   ];
 
   it('the call is debounced and the normalized result is applied', async () => {
@@ -487,10 +488,8 @@ describe('DisplayProviderLoader', () => {
   });
 
   it('only the response of the last request is applied', async () => {
-    const resolvers: Array<(value: DatasetFeatureInput[]) => void> = [];
-    const provider = vi.fn(
-      () => new Promise<DatasetFeatureInput[]>((resolve) => resolvers.push(resolve)),
-    );
+    const resolvers: Array<(value: DatasetRow[]) => void> = [];
+    const provider = vi.fn(() => new Promise<DatasetRow[]>((resolve) => resolvers.push(resolve)));
     const { loader, applied } = createLoader(provider);
     loader.schedule(VIEW, 12);
     await vi.advanceTimersByTimeAsync(100);
@@ -504,10 +503,8 @@ describe('DisplayProviderLoader', () => {
   });
 
   it('a response in flight across invalidate is thrown away and the range is fetched again', async () => {
-    const resolvers: Array<(value: DatasetFeatureInput[]) => void> = [];
-    const provider = vi.fn(
-      () => new Promise<DatasetFeatureInput[]>((resolve) => resolvers.push(resolve)),
-    );
+    const resolvers: Array<(value: DatasetRow[]) => void> = [];
+    const provider = vi.fn(() => new Promise<DatasetRow[]>((resolve) => resolvers.push(resolve)));
     const { loader, applied } = createLoader(provider);
     loader.schedule(VIEW, 12);
     await vi.advanceTimersByTimeAsync(100);
@@ -522,10 +519,8 @@ describe('DisplayProviderLoader', () => {
   });
 
   it('after dispose nothing is called or applied', async () => {
-    const resolvers: Array<(value: DatasetFeatureInput[]) => void> = [];
-    const provider = vi.fn(
-      () => new Promise<DatasetFeatureInput[]>((resolve) => resolvers.push(resolve)),
-    );
+    const resolvers: Array<(value: DatasetRow[]) => void> = [];
+    const provider = vi.fn(() => new Promise<DatasetRow[]>((resolve) => resolvers.push(resolve)));
     const { loader, applied } = createLoader(provider);
     loader.schedule(VIEW, 12);
     await vi.advanceTimersByTimeAsync(100);

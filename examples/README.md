@@ -15,7 +15,7 @@ at the top saying what it shows. The guides quote their code from here.
 | [plugin](plugin/) | A plugin with a hook, an api and a mode of its own | [Plugins](../docs/guides/plugins.md) |
 | [custom-feature-type](custom-feature-type/) | A feature type with its own renderer, hit test and box selection | [Custom types](../docs/guides/custom-types.md) |
 | [large-data](large-data/) | Datasets, static and fetched for the view | [Large data](../docs/guides/large-data.md) |
-| [columnar-worker](columnar-worker/) | A table of typed arrays read in a Worker and drawn from its columns | [Large data](../docs/guides/large-data.md) |
+| [table-worker](table-worker/) | A table of typed arrays read in a Worker and drawn from its columns | [Large data](../docs/guides/large-data.md) |
 
 ## Running them
 

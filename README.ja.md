@@ -137,7 +137,7 @@ GeoParquet や Arrow の表は、点、線、多角形が行ごとに混ざっ�
   - 独自のレンダラーと当たり判定を持つ地物型
 - [データセット][ex-large-data]
   - 5 万のマス目の色分けと、見えている範囲の点の取り寄せ
-- [100 万の点][ex-columnar-worker]
+- [100 万の点][ex-table-worker]
   - Worker で読み込む 100 万の点
 
 ## インストール
@@ -245,4 +245,4 @@ AGPL が製品に合わない場合は、Kasika, Inc. (可視化技研株式会�
 [ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
 [ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
 [ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
-[ex-columnar-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-worker/
+[ex-table-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/table-worker/

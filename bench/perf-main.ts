@@ -10,7 +10,7 @@
  * rate.
  */
 
-import type { DatasetFeatureInput } from '@sakuzu/maplibre-gl-draw';
+import type { DatasetRow } from '@sakuzu/maplibre-gl-draw';
 import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 // The stylesheet of the installed maplibre-gl (the version the page runs against).
@@ -44,25 +44,28 @@ const el = (id: string): HTMLElement => {
   return node;
 };
 
-function buildFeatures(): DatasetFeatureInput[] {
-  const feats: DatasetFeatureInput[] = [];
+function buildFeatures(): DatasetRow[] {
+  const feats: DatasetRow[] = [];
   for (let i = 0; i < GRID_NX; i++) {
     for (let j = 0; j < GRID_NY; j++) {
       const x = ORIGIN_LNG + i * CELL_DEG;
       const y = ORIGIN_LAT + j * CELL_DEG;
       const s = CELL_DEG * 0.93;
       feats.push({
+        type: 'Feature',
         id: `g-${i}-${j}`,
-        type: 'Polygon' as const,
-        coordinates: [
-          [
-            [x, y],
-            [x + s, y],
-            [x + s, y + s],
-            [x, y + s],
-            [x, y],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [x, y],
+              [x + s, y],
+              [x + s, y + s],
+              [x, y + s],
+              [x, y],
+            ],
           ],
-        ],
+        },
         properties: { v: (i * 7 + j * 13) % 100 },
       });
     }
@@ -75,7 +78,7 @@ map.on('load', () => {
   const t0 = performance.now();
   draw.addDataset({
     id: 'perf-grid',
-    features: feats,
+    rows: feats,
     styleRule: {
       kind: 'graduated',
       property: 'v',
@@ -191,7 +194,7 @@ runBtn.addEventListener('click', async () => {
   result.textContent = 'Measuring 2/2 (with the dataset)...';
   draw.addDataset({
     id: 'perf-grid',
-    features: saved,
+    rows: saved,
     styleRule: {
       kind: 'graduated',
       property: 'v',

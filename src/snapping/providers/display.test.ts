@@ -14,11 +14,12 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
-import type { Dataset, DatasetFeatureInput } from '../../dataset/types.js';
+import type { Dataset, DatasetRow } from '../../dataset/types.js';
 import { resolveMessages } from '../../messages.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import type {
   SnapCandidate,
   SnapPointCandidate,
@@ -59,8 +60,8 @@ beforeEach(() => {
 });
 
 /** Adds one dataset */
-function addDataset(id: string, features: DatasetFeatureInput[]): Dataset {
-  return datasets.add({ id, features });
+function addDataset(id: string, rows: DatasetRow[]): Dataset {
+  return datasets.add({ id, rows });
 }
 
 /** Adds one feature to the Store (used as the counterpart of an intersection) */
@@ -124,14 +125,14 @@ const V_LINE: Coordinate[] = [
 describe('the vertex provider of datasets', () => {
   it('makes the vertices of the features of a dataset into candidates', () => {
     addDataset('data', [
-      {
+      toRow({
         id: 'line',
         type: 'LineString',
         coordinates: [
           [0, 0],
           [0.1, 0.1],
         ],
-      },
+      }),
     ]);
 
     const candidates = vertexCandidates();
@@ -143,7 +144,7 @@ describe('the vertex provider of datasets', () => {
   });
 
   it('attaches featureId and datasetId to a candidate', () => {
-    addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
 
     const candidates = vertexCandidates();
 
@@ -153,8 +154,8 @@ describe('the vertex provider of datasets', () => {
   });
 
   it('mixes the candidates of several datasets', () => {
-    addDataset('a', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
-    addDataset('b', [{ id: 'p2', type: 'Point', coordinates: [0.1, 0.1] }]);
+    addDataset('a', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
+    addDataset('b', [toRow({ id: 'p2', type: 'Point', coordinates: [0.1, 0.1] })]);
 
     const ids = vertexCandidates().map((c) => `${c.datasetId}/${c.featureId}`);
 
@@ -163,14 +164,14 @@ describe('the vertex provider of datasets', () => {
 
   it('does not target types that do not originate from GeoJSON, such as Circle', () => {
     addDataset('data', [
-      { id: 'c1', type: 'Circle', coordinates: [0, 0], properties: { radius: 100 } },
+      toRow({ id: 'c1', type: 'Circle', coordinates: [0, 0], properties: { radius: 100 } }),
     ]);
 
     expect(vertexCandidates()).toHaveLength(0);
   });
 
   it('returns no candidates when snapping to the data is disabled', () => {
-    addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
     enabled = false;
 
     expect(vertexCandidates()).toHaveLength(0);
@@ -180,14 +181,14 @@ describe('the vertex provider of datasets', () => {
 describe('the edge provider of datasets', () => {
   it('attaches the vertex references of both ends and the origin to an edge candidate', () => {
     addDataset('data', [
-      {
+      toRow({
         id: 'line',
         type: 'LineString',
         coordinates: [
           [0, 0],
           [0.1, 0],
         ],
-      },
+      }),
     ]);
 
     const candidates = edgeCandidates();
@@ -204,7 +205,7 @@ describe('the edge provider of datasets', () => {
 
   it('makes the rings of a Polygon into edges as well', () => {
     addDataset('data', [
-      {
+      toRow({
         id: 'poly',
         type: 'Polygon',
         coordinates: [
@@ -215,20 +216,20 @@ describe('the edge provider of datasets', () => {
             [0, 0],
           ],
         ],
-      },
+      }),
     ]);
 
     expect(edgeCandidates()).toHaveLength(3);
   });
 
   it('has no edge candidate for a Point', () => {
-    addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
 
     expect(edgeCandidates()).toHaveLength(0);
   });
 
   it('returns no candidates when snapping to the data is disabled', () => {
-    addDataset('data', [{ id: 'line', type: 'LineString', coordinates: H_LINE }]);
+    addDataset('data', [toRow({ id: 'line', type: 'LineString', coordinates: H_LINE })]);
     enabled = false;
 
     expect(edgeCandidates()).toHaveLength(0);
@@ -237,7 +238,7 @@ describe('the edge provider of datasets', () => {
 
 describe('the hiding of datasets', () => {
   it('does not target a hidden dataset', () => {
-    const dataset = addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    const dataset = addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
     dataset.setVisible(false);
 
     expect(vertexCandidates()).toHaveLength(0);
@@ -246,8 +247,8 @@ describe('the hiding of datasets', () => {
 
   it('does not target a hidden feature', () => {
     addDataset('data', [
-      { id: 'p1', type: 'Point', coordinates: [0, 0], visible: false },
-      { id: 'p2', type: 'Point', coordinates: [0.1, 0.1] },
+      toRow({ id: 'p1', type: 'Point', coordinates: [0, 0], visible: false }),
+      toRow({ id: 'p2', type: 'Point', coordinates: [0.1, 0.1] }),
     ]);
 
     const candidates = vertexCandidates();
@@ -257,7 +258,7 @@ describe('the hiding of datasets', () => {
   });
 
   it('makes it a target again when it is shown again', () => {
-    const dataset = addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    const dataset = addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
     dataset.setVisible(false);
     dataset.setVisible(true);
 
@@ -268,9 +269,9 @@ describe('the hiding of datasets', () => {
     // 2 points stacked at the same position. Only the frontmost one is drawn
     const dataset = datasets.add({
       id: 'data',
-      features: [
-        { id: 'loser', type: 'Point', coordinates: [0, 0] },
-        { id: 'winner', type: 'Point', coordinates: [0, 0] },
+      rows: [
+        toRow({ id: 'loser', type: 'Point', coordinates: [0, 0] }),
+        toRow({ id: 'winner', type: 'Point', coordinates: [0, 0] }),
       ],
       collisionThinning: { enabled: true },
     });
@@ -286,16 +287,16 @@ describe('the hiding of datasets', () => {
 
 describe('the index of datasets', () => {
   it('rebuilds the index when the features are replaced', () => {
-    const dataset = addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    const dataset = addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
     expect(vertexCandidates().map((c) => c.featureId)).toEqual(['p1']);
 
-    dataset.setFeatures([{ id: 'p2', type: 'Point', coordinates: [0.1, 0.1] }]);
+    dataset.setRows([toRow({ id: 'p2', type: 'Point', coordinates: [0.1, 0.1] })]);
 
     expect(vertexCandidates().map((c) => c.featureId)).toEqual(['p2']);
   });
 
   it('drops a removed dataset from the targets', () => {
-    addDataset('data', [{ id: 'p1', type: 'Point', coordinates: [0, 0] }]);
+    addDataset('data', [toRow({ id: 'p1', type: 'Point', coordinates: [0, 0] })]);
     datasets.remove('data');
 
     expect(vertexCandidates()).toHaveLength(0);
@@ -305,8 +306,8 @@ describe('the index of datasets', () => {
 describe('the intersection provider of datasets', () => {
   it('returns the intersections of edges between two datasets', () => {
     addDataset('data', [
-      { id: 'h', type: 'LineString', coordinates: H_LINE },
-      { id: 'v', type: 'LineString', coordinates: V_LINE },
+      toRow({ id: 'h', type: 'LineString', coordinates: H_LINE }),
+      toRow({ id: 'v', type: 'LineString', coordinates: V_LINE }),
     ]);
 
     const candidates = intersectionCandidates();
@@ -329,8 +330,8 @@ describe('the intersection provider of datasets', () => {
       messages: { snapIntersection: '交点' },
     });
     addDataset('data', [
-      { id: 'h', type: 'LineString', coordinates: H_LINE },
-      { id: 'v', type: 'LineString', coordinates: V_LINE },
+      toRow({ id: 'h', type: 'LineString', coordinates: H_LINE }),
+      toRow({ id: 'v', type: 'LineString', coordinates: V_LINE }),
     ]);
 
     const descriptions = localized.providers
@@ -351,8 +352,8 @@ describe('the intersection provider of datasets', () => {
       messages: resolveMessages({ snapIntersection: 'Kreuzung' }),
     });
     addDataset('data', [
-      { id: 'h', type: 'LineString', coordinates: H_LINE },
-      { id: 'v', type: 'LineString', coordinates: V_LINE },
+      toRow({ id: 'h', type: 'LineString', coordinates: H_LINE }),
+      toRow({ id: 'v', type: 'LineString', coordinates: V_LINE }),
     ]);
 
     const descriptions = localized.providers
@@ -364,14 +365,14 @@ describe('the intersection provider of datasets', () => {
   });
 
   it('makes intersections with the edges of another dataset as well', () => {
-    addDataset('a', [{ id: 'h', type: 'LineString', coordinates: H_LINE }]);
-    addDataset('b', [{ id: 'v', type: 'LineString', coordinates: V_LINE }]);
+    addDataset('a', [toRow({ id: 'h', type: 'LineString', coordinates: H_LINE })]);
+    addDataset('b', [toRow({ id: 'v', type: 'LineString', coordinates: V_LINE })]);
 
     expect(intersectionCandidates()).toHaveLength(1);
   });
 
   it('returns an intersection between a display edge and a Store edge with the origin of the display side', () => {
-    addDataset('data', [{ id: 'h', type: 'LineString', coordinates: H_LINE }]);
+    addDataset('data', [toRow({ id: 'h', type: 'LineString', coordinates: H_LINE })]);
     addStoreFeature('v', 'LineString', V_LINE);
 
     const candidates = intersectionCandidates();
@@ -385,14 +386,14 @@ describe('the intersection provider of datasets', () => {
     // Place one display line where it does not cross, and make the 2 Store lines cross
     // at the origin
     addDataset('data', [
-      {
+      toRow({
         id: 'far',
         type: 'LineString',
         coordinates: [
           [0.5, 0.5],
           [0.6, 0.5],
         ],
-      },
+      }),
     ]);
     addStoreFeature('h', 'LineString', H_LINE);
     addStoreFeature('v', 'LineString', V_LINE);
@@ -402,7 +403,7 @@ describe('the intersection provider of datasets', () => {
 
   it('does not make a self-intersection of the same feature into an intersection', () => {
     addDataset('data', [
-      {
+      toRow({
         id: 'bowtie',
         type: 'LineString',
         coordinates: [
@@ -411,7 +412,7 @@ describe('the intersection provider of datasets', () => {
           [0.1, -0.1],
           [-0.1, 0.1],
         ],
-      },
+      }),
     ]);
 
     expect(intersectionCandidates()).toHaveLength(0);
@@ -419,8 +420,8 @@ describe('the intersection provider of datasets', () => {
 
   it('returns no candidates when snapping to the data is disabled', () => {
     addDataset('data', [
-      { id: 'h', type: 'LineString', coordinates: H_LINE },
-      { id: 'v', type: 'LineString', coordinates: V_LINE },
+      toRow({ id: 'h', type: 'LineString', coordinates: H_LINE }),
+      toRow({ id: 'v', type: 'LineString', coordinates: V_LINE }),
     ]);
     enabled = false;
 
@@ -430,7 +431,7 @@ describe('the intersection provider of datasets', () => {
 
 describe('getting features for tracing', () => {
   it('can be looked up by dataset ID and feature ID', () => {
-    addDataset('data', [{ id: 'line', type: 'LineString', coordinates: H_LINE }]);
+    addDataset('data', [toRow({ id: 'line', type: 'LineString', coordinates: H_LINE })]);
 
     const feature = providers.getFeature('data', 'line');
 
@@ -439,22 +440,26 @@ describe('getting features for tracing', () => {
   });
 
   it('can look up a feature of a hidden dataset as well', () => {
-    const dataset = addDataset('data', [{ id: 'line', type: 'LineString', coordinates: H_LINE }]);
+    const dataset = addDataset('data', [
+      toRow({ id: 'line', type: 'LineString', coordinates: H_LINE }),
+    ]);
     dataset.setVisible(false);
 
     expect(providers.getFeature('data', 'line')?.id).toBe('line');
   });
 
   it('looks up the new feature after a replacement', () => {
-    const dataset = addDataset('data', [{ id: 'line', type: 'LineString', coordinates: H_LINE }]);
-    dataset.setFeatures([{ id: 'other', type: 'LineString', coordinates: V_LINE }]);
+    const dataset = addDataset('data', [
+      toRow({ id: 'line', type: 'LineString', coordinates: H_LINE }),
+    ]);
+    dataset.setRows([toRow({ id: 'other', type: 'LineString', coordinates: V_LINE })]);
 
     expect(providers.getFeature('data', 'line')).toBeNull();
     expect(providers.getFeature('data', 'other')?.id).toBe('other');
   });
 
   it('returns null for a dataset or a feature that does not exist', () => {
-    addDataset('data', [{ id: 'line', type: 'LineString', coordinates: H_LINE }]);
+    addDataset('data', [toRow({ id: 'line', type: 'LineString', coordinates: H_LINE })]);
 
     expect(providers.getFeature('other', 'line')).toBeNull();
     expect(providers.getFeature('data', 'missing')).toBeNull();

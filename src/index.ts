@@ -7,8 +7,8 @@
  * The caller accesses the whole public API through the single entry
  * `import { ... } from '@sakuzu/maplibre-gl-draw'`, plus two subpaths that do not load
  * maplibre-gl: the pure geometry functions of `@sakuzu/maplibre-gl-draw/geometry`, which also
- * run in Node, and the Worker-side preparation of columnar data of
- * `@sakuzu/maplibre-gl-draw/columnar`. Tree-shaking is applied by the ESM bundler, which
+ * run in Node, and the building and Worker-side preparation of tables of
+ * `@sakuzu/maplibre-gl-draw/table`. Tree-shaking is applied by the ESM bundler, which
  * looks at `"sideEffects": false` in package.json.
  *
  * Every public symbol is listed here by name, in one of two layers (see "The public
@@ -163,17 +163,9 @@ export type {
   DatasetOrder,
   DatasetPlacement,
   DatasetCollisionThinning,
-  DatasetColumn,
-  DatasetColumnarGeometry,
-  DatasetColumnarGeometryType,
-  DatasetColumnarInput,
-  DatasetColumnarMixedGeometry,
-  DatasetColumnarPrepared,
-  DatasetDictionaryCodes,
-  DatasetDictionaryColumn,
-  DatasetFeatureInput,
   DatasetFeatureProvider,
   DatasetHoverPayload,
+  DatasetRow,
   DatasetThinningStats,
   DatasetZoomScale,
   ResolvedCollisionThinning,
