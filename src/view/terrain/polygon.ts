@@ -5,7 +5,7 @@
  * The injection point for terrain subdivision of polygons
  *
  * Called from the polygon renderers (polygon/sdf-polygon.ts and polygon/batch.ts). When the
- * terrain is disabled, `getTerrainTessellationStep(context)` returns null and the caller does
+ * terrain is disabled, `terrainTessellationStep(context)` returns null and the caller does
  * nothing. Rendering without terrain therefore does not change by a single byte.
  */
 
@@ -37,7 +37,7 @@ import { tilingSignature } from './tiling.js';
  * @param context The terrain state of the draw instance
  * @returns The step, or `null` when the terrain is disabled
  */
-export function getTerrainTessellationStep(context: TerrainContext): TessellationStep | null {
+export function terrainTessellationStep(context: TerrainContext): TessellationStep | null {
   const terrain = getTerrainRenderState(context);
   if (!terrain.active || !(terrain.stepGrid > 0)) return null;
   const tiling = terrain.tessellationTiling;

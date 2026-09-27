@@ -23,7 +23,6 @@
     "Snapping and tracing",
     "Styles",
     "Extension points",
-    "Building blocks",
     "Measure",
     "Create",
     "Combine",
@@ -31,6 +30,12 @@
     "Repair",
     "Bounds and units",
     "Types and errors",
+    "Shaders and projection",
+    "Blending and billboards",
+    "Quads",
+    "Lines",
+    "Terrain",
+    "Hit testing",
     "*"
   ],
   "groupOrder": [

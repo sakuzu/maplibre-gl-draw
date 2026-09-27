@@ -4,12 +4,13 @@
 /**
  * The public surface of the package
  *
- * - The names that src/index.ts exports are pinned in two lists, one per layer (see "The
- *   public surface" in CONTRIBUTING.md). Adding or removing a name means editing these lists
- *   as well, so every change to the surface is deliberate.
- * - The emitted declarations (with `stripInternal`) are self-contained: every named type
- *   that a public declaration refers to is exported too, and nothing that a public
- *   declaration needs was stripped as `@internal`.
+ * - The names that src/index.ts (layer 1) and src/webgl/index.ts (layer 2) export are
+ *   pinned in two lists (see "The public surface" in CONTRIBUTING.md). Adding or removing a
+ *   name means editing these lists as well, so every change to the surface is deliberate.
+ * - The emitted declarations (with `stripInternal`) are self-contained: nothing that a
+ *   public declaration needs was stripped as `@internal`, and every named type that a
+ *   public declaration refers to is exported too, except the pinned lists of known gaps.
+ *   A layer 1 declaration counts only the exports of layer 1.
  */
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -233,75 +234,53 @@ const LAYER_1 = [
   'VertexSelection',
 ];
 
-/** Layer 2: building blocks for extension authors (may change in a minor release) */
-const LAYER_2 = [
-  'anchorElevationMeters',
-  'anchorGhostOpacity',
+/** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
+const WEBGL = [
   'applyDrawBlendState',
-  'AutoNameGenerator',
-  'AuxiliaryHandleRegistry',
-  'BlendCapableGL',
-  'BoxSelectionStrategyRegistry',
   'calculateLngLatOffset',
-  'calculateOffsetUniforms',
-  'computeBoundingBox',
   'computeQuadVertices',
-  'createFeatureCompanionRegistry',
-  'createGeometryApi',
-  'createOBB',
   'createProgram',
-  'createSelectionExtensionRegistry',
-  'DashSegment',
-  'DEFAULT_POINT_FRAME_SIZE',
+  'dashPattern',
   'DEFAULT_TILE_SIZE',
-  'DEFAULT_VIEWPORT_EXPANSION_FACTOR',
   'densifyPath',
-  'distanceToOBB',
-  'DrapeQuadCorners',
   'drawBillboardsWithoutDepth',
   'drawQuadSurfaceOnTerrain',
+  'OFFSET_MODE_GLSL',
+  'PointHitTestStrategy',
+  'ProjectionUniformManager',
+  'QUAD_GLYPH_STRIDE',
+  'QuadDrapeGlyphs',
+  'QuadShader',
+  'QuadVertices',
+  'SDFStrokeOptions',
+  'SDFStrokeStyle',
+  'splitIntoDashes',
+  'terrainTessellationStep',
+  'WidthUnit',
+];
+
+/**
+ * Types that the declarations of layer 1 still refer to but that layer 1 does not export:
+ * the services and renderers of the 1.0 contexts (ModeContext, PluginContext,
+ * CustomRendererDrawContext) and the terrain diagnostics. The rewrite of layer 1 for 2.0
+ * removes these references; until then the list pins them, so that no new one slips in. The
+ * three that the webgl entry exports (SDFStrokeOptions, SDFStrokeStyle, WidthUnit) are here
+ * because a layer 1 declaration must not depend on layer 2.
+ */
+const PENDING_LAYER_1 = [
+  'AutoNameGenerator',
+  'AuxiliaryHandleRegistry',
+  'BoxSelectionStrategyRegistry',
   'EventEmitter',
   'FeatureCompanionHitResult',
   'FeatureCompanionRegistry',
   'FillShaderManager',
-  'GeometryApi',
-  'GeometryApiDeps',
-  'getAnchorElevationGeneration',
-  'getContrastColor',
-  'getExpandedViewportBounds',
-  'getOBBAABB',
-  'getProjectionTransitionUniform',
-  'getSelectedFeatureIds',
-  'getStrokeDashPattern',
-  'getTerrainTessellationStep',
-  'hasZeroArea',
   'HitTestService',
   'HitTestTopmost',
   'HookName',
-  'lngLatToMercator',
-  'MercatorCoord',
-  'MercatorRect',
-  'metersToMercatorScale',
-  'OBB',
-  'OBBCorners',
-  'OFFSET_MODE_GLSL',
   'OffsetUniforms',
-  'pixelsToDegreesLat',
-  'pixelsToDegreesLng',
   'PluginManager',
-  'PointHitTestStrategy',
   'PointShapeRenderer',
-  'ProjectionUniformLocations',
-  'ProjectionUniformManager',
-  'QUAD_GLYPH_STRIDE',
-  'QuadDrapeColor',
-  'QuadDrapeFill',
-  'QuadDrapeSurface',
-  'QuadDrapeGlyphs',
-  'QuadShader',
-  'QuadVertices',
-  'rectangleIntersectsOBB',
-  'resolvePixelRatio',
   'SDFLineRenderer',
   'SDFStrokeOptions',
   'SDFStrokeStyle',
@@ -309,14 +288,11 @@ const LAYER_2 = [
   'SelectionScope',
   'ShaderData',
   'SpatialQuery',
-  'splitIntoDashes',
   'TerrainContext',
   'TerrainDiagnostics',
   'TerrainDrapeDebug',
   'TerrainRenderDiagnostics',
   'TerrainRenderState',
-  'TessellationStep',
-  'TessellationTiling',
   'TopHit',
   'TopmostHitTestOptions',
   'TraceConfig',
@@ -324,25 +300,38 @@ const LAYER_2 = [
   'WidthUnit',
 ];
 
-const LAYER_2_MARKER = '// Layer 2:';
+/**
+ * Types that the building blocks of src/webgl/index.ts refer to without exporting them (the
+ * parameter and field types of the quad, projection, dash and terrain helpers). The entry
+ * keeps to the symbol list of its design; a caller names these types through the functions
+ * that take them (for example `Parameters<typeof drawQuadSurfaceOnTerrain>`).
+ */
+const WEBGL_UNEXPORTED = [
+  'BlendCapableGL',
+  'DashSegment',
+  'DrapeQuadCorners',
+  'MercatorRect',
+  'OffsetUniforms',
+  'ProjectionUniformLocations',
+  'QuadDrapeColor',
+  'QuadDrapeFill',
+  'QuadDrapeSurface',
+  'TerrainContext',
+  'TerrainRenderState',
+  'TessellationStep',
+  'TessellationTiling',
+];
 
 function byName(a: string, b: string): number {
   return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0;
 }
 
-/** Reads the export statements of src/index.ts, split at the layer 2 marker */
-function readIndexExports(): {
-  layer1: string[];
-  layer2: string[];
-  values: string[];
-  star: number;
-} {
-  const fileName = resolve(ROOT, 'src/index.ts');
+/** Reads the export statements of an entry point */
+function readExports(file: string): { names: string[]; values: string[]; star: number } {
+  const fileName = resolve(ROOT, file);
   const text = ts.sys.readFile(fileName) ?? '';
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true);
-  const boundary = text.indexOf(LAYER_2_MARKER);
-  const layer1: string[] = [];
-  const layer2: string[] = [];
+  const names: string[] = [];
   const values: string[] = [];
   let star = 0;
   for (const statement of source.statements) {
@@ -353,9 +342,8 @@ function readIndexExports(): {
     ) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name)) continue;
-        const name = declaration.name.text;
-        (boundary >= 0 && statement.getStart(source) > boundary ? layer2 : layer1).push(name);
-        values.push(name);
+        names.push(declaration.name.text);
+        values.push(declaration.name.text);
       }
       continue;
     }
@@ -366,33 +354,46 @@ function readIndexExports(): {
       continue;
     }
     for (const element of clause.elements) {
-      const name = element.name.text;
-      (boundary >= 0 && statement.getStart(source) > boundary ? layer2 : layer1).push(name);
-      if (!statement.isTypeOnly && !element.isTypeOnly) values.push(name);
+      names.push(element.name.text);
+      if (!statement.isTypeOnly && !element.isTypeOnly) values.push(element.name.text);
     }
   }
-  return { layer1, layer2, values, star };
+  return { names, values, star };
 }
 
 describe('the export list of src/index.ts', () => {
   it('names every export, with no export *', () => {
-    expect(readIndexExports().star).toBe(0);
+    expect(readExports('src/index.ts').star).toBe(0);
   });
 
-  it('matches layer 1 and layer 2 section by section', () => {
-    const { layer1, layer2 } = readIndexExports();
-    expect([...layer1].sort(byName)).toEqual([...LAYER_1].sort(byName));
-    expect([...layer2].sort(byName)).toEqual([...LAYER_2].sort(byName));
-  });
-
-  it('keeps the two layers disjoint', () => {
-    const both = LAYER_1.filter((name) => LAYER_2.includes(name));
-    expect(both).toEqual([]);
+  it('matches layer 1', () => {
+    expect([...readExports('src/index.ts').names].sort(byName)).toEqual([...LAYER_1].sort(byName));
   });
 
   it('exports at runtime exactly the value names of the list', async () => {
     const runtime = Object.keys(await import('./index.js')).sort(byName);
-    expect(runtime).toEqual(readIndexExports().values.sort(byName));
+    expect(runtime).toEqual(readExports('src/index.ts').values.sort(byName));
+  });
+});
+
+describe('the export list of src/webgl/index.ts', () => {
+  it('names every export, with no export *', () => {
+    expect(readExports('src/webgl/index.ts').star).toBe(0);
+  });
+
+  it('matches layer 2', () => {
+    expect([...readExports('src/webgl/index.ts').names].sort(byName)).toEqual(
+      [...WEBGL].sort(byName),
+    );
+  });
+
+  it('shares no name with the main entry', () => {
+    expect(LAYER_1.filter((name) => WEBGL.includes(name))).toEqual([]);
+  });
+
+  it('exports at runtime exactly the value names of the list', async () => {
+    const runtime = Object.keys(await import('./webgl/index.js')).sort(byName);
+    expect(runtime).toEqual(readExports('src/webgl/index.ts').values.sort(byName));
   });
 });
 
@@ -468,22 +469,30 @@ function isTopLevel(declaration: ts.Declaration): boolean {
 }
 
 /**
- * Walks every named type reachable from the exports and returns the ones that are not
- * exported. A type alias whose name and definition are identical to an exported one counts
- * as exported (the two are the same type to a caller).
+ * Walks every named type reachable from the exports of `from` and returns the names of the
+ * ones that the entries of `exportedBy` do not export. A type alias whose name and definition
+ * are identical to an exported one counts as exported (the two are the same type to a caller).
  */
-function findForgottenExports(program: ts.Program, files: Map<string, string>, entries: string[]) {
+function findForgottenExports(
+  program: ts.Program,
+  files: Map<string, string>,
+  exportedBy: string[],
+  from: string[],
+) {
   const checker = program.getTypeChecker();
   const ours = (node: ts.Node) => files.has(resolve(node.getSourceFile().fileName));
   const resolveAlias = (symbol: ts.Symbol) =>
     symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   const exported = new Set<ts.Symbol>();
   const exportedAliases = new Map<string, string>();
-  for (const entry of entries) {
+  const exportsOf = (entry: string) => {
     const source = program.getSourceFile(entry);
     const moduleSymbol = source && checker.getSymbolAtLocation(source);
     if (!moduleSymbol) throw new Error(`no module symbol for ${entry}`);
-    for (const symbol of checker.getExportsOfModule(moduleSymbol)) {
+    return checker.getExportsOfModule(moduleSymbol);
+  };
+  for (const entry of exportedBy) {
+    for (const symbol of exportsOf(entry)) {
       const target = resolveAlias(symbol);
       exported.add(target);
       for (const declaration of target.declarations ?? []) {
@@ -495,7 +504,7 @@ function findForgottenExports(program: ts.Program, files: Map<string, string>, e
   }
   const seen = new Set<ts.Symbol>(exported);
   const forgotten = new Set<string>();
-  const visitSymbol = (symbol: ts.Symbol, from: string) => {
+  const visitSymbol = (symbol: ts.Symbol) => {
     const target = resolveAlias(symbol);
     if (seen.has(target)) return;
     const declarations = (target.declarations ?? []).filter(
@@ -508,15 +517,10 @@ function findForgottenExports(program: ts.Program, files: Map<string, string>, e
         ts.isTypeAliasDeclaration(declaration) &&
         exportedAliases.get(target.name) === declaration.type.getText(),
     );
-    if (!sameAlias) {
-      const file = declarations[0].getSourceFile().fileName;
-      forgotten.add(
-        `${target.name} (${file.slice(file.indexOf('__api_check__') + 14)}) <- ${from}`,
-      );
-    }
-    for (const declaration of declarations) walk(declaration, target.name);
+    if (!sameAlias) forgotten.add(target.name);
+    for (const declaration of declarations) walk(declaration);
   };
-  const walk = (node: ts.Node, from: string): void => {
+  const walk = (node: ts.Node): void => {
     if (
       (ts.isPropertyDeclaration(node) || ts.isMethodDeclaration(node)) &&
       ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Private
@@ -530,13 +534,13 @@ function findForgottenExports(program: ts.Program, files: Map<string, string>, e
     else if (ts.isImportTypeNode(node)) name = node.qualifier;
     if (name) {
       const symbol = checker.getSymbolAtLocation(ts.isQualifiedName(name) ? name.right : name);
-      if (symbol) visitSymbol(symbol, from);
+      if (symbol) visitSymbol(symbol);
     }
-    ts.forEachChild(node, (child) => walk(child, from));
+    ts.forEachChild(node, (child) => walk(child));
   };
-  for (const symbol of exported) {
+  for (const symbol of from.flatMap(exportsOf).map(resolveAlias)) {
     for (const declaration of symbol.declarations ?? []) {
-      if (ours(declaration)) walk(declaration, symbol.name);
+      if (ours(declaration)) walk(declaration);
     }
   }
   return [...forgotten].sort(byName);
@@ -544,7 +548,10 @@ function findForgottenExports(program: ts.Program, files: Map<string, string>, e
 
 describe('the emitted declarations', () => {
   const outDir = resolve(ROOT, '__api_check__');
-  const entries = [resolve(outDir, 'index.d.ts'), resolve(outDir, 'geometry/index.d.ts')];
+  const main = resolve(outDir, 'index.d.ts');
+  const geometry = resolve(outDir, 'geometry/index.d.ts');
+  const webgl = resolve(outDir, 'webgl/index.d.ts');
+  const entries = [main, geometry, webgl];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -566,8 +573,17 @@ describe('the emitted declarations', () => {
     expect(errors).toEqual([]);
   }, 60_000);
 
-  it('export every named type that a public declaration refers to', () => {
+  it('export every named type that a layer 1 declaration refers to, from layer 1', () => {
     setup();
-    expect(findForgottenExports(program, files, entries)).toEqual([]);
+    expect(findForgottenExports(program, files, [main, geometry], [main, geometry])).toEqual(
+      [...PENDING_LAYER_1].sort(byName),
+    );
+  }, 60_000);
+
+  it('export every named type that a layer 2 declaration refers to', () => {
+    setup();
+    expect(findForgottenExports(program, files, entries, [webgl])).toEqual(
+      [...WEBGL_UNEXPORTED].sort(byName),
+    );
   }, 60_000);
 });

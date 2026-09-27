@@ -105,6 +105,7 @@ const ENTRY_POINTS = [
   ['maplibre-gl-draw', '@sakuzu/maplibre-gl-draw'],
   ['geometry', '@sakuzu/maplibre-gl-draw/geometry'],
   ['columnar', '@sakuzu/maplibre-gl-draw/columnar'],
+  ['webgl', '@sakuzu/maplibre-gl-draw/webgl'],
 ];
 
 /**

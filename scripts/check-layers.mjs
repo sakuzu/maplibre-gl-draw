@@ -7,6 +7,8 @@
  *
  * - A runtime import that breaks a rule is an error (exit code 1)
  * - A runtime import cycle between files is an error (exit code 1)
+ * - An import of the layer 2 entry (src/webgl/) from outside it is an error, even a type-only
+ *   one: the layer 1 declarations do not refer to layer 2 (rule 10)
  * - A type-only import that points the wrong way (`import type`, `export type`, or an
  *   import whose specifiers are all `type X`, and `import('...')` in a type position) is
  *   listed but does not fail the check. Those are the known deviations of the document
@@ -38,6 +40,8 @@ const RANK = {
   plugins: 7,
   api: 8,
   entry: 9,
+  // The layer 2 entry: an entry like src/index.ts, and imported by nothing (rule 10)
+  webgl: 9,
 };
 
 /** Files at the root of src/ belong to the area given here */
@@ -76,6 +80,8 @@ function brokenRule(from, to, typeOnly) {
   const a = areaOf(from);
   const b = areaOf(to);
   if (a === b) return null;
+  // Rule 10: nothing outside src/webgl/ imports it, not even a type
+  if (b === 'webgl') return `rule 10 (${a} -> webgl)`;
   // Rule 9: extension/ may refer to the types of the areas that consume it, never to api/
   if (a === 'extension' && typeOnly && b !== 'api' && b !== 'entry') return null;
   // Rule 4: dispatcher/ does not call operations/
@@ -212,7 +218,8 @@ for (const file of files) {
     const rule = brokenRule(file, imp.to, imp.typeOnly);
     if (!rule) continue;
     const line = `${rule}: src/${file} -> src/${imp.to}${imp.names ? `  ${imp.names}` : ''}`;
-    (imp.typeOnly ? typeDeviations : violations).push(line);
+    const soft = imp.typeOnly && !rule.startsWith('rule 10 ');
+    (soft ? typeDeviations : violations).push(line);
   }
 }
 

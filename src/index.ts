@@ -5,23 +5,19 @@
  * MapLibre GL Draw - public entry point
  *
  * The caller accesses the whole public API through the single entry
- * `import { ... } from '@sakuzu/maplibre-gl-draw'`, plus two subpaths that do not load
- * maplibre-gl: the pure geometry functions of `@sakuzu/maplibre-gl-draw/geometry`, which also
- * run in Node, and the Worker-side preparation of columnar data of
- * `@sakuzu/maplibre-gl-draw/columnar`. Tree-shaking is applied by the ESM bundler, which
- * looks at `"sideEffects": false` in package.json.
+ * `import { ... } from '@sakuzu/maplibre-gl-draw'`, plus three subpaths: the pure geometry
+ * functions of `@sakuzu/maplibre-gl-draw/geometry`, which also run in Node, the Worker-side
+ * preparation of columnar data of `@sakuzu/maplibre-gl-draw/columnar`, and the building
+ * blocks for custom shaders of `@sakuzu/maplibre-gl-draw/webgl`. Tree-shaking is applied by
+ * the ESM bundler, which looks at `"sideEffects": false` in package.json.
  *
- * Every public symbol is listed here by name, in one of two layers (see "The public
- * surface" in CONTRIBUTING.md and "The two layers of the public API" in
- * docs/reference/README.md):
+ * Every public symbol of this entry is listed here by name (see "The public surface" in
+ * CONTRIBUTING.md). They are layer 1, the public API: the factory, the instance and its
+ * options, the data model, the events, the extension points and the pure functions. It
+ * follows semver. Layer 2, the building blocks for custom shaders, is the webgl entry
+ * (src/webgl/index.ts); it may change in a minor release.
  *
- *   - Layer 1, the public API: the factory, the instance and its options, the data model,
- *     the events, the extension points and the pure functions. It follows semver.
- *   - Layer 2, building blocks for extension authors: the rendering parts, the math and the
- *     core services that a plugin, a custom feature type or a custom mode may reuse. Its
- *     guarantee is weaker: it may change in a minor release.
- *
- * Anything not listed here is internal. Where it would otherwise appear in the emitted
+ * Anything that no entry lists is internal. Where it would otherwise appear in the emitted
  * declarations, its JSDoc carries the internal tag and `stripInternal` drops it from them.
  * The list is pinned by src/index.test.ts, so every addition or removal is deliberate.
  *
@@ -287,112 +283,4 @@ export type {
   PointFrameExtentProvider,
   RenderSlot,
   ResizeStrategy,
-} from './view/index.js';
-
-// ============================================================================
-// Layer 2: building blocks for extension authors (may change in a minor release)
-// ============================================================================
-
-// Core services reached through ModeContext and CustomRendererDrawContext
-export type {
-  BoxSelectionStrategyRegistry,
-  HitTestService,
-  HitTestTopmost,
-  TopHit,
-  TopmostHitTestOptions,
-  UnprojectFunction,
-} from './dispatcher/index.js';
-export type { HookName, PluginManager } from './plugins/index.js';
-export type { TraceConfig } from './shared/config/index.js';
-export type { AutoNameGenerator, EventEmitter } from './shared/utils/index.js';
-export type { SpatialQuery } from './store/index.js';
-export type {
-  AuxiliaryHandleRegistry,
-  FeatureCompanionHitResult,
-  FeatureCompanionRegistry,
-  FillShaderManager,
-  PointShapeRenderer,
-  SDFLineRenderer,
-  SDFStrokeOptions,
-  SDFStrokeStyle,
-  SelectionExtensionRegistry,
-  SelectionScope,
-  TerrainContext,
-  TerrainRenderState,
-  WidthUnit,
-} from './view/index.js';
-
-// Diagnostics (their fields follow the rendering)
-export type { TerrainDiagnostics, TerrainRenderDiagnostics } from './api/index.js';
-export type { TerrainDrapeDebug } from './view/index.js';
-
-// WebGL building blocks
-export { resolvePixelRatio } from './shared/utils/index.js';
-export type {
-  BlendCapableGL,
-  DashSegment,
-  DrapeQuadCorners,
-  OffsetUniforms,
-  ProjectionUniformLocations,
-  QuadDrapeColor,
-  QuadDrapeFill,
-  QuadDrapeSurface,
-  QuadDrapeGlyphs,
-  QuadVertices,
-  ShaderData,
-} from './view/index.js';
-export {
-  applyDrawBlendState,
-  calculateLngLatOffset,
-  calculateOffsetUniforms,
-  computeQuadVertices,
-  createProgram,
-  drawBillboardsWithoutDepth,
-  drawQuadSurfaceOnTerrain,
-  getProjectionTransitionUniform,
-  getStrokeDashPattern,
-  OFFSET_MODE_GLSL,
-  ProjectionUniformManager,
-  QUAD_GLYPH_STRIDE,
-  QuadShader,
-  splitIntoDashes,
-} from './view/index.js';
-
-// Terrain anchoring
-export type { MercatorRect, TessellationStep, TessellationTiling } from './view/index.js';
-export {
-  anchorElevationMeters,
-  anchorGhostOpacity,
-  densifyPath,
-  getAnchorElevationGeneration,
-  getTerrainTessellationStep,
-  metersToMercatorScale,
-} from './view/index.js';
-
-// Geometry and projection math
-export type { MercatorCoord, OBB, OBBCorners } from './shared/math/index.js';
-export {
-  createOBB,
-  DEFAULT_TILE_SIZE,
-  distanceToOBB,
-  getOBBAABB,
-  lngLatToMercator,
-  pixelsToDegreesLat,
-  pixelsToDegreesLng,
-  rectangleIntersectsOBB,
-} from './shared/math/index.js';
-export { getContrastColor } from './shared/utils/index.js';
-
-// Selection UI, hit testing and viewport helpers
-export { PointHitTestStrategy } from './dispatcher/index.js';
-export { createGeometryApi, type GeometryApi, type GeometryApiDeps } from './api/index.js';
-export {
-  computeBoundingBox,
-  createFeatureCompanionRegistry,
-  createSelectionExtensionRegistry,
-  DEFAULT_POINT_FRAME_SIZE,
-  DEFAULT_VIEWPORT_EXPANSION_FACTOR,
-  getExpandedViewportBounds,
-  getSelectedFeatureIds,
-  hasZeroArea,
 } from './view/index.js';
