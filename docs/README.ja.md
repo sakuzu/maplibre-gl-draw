@@ -42,8 +42,8 @@
   Vue での使い方と、サーバーサイドレンダリングでの使い方
 - [guides/performance.ja.md](guides/performance.ja.md) — 扱える規模の
   目安と、自分の場合の測り方
-- [guides/migrating.ja.md](guides/migrating.ja.md) — mapbox-gl-draw や
-  terra-draw からの移行
+- [guides/migrating.ja.md](guides/migrating.ja.md) — 1.0 から 2.0 への
+  移行と、mapbox-gl-draw や terra-draw からの移行
 
 ## リファレンス (英語)
 

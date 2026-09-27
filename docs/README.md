@@ -39,8 +39,8 @@ Each guide covers one task. Read the ones you need, in any order.
   React, Svelte and Vue, and with server-side rendering
 - [guides/performance.md](guides/performance.md) — the rough scale the
   library handles and how to measure your case
-- [guides/migrating.md](guides/migrating.md) — moving from mapbox-gl-draw
-  or terra-draw
+- [guides/migrating.md](guides/migrating.md) — moving from 1.0 to 2.0,
+  and from mapbox-gl-draw or terra-draw
 
 ## Reference
 
