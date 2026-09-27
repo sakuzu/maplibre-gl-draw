@@ -113,7 +113,7 @@ function handlePluginInteractionClick(
  */
 function handleVertexClick(
   event: MouseNormalizedEvent,
-  selectedIds: string[],
+  selectedIds: readonly string[],
   context: EngineModeContext,
   config: SelectionUIConfig,
 ): boolean {
@@ -167,7 +167,7 @@ function handleVertexClick(
 function handleFeatureClick(
   event: MouseNormalizedEvent,
   selection: Selection,
-  selectedIds: string[],
+  selectedIds: readonly string[],
   context: EngineModeContext,
 ): void {
   const { store } = context;

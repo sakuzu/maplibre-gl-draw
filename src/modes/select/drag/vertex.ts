@@ -111,7 +111,7 @@ export function startVertexDrag(
 
   // Check the currently selected vertices
   const selectedVertices = store.getVertexSelection();
-  let vertexRefsToMove: VertexRef[];
+  let vertexRefsToMove: readonly VertexRef[];
 
   if (
     selectedVertices &&

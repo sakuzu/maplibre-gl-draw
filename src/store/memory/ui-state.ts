@@ -2,19 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * MemoryUiState
+ * The local state of a client, in memory, in two parts
  *
- * The in-memory UiState core holds for every Store (selection / editing / tentative /
- * boxSelection / dragState / vertexSelection / mode / read-only / interaction lock / local
- * visibility). Each setter merges its change into the ChangeBus of the Store.
+ * - MemoryClientState: the state of this client that the Store contract holds (selection,
+ *   editing, vertex selection, mode, read-only, interaction lock, local visibility). The
+ *   in-memory Store keeps it next to the document.
+ * - MemoryDrawingState: the state only the drawing reads (the geometry being drawn, the box
+ *   selection, the drag, the vertices that follow along). Core keeps it around whatever Store
+ *   holds the rest.
  *
- * - Selection / mode / features being edited / Tentative are included in data change
- *   notifications
- * - BoxSelection / DragState / VertexSelection are UI-only state, so they only raise the
- *   uiStateChanged flag
+ * Each setter merges its change into the ChangeBus it was given: the selection, the editing
+ * and the mode with their categories, the geometry being drawn with `tentative`, and the rest
+ * with the uiStateChanged flag.
  */
 
-import type { UiState } from '../store.js';
 import type {
   BoxSelection,
   DragState,
@@ -26,16 +27,17 @@ import type {
 } from '../types.js';
 import type { ChangeBus } from './change-bus.js';
 
-export class MemoryUiState implements UiState {
+/**
+ * The state of this client the Store contract holds, in memory
+ *
+ * @internal
+ */
+export class MemoryClientState {
   readonly #bus: ChangeBus;
 
   #selection: Selection = { type: null, ids: [] };
   #editingIds: string[] = [];
-  #tentative: TentativeState | null = null;
-  #boxSelection: BoxSelection | null = null;
-  #dragState: DragState | null = null;
   #selectedVertices: VertexSelection | null = null;
-  #followedVertices: VertexSelection[] | null = null;
   #mode: Mode = 'select';
   // Read-only (forbids local writes to the document). Local state, not part of the document.
   #readOnly = false;
@@ -68,22 +70,6 @@ export class MemoryUiState implements UiState {
     });
   }
 
-  /**
-   * Removes a deleted feature, group or layer from the selection (internal use)
-   */
-  removeFromSelection(id: string): void {
-    const previousType = this.#selection.type;
-    const previousIds = this.#selection.ids;
-    if (!previousIds.includes(id)) return;
-
-    const ids = previousIds.filter((selected) => selected !== id);
-    const type = ids.length === 0 ? null : previousType;
-    this.#selection = { type, ids };
-    this.#bus.merge({
-      selection: { type, ids: [...ids], previousType, previousIds: [...previousIds] },
-    });
-  }
-
   // Editing
 
   getEditingIds(): readonly string[] {
@@ -106,62 +92,6 @@ export class MemoryUiState implements UiState {
     this.#bus.merge({ editing: { ended: endedIds } });
   }
 
-  /** Removal from editing that accompanies a feature deletion (internal use) */
-  removeFromEditing(featureId: string): void {
-    const idx = this.#editingIds.indexOf(featureId);
-    if (idx === -1) return;
-    this.#editingIds.splice(idx, 1);
-    this.#bus.merge({ editing: { ended: [featureId] } });
-  }
-
-  // Tentative
-
-  getTentative(): TentativeState | null {
-    return this.#tentative;
-  }
-
-  setTentative(state: TentativeState | null): void {
-    const previous = this.#tentative;
-    this.#tentative = state ? { ...state, coordinates: [...state.coordinates] } : null;
-    this.#bus.merge({ tentative: { state: this.#tentative, previous } });
-  }
-
-  // BoxSelection
-
-  getBoxSelection(): BoxSelection | null {
-    return this.#boxSelection;
-  }
-
-  setBoxSelection(box: BoxSelection | null): void {
-    this.#boxSelection = box
-      ? {
-          startPoint: [...box.startPoint],
-          endPoint: [...box.endPoint],
-          previousSelection: [...box.previousSelection],
-        }
-      : null;
-    this.#bus.merge({ uiStateChanged: true });
-  }
-
-  // DragState
-
-  getDragState(): DragState | null {
-    return this.#dragState;
-  }
-
-  setDragState(state: DragState | null): void {
-    this.#dragState = state
-      ? {
-          operation: state.operation,
-          activeVertex: state.activeVertex ? { ...state.activeVertex } : undefined,
-          activeFeatureId: state.activeFeatureId,
-          rotateInfo: state.rotateInfo,
-          movingFeatureIds: state.movingFeatureIds ? [...state.movingFeatureIds] : undefined,
-        }
-      : null;
-    this.#bus.merge({ uiStateChanged: true });
-  }
-
   // VertexSelection
 
   getVertexSelection(): VertexSelection | null {
@@ -175,29 +105,6 @@ export class MemoryUiState implements UiState {
           vertices: selection.vertices.map((ref) => ({ ...ref })),
         }
       : null;
-    this.#bus.merge({ uiStateChanged: true });
-  }
-
-  // FollowedVertices (vertices that follow along when shared vertices move together. Set only
-  // during a drag)
-
-  getFollowedVertices(): VertexSelection[] | null {
-    return this.#followedVertices;
-  }
-
-  setFollowedVertices(selections: VertexSelection[] | null): void {
-    // Since null is written every time a drag ends, null -> null is not notified (raising
-    // uiStateChanged every time would cause a wasteful re-render).
-    if (this.#followedVertices === null && (selections === null || selections.length === 0)) {
-      return;
-    }
-    this.#followedVertices =
-      selections && selections.length > 0
-        ? selections.map((selection) => ({
-            featureId: selection.featureId,
-            vertices: selection.vertices.map((ref) => ({ ...ref })),
-          }))
-        : null;
     this.#bus.merge({ uiStateChanged: true });
   }
 
@@ -258,11 +165,93 @@ export class MemoryUiState implements UiState {
     else this.#locallyHidden.delete(id);
     this.#bus.merge({ uiStateChanged: true });
   }
+}
 
-  /** Removes a deleted feature / group / layer from the hidden set (internal use). */
-  removeFromLocallyHidden(id: string): void {
-    if (this.#locallyHidden.delete(id)) {
-      this.#bus.merge({ uiStateChanged: true });
+/**
+ * The state only the drawing reads, in memory
+ *
+ * @internal
+ */
+export class MemoryDrawingState {
+  readonly #bus: ChangeBus;
+
+  #tentative: TentativeState | null = null;
+  #boxSelection: BoxSelection | null = null;
+  #dragState: DragState | null = null;
+  #followedVertices: VertexSelection[] | null = null;
+
+  constructor(bus: ChangeBus) {
+    this.#bus = bus;
+  }
+
+  // Tentative
+
+  getTentative(): TentativeState | null {
+    return this.#tentative;
+  }
+
+  setTentative(state: TentativeState | null): void {
+    const previous = this.#tentative;
+    this.#tentative = state ? { ...state, coordinates: [...state.coordinates] } : null;
+    this.#bus.merge({ tentative: { state: this.#tentative, previous } });
+  }
+
+  // BoxSelection
+
+  getBoxSelection(): BoxSelection | null {
+    return this.#boxSelection;
+  }
+
+  setBoxSelection(box: BoxSelection | null): void {
+    this.#boxSelection = box
+      ? {
+          startPoint: [...box.startPoint],
+          endPoint: [...box.endPoint],
+          previousSelection: [...box.previousSelection],
+        }
+      : null;
+    this.#bus.merge({ uiStateChanged: true });
+  }
+
+  // DragState
+
+  getDragState(): DragState | null {
+    return this.#dragState;
+  }
+
+  setDragState(state: DragState | null): void {
+    this.#dragState = state
+      ? {
+          operation: state.operation,
+          activeVertex: state.activeVertex ? { ...state.activeVertex } : undefined,
+          activeFeatureId: state.activeFeatureId,
+          rotateInfo: state.rotateInfo,
+          movingFeatureIds: state.movingFeatureIds ? [...state.movingFeatureIds] : undefined,
+        }
+      : null;
+    this.#bus.merge({ uiStateChanged: true });
+  }
+
+  // FollowedVertices (vertices that follow along when shared vertices move together. Set only
+  // during a drag)
+
+  getFollowedVertices(): VertexSelection[] | null {
+    return this.#followedVertices;
+  }
+
+  setFollowedVertices(selections: VertexSelection[] | null): void {
+    // Since null is written every time a drag ends, null -> null is not notified (raising
+    // uiStateChanged every time would cause a wasteful re-render).
+    if (this.#followedVertices === null && (selections === null || selections.length === 0)) {
+      return;
     }
+    this.#followedVertices =
+      selections && selections.length > 0
+        ? selections.map((selection) => ({
+            featureId: selection.featureId,
+            vertices: selection.vertices.map((ref) => ({ ...ref })),
+          }))
+        : null;
+    this.#bus.merge({ uiStateChanged: true });
   }
 }

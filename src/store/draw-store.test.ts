@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { toStore } from './draw-store.js';
-import { MemoryDocumentStore, MemoryStore } from './memory.js';
+import { MemoryContractStore, MemoryStore } from './memory.js';
 import type { Feature, Layer, StoreChange } from './types.js';
 
 function layer(id: string): Layer {
@@ -121,7 +121,7 @@ describe('the objects the in-memory store returns', () => {
     const notified = updated[0];
     store.createFeature(point('d'));
     expect(notified.items).toEqual(['b', 'a', 'c']);
-    expect(() => (store.getLayer('l1') as Layer).items.push('x')).toThrow(TypeError);
+    expect(() => ((store.getLayer('l1') as Layer).items as string[]).push('x')).toThrow(TypeError);
   });
 
   it('keeps a bulk load inside one transaction linear (one copy of the order per notification)', () => {
@@ -174,9 +174,9 @@ describe('the read-only gate', () => {
   });
 });
 
-describe('a DocumentStore of the host', () => {
-  it('gets the local state and the read-only gate of core around it', () => {
-    const document = new MemoryDocumentStore();
+describe('a Store of the host', () => {
+  it('keeps the state of this client, with the drawing state and the read-only gate of core around it', () => {
+    const document = new MemoryContractStore();
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.createFeature(point('f1'));
@@ -189,10 +189,17 @@ describe('a DocumentStore of the host', () => {
     expect(store.getMode()).toBe('draw_line');
     expect(store.createFeature(point('f2'))).toBe(false);
     expect(document.getFeature('f2')).toBeUndefined();
+    // The state of this client is written to the Store of the host
+    expect(document.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    expect(document.getMode()).toBe('draw_line');
+    expect(document.isReadOnly()).toBe(true);
+    // The drawing state stays with core
+    store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'l1' });
+    expect(store.getTentative()).not.toBeNull();
   });
 
-  it('applies a change made on the document itself (from elsewhere) even while read-only', () => {
-    const document = new MemoryDocumentStore();
+  it('applies a change made on the Store of the host (from elsewhere) even while read-only', () => {
+    const document = new MemoryContractStore();
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.setReadOnly(true);
@@ -207,8 +214,8 @@ describe('a DocumentStore of the host', () => {
     expect(notified[0].features?.created?.map((f) => f.id)).toEqual(['r1']);
   });
 
-  it('drops a feature deleted on the document from the selection, editing and hiding', () => {
-    const document = new MemoryDocumentStore();
+  it('drops a feature deleted on the Store of the host from the selection, editing and hiding', () => {
+    const document = new MemoryContractStore();
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.createFeature(point('f1'));
@@ -359,7 +366,7 @@ describe('the invariants of the selection', () => {
   });
 
   it('drops a feature hidden by a change of the document from elsewhere', () => {
-    const document = new MemoryDocumentStore();
+    const document = new MemoryContractStore();
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.createFeature(point('f1'));
@@ -405,7 +412,7 @@ describe('the invariants of the selection', () => {
   });
 
   it('ends the vertex selection on a change of the coordinates from elsewhere during a drag', () => {
-    const document = new MemoryDocumentStore();
+    const document = new MemoryContractStore();
     const store = toStore(document);
     store.createLayer(layer('l1'));
     store.createFeature(point('f1'));

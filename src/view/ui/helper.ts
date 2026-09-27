@@ -28,7 +28,7 @@ import {
  * @param store The Store to read the selection from
  * @returns The feature ids. An empty array when nothing is selected
  */
-export function getSelectedFeatureIds(store: Store): string[] {
+export function getSelectedFeatureIds(store: Store): readonly string[] {
   const selection = store.getSelection();
   switch (selection.type) {
     case 'feature':

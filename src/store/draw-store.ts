@@ -4,16 +4,18 @@
 /**
  * DrawStore
  *
- * The Store core works with: a DocumentStore (the in-memory one, or one the host gave) and
- * the local UiState of this client behind one gate.
+ * The Store core works with: a {@link StoreContract} (the in-memory one, or one the host gave)
+ * and the state only the drawing reads, behind one gate. It reaches the contract only through
+ * the members of the public `Store`.
  *
- *   - Read-only is enforced here, at the write methods, and nowhere else. A refused write
- *     returns false and touches nothing. The DocumentStore never sees the gate, so changes
- *     applied to the document from elsewhere are not stopped by it.
- *   - The notifications of the document are forwarded into the ChangeBus of the local state,
- *     so a listener gets one StoreChange per transaction with both kinds of change.
- *   - Deletions reach the local state: the id of a deleted feature, group or layer leaves the
- *     selection, the features being edited and the locally hidden set, whatever deleted it.
+ *   - Read-only is enforced here, at the write methods of the document. A refused write
+ *     returns false and touches nothing. Changes applied to the contract from elsewhere are not
+ *     stopped by it.
+ *   - The notifications of the contract are forwarded into the ChangeBus of this Store, so a
+ *     listener gets one StoreChange per transaction with every kind of change.
+ *   - Deletions reach the state of this client: the id of a deleted feature, group or layer
+ *     leaves the selection, the features being edited and the locally hidden set, whatever
+ *     deleted it, through the writes of the contract.
  *   - The selection holds only what can be seen: a change that hides a selected item (its own
  *     visible flag, the one of its group or layer, or local hiding) takes it out of the
  *     selection, and the vertex selection ends when its feature is deleted or its coordinates
@@ -23,8 +25,8 @@
 
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { ChangeBus } from './memory/change-bus.js';
-import { MemoryUiState } from './memory/ui-state.js';
-import type { DocumentStore, Store } from './store.js';
+import { MemoryDrawingState } from './memory/ui-state.js';
+import type { Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
   DragState,
@@ -44,28 +46,28 @@ import type {
 } from './types.js';
 
 /**
- * Returns the Store for a store option: a Store is used as it is, a DocumentStore gets the
- * local state and the read-only gate of core around it
+ * Returns the Store for a store option: a Store of core is used as it is, a Store of the host
+ * gets the drawing state and the read-only gate of core around it
  *
  * @internal
  */
-export function toStore(store: DocumentStore | Store): Store {
+export function toStore(store: StoreContract | Store): Store {
   return store instanceof DrawStore ? store : new DrawStore(store);
 }
 
 /**
- * The Store of core over a DocumentStore
+ * The Store of core over a {@link StoreContract}
  *
  * @internal
  */
 export class DrawStore implements Store {
-  readonly #document: DocumentStore;
+  readonly #contract: StoreContract;
   readonly #bus = new ChangeBus();
-  readonly #ui = new MemoryUiState(this.#bus);
+  readonly #drawing = new MemoryDrawingState(this.#bus);
 
-  constructor(document: DocumentStore) {
-    this.#document = document;
-    document.subscribe((changes) => this.#receive(changes));
+  constructor(contract: StoreContract) {
+    this.#contract = contract;
+    contract.subscribe((changes) => this.#receive(changes));
   }
 
   // ============================================================================
@@ -73,37 +75,37 @@ export class DrawStore implements Store {
   // ============================================================================
 
   getFeature(id: string): Feature | undefined {
-    return this.#document.getFeature(id);
+    return this.#contract.getFeature(id);
   }
   listFeatures(): Feature[] {
-    return this.#document.listFeatures();
+    return this.#contract.listFeatures();
   }
   listFeaturesInOrder(): Feature[] {
-    return this.#document.listFeaturesInOrder();
+    return this.#contract.listFeaturesInOrder();
   }
   getLayer(id: string): Layer | undefined {
-    return this.#document.getLayer(id);
+    return this.#contract.getLayer(id);
   }
   listLayers(): Layer[] {
-    return this.#document.listLayers();
+    return this.#contract.listLayers();
   }
   getLayerOrder(): readonly string[] {
-    return this.#document.getLayerOrder();
+    return this.#contract.getLayerOrder();
   }
   getGroup(id: string): Group | undefined {
-    return this.#document.getGroup(id);
+    return this.#contract.getGroup(id);
   }
   listGroups(): Group[] {
-    return this.#document.listGroups();
+    return this.#contract.listGroups();
   }
   getFile(id: string): FileData | undefined {
-    return this.#document.getFile(id);
+    return this.#contract.getFile(id);
   }
   listFiles(): FileData[] {
-    return this.#document.listFiles();
+    return this.#contract.listFiles();
   }
   getMetadata(): Metadata {
-    return this.#document.getMetadata();
+    return this.#contract.getMetadata();
   }
 
   // ============================================================================
@@ -111,150 +113,158 @@ export class DrawStore implements Store {
   // ============================================================================
 
   createFeature(feature: Feature): boolean {
-    return this.#write(() => this.#document.createFeature(feature));
+    return this.#write(() => this.#contract.createFeature(feature));
   }
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
-    return this.#write(() => this.#document.updateFeature(id, updates, options));
+    return this.#write(() => this.#contract.updateFeature(id, updates, options));
   }
   abortIntermediateUpdates(ids: string[]): void {
-    this.#document.abortIntermediateUpdates?.(ids);
+    this.#contract.abortIntermediateUpdates?.(ids);
   }
   deleteFeature(id: string): boolean {
     return this.#write(() => {
-      this.#document.deleteFeature(id);
+      const deleted = this.#contract.deleteFeature(id);
       // At once, so that the rest of a transaction already sees the selection without it
-      this.#forget(id);
+      if (deleted) this.#forget(id);
+      return deleted;
     });
   }
 
   createLayer(layer: Layer): boolean {
-    return this.#write(() => this.#document.createLayer(layer));
+    return this.#write(() => this.#contract.createLayer(layer));
   }
   updateLayer(id: string, updates: Partial<Layer>): boolean {
-    return this.#write(() => this.#document.updateLayer(id, updates));
+    return this.#write(() => this.#contract.updateLayer(id, updates));
   }
   deleteLayer(id: string): boolean {
-    return this.#write(() => this.#document.deleteLayer(id));
+    return this.#write(() => this.#contract.deleteLayer(id));
   }
   setLayerOrder(order: string[]): boolean {
-    return this.#write(() => this.#document.setLayerOrder(order));
+    return this.#write(() => this.#contract.setLayerOrder(order));
   }
   reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean {
-    return this.#write(() => this.#document.reorderInLayer(itemId, layerId, newIndex));
+    return this.#write(() => this.#contract.reorderInLayer(itemId, layerId, newIndex));
   }
   reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean {
-    return this.#write(() => this.#document.reorderInGroup(featureId, groupId, newIndex));
+    return this.#write(() => this.#contract.reorderInGroup(featureId, groupId, newIndex));
   }
 
   createGroup(group: Group): boolean {
-    return this.#write(() => this.#document.createGroup(group));
+    return this.#write(() => this.#contract.createGroup(group));
   }
   updateGroup(id: string, updates: Partial<Group>): boolean {
-    return this.#write(() => this.#document.updateGroup(id, updates));
+    return this.#write(() => this.#contract.updateGroup(id, updates));
   }
   deleteGroup(id: string): boolean {
-    return this.#write(() => this.#document.deleteGroup(id));
+    return this.#write(() => this.#contract.deleteGroup(id));
   }
 
   createFile(file: FileData): boolean {
-    return this.#write(() => this.#document.createFile(file));
+    return this.#write(() => this.#contract.createFile(file));
   }
   deleteFile(id: string): boolean {
-    return this.#write(() => this.#document.deleteFile(id));
+    return this.#write(() => this.#contract.deleteFile(id));
   }
 
   setMetadata(metadata: Partial<Metadata>): boolean {
-    return this.#write(() => this.#document.setMetadata(metadata));
+    return this.#write(() => this.#contract.setMetadata(metadata));
   }
 
   // ============================================================================
-  // The local state
+  // The state of this client (kept by the contract)
   // ============================================================================
 
   getSelection(): Selection {
-    return this.#ui.getSelection();
+    return this.#contract.getSelection();
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
-    this.#ui.setSelection(type, ids);
+    this.#local(() => this.#contract.setSelection(type, ids));
   }
 
   getEditingIds(): readonly string[] {
-    return this.#ui.getEditingIds();
+    return this.#contract.getEditingIds();
   }
   startEditing(ids: string[]): void {
-    this.#ui.startEditing(ids);
+    this.#local(() => this.#contract.startEditing(ids));
   }
   endEditing(ids: string[]): void {
-    this.#ui.endEditing(ids);
-  }
-
-  getTentative(): TentativeState | null {
-    return this.#ui.getTentative();
-  }
-  setTentative(state: TentativeState | null): void {
-    this.#ui.setTentative(state);
-  }
-
-  getBoxSelection(): BoxSelection | null {
-    return this.#ui.getBoxSelection();
-  }
-  setBoxSelection(box: BoxSelection | null): void {
-    this.#ui.setBoxSelection(box);
-  }
-
-  getDragState(): DragState | null {
-    return this.#ui.getDragState();
-  }
-  setDragState(state: DragState | null): void {
-    this.#ui.setDragState(state);
+    this.#local(() => this.#contract.endEditing(ids));
   }
 
   getVertexSelection(): VertexSelection | null {
-    return this.#ui.getVertexSelection();
+    return this.#contract.getVertexSelection();
   }
   setSelectedVertices(selection: VertexSelection | null): void {
-    this.#ui.setSelectedVertices(selection);
-  }
-
-  getFollowedVertices(): VertexSelection[] | null {
-    return this.#ui.getFollowedVertices();
-  }
-  setFollowedVertices(selections: VertexSelection[] | null): void {
-    this.#ui.setFollowedVertices(selections);
+    this.#local(() => this.#contract.setSelectedVertices(selection), true);
   }
 
   getMode(): Mode {
-    return this.#ui.getMode();
+    return this.#contract.getMode();
   }
   setMode(mode: Mode): void {
-    this.#ui.setMode(mode);
+    this.#local(() => this.#contract.setMode(mode));
   }
 
   isReadOnly(): boolean {
-    return this.#ui.isReadOnly();
+    return this.#contract.isReadOnly();
   }
   setReadOnly(value: boolean): void {
-    this.#ui.setReadOnly(value);
+    if (this.#contract.isReadOnly() === value) return;
+    this.#local(() => this.#contract.setReadOnly(value), true);
   }
 
   isInteractionLocked(): boolean {
-    return this.#ui.isInteractionLocked();
+    return this.#contract.isInteractionLocked();
   }
   setInteractionLock(value: boolean): void {
-    this.#ui.setInteractionLock(value);
+    if (this.#contract.isInteractionLocked() === value) return;
+    this.#local(() => this.#contract.setInteractionLock(value), true);
   }
 
   isHidden(id: string): boolean {
-    return this.#ui.isHidden(id);
+    return this.#contract.isHidden(id);
   }
   listHidden(): ReadonlySet<string> {
-    return this.#ui.listHidden();
+    return this.#contract.listHidden();
   }
   setLocallyHidden(id: string, hidden: boolean): void {
-    this.#bus.transact(() => {
-      this.#ui.setLocallyHidden(id, hidden);
+    if (this.#contract.isHidden(id) === hidden) return;
+    this.#local(() => {
+      this.#contract.setLocallyHidden(id, hidden);
       if (hidden) this.#pruneInvisible();
-    }, 'local');
+    }, true);
+  }
+
+  // ============================================================================
+  // The state only the drawing reads (kept here)
+  // ============================================================================
+
+  getTentative(): TentativeState | null {
+    return this.#drawing.getTentative();
+  }
+  setTentative(state: TentativeState | null): void {
+    this.#drawing.setTentative(state);
+  }
+
+  getBoxSelection(): BoxSelection | null {
+    return this.#drawing.getBoxSelection();
+  }
+  setBoxSelection(box: BoxSelection | null): void {
+    this.#drawing.setBoxSelection(box);
+  }
+
+  getDragState(): DragState | null {
+    return this.#drawing.getDragState();
+  }
+  setDragState(state: DragState | null): void {
+    this.#drawing.setDragState(state);
+  }
+
+  getFollowedVertices(): VertexSelection[] | null {
+    return this.#drawing.getFollowedVertices();
+  }
+  setFollowedVertices(selections: VertexSelection[] | null): void {
+    this.#drawing.setFollowedVertices(selections);
   }
 
   // ============================================================================
@@ -266,28 +276,40 @@ export class DrawStore implements Store {
   }
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
-    return this.#bus.transact(() => this.#document.transact(fn, source), source);
+    return this.#bus.transact(() => this.#contract.transact(fn, source), source);
   }
 
   // ============================================================================
   // Private
   // ============================================================================
 
-  /** Runs one document write unless read-only; true when it ran */
-  #write(fn: () => void): boolean {
-    if (this.#ui.isReadOnly()) return false;
-    this.transact(fn);
-    return true;
+  /** Runs one document write unless read-only; what the contract returned */
+  #write(fn: () => boolean): boolean {
+    if (this.#contract.isReadOnly()) return false;
+    return this.transact(fn);
   }
 
   /**
-   * Takes a notification of the document into the notification of this Store, together with
-   * the local state it changes (one notification with the document's source when it did not
-   * come from a transaction of this Store)
+   * Runs a write of the state of this client as one notification of this Store. `redraw` marks
+   * the notification for a state the categories do not describe (the vertex selection,
+   * read-only, the interaction lock, local visibility), in case the contract notifies it with no
+   * category or not at all.
+   */
+  #local(fn: () => void, redraw = false): void {
+    this.#bus.transact(() => {
+      fn();
+      if (redraw) this.#bus.merge({ uiStateChanged: true });
+    }, 'local');
+  }
+
+  /**
+   * Takes a notification of the contract into the notification of this Store, together with
+   * the state of this client it changes (one notification with the contract's source when it
+   * did not come from a transaction of this Store)
    */
   #receive(changes: StoreChange): void {
     this.#bus.transact(() => {
-      this.#bus.merge(documentPart(changes));
+      this.#bus.merge(withoutSource(changes));
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
@@ -296,13 +318,20 @@ export class DrawStore implements Store {
     }, changes.source ?? 'local');
   }
 
-  /** Removes an id that no longer names anything from the local state */
+  /** Removes an id that no longer names anything from the state of this client */
   #forget(id: string): void {
-    if (this.#document.getFeature(id) || this.#document.getGroup(id)) return;
-    if (this.#document.getLayer(id)) return;
-    this.#ui.removeFromSelection(id);
-    this.#ui.removeFromEditing(id);
-    this.#ui.removeFromLocallyHidden(id);
+    const contract = this.#contract;
+    if (contract.getFeature(id) || contract.getGroup(id) || contract.getLayer(id)) return;
+    const selection = contract.getSelection();
+    if (selection.ids.includes(id)) {
+      const ids = selection.ids.filter((selected) => selected !== id);
+      contract.setSelection(ids.length === 0 ? null : selection.type, ids);
+    }
+    if (contract.getEditingIds().includes(id)) contract.endEditing([id]);
+    if (contract.isHidden(id)) {
+      contract.setLocallyHidden(id, false);
+      this.#bus.merge({ uiStateChanged: true });
+    }
   }
 
   /**
@@ -310,13 +339,13 @@ export class DrawStore implements Store {
    * its handles, its vertex hits or its place in a Delete
    */
   #pruneInvisible(): void {
-    const selection = this.#ui.getSelection();
+    const selection = this.#contract.getSelection();
     const type = selection.type;
     if (type === null || selection.ids.length === 0) return;
-    const shown = createShownLookup(this.#document, this.#ui);
+    const shown = createShownLookup(this.#contract);
     const kept = selection.ids.filter((id) => shown(type, id));
     if (kept.length !== selection.ids.length) {
-      this.#ui.setSelection(kept.length > 0 ? type : null, kept);
+      this.#contract.setSelection(kept.length > 0 ? type : null, kept);
     }
   }
 
@@ -326,22 +355,28 @@ export class DrawStore implements Store {
    * would name other vertices
    */
   #pruneVertices(changes: StoreChange): void {
-    const vertices = this.#ui.getVertexSelection();
+    const vertices = this.#contract.getVertexSelection();
     if (!vertices) return;
     const featureId = vertices.featureId;
-    if (!this.#document.getFeature(featureId)) {
-      this.#ui.setSelectedVertices(null);
+    if (!this.#contract.getFeature(featureId)) {
+      this.#endVertexSelection();
       return;
     }
     const local = changes.source !== 'remote';
     for (const entry of changes.features?.updated ?? []) {
       if (entry.id !== featureId) continue;
       // The frames and the commit of a local drag keep the vertices being dragged selected
-      if (local && (entry.isIntermediate || this.#ui.getDragState() !== null)) continue;
+      if (local && (entry.isIntermediate || this.#drawing.getDragState() !== null)) continue;
       if (sameCoordinates(coordinatesOf(entry.feature), coordinatesOf(entry.previous))) continue;
-      this.#ui.setSelectedVertices(null);
+      this.#endVertexSelection();
       return;
     }
+  }
+
+  /** Clears the vertex selection, marking the notification for the drawing */
+  #endVertexSelection(): void {
+    this.#contract.setSelectedVertices(null);
+    this.#bus.merge({ uiStateChanged: true });
   }
 }
 
@@ -365,10 +400,8 @@ function mayHide(changes: StoreChange): boolean {
  * Each layer and group is looked up once per call site (a document can take time to read a
  * layer).
  */
-function createShownLookup(
-  document: DocumentStore,
-  ui: { isHidden(id: string): boolean },
-): (type: SelectionType, id: string) => boolean {
+function createShownLookup(document: StoreContract): (type: SelectionType, id: string) => boolean {
+  const ui = document;
   const layers = new Map<string, boolean>();
   const groups = new Map<string, boolean>();
 
@@ -407,7 +440,7 @@ function createShownLookup(
 }
 
 /** The layer of a group: the one of its members, or the layer that lists an empty group */
-function groupLayerId(document: DocumentStore, group: Group): string | undefined {
+function groupLayerId(document: StoreContract, group: Group): string | undefined {
   for (const featureId of group.featureIds) {
     const feature = document.getFeature(featureId);
     if (feature) return feature.layerId;
@@ -425,16 +458,8 @@ function sameCoordinates(a: unknown, b: unknown): boolean {
   return true;
 }
 
-/** The categories of a notification that belong to the document */
-function documentPart(changes: StoreChange): StoreChange {
-  const part: StoreChange = {};
-  if (changes.features) part.features = changes.features;
-  if (changes.layers) part.layers = changes.layers;
-  if (changes.groups) part.groups = changes.groups;
-  if (changes.layerReorder) part.layerReorder = changes.layerReorder;
-  if (changes.groupReorder) part.groupReorder = changes.groupReorder;
-  if (changes.metadata) part.metadata = changes.metadata;
-  if (changes.files) part.files = changes.files;
-  if (changes.uiStateChanged) part.uiStateChanged = true;
-  return part;
+/** A notification of the contract without its source (the transaction here carries it) */
+function withoutSource(changes: StoreChange): StoreChange {
+  const { source: _source, ...rest } = changes;
+  return rest;
 }

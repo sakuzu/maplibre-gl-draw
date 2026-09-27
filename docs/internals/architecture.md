@@ -222,7 +222,8 @@ There are no runtime violations and no runtime cycles. The type-only
 imports that point upward are few and deliberate: `modes/`, `snapping/`,
 `dataset/` and `view/ui/` read the normalized event and hit test types of
 `dispatcher/`; the drawing modes of `modes/draw/` read the types of the
-extension contract they are written to; the point hit test reads the public
+extension contract they are written to; the Store of core reads the public
+`Store` it is programmed against; the point hit test reads the public
 `Feature`; `view/shaders/` reads the shader types of the render context;
 `view/layer/` reads `DatasetManager` to draw datasets in the
 same pass; and the snap marker reads the line renderer's style type.
@@ -242,46 +243,55 @@ boundary with the host; and a change reaches every subscriber by itself.
 The state is split along one line. The contracts are in
 `src/store/store.ts`.
 
-- `DocumentStore` holds features, layers, groups, the stacking order,
-  files and metadata. A host replaces it through `Options.store` to keep
-  the document elsewhere. It knows nothing
-  about the user interface and nothing about read-only.
-- `UiState` holds selection, the ids being edited, the tentative geometry,
-  box selection, drag state, vertex selection, the vertices that follow a
-  shared vertex drag, the mode, read-only, the interaction lock and the
-  locally hidden ids. Core owns it and it is never part of the document.
-- `Store` is what core works with. Its document writes return `true` when
-  applied and `false` when read-only refused them. It delivers both kinds
-  of change in one notification.
+- `StoreContract` is the public `Store` of `src/api/extension/store.ts`
+  with the rules core relies on. It holds features, layers, groups, the
+  stacking order, files and metadata, and the state of this client that
+  the public contract names: selection, the ids being edited, vertex
+  selection, the mode, read-only, the interaction lock and the locally
+  hidden ids. A host replaces it through `Options.store`, and core reads
+  and writes it only through the members of the public `Store`.
+- The drawing state (the tentative geometry, box selection, drag state and
+  the vertices that follow a shared vertex drag) is read by the drawing
+  only. Core owns it around whatever holds the rest, and it is never part
+  of the document.
+- `Store` is what core works with: both, behind one gate. Its document
+  writes return what the contract returned, and `false` when read-only
+  refused them. It delivers every kind of change in one notification.
 - `StoreView` is reads, `subscribe` and `transact`, with no writes, so a
   host cannot reach past the checks that the public methods make.
 
 The implementation is `DrawStore` (`src/store/draw-store.ts`), a `Store`
-over any `DocumentStore`. `MemoryStore` is a `DrawStore` over the in-memory
-`MemoryDocumentStore` (`src/store/memory.ts`), and it is the default when no
-store is given. When `Options.store` is a `DocumentStore`, `toStore` wraps
-it in a `DrawStore`.
+over any `StoreContract`. `MemoryStore` is a `DrawStore` over the in-memory
+`MemoryContractStore` (`src/store/memory.ts`), which keeps a
+`MemoryDocumentStore` and the state of this client, and it is the default
+when no store is given. When `Options.store` is a Store of the host,
+`toStore` wraps it in a `DrawStore`; nothing casts it to an internal type.
 
 `DrawStore` is the one place that keeps these invariants:
 
 - Read-only is enforced at its write methods and nowhere else.
-- The notifications of the document are forwarded into the change bus of
-  the local state, so a listener gets one `StoreChange` per transaction
-  with both kinds of change.
+- The notifications of the contract are forwarded into its change bus, so
+  a listener gets one `StoreChange` per transaction with every kind of
+  change.
 - When a feature, group or layer is deleted, by anything, its id leaves the
-  selection, the ids being edited and the locally hidden set.
+  selection, the ids being edited and the locally hidden set, through the
+  writes of the contract.
 - The selection holds only what can be seen. A change that hides a selected
   item (its own visible flag, that of its group or layer, or local hiding)
   takes it out of the selection. The vertex selection ends when its feature
   is deleted or its coordinates change other than by a local drag.
 
-### The document contract
+### The Store contract
 
-A few rules bind every `DocumentStore` implementation.
+A few rules bind every `StoreContract` implementation. They are written in
+the TSDoc of `StoreContract`.
 
+- IDs: features and groups share one space of IDs, as both are listed in
+  `Layer.items`; layers and files have their own.
 - Containment: every feature is listed in exactly one container,
   `group.featureIds` of its group when it has `groupId`, otherwise
-  `layer.order` of its layer. Every mutation keeps this.
+  `layer.items` of its layer. Every mutation keeps this, and
+  `Group.layerId` names the layer that lists the group.
 - The stacking order is part of the document, saved and held by a replaced
   store with the rest, and it may hold entries of the host that are not layers
   (dataset ids, separators). The document keeps their
@@ -293,15 +303,17 @@ A few rules bind every `DocumentStore` implementation.
   changes an object after it has returned or notified it. A change stores a
   new object. `MemoryDocumentStore` freezes what it returns, so a write into
   it throws.
-- A write whose arguments cannot apply (an unknown id, a `layerId` that
-  names nothing, a duplicate id) throws and stores nothing. An
-  implementation that receives changes from elsewhere may ignore an update
-  to an id that a change from outside already removed.
-- `subscribe` delivers the document categories of `StoreChange` with their
-  source; other categories are ignored by core.
+- A write that is refused returns `false` and changes nothing; one whose
+  arguments cannot apply (an unknown id, a `layerId` that names nothing, a
+  duplicate id) may throw instead and stores nothing. Core does not call
+  the document writes while read-only.
+- `subscribe` delivers one `DocumentChange` per transaction with its
+  source; a replacement of the whole document made in one `transact` is
+  one `DocumentChange`. A write of the selection, the editing or the mode
+  is notified with its category.
 
-The full list of methods and their contracts is in the
-[generated reference](../api/index.md) under `DocumentStore`.
+The full list of methods is in the
+[generated reference](../api/index.md) under `Store`.
 
 ### StoreChange
 
@@ -312,21 +324,25 @@ optional category per kind of change:
   and `deleted`; `layers` also has `orderChanged`
 - `layerReorder` and `groupReorder`: the order inside one layer or group,
   separate from `layers.updated` so a consumer can handle them apart
-- `selection`, `editing`, `tentative`, `mode` and `metadata`
-- `uiStateChanged`: drag state or box selection changed
+- `selection`, `editing`, `tentative`, `mode`, `metadata` and `files`
+- `uiStateChanged`: a state without a category of its own changed (drag
+  state, box selection, vertex selection, read-only, the interaction lock,
+  local hiding)
 - `source`: where the change came from
 
-`UpdateSource` is `'local'`, `'silent'`, `'batch'`, `'remote'`, `'import'`
-or any other string an extension chooses. `silent` marks a bulk change that
-should not be recorded (clearing the selection when a drawing mode starts);
-`batch` labels a bulk change recorded as one unit (a GeoJSON import, which is
-one transaction); `remote` marks a change a replaced `DocumentStore`
-applied from outside the instance. The source is only a label: it never changes
-which events are emitted or how they are grouped; the transaction does.
+`UpdateSource` is `'local'`, `'silent'`, `'load'`, `'batch'`, `'remote'`,
+`'import'` or any other string an extension chooses. `silent` marks a bulk
+change that should not be recorded (clearing the selection when a drawing
+mode starts); `load` labels a GeoJSON load, recorded as one unit (it is one
+transaction, the replacement of `mode: 'replace'` included); `batch` labels
+a bulk change of a host or an extension recorded as one unit; `remote`
+marks a change a replaced Store applied from outside the instance. The
+source is only a label: it never changes which events are emitted or how
+they are grouped; the transaction does.
 
 An entry of `features.updated` may carry `isIntermediate: true`. It marks an
 intermediate state of an edit in progress, such as each step of a drag. The
-memory store applies it like any update; a replacement `DocumentStore` can
+memory store applies it like any update; a replacement Store can
 use the flag to choose between a persistence path and a transient path.
 When a drag ends without committing (a mode switch, an external reset), the
 optional `abortIntermediateUpdates(ids)` tells the store to discard the
@@ -768,7 +784,7 @@ Read-only leaves three things alone.
 - The local-state setters (selection, mode, editing, tentative, drag,
   vertex selection, local hiding). A viewer can still select, inspect and
   hide things locally.
-- Changes applied to the `DocumentStore` directly. A replacement store
+- Changes applied to the Store of the host directly. A replacement store
   applies changes from outside below the gate, so a read-only client still
   follows the document. Do not put read-only checks into the path that
   applies such changes or into anything that derives rendering state.
@@ -814,7 +830,7 @@ start of each interaction:
 
 ### Local visibility: where hiding applies
 
-The locally hidden set in `UiState` holds feature, group and layer ids. It
+The locally hidden set of the Store holds feature, group and layer ids. It
 is never part of the document and never changes it.
 
 `isLocallyHidden(feature, store)` looks at three levels: the feature, its

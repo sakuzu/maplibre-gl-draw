@@ -730,7 +730,7 @@ describe('simultaneous movement of shared vertices: follower highlight (UI state
     // Even after emptying the array used for the highlight, it still works because the
     // VertexState used for following is a separate thing
     const followed = store.getFollowedVertices();
-    if (followed) followed[0].vertices.length = 0;
+    if (followed) (followed[0].vertices as VertexRef[]).length = 0;
 
     handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
     handler.endDrag(context);

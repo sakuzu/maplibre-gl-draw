@@ -4,7 +4,8 @@
 /**
  * MemoryStore
  *
- * The in-memory Store: a DrawStore over a MemoryDocumentStore.
+ * The in-memory Store: a DrawStore over a MemoryContractStore, which keeps a
+ * MemoryDocumentStore and the state of this client.
  *
  * MemoryDocumentStore is the in-memory implementation of the DocumentStore contract.
  * Keeping Feature / Layer / Group consistent (cascading updates on deletion, cascading
@@ -21,16 +22,21 @@ import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy, frozenFeature } from './memory/frozen.js';
-import type { DocumentStore, Store } from './store.js';
+import { MemoryClientState } from './memory/ui-state.js';
+import type { DocumentStore, Store, StoreContract } from './store.js';
 import type {
   Feature,
   FileData,
   Group,
   Layer,
   Metadata,
+  Mode,
+  Selection,
+  SelectionType,
   StoreChange,
   UpdateFeatureOptions,
   UpdateSource,
+  VertexSelection,
 } from './types.js';
 
 /**
@@ -50,9 +56,176 @@ export interface MemoryStore extends Store {}
 export const MemoryStore: { new (): MemoryStore; readonly prototype: MemoryStore } =
   class extends DrawStore {
     constructor() {
-      super(new MemoryDocumentStore());
+      super(new MemoryContractStore());
     }
   };
+
+/**
+ * The in-memory {@link StoreContract}: a MemoryDocumentStore and the state of this client, with
+ * one notification per transaction
+ *
+ * Its writes of the document apply whatever read-only says (the Store of core gates them), and
+ * throw for an argument that cannot apply, as MemoryDocumentStore does.
+ *
+ * @internal
+ */
+export class MemoryContractStore implements StoreContract {
+  readonly #bus = new ChangeBus();
+  readonly #document = new MemoryDocumentStore();
+  readonly #client = new MemoryClientState(this.#bus);
+
+  constructor() {
+    this.#document.subscribe((changes) => this.#bus.merge(changes));
+  }
+
+  // The document
+
+  getFeature(id: string): Feature | undefined {
+    return this.#document.getFeature(id);
+  }
+  listFeatures(): Feature[] {
+    return this.#document.listFeatures();
+  }
+  listFeaturesInOrder(): Feature[] {
+    return this.#document.listFeaturesInOrder();
+  }
+  getLayer(id: string): Layer | undefined {
+    return this.#document.getLayer(id);
+  }
+  listLayers(): Layer[] {
+    return this.#document.listLayers();
+  }
+  getLayerOrder(): readonly string[] {
+    return this.#document.getLayerOrder();
+  }
+  getGroup(id: string): Group | undefined {
+    return this.#document.getGroup(id);
+  }
+  listGroups(): Group[] {
+    return this.#document.listGroups();
+  }
+  getFile(id: string): FileData | undefined {
+    return this.#document.getFile(id);
+  }
+  listFiles(): FileData[] {
+    return this.#document.listFiles();
+  }
+  getMetadata(): Metadata {
+    return this.#document.getMetadata();
+  }
+
+  createFeature(feature: Feature): boolean {
+    return this.#apply(() => this.#document.createFeature(feature));
+  }
+  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
+    return this.#apply(() => this.#document.updateFeature(id, updates, options));
+  }
+  deleteFeature(id: string): boolean {
+    return this.#apply(() => this.#document.deleteFeature(id));
+  }
+  createLayer(layer: Layer): boolean {
+    return this.#apply(() => this.#document.createLayer(layer));
+  }
+  updateLayer(id: string, updates: Partial<Layer>): boolean {
+    return this.#apply(() => this.#document.updateLayer(id, updates));
+  }
+  deleteLayer(id: string): boolean {
+    return this.#apply(() => this.#document.deleteLayer(id));
+  }
+  setLayerOrder(order: string[]): boolean {
+    return this.#apply(() => this.#document.setLayerOrder(order));
+  }
+  reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean {
+    return this.#apply(() => this.#document.reorderInLayer(itemId, layerId, newIndex));
+  }
+  reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean {
+    return this.#apply(() => this.#document.reorderInGroup(featureId, groupId, newIndex));
+  }
+  createGroup(group: Group): boolean {
+    return this.#apply(() => this.#document.createGroup(group));
+  }
+  updateGroup(id: string, updates: Partial<Group>): boolean {
+    return this.#apply(() => this.#document.updateGroup(id, updates));
+  }
+  deleteGroup(id: string): boolean {
+    return this.#apply(() => this.#document.deleteGroup(id));
+  }
+  createFile(file: FileData): boolean {
+    return this.#apply(() => this.#document.createFile(file));
+  }
+  deleteFile(id: string): boolean {
+    return this.#apply(() => this.#document.deleteFile(id));
+  }
+  setMetadata(metadata: Partial<Metadata>): boolean {
+    return this.#apply(() => this.#document.setMetadata(metadata));
+  }
+
+  // The state of this client
+
+  getSelection(): Selection {
+    return this.#client.getSelection();
+  }
+  setSelection(type: SelectionType | null, ids: string[]): void {
+    this.#client.setSelection(type, ids);
+  }
+  getEditingIds(): readonly string[] {
+    return this.#client.getEditingIds();
+  }
+  startEditing(ids: string[]): void {
+    this.#client.startEditing(ids);
+  }
+  endEditing(ids: string[]): void {
+    this.#client.endEditing(ids);
+  }
+  getVertexSelection(): VertexSelection | null {
+    return this.#client.getVertexSelection();
+  }
+  setSelectedVertices(selection: VertexSelection | null): void {
+    this.#client.setSelectedVertices(selection);
+  }
+  getMode(): Mode {
+    return this.#client.getMode();
+  }
+  setMode(mode: Mode): void {
+    this.#client.setMode(mode);
+  }
+  isReadOnly(): boolean {
+    return this.#client.isReadOnly();
+  }
+  setReadOnly(value: boolean): void {
+    this.#client.setReadOnly(value);
+  }
+  isInteractionLocked(): boolean {
+    return this.#client.isInteractionLocked();
+  }
+  setInteractionLock(value: boolean): void {
+    this.#client.setInteractionLock(value);
+  }
+  isHidden(id: string): boolean {
+    return this.#client.isHidden(id);
+  }
+  listHidden(): ReadonlySet<string> {
+    return this.#client.listHidden();
+  }
+  setLocallyHidden(id: string, hidden: boolean): void {
+    this.#client.setLocallyHidden(id, hidden);
+  }
+
+  // Subscription and transactions
+
+  subscribe(listener: (changes: StoreChange) => void): () => void {
+    return this.#bus.subscribe(listener);
+  }
+  transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
+    return this.#bus.transact(() => this.#document.transact(fn, source), source);
+  }
+
+  /** Runs one write of the document; true once it applied */
+  #apply(write: () => void): boolean {
+    this.transact(write);
+    return true;
+  }
+}
 
 /**
  * The in-memory DocumentStore
@@ -603,18 +776,20 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** The layer's copy for the current notification (made on the first change) */
-  #writableLayer(current: Layer): Layer {
-    if (this.#freshLayers.has(current.id)) return current;
-    const layer: Layer = { ...current, items: [...current.items] };
+  #writableLayer(current: Layer): Layer & { items: string[] } {
+    // A layer copied for this notification has its own array until it is frozen
+    if (this.#freshLayers.has(current.id)) return current as Layer & { items: string[] };
+    const layer = { ...current, items: [...current.items] };
     this.#layers.set(layer.id, layer);
     this.#freshLayers.add(layer.id);
     return layer;
   }
 
   /** The group's copy for the current notification (made on the first change) */
-  #writableGroup(current: Group): Group {
-    if (this.#freshGroups.has(current.id)) return current;
-    const group: Group = { ...current, featureIds: [...current.featureIds] };
+  #writableGroup(current: Group): Group & { featureIds: string[] } {
+    // A group copied for this notification has its own array until it is frozen
+    if (this.#freshGroups.has(current.id)) return current as Group & { featureIds: string[] };
+    const group = { ...current, featureIds: [...current.featureIds] };
     this.#groups.set(group.id, group);
     this.#freshGroups.add(group.id);
     return group;

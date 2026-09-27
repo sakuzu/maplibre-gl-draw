@@ -84,7 +84,7 @@ export interface Selection {
   /** Selection type (null means nothing is selected) */
   type: SelectionType | null;
   /** IDs of the selected items */
-  ids: string[];
+  ids: readonly string[];
 }
 
 /**
@@ -124,7 +124,7 @@ export interface VertexSelection {
   /** The ID of the feature whose vertices are selected */
   featureId: string;
   /** The selected vertices */
-  vertices: VertexRef[];
+  vertices: readonly VertexRef[];
 }
 
 /**
@@ -460,7 +460,7 @@ export interface Layer {
    *
    * A feature in a group is listed in `Group.featureIds` instead.
    */
-  items: string[];
+  items: readonly string[];
   /** Free-form data of the host, saved and exported with the layer */
   metadata: Record<string, unknown> | undefined;
   /**
@@ -491,7 +491,7 @@ export interface Group {
   /** The display name */
   name: string;
   /** The IDs of the members, back to front (the last is the frontmost) */
-  featureIds: string[];
+  featureIds: readonly string[];
   /**
    * Whether the group is locked (every member is then locked, see {@link isFeatureLocked})
    */
@@ -566,7 +566,7 @@ export interface TentativeState {
  *   is one transaction, which is what makes it one notification)
  * - batch: a bulk change of a host or an extension recorded as one step; core does not write
  *   it
- * - remote: a change that came from outside the instance. A replaced {@link DocumentStore}
+ * - remote: a change that came from outside the instance. A replaced Store (see StoreContract)
  *   writes it for the changes it applies from elsewhere, so that subscribers can tell them from
  *   local edits and core keeps the local editing state (a vertex selection) consistent with them
  * - import: for a host or an extension that loads data by its own means; core does not write
@@ -606,7 +606,7 @@ export interface UpdateFeatureOptions {
  * `subscribe` of the Store delivers one per outermost transaction (or per write outside
  * one). Each category is present only when the transaction changed it. The document
  * categories (features, layers, groups, layerReorder, groupReorder, metadata, files) are what a
- * {@link DocumentStore} notifies; the others are local state of this client.
+ * DocumentStore notifies; the others are local state of this client.
  */
 export interface StoreChange {
   /**
@@ -768,7 +768,7 @@ export interface Data {
   layers?: Layer[];
   /**
    * The stacking order, from the back: every layer of `layers` once, and the entries of the
-   * application that are not layers (see {@link DocumentStore.setLayerOrder}) at their
+   * application that are not layers (see the stacking order of StoreContract) at their
    * positions
    */
   layerOrder: string[];

@@ -29,7 +29,7 @@
  * registry per draw instance (createFeatureCompanionRegistry). When several instances
  * (the hidden renderers of printing and thumbnails) hold different Stores that have the
  * same feature ids, the provider has no way to tell "is this a feature of my own Store?"
- * (a replaced DocumentStore may return a new object from getFeature every time, so identity
+ * (a replaced Store may return a new object from getFeature every time, so identity
  * cannot be used), so ownership is expressed by separating the registries.
  */
 

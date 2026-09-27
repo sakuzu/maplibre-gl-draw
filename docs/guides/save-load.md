@@ -280,24 +280,31 @@ const store: Store = createServerStore();
 const draw = createDraw(map, { store });
 ```
 
-The store holds the document: the features, the layers and their
-stacking order, the groups, the files and the metadata. The instance
-reads and writes the document through its methods, subscribes to it and
-groups writes with its `transact`. The state of this client (the
-selection, the mode, read-only, the interaction lock and the hidden
-items) stays in the instance around the store, which never sees
-read-only: the instance refuses those writes before they reach it.
+The store holds the document (the features, the layers and their
+stacking order, the groups, the files and the metadata) and the state of
+this client (the selection, the features being edited, the selected
+vertices, the mode, read-only, the interaction lock and the hidden items).
+The instance reads and writes both only through the methods of `Store`,
+subscribes to it and groups writes with its `transact`. It does not call
+the writes of the document while `isReadOnly()` is true. The shape being
+drawn, the box selection and the drag stay in the instance.
 
 A store of your own keeps a few rules:
 
+- The IDs of features and groups are unique together, and so are the IDs
+  of layers and those of files
 - Every feature is listed in exactly one place: in the `featureIds` of its
-  group when it has a `groupId`, otherwise in the `items` of its layer
+  group when it has a `groupId`, otherwise in the `items` of its layer.
+  Every group is in the `items` of one layer, and its `layerId` names that
+  layer
 - An object it has returned or notified is never changed afterwards; a
   change stores a new object
 - A write whose argument cannot apply (an ID that does not exist, a layer
   or group that names nothing, an ID taken twice) changes nothing
 - `transact` groups the changes of a function into one notification of
-  `subscribe`
+  `subscribe`, so a load that replaces the whole document is one
+  `DocumentChange`. A write of the selection, the editing or the mode is
+  notified with its category
 - A change it applies from outside the instance is notified like a local
   one, with the source `'remote'`. The instance draws it, and a deleted
   item leaves the selection
