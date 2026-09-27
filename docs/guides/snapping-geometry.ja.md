@@ -299,63 +299,66 @@ draw.on('draw.geometry.applied', ({ operation, status, resultIds }) => {
 同じ結果になります。
 
 <!-- docs-check:
-declare const polygonA: import('@sakuzu/maplibre-gl-draw/geometry').PolygonCoordinates;
-declare const polygonB: import('@sakuzu/maplibre-gl-draw/geometry').PolygonCoordinates;
-declare const road: import('@sakuzu/maplibre-gl-draw/geometry').Coordinate[];
+declare const polygonA: import('geojson').Polygon;
+declare const polygonB: import('geojson').Polygon;
+declare const road: import('geojson').LineString;
 -->
 
 ```ts
 import {
+  area,
   buffer,
   pointOnSurface,
-  sphericalArea,
-  unionAll,
+  union,
 } from '@sakuzu/maplibre-gl-draw/geometry';
 
-// polygonA と polygonB は Polygon の座標 ([ring, ...])
-const merged = unionAll([polygonA, polygonB]);
-const areaSquareMeters = sphericalArea(merged);
-const labelAnchor = pointOnSurface(merged);
+// polygonA と polygonB は GeoJSON の Polygon (またはそれを持つ地物)
+const merged = union([polygonA, polygonB]);
+if (merged !== null) {
+  const areaSquareMeters = area(merged);
+  const labelAnchor = pointOnSurface(merged);
+}
 
-const band = buffer({ type: 'LineString', coordinates: road }, 100, {
-  segments: 32,
-});
+const band = buffer(road, 100, { segments: 32 });
 ```
 
-含まれるのは、ブール演算 (`union`、`difference`、
-`intersection`、`clip` と、それぞれの `*All` 版)、`splitArea`、
-`buffer`、判定 (`pointInPolygon`、`intersects`、`contains`、
-`within`)、計測 (`geodesicLength`、`sphericalArea`、`centroid`、
-`pointOnSurface`)、`simplify` とリングの向きを扱う補助関数、
-球面上の距離と方位、境界ボックスです。
+含まれるのは、計測 (`distance`、`bearing`、`destination`、
+`midpoint`、`along`、`nearestPointOnLine`、`length`、`area`、
+`perimeter`、`centroid`、`pointOnSurface`)、形の生成 (`circle`、
+`buffer`)、面の配列に対するブール演算 (`union`、`intersection`、
+`difference`) と `split`、判定 (`pointInPolygon`、`overlaps`、
+`contains`、`bboxIntersects`、`bboxContains`)、整形 (`makeValid`、
+`rewind`、`simplify`)、そして `bbox` と `metersToDegrees` です。
 
 ### すべての関数で成り立つこと
 
 - 同じ入力からは常に同じ出力が返ります。引数は変更せず、結果は
-  新しい配列です
-- 座標は GeoJSON の配列で、地物の `coordinates` と同じ
-  形です。面を扱う関数は `Polygon` か `MultiPolygon` の座標を
-  受け取り、`MultiPolygon` の座標を返します
-- `[]` は結果が空であることを、`null` はその入力に対して演算が
-  定義されないことを表します
+  新しいオブジェクトです
+- 入力は GeoJSON の geometry か、geometry を持つ地物です。点は
+  位置 `[lng, lat]` か `Point` で渡します。結果は GeoJSON の
+  geometry で、面はパートが 1 つなら `Polygon`、複数なら
+  `MultiPolygon` で返ります
+- 長さ、距離、半径、許容の単位はメートル、面積は平方メートル、
+  方位と座標は度です
+- `null` は結果が空であることを表します。関数が受け取れない形の
+  入力には、コード `invalid-input` を持つ `GeometryError` を
+  投げます
 
 <!-- docs-check:
-declare const polygon: import('@sakuzu/maplibre-gl-draw/geometry').PolygonCoordinates;
+declare const polygon: import('geojson').Polygon;
 -->
 
 ```ts
-const shrunk = buffer({ type: 'Polygon', coordinates: polygon }, -50);
+const shrunk = buffer(polygon, -50);
 if (shrunk === null) {
-  // 点か線に負の距離を渡した
-} else if (shrunk.length === 0) {
   // 面が丸ごと消えた
 }
 ```
 
 - 壊れた入力は、先へ渡さずに入口で取り除きます。位置が 3 つに
   満たないリングや、有限の数でない座標は計算に届きません
-- ブール演算の `*All` 関数は、結果を計算できないとき、理由の
-  コードを持つ `GeometryError` を投げます
+- ブール演算は、結果を計算できないとき、コード
+  `engine-failure` を持つ `GeometryError` を投げます
 - 境界を共有するだけの面どうしは、重なっているとみなしません
 - ±180° の経線をまたぐ形と、極の周辺は対象外です。そこでは
   `buffer` は `null` を返します
@@ -368,7 +371,7 @@ if (shrunk === null) {
 - [snapping-and-geometry](../../examples/snapping-and-geometry/)
   では、`Options.snap` を設定し、`draw.snapping`、
   `draw.tracing`、`draw.topology` を切り替え、`union`、
-  `subtract`、`buffer`、`split` を実行し、`sphericalArea` で
+  `subtract`、`buffer`、`split` を実行し、`area` で
   面積を測ります
 
 ## リファレンス

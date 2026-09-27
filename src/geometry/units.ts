@@ -11,11 +11,11 @@
 /**
  * The radius in meters of the sphere on which every function of this entry measures.
  *
- * The value is the mean Earth radius, 6,371,000 m. Distances, bearings, areas, circles and
- * buffers all assume this sphere rather than an ellipsoid, so a result differs from an
- * ellipsoidal computation by up to about 0.5%.
+ * The value is the mean Earth radius of the IUGG, 6,371,008.8 m. Distances, bearings, areas,
+ * circles and buffers all assume this sphere rather than an ellipsoid, so a result differs from
+ * an ellipsoidal computation by up to about 0.5%.
  */
-export const EARTH_RADIUS_METERS = 6371000;
+export const EARTH_RADIUS_METERS = 6371008.8;
 
 /**
  * Converts an angle in degrees to radians.

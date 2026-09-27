@@ -282,55 +282,57 @@ without loading the map-facing part of the package, and gives the same
 results in Node and Bun.
 
 <!-- docs-check:
-declare const polygonA: import('@sakuzu/maplibre-gl-draw/geometry').PolygonCoordinates;
-declare const polygonB: import('@sakuzu/maplibre-gl-draw/geometry').PolygonCoordinates;
-declare const road: import('@sakuzu/maplibre-gl-draw/geometry').Coordinate[];
+declare const polygonA: import('geojson').Polygon;
+declare const polygonB: import('geojson').Polygon;
+declare const road: import('geojson').LineString;
 -->
 
 ```ts
 import {
+  area,
   buffer,
   pointOnSurface,
-  sphericalArea,
-  unionAll,
+  union,
 } from '@sakuzu/maplibre-gl-draw/geometry';
 
-// polygonA and polygonB are Polygon coordinates ([ring, ...])
-const merged = unionAll([polygonA, polygonB]);
-const areaSquareMeters = sphericalArea(merged);
-const labelAnchor = pointOnSurface(merged);
+// polygonA and polygonB are GeoJSON Polygons (or features that hold one)
+const merged = union([polygonA, polygonB]);
+if (merged !== null) {
+  const areaSquareMeters = area(merged);
+  const labelAnchor = pointOnSurface(merged);
+}
 
-const band = buffer({ type: 'LineString', coordinates: road }, 100, {
-  segments: 32,
-});
+const band = buffer(road, 100, { segments: 32 });
 ```
 
-It contains boolean operations (`union`, `difference`, `intersection`,
-`clip` and their `*All` forms), `splitArea`, `buffer`, predicates
-(`pointInPolygon`, `intersects`, `contains`, `within`), measurement
-(`geodesicLength`, `sphericalArea`, `centroid`, `pointOnSurface`),
-`simplify` and ring orientation helpers, distances and bearings on the
-sphere, and bounding boxes.
+It contains measurement (`distance`, `bearing`, `destination`,
+`midpoint`, `along`, `nearestPointOnLine`, `length`, `area`, `perimeter`,
+`centroid`, `pointOnSurface`), construction (`circle`, `buffer`), boolean
+operations on arrays of polygons (`union`, `intersection`, `difference`)
+and `split`, tests (`pointInPolygon`, `overlaps`, `contains`,
+`bboxIntersects`, `bboxContains`), repair (`makeValid`, `rewind`,
+`simplify`), and `bbox` and `metersToDegrees`.
 
 ### What holds for every function
 
 - The same input always gives the same output. Arguments are not changed;
-  results are new arrays
-- Coordinates are GeoJSON arrays, the same shape as a feature's
-  `coordinates`. Functions on areas accept `Polygon` or `MultiPolygon`
-  coordinates and return `MultiPolygon` coordinates
-- `[]` means the result is empty; `null` means the operation is not
-  defined for that input
+  results are new objects
+- Inputs are GeoJSON geometries, or features whose geometry is used; a
+  point is a position `[lng, lat]` or a `Point`. Results are GeoJSON
+  geometries: an area comes back as a `Polygon`, or a `MultiPolygon` when
+  it has several parts
+- Lengths, distances, radii and tolerances are in meters, areas in square
+  meters, bearings and coordinates in degrees
+- `null` means the result is empty; an input whose shape the function
+  cannot take throws a `GeometryError` with the code `invalid-input`
 
 <!-- docs-check:
-declare const polygon: import('@sakuzu/maplibre-gl-draw/geometry').PolygonCoordinates;
+declare const polygon: import('geojson').Polygon;
 -->
 
 ```ts
-const shrunk = buffer({ type: 'Polygon', coordinates: polygon }, -50);
+const shrunk = buffer(polygon, -50);
 if (shrunk === null) {
-  // a negative distance for a point or a line
-} else if (shrunk.length === 0) {
   // the whole area vanished
 }
 ```
@@ -338,8 +340,8 @@ if (shrunk === null) {
 - Broken input is dropped at the entry rather than passed on: a ring with
   fewer than three positions or a coordinate that is not a finite number
   does not reach the computation
-- The boolean `*All` functions throw a `GeometryError` with a reason code
-  when they cannot compute a result
+- The boolean operations throw a `GeometryError` with the code
+  `engine-failure` when they cannot compute a result
 - Areas that only share a boundary do not overlap
 - Crossing the ±180° meridian and the surroundings of the poles are out of
   scope; `buffer` returns `null` there
@@ -351,7 +353,7 @@ if (shrunk === null) {
 - [snapping-and-geometry](../../examples/snapping-and-geometry/)
   sets `Options.snap`, switches `draw.snapping`, `draw.tracing` and
   `draw.topology`, runs `union`, `subtract`, `buffer` and `split`, and
-  measures with `sphericalArea`
+  measures with `area`
 
 ## Reference
 
