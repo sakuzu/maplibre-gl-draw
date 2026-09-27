@@ -33,8 +33,8 @@ generated from the sources. To learn how to use the library, start with
 
 ## Entry points
 
-The package has three entry points. Import from the first one unless
-you need the other two.
+The package has four entry points. Import from the first one unless
+you need the others.
 
 - `@sakuzu/maplibre-gl-draw` ({@link maplibre-gl-draw | the reference}):
   the instance, its options, the data model, the events, datasets and
@@ -44,10 +44,9 @@ you need the other two.
   build circles and buffers, combine polygons, test whether a point lies
   in a polygon, and tidy shapes. They also work in code that does not use
   the drawing engine (workers, servers, tests).
-- `@sakuzu/maplibre-gl-draw/columnar` ({@link columnar | the reference}):
-  the preparation of a columnar table for a dataset, importable in a
-  Worker.
-
-The symbols under Building blocks are for people who write plugins,
-modes and feature types. They may change in a minor release; everything
-else follows semantic versioning.
+- `@sakuzu/maplibre-gl-draw/table` ({@link table | the reference}):
+  the parts for reading a large table in a Worker and putting it on the
+  map as a dataset.
+- `@sakuzu/maplibre-gl-draw/webgl` ({@link webgl | the reference}):
+  building blocks for custom shaders. They may change in a minor
+  release; everything else follows semantic versioning.

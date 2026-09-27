@@ -15,6 +15,7 @@ import { createDatasetManager, type DatasetManager } from '../../dataset/manager
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
   createFeatureCompanionRegistry,
@@ -99,7 +100,7 @@ function addDataset(
 ): ReturnType<DatasetManager['add']> {
   return manager.add({
     id,
-    features: [{ id: `${id}-f`, type: 'Point', coordinates: CENTER_COORD }],
+    rows: [toRow({ id: `${id}-f`, type: 'Point', coordinates: CENTER_COORD })],
     interactive,
     order,
   });

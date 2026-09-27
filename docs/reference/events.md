@@ -255,7 +255,7 @@ datasets, in one event.
 
 - The frontmost thing under the pointer is a feature of an interactive
   dataset: `datasetId`, `feature` and `row` (the index of the feature
-  in what the dataset was given, or its row in a columnar table) are set
+  in what the dataset was given, or its row in a table) are set
 - Nothing was hit, or a dataset with `interactive: false` blocked the
   click: all three are `null`
 - The frontmost thing is a feature of the Store: not emitted
@@ -326,8 +326,7 @@ roads.on('change', ({ reason }) => rebuildLabels(reason));
 
 - `click` with `{ datasetId, feature, row, lngLat }` fires when a
   feature of this dataset is the frontmost hit. `row` is the index of
-  the feature in what the dataset was given, or its row in a columnar
-  table
+  the feature in what the dataset was given, or its row in a table
 - `hover` with `{ datasetId, feature, row, lngLat }` fires when the
   hovered feature changes. `feature` and `row` are `null` when the pointer
   leaves
@@ -335,7 +334,7 @@ roads.on('change', ({ reason }) => rebuildLabels(reason));
   selection or thinning winners change
 
 `click` and `hover` fire only with `interactive: true`; `change` fires
-regardless. `reason` is `'features'` (`setFeatures`, `setColumnar` or a
+regardless. `reason` is `'features'` (`setRows`, `setTable` or a
 provider result),
 `'style'` (`setStyleRule` or `setBaseStyle`), `'visibility'` (`setVisible`
 actually switched), `'selection'` (`setSelectedIds` actually changed) or

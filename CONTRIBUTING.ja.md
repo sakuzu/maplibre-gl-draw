@@ -124,9 +124,9 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
 
 ### 公開する範囲
 
-`src/index.ts` では公開する記号を 1 つずつ名前で並べ、`export *` は
-使いません。名前は 2 つの層に分かれ、ファイルでもこの順に 2 つの節に
-分けて並べます。
+`src/index.ts` と `src/webgl/index.ts` では公開する記号を 1 つずつ
+名前で並べ、`export *` は使いません。名前は 2 つの層に分かれます。層 1
+は main の入口で、層 2 は入口 `@sakuzu/maplibre-gl-draw/webgl` です。
 
 - 層 1 は公開 API です。ファクトリー `createMapLibreGLDraw`、
   インスタンス `MapLibreGLDraw` とその `Options`、データモデル
@@ -136,34 +136,31 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
   overlay renderer、snapping provider、hit test と box selection の
   strategy、補助ハンドルと companion の契約)、純関数 (style rule、
   プロパティーのアクセサー、トレース) を含みます。semver に従います。
-- 層 2 は拡張を作る人向けの部品です。プラグイン、独自の地物の型、独自の
-  モードが、core と同じやり方で描画や当たり判定をするために再利用できる
-  部品を含みます。WebGL の補助 (`createProgram`、`QuadShader`、
-  `ProjectionUniformManager`、blend と深度の補助)、地形に固定する関数、
-  OBB と投影の計算、選択の補助、`ModeContext` と
-  `CustomRendererDrawContext` が渡す core のサービスの型が該当します。
-  保証は層 1 より弱く、minor の版で変わることがあります。一覧は
-  `docs/reference/README.md` の節 "The two layers of the public API" に
-  あります。
+- 層 2 は独自のシェーダーを書く人向けの部品です (`src/webgl/index.ts`)。
+  core のシェーダーと地形の描き方に結び付いた部品を含みます。GLSL の
+  断片と投影の uniform、`createProgram`、`QuadShader`、合成と看板の補助、
+  共有の線の描画器の入力の型、破線と地形の分割の規則、
+  `PointHitTestStrategy` が該当します。それに結び付かない純粋な計算
+  (向きのある矩形、px と度の換算、色のコントラスト) は公開せず、拡張の側で
+  持ちます。保証は層 1 より弱く、minor の版で変わることがあります。層 1
+  の宣言は層 2 の型を参照しません。
 
 新しい記号をどこに置くかは次のように決めます。
 
 - ホストのアプリケーションがライブラリーを使うのに必要な記号と、拡張が
   拡張点につなぐのに必要な記号は層 1 に置きます。
-- 拡張が自分の描画や当たり判定の中で core と同じことを再現するための
-  記号は層 2 に置きます。一般的な拡張点で足りるなら、新しい部品より
-  そちらを選びます。
+- 独自のシェーダーが core のシェーダーと同じことを再現するための記号は
+  層 2 に置きます。一般的な拡張点で足りるなら、新しい部品よりそちらを
+  選びます。
 - 公開の宣言が参照する型 (引数、戻り値、フィールド) も export します。
-  置く層は、その型を必要とする宣言の層に合わせます。ただし `ModeContext`
-  と `CustomRendererDrawContext` から届く core のサービスの型は層 2 に
-  置きます。
+  置く層は、その型を必要とする宣言の層に合わせます。
 - それ以外は内部の記号で、並べません。
 
 記号を公開するときは、そのドメインの barrel (`src/<domain>/index.ts`。
-公開する記号だけを並べます) に足し、`src/index.ts` の該当する節に名前を
-書き、`src/index.test.ts` のその層の一覧に足し、`CHANGELOG.md` に記録
-します (層 2 なら `docs/reference/README.md` にも記録します)。テストが
-一覧を固定しているので、公開する範囲が意図せず変わることはありません。
+公開する記号だけを並べます) に足し、`src/index.ts` か
+`src/webgl/index.ts` の該当する節に名前を書き、`src/index.test.ts` の
+その層の一覧に足し、`CHANGELOG.md` に記録します。テストが一覧を固定して
+いるので、公開する範囲が意図せず変わることはありません。
 
 内部の記号のうち、生成される宣言に出てしまうもの (モジュールから export
 した宣言や、公開のクラスとインターフェースのメンバーのうち契約に含まれ

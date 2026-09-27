@@ -8,8 +8,8 @@
 
 import {
   createMapLibreGLDraw,
-  type DatasetFeatureInput,
   type DatasetFeatureProvider,
+  type DatasetRow,
 } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -27,11 +27,11 @@ const map = new maplibregl.Map({
 const draw = createMapLibreGLDraw(map);
 
 /** 250 x 200 square cells around the center, with a value from 0 to 100 that varies smoothly */
-function createCells(): DatasetFeatureInput[] {
+function createCells(): DatasetRow[] {
   const cols = 250;
   const rows = 200;
   const size = 0.0006;
-  const cells: DatasetFeatureInput[] = [];
+  const cells: DatasetRow[] = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = CENTER[0] + (col - cols / 2) * size;
@@ -40,17 +40,20 @@ function createCells(): DatasetFeatureInput[] {
         50 + 30 * Math.sin(col / 17) * Math.cos(row / 13) + 20 * Math.sin((col + row) / 40),
       );
       cells.push({
+        type: 'Feature',
         id: `cell-${row}-${col}`,
-        type: 'Polygon',
-        coordinates: [
-          [
-            [x, y],
-            [x + size, y],
-            [x + size, y + size * 0.8],
-            [x, y + size * 0.8],
-            [x, y],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [x, y],
+              [x + size, y],
+              [x + size, y + size * 0.8],
+              [x, y + size * 0.8],
+              [x, y],
+            ],
           ],
-        ],
+        },
         properties: { value },
         style: { fillOpacity: 0.6, strokeWidth: 0 },
       });
@@ -61,7 +64,7 @@ function createCells(): DatasetFeatureInput[] {
 
 const grid = draw.addDataset({
   id: 'grid',
-  features: createCells(),
+  rows: createCells(),
   styleRule: {
     kind: 'graduated',
     property: 'value',
@@ -78,14 +81,17 @@ const grid = draw.addDataset({
 const pointsFor: DatasetFeatureProvider = async (bbox, zoom) => {
   if (zoom < 12) return [];
   const step = 360 / 2 ** (Math.floor(zoom) + 4);
-  const points: DatasetFeatureInput[] = [];
+  const points: DatasetRow[] = [];
   for (let i = Math.floor(bbox.minX / step); i * step < bbox.maxX; i++) {
     for (let j = Math.floor(bbox.minY / step); j * step < bbox.maxY; j++) {
       const hash = Math.abs(Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1;
       points.push({
+        type: 'Feature',
         id: `point-${i}-${j}`,
-        type: 'Point',
-        coordinates: [(i + hash) * step, (j + ((hash * 7) % 1)) * step],
+        geometry: {
+          type: 'Point',
+          coordinates: [(i + hash) * step, (j + ((hash * 7) % 1)) * step],
+        },
         properties: { kind: ['shop', 'school', 'station'][Math.floor(hash * 3)] },
       });
     }

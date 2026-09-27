@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
@@ -24,7 +25,7 @@ import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import type { TriangulationScheduler } from './triangulation.js';
-import type { DatasetFeatureInput } from './types.js';
+import type { DatasetRow } from './types.js';
 
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
@@ -51,8 +52,8 @@ function createBatchTarget(): { target: DisplayBatchTarget; log: string[] } {
   return { target, log };
 }
 
-function point(id: string, coord: [number, number] = [0, 0]): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: coord };
+function point(id: string, coord: [number, number] = [0, 0]): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: coord });
 }
 
 /** A simple test that counts a matching coordinate as a hit */
@@ -64,8 +65,8 @@ const exactHit = (feature: Feature, coordinate: Coordinate): boolean => {
 describe('the draw order of DatasetManager', () => {
   it('it draws each order separately', () => {
     const manager = createManager();
-    manager.add({ id: 'below', features: [point('b1')], order: 'below-store' });
-    manager.add({ id: 'above', features: [point('a1')], order: 'above-store' });
+    manager.add({ id: 'below', rows: [point('b1')], order: 'below-store' });
+    manager.add({ id: 'above', rows: [point('a1')], order: 'above-store' });
 
     const belowTarget = createBatchTarget();
     manager.draw('below-store', belowTarget.target, {} as ProjectionData, 10);
@@ -78,7 +79,7 @@ describe('the draw order of DatasetManager', () => {
 
   it('the default of order is below-store', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a')] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
     expect(dataset.order).toBe('below-store');
 
@@ -89,9 +90,9 @@ describe('the draw order of DatasetManager', () => {
 
   it('datasets with the same order are drawn in the order they were added', () => {
     const manager = createManager();
-    manager.add({ id: 'first', features: [point('f')] });
-    manager.add({ id: 'second', features: [point('s')] });
-    manager.add({ id: 'third', features: [point('t')] });
+    manager.add({ id: 'first', rows: [point('f')] });
+    manager.add({ id: 'second', rows: [point('s')] });
+    manager.add({ id: 'third', rows: [point('t')] });
 
     const { target, log } = createBatchTarget();
     manager.draw('below-store', target, {} as ProjectionData, 10);
@@ -126,7 +127,7 @@ describe('the hit testing of DatasetManager', () => {
 
   it('a dataset that is not interactive blocks too (feature is null)', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])] });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])] });
 
     const hit = hitTest(manager);
     expect(hit?.dataset.id).toBe('c1');
@@ -135,7 +136,7 @@ describe('the hit testing of DatasetManager', () => {
 
   it('it returns the feature of an interactive dataset', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
 
     expect(manager.hasAny()).toBe(true);
     const hit = hitTest(manager);
@@ -147,19 +148,19 @@ describe('the hit testing of DatasetManager', () => {
     const manager = createManager();
     manager.add({
       id: 'above',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
       order: 'above-store',
     });
-    manager.add({ id: 'below', features: [point('b', [1, 1])], interactive: true });
+    manager.add({ id: 'below', rows: [point('b', [1, 1])], interactive: true });
 
     expect(hitTest(manager)?.feature?.id).toBe('a');
   });
 
   it('within the same order, the one added later takes precedence', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('old', [1, 1])], interactive: true });
-    manager.add({ id: 'c2', features: [point('new', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('old', [1, 1])], interactive: true });
+    manager.add({ id: 'c2', rows: [point('new', [1, 1])], interactive: true });
 
     expect(hitTest(manager)?.feature?.id).toBe('new');
   });
@@ -168,7 +169,7 @@ describe('the hit testing of DatasetManager', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [point('back', [1, 1]), point('front', [1, 1])],
+      rows: [point('back', [1, 1]), point('front', [1, 1])],
       interactive: true,
     });
 
@@ -177,7 +178,7 @@ describe('the hit testing of DatasetManager', () => {
 
   it('removing it stops it from being hit', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
 
     manager.remove('c1');
 
@@ -188,7 +189,7 @@ describe('the hit testing of DatasetManager', () => {
   it('a feature outside the tolerance is not a candidate', () => {
     const manager = createManager();
     const test = vi.fn(() => true);
-    manager.add({ id: 'c1', features: [point('far', [50, 50])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('far', [50, 50])], interactive: true });
 
     expect(manager.hitTestSide('below-store', [1, 1], 0.1, test)).toBeNull();
     // It is dropped by the spatial index, so the precise test is not called
@@ -199,7 +200,7 @@ describe('the hit testing of DatasetManager', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
       styleRule: { kind: 'single', color: '#ff0000' },
     });
@@ -209,7 +210,7 @@ describe('the hit testing of DatasetManager', () => {
 
   it('hasAny does not count hidden datasets', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a', [1, 1])] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a', [1, 1])] });
 
     expect(manager.hasAny()).toBe(true);
     dataset.setVisible(false);
@@ -220,9 +221,9 @@ describe('the hit testing of DatasetManager', () => {
 describe('the stacking order of DatasetManager (layer-order)', () => {
   it('a layer-order dataset is not drawn by the drawing of a side', () => {
     const manager = createManager();
-    manager.add({ id: 'entry', features: [point('e')], order: 'layer-order' });
-    manager.add({ id: 'below', features: [point('b')] });
-    manager.add({ id: 'above', features: [point('a')], order: 'above-store' });
+    manager.add({ id: 'entry', rows: [point('e')], order: 'layer-order' });
+    manager.add({ id: 'below', rows: [point('b')] });
+    manager.add({ id: 'above', rows: [point('a')], order: 'above-store' });
 
     const below = createBatchTarget();
     manager.draw('below-store', below.target, {} as ProjectionData, 10);
@@ -235,8 +236,8 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
 
   it('drawOne draws only the layer-order datasets', () => {
     const manager = createManager();
-    manager.add({ id: 'entry', features: [point('e')], order: 'layer-order' });
-    manager.add({ id: 'below', features: [point('b')] });
+    manager.add({ id: 'entry', rows: [point('e')], order: 'layer-order' });
+    manager.add({ id: 'below', rows: [point('b')] });
 
     const { target, log } = createBatchTarget();
     expect(manager.drawOne('entry', target, {} as ProjectionData, 10)).toBe(true);
@@ -250,11 +251,11 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
     const manager = createManager();
     manager.add({
       id: 'entry',
-      features: [point('e', [1, 1])],
+      rows: [point('e', [1, 1])],
       interactive: true,
       order: 'layer-order',
     });
-    manager.add({ id: 'below', features: [point('b', [1, 1])], interactive: true });
+    manager.add({ id: 'below', rows: [point('b', [1, 1])], interactive: true });
 
     expect(manager.hitTestEntry('entry', [1, 1], 0.1, exactHit)?.feature?.id).toBe('e');
     expect(manager.hitTestEntry('below', [1, 1], 0.1, exactHit)).toBeNull();
@@ -265,7 +266,7 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
     const manager = createManager();
     manager.add({
       id: 'entry',
-      features: [point('e', [1, 1])],
+      rows: [point('e', [1, 1])],
       interactive: true,
       order: 'layer-order',
     });
@@ -276,7 +277,7 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
 
   it('move can put it on the order and take it off again', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a')] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
     expect(manager.move('c1', { order: 'layer-order' })).toBe(true);
     expect(dataset.order).toBe('layer-order');
@@ -294,12 +295,12 @@ describe('the stacking order of DatasetManager (layer-order)', () => {
 
   it('the order of the sides does not break with a dataset of the order mixed in', () => {
     const manager = createManager();
-    manager.add({ id: 'b1', features: [point('b1')] });
-    manager.add({ id: 'e1', features: [point('e1')], order: 'layer-order' });
-    manager.add({ id: 'b2', features: [point('b2')] });
-    manager.add({ id: 'a1', features: [point('a1')], order: 'above-store' });
-    manager.add({ id: 'e2', features: [point('e2')], order: 'layer-order' });
-    manager.add({ id: 'a2', features: [point('a2')], order: 'above-store' });
+    manager.add({ id: 'b1', rows: [point('b1')] });
+    manager.add({ id: 'e1', rows: [point('e1')], order: 'layer-order' });
+    manager.add({ id: 'b2', rows: [point('b2')] });
+    manager.add({ id: 'a1', rows: [point('a1')], order: 'above-store' });
+    manager.add({ id: 'e2', rows: [point('e2')], order: 'layer-order' });
+    manager.add({ id: 'a2', rows: [point('a2')], order: 'above-store' });
 
     const below = createBatchTarget();
     manager.draw('below-store', below.target, {} as ProjectionData, 10);
@@ -327,7 +328,7 @@ describe('the lifecycle of DatasetManager', () => {
       requestRepaint: () => {},
     });
 
-    manager.add({ id: 'static', features: [point('a')] });
+    manager.add({ id: 'static', rows: [point('a')] });
     expect(subscribed).toBe(0);
 
     manager.add({ id: 'dynamic', provider: async () => [] });
@@ -339,8 +340,8 @@ describe('the lifecycle of DatasetManager', () => {
 
   it('destroy disposes every dataset', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a')] });
-    manager.add({ id: 'c2', features: [point('b')], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a')] });
+    manager.add({ id: 'c2', rows: [point('b')], interactive: true });
 
     manager.destroy();
 
@@ -353,18 +354,18 @@ describe('the lifecycle of DatasetManager', () => {
 
   it('list returns the display order (from the back to the front)', () => {
     const manager = createManager();
-    manager.add({ id: 'a', features: [] });
-    manager.add({ id: 'b', features: [] });
+    manager.add({ id: 'a', rows: [] });
+    manager.add({ id: 'b', rows: [] });
 
     expect(manager.list().map((c) => c.id)).toEqual(['a', 'b']);
   });
 
   it('list returns the below-store group and then the above-store group', () => {
     const manager = createManager();
-    manager.add({ id: 'above1', features: [], order: 'above-store' });
-    manager.add({ id: 'below1', features: [] });
-    manager.add({ id: 'above2', features: [], order: 'above-store' });
-    manager.add({ id: 'below2', features: [] });
+    manager.add({ id: 'above1', rows: [], order: 'above-store' });
+    manager.add({ id: 'below1', rows: [] });
+    manager.add({ id: 'above2', rows: [], order: 'above-store' });
+    manager.add({ id: 'below2', rows: [] });
 
     // Regardless of the order of addition, they go from the back (the head of below) to the
     // front (the tail of above)
@@ -373,9 +374,9 @@ describe('the lifecycle of DatasetManager', () => {
 
   it('a dataset removed from list drops out', () => {
     const manager = createManager();
-    manager.add({ id: 'a', features: [] });
-    manager.add({ id: 'b', features: [] });
-    manager.add({ id: 'c', features: [] });
+    manager.add({ id: 'a', rows: [] });
+    manager.add({ id: 'b', rows: [] });
+    manager.add({ id: 'c', rows: [] });
 
     manager.remove('b');
 
@@ -401,7 +402,7 @@ describe('the reordering of DatasetManager', () => {
 
   it('order changes the side and the order property follows it', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a')] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
     expect(dataset.order).toBe('below-store');
     expect(manager.move('c1', { order: 'above-store' })).toBe(true);
@@ -412,7 +413,7 @@ describe('the reordering of DatasetManager', () => {
 
   it('it can go to the other side and back again', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a')] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a')] });
 
     manager.move('c1', { order: 'above-store' });
     manager.move('c1', { order: 'below-store' });
@@ -423,9 +424,9 @@ describe('the reordering of DatasetManager', () => {
 
   it('giving only the side puts it at the front of the destination', () => {
     const manager = createManager();
-    manager.add({ id: 'a1', features: [point('a1')], order: 'above-store' });
-    manager.add({ id: 'a2', features: [point('a2')], order: 'above-store' });
-    manager.add({ id: 'b1', features: [point('b1')] });
+    manager.add({ id: 'a1', rows: [point('a1')], order: 'above-store' });
+    manager.add({ id: 'a2', rows: [point('a2')], order: 'above-store' });
+    manager.add({ id: 'b1', rows: [point('b1')] });
 
     manager.move('b1', { order: 'above-store' });
 
@@ -434,9 +435,9 @@ describe('the reordering of DatasetManager', () => {
 
   it('index changes the position within the same side (0 is the backmost)', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a')] });
-    manager.add({ id: 'c2', features: [point('b')] });
-    manager.add({ id: 'c3', features: [point('c')] });
+    manager.add({ id: 'c1', rows: [point('a')] });
+    manager.add({ id: 'c2', rows: [point('b')] });
+    manager.add({ id: 'c3', rows: [point('c')] });
 
     manager.move('c3', { index: 0 });
 
@@ -446,9 +447,9 @@ describe('the reordering of DatasetManager', () => {
 
   it('omitting index keeps the position within the same side', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a')] });
-    manager.add({ id: 'c2', features: [point('b')] });
-    manager.add({ id: 'c3', features: [point('c')] });
+    manager.add({ id: 'c1', rows: [point('a')] });
+    manager.add({ id: 'c2', rows: [point('b')] });
+    manager.add({ id: 'c3', rows: [point('c')] });
 
     manager.move('c2', {});
     manager.move('c2', { order: 'below-store' });
@@ -458,9 +459,9 @@ describe('the reordering of DatasetManager', () => {
 
   it('an out-of-range index is clamped', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a')] });
-    manager.add({ id: 'c2', features: [point('b')] });
-    manager.add({ id: 'c3', features: [point('c')] });
+    manager.add({ id: 'c1', rows: [point('a')] });
+    manager.add({ id: 'c2', rows: [point('b')] });
+    manager.add({ id: 'c3', rows: [point('c')] });
 
     manager.move('c1', { index: 99 });
     expect(drawnIds(manager).below).toEqual(['b', 'c', 'a']);
@@ -471,9 +472,9 @@ describe('the reordering of DatasetManager', () => {
 
   it('the side and index can be given together', () => {
     const manager = createManager();
-    manager.add({ id: 'a1', features: [point('a1')], order: 'above-store' });
-    manager.add({ id: 'a2', features: [point('a2')], order: 'above-store' });
-    manager.add({ id: 'b1', features: [point('b1')] });
+    manager.add({ id: 'a1', rows: [point('a1')], order: 'above-store' });
+    manager.add({ id: 'a2', rows: [point('a2')], order: 'above-store' });
+    manager.add({ id: 'b1', rows: [point('b1')] });
 
     manager.move('b1', { order: 'above-store', index: 1 });
 
@@ -483,8 +484,8 @@ describe('the reordering of DatasetManager', () => {
 
   it('the precedence of the hit testing follows the reordering', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a', [1, 1])], interactive: true });
-    manager.add({ id: 'c2', features: [point('b', [1, 1])], interactive: true });
+    manager.add({ id: 'c1', rows: [point('a', [1, 1])], interactive: true });
+    manager.add({ id: 'c2', rows: [point('b', [1, 1])], interactive: true });
     const topmost = () =>
       manager.hitTestSide('above-store', [1, 1], 0.1, exactHit) ??
       manager.hitTestSide('below-store', [1, 1], 0.1, exactHit);
@@ -508,7 +509,7 @@ describe('the reordering of DatasetManager', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [1, 1])],
+      rows: [point('a', [1, 1])],
       interactive: true,
     });
     dataset.setVisible(false);
@@ -525,7 +526,7 @@ describe('the reordering of DatasetManager', () => {
 
   it('the features held and interactive do not change', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a')], interactive: true });
+    const dataset = manager.add({ id: 'c1', rows: [point('a')], interactive: true });
     const before = dataset.getFeatures();
 
     manager.move('c1', { order: 'above-store', index: 0 });
@@ -543,7 +544,7 @@ describe('the reordering of DatasetManager', () => {
       onViewportChange: () => () => {},
       requestRepaint,
     });
-    manager.add({ id: 'c1', features: [point('a')] });
+    manager.add({ id: 'c1', rows: [point('a')] });
     requestRepaint.mockClear();
 
     manager.move('c1', { order: 'above-store' });
@@ -576,7 +577,7 @@ describe('a destroyed DatasetManager', () => {
   it('refuses to add a dataset, which nothing would release', () => {
     const manager = createManager();
     manager.destroy();
-    expect(() => manager.add({ id: 'late', features: [point('a')] })).toThrow(/destroyed/);
+    expect(() => manager.add({ id: 'late', rows: [point('a')] })).toThrow(/destroyed/);
     expect(manager.list()).toHaveLength(0);
   });
 });
@@ -603,7 +604,7 @@ describe('the add and remove notifications of DatasetManager', () => {
 
   it('notifies an addition once the dataset is listed', () => {
     const { manager, log } = createNotifyingManager();
-    manager.add({ id: 'a', features: [point('p')] });
+    manager.add({ id: 'a', rows: [point('p')] });
     manager.add({ id: 'b', provider: async () => [] });
 
     expect(log).toEqual(['add a listed', 'add b listed']);
@@ -611,8 +612,8 @@ describe('the add and remove notifications of DatasetManager', () => {
 
   it('notifies a removal by the manager and by the dataset itself, once each', () => {
     const { manager, log } = createNotifyingManager();
-    const a = manager.add({ id: 'a', features: [] });
-    manager.add({ id: 'b', features: [] });
+    const a = manager.add({ id: 'a', rows: [] });
+    manager.add({ id: 'b', rows: [] });
     log.length = 0;
 
     manager.remove('b');
@@ -626,10 +627,10 @@ describe('the add and remove notifications of DatasetManager', () => {
 
   it('notifies neither a refused addition, a move nor a destroy', () => {
     const { manager, log } = createNotifyingManager();
-    manager.add({ id: 'a', features: [] });
+    manager.add({ id: 'a', rows: [] });
     log.length = 0;
 
-    expect(() => manager.add({ id: 'a', features: [] })).toThrow();
+    expect(() => manager.add({ id: 'a', rows: [] })).toThrow();
     manager.move('a', { order: 'above-store' });
     manager.destroy();
 
@@ -638,9 +639,9 @@ describe('the add and remove notifications of DatasetManager', () => {
 
   it('notifies a dataset rebuilt under the same id as a removal and then an addition', () => {
     const { manager, log } = createNotifyingManager();
-    const first = manager.add({ id: 'a', features: [] });
+    const first = manager.add({ id: 'a', rows: [] });
     manager.remove('a');
-    const second = manager.add({ id: 'a', features: [] });
+    const second = manager.add({ id: 'a', rows: [] });
 
     expect(second).not.toBe(first);
     expect(log).toEqual(['add a listed', 'remove a gone', 'add a listed']);
@@ -661,9 +662,9 @@ describe('the reorder notification of DatasetManager', () => {
         orders.push(order);
       },
     });
-    manager.add({ id: 'a', features: [] });
-    manager.add({ id: 'b', features: [] });
-    manager.add({ id: 'c', features: [] });
+    manager.add({ id: 'a', rows: [] });
+    manager.add({ id: 'b', rows: [] });
+    manager.add({ id: 'c', rows: [] });
     return { manager, orders };
   }
 
@@ -704,7 +705,7 @@ describe('the reorder notification of DatasetManager', () => {
   it('notifies neither an addition nor a removal', () => {
     const { manager, orders } = createReorderingManager();
 
-    manager.add({ id: 'd', features: [] });
+    manager.add({ id: 'd', rows: [] });
     manager.remove('a');
 
     expect(orders).toEqual([]);
@@ -779,7 +780,7 @@ describe('the pending work of DatasetManager', () => {
     try {
       const manager = managerWith();
       const renderers = createRenderers();
-      manager.add({ id: 'c1', features: SPREAD });
+      manager.add({ id: 'c1', rows: SPREAD });
 
       drawFrame(manager, renderers);
       expect(manager.hasPendingWork()).toBe(true);
@@ -798,7 +799,7 @@ describe('the pending work of DatasetManager', () => {
     try {
       const manager = managerWith();
       const renderers = createRenderers();
-      const dataset = manager.add({ id: 'c1', features: SPREAD });
+      const dataset = manager.add({ id: 'c1', rows: SPREAD });
       drawFrame(manager, renderers);
       expect(manager.hasPendingWork()).toBe(true);
 
@@ -820,7 +821,7 @@ describe('the pending work of DatasetManager', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
     try {
       const manager = managerWith({ timeSlicing: false });
-      manager.add({ id: 'c1', features: SPREAD });
+      manager.add({ id: 'c1', rows: SPREAD });
       drawFrame(manager, createRenderers());
       expect(manager.hasPendingWork()).toBe(false);
     } finally {
@@ -837,7 +838,7 @@ describe('the pending work of DatasetManager', () => {
   it('a provider call waiting for its debounce or its response is pending', async () => {
     vi.useFakeTimers();
     try {
-      let resolve: (features: DatasetFeatureInput[]) => void = () => {};
+      let resolve: (features: DatasetRow[]) => void = () => {};
       const manager = managerWith({ providerDebounceMs: 50 });
       manager.add({
         id: 'c1',

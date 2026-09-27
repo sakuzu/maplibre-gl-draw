@@ -38,10 +38,15 @@
       "import": "./dist/geometry/index.js",
       "default": "./dist/geometry/index.js"
     },
-    "./columnar": {
-      "types": "./dist/dataset/columnar/index.d.ts",
-      "import": "./dist/dataset/columnar/index.js",
-      "default": "./dist/dataset/columnar/index.js"
+    "./table": {
+      "types": "./dist/table/index.d.ts",
+      "import": "./dist/table/index.js",
+      "default": "./dist/table/index.js"
+    },
+    "./webgl": {
+      "types": "./dist/webgl/index.d.ts",
+      "import": "./dist/webgl/index.js",
+      "default": "./dist/webgl/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -83,7 +88,7 @@
     "dev": "npm run dev -w examples",
     "dev:playground": "npm run dev -w playground",
     "dev:bench": "npm run dev -w bench",
-    "check:package": "publint && rm -rf .pack && mkdir -p .pack && npm pack --ignore-scripts --pack-destination .pack >/dev/null && attw .pack/*.tgz --profile esm-only && node --input-type=module -e \"await import('./dist/index.js'); await import('./dist/geometry/index.js'); await import('./dist/dataset/columnar/index.js'); console.log('dist imports ok')\" && rm -rf .pack",
+    "check:package": "publint && rm -rf .pack && mkdir -p .pack && npm pack --ignore-scripts --pack-destination .pack >/dev/null && attw .pack/*.tgz --profile esm-only && node --input-type=module -e \"await import('./dist/index.js'); await import('./dist/geometry/index.js'); await import('./dist/table/index.js'); await import('./dist/webgl/index.js'); console.log('dist imports ok')\" && rm -rf .pack",
     "prepack": "npm run build",
     "site:dev": "npm run docs:api && vitepress dev docs",
     "site:build": "npm run docs:api && vitepress build docs",

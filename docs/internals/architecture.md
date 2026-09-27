@@ -140,6 +140,8 @@ composes the public API.
                  |
                extension/      contracts for extensions (types only)
                  |
+               table/          tables of rows as columns (a sub-entry)
+                 |
                shared/         types, math, config, utils
                  |
                geometry/       pure geometry, no dependencies
@@ -176,6 +178,10 @@ composes the public API.
    declarations may refer to types of the areas that consume them with
    type-only imports, and nothing in it imports `api/`. The registration
    functions stay on the instance (`api/extension-api.ts`).
+10. `webgl/` is the entry of layer 2 (`@sakuzu/maplibre-gl-draw/webgl`). It
+    re-exports building blocks of `view/`, `dispatcher/` and `shared/`, and
+    nothing inside the library imports it, not even a type, so a layer 1
+    declaration never depends on layer 2.
 
 ### Checking the rules
 
@@ -187,11 +193,14 @@ Every area has a height. From the bottom: `geometry/`; `shared/` together
 with `src/messages.ts`; `extension/`; `store/`; `view/`; `dataset/`;
 `operations/` and `snapping/` at the same height; `modes/`; `dispatcher/`;
 `plugins/`; `api/`; and the entry files `src/index.ts` and
-`src/maplibre-gl-draw.ts`. An import may point to a lower area or stay
-inside its own area, with the exceptions of rules 4, 5, 6 and 9.
+`src/maplibre-gl-draw.ts`, with `src/webgl/` at the same height. An import
+may point to a lower area or stay inside its own area, with the exceptions
+of rules 4, 5, 6, 9 and 10.
 
 - A runtime import against the rules fails the check.
 - A runtime import cycle between files fails the check.
+- An import of `src/webgl/` from outside it fails the check, even a
+  type-only one (rule 10).
 - A type-only import against the rules (`import type`, `export type`, an
   import whose specifiers are all `type X`, or `import('...')` in a type
   position) is listed but does not fail. Types are erased at build time,
@@ -941,13 +950,14 @@ through `CustomRendererDrawContext.terrain`.
 
 ## The public surface
 
-The package has two module entries: `.` and `./geometry`. The second
-collects only pure functions that also run outside the browser; no other
-subpath is exported, because it would freeze the internal structure for the
-outside. `./package.json` is exported as metadata.
+The package has the module entries `.`, `./geometry`, `./table` and
+`./webgl`. `./geometry` collects only pure functions that also run outside
+the browser, and `./webgl` is layer 2 below; no other subpath is exported,
+because it would freeze the internal structure for the outside.
+`./package.json` is exported as metadata.
 
-`src/index.ts` names every public symbol one by one, with no `export *`,
-in two sections.
+`src/index.ts` and `src/webgl/index.ts` name every public symbol one by
+one, with no `export *`, in two layers.
 
 - Layer 1, the public API. The factory `createMapLibreGLDraw`, the
   `MapLibreGLDraw` instance and its `Options` with every type they refer
@@ -957,13 +967,14 @@ in two sections.
   hit test and box selection strategies, the auxiliary handle and companion
   contracts), the store contracts and `MemoryStore`, and the pure functions.
   It follows semver.
-- Layer 2, building blocks for extension authors. Parts that let an
-  extension draw and hit test the way core does: the WebGL helpers
-  (`createProgram`, `QuadShader`, `ProjectionUniformManager`, the blend and
-  depth helpers), the terrain anchoring functions, the OBB and projection
-  math, the selection helpers, and the types of the core services that
-  `ModeContext` and `CustomRendererDrawContext` hand over. It may change in
-  a minor release.
+- Layer 2, the building blocks for custom shaders, in
+  `src/webgl/index.ts`. Parts tied to the shaders and the terrain drawing
+  of core: the GLSL snippet and the projection uniforms, `createProgram`,
+  `QuadShader`, the blend and billboard helpers, the input types of the
+  shared line renderer, the dash and terrain subdivision rules, and
+  `PointHitTestStrategy`. Pure math that is not tied to them (oriented
+  boxes, pixel and degree conversion, contrast colors) is not published.
+  It may change in a minor release.
 
 The rules for deciding which layer a new symbol belongs to, and the steps
 for publishing it, are in "The public surface" of `CONTRIBUTING.md`.
@@ -974,10 +985,11 @@ over, such as a shared renderer or the terrain context, is exported as a
 type only, and its members outside the contract carry the internal JSDoc
 tag, which `stripInternal` removes from the declarations.
 
-`src/index.test.ts` pins both lists (`LAYER_1` and `LAYER_2`), checks that
+`src/index.test.ts` pins both lists (`LAYER_1` and `WEBGL`), checks that
 the runtime exports match, and emits the declarations to check that they
 type-check on their own and that every type a public declaration refers to
-is exported.
+is exported (a layer 1 declaration only by layer 1), apart from a pinned
+list of known gaps in layer 1.
 
 ## Dependencies
 
@@ -985,8 +997,8 @@ The runtime dependencies are `earcut` (triangulation), `rbush` (the
 spatial index of the Store), `polygon-clipping` (boolean operations in
 `geometry/`, and the only dependency of that sub-entry), `ulid` (ids; the
 random bytes are drawn in batches, `shared/utils/id.ts`) and
-`@types/geojson`. The `columnar` sub-entry (`dataset/columnar/index.ts`)
-has no runtime dependency.
+`@types/geojson`. The `table` sub-entry (`table/index.ts`) has no runtime
+dependency.
 
 - `@types/geojson` is a runtime dependency because the emitted declarations
   refer to the `geojson` types.
@@ -1022,7 +1034,8 @@ part.
 | `operations/` | Resize, rotate, vertex, tracing |
 | `snapping/` | SnapService, providers, marker |
 | `view/` | CustomLayer, renderers, shaders, UI |
-| `dataset/` | Datasets, `columnar` sub-entry |
+| `dataset/` | Datasets |
+| `table/` | Tables of rows as columns (sub-entry) |
 | `plugins/` | PluginManager, context, hooks |
 | `extension/` | Contracts for extensions (types) |
 | `shared/` | Types, math, config, utils |

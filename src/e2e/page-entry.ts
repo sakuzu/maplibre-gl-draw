@@ -8,15 +8,15 @@
  * Chromium. maplibre-gl stays external and resolves to maplibre's own build through the import
  * map of the page, so the engine and the page share one maplibre.
  *
- * Besides the public entry point, the page carries the columnar subpath, the test terrain
+ * Besides the public entry point, the page carries the table subpath, the test terrain
  * (`dem-fixture.ts`) and the few internals the terrain tests read the GPU side of the engine
  * through.
  */
 
 import * as maplibregl from 'maplibre-gl';
-import { prepareDatasetColumnar } from '../dataset/columnar/index.js';
 import { createMapLibreGLDraw } from '../index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
+import { prepareTable } from '../table/index.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
   getMapTerrain,
@@ -31,7 +31,7 @@ installTestDem(maplibregl);
 (window as unknown as { e2e: unknown }).e2e = {
   maplibregl,
   createMapLibreGLDraw,
-  prepareDatasetColumnar,
+  prepareTable,
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {
     DemAtlas,

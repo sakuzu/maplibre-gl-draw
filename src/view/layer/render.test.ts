@@ -27,6 +27,7 @@ import type {
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { type RenderLayersRange, renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
@@ -228,7 +229,7 @@ describe('renderLayers and datasets', () => {
     const display = createDisplay();
     display.add({
       id: 'disp',
-      features: [{ id: 'disp-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'disp-1', type: 'Point', coordinates: [0, 0] })],
       order: 'below-store',
     });
 
@@ -241,7 +242,7 @@ describe('renderLayers and datasets', () => {
     const display = createDisplay();
     display.add({
       id: 'disp',
-      features: [{ id: 'disp-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'disp-1', type: 'Point', coordinates: [0, 0] })],
       order: 'above-store',
     });
 
@@ -254,12 +255,12 @@ describe('renderLayers and datasets', () => {
     const display = createDisplay();
     display.add({
       id: 'under',
-      features: [{ id: 'under-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
       order: 'below-store',
     });
     display.add({
       id: 'over',
-      features: [{ id: 'over-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
       order: 'above-store',
     });
 
@@ -289,7 +290,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -307,7 +308,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -325,7 +326,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'orphan',
-        features: [{ id: 'orphan-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'orphan-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -338,7 +339,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -367,17 +368,17 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'under',
-        features: [{ id: 'under-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
         order: 'below-store',
       });
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
       display.add({
         id: 'over',
-        features: [{ id: 'over-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
         order: 'above-store',
       });
 
@@ -410,11 +411,11 @@ describe('viewport of renderLayers', () => {
     });
     display.add({
       id: 'under',
-      features: [{ id: 'under-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
     });
     display.add({
       id: 'over',
-      features: [{ id: 'over-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
       order: 'above-store',
     });
     managerBoundsCalls = 0;

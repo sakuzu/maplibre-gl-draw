@@ -310,13 +310,16 @@ frame what you would otherwise spread over frames.
 
 ## The building blocks
 
-The parts the library uses for its own drawing are exported as building
-blocks: the shared renderers, `ProjectionUniformManager`, `QuadShader`,
-the terrain anchors, the oriented boxes and the projection math. They are
-the second layer of the public surface, which may change in a minor
-release; [the reference overview](../reference/README.md) explains the
-difference. Use them when your type draws like a built-in one, and keep
-your own code for the rest.
+The draw context already passes the shared renderers, so most types need
+nothing else. For a type that writes its own shaders, the entry
+`@sakuzu/maplibre-gl-draw/webgl` exports the parts the library's shaders
+are built on: the GLSL snippet and `ProjectionUniformManager` for the
+projection, `createProgram`, `QuadShader`, the blend and billboard
+helpers, and the dash and terrain subdivision rules. They are the second
+layer of the public surface, which may change in a minor release;
+[the reference overview](../reference/README.md) explains the difference.
+Pure math such as oriented boxes or pixel and degree conversion is not
+exported; keep your own.
 
 ## Related example
 
@@ -334,4 +337,3 @@ your own code for the rest.
 - [AuxiliaryHandleProvider](../api/maplibre-gl-draw/interfaces/AuxiliaryHandleProvider.md)
 - [FeatureCompanionProvider](../api/maplibre-gl-draw/interfaces/FeatureCompanionProvider.md)
 - [CustomOverlayRenderer](../api/maplibre-gl-draw/interfaces/CustomOverlayRenderer.md)
-- [SDFLineRenderer](../api/maplibre-gl-draw/interfaces/SDFLineRenderer.md)

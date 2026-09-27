@@ -24,8 +24,8 @@
  *
  * A build has two phases, both advanced by the time budget of the frame: the dataset, which
  * walks the rows of the chunk and resolves their styles into the intermediate data (a
- * `ChunkCollector`; the features of an array go through `collectFeatures`, a columnar table
- * through `columnar/collect.ts`), and the building of the GPU resources from it.
+ * `ChunkCollector`; the features of an array go through `collectFeatures`, a table through
+ * `table-source.ts`), and the building of the GPU resources from it.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -268,7 +268,7 @@ function grow<T extends Float64Array | Int32Array>(array: T, length: number): T 
  * Intermediate data accumulated while building
  *
  * A collector fills either the arrays of objects (the features of an array) or the packed
- * builders (a columnar table); the building reads both.
+ * builders (a table); the building reads both.
  *
  * @internal
  */

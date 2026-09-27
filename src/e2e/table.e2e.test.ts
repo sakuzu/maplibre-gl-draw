@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end tests of the columnar input of the datasets
+ * End-to-end tests of the table input of the datasets
  *
- * The same rows are drawn once as features and once as a columnar table (with and without the
- * arrays of `prepareDatasetColumnar`), on the real maplibre and WebGL of the browser. The pictures
+ * The same rows are drawn once as GeoJSON features and once as a table (bare, and prepared with
+ * `prepareTable`), on the real maplibre and WebGL of the browser. The pictures
  * must be the same pixel for pixel, and a click with the real pointer must report the same
  * feature and row. The mixed kind puts points, lines, polygons and two-part lines in one table
  * with a mixed geometry column.
@@ -110,9 +110,9 @@ async function installRows(page: Page): Promise<void> {
         rowsOfKind[k] ??= rowsOf(k === 'multilines' ? 'lines' : k);
         const row = rowsOfKind[k][i];
         return {
+          type: 'Feature',
           id: `r${i}`,
-          type: typeOf(k),
-          coordinates: coordinatesOf(k, row.coords),
+          geometry: { type: typeOf(k), coordinates: coordinatesOf(k, row.coords) },
           properties: { cls: CLASSES[row.cls], value: row.value },
         };
       });
@@ -138,7 +138,7 @@ async function installRows(page: Page): Promise<void> {
         const child = children[k];
         types[i] = k;
         offsets[i] = child.rows++;
-        const coordinates = features[i].coordinates as never;
+        const coordinates = (features[i].geometry as { coordinates: never }).coordinates;
         if (child.kind === 'points') {
           child.coords.push(...(coordinates as number[]));
           continue;
@@ -235,7 +235,7 @@ async function installRows(page: Page): Promise<void> {
 async function drawAndRead(
   page: Page,
   kind: Kind,
-  form: 'features' | 'columnar' | 'prepared',
+  form: 'rows' | 'table' | 'prepared',
 ): Promise<{ differs: (other: string) => Promise<number>; key: string; drawn: number }> {
   const key = `${kind}-${form}`;
   const drawn = await page.evaluate(
@@ -243,20 +243,17 @@ async function drawAndRead(
       const w = window as unknown as Record<string, unknown> & {
         map: import('maplibre-gl').Map;
         draw: import('../index.js').MapLibreGLDraw;
-        e2e: { prepareDatasetColumnar: (input: unknown) => unknown };
+        e2e: { prepareTable: (input: unknown) => unknown };
       };
       const { map, draw } = w;
       for (const c of draw.getDatasets()) draw.removeDataset(c.id);
       const style = w.STYLE as object;
       const options =
-        form === 'features'
-          ? { features: (w.featuresOf as (k: string) => unknown)(kind) }
-          : form === 'columnar'
-            ? { columnar: (w.tableOf as (k: string) => unknown)(kind) }
-            : (() => {
-                const table = (w.tableOf as (k: string) => unknown)(kind);
-                return { columnar: table, prepared: w.e2e.prepareDatasetColumnar(table) };
-              })();
+        form === 'rows'
+          ? { rows: (w.featuresOf as (k: string) => unknown)(kind) }
+          : form === 'table'
+            ? { table: (w.tableOf as (k: string) => unknown)(kind) }
+            : { table: w.e2e.prepareTable((w.tableOf as (k: string) => unknown)(kind)) };
       draw.addDataset({
         id: 'data',
         ...style,
@@ -356,7 +353,7 @@ async function clickRow(
   );
 }
 
-describe('the columnar input on a real map', () => {
+describe('the table input on a real map', () => {
   const targets: Record<Kind, [number, number]> = {
     // Row 47 of each kind (the first vertex of a point, a point on a line, inside a polygon)
     points: [139.66 + 7 * 0.004, 35.655 + 2 * 0.0025],
@@ -374,22 +371,22 @@ describe('the columnar input on a real map', () => {
       await installRows(page);
 
       // The pictures are read before any pointer event (the pointer itself changes the picture)
-      const features = await drawAndRead(page, kind, 'features');
-      const columnar = await drawAndRead(page, kind, 'columnar');
+      const features = await drawAndRead(page, kind, 'rows');
+      const table = await drawAndRead(page, kind, 'table');
       const prepared = await drawAndRead(page, kind, 'prepared');
 
       // Something was drawn over a good part of the map
       expect(features.drawn).toBeGreaterThan((MAP_SIZE.width * MAP_SIZE.height) / 50);
-      expect(await columnar.differs(features.key)).toBe(0);
+      expect(await table.differs(features.key)).toBe(0);
       expect(await prepared.differs(features.key)).toBe(0);
 
-      const clickedColumnar = await clickRow(page, targets[kind]);
-      await drawAndRead(page, kind, 'features');
+      const clickedTable = await clickRow(page, targets[kind]);
+      await drawAndRead(page, kind, 'rows');
       const clickedFeature = await clickRow(page, targets[kind]);
       expect(clickedFeature).not.toBeNull();
       expect(clickedFeature?.id).toBe('r47');
       expect(clickedFeature?.row).toBe(47);
-      expect(clickedColumnar).toEqual(clickedFeature);
+      expect(clickedTable).toEqual(clickedFeature);
       await page.close();
     });
   }

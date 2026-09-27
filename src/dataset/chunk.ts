@@ -20,7 +20,7 @@
 import type { BoundingBox, Feature } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
-import { CHUNK_TARGET_SIZE, type PartitionedRows, partitionRows } from './partition.js';
+import { CHUNK_TARGET_SIZE, type PartitionedRows, partitionRows } from '../table/partition.js';
 
 export {
   CHUNK_TARGET_SIZE,
@@ -28,7 +28,7 @@ export {
   chunkTargetSizeFor,
   LARGE_CHUNK_TARGET_SIZE,
   LARGE_DATASET_THRESHOLD,
-} from './partition.js';
+} from '../table/partition.js';
 
 /**
  * A spatial chunk

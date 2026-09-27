@@ -66,7 +66,7 @@ export type {
 export { QUAD_GLYPH_STRIDE } from './terrain/drape/quad-glyphs.js';
 export { metersToMercatorScale } from './terrain/metrics.js';
 export { anchorGhostOpacity } from './terrain/occlusion.js';
-export { getTerrainTessellationStep } from './terrain/polygon.js';
+export { terrainTessellationStep } from './terrain/polygon.js';
 export type { MercatorRect, TessellationStep, TessellationTiling } from './terrain/tessellation.js';
 export { densifyPath } from './terrain/tessellation.js';
 export type {

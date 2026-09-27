@@ -53,7 +53,7 @@ export interface MercatorRect {
 
 /**
  * How finely a line or a fill is subdivided to follow the terrain mesh, as
- * {@link getTerrainTessellationStep} returns it.
+ * {@link terrainTessellationStep} returns it.
  */
 export interface TessellationStep {
   /**
@@ -273,7 +273,7 @@ export function latFromMercatorY(y: number): number {
  * on the original line).
  *
  * @param path The vertices `[lng, lat]` in degrees
- * @param step The step from {@link getTerrainTessellationStep}
+ * @param step The step from {@link terrainTessellationStep}
  * @returns The densified vertices. The input itself for fewer than 2 positions or a step of
  *   0; insertion stops when `step.maxPoints` is reached
  */

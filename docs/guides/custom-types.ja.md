@@ -326,14 +326,16 @@ draw.registerAuxiliaryHandleProvider({
 
 ## 部品
 
-ライブラリーが自分の描画に使っている部品は、組み立て用の部品と
-して公開しています。共有の描画器、`ProjectionUniformManager`、
-`QuadShader`、地形のアンカー、向きのある箱、投影の計算です。
-これらは公開面の 2 層目にあたり、マイナーリリースで変わること
-があります。その違いは
+描画の文脈が共有の描画器を渡すので、たいていの型はほかに何も
+要りません。自分でシェーダーを書く型のために、入口
+`@sakuzu/maplibre-gl-draw/webgl` がライブラリーのシェーダーの
+土台になっている部品を公開しています。投影のための GLSL の断片と
+`ProjectionUniformManager`、`createProgram`、`QuadShader`、合成と
+看板の補助、破線と地形の分割の規則です。これらは公開面の 2 層目に
+あたり、マイナーリリースで変わることがあります。その違いは
 [リファレンスの概要](../reference/README.md) で説明しています。
-組み込みの型と同じように描く型ではこれらを使い、それ以外は自分
-のコードで書いてください。
+向きのある箱や px と度の換算のような純粋な計算は公開していない
+ので、自分のコードで持ってください。
 
 ## 関連する例
 
@@ -351,4 +353,3 @@ draw.registerAuxiliaryHandleProvider({
 - [AuxiliaryHandleProvider](../api/maplibre-gl-draw/interfaces/AuxiliaryHandleProvider.md)
 - [FeatureCompanionProvider](../api/maplibre-gl-draw/interfaces/FeatureCompanionProvider.md)
 - [CustomOverlayRenderer](../api/maplibre-gl-draw/interfaces/CustomOverlayRenderer.md)
-- [SDFLineRenderer](../api/maplibre-gl-draw/interfaces/SDFLineRenderer.md)

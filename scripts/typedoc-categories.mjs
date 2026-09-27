@@ -4,11 +4,11 @@
 // A TypeDoc plugin that sorts the API reference by task instead of by kind.
 //
 // The sources already group the public symbols: the section comments of each entry point
-// (src/index.ts, src/geometry/index.ts) and of the MapLibreGLDraw interface (src/api/api.ts).
-// This plugin reads those comments and gives every symbol a category, and every member of
-// MapLibreGLDraw a group, so that the grouping lives in one place, next to the code. A symbol
-// outside any section, or a section this file does not know, fails the build, so that the
-// reference cannot fall out of step with the sources.
+// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/webgl/index.ts) and of the
+// MapLibreGLDraw interface (src/api/api.ts). This plugin reads those comments and gives every
+// symbol a category, and every member of MapLibreGLDraw a group, so that the grouping lives in
+// one place, next to the code. A symbol outside any section, or a section this file does not
+// know, fails the build, so that the reference cannot fall out of step with the sources.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,24 +27,21 @@ const MAIN_CATEGORIES = [
   ['Snapping and tracing', ['Snapping', 'Tracing']],
   ['Styles', ['Style rules (pure functions)', 'Property accessors']],
   ['Extension points', ['Extension points']],
-  [
-    'Building blocks',
-    [
-      'Core services reached through ModeContext and CustomRendererDrawContext',
-      'Diagnostics (their fields follow the rendering)',
-      'WebGL building blocks',
-      'Terrain anchoring',
-      'Geometry and projection math',
-      'Selection UI, hit testing and viewport helpers',
-    ],
-  ],
 ];
 
 /** Section comments that head a layer rather than a topic */
-const LAYER_HEADINGS = new Set([
-  'Layer 1: the public API',
-  'Layer 2: building blocks for extension authors (may change in a minor release)',
-]);
+const LAYER_HEADINGS = new Set(['Layer 1: the public API']);
+
+/** The sections of src/webgl/index.ts, which are its categories (in this order) */
+const WEBGL_CATEGORIES = [
+  'Shaders and projection',
+  'Blending and billboards',
+  'Quads',
+  'Lines',
+  'Terrain',
+  'Hit testing',
+  'Supporting types',
+];
 
 /** The sections of the MapLibreGLDraw interface, merged into groups (in this order) */
 const MEMBER_GROUPS = [
@@ -148,6 +145,12 @@ export function load(app) {
     const entries = [
       { module: 'maplibre-gl-draw', file: 'src/index.ts', rename: (s) => categoryOf.get(s) },
       { module: 'geometry', file: 'src/geometry/index.ts', rename: (s) => s },
+      { module: 'table', file: 'src/table/index.ts', rename: (s) => s },
+      {
+        module: 'webgl',
+        file: 'src/webgl/index.ts',
+        rename: (s) => (WEBGL_CATEGORIES.includes(s) ? s : undefined),
+      },
     ];
     for (const { module, file, rename } of entries) {
       const mod = project.children?.find((c) => c.name === module);

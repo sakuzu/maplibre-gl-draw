@@ -41,8 +41,8 @@ export interface DatasetClickEventPayload {
   /** The feature that was hit. null when there was no hit */
   feature: Feature | null;
   /**
-   * The row of the feature in its dataset (its index in the features given to the
-   * dataset, or its row in a columnar table). null when there was no hit
+   * The row of the feature in its dataset (its index in the rows given to the
+   * dataset, or its row in a table). null when there was no hit
    */
   row: number | null;
   /** Map coordinate [lng, lat] */

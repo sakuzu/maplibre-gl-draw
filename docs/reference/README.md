@@ -18,49 +18,48 @@ they link here for the details.
 
 ## Entry points
 
-The package has three entry points.
+The package has four entry points.
 
 - `@sakuzu/maplibre-gl-draw` — the drawing and editing library: the
   factory `createMapLibreGLDraw`, the instance, its options, the data
-  model, the events, the extension points and the building blocks
+  model, the events and the extension points
 - `@sakuzu/maplibre-gl-draw/geometry` — pure geometry functions (boolean
   operations, buffer, splitting, predicates, measurement). They do not
   depend on maplibre-gl, the DOM or the instance, so they also run in
   Node and in workers
-- `@sakuzu/maplibre-gl-draw/columnar` — the preparation of a columnar
-  table for a dataset (`prepareDatasetColumnar`), whose rows have one
-  geometry type or several, and the list of its buffers for
-  `postMessage` (`columnarTransferables`). It
-  depends on neither maplibre-gl nor WebGL nor the DOM, so a Worker that
-  reads a file can use it
+- `@sakuzu/maplibre-gl-draw/table` — the building of a table for a
+  dataset from GeoJSON (`tableFromFeatures`, `createTableBuilder`), whose
+  rows have one geometry type or several, its preparation
+  (`prepareTable`) and the list of its buffers for `postMessage`
+  (`transferList`). It depends on neither maplibre-gl nor WebGL nor the
+  DOM, so a Worker that reads a file can use it
+- `@sakuzu/maplibre-gl-draw/webgl` — building blocks for custom shaders
+  (the GLSL snippet and the projection uniforms, the quad shader, the
+  blend and billboard helpers, the dash and terrain subdivision rules).
+  It may change in a minor release
 
-Import only from these three. Paths inside the package (`dist/...`) are
+Import only from these four. Paths inside the package (`dist/...`) are
 not public and may change in any release.
 
 ## The two layers of the public API
 
-The symbols of the main entry fall into two layers.
+The public symbols fall into two layers.
 
-Layer 1 is the public API: what an application needs to use the library,
-and what an extension needs to plug into an extension point (`Plugin`,
-`PluginContext`, `ModeHandler`, `CustomFeatureHandler`, the snapping
-provider, the hit test strategy and so on). It also includes the pure
-functions for style rules and property access. The geometry entry
-follows the same rules as layer 1.
+Layer 1 is the public API, the main entry: what an application needs to
+use the library, and what an extension needs to plug into an extension
+point (`Plugin`, `PluginContext`, `ModeHandler`, `CustomFeatureHandler`,
+the snapping provider, the hit test strategy and so on). It also
+includes the pure functions for style rules and property access. The
+geometry and table entries follow the same rules as layer 1.
 
-Layer 2 is building blocks for extension authors: parts that a plugin, a
-custom mode or a custom feature type may reuse to draw and hit test the
-same way the library does. These are the WebGL helpers, the renderers,
-terrain anchoring, projection and bounding box math, selection helpers,
-the types of the services that `ModeContext` and
-`CustomRendererDrawContext` hand over, and the types of the diagnostics
-(`draw.getTerrainDiagnostics()`), whose fields follow the rendering.
-Prefer an extension point of
-layer 1 when one does the job, and use the service types only for the
-instances a context passes you.
+Layer 2 is the entry `@sakuzu/maplibre-gl-draw/webgl`: building blocks
+for people who write their own shaders and want them to draw the way
+the library does. Most overlays do not need it, because the context of
+a renderer already passes the shared renderers. Prefer an extension
+point of layer 1 when one does the job.
 
-The generated reference marks which layer each symbol belongs to. The
-list is fixed in `src/index.ts`; whatever it does not export is internal.
+The lists are fixed in `src/index.ts` and `src/webgl/index.ts`; whatever
+they do not export is internal.
 
 ## Versioning
 
@@ -93,10 +92,11 @@ npm install
 npm run site:dev
 ```
 
-`npm run docs:api` runs typedoc on the three entry points and writes
+`npm run docs:api` runs typedoc on the four entry points and writes
 Markdown to `docs/api/`, sorted by task: the categories come from the
-section comments of `src/index.ts` and `src/geometry/index.ts`, and the
-groups of `MapLibreGLDraw` from the section comments of its declaration
+section comments of the entry files (`src/index.ts`,
+`src/geometry/index.ts`, `src/table/index.ts` and `src/webgl/index.ts`),
+and the groups of `MapLibreGLDraw` from the section comments of its declaration
 (`scripts/typedoc-categories.mjs`). A symbol outside any section fails
 the build. Each page shows the declaration, its description, the default
 values of options, and examples where they help.

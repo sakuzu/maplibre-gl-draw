@@ -132,9 +132,9 @@ not cover.
 
 ### The public surface
 
-`src/index.ts` names every public symbol one by one; it has no
-`export *`. The names fall into two layers, and the file lists them in two
-sections in this order.
+`src/index.ts` and `src/webgl/index.ts` name every public symbol one by
+one; they have no `export *`. The names fall into two layers: layer 1 is
+the main entry, and layer 2 is the entry `@sakuzu/maplibre-gl-draw/webgl`.
 
 - Layer 1, the public API. The factory `createMapLibreGLDraw`, the
   `MapLibreGLDraw` instance and its `Options`, the data model (`Feature`,
@@ -144,35 +144,33 @@ sections in this order.
   overlay renderer, the snapping provider, the hit test and box selection
   strategies, the auxiliary handle and the companion contracts) and the pure
   functions (style rules, property accessors, tracing). It follows semver.
-- Layer 2, building blocks for extension authors. Parts that a plugin, a
-  custom feature type or a custom mode may reuse to draw and hit test the
-  same way core does: the WebGL helpers (`createProgram`, `QuadShader`,
-  `ProjectionUniformManager`, the blend and depth helpers), the terrain
-  anchoring functions, the OBB and projection math, the selection helpers,
-  and the types of the core services that `ModeContext` and
-  `CustomRendererDrawContext` hand over. Its guarantee is weaker than that
-  of layer 1: it may change in a minor release. The list is the section
-  "The two layers of the public API" of `docs/reference/README.md`.
+- Layer 2, the building blocks for custom shaders (`src/webgl/index.ts`).
+  Parts tied to the shaders and the terrain drawing of core: the GLSL
+  snippet and the projection uniforms, `createProgram`, `QuadShader`, the
+  blend and billboard helpers, the input types of the shared line
+  renderer, the dash and terrain subdivision rules, and
+  `PointHitTestStrategy`. Pure math that is not tied to them (oriented
+  boxes, pixel and degree conversion, contrast colors) is not published;
+  an extension keeps its own. Its guarantee is weaker than that of layer
+  1: it may change in a minor release. No layer 1 declaration refers to a
+  layer 2 type.
 
 Where a new symbol goes is decided as follows.
 
 - A symbol that a host application needs to use the library, or that an
   extension needs to plug into an extension point, is layer 1.
-- A symbol that exists so that an extension can reproduce what core does
-  inside its own rendering or hit testing is layer 2. Prefer a general
-  extension point to a new building block when one would do.
+- A symbol that exists so that a custom shader can reproduce what the
+  shaders of core do is layer 2. Prefer a general extension point to a new
+  building block when one would do.
 - A type that a public declaration refers to is exported too (a parameter,
-  a return value, a field). It goes to the layer of the declaration that
-  needs it, except the types of core services reached through
-  `ModeContext` and `CustomRendererDrawContext`, which are layer 2.
+  a return value, a field), in the layer of the declaration that needs it.
 - Everything else is internal and is not listed.
 
 To publish a symbol, add it to the barrel of its domain
 (`src/<domain>/index.ts`, which lists only public symbols), name it in the
-right section of `src/index.ts`, add it to the list of that layer in
-`src/index.test.ts`, and record it in `CHANGELOG.md` (and, for layer 2, in
-`docs/reference/README.md`). The test pins the lists, so a change to the surface
-never happens by accident.
+right section of `src/index.ts` or `src/webgl/index.ts`, add it to the list
+of that layer in `src/index.test.ts`, and record it in `CHANGELOG.md`. The
+test pins the lists, so a change to the surface never happens by accident.
 
 An internal symbol that would still appear in the emitted declarations (an
 exported declaration of a module, or a member of a public class or
