@@ -10,6 +10,7 @@ import type { Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawOptions } from '../options.js';
 import { createDatasets } from './datasets.js';
+import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
 import { createDrawing } from './drawing.js';
 import type { Engine } from './engine.js';
@@ -23,6 +24,9 @@ import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound } from './shared.js';
+
+/** The methods of the instance that return a promise: after destroy they reject */
+const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load']);
 
 /**
  * Builds the draw instance on an engine and hands it to the extensions of the engine
@@ -54,8 +58,11 @@ export function createDrawOnEngine(
   };
   const features = createFeatures(deps);
   const groups = createGroups(deps);
+  // Set once destroy has run to the end, so that the extensions removed by it can still read
+  // the instance
+  let destroyed = false;
 
-  const draw: Draw = {
+  const members: Draw = {
     features,
     layers: createLayers(deps),
     groups,
@@ -98,8 +105,20 @@ export function createDrawOnEngine(
 
     ...createDrawing(engine),
 
-    destroy: () => engine.destroy(),
+    destroy() {
+      if (destroyed) return;
+      try {
+        engine.destroy();
+      } finally {
+        destroyed = true;
+      }
+    },
   };
+  // After destroy, every method but destroy throws invalid-state
+  const draw = guardAfterDestroy(members, () => destroyed, {
+    asyncMembers: ASYNC_MEMBERS,
+    skip: new Set(['destroy']),
+  });
   engine.extensions.attach(draw);
   return draw;
 }

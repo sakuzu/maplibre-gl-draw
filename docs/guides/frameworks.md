@@ -15,8 +15,10 @@ library out of server-side rendering.
 
 `destroy()` removes the layers and listeners the instance added, removes
 its plugins and the other extensions, and gives the map back the
-settings it changed. A second call does nothing. `draw.on` returns the
-function that unsubscribes, so a component that subscribes to a
+settings it changed. A second call does nothing, and any other method
+called after it throws a `DrawError` with the code `invalid-state`, so a
+late callback shows up instead of acting on a dead map. `draw.on` returns
+the function that unsubscribes, so a component that subscribes to a
 longer-lived instance can clean up with it.
 
 ## React
