@@ -49,6 +49,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run check:package
+      - name: Documentation site (fails on a dead link)
+        run: npm run site:build
       - name: docs:check (e2e runs in its own job)
         run: npm run docs:check -- --skip-e2e --base origin/${{ github.base_ref || 'main' }}
 

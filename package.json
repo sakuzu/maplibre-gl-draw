@@ -67,7 +67,7 @@
     "build": "rm -rf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "check:spdx": "node scripts/spdx.mjs",
-    "lint": "biome check src examples playground bench scripts && npm run check:layers && npm run check:terms && npm run check:spdx",
+    "lint": "biome check src examples playground bench scripts docs/.vitepress/config.mts && npm run check:layers && npm run check:terms && npm run check:spdx",
     "check:layers": "node scripts/check-layers.mjs",
     "check:terms": "node scripts/check-terms.mjs",
     "docs:api": "typedoc",
@@ -84,7 +84,10 @@
     "dev:playground": "npm run dev -w playground",
     "dev:bench": "npm run dev -w bench",
     "check:package": "publint && rm -rf .pack && mkdir -p .pack && npm pack --ignore-scripts --pack-destination .pack >/dev/null && attw .pack/*.tgz --profile esm-only && node --input-type=module -e \"await import('./dist/index.js'); await import('./dist/geometry/index.js'); await import('./dist/display/columnar/index.js'); console.log('dist imports ok')\" && rm -rf .pack",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "site:dev": "vitepress dev docs",
+    "site:build": "vitepress build docs",
+    "site:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@types/geojson": "^7946.0.16",
@@ -108,6 +111,7 @@
     "publint": "^0.3.24",
     "typedoc": "0.28.20",
     "typescript": "^6.0.3",
+    "vitepress": "^1.6.4",
     "vitest": "^4.1.11"
   }
 }
