@@ -47,7 +47,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, posix, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -141,7 +141,8 @@ function select({ include = [], exclude = [] }) {
   return FILES.filter((f) => inc(f) && !exc(f)).sort();
 }
 
-const readText = (file) => readFileSync(join(ROOT, file), 'utf8');
+/** Reads a file relative to the root, or at an absolute path (a page of the fresh API reference) */
+const readText = (file) => readFileSync(isAbsolute(file) ? file : join(ROOT, file), 'utf8');
 const MARKDOWN = select(config.markdown);
 
 // ---------------------------------------------------------------------------------------------
@@ -551,7 +552,7 @@ function stepLinks() {
           report.errors.push(`${file}:${i + 1}: broken link ${target}`);
           continue;
         }
-        if (anchor && dest.endsWith('.md') && !anchorsOf(dest).has(anchor)) {
+        if (anchor && dest.endsWith('.md') && !anchorsOf(inReference ? onDisk : dest).has(anchor)) {
           report.errors.push(`${file}:${i + 1}: no heading for #${anchor} in ${dest}`);
         }
       }
