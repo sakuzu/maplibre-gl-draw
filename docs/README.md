@@ -29,12 +29,13 @@ Each guide covers one task. Read the ones you need, in any order.
 - [guides/terrain.md](guides/terrain.md) — what changes when the map has
   terrain
 - [guides/read-only.md](guides/read-only.md) — read-only mode, the
-  interaction lock and per-client visibility
-- [guides/large-data.md](guides/large-data.md) — datasets for large data
-- [guides/plugins.md](guides/plugins.md) — writing a plugin and a custom
-  mode
+  interaction lock and hiding on one client
+- [guides/large-data.md](guides/large-data.md) — datasets: data drawn
+  beside the document and not edited, from rows, tables or a server
+- [guides/plugins.md](guides/plugins.md) — extensions: writing a plugin
+  and a mode of your own
 - [guides/custom-types.md](guides/custom-types.md) — adding a feature type
-  with its own rendering and hit testing
+  with its own drawing and hit testing, overlays and providers
 - [guides/frameworks.md](guides/frameworks.md) — using the library with
   React, Svelte and Vue, and with server-side rendering
 - [guides/performance.md](guides/performance.md) — the rough scale the
@@ -47,9 +48,9 @@ Each guide covers one task. Read the ones you need, in any order.
 - [API reference](https://sakuzu.github.io/maplibre-gl-draw/api/) — the
   generated reference of every public symbol, published with the
   [live demo](https://sakuzu.github.io/maplibre-gl-draw/)
-- [reference/README.md](reference/README.md) — the two layers of the
-  public API, the versioning guarantee, and how to build the generated API
-  reference
+- [reference/README.md](reference/README.md) — the four entry points,
+  the two layers of the public API, the versioning guarantee, and how to
+  build the generated API reference
 - [reference/data-format.md](reference/data-format.md) — the native format
   and GeoJSON, per feature type
 - [reference/events.md](reference/events.md) — every event and its payload

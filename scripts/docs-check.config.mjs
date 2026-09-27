@@ -60,7 +60,7 @@ export default {
     // A block that declares the same name shadows it.
     globals: `
 declare const map: import('maplibre-gl').Map;
-declare const draw: import('@sakuzu/maplibre-gl-draw').MapLibreGLDraw;
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
 declare const feature: import('@sakuzu/maplibre-gl-draw').Feature;
 declare const featureId: string;
 declare const layerId: string;
