@@ -103,6 +103,7 @@ change is made.
 | `drag.started` | `{ kind; featureIds }` |
 | `drag.ended` | `{ kind; featureIds; cancelled }` |
 | `snap.changed` | `{ result: SnapResult \| null }` |
+| `preview.changed` | `{ feature: FeatureInput \| null }` |
 | `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
 | `dataset.clicked` | `{ datasetId; rowIndex; row; lngLat; point }` |
 | `image.requested` | `{ lngLat; zoom; layerId }` |
@@ -309,6 +310,15 @@ value. Setting the value it already has fires nothing.
 Fires while drawing or editing, when the target of the snapping changes.
 When the pointer leaves every target, it fires once with `result: null`.
 Use it for a status line such as "snapped to a vertex".
+
+### preview.changed
+
+Fires every time the shape being drawn changes: at each vertex, at each
+move of the pointer that moves the shape, and once with `feature: null`
+when the shape is created, discarded or left. Nothing is throttled.
+`feature` has the type, the geometry and the layer of the shape, the ID it
+will be created with, and the radius of a circle. Use it to show the
+length while drawing, or to share the shape with other users.
 
 ### map.clicked
 

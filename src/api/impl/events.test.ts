@@ -51,6 +51,7 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'readOnly.changed',
   'interactionLock.changed',
   'snap.changed',
+  'preview.changed',
   'map.clicked',
   'dataset.clicked',
   'dataset.added',
@@ -540,5 +541,73 @@ describe('the signals of the engine', () => {
     engine.destroy();
     engine.events.emit('mode.changed', { mode: 'select', previous: 'select' });
     expect(heard).not.toHaveBeenCalled();
+  });
+});
+
+describe('preview.changed', () => {
+  let engine: Engine;
+  let signals: Recorded[];
+  let local: Draw;
+
+  beforeEach(() => {
+    engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    local = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    signals = record(local);
+  });
+
+  afterEach(() => local.destroy());
+
+  const shapes = () =>
+    payloadsOf(signals, 'preview.changed').map(({ feature }) =>
+      feature ? (feature.geometry as { coordinates: unknown }).coordinates : null,
+    );
+
+  it('fires at each change of the shape being drawn, and null when it is created', () => {
+    local.setMode('draw_line');
+    const input = createSyntheticInput(engine);
+    input.click([0, 0]);
+    input.move([0.5, 0.5]);
+    input.click([1, 1]);
+    const [first] = payloadsOf(signals, 'preview.changed');
+    expect(first.feature).toMatchObject({ type: 'LineString', layerId: expect.any(String) });
+    expect(typeof first.feature?.id).toBe('string');
+    const count = shapes().length;
+    expect(count).toBeGreaterThanOrEqual(3);
+    const all = shapes();
+    const last = all[all.length - 1] as number[][];
+    expect(last[0]).toEqual([0, 0]);
+    expect(last[1][0]).toBeCloseTo(1);
+    expect(last[1][1]).toBeCloseTo(1);
+
+    input.key('Enter');
+    expect(shapes()[shapes().length - 1]).toBeNull();
+    const created = payloadsOf(signals, 'feature.created');
+    expect(created).toHaveLength(1);
+    expect(created[0].feature.id).toBe(first.feature?.id);
+  });
+
+  it('fires null once when the drawing is cancelled, and nothing when there was none', () => {
+    local.setMode('draw_line');
+    const input = createSyntheticInput(engine);
+    input.click([0, 0]);
+    input.move([0.5, 0.5]);
+    const before = shapes().length;
+    input.key('Escape');
+    expect(shapes().slice(before)).toEqual([null]);
+
+    local.setMode('select');
+    expect(shapes()).toHaveLength(before + 1);
+  });
+
+  it('carries the radius of a circle', () => {
+    local.setMode('draw_circle');
+    const input = createSyntheticInput(engine);
+    input.click([0, 0]);
+    input.move([0.01, 0]);
+    const changes = payloadsOf(signals, 'preview.changed');
+    const last = changes[changes.length - 1]?.feature;
+    expect(last?.type).toBe('Circle');
+    expect(last?.properties?.['maplibre-gl-draw:radiusMeters']).toBeGreaterThan(0);
   });
 });

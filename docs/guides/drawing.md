@@ -92,6 +92,22 @@ draw.options.update({
 });
 ```
 
+`preview.changed` fires every time that shape changes, and once with
+`feature: null` when it is created, discarded or left. It is not
+throttled, so a listener that does heavy work waits for the next frame
+itself. Use it to show the length while drawing, or to share the shape
+with other users.
+
+```ts
+import { length } from '@sakuzu/maplibre-gl-draw/geometry';
+
+draw.on('preview.changed', ({ feature }) => {
+  if (feature?.geometry.type === 'LineString') {
+    console.log(`${Math.round(length(feature.geometry))} m`);
+  }
+});
+```
+
 ### After finishing
 
 A point, line, polygon or circle is created in one transaction with its

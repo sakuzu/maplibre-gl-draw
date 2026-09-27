@@ -7,23 +7,28 @@
  *
  * One transaction of the Store is one notification. From it come first the events of each
  * resource (features, layers, groups, metadata, selection, vertex selection, mode, hidden,
- * read-only, interaction lock), in that order, and last one `document.changed` with the whole
+ * read-only, interaction lock, the shape being drawn), in that order, and last one
+ * `document.changed` with the whole
  * change when the transaction changed the document. The engine announces the rest
  * on its internal emitter (snapping, clicks, images, the stacking order, failed loads,
  * drags), and each is passed on under its name here.
  */
 
+import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type {
+  FeatureCoordinates,
   StoreChange,
   Feature as StoredFeature,
   VertexSelection as StoredVertexSelection,
+  TentativeState,
 } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { DocumentChange, DrawEventListener, DrawEvents } from '../events.js';
 import type { Hit } from '../extension/provider.js';
-import type { Feature, MoveTarget } from '../model.js';
+import type { Feature, FeatureInput, MoveTarget } from '../model.js';
 import type { SnapResult } from '../state.js';
 import { toDatasetRow } from './rows.js';
 
@@ -149,9 +154,43 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
       hub.emit('interactionLock.changed', { locked });
     }
 
+    // The shape being drawn, once per notification that set or cleared it
+    const tentative = changes.tentative;
+    if (tentative && (tentative.state !== null || tentative.previous !== null)) {
+      hub.emit('preview.changed', { feature: toPreviewFeature(tentative.state) });
+    }
+
     const change = toDocumentChange(changes);
     if (change) hub.emit('document.changed', change);
   });
+}
+
+/**
+ * The shape being drawn in the shape of the API: its type, geometry and layer, the ID it will
+ * be created with, and the radius of a circle
+ *
+ * @internal
+ */
+export function toPreviewFeature(state: TentativeState | null): FeatureInput | null {
+  if (!state) return null;
+  const coordinates = structuredClone(state.coordinates) as FeatureCoordinates;
+  const feature: FeatureInput = {
+    type: state.type,
+    geometry: geometryFromCoordinates(state.type, coordinates),
+    layerId: state.layerId,
+  };
+  if (state.pendingFeatureId !== undefined) feature.id = state.pendingFeatureId;
+  const properties: Record<string, number> = {};
+  if (state.radiusMeters !== undefined) {
+    properties[DRAW_PROPERTY_KEYS.radiusMeters] = state.radiusMeters;
+  }
+  if (state.radiusHandleAngle !== undefined) {
+    properties[DRAW_PROPERTY_KEYS.radiusHandleAngle] = state.radiusHandleAngle;
+  }
+  if (Object.keys(properties).length > 0) {
+    feature.properties = properties as FeatureInput['properties'];
+  }
+  return feature;
 }
 
 /** Whether a list of IDs holds the same IDs as a set */

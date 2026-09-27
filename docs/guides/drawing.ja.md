@@ -90,6 +90,22 @@ draw.options.update({
 });
 ```
 
+その形が変わるたびに `preview.changed` が届き、形が作られたとき、
+捨てられたとき、モードを離れたときには `feature: null` で 1 回届きます。
+間引きはしないので、重い処理をするリスナーは自分で次のフレームまで
+待ってください。描いている途中の長さを表示したり、形をほかの利用者と
+共有したりするのに使います。
+
+```ts
+import { length } from '@sakuzu/maplibre-gl-draw/geometry';
+
+draw.on('preview.changed', ({ feature }) => {
+  if (feature?.geometry.type === 'LineString') {
+    console.log(`${Math.round(length(feature.geometry))} m`);
+  }
+});
+```
+
 ### 描き終えた後
 
 点、線、多角形、円は、その選択と合わせて 1 つの取引で作られ、新しい
