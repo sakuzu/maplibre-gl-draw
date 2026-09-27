@@ -117,8 +117,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
   being drawn, and `selectionStyle.boxSelection` for the selection box.
 - The contexts of the extensions: `terrain`, `names`, `screen` and
-  `invalidate` and `drawing` for every kind, and `hitTest`, `snap`,
-  `commitFeature`, `preview`, `cursor` and `listTraceRows` for a mode.
+  `invalidate` and `drawing` (with `cancel`) for every kind, and
+  `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and
+  `listTraceRows` for a mode.
 - In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
   `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
 - In `/table`: `tableFromFeatures`, `createTableBuilder` and
@@ -465,7 +466,7 @@ The `PluginContext`. Its writes took a `source`; in 2.0 wrap them in
 | `batch(fn)` | `draw.transact(fn, options)` | |
 | `notifyStateReset` | (removed) | The Store reports it |
 | `undoVertex`, `redoVertex` | `drawing.undoVertex`, `redoVertex` | |
-| (none) | `drawing.isDrawing` | |
+| (none) | `drawing.isDrawing`, `drawing.cancel` | |
 | `invalidateFeatures(type)` | `invalidate({ type })` | |
 | `projectAnchor(lng, lat)` | `terrain.project([lng, lat])` | |
 | `anchorElevationMeters` | `terrain.elevation` | |

@@ -492,7 +492,8 @@ Every kind of extension gets one context. They share
 - `invalidate({ type, ids })`, which redraws (`invalidateFeatures`)
 - `drawing`, with `undoVertex()`, `redoVertex()` and `isDrawing()`,
   for the vertices of the shape being drawn (`undoVertex` and
-  `redoVertex` of the 1.0 `PluginContext`)
+  `redoVertex` of the 1.0 `PluginContext`), and `cancel()`, which
+  cancels the shape
 
 A `PluginContext` adds `extensions`, the collections of
 `draw.extensions`. What a plugin adds there is removed with the

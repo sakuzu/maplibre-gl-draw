@@ -506,7 +506,8 @@ const removeLogger = draw.extensions.plugins.add(logger);
   (`invalidateFeatures` の代わりです)
 - `drawing` は、描いている途中の形の頂点のための `undoVertex()`、
   `redoVertex()`、`isDrawing()` を持ちます (1.0 の `PluginContext`
-  の `undoVertex` と `redoVertex` の代わりです)
+  の `undoVertex` と `redoVertex` の代わりです)。`cancel()` はその形を
+  取り消します
 
 `PluginContext` には、さらに `extensions` (`draw.extensions` と同じ
 コレクション) があります。プラグインがここで足したものは、プラグイン

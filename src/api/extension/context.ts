@@ -129,6 +129,15 @@ export interface ExtensionContext {
     redoVertex(): boolean;
     /** Whether the current mode is drawing a shape that is not created yet */
     isDrawing(): boolean;
+    /**
+     * Cancels the shape being drawn, as an Escape does while drawing: the mode drops it
+     * (`ModeHandler.onCancel`), the preview is cleared and the mode stays the current one.
+     * When nothing is being drawn it does nothing; unlike an Escape, it does not leave the
+     * mode.
+     *
+     * @returns True when a shape was being drawn and was cancelled
+     */
+    cancel(): boolean;
   };
 }
 

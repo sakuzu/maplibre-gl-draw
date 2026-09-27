@@ -127,7 +127,9 @@ instance:
 - `invalidate`, which asks for features to be drawn again when
   something outside the document changed their look
 - `drawing`, which removes the last vertex of the shape being drawn
-  and puts it back (`undoVertex`, `redoVertex`, `isDrawing`)
+  and puts it back (`undoVertex`, `redoVertex`, `isDrawing`), and
+  cancels the shape as an Escape does, without leaving the mode
+  (`cancel`)
 
 ### Writing to the document
 

@@ -899,3 +899,62 @@ describe('the extensions of two draw instances', () => {
     editor.destroy();
   });
 });
+
+describe('drawing.cancel', () => {
+  it('cancels the shape being drawn with drawing.cancel, and stays in the mode', () => {
+    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    const draw = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    let ctx: PluginContext | null = null;
+    draw.extensions.plugins.add(
+      plugin('canceller', {
+        onAdd(context) {
+          ctx = context;
+        },
+      }),
+    );
+    const context = ctx as unknown as PluginContext;
+    expect(context.drawing.cancel()).toBe(false);
+
+    engine.modeManager.setMode('draw_line');
+    const input = createSyntheticInput(engine);
+    input.click([0, 0]);
+    input.move([1, 1]);
+    expect(context.drawing.isDrawing()).toBe(true);
+    const previews: unknown[] = [];
+    draw.on('preview.changed', ({ feature }) => previews.push(feature));
+    expect(context.drawing.cancel()).toBe(true);
+    expect(context.drawing.isDrawing()).toBe(false);
+    expect(previews).toEqual([null]);
+    expect(engine.modeManager.getMode()).toBe('draw_line');
+    expect(context.drawing.cancel()).toBe(false);
+    expect(engine.modeManager.getMode()).toBe('draw_line');
+
+    // The mode dropped its vertices: the next click starts a new shape
+    input.click([2, 2]);
+    input.move([3, 3]);
+    const coordinates = engine.context.store.getTentative()?.coordinates as number[][];
+    expect(coordinates).toHaveLength(2);
+    expect(coordinates[0]).toEqual([2, 2]);
+
+    // A mode of the contract hears onCancel
+    const onCancel = vi.fn();
+    draw.extensions.modes.add('custom', (modeCtx) => ({
+      onClick(event) {
+        modeCtx.preview.set({
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: event.lngLat },
+        });
+        return true;
+      },
+      onCancel,
+    }));
+    engine.modeManager.setMode('custom');
+    input.click([0, 0]);
+    expect(context.drawing.cancel()).toBe(true);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(context.drawing.isDrawing()).toBe(false);
+    expect(engine.modeManager.getMode()).toBe('custom');
+    draw.destroy();
+  });
+});

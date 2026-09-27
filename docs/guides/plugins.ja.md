@@ -126,7 +126,8 @@ console.log(counter?.count());
 - `invalidate` は、文書の外の何かが見た目を変えたときに、地物を描き
   直させます
 - `drawing` は、描いている途中の形の最後の頂点を取り除き、また戻します
-  (`undoVertex`、`redoVertex`、`isDrawing`)
+  (`undoVertex`、`redoVertex`、`isDrawing`)。また、Escape と同じように
+  その形を取り消します。モードは離れません (`cancel`)
 
 ### 文書に書く
 

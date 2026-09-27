@@ -375,6 +375,13 @@ export function createExtensionContext(
       undoVertex: () => modeManager.undoVertex(),
       redoVertex: () => modeManager.redoVertex(),
       isDrawing: () => store.getTentative() !== null,
+      cancel() {
+        if (store.getTentative() === null) return false;
+        // The mode drops what it was drawing (onCancel of a mode of the contract)
+        modeManager.notifyStateReset();
+        if (store.getTentative() !== null) store.setTentative(null);
+        return true;
+      },
     },
   };
 }
