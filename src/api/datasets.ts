@@ -5,13 +5,16 @@
  * `draw.datasets`: large data that is drawn but not edited, and is not part of the document
  */
 
-import type { BBox, Feature as GeoJSONFeature, Position } from 'geojson';
+import type { BBox, Feature as GeoJSONFeature, Geometry, Position } from 'geojson';
 import type { PreparedTable, Table } from '../table/index.js';
 import type { ScreenPoint } from './events.js';
 import type { FeatureStyle, FeatureType, StyleRule } from './model.js';
 
-/** A row of a dataset, given and read as a GeoJSON feature. */
-export type DatasetRow = GeoJSONFeature;
+/**
+ * A row of a dataset, given and read as a GeoJSON feature. Its geometry may be `null`, as
+ * GeoJSON allows; such a row is kept in the table and is not drawn.
+ */
+export type DatasetRow = GeoJSONFeature<Geometry | null>;
 
 /**
  * Where a dataset is stacked: below the layers of the document, above them, or inside the

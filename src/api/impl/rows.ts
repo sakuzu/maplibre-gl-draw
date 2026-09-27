@@ -6,7 +6,7 @@
  * API gives them: GeoJSON features, `BBox` arrays and `Position` arrays
  */
 
-import type { BBox, Geometry } from 'geojson';
+import type { BBox } from 'geojson';
 import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
 import type { DatasetRow } from '../datasets.js';
 
@@ -20,7 +20,7 @@ export function toDatasetRow(feature: StoredFeature): DatasetRow {
   const row: DatasetRow & { style?: StoredFeature['style'] } = {
     type: 'Feature',
     id: feature.id,
-    geometry: hasGeometry(feature) ? feature.geometry : (null as unknown as Geometry),
+    geometry: hasGeometry(feature) ? feature.geometry : null,
     properties: feature.properties ?? {},
   };
   if (feature.style && Object.keys(feature.style).length > 0) row.style = feature.style;

@@ -181,6 +181,14 @@ describe('a dataset', () => {
     expect(dataset.findRow('none')).toBeNull();
   });
 
+  it('keeps a row whose geometry is null and gives it back with a null geometry', () => {
+    const empty: DatasetRow = { type: 'Feature', id: 'n', geometry: null, properties: {} };
+    const dataset = datasets.add({ id: 'd', rows: [ROWS[0], empty] });
+    expect(dataset.getRowId(1)).toBe('n');
+    expect(dataset.getRow(1)?.geometry).toBeNull();
+    expect(dataset.getRowPoint(1)).toBeNull();
+  });
+
   it('lists the rows of a range, with and without their drawn look', () => {
     const dataset = datasets.add({
       id: 'd',
