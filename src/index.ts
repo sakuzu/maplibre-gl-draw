@@ -1,25 +1,37 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+// The main entry. Every public symbol of it is listed below by name, grouped by topic (see
+// "The public surface" in CONTRIBUTING.md), and the whole entry follows semver. Anything that
+// no entry lists is internal: where it would otherwise appear in the emitted declarations, its
+// JSDoc carries the internal tag and `stripInternal` drops it from them. The list is pinned by
+// src/index.test.ts, so every addition or removal is deliberate. Tree-shaking is left to the
+// ESM bundler, which reads `"sideEffects": false` in package.json.
+
 /**
- * MapLibre GL Draw - public entry point
+ * Draw and edit points, lines and areas on a MapLibre map, and show large data beside them.
  *
- * The caller accesses the whole public API through the single entry
- * `import { ... } from '@sakuzu/maplibre-gl-draw'`, plus three subpaths: the pure geometry
- * functions of `@sakuzu/maplibre-gl-draw/geometry`, which also run in Node, the building and
- * Worker-side preparation of tables of `@sakuzu/maplibre-gl-draw/table`, and the building
- * blocks for custom shaders of `@sakuzu/maplibre-gl-draw/webgl`. Tree-shaking is applied by
- * the ESM bundler, which looks at `"sideEffects": false` in package.json.
+ * Import from here for everything an application does with a drawing: create the instance,
+ * read and change its features, layers and groups, listen to what changes, save and load the
+ * document, and add plugins, modes and feature types. Three subpaths cover the rest: geometry
+ * that needs no map (`/geometry`), large tables read in a Worker (`/table`) and custom shaders
+ * (`/webgl`).
  *
- * Every public symbol of this entry is listed here by name, grouped by topic (see "The public
- * surface" in CONTRIBUTING.md): the entry and its options, the document model, the inputs,
- * the state, the events, the errors, the datasets, the Store, the extension contract and the
- * style rule functions. The whole entry follows semver. The building blocks for custom
- * shaders are the webgl entry (src/webgl/index.ts); it may change in a minor release.
+ * ```ts
+ * import { createDraw } from '@sakuzu/maplibre-gl-draw';
  *
- * Anything that no entry lists is internal. Where it would otherwise appear in the emitted
- * declarations, its JSDoc carries the internal tag and `stripInternal` drops it from them.
- * The list is pinned by src/index.test.ts, so every addition or removal is deliberate.
+ * const draw = createDraw(map);
+ * draw.setMode('draw_polygon');
+ * draw.on('feature.created', ({ feature }) => {
+ *   console.log(feature.id, feature.geometry);
+ * });
+ * ```
+ *
+ * Read next: [getting started](https://sakuzu.github.io/maplibre-gl-draw/getting-started),
+ * then the guides for [drawing](https://sakuzu.github.io/maplibre-gl-draw/guides/drawing) and
+ * [saving and loading](https://sakuzu.github.io/maplibre-gl-draw/guides/save-load). The
+ * symbols used most are {@link createDraw}, {@link Draw}, {@link Feature} and
+ * {@link DrawEvents}.
  *
  * @module maplibre-gl-draw
  */

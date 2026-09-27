@@ -2,11 +2,44 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Building blocks for people who write their own shaders: GLSL snippets, the projection
- * uniforms, the quad shader and the rules the shared renderers follow for dashes and terrain.
- * This entry is the second layer of the public API and may change in a minor release.
- * `RenderContext` already passes the shared renderers to a renderer, so most overlays do not
- * need this entry.
+ * Write your own shaders that draw the way the library does.
+ *
+ * Use it only when a custom feature type or an overlay needs a shader of its own. The
+ * {@link maplibre-gl-draw!RenderContext | RenderContext} a renderer receives already carries
+ * the shared renderers of lines, areas and point markers, and most renderers need nothing
+ * more. This entry holds the GLSL of the projection, the uniforms that go with it, the quad
+ * shader, and the rules the shared renderers follow for dashes and terrain. Unlike the main
+ * entry, it may change in a minor release.
+ *
+ * ```ts
+ * import {
+ *   createProgram, OFFSET_MODE_GLSL, ProjectionUniformManager,
+ * } from '@sakuzu/maplibre-gl-draw/webgl';
+ *
+ * let program: WebGLProgram | null = null;
+ * let uniforms: ProjectionUniformManager | null = null;
+ * draw.extensions.overlays.add({
+ *   name: 'my-shader',
+ *   onAdd: () => {},
+ *   draw(ctx) {
+ *     if (!program) {
+ *       const vertex = vertexSource(ctx.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
+ *       program = createProgram(ctx.gl, vertex, fragmentSource);
+ *       uniforms = new ProjectionUniformManager(ctx.gl);
+ *       uniforms.getLocations(program);
+ *     }
+ *     ctx.gl.useProgram(program);
+ *     uniforms?.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+ *     // bind the buffers of your shape and draw it
+ *   },
+ *   onRemove: (_map, gl) => gl.deleteProgram(program),
+ * });
+ * ```
+ *
+ * Read next: the guide
+ * [custom feature types](https://sakuzu.github.io/maplibre-gl-draw/guides/custom-types). The
+ * parts used most are {@link createProgram}, {@link OFFSET_MODE_GLSL} and
+ * {@link ProjectionUniformManager}.
  *
  * @module webgl
  */

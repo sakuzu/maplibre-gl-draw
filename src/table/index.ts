@@ -2,17 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The subpath `@sakuzu/maplibre-gl-draw/table`
+ * Read a large table in a Worker and put it on the map.
  *
- * The parts for reading a large table in a Worker and putting it on the map. Use it when the
- * data has hundreds of thousands of rows or more and comes from a file: read and prepare it in a
- * Worker, and the main thread only receives it and passes it to the dataset. For a few thousand
- * rows, passing an array of features as `rows` is simpler.
+ * Use it when the data has hundreds of thousands of rows or more and comes from a file: read
+ * and prepare it in a Worker, and the main thread only receives it and passes it to
+ * `draw.datasets.add`. For a few thousand rows, passing an array of features as `rows` is
+ * simpler. It depends on neither maplibre nor WebGL nor the DOM, so a Worker can import it
+ * without pulling in the engine.
  *
- * It depends on neither maplibre nor WebGL nor the DOM, so a Worker can import it without
- * pulling in the engine.
- *
- * @example
  * ```ts
  * // worker.ts
  * import {
@@ -27,6 +24,11 @@
  * worker.onmessage = (e) =>
  *   draw.datasets.add({ id: 'places', table: e.data });
  * ```
+ *
+ * Read next: the guide
+ * [showing large data](https://sakuzu.github.io/maplibre-gl-draw/guides/large-data). The
+ * functions used most are {@link tableFromFeatures}, {@link createTableBuilder},
+ * {@link prepareTable} and {@link transferList}.
  *
  * @module table
  */
