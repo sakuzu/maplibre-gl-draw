@@ -514,7 +514,7 @@ export function evaluateStyleRule(
  *
  * @param rule - The rule
  * @param messages - The words of the labels, to show them in another language
- * @returns The legend rows
+ * @returns The legend rows, their colors as `#rrggbb`
  */
 export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[] {
   return deriveRuleLegend(rule, messages);

@@ -176,7 +176,8 @@ draw.layers.update(otherLayerId, {
 draw.layers.update(layerId, { styleRule: undefined });
 ```
 
-- 規則の色は `#rrggbb` で書いてください
+- 規則の色は CSS の色で書きます。`evaluateStyleRule` と `deriveLegend` は
+  `#rrggbb` にそろえて返します
 - `categorical` は、文字列、数値、真偽値を文字列にしたもの
   (`String(value)`) を `map` のキーと照らし合わせます
 - `graduated` は、昇順に並んだ n 個の `breaks` と n + 1 個の `colors` を
@@ -210,7 +211,8 @@ draw.layers.update(layerId, { styleRule: undefined });
   文字列には `other` が使われます
 
 `features.getAppliedStyle(id)` は、地物が実際に描かれる見た目を、
-すべてのキーを埋めて返します。インスペクターのパネルに表示するときに
+すべてのキーを埋めて返します (`style.circle` と `style.image` の既定も
+含みます)。インスペクターのパネルに表示するときに
 使えます。
 
 ```ts

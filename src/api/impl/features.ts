@@ -492,8 +492,10 @@ function appliedStyle(
   config: FeatureStyleConfig,
 ): FeatureStyleResolved {
   const point = config.point.point;
-  const stroke = AREA_TYPES.has(feature.type) ? config.polygon.stroke : config.lineString.stroke;
-  const fill = config.polygon.fill.color;
+  // A circle takes the look of the circles when the options give one, as it is drawn
+  const area = feature.type === 'Circle' ? (config.circle ?? config.polygon) : config.polygon;
+  const stroke = AREA_TYPES.has(feature.type) ? area.stroke : config.lineString.stroke;
+  const fill = area.fill.color;
   const defaults: FeatureStyleResolved = {
     fillColor: toHex(fill),
     fillOpacity: fill[3],
@@ -505,7 +507,7 @@ function appliedStyle(
     pointRadius: point.size / 2,
     pointShape: point.shape === 'icon' ? 'circle' : point.shape,
     pointOpacity: 1,
-    imageOpacity: 1,
+    imageOpacity: config.image?.opacity ?? 1,
   };
   const layer = store.getLayer(feature.layerId);
   const own =

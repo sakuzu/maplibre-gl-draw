@@ -120,6 +120,26 @@ export function formatColor(color: Color): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/** The colors normalized so far; a style rule gives the same few colors to many features */
+const hexCache = new Map<string, string>();
+
+/**
+ * A CSS color as `#rrggbb`, its alpha left out; a value that is not a color is returned as
+ * it is.
+ *
+ * @internal
+ */
+export function toHexColor(value: string): string {
+  let hex = hexCache.get(value);
+  if (hex === undefined) {
+    const color = parseColor(value);
+    hex = color ? formatColor([color[0], color[1], color[2], 1]) : value;
+    if (hexCache.size >= CACHE_LIMIT) hexCache.clear();
+    hexCache.set(value, hex);
+  }
+  return hex;
+}
+
 function parse(text: string): Color | null {
   if (text.startsWith('#')) return parseHex(text.slice(1));
   if (text === 'transparent') return [0, 0, 0, 0];

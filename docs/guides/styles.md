@@ -177,7 +177,8 @@ draw.layers.update(otherLayerId, {
 draw.layers.update(layerId, { styleRule: undefined });
 ```
 
-- Write the colors of a rule as `#rrggbb`
+- The colors of a rule are CSS colors; `evaluateStyleRule` and
+  `deriveLegend` return them as `#rrggbb`
 - `categorical` matches strings, numbers and booleans by their text
   (`String(value)`) against the keys of `map`
 - `graduated` takes n ascending `breaks` and n + 1 `colors`: a value below
@@ -210,7 +211,8 @@ A dataset takes the same rule type; see
   `other`
 
 `features.getAppliedStyle(id)` returns the look a feature is drawn with,
-every key filled in, which an inspector panel can show:
+every key filled in (the defaults of `style.circle` and `style.image`
+included), which an inspector panel can show:
 
 ```ts
 const look = draw.features.getAppliedStyle(featureId);

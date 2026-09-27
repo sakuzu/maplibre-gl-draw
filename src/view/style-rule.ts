@@ -22,6 +22,7 @@
  */
 
 import { MESSAGES_EN, type Messages, resolveMessages } from '../messages.js';
+import { toHexColor } from '../shared/color.js';
 import { interpolateHexColor } from '../shared/utils/color.js';
 import type { Feature, FeatureStyle, FeatureType, StyleRule } from '../store/types.js';
 
@@ -33,7 +34,7 @@ import type { Feature, FeatureStyle, FeatureType, StyleRule } from '../store/typ
 export interface LegendEntry {
   /** The displayed label */
   label: string;
-  /** The color (in #RRGGBB form) */
+  /** The color, as `#rrggbb` */
   color: string;
 }
 
@@ -124,18 +125,19 @@ function graduatedIndex(breaks: number[], value: number): number {
  * `categorical` matches strings, numbers and booleans by `String(value)`; `graduated` and
  * `continuous` take finite numbers only (a numeric string gives `other`). `continuous`
  * clamps values outside `min`..`max` and returns the first ramp color when `max <= min`. It
- * is a pure function.
+ * is a pure function. The colors of the rule may be any CSS color; the result is normalized
+ * to `#rrggbb`.
  *
  * @param rule The style rule
  * @param properties The attributes of the feature
- * @returns The color in `#RRGGBB` form
+ * @returns The color in `#rrggbb` form
  */
 export function evaluateStyleRule(
   rule: StyleRule,
   properties: Record<string, unknown> | undefined,
 ): string {
   if (rule.kind === 'single') {
-    return rule.color;
+    return toHexColor(rule.color);
   }
   return evaluateStyleRuleValue(rule, properties?.[rule.property]);
 }
@@ -149,6 +151,11 @@ export function evaluateStyleRule(
  * @internal
  */
 export function evaluateStyleRuleValue(rule: StyleRule, value: unknown): string {
+  return toHexColor(ruleColorOf(rule, value));
+}
+
+/** The color of the rule for a value, as the rule writes it */
+function ruleColorOf(rule: StyleRule, value: unknown): string {
   if (rule.kind === 'single') {
     return rule.color;
   }
@@ -169,11 +176,13 @@ export function evaluateStyleRuleValue(rule: StyleRule, value: unknown): string 
     return color ?? rule.other;
   }
 
-  // continuous: linearly interpolates the 2 colors of the ramp over min..max
-  // (out-of-range values are clamped)
+  // continuous: linearly interpolates the 2 colors of the ramp over min..max in OKLab
+  // (out-of-range values are clamped; the end points are the colors of the ramp)
   const [from, to] = rule.ramp;
   if (!(rule.max > rule.min)) return from;
   const t = Math.min(1, Math.max(0, (numeric - rule.min) / (rule.max - rule.min)));
+  if (t === 0) return from;
+  if (t === 1) return to;
   return interpolateHexColor(from, to, t);
 }
 
@@ -268,6 +277,7 @@ function graduatedLabel(breaks: number[], index: number, messages: Messages): st
  *   `legendOther` is appended at the end
  *
  * Numbers are turned into strings with `String()`. Locale formatting is up to the caller.
+ * The colors are normalized to `#rrggbb`, as {@link evaluateStyleRule} returns them.
  *
  * @param rule The style rule
  * @param messages The entries of the messages table to use (default: `MESSAGES_EN`;
@@ -275,6 +285,11 @@ function graduatedLabel(breaks: number[], index: number, messages: Messages): st
  * @returns The legend rows, in the order to show them
  */
 export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[] {
+  return legendOf(rule, messages).map(({ label, color }) => ({ label, color: toHexColor(color) }));
+}
+
+/** The legend rows with the colors as the rule writes them */
+function legendOf(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[] {
   const table = messages ? resolveMessages(messages) : MESSAGES_EN;
 
   if (rule.kind === 'single') {

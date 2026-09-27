@@ -15,6 +15,7 @@ import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureInput } from '../model.js';
 import { createFeatures } from './features.js';
+import { toFeatureStyleConfig } from './options.js';
 
 let store: MemoryStore;
 let features: FeaturesCollection;
@@ -431,6 +432,47 @@ describe('getAppliedStyle', () => {
     features.update('a', { style: { fillColor: '#0000ff', strokeWidth: 5 } });
     expect(features.getAppliedStyle('a')).toMatchObject({ fillColor: '#0000ff', strokeWidth: 5 });
     expect(features.getAppliedStyle('x')).toBeUndefined();
+  });
+
+  it('takes the defaults of the circles and the images when the options give them', () => {
+    const deps = createResourceDeps(store);
+    const withStyle = createFeatures({
+      ...deps,
+      featureStyle: toFeatureStyleConfig({
+        style: { circle: { fillColor: 'blue', strokeWidth: 4 }, image: { imageOpacity: 0.5 } },
+      }),
+    });
+    const base = {
+      layerId: 'l1',
+      groupId: undefined,
+      properties: {},
+      style: {},
+      visible: true,
+      locked: false,
+    };
+    store.createFeature({
+      ...base,
+      id: 'c',
+      type: 'Circle',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    });
+    store.createFeature({
+      ...base,
+      id: 'i',
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    });
+    features.create(area('p', [0, 0, 1, 1]));
+    expect(withStyle.getAppliedStyle('c')).toMatchObject({
+      fillColor: '#0000ff',
+      strokeWidth: 4,
+    });
+    expect(withStyle.getAppliedStyle('p')).toMatchObject({
+      fillColor: '#ff0077',
+      strokeWidth: 2,
+    });
+    expect(withStyle.getAppliedStyle('i')?.imageOpacity).toBe(0.5);
+    expect(features.getAppliedStyle('i')?.imageOpacity).toBe(1);
   });
 });
 
