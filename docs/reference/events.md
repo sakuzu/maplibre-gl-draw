@@ -332,9 +332,11 @@ feature of the document, or on nothing, does not fire it: listen to
 Fires when the mode `draw_image` starts. The library does not open a file
 dialog: your application picks the file and loads it with
 `draw.document.load(file, { coordinate: lngLat, zoom, layerId })`.
-`lngLat` is the center of the map, and `layerId` the layer the image goes
-into. The mode returns to `select` right after, and the mode cannot start
-while no layer can be written.
+`lngLat` is the clicked position when a click led to the mode (a listener
+of `map.clicked` entered it), and the center of the map when the mode was
+entered otherwise, such as by `draw.setMode('draw_image')` from a button.
+`layerId` is the layer the image goes into. The mode returns to `select`
+right after, and the mode cannot start while no layer can be written.
 
 ### dataset.added and dataset.removed
 

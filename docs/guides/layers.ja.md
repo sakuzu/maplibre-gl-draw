@@ -154,11 +154,11 @@ const created = draw.selection.group(); // まとめられないときは null
 | `features.move(id, { groupId: null })` | グループのすぐ手前に出します |
 | `features.move(id, { groupId, index })` | グループの中で並べ替えます |
 | `groups.delete(id)` | グループを解き、地物は残します |
-| `selection.ungroup()` | 選んだグループを解きます |
+| `selection.ungroup()` | 下の Shift+Cmd/Ctrl+G と同じ |
 
 - グループを解くと、その地物が順を保ってグループのあった位置に入ります
-- Shift+Cmd/Ctrl+G は、選んだグループを解くか、選んだ地物をその
-  グループから出します
+- Shift+Cmd/Ctrl+G と `selection.ungroup()` は、選んだグループを
+  解くか、選んだ地物をそのグループから出します
 - 空になったグループ (最後の地物が出たか削除された) は、合わせて削除
   されます
 - 地物は必ずどこか 1 か所に並んでいます。`groupId` を持つならその

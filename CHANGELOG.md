@@ -286,7 +286,7 @@ A plugin of 1.0 subscribed to the same names without `draw.`
 | `draw.metadata.change` | `metadata.updated` | |
 | `draw.selection.change` | `selection.changed` | `{ selection, previous }` |
 | `draw.mode.change` | `mode.changed` | `previousMode` is `previous` |
-| `draw.image.request` | `image.requested` | `{ featureId, fileId }` |
+| `draw.image.request` | `image.requested` | `{ lngLat, zoom, layerId }` |
 | `draw.geometry.applied` | (removed) | The methods return the result |
 | `draw.snap.change` | `snap.changed` | `{ result }` |
 | `draw.dataset.click` | `dataset.clicked` | `row` and `rowIndex` |

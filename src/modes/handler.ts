@@ -96,6 +96,11 @@ export interface EngineModeContext {
    * agree, and a second draw instance on the page never takes part.
    */
   selectionScope: import('../view/ui/selection-scope.js').SelectionScope;
+  /**
+   * The position of the click being handled, or null outside a click (a mode entered from a
+   * listener of a click reads where it was)
+   */
+  getClickPosition?(): [number, number] | null;
   /** The emitter of the signals of the engine (the drag, the image request) */
   eventEmitter: import('../shared/utils/event-emitter.js').EventEmitter;
   /** The resolved colors and sizes of the selection UI */

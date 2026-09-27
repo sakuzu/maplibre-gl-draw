@@ -339,6 +339,9 @@ export function createEngine(
     { name: 'draw_freehand', factory: drawFreehandMode },
   ]);
 
+  // The position of the click being handled, for what a click causes
+  let clickPosition: [number, number] | null = null;
+
   // 7. The context of the modes of the engine (select and image)
   const modeContext: EngineModeContext = {
     map,
@@ -362,6 +365,7 @@ export function createEngine(
       return context.options.scaleWithZoom;
     },
     setMode: (mode: Mode) => modeManager.setMode(mode),
+    getClickPosition: () => clickPosition,
     // The key that temporarily disables shared vertices is shared with the
     // disableKey of the snapping
     snapOptions: context.snapOptions,
@@ -394,6 +398,9 @@ export function createEngine(
     displayInteractions,
     // Emit a click in select mode as a public event (draw.map.click)
     notifyMapClick: (payload) => eventEmitter.emit('map.click', payload),
+    trackClick: (lngLat) => {
+      clickPosition = lngLat;
+    },
     snapService,
     extensionInput: extensions.input,
   });

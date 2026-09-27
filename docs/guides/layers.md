@@ -155,11 +155,11 @@ group takes the place of the frontmost of its features in the layer.
 | `features.move(id, { groupId: null })` | takes it out, in front of the group |
 | `features.move(id, { groupId, index })` | reorders inside the group |
 | `groups.delete(id)` | dissolves a group, keeps the features |
-| `selection.ungroup()` | dissolves the selected groups |
+| `selection.ungroup()` | as Shift+Cmd/Ctrl+G, below |
 
 - Dissolving a group puts its features where the group was, in their order
-- Shift+Cmd/Ctrl+G dissolves a selected group, or takes the selected
-  features out of their group
+- Shift+Cmd/Ctrl+G and `selection.ungroup()` dissolve the selected
+  groups, or take the selected features out of their group
 - A group left empty (its last feature moved out or deleted) is deleted
   as well
 - A feature is always listed in exactly one place: in the `featureIds` of

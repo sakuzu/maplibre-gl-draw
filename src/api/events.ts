@@ -165,7 +165,9 @@ export interface DrawEvents {
   'dataset.reordered': { order: readonly string[]; previous: readonly string[] };
   /**
    * The image mode asks for an image to place at a position: the application picks a file
-   * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`
+   * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`. `lngLat` is
+   * the clicked position when a click led to the mode (a listener of `map.clicked` entered it),
+   * and the center of the map when the mode was entered otherwise
    */
   'image.requested': { lngLat: Position; zoom: number; layerId: string };
   /** The divisions of the stacking order changed */

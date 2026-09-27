@@ -5,7 +5,7 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
-import { groupSelection } from '../../operations/layer-operations.js';
+import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import {
   deleteSelectedItems,
   deleteSelectedVertices,
@@ -22,7 +22,6 @@ import type { ResourceDeps } from './shared.js';
 import {
   featureLocked,
   getItem,
-  groupLocked,
   invalidInput,
   isRecord,
   isShown,
@@ -126,15 +125,9 @@ export function createSelection(
     },
 
     ungroup() {
-      const { type, ids } = store.getSelection();
-      if (type !== 'group' || ids.length === 0 || store.isReadOnly()) return false;
-      const groups = ids.map((id) => store.getGroup(id)).filter((group) => group !== undefined);
-      if (groups.some((group) => groupLocked(store, group))) return false;
-      store.transact(() => {
-        // The Store puts the features where each group was in its layer
-        for (const group of groups) store.deleteGroup(group.id);
-      });
-      return true;
+      // The same operation as the ungroup shortcut
+      if (store.isReadOnly()) return false;
+      return ungroupSelection(store);
     },
 
     move(to) {

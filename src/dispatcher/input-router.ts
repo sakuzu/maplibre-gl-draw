@@ -98,6 +98,12 @@ export interface InputRouterDeps {
    */
   notifyMapClick?(payload: MapClickEventPayload): void;
   /**
+   * Called with the position of a click (before snapping) when its handling starts, and with
+   * null when it ends, so that what a click causes (a mode entered from a listener of it) can
+   * tell where it was
+   */
+  trackClick?(lngLat: [number, number] | null): void;
+  /**
    * The snapping service
    *
    * When omitted, no snapping is performed. It replaces the lngLat of click /
@@ -224,6 +230,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     map,
     displayInteractions,
     notifyMapClick,
+    trackClick,
     snapService,
     extensionInput,
   } = deps;
@@ -355,6 +362,36 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     return 'mode';
   }
 
+  /** A click: to the extensions, the mode, the datasets and the map.clicked notification */
+  function handleClickEvent(handler: EngineModeHandler, event: MouseNormalizedEvent): void {
+    // Deliver to the mode with the snapped coordinates (if nothing snapped,
+    // the original event is used unchanged)
+    const { event: snapped, result } = applySnap(event, 'click');
+    const route = toExtensions(handler, event, snapped, result);
+    if (route === 'consumed') return;
+    if (route === 'engine') handleClick(handler, snapped);
+    // Delivery to datasets happens only in select mode. A click
+    // in a drawing mode places a vertex, and delivering that same click as a
+    // click on the data as well would make the host application's "click to
+    // select" fire by mistake while drawing (for example, starting to draw a
+    // circle on top of a huge polygon of data would cover the whole screen with
+    // the selection highlight). The rule that a hit in the Store always wins is
+    // decided on the interception side, so the selection behavior of the mode
+    // during select is unaffected.
+    if (handler.modeName === 'select') displayInteractions?.handleClick(snapped);
+    // Emit the click of select mode as a single stream regardless of whether
+    // anything was hit (draw.map.click). display.click is designed not to fire
+    // when a feature in the Store is hit, so a host application that needs "a
+    // click anywhere on the map" (placing a comment pin, for instance) watches
+    // this one. The coordinates are copied from the raw event before snapping.
+    if (handler.modeName === 'select') {
+      notifyMapClick?.({
+        lngLat: [event.lngLat.lng, event.lngLat.lat],
+        point: { x: event.point.x, y: event.point.y },
+      });
+    }
+  }
+
   function handleEvent(input: NormalizedEvent, options: HandleEventOptions = {}): void {
     // Only input originating from the real pointer is stopped while held.
     // Synthetic input (dispatch) is let through
@@ -367,35 +404,14 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     const event = toStoredCopy(input, firstTentativeCoordinate(context.store.getTentative()));
 
     switch (event.type) {
-      case 'click': {
-        // Deliver to the mode with the snapped coordinates (if nothing snapped,
-        // the original event is used unchanged)
-        const { event: snapped, result } = applySnap(event, 'click');
-        const route = toExtensions(handler, event, snapped, result);
-        if (route === 'consumed') break;
-        if (route === 'engine') handleClick(handler, snapped);
-        // Delivery to datasets happens only in select mode. A click
-        // in a drawing mode places a vertex, and delivering that same click as a
-        // click on the data as well would make the host application's "click to
-        // select" fire by mistake while drawing (for example, starting to draw a
-        // circle on top of a huge polygon of data would cover the whole screen with
-        // the selection highlight). The rule that a hit in the Store always wins is
-        // decided on the interception side, so the selection behavior of the mode
-        // during select is unaffected.
-        if (handler.modeName === 'select') displayInteractions?.handleClick(snapped);
-        // Emit the click of select mode as a single stream regardless of whether
-        // anything was hit (draw.map.click). display.click is designed not to fire
-        // when a feature in the Store is hit, so a host application that needs "a
-        // click anywhere on the map" (placing a comment pin, for instance) watches
-        // this one. The coordinates are copied from the raw event before snapping.
-        if (handler.modeName === 'select') {
-          notifyMapClick?.({
-            lngLat: [event.lngLat.lng, event.lngLat.lat],
-            point: { x: event.point.x, y: event.point.y },
-          });
+      case 'click':
+        trackClick?.([event.lngLat.lng, event.lngLat.lat]);
+        try {
+          handleClickEvent(handler, event);
+        } finally {
+          trackClick?.(null);
         }
         break;
-      }
       case 'dblclick':
         if (toExtensions(handler, event, event, null) === 'engine') {
           handler.onDoubleClick?.(event);

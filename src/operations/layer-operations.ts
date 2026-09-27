@@ -210,31 +210,36 @@ function dissolveGroup(store: Store, groupId: string): void {
  *
  * Even with several targets it is gathered into one transaction, making it one undo unit.
  *
+ * @returns Whether a group was dissolved or a feature taken out of its group
  * @internal
  */
-export function ungroupSelection(store: Store): void {
+export function ungroupSelection(store: Store): boolean {
   const selection = store.getSelection();
-  if (selection.ids.length === 0) return;
+  if (selection.ids.length === 0) return false;
 
   // A group selection -> dissolve
   if (selection.type === 'group') {
+    const groupIds = selection.ids.filter((id) => store.getGroup(id) !== undefined);
+    if (groupIds.length === 0) return false;
     store.transact(() => {
-      for (const groupId of selection.ids) {
+      for (const groupId of groupIds) {
         dissolveGroup(store, groupId);
       }
     });
-    return;
+    return true;
   }
 
   // A feature selection -> take only the selected members out of the group (do not dissolve)
   if (selection.type === 'feature') {
     const memberIds = selection.ids.filter((id) => store.getFeature(id)?.groupId !== undefined);
-    if (memberIds.length === 0) return;
+    if (memberIds.length === 0) return false;
 
     store.transact(() => {
       for (const id of memberIds) {
         takeOutOfGroup(store, id);
       }
     });
+    return true;
   }
+  return false;
 }
