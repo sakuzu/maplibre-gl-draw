@@ -278,11 +278,11 @@ Every registration returns the function that cancels it: `addPlugin`,
 
 ## Reference
 
-- [Plugin](../reference/api/interfaces/index.Plugin.html)
-- [PluginContext](../reference/api/interfaces/index.PluginContext.html)
-- [Hooks](../reference/api/interfaces/index.Hooks.html) and
-  [MutationContext](../reference/api/interfaces/index.MutationContext.html)
-- [ModeHandler](../reference/api/interfaces/index.ModeHandler.html) and
-  [ModeContext](../reference/api/interfaces/index.ModeContext.html)
-- [EventMap](../reference/api/interfaces/index.EventMap.html) for the
+- [Plugin](../api/maplibre-gl-draw/interfaces/Plugin.md)
+- [PluginContext](../api/maplibre-gl-draw/interfaces/PluginContext.md)
+- [Hooks](../api/maplibre-gl-draw/interfaces/Hooks.md) and
+  [MutationContext](../api/maplibre-gl-draw/interfaces/MutationContext.md)
+- [ModeHandler](../api/maplibre-gl-draw/interfaces/ModeHandler.md) and
+  [ModeContext](../api/maplibre-gl-draw/interfaces/ModeContext.md)
+- [EventMap](../api/maplibre-gl-draw/interfaces/EventMap.md) for the
   event names of the context

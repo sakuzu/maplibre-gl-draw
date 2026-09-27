@@ -119,7 +119,7 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 ## リファレンス
 
 - `MapLibreGLDraw` の
-  [`getTerrainDiagnostics`](../reference/api/interfaces/index.MapLibreGLDraw.html#getterraindiagnostics)
-- [`TerrainDiagnostics`](../reference/api/interfaces/index.TerrainDiagnostics.html)、
-  [`TerrainRenderState`](../reference/api/interfaces/index.TerrainRenderState.html)、
-  [`TerrainDrapeDebug`](../reference/api/interfaces/index.TerrainDrapeDebug.html)
+  [`getTerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md#getterraindiagnostics)
+- [`TerrainDiagnostics`](../api/maplibre-gl-draw/interfaces/TerrainDiagnostics.md)、
+  [`TerrainRenderState`](../api/maplibre-gl-draw/interfaces/TerrainRenderState.md)、
+  [`TerrainDrapeDebug`](../api/maplibre-gl-draw/interfaces/TerrainDrapeDebug.md)

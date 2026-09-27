@@ -25,7 +25,7 @@
  * See THIRD_PARTY_NOTICES.md for the license text.
  *
  * This is used only for polygons whose vertex count exceeds the threshold (ordinary
- * polygons call the earcut dependency directly as before; display/triangulation.ts).
+ * polygons call the earcut dependency directly as before; dataset/triangulation.ts).
  */
 
 /**

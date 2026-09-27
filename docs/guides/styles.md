@@ -98,8 +98,8 @@ The groups are `point`, `lineString`, `polygon` (with `stroke` and `fill`)
 and `tentative` (the drawing preview). The selection frame and handles are
 set with `Options.selectionStyle`, and the box of a box selection with
 `Options.renderingStyle`. The default values are listed on the types
-([`FeatureStyleConfig`](../reference/api/interfaces/index.FeatureStyleConfig.html),
-[`SelectionUIConfig`](../reference/api/interfaces/index.SelectionUIConfig.html)).
+([`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md),
+[`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md)).
 
 The `shape` of `point` (the shape of a point whose style names no
 `pointShape`) and of the handles is `circle`, `square`, `triangle`
@@ -276,13 +276,13 @@ The words of the names the library gives new features, layers and groups
 
 ## Reference
 
-- [`FeatureStyle`](../reference/api/interfaces/index.FeatureStyle.html)
-- [`StyleRule`](../reference/api/types/index.StyleRule.html)
-- [`deriveLegend`](../reference/api/functions/index.deriveLegend.html)
-  and [`LegendEntry`](../reference/api/interfaces/index.LegendEntry.html)
-- [`evaluateStyleRule`](../reference/api/functions/index.evaluateStyleRule.html)
+- [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)
+- [`StyleRule`](../api/maplibre-gl-draw/type-aliases/StyleRule.md)
+- [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
+  and [`LegendEntry`](../api/maplibre-gl-draw/interfaces/LegendEntry.md)
+- [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   and
-  [`resolveFeatureStyle`](../reference/api/functions/index.resolveFeatureStyle.html)
-- [`FeatureStyleConfig`](../reference/api/interfaces/index.FeatureStyleConfig.html)
-- [`Messages`](../reference/api/interfaces/index.Messages.html) and
-  [`MESSAGES_EN`](../reference/api/variables/index.MESSAGES_EN.html)
+  [`resolveFeatureStyle`](../api/maplibre-gl-draw/functions/resolveFeatureStyle.md)
+- [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
+- [`Messages`](../api/maplibre-gl-draw/interfaces/Messages.md) and
+  [`MESSAGES_EN`](../api/maplibre-gl-draw/variables/MESSAGES_EN.md)

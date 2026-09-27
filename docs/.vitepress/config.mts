@@ -11,6 +11,7 @@
  * that shows it: GitHub, the live example, or the API reference.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 import type MarkdownIt from 'markdown-it';
 import { type DefaultTheme, defineConfig } from 'vitepress';
@@ -20,7 +21,8 @@ const LIVE = 'https://sakuzu.github.io/maplibre-gl-draw';
 const BASE = '/maplibre-gl-draw/';
 
 /** The documents the site serves, relative to docs/ */
-const SITE_PAGE = /^(index|getting-started|guides\/[a-z-]+|reference\/(README|data-format|events))(\.ja)?\.md$/;
+const SITE_PAGE =
+  /^(index|getting-started|guides\/[a-z-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
 
 /** The source path (relative to docs/) of a page, from the path VitePress gives the renderer */
 function sourceOf(relativePath: string): string {
@@ -38,10 +40,11 @@ function siteHref(href: string, sourcePath: string): string {
   const hash = hashAt === -1 ? '' : href.slice(hashAt);
   if (path === '') return href;
   // The path relative to the repository root
-  const target = posix.normalize(posix.join('docs', posix.dirname(sourcePath), path));
+  let target = posix.normalize(posix.join('docs', posix.dirname(sourcePath), path));
+  // TypeDoc copies a document that the API index links to into _media/; link the page instead
+  const media = target.match(/^docs\/api\/_media\/(.+)$/);
+  if (media) target = `docs/${media[1]}`;
 
-  const api = target.match(/^docs\/reference\/api\/(.*)$/);
-  if (api) return `${LIVE}/api/${api[1]}${hash}`;
   const example = target.match(/^examples\/([a-z-]+)\/?$/);
   if (example) return `${LIVE}/examples/${example[1]}/${hash}`;
   if (target === 'examples' || target === 'examples/README.md') return `${LIVE}/examples/`;
@@ -97,6 +100,28 @@ function linkRewrite(md: MarkdownIt): void {
   });
 }
 
+/** The entry points in the order a reader needs them, with the name they are imported by */
+const ENTRY_POINTS = [
+  ['maplibre-gl-draw', '@sakuzu/maplibre-gl-draw'],
+  ['geometry', '@sakuzu/maplibre-gl-draw/geometry'],
+  ['columnar', '@sakuzu/maplibre-gl-draw/columnar'],
+];
+
+/**
+ * The sidebar of the API reference, from the one TypeDoc writes next to the pages
+ * (`npm run docs:api`, which `npm run site:build` runs first)
+ */
+function apiSidebar(): DefaultTheme.SidebarItem[] {
+  const file = new URL('../api/typedoc-sidebar.json', import.meta.url);
+  if (!existsSync(file)) return [];
+  const modules = JSON.parse(readFileSync(file, 'utf8')) as DefaultTheme.SidebarItem[];
+  const entries = ENTRY_POINTS.flatMap(([name, importName]) => {
+    const module = modules.find((m) => m.text === name);
+    return module ? [{ ...module, text: importName, collapsed: name !== 'maplibre-gl-draw' }] : [];
+  });
+  return [{ text: 'API reference', link: '/api/' }, ...entries];
+}
+
 const guides = (lang: 'en' | 'ja'): DefaultTheme.SidebarItem[] => {
   const p = lang === 'ja' ? '/ja' : '';
   const t = (en: string, ja: string) => (lang === 'ja' ? ja : en);
@@ -141,7 +166,7 @@ const guides = (lang: 'en' | 'ja'): DefaultTheme.SidebarItem[] => {
     {
       text: t('Reference', 'リファレンス (英語)'),
       items: [
-        { text: t('API reference', 'API リファレンス'), link: `${LIVE}/api/` },
+        { text: t('API reference', 'API リファレンス'), link: '/api/' },
         { text: t('Public API and versions', '公開 API と版'), link: '/reference/' },
         { text: t('Data format', 'データ形式'), link: '/reference/data-format' },
         { text: t('Events', 'イベント'), link: '/reference/events' },
@@ -155,7 +180,7 @@ const nav = (lang: 'en' | 'ja'): DefaultTheme.NavItem[] => {
   return [
     { text: t('Guides', 'ガイド'), link: lang === 'ja' ? '/ja/getting-started' : '/getting-started', activeMatch: '/(ja/)?(getting-started|guides/)' },
     { text: t('Examples', '例'), link: `${LIVE}/examples/`, target: '_self' },
-    { text: 'API', link: `${LIVE}/api/`, target: '_self' },
+    { text: 'API', link: '/api/', activeMatch: '/api/' },
     { text: 'Playground', link: `${LIVE}/`, target: '_self' },
   ];
 };
@@ -168,7 +193,7 @@ export default defineConfig({
   outDir: '../site-dist/docs',
   cleanUrls: false,
   lastUpdated: false,
-  srcExclude: ['README.md', 'README.ja.md', 'api-index.md', 'internals/**', 'reference/api/**'],
+  srcExclude: ['README.md', 'README.ja.md', 'api-index.md', 'internals/**', 'reference/api/**', 'api/_media/**'],
   rewrites: {
     'index.ja.md': 'ja/index.md',
     'getting-started.ja.md': 'ja/getting-started.md',
@@ -195,7 +220,7 @@ export default defineConfig({
     root: {
       label: 'English',
       lang: 'en',
-      themeConfig: { nav: nav('en'), sidebar: guides('en') },
+      themeConfig: { nav: nav('en'), sidebar: { '/api/': apiSidebar(), '/': guides('en') } },
     },
     ja: {
       label: '日本語',
@@ -203,7 +228,7 @@ export default defineConfig({
       link: '/ja/',
       themeConfig: {
         nav: nav('ja'),
-        sidebar: guides('ja'),
+        sidebar: { '/api/': apiSidebar(), '/ja/': guides('ja') },
         outline: { label: 'このページの内容' },
         docFooter: { prev: '前のページ', next: '次のページ' },
         editLink: { pattern: `${REPO}/edit/main/docs/:path`, text: 'GitHub でこのページを直す' },

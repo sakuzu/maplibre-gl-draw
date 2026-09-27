@@ -121,7 +121,7 @@ export function drapeLayerSource(layerIndex: number, datasetCount: number): numb
 /**
  * The view of a dataset restricted to the part the drape needs
  *
- * The implementation in `display/dataset.ts` satisfies this shape. To keep the type
+ * The implementation in `dataset/dataset.ts` satisfies this shape. To keep the type
  * dependency one-directional, only the structure is declared here.
  */
 export interface DrapeDatasetSource {
@@ -332,7 +332,7 @@ function collectStoreFeature(
  *
  * So that the retained batch side does not draw the same features that were put on, the caller
  * tells the dataset "the polygons and lines are drawn by the drape"
- * (`drapedDatasets`). The test here and `collectFeature` in `display/retained.ts` form a
+ * (`drapedDatasets`). The test here and `collectFeature` in `dataset/retained.ts` form a
  * pair, so the condition must never be changed on only one side.
  */
 function collectDataset(

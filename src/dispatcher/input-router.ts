@@ -24,7 +24,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
-import type { DisplayInteractions } from '../display/interaction.js';
+import type { DisplayInteractions } from '../dataset/interaction.js';
 import type { ModeContext, ModeHandler, SnapInputType } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
 import type { PluginManager } from '../plugins/plugin-manager.js';

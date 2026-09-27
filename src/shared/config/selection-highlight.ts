@@ -6,7 +6,7 @@
  *
  * Two rendering paths read the same values.
  *
- * - Immediate mode (`highlightFeature` in `display/selection.ts`). Draws points, and the
+ * - Immediate mode (`highlightFeature` in `dataset/selection.ts`). Draws points, and the
  *   polygons and lines that do not go through the analysis drape (dashed outlines and so on)
  * - Analysis drape (`view/terrain/drape/renderer.ts`). Draws the selection highlight for the
  *   band (z > 11) that draws polygons and lines as pixels of the ground surface

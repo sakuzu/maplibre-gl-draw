@@ -672,13 +672,13 @@ For the size at which to choose a dataset over drawn features, see
 
 ## Reference
 
-- [addDataset](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [addDataset](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   and the other dataset methods of `MapLibreGLDraw`
-- [Dataset](../reference/api/interfaces/index.Dataset.html)
-- [DatasetOptions](../reference/api/interfaces/index.DatasetOptions.html)
-- [DatasetColumnarInput](../reference/api/interfaces/index.DatasetColumnarInput.html)
-  and [prepareDatasetColumnar](../reference/api/functions/columnar.prepareDatasetColumnar.html)
-- [DatasetCollisionThinning](../reference/api/interfaces/index.DatasetCollisionThinning.html)
-- [DatasetChangePayload](../reference/api/interfaces/index.DatasetChangePayload.html)
+- [Dataset](../api/maplibre-gl-draw/interfaces/Dataset.md)
+- [DatasetOptions](../api/maplibre-gl-draw/interfaces/DatasetOptions.md)
+- [DatasetColumnarInput](../api/maplibre-gl-draw/interfaces/DatasetColumnarInput.md)
+  and [prepareDatasetColumnar](../api/columnar/functions/prepareDatasetColumnar.md)
+- [DatasetCollisionThinning](../api/maplibre-gl-draw/interfaces/DatasetCollisionThinning.md)
+- [DatasetChangePayload](../api/maplibre-gl-draw/interfaces/DatasetChangePayload.md)
 - [events](../reference/events.md) for `draw.dataset.click`,
   `draw.dataset.add`, `draw.dataset.remove` and `draw.dataset.reorder`

@@ -8,8 +8,8 @@
  * It never touches the Store, so it is independent of the editing, undo and event paths.
  */
 
-import type { DatasetManager } from '../display/manager.js';
-import type { Dataset, DatasetOptions, DatasetPlacement } from '../display/types.js';
+import type { DatasetManager } from '../dataset/manager.js';
+import type { Dataset, DatasetOptions, DatasetPlacement } from '../dataset/types.js';
 import type { MapLibreGLDraw } from './api.js';
 
 /** @internal */

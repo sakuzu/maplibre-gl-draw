@@ -13,8 +13,8 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createDatasetManager, type DatasetManager } from '../../display/manager.js';
-import type { Dataset, DatasetFeatureInput } from '../../display/types.js';
+import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
+import type { Dataset, DatasetFeatureInput } from '../../dataset/types.js';
 import { resolveMessages } from '../../messages.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';

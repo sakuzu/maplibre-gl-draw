@@ -42,7 +42,7 @@ import type { StoreRetainedCache } from './store-retained.js';
 
 /**
  * The datasets as the per-layer rendering takes them (the type is owned by
- * render.ts, so this file does not read a type from display/)
+ * render.ts, so this file does not read a type from dataset/)
  */
 type RenderedDatasets = Parameters<typeof renderLayers>[10];
 

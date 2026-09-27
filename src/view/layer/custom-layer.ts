@@ -40,7 +40,7 @@ import type {
   CustomRenderMethodInput,
   Map as MapLibreMap,
 } from 'maplibre-gl';
-import type { DatasetManager } from '../../display/manager.js';
+import type { DatasetManager } from '../../dataset/manager.js';
 import type { CustomFeatureHandler, CustomOverlayRenderer } from '../../extension/index.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
@@ -537,7 +537,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     beginRenderFrame();
 
     // While the camera is moving, the re-baking of the retained batches is deferred (read by
-    // display/chunk-set.ts)
+    // dataset/chunk-set.ts)
     setTerrainCameraMoving(
       terrainContext,
       map?.isMoving?.() === true || map?.isZooming?.() === true,

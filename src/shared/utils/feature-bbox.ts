@@ -5,7 +5,7 @@
  * The bounding box of a feature
  *
  * A pure function of the feature (and the tile size for Image). The spatial index of the Store
- * (store/spatial) and the datasets (display/) both use it.
+ * (store/spatial) and the datasets (dataset/) both use it.
  */
 
 import { circleBoundingBox } from '../../geometry/circle.js';

@@ -237,7 +237,7 @@ selection, the mode, read-only and the rest of the local state around it.
 Its contract (every feature listed in exactly one container, no change to
 an object after the notification that carries it, `transact` grouping one
 notification, and so on) is written on
-[`DocumentStore`](../reference/api/interfaces/index.DocumentStore.html).
+[`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md).
 A change that your store applies from outside the instance is drawn and
 notified like a local one, and is never stopped by read-only. Give its
 notification the source `'remote'`, so that core keeps the vertex
@@ -277,13 +277,13 @@ the subscriber can leave it out by that source.
 
 ## Reference
 
-- [`LoadOptions`](../reference/api/interfaces/index.LoadOptions.html),
-  [`LoadResult`](../reference/api/interfaces/index.LoadResult.html) and
-  [`SkippedFeature`](../reference/api/interfaces/index.SkippedFeature.html)
-- [`ExportOptions`](../reference/api/interfaces/index.ExportOptions.html)
-  and [`ExportResult`](../reference/api/interfaces/index.ExportResult.html)
-- [`DocumentStore`](../reference/api/interfaces/index.DocumentStore.html),
-  [`StoreView`](../reference/api/interfaces/index.StoreView.html) and
-  [`StateChanges`](../reference/api/interfaces/index.StateChanges.html)
+- [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md),
+  [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md) and
+  [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)
+- [`ExportOptions`](../api/maplibre-gl-draw/interfaces/ExportOptions.md)
+  and [`ExportResult`](../api/maplibre-gl-draw/interfaces/ExportResult.md)
+- [`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md),
+  [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md) and
+  [`StateChanges`](../api/maplibre-gl-draw/interfaces/StateChanges.md)
 - [Data format](../reference/data-format.md) and
   [Events](../reference/events.md)

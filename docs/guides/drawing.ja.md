@@ -415,14 +415,14 @@ ARIA のロールもラベルも付けません。キーボードでは、削除
 
 ## リファレンス
 
-- [`MapLibreGLDraw`](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   (`setMode`、選択と頂点のメソッド)
-- [`Mode`](../reference/api/types/index.Mode.html)
-- [`InputOperations`](../reference/api/interfaces/index.InputOperations.html)
-- [`VertexRef`](../reference/api/interfaces/index.VertexRef.html)
-- [`AutoNameConfig`](../reference/api/interfaces/index.AutoNameConfig.html)
-- [`SelectionUIConfig`](../reference/api/interfaces/index.SelectionUIConfig.html)
+- [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md)
+- [`InputOperations`](../api/maplibre-gl-draw/interfaces/InputOperations.md)
+- [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
+- [`AutoNameConfig`](../api/maplibre-gl-draw/interfaces/AutoNameConfig.md)
+- [`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md)
   と
-  [`FeatureStyleConfig`](../reference/api/interfaces/index.FeatureStyleConfig.html)
+  [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
   (ハンドルと描画のプレビューの色と大きさ)
 - [イベント](../reference/events.md)

@@ -373,16 +373,16 @@ if (shrunk === null) {
 
 ## リファレンス
 
-- [`SnapOptions`](../reference/api/interfaces/index.SnapOptions.html)、
-  [`SnappingOperations`](../reference/api/interfaces/index.SnappingOperations.html)、
-  [`SnapProvider`](../reference/api/interfaces/index.SnapProvider.html)、
-  [`SnapResult`](../reference/api/interfaces/index.SnapResult.html)
-- [`TracingOperations`](../reference/api/interfaces/index.TracingOperations.html)
+- [`SnapOptions`](../api/maplibre-gl-draw/interfaces/SnapOptions.md)、
+  [`SnappingOperations`](../api/maplibre-gl-draw/interfaces/SnappingOperations.md)、
+  [`SnapProvider`](../api/maplibre-gl-draw/interfaces/SnapProvider.md)、
+  [`SnapResult`](../api/maplibre-gl-draw/interfaces/SnapResult.md)
+- [`TracingOperations`](../api/maplibre-gl-draw/interfaces/TracingOperations.md)
   と
-  [`TopologyOperations`](../reference/api/interfaces/index.TopologyOperations.html)
-- [`GeometryOperations`](../reference/api/interfaces/index.GeometryOperations.html)
+  [`TopologyOperations`](../api/maplibre-gl-draw/interfaces/TopologyOperations.md)
+- [`GeometryOperations`](../api/maplibre-gl-draw/interfaces/GeometryOperations.md)
   と
-  [`GeometryAppliedPayload`](../reference/api/interfaces/index.GeometryAppliedPayload.html)
-- [geometry モジュール](../reference/api/modules/geometry.html)。
-  たとえば [`buffer`](../reference/api/functions/geometry.buffer.html)
-  と [`GeometryError`](../reference/api/classes/geometry.GeometryError.html)
+  [`GeometryAppliedPayload`](../api/maplibre-gl-draw/interfaces/GeometryAppliedPayload.md)
+- [geometry モジュール](../api/geometry/index.md)。
+  たとえば [`buffer`](../api/geometry/functions/buffer.md)
+  と [`GeometryError`](../api/geometry/classes/GeometryError.md)

@@ -13,7 +13,7 @@ import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import type { BoundingBox, Coordinate, Feature } from '../types.js';
 
 // The bounding box of a feature is a pure function of the feature, so it is defined in
-// shared/ (display/ uses it too); re-exported here for the existing imports
+// shared/ (dataset/ uses it too); re-exported here for the existing imports
 export { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 
 /**

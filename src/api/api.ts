@@ -14,16 +14,16 @@ import type {
   CustomLayerInterface as MapLibreCustomLayerInterface,
   Map as MapLibreMap,
 } from 'maplibre-gl';
-import type { InputRouter } from '../dispatcher/input-router.js';
-import type { InputNormalizer } from '../dispatcher/normalizer.js';
-import type { MapClickEventPayload } from '../dispatcher/types.js';
-import type { DatasetManager } from '../display/manager.js';
+import type { DatasetManager } from '../dataset/manager.js';
 import type {
   Dataset,
   DatasetClickEventPayload,
   DatasetOptions,
   DatasetPlacement,
-} from '../display/types.js';
+} from '../dataset/types.js';
+import type { InputRouter } from '../dispatcher/input-router.js';
+import type { InputNormalizer } from '../dispatcher/normalizer.js';
+import type { MapClickEventPayload } from '../dispatcher/types.js';
 import type { CustomFeatureHandler, CustomOverlayRenderer } from '../extension/index.js';
 import type { ModeHandler } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
@@ -66,7 +66,7 @@ import type { RenderSlot } from '../view/layer/slots.js';
 import type { TerrainDrapeDebug } from '../view/terrain/state.js';
 import type { AuxiliaryHandleProvider } from '../view/ui/auxiliary-handles.js';
 import type { Context } from './context.js';
-import { createDisplayApi } from './display-api.js';
+import { createDisplayApi } from './dataset-api.js';
 import { createEventApi } from './event-api.js';
 import { createExtensionApi } from './extension-api.js';
 import { createFeatureApi } from './feature-api.js';
@@ -1005,7 +1005,7 @@ export interface MapLibreGLDraw {
    */
   input: InputOperations;
 
-  // Display API (read-only bulk display; it does not enter the Store)
+  // Dataset API (read-only bulk display; it does not enter the Store)
   /**
    * Adds a dataset: many features that are shown, with an attribute-driven
    * style, but never edited.

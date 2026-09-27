@@ -147,9 +147,9 @@ before they reach it and keeps the hidden set and the lock itself.
 
 ## Reference
 
-- [`MapLibreGLDraw`](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   (`setReadOnly`, `setInteractionLock`, `setLocallyHidden` and their
   readers)
-- [`isInteractionBlocked`](../reference/api/functions/index.isInteractionBlocked.html)
+- [`isInteractionBlocked`](../api/maplibre-gl-draw/functions/isInteractionBlocked.md)
   and
-  [`isFeatureLocked`](../reference/api/functions/index.isFeatureLocked.html)
+  [`isFeatureLocked`](../api/maplibre-gl-draw/functions/isFeatureLocked.md)

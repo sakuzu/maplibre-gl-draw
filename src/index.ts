@@ -5,8 +5,10 @@
  * MapLibre GL Draw - public entry point
  *
  * The caller accesses the whole public API through the single entry
- * `import { ... } from '@sakuzu/maplibre-gl-draw'` (plus the pure geometry functions of
- * `@sakuzu/maplibre-gl-draw/geometry`). Tree-shaking is applied by the ESM bundler, which
+ * `import { ... } from '@sakuzu/maplibre-gl-draw'`, plus two subpaths that do not load
+ * maplibre-gl: the pure geometry functions of `@sakuzu/maplibre-gl-draw/geometry`, which also
+ * run in Node, and the Worker-side preparation of columnar data of
+ * `@sakuzu/maplibre-gl-draw/columnar`. Tree-shaking is applied by the ESM bundler, which
  * looks at `"sideEffects": false` in package.json.
  *
  * Every public symbol is listed here by name, in one of two layers (see "The public
@@ -22,6 +24,8 @@
  * Anything not listed here is internal. Where it would otherwise appear in the emitted
  * declarations, its JSDoc carries the internal tag and `stripInternal` drops it from them.
  * The list is pinned by src/index.test.ts, so every addition or removal is deliberate.
+ *
+ * @module maplibre-gl-draw
  */
 
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by layer and topic
@@ -124,7 +128,7 @@ export {
 
 // Events
 export type { MapClickEventPayload } from './dispatcher/index.js';
-export type { DatasetClickEventPayload } from './display/index.js';
+export type { DatasetClickEventPayload } from './dataset/index.js';
 export type {
   EventListener,
   EventMap,
@@ -173,7 +177,7 @@ export type {
   DatasetThinningStats,
   DatasetZoomScale,
   ResolvedCollisionThinning,
-} from './display/index.js';
+} from './dataset/index.js';
 
 // Snapping
 export type {
@@ -371,7 +375,6 @@ export {
   createOBB,
   DEFAULT_TILE_SIZE,
   distanceToOBB,
-  generateCirclePolygon,
   getOBBAABB,
   lngLatToMercator,
   metersToDegreesLat,
@@ -381,6 +384,17 @@ export {
   rectangleIntersectsOBB,
 } from './shared/math/index.js';
 export { getContrastColor } from './shared/utils/index.js';
+
+import { generateCirclePolygon as generateCirclePolygonOfGeometry } from './geometry/index.js';
+
+/**
+ * Approximates a geodesic circle with a polygon
+ *
+ * @deprecated Import `generateCirclePolygon` from `@sakuzu/maplibre-gl-draw/geometry`, where
+ * the geometry functions live; it is the same function. This export will be removed in the next
+ * major release.
+ */
+export const generateCirclePolygon = generateCirclePolygonOfGeometry;
 
 // Selection UI, hit testing and viewport helpers
 export { PointHitTestStrategy } from './dispatcher/index.js';

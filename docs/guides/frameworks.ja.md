@@ -211,6 +211,6 @@ onDestroy(() => {
 
 ## リファレンス
 
-- [createMapLibreGLDraw](../reference/api/functions/index.createMapLibreGLDraw.html)
+- [createMapLibreGLDraw](../api/maplibre-gl-draw/functions/createMapLibreGLDraw.md)
 - `destroy`、`on`、`off` については
-  [MapLibreGLDraw](../reference/api/interfaces/index.MapLibreGLDraw.html)
+  [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)

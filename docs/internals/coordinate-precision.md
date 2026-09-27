@@ -183,7 +183,7 @@ coordinate values, and stay valid when the center moves.
 ### The origin of a retained batch
 
 Retained batches (the Store's `src/view/layer/store-retained.ts` and the
-datasets in `src/display/`) do not recompute offsets every
+datasets in `src/dataset/`) do not recompute offsets every
 frame. Each chunk has its own origin, and the coordinates relative to that
 origin are baked into the vertex buffer once, independent of the camera.
 Only the projection uniforms change per frame.

@@ -645,7 +645,7 @@ const BUILD_SLICE_VERTICES = 2_000;
  *
  * What cannot be finished in one frame is advanced by the budget of the frame and handed on. The
  * caller keeps drawing the batches of the previous version until it is finished
- * (`display/chunk-set.ts`). It is built the same way as the one-shot build
+ * (`dataset/chunk-set.ts`). It is built the same way as the one-shot build
  * (`buildChunkBatches`); only the unit of bundling differs.
  */
 export interface ChunkBuildJob {

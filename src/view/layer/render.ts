@@ -8,7 +8,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { DatasetManager } from '../../display/manager.js';
+import type { DatasetManager } from '../../dataset/manager.js';
 import type {
   CustomFeatureHandler,
   CustomRendererDrawContext,

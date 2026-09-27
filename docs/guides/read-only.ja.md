@@ -164,9 +164,9 @@ draw.getLocallyHidden(); // 隠している ID の ReadonlySet
 
 ## リファレンス
 
-- [`MapLibreGLDraw`](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   (`setReadOnly`、`setInteractionLock`、`setLocallyHidden` と、
   それぞれの状態を読むメソッド)
-- [`isInteractionBlocked`](../reference/api/functions/index.isInteractionBlocked.html)
+- [`isInteractionBlocked`](../api/maplibre-gl-draw/functions/isInteractionBlocked.md)
   と
-  [`isFeatureLocked`](../reference/api/functions/index.isFeatureLocked.html)
+  [`isFeatureLocked`](../api/maplibre-gl-draw/functions/isFeatureLocked.md)

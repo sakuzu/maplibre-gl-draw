@@ -99,8 +99,8 @@ const draw = createMapLibreGLDraw(map, {
 を持ちます)、`tentative` (描画のプレビュー) です。選択の枠とハンドルは
 `Options.selectionStyle` で、矩形選択の矩形は `Options.renderingStyle`
 で設定します。既定の値は型のリファレンスに載っています
-([`FeatureStyleConfig`](../reference/api/interfaces/index.FeatureStyleConfig.html)、
-[`SelectionUIConfig`](../reference/api/interfaces/index.SelectionUIConfig.html))。
+([`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)、
+[`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md))。
 
 `point` の `shape` (スタイルで `pointShape` を指定していない点の形) と
 ハンドルの `shape` は、`circle`、`square`、`triangle` (頂点が上)、
@@ -276,13 +276,13 @@ deriveLegend(rule, { legendOther: 'Autres' });
 
 ## リファレンス
 
-- [`FeatureStyle`](../reference/api/interfaces/index.FeatureStyle.html)
-- [`StyleRule`](../reference/api/types/index.StyleRule.html)
-- [`deriveLegend`](../reference/api/functions/index.deriveLegend.html)
-  と [`LegendEntry`](../reference/api/interfaces/index.LegendEntry.html)
-- [`evaluateStyleRule`](../reference/api/functions/index.evaluateStyleRule.html)
+- [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)
+- [`StyleRule`](../api/maplibre-gl-draw/type-aliases/StyleRule.md)
+- [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
+  と [`LegendEntry`](../api/maplibre-gl-draw/interfaces/LegendEntry.md)
+- [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   と
-  [`resolveFeatureStyle`](../reference/api/functions/index.resolveFeatureStyle.html)
-- [`FeatureStyleConfig`](../reference/api/interfaces/index.FeatureStyleConfig.html)
-- [`Messages`](../reference/api/interfaces/index.Messages.html) と
-  [`MESSAGES_EN`](../reference/api/variables/index.MESSAGES_EN.html)
+  [`resolveFeatureStyle`](../api/maplibre-gl-draw/functions/resolveFeatureStyle.md)
+- [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
+- [`Messages`](../api/maplibre-gl-draw/interfaces/Messages.md) と
+  [`MESSAGES_EN`](../api/maplibre-gl-draw/variables/MESSAGES_EN.md)

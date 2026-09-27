@@ -51,7 +51,7 @@ const prose = {
 export default {
   markdown,
 
-  typedoc: { config: 'typedoc.json' },
+  typedoc: { config: 'typedoc.site.json' },
 
   snippets: {
     include: ['README.md', 'README.ja.md', 'docs/getting-started*.md', 'docs/guides/**/*.md'],

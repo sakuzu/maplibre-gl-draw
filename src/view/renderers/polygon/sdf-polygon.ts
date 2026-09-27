@@ -617,7 +617,7 @@ void main() {
    * the cache used by the drawing of the Store must not be polluted with the features
    * of datasets). However, when options.triangulator is passed, both the caching and the
    * time slicing of the triangulation become its responsibility
-   * (display/triangulation.ts).
+   * (dataset/triangulation.ts).
    *
    * @returns The built batch. null when the shader is not initialized or there are no
    *   vertices

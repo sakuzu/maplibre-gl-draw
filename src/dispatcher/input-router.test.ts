@@ -14,7 +14,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { DisplayInteractions } from '../display/interaction.js';
+import type { DisplayInteractions } from '../dataset/interaction.js';
 import type { ModeContext, ModeHandler, SnapInputType } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
 import { createSnapService } from '../snapping/service.js';

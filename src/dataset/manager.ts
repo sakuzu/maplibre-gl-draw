@@ -42,7 +42,7 @@ export interface DatasetManagerDeps {
    *
    * Only the band of the collision thinning looks at it, because with a pitch the higher part of
    * the screen is farther away and only there the effective scale gets shallower
-   * (`effectiveZoomForCamera` in `display/thinning.ts`).
+   * (`effectiveZoomForCamera` in `dataset/thinning.ts`).
    */
   getEffectiveZoom?(): number;
   /**

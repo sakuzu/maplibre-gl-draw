@@ -84,16 +84,19 @@ in [releasing](../internals/releasing.md).
 
 ## Building the API reference
 
-The generated reference is published at
-<https://sakuzu.github.io/maplibre-gl-draw/api/>, next to the live demo.
-It is not committed. To build it from a clone of the repository:
+The generated reference is part of the documentation site, under
+[API reference](../api/index.md). It is not committed. To build it from a
+clone of the repository and read it with the rest of the site:
 
 ```sh
 npm install
-npm run docs:api
+npm run site:dev
 ```
 
-`npm run docs:api` runs typedoc on both entry points and writes HTML to
-`docs/reference/api/`. Open `docs/reference/api/index.html` in a
-browser. Each page shows the declaration, its description, the default
+`npm run docs:api` runs typedoc on the three entry points and writes
+Markdown to `docs/api/`, sorted by task: the categories come from the
+section comments of `src/index.ts` and `src/geometry/index.ts`, and the
+groups of `MapLibreGLDraw` from the section comments of its declaration
+(`scripts/typedoc-categories.mjs`). A symbol outside any section fails
+the build. Each page shows the declaration, its description, the default
 values of options, and examples where they help.

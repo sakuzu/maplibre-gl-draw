@@ -201,6 +201,6 @@ route.
 
 ## Reference
 
-- [createMapLibreGLDraw](../reference/api/functions/index.createMapLibreGLDraw.html)
-- [MapLibreGLDraw](../reference/api/interfaces/index.MapLibreGLDraw.html)
+- [createMapLibreGLDraw](../api/maplibre-gl-draw/functions/createMapLibreGLDraw.md)
+- [MapLibreGLDraw](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
   for `destroy`, `on` and `off`
