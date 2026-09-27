@@ -470,7 +470,7 @@ describe('the built-in edge provider', () => {
 
   it('leaves points, circles and freehand curves out of the edges', () => {
     addFeature('p1', 'Point', [0, 0]);
-    addFeature('c1', 'Circle', [0.1, 0], { properties: { radiusMeters: 100 } });
+    addFeature('c1', 'Circle', [0.1, 0], { properties: { 'maplibre-gl-draw:radiusMeters': 100 } });
     addFeature('fh', 'Freehand', [
       [0.2, 0],
       [0.3, 0],
@@ -678,7 +678,7 @@ describe('the built-in intersection provider', () => {
       [0.1, 0],
     ]);
     addFeature('p1', 'Point', [0, 0]);
-    addFeature('c1', 'Circle', [0, 0], { properties: { radiusMeters: 100 } });
+    addFeature('c1', 'Circle', [0, 0], { properties: { 'maplibre-gl-draw:radiusMeters': 100 } });
     addFeature('marker', 'Marker', [
       [0, -0.1],
       [0, 0.1],

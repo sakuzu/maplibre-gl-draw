@@ -112,14 +112,14 @@ export interface Options {
    * Whether the line widths of the features drawn in a drawing mode follow the zoom (default
    * true)
    *
-   * By default a drawing mode records the zoom a feature is drawn at in
-   * `properties.createdZoom`, and the widths of its lines and outlines are those of that zoom:
-   * they double with each zoom level in and halve with each level out, like lines drawn on
-   * paper. An application that wants the widths to stay the same on the screen at every zoom
-   * sets `false`; a drawn feature then gets no created zoom, like a feature added through the
-   * API. It does not change features already drawn: the widths follow
-   * `properties.createdZoom` wherever it is set, so a feature added through the API can set it
-   * too. An Image always scales with the map.
+   * By default a drawing mode records the zoom a feature is drawn at in `properties`, under
+   * `maplibre-gl-draw:createdZoom`, and the widths of its lines and outlines are those of that
+   * zoom: they double with each zoom level in and halve with each level out, like lines drawn
+   * on paper. An application that wants the widths to stay the same on the screen at every
+   * zoom sets `false`; a drawn feature then gets no created zoom, like a feature added through
+   * the API. It does not change features already drawn: the widths follow
+   * `maplibre-gl-draw:createdZoom` wherever it is set, so a feature added through the API can
+   * set it too. An Image always scales with the map.
    */
   scaleWithZoom?: boolean;
 

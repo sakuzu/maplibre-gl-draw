@@ -120,11 +120,11 @@ describe('the spatial index derived from the Store', () => {
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
-      properties: { radiusMeters: 100 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 100 },
     });
     expect(context.spatialIndex.findNear([0.5, 0], 0.001)).toEqual([]);
 
-    api.updateFeature('c1', { properties: { radiusMeters: 100_000 } });
+    api.updateFeature('c1', { properties: { 'maplibre-gl-draw:radiusMeters': 100_000 } });
 
     expect(context.spatialIndex.findNear([0.5, 0], 0.001)).toEqual(['c1']);
   });

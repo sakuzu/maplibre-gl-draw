@@ -145,7 +145,7 @@ function generateLineString(id: string, layerId: string): DrawFeature {
     type: 'LineString',
     coordinates,
     layerId,
-    properties: { createdZoom: 14 },
+    properties: { 'maplibre-gl-draw:createdZoom': 14 },
     style: {
       strokeColor: randomColor(),
       strokeWidth: Math.floor(random(1, 8)), // Random width of 1 to 7 px
@@ -180,7 +180,7 @@ function generatePolygon(id: string, layerId: string): DrawFeature {
     type: 'Polygon',
     coordinates: [coordinates],
     layerId,
-    properties: { createdZoom: 14 },
+    properties: { 'maplibre-gl-draw:createdZoom': 14 },
     style: {
       fillColor,
       fillOpacity: 1, // Opaque
@@ -202,7 +202,7 @@ function generateSticker(id: string, layerId: string): DrawFeature {
     coordinates: randomCoordinate(),
     layerId,
     properties: {
-      createdZoom: 12,
+      'maplibre-gl-draw:createdZoom': 12,
     },
     style: {
       fillColor: randomColor(),

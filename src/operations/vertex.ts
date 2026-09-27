@@ -316,7 +316,7 @@ function copyTopLevelCoordinates(coordinates: FeatureCoordinates): FeatureCoordi
  * computeVertexMove). The top-level array is always made new, only the container
  * that splice changes (the target ring / part) is copied, and the other parts /
  * rings / coordinate pairs keep sharing references with the input. The input
- * feature.coordinates is never rewritten. For a feature on the order of 100,000
+ * geometry is never rewritten. For a feature on the order of 100,000
  * vertices a full copy took more than ten milliseconds each time, which produced a
  * hitch on a single click that added a vertex.
  *
@@ -442,7 +442,7 @@ function deleteVertexFromRings(
  * computeVertexMove). The top-level array is always made new, only the container
  * that splice changes (the target ring / part) is copied, and the other parts /
  * rings / coordinate pairs keep sharing references with the input. The input
- * feature.coordinates is never rewritten.
+ * geometry is never rewritten.
  *
  * @internal
  */

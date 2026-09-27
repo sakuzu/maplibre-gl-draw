@@ -15,25 +15,6 @@
 export const NATIVE_VERSION = '2.0.0';
 
 /**
- * The properties this library itself keeps in `Feature.properties`
- *
- * They are stored without a prefix in the native format, and the
- * `maplibre-gl-draw:` prefix is added when exporting to GeoJSON. Every other property, those
- * of the host and of extensions included, is written as a plain key. `name` and `description`
- * are plain keys too: other GIS tools read them as the name and the description.
- */
-export const LIBRARY_PROPERTIES: ReadonlySet<string> = new Set([
-  // Common
-  'createdZoom',
-  'rotation',
-  'scale',
-  // Image
-  'imageFileId',
-  'imageWidth',
-  'imageHeight',
-]);
-
-/**
  * The number of decimal places the GeoJSON export keeps in a coordinate
  *
  * 1e-7 degrees is about 1.1 cm at the equator, finer than any edit on the map, and it keeps

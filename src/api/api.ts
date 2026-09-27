@@ -357,7 +357,8 @@ export interface MapLibreGLDraw {
    *   const layerId = draw.addLayer('Imported');
    *   if (layerId === null) return; // read-only
    *   draw.setActiveLayer(layerId);
-   *   draw.addFeature({ type: 'Point', coordinates: [139.767, 35.681] });
+   *   const geometry = { type: 'Point' as const, coordinates: [139.767, 35.681] };
+   *   draw.addFeature({ type: 'Point', geometry });
    * }, 'batch');
    * ```
    */
@@ -561,7 +562,7 @@ export interface MapLibreGLDraw {
   /**
    * Adds a feature.
    *
-   * Only `type` and `coordinates` are required. The rest take defaults: a generated `id`, the
+   * Only `type` and `geometry` are required. The rest take defaults: a generated `id`, the
    * active layer, empty `properties`, `locked: false` and `visible: true`. The feature is
    * placed at the front of its layer, and `draw.feature.create` is emitted.
    *
@@ -575,7 +576,7 @@ export interface MapLibreGLDraw {
    * ```typescript
    * const id = draw.addFeature({
    *   type: 'Point',
-   *   coordinates: [139.767, 35.681],
+   *   geometry: { type: 'Point', coordinates: [139.767, 35.681] },
    *   properties: { name: 'Tokyo Station' },
    * });
    * if (id !== null) draw.select(id);
@@ -1309,7 +1310,7 @@ export interface MapLibreGLDraw {
    *   hitTest: new StarHitTest(),
    *   getBoundingBox: (feature) => starBounds(feature),
    * });
-   * draw.addFeature({ type: 'Star', coordinates: [139.767, 35.681] });
+   * draw.addFeature({ type: 'Star', geometry: { type: 'Point', coordinates: [139.767, 35.681] } });
    * ```
    */
   registerFeatureHandler(handler: CustomFeatureHandler): () => void;

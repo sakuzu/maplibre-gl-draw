@@ -114,9 +114,10 @@ export interface ModeContext {
    * Whether the line widths of the features a drawing mode creates follow the zoom (the
    * `scaleWithZoom` option of the instance)
    *
-   * When it is true, a mode writes the zoom of the commit into `properties.createdZoom`, and
-   * the widths of the feature grow and shrink with the map from there. When it is false, it
-   * writes no created zoom and the widths stay the same on the screen.
+   * When it is true, a mode writes the zoom of the commit into `properties` under
+   * `maplibre-gl-draw:createdZoom`, and the widths of the feature grow and shrink with the map
+   * from there. When it is false, it writes no created zoom and the widths stay the same on
+   * the screen.
    */
   scaleWithZoom: boolean;
   /**

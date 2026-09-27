@@ -501,7 +501,7 @@ describe('simultaneous movement of shared vertices: geometries out of scope', ()
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [10, 0] },
       layerId: 'l1',
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
       style: {},
@@ -856,7 +856,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
       style: {},
@@ -875,8 +875,8 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
     expect(commits).toHaveLength(1);
     const committed = updatesOf(commits[0])[0];
     expect(committed.id).toBe('c1');
-    const radiusMeters = store.getFeature('c1')?.properties.radiusMeters;
-    expect(committed.feature.properties.radiusMeters).toBe(radiusMeters);
+    const radiusMeters = store.getFeature('c1')?.properties['maplibre-gl-draw:radiusMeters'];
+    expect(committed.feature.properties['maplibre-gl-draw:radiusMeters']).toBe(radiusMeters);
     // The radius for a position 2 degrees away from the center (not still 1000)
     expect(radiusMeters).toBeGreaterThan(200000);
   });
@@ -888,7 +888,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: center },
       layerId: 'l1',
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
       style: {},
@@ -902,8 +902,8 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
     const properties = store.getFeature('c1')?.properties ?? {};
     const handle = destinationPoint(
       center,
-      properties.radiusMeters as number,
-      properties.radiusHandleAngle as number,
+      properties['maplibre-gl-draw:radiusMeters'] as number,
+      properties['maplibre-gl-draw:radiusHandleAngle'] as number,
     );
     expect(haversineDistanceMeters(handle, pointer)).toBeLessThan(1);
   });
@@ -1026,7 +1026,7 @@ describe('a feature that disappears during a drag', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
       style: {},
@@ -1467,7 +1467,7 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
       style: {},
@@ -1479,7 +1479,7 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
 
     handler.reset(store);
 
-    expect(store.getFeature('c1')?.properties).toEqual({ radiusMeters: 1000 });
+    expect(store.getFeature('c1')?.properties).toEqual({ 'maplibre-gl-draw:radiusMeters': 1000 });
   });
 
   it('leaves a feature that something else changed during the drag', () => {

@@ -266,7 +266,7 @@ describe('the line width convention', () => {
   function withCreatedZoom(feature: Feature, createdZoom: number): Feature {
     return {
       ...feature,
-      properties: { ...feature.properties, createdZoom },
+      properties: { ...feature.properties, 'maplibre-gl-draw:createdZoom': createdZoom },
     } as Feature;
   }
 

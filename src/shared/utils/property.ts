@@ -13,7 +13,8 @@ import { getDrawProperty, setDrawProperty } from '../properties.js';
 import type { Feature, ImageProperties } from '../types/model.js';
 
 /**
- * Gets the zoom at which the feature was created (`properties.createdZoom`)
+ * Gets the zoom at which the feature was created (`maplibre-gl-draw:createdZoom` in
+ * `properties`)
  *
  * The drawing modes record it. Line widths follow the map from that zoom, and an Image is
  * drawn at its size in pixels at that zoom (see {@link FeatureStyle.strokeWidth}).
@@ -43,10 +44,13 @@ export function getCreatedZoom(feature: Feature): number | undefined {
  * setCreatedZoom(properties, map.getZoom());
  * draw.addFeature({
  *   type: 'LineString',
- *   coordinates: [
- *     [139.76, 35.68],
- *     [139.78, 35.69],
- *   ],
+ *   geometry: {
+ *     type: 'LineString',
+ *     coordinates: [
+ *       [139.76, 35.68],
+ *       [139.78, 35.69],
+ *     ],
+ *   },
  *   properties,
  * });
  * ```
@@ -56,7 +60,8 @@ export function setCreatedZoom(properties: Record<string, unknown>, zoom: number
 }
 
 /**
- * Gets the rotation of the feature in degrees (`properties.rotation`, 0 when unset)
+ * Gets the rotation of the feature in degrees (`maplibre-gl-draw:rotation` in `properties`, 0
+ * when unset)
  */
 export function getRotation(feature: Feature): number {
   return getDrawProperty(feature, 'rotation') ?? 0;
@@ -71,8 +76,8 @@ export function setRotation(properties: Record<string, unknown>, rotation: numbe
 }
 
 /**
- * Gets the scale of the feature (`properties.scale`, 1 when unset), which resizing an Image
- * changes
+ * Gets the scale of the feature (`maplibre-gl-draw:scale` in `properties`, 1 when unset),
+ * which resizing an Image changes
  */
 export function getScale(feature: Feature): number {
   return getDrawProperty(feature, 'scale') ?? 1;

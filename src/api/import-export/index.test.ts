@@ -1217,7 +1217,10 @@ describe('createImportExportAPI', () => {
         layers: [createTestLayer()],
         layerOrder: ['default-layer'],
         features: [
-          createTestFeature('img-1', { type: 'Image', properties: { imageFileId: 'file-1' } }),
+          createTestFeature('img-1', {
+            type: 'Image',
+            properties: { 'maplibre-gl-draw:imageFileId': 'file-1' },
+          }),
         ],
         files: { 'file-1': { id: 'file-1', mimeType: 'image/png', dataURL: PNG_1X1 } },
       };
@@ -1326,7 +1329,9 @@ describe('createImportExportAPI', () => {
       const result = await api.load(imageFeature(PNG_1X1));
 
       const feature = context.store.getFeature(result.featureIds[0]);
-      const file = context.store.getFile(feature?.properties.imageFileId as string);
+      const file = context.store.getFile(
+        feature?.properties['maplibre-gl-draw:imageFileId'] as string,
+      );
       expect(file?.dataURL).toBe(PNG_1X1);
     });
 
@@ -1508,7 +1513,10 @@ describe('createImportExportAPI', () => {
         ],
       });
 
-      expect(context.store.getFeature(result.featureIds[0])?.type).toBe('Circle');
+      const circle = context.store.getFeature(result.featureIds[0]);
+      expect(circle?.type).toBe('Circle');
+      // The radius was written without the prefix then
+      expect(circle?.properties).toEqual({ 'maplibre-gl-draw:radiusMeters': 10 });
     });
   });
 

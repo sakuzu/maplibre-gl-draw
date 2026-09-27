@@ -99,7 +99,7 @@ export interface CustomRendererDrawContext {
  *   name: 'marker',
  *   onAdd() {}, // nothing to create: the shared point renderer does the drawing
  *   draw(feature, _projectionData, zoom, context) {
- *     const coordinate = feature.coordinates as [number, number];
+ *     const coordinate = (feature.geometry as GeoJSON.Point).coordinates as [number, number];
  *     // Fade with the layer: the opacity of the layer is multiplied into the alpha
  *     const style = {
  *       ...markerStyle,

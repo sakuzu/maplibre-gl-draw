@@ -877,7 +877,7 @@ describe('fixed width (features without createdZoom)', () => {
     const h = createHarness(
       [
         makeFeature('fixed', 'LineString'),
-        makeFeature('scaled', 'LineString', { properties: { createdZoom: 12 } }),
+        makeFeature('scaled', 'LineString', { properties: { 'maplibre-gl-draw:createdZoom': 12 } }),
       ],
       { fixed: { strokeWidth: 3 }, scaled: { strokeWidth: 4 } },
     );
@@ -893,7 +893,7 @@ describe('fixed width (features without createdZoom)', () => {
     const h = createHarness(
       [
         makeFeature('fixed', 'Polygon'),
-        makeFeature('scaled', 'Polygon', { properties: { createdZoom: 12 } }),
+        makeFeature('scaled', 'Polygon', { properties: { 'maplibre-gl-draw:createdZoom': 12 } }),
       ],
       { fixed: { strokeWidth: 3 }, scaled: { strokeWidth: 4 } },
     );
@@ -1313,7 +1313,7 @@ describe('viewport thinning', () => {
   it('the bbox of a Circle expands by the radius', () => {
     // A radius of 200 km ≒ 1.8 degrees. The center is the origin.
     const h = createHarness([
-      makeFeature('c1', 'Circle', { properties: { radiusMeters: 200000 } }),
+      makeFeature('c1', 'Circle', { properties: { 'maplibre-gl-draw:radiusMeters': 200000 } }),
     ]);
 
     // A range that does not contain the center but touches the circle
@@ -1433,7 +1433,11 @@ describe('viewport thinning', () => {
     // 100px square at createdZoom 4 ≒ ±2.2 degrees. The anchor is the origin.
     const h = createHarness([
       makeFeature('img', 'Image', {
-        properties: { imageWidth: 100, imageHeight: 100, createdZoom: 4 },
+        properties: {
+          'maplibre-gl-draw:imageWidth': 100,
+          'maplibre-gl-draw:imageHeight': 100,
+          'maplibre-gl-draw:createdZoom': 4,
+        },
       }),
     ]);
 

@@ -94,11 +94,11 @@ describe('startRotation', () => {
       type: 'Image',
       geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
-        rotation: 45,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
+        'maplibre-gl-draw:rotation': 45,
       },
     });
 
@@ -117,10 +117,10 @@ describe('startRotation', () => {
       type: 'Image',
       geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
       },
     });
 
@@ -203,11 +203,11 @@ describe('computeRotation', () => {
       type: 'Image',
       geometry: { type: 'Point', coordinates: [5, 5] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
-        rotation: 10,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
+        'maplibre-gl-draw:rotation': 10,
       },
     });
 
@@ -237,11 +237,11 @@ describe('computeRotation', () => {
       type: 'Image',
       geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
-        rotation: 0,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
+        'maplibre-gl-draw:rotation': 0,
       },
     });
 
@@ -583,7 +583,7 @@ describe('custom types registered with the scale strategy', () => {
       id: 'unregistered1',
       type: 'UnregisteredType',
       geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
-      properties: { rotation: 15 },
+      properties: { 'maplibre-gl-draw:rotation': 15 },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);

@@ -50,14 +50,14 @@ export type DrawPropertyName = keyof DrawPropertyValues;
  * @internal
  */
 export const DRAW_PROPERTY_KEYS = {
-  createdZoom: 'createdZoom',
-  rotation: 'rotation',
-  scale: 'scale',
-  radiusMeters: 'radiusMeters',
-  radiusHandleAngle: 'radiusHandleAngle',
-  imageFileId: 'imageFileId',
-  imageWidth: 'imageWidth',
-  imageHeight: 'imageHeight',
+  createdZoom: `${DRAW_PROPERTY_PREFIX}createdZoom`,
+  rotation: `${DRAW_PROPERTY_PREFIX}rotation`,
+  scale: `${DRAW_PROPERTY_PREFIX}scale`,
+  radiusMeters: `${DRAW_PROPERTY_PREFIX}radiusMeters`,
+  radiusHandleAngle: `${DRAW_PROPERTY_PREFIX}radiusHandleAngle`,
+  imageFileId: `${DRAW_PROPERTY_PREFIX}imageFileId`,
+  imageWidth: `${DRAW_PROPERTY_PREFIX}imageWidth`,
+  imageHeight: `${DRAW_PROPERTY_PREFIX}imageHeight`,
 } as const satisfies Record<DrawPropertyName, string>;
 
 /**

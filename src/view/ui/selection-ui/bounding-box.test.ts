@@ -21,7 +21,7 @@ function makeCircle(center: Coordinate, radiusMeters: number): Feature {
     type: 'Circle',
     geometry: { type: 'Point', coordinates: center },
     layerId: 'layer-1',
-    properties: { radiusMeters },
+    properties: { 'maplibre-gl-draw:radiusMeters': radiusMeters },
     locked: false,
     visible: true,
     style: {},

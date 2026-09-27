@@ -110,7 +110,7 @@ async function clear(): Promise<void> {
           [138.75, 35.335],
         ],
       },
-      properties: { createdZoom: 13 },
+      properties: { 'maplibre-gl-draw:createdZoom': 13 },
       style: { strokeColor: '#00AA00', strokeWidth: 3 },
     });
   });
@@ -322,7 +322,7 @@ function lineOf(path: LngLat[], color: string, stroke: Stroke): FeatureInput {
   return {
     type: 'LineString',
     geometry: { type: 'LineString', coordinates: path },
-    properties: { createdZoom: 13 },
+    properties: { 'maplibre-gl-draw:createdZoom': 13 },
     style: { strokeColor: color, strokeWidth: 4, lineStyle: stroke },
   };
 }
@@ -331,7 +331,7 @@ function polygonOf(ring: LngLat[], color: string, stroke: Stroke): FeatureInput 
   return {
     type: 'Polygon',
     geometry: { type: 'Polygon', coordinates: [ring] },
-    properties: { createdZoom: 13 },
+    properties: { 'maplibre-gl-draw:createdZoom': 13 },
     style: {
       fillColor: color,
       fillOpacity: 1,

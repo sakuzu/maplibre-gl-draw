@@ -23,11 +23,11 @@ import {
   normalizeMultiPolygonOrientation,
   normalizePolygonOrientation,
 } from '../../geometry/simplify.js';
-import { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
+import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { ExportOptions, Feature } from '../../store/types.js';
-import { GEOJSON_COORDINATE_DECIMALS, LIBRARY_PROPERTIES } from './constants.js';
+import { GEOJSON_COORDINATE_DECIMALS } from './constants.js';
 import { setOwnProperty } from './own-property.js';
 
 type Position = [number, number];
@@ -121,15 +121,11 @@ export function convertFeatureToGeoJSON(
 ): GeoJSON.Feature<GeoJSON.Geometry> | null {
   const properties: Record<string, unknown> = {};
 
-  // Add the properties (this library's own ones get the prefix). They are defined as
-  // own properties so that a `__proto__` key is written out instead of replacing the
-  // prototype of the output object.
+  // Add the properties as they are (the values of this library already carry the prefix).
+  // They are defined as own properties so that a `__proto__` key is written out instead of
+  // replacing the prototype of the output object.
   for (const [key, value] of Object.entries(feature.properties)) {
-    if (LIBRARY_PROPERTIES.has(key)) {
-      setOwnProperty(properties, `${DRAW_PROPERTY_PREFIX}${key}`, value);
-    } else {
-      setOwnProperty(properties, key, value);
-    }
+    setOwnProperty(properties, key, value);
   }
 
   // Add the metadata
@@ -199,7 +195,7 @@ export function convertFeatureToGeoJSON(
       properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
 
       // Embed the image data as Base64
-      const imageFileId = feature.properties.imageFileId as string | undefined;
+      const imageFileId = getDrawProperty(feature, 'imageFileId');
       if (imageFileId) {
         const fileData = store.getFile(imageFileId);
         if (fileData) {

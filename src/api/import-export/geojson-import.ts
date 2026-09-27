@@ -6,7 +6,14 @@
  * GeoJSON FeatureCollection
  */
 
-import { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
+import type { DrawPropertyName } from '../../shared/properties.js';
+import {
+  DRAW_PROPERTY_NAMES,
+  DRAW_PROPERTY_PREFIX,
+  drawPropertyKey,
+  hasDrawProperty,
+  setDrawProperty,
+} from '../../shared/properties.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { createId } from '../../shared/utils/id.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
@@ -19,7 +26,6 @@ import type {
   LoadResult,
   SkippedFeature,
 } from '../../store/types.js';
-import { LIBRARY_PROPERTIES } from './constants.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { setOwnProperty } from './own-property.js';
@@ -297,6 +303,14 @@ function resolveFeatureType(geometryType: 'Point' | 'LineString', marker: unknow
   return expectedDepth === undefined || expectedDepth === actualDepth ? marker : geometryType;
 }
 
+/** The keys of `properties` that hold the values of this library */
+const LIBRARY_KEYS: ReadonlySet<string> = new Set(
+  DRAW_PROPERTY_NAMES.map((name) => drawPropertyKey(name)),
+);
+
+/** The values of a Circle that an earlier export wrote without the prefix */
+const LEGACY_CIRCLE_PROPERTIES: readonly DrawPropertyName[] = ['radiusMeters', 'radiusHandleAngle'];
+
 /** The geometry types the import converts */
 const SUPPORTED_GEOMETRY_TYPES: ReadonlySet<string> = new Set([
   'Point',
@@ -478,7 +492,7 @@ export function convertGeoJSONToFeature(
 
   // Extract the properties
   // - without a prefix: added as is as a user-defined property
-  // - with a prefix and one of this library's own properties: added with the prefix stripped
+  // - with a prefix and one of this library's own values: added as is
   // - any other prefixed key (id, layerId, style, visible, locked and so on): excluded
   //   (they are handled separately)
   // Keys are defined as own properties so that a `__proto__` key stays an ordinary key.
@@ -486,18 +500,25 @@ export function convertGeoJSONToFeature(
   if (properties) {
     for (const [key, value] of Object.entries(properties)) {
       if (key.startsWith(DRAW_PROPERTY_PREFIX)) {
-        const keyWithoutPrefix = key.slice(DRAW_PROPERTY_PREFIX.length);
-        if (LIBRARY_PROPERTIES.has(keyWithoutPrefix)) {
-          // When there is image data, imageFileId is replaced with a new ID, so it is
-          // not added here
-          if (keyWithoutPrefix !== 'imageFileId' || !embedsImage) {
-            setOwnProperty(userProperties, keyWithoutPrefix, value);
-          }
+        // When there is image data, imageFileId is replaced with a new ID, so it is not
+        // added here. Anything else that is not a value of this library (id, layerId, style,
+        // featureType, visible, locked, imageData and so on) is excluded
+        if (LIBRARY_KEYS.has(key) && (key !== drawPropertyKey('imageFileId') || !embedsImage)) {
+          setOwnProperty(userProperties, key, value);
         }
-        // Anything else (id, layerId, style, featureType, visible, locked, imageData and
-        // so on) is excluded
       } else {
         setOwnProperty(userProperties, key, value);
+      }
+    }
+  }
+
+  // An earlier export wrote the radius of a Circle and the direction of its handle without
+  // the prefix; they are read as the values of this library when the prefixed ones are absent
+  if (geometry.type === 'Point' && resolveFeatureType('Point', featureType) === 'Circle') {
+    for (const name of LEGACY_CIRCLE_PROPERTIES) {
+      if (userProperties[name] !== undefined && !hasDrawProperty(userProperties, name)) {
+        setOwnProperty(userProperties, drawPropertyKey(name), userProperties[name]);
+        delete userProperties[name];
       }
     }
   }
@@ -512,7 +533,7 @@ export function convertGeoJSONToFeature(
       mimeType: imageMimeType as string,
       dataURL: imageData as string,
     };
-    userProperties.imageFileId = newFileId;
+    setDrawProperty(userProperties, 'imageFileId', newFileId);
   }
 
   const meta: GeoJSONFeatureMeta = {

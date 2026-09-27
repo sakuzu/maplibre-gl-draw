@@ -126,7 +126,7 @@ describe('collectPolygons', () => {
     const polygons = collectPolygons(
       [
         makeFeature('m', 'MultiPolygon', [[ring], [ring]]),
-        makeFeature('c', 'Circle', [0, 0], { radiusMeters: 1000 }),
+        makeFeature('c', 'Circle', [0, 0], { 'maplibre-gl-draw:radiusMeters': 1000 }),
         makeFeature('z', 'Circle', [0, 0]),
       ],
       makeStyles(),

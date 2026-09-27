@@ -523,7 +523,7 @@ describe('BatchManager line batches', () => {
     const { manager, calls } = createLineManager();
 
     const feature = makeLine('a', coordsA, { strokeWidth: 3 });
-    feature.properties = { ...(feature.properties ?? {}), createdZoom: 12 };
+    feature.properties = { ...(feature.properties ?? {}), 'maplibre-gl-draw:createdZoom': 12 };
     manager.processFeature(feature, false);
     manager.endFrame();
 

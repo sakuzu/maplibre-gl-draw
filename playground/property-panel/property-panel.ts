@@ -692,7 +692,7 @@ export class PropertyPanel {
     const fillOpacity = style.fillOpacity ?? DEFAULT_STYLES.fillOpacity;
 
     // Radius (in meters)
-    const radiusMeters = (feature.properties?.radiusMeters as number) ?? 100;
+    const radiusMeters = (feature.properties?.['maplibre-gl-draw:radiusMeters'] as number) ?? 100;
 
     return `
       <div class="editor-section">
@@ -1085,7 +1085,7 @@ export class PropertyPanel {
         const radiusMeters = parseFloat(value);
         if (!Number.isNaN(radiusMeters) && radiusMeters > 0) {
           this.draw.updateFeature(selectedIds[0], {
-            properties: { ...feature.properties, radiusMeters },
+            properties: { ...feature.properties, 'maplibre-gl-draw:radiusMeters': radiusMeters },
           });
         }
         break;

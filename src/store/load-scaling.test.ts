@@ -71,7 +71,7 @@ function generate(count: number): Data {
       coordinates = [
         [center, [center[0] + 0.001, center[1]], [center[0], center[1] + 0.001], center],
       ];
-    else if (type === 'Circle') extra.radiusMeters = 100;
+    else if (type === 'Circle') extra['maplibre-gl-draw:radiusMeters'] = 100;
     const li = i % layerCount;
     const id = `f-${i}`;
     features.push({

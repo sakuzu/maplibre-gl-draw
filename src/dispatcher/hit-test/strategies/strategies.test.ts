@@ -378,7 +378,7 @@ describe('CircleHitTestStrategy', () => {
   const circle = createFeature({
     type: 'Circle',
     geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
-    properties: { radiusMeters: 1000 },
+    properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
   });
 
   it('has geometryType Circle', () => {
@@ -415,7 +415,7 @@ describe('CircleHitTestStrategy', () => {
     const zeroRadius = createFeature({
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
-      properties: { radiusMeters: 0 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 0 },
     });
     expect(strategy.test(zeroRadius, [0, 0], 0)).toBe(false);
   });
@@ -446,11 +446,11 @@ describe('ImageHitTestStrategy', () => {
     type: 'Image',
     geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
     properties: {
-      imageFileId: 'test-image',
-      imageWidth: 100,
-      imageHeight: 100,
-      createdZoom: 14,
-      scale: 1,
+      'maplibre-gl-draw:imageFileId': 'test-image',
+      'maplibre-gl-draw:imageWidth': 100,
+      'maplibre-gl-draw:imageHeight': 100,
+      'maplibre-gl-draw:createdZoom': 14,
+      'maplibre-gl-draw:scale': 1,
     },
     style: {
       width: 100,

@@ -344,7 +344,7 @@ function geometryOf(type: DatasetColumnarGeometryType, i: number): Geometry {
 /** The properties of row `i` (some with createdZoom) */
 function propertiesOf(i: number): Record<string, string | number> {
   const properties: Record<string, string | number> = { cls: CLASSES[i % 3], value: i };
-  if (i % 4 === 0) properties.createdZoom = 12;
+  if (i % 4 === 0) properties['maplibre-gl-draw:createdZoom'] = 12;
   return properties;
 }
 

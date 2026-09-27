@@ -65,7 +65,7 @@ export type CustomResizeCalculator = (
  *
  * // A "marker" type: one coordinate, drawn as a square, hit within the tolerance
  * const distanceTo = (feature: Feature, [lng, lat]: [number, number]) => {
- *   const [x, y] = feature.coordinates as [number, number];
+ *   const [x, y] = (feature.geometry as GeoJSON.Point).coordinates;
  *   return Math.hypot(x - lng, y - lat);
  * };
  *
@@ -80,7 +80,7 @@ export type CustomResizeCalculator = (
  * };
  *
  * const unregister = draw.registerFeatureHandler(markerHandler);
- * draw.addFeature({ type: 'marker', coordinates: [139.767, 35.681] });
+ * draw.addFeature({ type: 'marker', geometry: { type: 'Point', coordinates: [139.767, 35.681] } });
  * ```
  */
 export interface CustomFeatureHandler {

@@ -340,7 +340,11 @@ describe('the handling of a Circle', () => {
       id: 'circle',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: center },
-      properties: { radiusMeters, radiusHandleAngle: 135, name: '円' },
+      properties: {
+        'maplibre-gl-draw:radiusMeters': radiusMeters,
+        'maplibre-gl-draw:radiusHandleAngle': 135,
+        name: '円',
+      },
     });
     addSquare('far', [20, 20, 30, 30]);
     store.setSelection('feature', ['circle', 'far']);
@@ -360,8 +364,8 @@ describe('the handling of a Circle', () => {
     // closing point)
     expect((coordinatesOf(result!) as Coordinate[][][])[0][0]).toHaveLength(65);
     // The parametric properties that came from the circle are lost
-    expect(result?.properties.radiusMeters).toBeUndefined();
-    expect(result?.properties.radiusHandleAngle).toBeUndefined();
+    expect(result?.properties['maplibre-gl-draw:radiusMeters']).toBeUndefined();
+    expect(result?.properties['maplibre-gl-draw:radiusHandleAngle']).toBeUndefined();
   });
 
   it('does not include a Circle without a radius among the targets', () => {
@@ -799,7 +803,11 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
       id: 'circle',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
-      properties: { radiusMeters: 1000, radiusHandleAngle: 135, name: '円' },
+      properties: {
+        'maplibre-gl-draw:radiusMeters': 1000,
+        'maplibre-gl-draw:radiusHandleAngle': 135,
+        name: '円',
+      },
       style: { fillColor: '#00ff00' },
     });
 
@@ -810,7 +818,11 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
     expect(result?.type).toBe('Circle');
     expect(coordinatesOf(result)).toEqual([0, 0]);
     // It keeps the parametric nature (the Circle-specific properties carry over too)
-    expect(result?.properties).toEqual({ radiusMeters: 1500, radiusHandleAngle: 135, name: '円' });
+    expect(result?.properties).toEqual({
+      'maplibre-gl-draw:radiusMeters': 1500,
+      'maplibre-gl-draw:radiusHandleAngle': 135,
+      name: '円',
+    });
     expect(result?.style).toEqual({ fillColor: '#00ff00' });
   });
 
@@ -819,12 +831,12 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
       id: 'circle',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
     });
 
     geometry.buffer(['circle'], { distanceMeters: -400 });
 
-    expect(store.getFeature('geo-1')?.properties.radiusMeters).toBe(600);
+    expect(store.getFeature('geo-1')?.properties['maplibre-gl-draw:radiusMeters']).toBe(600);
   });
 
   it('treats a shrink that takes the radius to 0 or less as empty', () => {
@@ -832,7 +844,7 @@ describe('the special case of a Circle for draw.geometry.buffer', () => {
       id: 'circle',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
     });
     store.setSelection('feature', ['circle']);
 
@@ -993,7 +1005,11 @@ describe('the inheritance and placement of draw.geometry.buffer', () => {
       style: { fillColor: '#ff0000' },
       // A result that fell to a polygon has no notion of a radius, so no Circle-specific
       // property is kept
-      properties: { name: '面', radiusMeters: 500, radiusHandleAngle: 90 },
+      properties: {
+        name: '面',
+        'maplibre-gl-draw:radiusMeters': 500,
+        'maplibre-gl-draw:radiusHandleAngle': 90,
+      },
     });
 
     geometry.buffer(['area'], { distanceMeters: 100 });
@@ -1121,7 +1137,7 @@ describe('draw.geometry.split', () => {
     addSquare('bottom', [40, 40, 50, 50]);
     addSquare('area', [0, 0, 10, 10], {
       style: { fillColor: '#ff0000' },
-      properties: { name: '区画', radiusMeters: 500 },
+      properties: { name: '区画', 'maplibre-gl-draw:radiusMeters': 500 },
     });
     addSquare('top', [60, 60, 70, 70]);
     addLine('cut', [
@@ -1240,7 +1256,7 @@ describe('draw.geometry.split', () => {
       id: 'circle',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
-      properties: { radiusMeters: 1000 },
+      properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
     });
     addLine('cut', [
       [-1, 0],

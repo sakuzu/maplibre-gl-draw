@@ -228,7 +228,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     const features = store.getAllFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('Circle');
-    expect(features[0].properties.radiusMeters).toBeGreaterThan(0);
+    expect(features[0].properties['maplibre-gl-draw:radiusMeters']).toBeGreaterThan(0);
   });
 
   it('can draw with coordinates in the { lng, lat } form as well', () => {

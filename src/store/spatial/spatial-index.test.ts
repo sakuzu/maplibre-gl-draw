@@ -59,7 +59,7 @@ function createCircle(
     type: 'Circle',
     geometry: { type: 'Point', coordinates: coord },
     layerId,
-    properties: { radiusMeters },
+    properties: { 'maplibre-gl-draw:radiusMeters': radiusMeters },
     locked: false,
     visible: true,
     style: {},

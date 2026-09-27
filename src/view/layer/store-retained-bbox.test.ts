@@ -98,7 +98,7 @@ describe('computeFeaturesBBox', () => {
 
   it('uses the extent of the geodesic circle rather than its center', () => {
     const bbox = computeFeaturesBBox(
-      [makeFeature('c', 'Circle', [0, 0], { radiusMeters: 100_000 })],
+      [makeFeature('c', 'Circle', [0, 0], { 'maplibre-gl-draw:radiusMeters': 100_000 })],
       undefined,
     );
     expect(bbox).not.toBeNull();

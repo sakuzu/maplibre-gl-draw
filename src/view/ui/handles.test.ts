@@ -332,7 +332,10 @@ describe('computeCircleRadiusHandle', () => {
         type: 'Circle',
         geometry: { type: 'Point', coordinates: center },
         layerId: 'layer-1',
-        properties: { radiusMeters, radiusHandleAngle: angle },
+        properties: {
+          'maplibre-gl-draw:radiusMeters': radiusMeters,
+          'maplibre-gl-draw:radiusHandleAngle': angle,
+        },
         locked: false,
         visible: true,
         style: {},

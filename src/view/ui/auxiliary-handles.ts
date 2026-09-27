@@ -93,7 +93,7 @@ export interface AuxiliaryHandleHit {
  *   id: 'label-handle',
  *   getHandles(feature, ctx) {
  *     if (feature.type !== 'LineString') return [];
- *     const first = (feature.coordinates as [number, number][])[0];
+ *     const first = (feature.geometry as GeoJSON.LineString).coordinates[0] as [number, number];
  *     const p = ctx.project(first);
  *     const { lng, lat } = ctx.unproject({ x: p.x, y: p.y - 20 });
  *     return [{ id: 'label', position: [lng, lat], cursor: 'move' }];

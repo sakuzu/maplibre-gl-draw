@@ -22,6 +22,7 @@
  * are drawn in the order of the table whatever the order within the children.
  */
 
+import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureCoordinates } from '../../shared/types/model.js';
 import type { Color } from '../../shared/types/style.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
@@ -64,7 +65,7 @@ import type {
 } from './types.js';
 
 /** The column the zoom of creation of a row is read from (the same key as on a feature) */
-const CREATED_ZOOM_COLUMN = 'createdZoom';
+const CREATED_ZOOM_COLUMN = drawPropertyKey('createdZoom');
 
 /** The key of the slots for "no rule color" */
 const NO_RULE_COLOR = '';

@@ -117,13 +117,13 @@ const MODES: Array<[string, () => ModeHandler, (handler: ModeHandler) => void]> 
 
 describe('the created zoom of a drawn feature', () => {
   it.each(MODES)('is recorded on %s when the widths follow the zoom', (_name, create, input) => {
-    expect(drawWith(create(), true, input).createdZoom).toBe(ZOOM);
+    expect(drawWith(create(), true, input)['maplibre-gl-draw:createdZoom']).toBe(ZOOM);
   });
 
   it.each(MODES)(
     'is not recorded on %s when the widths stay the same on the screen',
     (_name, create, input) => {
-      expect(drawWith(create(), false, input)).not.toHaveProperty('createdZoom');
+      expect(drawWith(create(), false, input)).not.toHaveProperty(['maplibre-gl-draw:createdZoom']);
     },
   );
 });

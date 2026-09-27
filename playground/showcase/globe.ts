@@ -66,7 +66,7 @@ function createDocument() {
             id: 'tokyo-range',
             type: 'Circle',
             geometry: { type: 'Point', coordinates: PLACES.tokyo },
-            properties: { name: '2,500 km from Tokyo', radiusMeters: 2_500_000 },
+            properties: { name: '2,500 km from Tokyo', 'maplibre-gl-draw:radiusMeters': 2_500_000 },
             style: {
               fillColor: '#3A86FF',
               fillOpacity: 0.35,
@@ -81,10 +81,10 @@ function createDocument() {
             geometry: { type: 'Point', coordinates: [131, 16] },
             properties: {
               name: 'Storm',
-              createdZoom: 3,
-              imageFileId: 'file-storm',
-              imageWidth: 256,
-              imageHeight: 256,
+              'maplibre-gl-draw:createdZoom': 3,
+              'maplibre-gl-draw:imageFileId': 'file-storm',
+              'maplibre-gl-draw:imageWidth': 256,
+              'maplibre-gl-draw:imageHeight': 256,
             },
             style: { width: 150, height: 150, imageOpacity: 0.95 },
           },

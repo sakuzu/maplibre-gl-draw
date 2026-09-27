@@ -263,17 +263,17 @@ export interface ImageStyle extends FeatureStyle {
   /**
    * The width in pixels at the created zoom
    *
-   * @defaultValue the width of the image (`properties.imageWidth`)
+   * @defaultValue the width of the image (`maplibre-gl-draw:imageWidth` in `properties`)
    */
   width?: number;
   /**
    * The height in pixels at the created zoom
    *
-   * @defaultValue the height of the image (`properties.imageHeight`)
+   * @defaultValue the height of the image (`maplibre-gl-draw:imageHeight` in `properties`)
    */
   height?: number;
   /**
-   * A rotation in degrees, added to `properties.rotation`
+   * A rotation in degrees, added to `maplibre-gl-draw:rotation` in `properties`
    *
    * @defaultValue `0`
    */
@@ -311,8 +311,8 @@ export interface ImageProperties {
 /**
  * An embedded file of the document, such as the data of an image
  *
- * Features refer to it by ID (`properties.imageFileId` of an Image), and the native format
- * exports the files the exported features use.
+ * Features refer to it by ID (`maplibre-gl-draw:imageFileId` in `properties` of an Image),
+ * and the native format exports the files the exported features use.
  */
 export interface FileData {
   /** The ID of the file, unique within the document */
