@@ -10,6 +10,8 @@
  *   emitApplied   emits draw.geometry.applied
  */
 
+import type { DrawPropertyName } from '../../shared/properties.js';
+import { setDrawProperty } from '../../shared/properties.js';
 import type { EventEmitter, GeometryAppliedPayload } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
@@ -20,7 +22,7 @@ import type { GeometryApiDeps } from './types.js';
  * reduced to a polygon (because a Circle becomes a polygon of 64 segments and loses the
  * notion of a radius).
  */
-const CIRCLE_ONLY_PROPERTIES = ['radiusMeters', 'radiusHandleAngle'] as const;
+const CIRCLE_ONLY_PROPERTIES: readonly DrawPropertyName[] = ['radiusMeters', 'radiusHandleAngle'];
 
 /** Where the result feature is placed (the layer / group, and the z position within it). */
 interface ResultPlacement {
@@ -85,8 +87,8 @@ function moveToPlacement(store: Store, resultId: string, placement: ResultPlacem
  */
 function inheritProperties(anchor: Feature): Record<string, unknown> {
   const properties = { ...anchor.properties };
-  for (const key of CIRCLE_ONLY_PROPERTIES) {
-    delete properties[key];
+  for (const name of CIRCLE_ONLY_PROPERTIES) {
+    setDrawProperty(properties, name, undefined);
   }
   return properties;
 }

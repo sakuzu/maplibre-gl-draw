@@ -7,6 +7,7 @@
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { haversineDistanceMeters, initialBearingDegrees } from '../../../geometry/distance.js';
+import { drawProperties } from '../../../shared/properties.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
@@ -44,8 +45,7 @@ export class RadiusDrag implements DragOperation {
     const updates: Partial<Feature> = {
       properties: {
         ...feature.properties,
-        radiusMeters: newRadiusMeters,
-        radiusHandleAngle: newAngle,
+        ...drawProperties({ radiusMeters: newRadiusMeters, radiusHandleAngle: newAngle }),
       },
     };
 

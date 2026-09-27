@@ -6,6 +6,7 @@
  * GeoJSON FeatureCollection
  */
 
+import { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
 import { createId } from '../../shared/utils/id.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { Store } from '../../store/store.js';
@@ -17,7 +18,7 @@ import type {
   LoadResult,
   SkippedFeature,
 } from '../../store/types.js';
-import { GEOJSON_PREFIX, LIBRARY_PROPERTIES } from './constants.js';
+import { LIBRARY_PROPERTIES } from './constants.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { setOwnProperty } from './own-property.js';
@@ -430,7 +431,7 @@ export function convertGeoJSONToFeature(
   // form, and anything else gets a new id. The prefixed property takes precedence, then the
   // standard id member of the Feature. Whether it collides with existing data is resolved by
   // the caller, which knows the store.
-  const prefixedId = properties?.[`${GEOJSON_PREFIX}id`];
+  const prefixedId = properties?.[`${DRAW_PROPERTY_PREFIX}id`];
   const rawId =
     prefixedId === undefined || prefixedId === null || prefixedId === ''
       ? geoFeature.id
@@ -441,27 +442,27 @@ export function convertGeoJSONToFeature(
       : typeof rawId === 'number' && Number.isFinite(rawId)
         ? String(rawId)
         : generateFeatureId();
-  const rawLayerId = properties?.[`${GEOJSON_PREFIX}layerId`];
+  const rawLayerId = properties?.[`${DRAW_PROPERTY_PREFIX}layerId`];
   const featureLayerId = typeof rawLayerId === 'string' && rawLayerId !== '' ? rawLayerId : layerId;
-  const rawGroupId = properties?.[`${GEOJSON_PREFIX}groupId`];
+  const rawGroupId = properties?.[`${DRAW_PROPERTY_PREFIX}groupId`];
   const groupId = typeof rawGroupId === 'string' && rawGroupId !== '' ? rawGroupId : undefined;
   // The round-trip style key takes precedence; only when it is absent is the style built
   // from simplestyle-spec (they are not merged). Either way the keys are validated.
-  const roundTripStyle = properties?.[`${GEOJSON_PREFIX}style`];
+  const roundTripStyle = properties?.[`${DRAW_PROPERTY_PREFIX}style`];
   const style: Feature['style'] =
     roundTripStyle !== undefined && roundTripStyle !== null
       ? sanitizeFeatureStyle(roundTripStyle)
       : simplestyleToFeatureStyle(properties);
-  const featureType: unknown = properties?.[`${GEOJSON_PREFIX}featureType`];
+  const featureType: unknown = properties?.[`${DRAW_PROPERTY_PREFIX}featureType`];
   // visible is hidden only when it is explicitly false, and locked is treated as locked
   // only when it is explicitly true
-  const visible = properties?.[`${GEOJSON_PREFIX}visible`] !== false;
-  const locked = properties?.[`${GEOJSON_PREFIX}locked`] === true;
+  const visible = properties?.[`${DRAW_PROPERTY_PREFIX}visible`] !== false;
+  const locked = properties?.[`${DRAW_PROPERTY_PREFIX}locked`] === true;
 
   // Extract the embedded image data. It is taken only for a single point that really is an
   // Image.
-  const imageData = properties?.[`${GEOJSON_PREFIX}imageData`] as string | undefined;
-  const imageMimeType = properties?.[`${GEOJSON_PREFIX}imageMimeType`] as string | undefined;
+  const imageData = properties?.[`${DRAW_PROPERTY_PREFIX}imageData`] as string | undefined;
+  const imageMimeType = properties?.[`${DRAW_PROPERTY_PREFIX}imageMimeType`] as string | undefined;
   const embedsImage =
     Boolean(imageData && imageMimeType) &&
     geometry.type === 'Point' &&
@@ -476,8 +477,8 @@ export function convertGeoJSONToFeature(
   const userProperties: Record<string, unknown> = {};
   if (properties) {
     for (const [key, value] of Object.entries(properties)) {
-      if (key.startsWith(GEOJSON_PREFIX)) {
-        const keyWithoutPrefix = key.slice(GEOJSON_PREFIX.length);
+      if (key.startsWith(DRAW_PROPERTY_PREFIX)) {
+        const keyWithoutPrefix = key.slice(DRAW_PROPERTY_PREFIX.length);
         if (LIBRARY_PROPERTIES.has(keyWithoutPrefix)) {
           // When there is image data, imageFileId is replaced with a new ID, so it is
           // not added here

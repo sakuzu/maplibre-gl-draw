@@ -29,3 +29,5 @@ can be read in any order after it.
    the end-to-end tests and the tests of the examples
 7. [releasing.md](./releasing.md): versions, the supported maplibre-gl and
    Node versions, tags, the changelog and the release steps
+8. [api-2-notes.md](./api-2-notes.md): how the document model of 1.0 maps
+   onto the model of 2.0

@@ -11,6 +11,7 @@
  */
 
 import { fromPlane, toPlane } from '../shared/math/mercator-plane.js';
+import { getDrawProperty, hasDrawProperty } from '../shared/properties.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import { mapCoordinatesDeep } from '../shared/utils/coordinates.js';
 import { getImageProperties } from '../shared/utils/property.js';
@@ -45,7 +46,7 @@ function hasRotationProperty(feature: Feature, extensions?: RotateExtensions): b
   return (
     feature.properties !== null &&
     typeof feature.properties === 'object' &&
-    'rotation' in feature.properties
+    hasDrawProperty(feature.properties, 'rotation')
   );
 }
 
@@ -57,8 +58,7 @@ function getFeatureRotation(feature: Feature): number {
     const props = getImageProperties(feature);
     return props.rotation ?? 0;
   }
-  const props = feature.properties as Record<string, unknown>;
-  return typeof props.rotation === 'number' ? props.rotation : 0;
+  return getDrawProperty(feature, 'rotation') ?? 0;
 }
 
 /**

@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../../store/types.js';
-import { INTERNAL_PROPERTIES } from '../config/constants.js';
+import { drawPropertyKey } from '../properties.js';
 import {
   getCreatedZoom,
   getFeatureDescription,
@@ -41,7 +41,7 @@ describe('getter/setter round trip of the internal meta', () => {
   it('createdZoom', () => {
     const props: Record<string, unknown> = {};
     setCreatedZoom(props, 12);
-    expect(props[INTERNAL_PROPERTIES.CREATED_ZOOM]).toBe(12);
+    expect(props[drawPropertyKey('createdZoom')]).toBe(12);
     expect(getCreatedZoom(featureWith(props))).toBe(12);
   });
 

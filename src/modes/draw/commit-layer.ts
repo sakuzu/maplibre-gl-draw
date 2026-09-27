@@ -5,6 +5,7 @@
  * What a drawing mode writes when it commits: the layer, and the created zoom
  */
 
+import { drawProperties } from '../../shared/properties.js';
 import type { ModeContext } from '../handler.js';
 
 /**
@@ -33,6 +34,6 @@ export function resolveCommitLayer(context: ModeContext): string | null {
  * nothing is written, and the feature keeps its widths on the screen like one added through
  * the API.
  */
-export function createdZoomProperty(context: ModeContext): { createdZoom?: number } {
-  return context.scaleWithZoom ? { createdZoom: context.map.getZoom() } : {};
+export function createdZoomProperty(context: ModeContext): Record<string, number | string> {
+  return context.scaleWithZoom ? drawProperties({ createdZoom: context.map.getZoom() }) : {};
 }

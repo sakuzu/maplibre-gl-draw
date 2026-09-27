@@ -10,6 +10,7 @@
 
 import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { haversineDistanceMeters, initialBearingDegrees } from '../../geometry/distance.js';
+import { drawProperties } from '../../shared/properties.js';
 import type { Coordinate, Feature, Mode } from '../../store/types.js';
 import type { ModeContext, ModeHandler } from '../handler.js';
 import { createdZoomProperty, resolveCommitLayer } from './commit-layer.js';
@@ -161,8 +162,10 @@ export class DrawCircleMode implements ModeHandler {
       coordinates: this.center,
       layerId,
       properties: {
-        radiusMeters: this.radiusMeters,
-        radiusHandleAngle: this.radiusHandleAngle,
+        ...drawProperties({
+          radiusMeters: this.radiusMeters,
+          radiusHandleAngle: this.radiusHandleAngle,
+        }),
         ...createdZoomProperty(this.context),
         // The polygon coordinates for rendering are computed at render time, so they are not saved
         ...(autoName !== undefined && { name: autoName }),

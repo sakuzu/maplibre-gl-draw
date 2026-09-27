@@ -12,6 +12,7 @@
 import type { CustomResizeResult } from '../extension/index.js';
 import type { HandleType } from '../shared/config/constants.js';
 import { fromPlane, toPlane } from '../shared/math/mercator-plane.js';
+import { getDrawProperty, hasDrawProperty } from '../shared/properties.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import { mapCoordinatesDeep } from '../shared/utils/coordinates.js';
 import { getCircleRadius, getImageProperties } from '../shared/utils/property.js';
@@ -61,7 +62,7 @@ function hasScaleProperty(feature: Feature, extensions?: ResizeExtensions): bool
   return (
     feature.properties !== null &&
     typeof feature.properties === 'object' &&
-    'scale' in feature.properties
+    hasDrawProperty(feature.properties, 'scale')
   );
 }
 
@@ -73,8 +74,7 @@ function getFeatureScale(feature: Feature): number {
     const props = getImageProperties(feature);
     return props.scale ?? 1;
   }
-  const props = feature.properties as Record<string, unknown>;
-  return typeof props.scale === 'number' ? props.scale : 1;
+  return getDrawProperty(feature, 'scale') ?? 1;
 }
 
 /**

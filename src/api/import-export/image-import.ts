@@ -5,6 +5,7 @@
  * Import of image files (creates an Image feature)
  */
 
+import { drawProperties } from '../../shared/properties.js';
 import { processImageFile } from '../../shared/utils/image.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { Store } from '../../store/store.js';
@@ -48,10 +49,12 @@ export async function loadImage(
     coordinates: options.coordinate,
     layerId,
     properties: {
-      imageFileId: fileId,
-      imageWidth: processed.width,
-      imageHeight: processed.height,
-      createdZoom: options.zoom ?? 1,
+      ...drawProperties({
+        imageFileId: fileId,
+        imageWidth: processed.width,
+        imageHeight: processed.height,
+        createdZoom: options.zoom ?? 1,
+      }),
       ...(autoName !== undefined && { name: autoName }),
     },
     locked: false,

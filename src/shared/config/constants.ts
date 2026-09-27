@@ -4,24 +4,8 @@
 /**
  * Constant definitions
  *
- * Property prefixes and UI configuration constants.
+ * UI configuration constants.
  */
-
-/**
- * Keys of the internal meta properties
- *
- * createdZoom/rotation/scale are stored in feature.properties and round-trip through GeoJSON
- * with the maplibre-gl-draw: prefix (this library's own data, required to reproduce the
- * rendering).
- */
-export const INTERNAL_PROPERTIES = {
-  /** Zoom level at creation time */
-  CREATED_ZOOM: 'createdZoom',
-  /** Rotation angle (degrees) */
-  ROTATION: 'rotation',
-  /** Scale */
-  SCALE: 'scale',
-} as const;
 
 /**
  * The handle of the selection UI being dragged

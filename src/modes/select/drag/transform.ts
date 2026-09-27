@@ -11,6 +11,7 @@ import { computeResize, startResize } from '../../../operations/resize.js';
 import type { RotateState } from '../../../operations/rotate.js';
 import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
 import type { HandleType } from '../../../shared/config/constants.js';
+import { drawProperties } from '../../../shared/properties.js';
 import type { Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
@@ -48,7 +49,7 @@ export class ResizeDrag implements DragOperation {
         if (result.scale !== undefined) {
           updates.properties = {
             ...feature.properties,
-            scale: result.scale,
+            ...drawProperties({ scale: result.scale }),
           };
         }
 
@@ -56,7 +57,7 @@ export class ResizeDrag implements DragOperation {
         if (result.radiusMeters !== undefined && feature.type === 'Circle') {
           updates.properties = {
             ...feature.properties,
-            radiusMeters: result.radiusMeters,
+            ...drawProperties({ radiusMeters: result.radiusMeters }),
           };
         }
 
@@ -123,7 +124,7 @@ export class RotateDrag implements DragOperation {
         if (result.rotation !== undefined) {
           updates.properties = {
             ...feature.properties,
-            rotation: result.rotation,
+            ...drawProperties({ rotation: result.rotation }),
           };
         }
 

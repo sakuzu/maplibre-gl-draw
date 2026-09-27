@@ -83,8 +83,7 @@ export interface FeatureStyle {
  */
 export type FeatureStyleResolved = Required<FeatureStyle>;
 
-/** The prefix of the keys of `properties` that hold the values of the library. */
-export const DRAW_PROPERTY_PREFIX = 'maplibre-gl-draw:' as const;
+export { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
 
 /**
  * The `properties` of a feature: the GeoJSON properties themselves, with the keys of the

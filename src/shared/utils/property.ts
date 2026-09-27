@@ -5,13 +5,11 @@
  * Property helpers
  *
  * Utilities for handling the properties of a feature (feature.properties) in a type-safe way.
- *
- * This library's own data such as createdZoom/rotation/scale has to round-trip through
- * GeoJSON with the maplibre-gl-draw: prefix, so it is held inside feature.properties under
- * keys without the prefix.
+ * The values of the library are read and written through the accessors of
+ * shared/properties.ts, which own their keys.
  */
 
-import { INTERNAL_PROPERTIES } from '../config/constants.js';
+import { getDrawProperty, setDrawProperty } from '../properties.js';
 import type { Feature, ImageProperties } from '../types/model.js';
 
 /**
@@ -30,8 +28,7 @@ import type { Feature, ImageProperties } from '../types/model.js';
  * ```
  */
 export function getCreatedZoom(feature: Feature): number | undefined {
-  const value = feature.properties[INTERNAL_PROPERTIES.CREATED_ZOOM];
-  return typeof value === 'number' ? value : undefined;
+  return getDrawProperty(feature, 'createdZoom');
 }
 
 /**
@@ -55,15 +52,14 @@ export function getCreatedZoom(feature: Feature): number | undefined {
  * ```
  */
 export function setCreatedZoom(properties: Record<string, unknown>, zoom: number): void {
-  properties[INTERNAL_PROPERTIES.CREATED_ZOOM] = zoom;
+  setDrawProperty(properties, 'createdZoom', zoom);
 }
 
 /**
  * Gets the rotation of the feature in degrees (`properties.rotation`, 0 when unset)
  */
 export function getRotation(feature: Feature): number {
-  const value = feature.properties[INTERNAL_PROPERTIES.ROTATION];
-  return typeof value === 'number' ? value : 0;
+  return getDrawProperty(feature, 'rotation') ?? 0;
 }
 
 /**
@@ -71,7 +67,7 @@ export function getRotation(feature: Feature): number {
  * {@link FeatureInput} before `addFeature`, say)
  */
 export function setRotation(properties: Record<string, unknown>, rotation: number): void {
-  properties[INTERNAL_PROPERTIES.ROTATION] = rotation;
+  setDrawProperty(properties, 'rotation', rotation);
 }
 
 /**
@@ -79,15 +75,14 @@ export function setRotation(properties: Record<string, unknown>, rotation: numbe
  * changes
  */
 export function getScale(feature: Feature): number {
-  const value = feature.properties[INTERNAL_PROPERTIES.SCALE];
-  return typeof value === 'number' ? value : 1;
+  return getDrawProperty(feature, 'scale') ?? 1;
 }
 
 /**
  * Sets the scale of the feature
  */
 export function setScale(properties: Record<string, unknown>, scale: number): void {
-  properties[INTERNAL_PROPERTIES.SCALE] = scale;
+  setDrawProperty(properties, 'scale', scale);
 }
 
 /**
@@ -130,14 +125,13 @@ export function setFeatureDescription(
  * Use it instead of a dangerous cast such as `as unknown as ImageProperties`.
  */
 export function getImageProperties(feature: Feature): ImageProperties {
-  const p = feature.properties;
   return {
-    imageFileId: typeof p.imageFileId === 'string' ? p.imageFileId : '',
-    imageWidth: typeof p.imageWidth === 'number' ? p.imageWidth : 0,
-    imageHeight: typeof p.imageHeight === 'number' ? p.imageHeight : 0,
-    createdZoom: typeof p.createdZoom === 'number' ? p.createdZoom : 0,
-    rotation: typeof p.rotation === 'number' ? p.rotation : undefined,
-    scale: typeof p.scale === 'number' ? p.scale : undefined,
+    imageFileId: getDrawProperty(feature, 'imageFileId') ?? '',
+    imageWidth: getDrawProperty(feature, 'imageWidth') ?? 0,
+    imageHeight: getDrawProperty(feature, 'imageHeight') ?? 0,
+    createdZoom: getDrawProperty(feature, 'createdZoom') ?? 0,
+    rotation: getDrawProperty(feature, 'rotation'),
+    scale: getDrawProperty(feature, 'scale'),
   };
 }
 
@@ -145,8 +139,7 @@ export function getImageProperties(feature: Feature): ImageProperties {
  * Gets the radius (meters) of a Circle feature. undefined when it is unset or invalid.
  */
 export function getCircleRadius(feature: Feature): number | undefined {
-  const value = feature.properties.radiusMeters;
-  return typeof value === 'number' ? value : undefined;
+  return getDrawProperty(feature, 'radiusMeters');
 }
 
 /**
@@ -154,6 +147,5 @@ export function getCircleRadius(feature: Feature): number | undefined {
  * (toward the southwest).
  */
 export function getRadiusHandleAngle(feature: Feature): number {
-  const value = feature.properties.radiusHandleAngle;
-  return typeof value === 'number' ? value : 135;
+  return getDrawProperty(feature, 'radiusHandleAngle') ?? 135;
 }

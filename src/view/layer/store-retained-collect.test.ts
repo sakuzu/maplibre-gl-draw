@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { INTERNAL_PROPERTIES } from '../../shared/config/constants.js';
+import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature } from '../../store/types.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import { collectLineItems, collectPoints, collectPolygons } from './store-retained-collect.js';
@@ -45,7 +45,7 @@ function makeStyles(fillAlpha = 0.5, strokeOpacity = 1): RetainedStyleResolver {
   } as unknown as RetainedStyleResolver;
 }
 
-const ZOOMED = { [INTERNAL_PROPERTIES.CREATED_ZOOM]: 12 };
+const ZOOMED = { [drawPropertyKey('createdZoom')]: 12 };
 
 describe('collectLineItems', () => {
   it('marks a feature without createdZoom as fixed width with a negative width', () => {

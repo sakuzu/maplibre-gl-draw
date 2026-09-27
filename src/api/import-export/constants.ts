@@ -14,9 +14,6 @@
  */
 export const NATIVE_VERSION = '2.0.0';
 
-/** Prefix of the GeoJSON properties that hold this library's own data */
-export const GEOJSON_PREFIX = 'maplibre-gl-draw:';
-
 /**
  * The properties this library itself keeps in `Feature.properties`
  *

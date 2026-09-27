@@ -5,6 +5,7 @@
  * Import / export of the native format
  */
 
+import { getDrawProperty } from '../../shared/properties.js';
 import type { Store } from '../../store/store.js';
 import type { Data, ExportOptions, FileData, LoadResult } from '../../store/types.js';
 import { NATIVE_VERSION } from './constants.js';
@@ -33,8 +34,9 @@ export function exportNative(store: Store, options?: ExportOptions): Data {
   // Get only the files that are in use
   const usedFileIds = new Set<string>();
   for (const feature of features) {
-    if (feature.type === 'Image' && feature.properties.imageFileId) {
-      usedFileIds.add(feature.properties.imageFileId as string);
+    const imageFileId = getDrawProperty(feature, 'imageFileId');
+    if (feature.type === 'Image' && imageFileId) {
+      usedFileIds.add(imageFileId);
     }
   }
 

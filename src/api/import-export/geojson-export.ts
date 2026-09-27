@@ -23,9 +23,10 @@ import {
   normalizeMultiPolygonOrientation,
   normalizePolygonOrientation,
 } from '../../geometry/simplify.js';
+import { DRAW_PROPERTY_PREFIX } from '../../shared/properties.js';
 import type { Store } from '../../store/store.js';
 import type { ExportOptions, Feature } from '../../store/types.js';
-import { GEOJSON_COORDINATE_DECIMALS, GEOJSON_PREFIX, LIBRARY_PROPERTIES } from './constants.js';
+import { GEOJSON_COORDINATE_DECIMALS, LIBRARY_PROPERTIES } from './constants.js';
 import { setOwnProperty } from './own-property.js';
 
 type Position = [number, number];
@@ -124,26 +125,26 @@ export function convertFeatureToGeoJSON(
   // prototype of the output object.
   for (const [key, value] of Object.entries(feature.properties)) {
     if (LIBRARY_PROPERTIES.has(key)) {
-      setOwnProperty(properties, `${GEOJSON_PREFIX}${key}`, value);
+      setOwnProperty(properties, `${DRAW_PROPERTY_PREFIX}${key}`, value);
     } else {
       setOwnProperty(properties, key, value);
     }
   }
 
   // Add the metadata
-  properties[`${GEOJSON_PREFIX}id`] = feature.id;
-  properties[`${GEOJSON_PREFIX}layerId`] = feature.layerId;
+  properties[`${DRAW_PROPERTY_PREFIX}id`] = feature.id;
+  properties[`${DRAW_PROPERTY_PREFIX}layerId`] = feature.layerId;
   if (feature.groupId !== undefined) {
-    properties[`${GEOJSON_PREFIX}groupId`] = feature.groupId;
+    properties[`${DRAW_PROPERTY_PREFIX}groupId`] = feature.groupId;
   }
   if (!feature.visible) {
-    properties[`${GEOJSON_PREFIX}visible`] = false;
+    properties[`${DRAW_PROPERTY_PREFIX}visible`] = false;
   }
   if (feature.locked) {
-    properties[`${GEOJSON_PREFIX}locked`] = true;
+    properties[`${DRAW_PROPERTY_PREFIX}locked`] = true;
   }
   if (feature.style) {
-    properties[`${GEOJSON_PREFIX}style`] = feature.style;
+    properties[`${DRAW_PROPERTY_PREFIX}style`] = feature.style;
   }
 
   let geometry: GeoJSON.Geometry;
@@ -188,15 +189,15 @@ export function convertFeatureToGeoJSON(
     case 'Image': {
       // An Image is written out as a Point geometry and identified by featureType
       geometry = { type: 'Point', coordinates: exportPosition(feature.coordinates as Position) };
-      properties[`${GEOJSON_PREFIX}featureType`] = feature.type;
+      properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
 
       // Embed the image data as Base64
       const imageFileId = feature.properties.imageFileId as string | undefined;
       if (imageFileId) {
         const fileData = store.getFile(imageFileId);
         if (fileData) {
-          properties[`${GEOJSON_PREFIX}imageData`] = fileData.dataURL;
-          properties[`${GEOJSON_PREFIX}imageMimeType`] = fileData.mimeType;
+          properties[`${DRAW_PROPERTY_PREFIX}imageData`] = fileData.dataURL;
+          properties[`${DRAW_PROPERTY_PREFIX}imageMimeType`] = fileData.mimeType;
         }
       }
       break;
@@ -211,13 +212,13 @@ export function convertFeatureToGeoJSON(
       // the original type from the same marker.
       if (isCoordinatePair(feature.coordinates)) {
         geometry = { type: 'Point', coordinates: exportPosition(feature.coordinates as Position) };
-        properties[`${GEOJSON_PREFIX}featureType`] = feature.type;
+        properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
       } else if (isCoordinatePairArray(feature.coordinates)) {
         geometry = {
           type: 'LineString',
           coordinates: exportLine(feature.coordinates as Position[]),
         };
-        properties[`${GEOJSON_PREFIX}featureType`] = feature.type;
+        properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
       } else {
         console.warn(`Unsupported feature type for GeoJSON export: ${feature.type}`);
         return null;

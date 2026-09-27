@@ -11,7 +11,6 @@ export type { HandleType } from './constants.js';
 export {
   CURSOR_STYLES,
   HANDLE_POSITIONS,
-  INTERNAL_PROPERTIES,
   MOUSE_STATE,
 } from './constants.js';
 export type {
