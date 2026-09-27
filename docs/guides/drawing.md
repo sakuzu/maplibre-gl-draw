@@ -2,8 +2,8 @@
 
 This guide covers what a user can do on the map: the six drawing modes, the
 `select` mode that moves, resizes, rotates and edits the vertices of what is
-selected, the keyboard and touch input, Multi geometries and holes, drawing
-from code (`draw.input`) and the names given to new features.
+selected, the keyboard and touch input, Multi geometries and holes, creating
+features from code and the names given to new features.
 
 The examples assume a `draw` instance created as in
 [Getting started](../getting-started.md).
@@ -11,18 +11,18 @@ The examples assume a `draw` instance created as in
 ## Minimal code
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 // Click to add vertices; Enter or a click on the first vertex finishes
 draw.setMode('draw_polygon');
 
-draw.on('draw.feature.create', ({ feature }) => {
+draw.on('feature.created', ({ feature }) => {
   console.log(feature.type, feature.properties.name);
 });
 
-draw.on('draw.mode.change', ({ mode }) => {
+draw.on('mode.changed', ({ mode }) => {
   console.log('mode', mode); // 'select' once the polygon is finished
 });
 ```
@@ -32,8 +32,8 @@ After the polygon is finished, the new feature is selected and the mode is
 
 ## Modes
 
-There are seven built-in modes. `select` is the default
-(`Options.defaultMode`).
+There are seven built-in modes, listed in `MODES`. `select` is the default
+(the `defaultMode` option).
 
 | Mode | Creates | How |
 | --- | --- | --- |
@@ -43,14 +43,18 @@ There are seven built-in modes. `select` is the default
 | `draw_polygon` | `Polygon` | clicks, then finish |
 | `draw_circle` | `Circle` | click the center, click the radius |
 | `draw_freehand` | `Freehand` | drag a stroke |
-| `draw_image` | `Image` | the host picks a file (see below) |
+| `draw_image` | `Image` | the application picks a file (see below) |
 
 `draw.setMode(mode)` returns `true` when the mode is `mode` after the call.
-It returns `false`, and nothing changes, for a name with no registered mode,
-for a drawing mode while the interaction lock is on, and for a drawing mode
-while no layer can be written (every layer is locked or hidden; see
-[Layers and groups](layers.md)). Custom modes are added with
-`registerMode` ([Plugins](plugins.md)).
+It returns `false`, and nothing changes, for a drawing mode while the
+interaction lock is on, and for a drawing mode while no layer can be
+written (every layer is locked or hidden; see
+[Layers and groups](layers.md)). A name with no mode behind it throws a
+`DrawError` with the code `not-found`.
+
+`draw.getMode()` reads the current mode, and `mode.changed` reports every
+change with the mode before it. Modes of your own are added with
+`draw.extensions.modes.add` ([Plugins](plugins.md)).
 
 ## Drawing modes
 
@@ -78,42 +82,55 @@ leaves the mode for `select` only when nothing is being drawn.
   map
 - A drawing mode clears the selection when it starts
 
+The shape being drawn is shown with the `previewStyle` option, which takes
+the keys of a feature style: the stroke keys give its lines and the
+outlines of its vertices, the point keys its vertices.
+
+```ts
+draw.options.update({
+  previewStyle: { strokeColor: '#e11d48', strokeWidth: 2, pointRadius: 5 },
+});
+```
+
 ### After finishing
 
 A point, line, polygon or circle is created in one transaction with its
 selection, and the mode returns to `select` with the new feature selected.
-`draw.feature.create` and `draw.selection.change` fire for it.
+`feature.created` and `selection.changed` fire for it, and
+`document.changed` once for the whole change.
 
 Freehand is different: every stroke (press, drag, release) becomes its own
 feature, the mode stays `draw_freehand` so that strokes can follow one
 another, and the new features are not selected. A second finger landing
 during a stroke, or the browser cancelling the touch, discards the stroke.
 
-Every drawn feature gets `properties.createdZoom`, the zoom when it was
-drawn, and its line widths then follow the map (see [Styles](styles.md)).
-An application that wants the widths to stay the same on the screen
-creates the instance with `scaleWithZoom: false`; a drawn feature then gets
-no `createdZoom`, like a feature added through the API. When automatic
-names are on, every drawn feature also gets `properties.name`. The new
-feature
-goes into the active layer, or into the first writable layer when the active
-one is locked or hidden.
+Every drawn feature gets `properties['maplibre-gl-draw:createdZoom']`, the
+zoom when it was drawn, and its line widths then follow the map (see
+[Styles](styles.md)). An application that wants the widths to stay the
+same on the screen creates the instance with `scaleWithZoom: false`; a
+drawn feature then gets no reference zoom, like a feature created from
+code.
+
+When automatic names are on, every drawn feature also gets
+`properties.name`. The new feature goes into the active layer, or into the
+first writable layer when the active one is locked or hidden.
 
 ### Images
 
 The library does not open a file dialog. Entering `draw_image` emits
-`draw.image.request` with the map center, the zoom and the target layer,
-and returns to `select` at once. The host shows its own file picker and
-passes the file to `draw.load`:
+`image.requested` with the center of the map, the zoom and the layer to
+place the image in, and returns to `select` at once. The application shows
+its own file picker and passes the file to `draw.document.load`:
 
 ```ts
-draw.on('draw.image.request', ({ coordinate, zoom, layerId }) => {
+draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
-    if (file) await draw.load(file, { coordinate, zoom, layerId });
+    if (!file) return;
+    await draw.document.load(file, { coordinate: lngLat, zoom, layerId });
   });
   input.click();
 });
@@ -122,14 +139,14 @@ draw.setMode('draw_image');
 ```
 
 The image is centered on `coordinate`, converted to WebP (scaled down when
-a side exceeds 4096 px), stored once in the document's files and referenced
-by the feature, and the new feature is selected. Several Image features can
-share one stored file.
+a side exceeds 4096 px), stored once in the files of the document and
+referenced by the feature, and the new feature is selected. Several Image
+features can share one stored file.
 
 The library does not take files dropped on the map. To place a dropped
 image where it was dropped, the application listens to the drop and calls
-`draw.load` with that position; see
-[Files dropped on the map](save-load.md#files-dropped-on-the-map).
+`draw.document.load` with that position; see
+[Save and load](save-load.md).
 
 ## Selecting and editing
 
@@ -158,42 +175,46 @@ What each part does when it is dragged:
 | The rotation handle | rotates around the center of the frame |
 | The radius handle (`Circle`) | changes the radius, center fixed |
 
-- A drag with a corner changes a circle's radius and center together; the
-  radius handle keeps the center and remembers its angle
-  (`radiusHandleAngle`)
-- An image is scaled as a whole (its `scale` property), not per axis
+- A drag with a corner changes the radius and the center of a circle
+  together; the radius handle keeps the center and remembers its angle
+  (`maplibre-gl-draw:radiusHandleAngle`)
+- An image is scaled as a whole (`maplibre-gl-draw:scale`), not per axis
 - A point keeps a constant size on screen, so it has only a frame
 - A midpoint handle sits on the edge as it is drawn, halfway across in
   longitude
-- On the globe projection an edge between two vertices follows the path it
-  takes on the Mercator map (a parallel stays a parallel), as maplibre's own
-  layers do. The fill, the outline, the frame, the handles and the hit test
-  all follow that path
+- On the globe an edge between two vertices follows the path it takes on
+  the Mercator map (a parallel stays a parallel), as the layers of the map
+  do. The fill, the outline, the frame, the handles and the hit test all
+  follow that path
 - A single-coordinate feature (a one-point `MultiPoint`) shows its vertex
   handles but no corners or rotation handle
-- Every drag is one change: the intermediate states are written with
-  `isIntermediate` and the release commits
+- Every drag is one change: while it lasts, `feature.updated` arrives with
+  `intermediate: true`, and the release writes the final state.
+  `drag.started` and `drag.ended` mark its start and end
 - A locked feature can be selected but shows no handles and does not move
   ([Layers and groups](layers.md))
 
-For a line or polygon with very many vertices the handles are thinned on
-screen; see [Performance](performance.md).
+The colors and sizes of the frame and the handles are the
+`selectionStyle` option. For a line or polygon with very many vertices the
+handles are thinned on screen; see [Performance](performance.md).
 
 ### Vertices
 
 A click on a vertex handle selects that vertex, and Shift+click adds or
 removes another vertex of the same feature. Delete or Backspace removes the
-selected vertices. The same can be done from code:
+selected vertices. The same can be done from code with
+`draw.vertexSelection`:
 
 ```ts
-draw.selectVertices(featureId, [{ ring: 0, index: 2 }]);
-draw.getSelectedVertices(); // { featureId, vertices: [...] }
-const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
+draw.vertexSelection.set(featureId, [{ ring: 0, index: 2 }]);
+draw.vertexSelection.get(); // { featureId, vertices: [...] }
+const removed = draw.vertexSelection.delete();
 ```
 
 A vertex is named by a `VertexRef` (`{ part?, ring, index }`); see
-[Multi geometries and holes](#multi-geometries-and-holes). Deleting never
-removes the feature itself:
+[Multi geometries and holes](#multi-geometries-and-holes). `set` returns
+`false` for a locked feature, and `vertexSelection.changed` reports every
+change. Deleting never removes the feature itself:
 
 - A line keeps at least two points
 - A polygon ring keeps at least four positions (a closed triangle). The
@@ -202,7 +223,7 @@ removes the feature itself:
 - In the other Multi types the test is per part and ring, so one part at
   its minimum does not block deletion in another
 
-Snapping applies to vertex drags, and vertices shared with neighbouring
+Snapping applies to vertex drags, and vertices shared with neighboring
 features can move together; see
 [Snapping and geometry](snapping-geometry.md).
 
@@ -216,8 +237,8 @@ features can move together; see
 | Click on another feature | selects it instead |
 | Click on empty map | clears the selection |
 
-A box selection selects the features whose shape intersects the box (a
-point counts by its coordinate, an image by its rotated frame). When the
+A box selection selects the features whose shape meets the box (a point
+counts by its coordinate, an image by its rotated frame). When the
 selection existed before, each feature in the box is toggled. Escape during
 the drag restores the selection as it was. Locked and hidden features are
 not box-selected.
@@ -225,17 +246,25 @@ not box-selected.
 A multiple selection shows one frame with corner and rotation handles
 around all of it. Dragging inside the frame moves every feature by the same
 amount; a corner scales them all from the opposite corner, each by its own
-rule (coordinates for geometries, `scale` for images, only the position for
-points); the rotation handle turns them around the center of the frame
-(points keep their icons upright).
+rule (coordinates for geometries, the scale for images, only the position
+for points); the rotation handle turns them around the center of the frame
+(points keep their markers upright).
 
 A touch screen has no Shift key, so box selection and Shift+click are not
-available there. Offer your own control and call `draw.select(ids)`.
+available there. Offer your own control and call `draw.selection.set` and
+`draw.selection.add`.
 
-The selection can also be a group or a layer (`draw.select(id, 'group')`).
-`draw.getSelectedFeatures()` returns features only for a feature selection,
-and `draw.deleteSelection()` deletes whatever is selected, the same as the
-Delete key.
+```ts
+draw.selection.set('feature', [featureId]);
+draw.selection.add([feature.id]);
+const selected = draw.selection.features();
+```
+
+The selection holds one type at a time, and it can be a group or a layer
+too (`draw.selection.set('group', [groupId])`). `selection.features()`
+returns the selected features, or the features inside the selected groups
+or layers. `selection.delete()` deletes whatever is selected, and
+`selection.changed` reports every change with the selection before it.
 
 ## Keyboard
 
@@ -257,7 +286,7 @@ instance is read-only or under the interaction lock; then, and without a
 selection, the key is left to the map, which pans. A double click on a
 feature does not zoom the map.
 
-A drag ends without committing when the window loses the focus, and a
+A drag ends without being written when the window loses the focus, and a
 press released outside the page is released where the pointer last was.
 
 ## Touch and pen
@@ -270,8 +299,8 @@ fingers belong to the map (pan, zoom, rotate), and a second finger that
 lands during a drag cancels the drag.
 
 A pen works through whichever events the browser reports it with. The
-normalized events that modes and plugins receive carry `pointerType`
-(`'mouse'`, `'touch'` or `'pen'`).
+pointer events that modes and plugins receive (`DrawPointerEvent`) carry
+`pointerType` (`'mouse'`, `'touch'` or `'pen'`).
 
 ## Multi geometries and holes
 
@@ -279,12 +308,12 @@ The drawing modes create single geometries, and a polygon is drawn with its
 outer ring only. `MultiPoint`, `MultiLineString`, `MultiPolygon` and
 polygons with holes come from:
 
-- `draw.load` of GeoJSON (Multi geometries are kept; `flattenMulti: true`
-  splits them into single features)
+- `draw.document.load` of GeoJSON (Multi geometries are kept;
+  `flattenMulti: true` splits them into single features)
 - the geometry operations: a union of separate polygons gives a
   `MultiPolygon`, a subtraction from the inside gives a hole
   ([Snapping and geometry](snapping-geometry.md))
-- `draw.addFeature` with the coordinates
+- `draw.features.create` with the geometry
 
 They are drawn, hit-tested and edited like single geometries. A click on
 any part selects the whole feature, the frame encloses every part, and
@@ -300,59 +329,64 @@ every part and ring gets its own vertex and midpoint handles.
 
 `part` may be left out when it is 0.
 
-## Drawing from code
+## Creating features from code
 
-`draw.input` sends synthetic clicks, moves and keys into the same entry
-point as the pointer. A drawing mode cannot tell them from real input, so
-snapping and plugins work the same way. Use it for numeric input (a
-distance and bearing, typed coordinates), for automation and for tests.
-
-```ts
-draw.setMode('draw_line');
-draw.input.click([139.7, 35.68]);
-draw.input.click([139.71, 35.68]);
-draw.input.click([139.71, 35.69]);
-draw.input.key('Enter');
-
-// The mode is back to select with the new line selected
-const [line] = draw.getSelectedFeatures();
-```
-
-- A coordinate is `[lng, lat]` or `{ lng, lat }`; the screen position is
-  computed for you
-- `click` sends a move to the same place first, as a real cursor would, so
-  a circle needs only two clicks: the center, then a point on the edge
-- A polygon also finishes with a click on its first vertex
-- `key('Escape')` cancels and `key('Backspace')` removes the last vertex
-- `move` moves only the preview of the drawing
-- A synthetic input snaps like a real one. Pass `{ snap: false }` to place
-  a typed coordinate exactly
+`draw.features.create` takes a type and a GeoJSON geometry, and returns the
+feature as it was stored. Use it for coordinates typed into a form, a
+position computed from a distance and a bearing, automation and tests.
 
 ```ts
-draw.input.click([139.7, 35.68], { snap: false });
+import { destination } from '@sakuzu/maplibre-gl-draw/geometry';
+
+const start = [139.7, 35.68];
+const line = draw.features.create({
+  type: 'LineString',
+  geometry: {
+    type: 'LineString',
+    coordinates: [start, destination(start, 500, 90)], // 500 m to the east
+  },
+  properties: { name: 'Survey line' },
+});
+if (line) draw.selection.set('feature', [line.id]);
 ```
 
-While a panel of your own decides the coordinates, call
-`draw.input.setPointerHold(true)`: clicks and moves from the real pointer
-then stop reaching the mode (the map still pans and zooms). Set it back to
-`false` when the panel closes. The library does not include the input
-panel itself.
+- The feature goes into the active layer unless `layerId` or `groupId`
+  says otherwise. A feature created from code may go into a locked or
+  hidden layer, which a user cannot draw into
+- `create` returns `null` while the instance is read-only. A wrong input
+  throws a `DrawError` and creates nothing
+- A circle is a `Point` geometry, the center, with its radius in
+  `properties['maplibre-gl-draw:radiusMeters']`
+- A feature created from code gets no automatic name and no reference zoom,
+  and the mode and the selection do not change
+- `createMany` creates several features in one transaction
+
+```ts
+draw.features.create({
+  type: 'Circle',
+  geometry: { type: 'Point', coordinates: [139.7, 35.68] },
+  properties: { 'maplibre-gl-draw:radiusMeters': 250 },
+});
+```
+
+A tool that should draw the way the built-in modes do (the writable layer,
+the automatic name and the reference zoom) is a mode of your own, which
+creates its features with `commitFeature` ([Plugins](plugins.md)).
 
 ## Automatic names
 
 New features, layers and groups get a name with a serial number per type:
 `Point 1`, `LineString 1`, `Polygon 1`, `Circle 1`, `Freehand 1`,
-`Image 1`, `Layer 1`, `Group 1`. A custom feature type that an extension
-draws uses its type id as the word.
+`Image 1`, `Layer 1`, `Group 1`. A custom feature type uses its type name
+as the word.
 
 A number is never reused: after `Point 1` and `Point 2`, deleting
-`Point 2` and drawing again gives `Point 3`. Names that arrive from a load
-or from `addFeature` count as well.
+`Point 2` and drawing again gives `Point 3`. Names that arrive in the
+document, by a load or from code, count as well.
 
 ```ts
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   autoName: {
-    enabled: true,
     typeNames: { Point: 'Pin', Layer: 'Sheet' },
     formatter: (typeName, n) => `${typeName} #${n}`,
   },
@@ -361,22 +395,22 @@ const draw = createMapLibreGLDraw(map, {
 
 `autoName: false` turns the names off; new features then have no `name`.
 A layer or a group always has a name, so one created without a name then
-gets the word of its type alone (`Layer`, or your `typeNames.Layer`).
+gets the word of its type alone (`Layer`, or your `typeNames.Layer`). The
+option can change while the instance runs, with `draw.options.update`.
 
 ### Names in another language
 
-The words of every generated name come from this one configuration, and
-the defaults are English. The library does not translate them, and they
-are not part of `Options.messages` ([Messages](styles.md#messages)). A host
+The words of every generated name come from this one option, and the
+defaults are English. The library does not translate them, and they are
+not part of the `messages` option ([Styles](styles.md)). An application
 that shows another language passes a word for each type it uses in
-`typeNames`, keyed by the type id: `Point`, `LineString`, `Polygon`,
-`Circle`, `Freehand`, `Image`, `Layer`, `Group`, and the type id of each
+`typeNames`, keyed by the type name: `Point`, `LineString`, `Polygon`,
+`Circle`, `Freehand`, `Image`, `Layer`, `Group`, and the name of each
 custom feature type it draws.
 
 ```ts
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   autoName: {
-    enabled: true,
     typeNames: {
       Point: 'Punkt',
       LineString: 'Linie',
@@ -405,24 +439,28 @@ copy of the world, and box selection does not reach across the line.
 
 Drawing and editing are driven by pointer input on the map canvas, and the
 library adds no ARIA roles or labels. The keyboard covers deleting, moving
-by arrow keys, grouping and cancelling. `draw.input` lets a host offer
-another way to enter coordinates, such as a form.
+by arrow keys, grouping and cancelling. `draw.features.create` lets an
+application offer another way to enter coordinates, such as a form.
 
 ## Examples
 
 - [basic](../../examples/basic/) draws a polygon, listens to
-  `draw.feature.create` and `draw.features.change`, and exports GeoJSON
+  `feature.created` and `document.changed`, and saves GeoJSON
 
 ## Reference
 
-- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
-  (`setMode`, the selection and vertex methods)
-- [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md)
-- [`InputOperations`](../api/maplibre-gl-draw/interfaces/InputOperations.md)
-- [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
-- [`AutoNameConfig`](../api/maplibre-gl-draw/interfaces/AutoNameConfig.md)
-- [`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md)
+- [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`setMode`,
+  `getMode`)
+- [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md) and
+  [`MODES`](../api/maplibre-gl-draw/variables/MODES.md)
+- [`FeaturesCollection`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
+  and [`FeatureInput`](../api/maplibre-gl-draw/interfaces/FeatureInput.md)
+- [`SelectionResource`](../api/maplibre-gl-draw/interfaces/SelectionResource.md)
   and
-  [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
-  (the colors and sizes of the handles and of the drawing preview)
+  [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)
+- [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
+- [`AutoNameOptions`](../api/maplibre-gl-draw/interfaces/AutoNameOptions.md)
+- [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
+  and [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
+  (the colors and sizes of the handles and of the shape being drawn)
 - [Events](../reference/events.md)

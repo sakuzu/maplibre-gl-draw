@@ -1,118 +1,133 @@
 # レイヤーとグループ
 
-すべての地物はどれかのレイヤーに属し、1 つのレイヤーの
-地物はグループにまとめられます。この手引きでは、レイヤー、新しい
-地物が入るアクティブなレイヤー、グループ、ロック、描画順と、
-MapLibre 自身のレイヤーを描画のレイヤーの間に置く方法を説明します。
+地物はすべてどれかのレイヤーに入り、同じレイヤーの地物はグループに
+まとめられます。この手引きでは、レイヤー、新しい地物が入るアクティブな
+レイヤー、グループ、ロック、重なりの順を扱い、地図のレイヤーを描画の
+レイヤーのあいだに挟む方法も説明します。
 
 ## 最小のコード
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
-// 既定のレイヤー ("Layer 1") がある。2 つ目を足してそこに描く
-// (読み取り専用のとき addLayer は null を返す)
-const notes = draw.addLayer('Notes');
-if (notes !== null) {
-  draw.setActiveLayer(notes);
+// 文書は空のレイヤーを 1 つ持って始まる。2 つ目を足してそこに描く
+// (読み取り専用のあいだ create は null を返す)
+const notes = draw.layers.create({ name: 'Notes' });
+if (notes) {
+  draw.layers.setActive(notes.id);
   draw.setMode('draw_point');
 
-  // 後で: ロックし、選択はできるが編集はできないようにする
-  draw.updateLayer(notes, { locked: true });
+  // 後で: ロックして、地物を選べるが編集できないようにする
+  draw.layers.update(notes.id, { locked: true });
 }
 ```
 
 ## レイヤー
 
-`Layer` は、`name`、`visible`、`locked`、`opacity`、中の項目の並び
-`order` (地物とグループの ID で、末尾が前面)、省略できる
-`styleRule` ([スタイル](styles.ja.md)) を持ちます。
+`Layer` は、`name`、`visible`、`locked`、`opacity`、中に持つ
+`items` (地物とグループの ID を奥から並べたもの)、省略できる
+`styleRule` ([スタイル](styles.ja.md))、省略できる独自の `metadata` を
+持ちます。
 
-| メソッド | 動作 |
+| メソッド | すること |
 | --- | --- |
-| `addLayer(name?)` | 最前面にレイヤーを追加し、ID を返します |
-| `updateLayer(id, updates)` | レイヤーの項目を変えます |
-| `deleteLayer(id)` | レイヤーを中の地物やグループごと削除します |
-| `getAllLayers()`、`getLayer(id)` | 読み取ります |
+| `layers.create(input)` | レイヤーを足します。`index` が無ければ手前です |
+| `layers.update(id, patch)` | 渡したキーだけを変えます |
+| `layers.delete(id)` | 地物とグループごとレイヤーを削除します |
+| `layers.get(id)`、`list()`、`count()`、`has(id)` | 読みます |
 
-読み取り専用の間は、`addLayer` は何も追加せずに `null` を返します。
-`addFeature` と `addGroup` も同じです ([読み取り専用](read-only.ja.md))。
+`create` と `update` は、保存したとおりのレイヤーを返します。読み取り
+専用のあいだは何も変えず、`create` と `update` は `null` を、`delete` は
+`false` を返します ([読み取り専用](read-only.ja.md))。無い ID を渡すと、
+コード `not-found` の `DrawError` を投げます。名前が `Many` で終わる
+メソッドは、同じことを複数のレイヤーについて 1 つの取引で行います。
 
-名前を指定せずに追加したレイヤーとグループには、自動の名前付けで
-名前が付きます (`Layer 2`、`Group 1`)。語は `autoName` オプションから
-取られます ([自動の名前](drawing.ja.md#自動の名前))。
+```ts
+const roads = draw.layers.create({ name: 'Roads', opacity: 0.8, index: 0 });
+const hidden = draw.layers.list({ visible: false });
+```
 
-インスタンスを作ると、ID が `default-layer` の既定のレイヤーができます。
-`initDefaultLayer: false` を指定するとレイヤーは作られず、ホストが自分で
-作ります。自前のデータから構造を復元するときなどに使います。
+名前を指定せずに作ったレイヤーやグループには、`autoName` の設定の語で
+自動の名前 (`Layer 2`、`Group 1`) が付きます
+([自動の名前](drawing.ja.md#自動の名前))。
 
-`deleteLayer` は、レイヤーの中にあるものをすべて削除します。レイヤーを
-選んでいるときの `draw.deleteSelection()` と Delete キーは、少なくとも
-1 つのレイヤーを残し、ロックされた地物やグループを含むレイヤーは
-削除しません。
+インスタンスを作ると、文書は空のレイヤーを 1 つ持って始まります。
+`initDefaultLayer: false` を渡すとレイヤーは作られず、アプリケーションが
+自分でレイヤーを作ります。自前のデータから構成を復元するときなどに
+使います。
 
-変更すると、`draw.layer.create`、`draw.layer.update`、
-`draw.layer.delete`、`draw.layer.reorder` が出ます。
+`layers.delete` はレイヤーの中身もすべて削除します。ロックされた
+レイヤーや、ロックされた地物かグループを持つレイヤーには `false` を
+返します。レイヤーを選んでいるときの選択の削除 (`selection.delete()` と
+Delete キー) は、少なくとも 1 つのレイヤーを残します。
+
+変更すると `layer.created`、`layer.updated`、`layer.deleted`、
+`layer.reordered` が届きます。
 
 ## アクティブなレイヤー
 
-新しい地物はアクティブなレイヤーに入ります。
-`setActiveLayer(id)` で設定し、`getActiveLayer()` で読み取ります。
-アクティブなレイヤーが削除されると、最初のレイヤーがアクティブになります。
+新しい地物はアクティブなレイヤーに入ります。`layers.setActive(id)` で
+設定し、`layers.getActive()` で取得します。ロックされたレイヤーは
+アクティブにできず、`setActive` は `false` を返します。アクティブな
+レイヤーが削除されると、最初のレイヤーがアクティブになります。
 
-利用者が描いたものは、存在していて、ロックされておらず、表示されている
-(全員に対しても、ローカルでも非表示になっていない) レイヤーにだけ書き
-込まれます。アクティブなレイヤーに書き込めないときは、書き込める最初の
-レイヤーに入ります。アクティブなレイヤーに再び書き込めるようになれば、
-そちらに戻ります。書き込めるレイヤーが 1 つも無い間は、`setMode` は描画
-モードを受け付けません。この規則は利用者の描画にだけ当てはまり、
-`addFeature` と `load` は存在するどのレイヤーでも受け付けます。
+利用者の描画は、存在していて、ロックされておらず、表示されている
+(全員に対しても、この端末でも隠されていない) レイヤーにだけ書き込み
+ます。アクティブなレイヤーに書き込めないときは、書き込める最初の
+レイヤーに描き、書き込めるようになるとアクティブなレイヤーに戻ります。
+書き込めるレイヤーが 1 つも無いあいだ、`setMode` は描画モードを
+受け付けません。この規則は利用者の描画だけのもので、`features.create`
+と `document.load` は存在するどのレイヤーにも書き込めます。
 
-## 描画順
+## 重なりの順
 
-どの階層でも、配列の末尾が前面です。
+どの段階でも、並びの末尾が手前です。
 
-1. レイヤーどうしでは、レイヤーの順 (`getLayerOrder()`)
-2. レイヤーの中では、`layer.order` (地物とグループ)
+1. レイヤーのあいだでは、`layers.list()` の順
+2. レイヤーの中では、`layer.items` (地物とグループ)
 3. グループの中では、`group.featureIds`
 
-`getAllFeatures()` は、すべての地物をこの順に背面から返します。
+`features.list()` は、すべての地物をこの順に奥から返します。
+`layers.reorder` はすべてのレイヤーの ID を奥から並べて受け取り、
+`features.move` と `groups.move` が地物とグループを置きます。`index` を
+渡さない移動は移動先の手前に置き、`index: 0` は一番奥です。
 
 <!-- docs-check:
-declare const notes: string;
+declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
 -->
 
 ```ts
-// notes レイヤーを既定のレイヤーの背面へ
-draw.setLayerOrder([notes, 'default-layer']);
+// notes のレイヤーをほかのすべてのレイヤーの奥に置く
+const others = draw.layers.list().filter((layer) => layer.id !== notes.id);
+draw.layers.reorder([notes.id, ...others.map((layer) => layer.id)]);
 
-// 1 つのフィーチャーをレイヤーの最前面へ
-const layer = draw.getLayer('default-layer');
-if (layer) draw.reorderInLayer(featureId, layer.id, layer.order.length - 1);
+// 1 つの地物をそのレイヤーの一番手前に出す
+const target = draw.features.get(featureId);
+if (target) draw.features.move(target.id, { layerId: target.layerId });
 
-// フィーチャーかグループを別のレイヤーへ移す
-draw.moveToLayer(featureId, notes);
+// 地物やグループを別のレイヤーに移す
+draw.features.move(featureId, { layerId: notes.id });
+draw.groups.move(groupId, { layerId: notes.id, index: 0 });
 ```
 
-レイヤーの順は文書の一部です。`export('native')` が保存し、`load()` が
-丸ごと置き換え、差し替えた Store が持ちます。レイヤーではない独自の
-項目も入れられます。データセットの ID
-([大量のデータ](large-data.ja.md) を参照) と区切り (後述) です。その
-意味はアプリが決め、ライブラリーはそれぞれの位置を保つだけです。
+- レイヤーへ移した地物はグループから出ます。`{ groupId }` はどの
+  レイヤーのグループにも地物を移し、`{ groupId: null }` は地物を
+  グループから出してグループのすぐ手前に置きます
+- `moveMany` は複数の地物やグループを、それらのあいだの順を保って
+  移します
+- ロックされたものの移動や、ロックされたレイヤーやグループへの移動は
+  `false` を返し、何も変えません
+- 移った地物ごとに、元の場所と行き先を載せた `feature.moved` が届きます
 
-- `setLayerOrder` は、レイヤーではない ID も残します。空の文字列は
-  捨て、同じ ID が繰り返されたら最初の位置に残します
-- `addLayer` は新しいレイヤーを最前面に置き、`deleteLayer` はその
-  レイヤーの ID だけを外します。ほかに項目を外す操作は無いので、独自の
-  項目は、それを除いた順をアプリが設定するまで残ります
-- 何も指さない ID は、描画のときに読み飛ばされます
+重なりの順は文書の一部です。`document.toJSON()` は `layerOrder` に書き
+出し、文書の `document.load` はこれを置き換えます。
 
 ## グループ
 
-グループは 1 つのレイヤーの地物をまとめ、一緒に選択、移動、
-非表示、ロックできるようにします。
+グループは同じレイヤーの地物をまとめ、一緒に選ぶ、動かす、隠す、ロック
+することができるようにします。
 
 <!-- docs-check:
 declare const idA: string;
@@ -120,153 +135,172 @@ declare const idB: string;
 -->
 
 ```ts
-// 読み取り専用なら null
-const groupId = draw.addGroup([idA, idB], draw.getActiveLayer(), 'Site');
+// 読み取り専用のあいだは null
+const site = draw.groups.create({ featureIds: [idA, idB], name: 'Site' });
 
-// 現在の選択から。Cmd/Ctrl+G と同じ
-draw.select([idA, idB]);
-const created = draw.groupSelection(); // まとめられないときは null
+// Cmd/Ctrl+G と同じく、今の選択から作ることもできる
+draw.selection.set('feature', [idA, idB]);
+const created = draw.selection.group(); // まとめられないときは null
 ```
 
-`groupSelection` は、2 つ以上の地物が選ばれていて、すべて同じ
-レイヤーにあり、どれもまだグループに入っていないときにグループを作り
-ます。グループは、レイヤーの並びの中で、選ばれた地物のうち最も
-前面にあるものの位置に入ります。
+地物が同じレイヤーにそろっていなければ、`groups.create` は `DrawError`
+を投げます。`selection.group()` がグループを作るのは、同じレイヤーの
+地物を 2 つ以上選んでいて、どれもまだグループに入っていないときです。
+グループは、レイヤーの中で最も手前にあった地物の位置に入ります。
 
-| メソッド | 動作 |
+| メソッド | すること |
 | --- | --- |
-| `addFeatureToGroup(featureId, groupId, index?)` | グループに入れます |
-| `removeFeatureFromGroup(featureId)` | グループの直後に出します |
-| `reorderInGroup(featureId, groupId, index)` | グループの中で並べ替えます |
-| `ungroupSelection()` | グループを解除するか、メンバーを出します |
-| `ungroupGroup(groupId)` | 1 つのグループを解除します |
-| `deleteGroup(groupId)` | グループを削除し、地物は残します |
+| `features.move(id, { groupId })` | 地物をグループに入れます |
+| `features.move(id, { groupId: null })` | グループのすぐ手前に出します |
+| `features.move(id, { groupId, index })` | グループの中で並べ替えます |
+| `groups.delete(id)` | グループを解き、地物は残します |
+| `selection.ungroup()` | 選んだグループを解きます |
 
-- `ungroupSelection` は、選んだグループを解除するか、選んだメンバーを
-  そのグループから出します。Shift+Cmd/Ctrl+G と同じ動作です
-- グループを解除するか削除すると、中の地物は元の順のまま、
-  グループがあった位置に入ります
-- 空になったグループ (最後のメンバーが出たか削除された) は自動で削除
+- グループを解くと、その地物が順を保ってグループのあった位置に入ります
+- Shift+Cmd/Ctrl+G は、選んだグループを解くか、選んだ地物をその
+  グループから出します
+- 空になったグループ (最後の地物が出たか削除された) は、合わせて削除
   されます
-- 地物は常にちょうど 1 か所に並びます。`groupId` があれば
-  そのグループの `featureIds` に、無ければレイヤーの `order` に並び
-  ます。`updateFeature` で `layerId` か `groupId` を変えると、並ぶ場所が
-  移ります
+- 地物は必ずどこか 1 か所に並んでいます。`groupId` を持つならその
+  グループの `featureIds` に、持たないならレイヤーの `items` にあります
+
+変更すると `group.created`、`group.updated`、`group.deleted` が
+届きます。
 
 ## ロック
 
-地物、グループ、レイヤーの `locked` を設定すると、選択と表示は
-できますが、それ以外の編集はすべて拒まれます。
+地物、グループ、レイヤーの `locked` は、選ぶことと表示することだけを
+許し、ほかの編集をすべて拒みます。
 
 ```ts
-draw.updateFeature(featureId, { locked: true });
-draw.updateGroup(groupId, { locked: true });
-draw.updateLayer(layerId, { locked: true });
+draw.features.update(featureId, { locked: true });
+draw.groups.update(groupId, { locked: true });
+draw.layers.update(layerId, { locked: true });
 ```
 
-- ロックは継承されます。地物自身か、そのグループか、その
-  レイヤーがロックされていれば、その地物はロックされています。
-  `isFeatureLocked(feature, draw.getStore())` で判定できます
-- ロックされた地物は選べて、`getSelectedFeatures()` にも含まれ
-  ます
-- 移動、拡縮、回転、頂点の編集、削除はできず、ハンドルは出ず、矩形選択
+- ロックは引き継がれます。地物自身、そのグループ、そのレイヤーの
+  どれかがロックされていれば、その地物はロックされています
+- ロックされた地物も選べ、`selection.features()` に含まれます
+- 移動、拡縮、回転、頂点の編集、削除はできず、ハンドルも出ず、矩形選択
   でも選ばれません
-- `updateFeature`、`updateGroup`、`updateLayer` は、ロックされた項目の
-  `locked` と `visible` 以外を変えようとすると `false` を返します
-- Delete キーはロックされた地物を残します。選んだグループからは
-  ロックされていないメンバーだけが削除され、ロックされた項目を含む
+- ロックされたものについて、`locked` と `visible` 以外を変える差分を
+  渡すと `update` は `null` を返し、`delete` と `move` は `false` を
+  返します
+- Delete キーはロックされた地物を残します。グループを選んでいれば
+  ロックされていない地物だけが削除され、ロックされたものを持つ
   レイヤーは削除されません
-- 幾何演算は、ロックされた地物を読み飛ばします
+- 幾何演算はロックされた地物を拒みます
 
-データに触れずにすべての編集をまとめて止めるには、読み取り専用か操作
-ロックを使ってください ([読み取り専用](read-only.ja.md))。
+引き継がれたロックは、3 つのものから読み取ります。
+
+```ts
+function isLocked(id: string): boolean {
+  const f = draw.features.get(id);
+  if (!f) return false;
+  const group = f.groupId ? draw.groups.get(f.groupId) : undefined;
+  const layer = draw.layers.get(f.layerId);
+  return f.locked || group?.locked === true || layer?.locked === true;
+}
+```
+
+データに手を付けずにすべての編集を一度に止めるには、読み取り専用か
+操作ロックを使います ([読み取り専用](read-only.ja.md))。
 
 ## 表示
 
-地物、グループ、レイヤーの `visible: false` は、文書を共有して
-いる全員に対して隠します。この設定は保存され、書き出されます。この
-クライアントでだけ隠すには、`setLocallyHidden` を使います
-([読み取り専用](read-only.ja.md))。非表示の地物は、描画、当たり
-判定、吸着、幾何演算の対象になりません。
+地物、グループ、レイヤーの `visible: false` は、文書を共有する全員に
+対して隠します。保存され、書き出しにも入ります。この端末だけで隠すには
+`draw.hidden.add(id)` を使います ([読み取り専用](read-only.ja.md))。
+隠れた地物は、描画、当たり判定、吸着、幾何演算の対象にならず、選ぶことも
+できません。
 
 ## 不透明度
 
-`opacity` (0 から 1) で、レイヤー全体を薄くできます。レイヤーについて
-描くものすべて (塗り、線、点、画像と、独自の型の描画器や地物に
-付随する描画が描くもの) のアルファに掛けられます。
+`opacity` (0 から 1) はレイヤー全体を薄くします。塗り、線、点、画像、
+独自の地物の型が描くものなど、そのレイヤーに描くすべての不透明度に
+掛け合わされます。
 
 ```ts
-draw.updateLayer(layerId, { opacity: 0.4 });
+draw.layers.update(layerId, { opacity: 0.4 });
 ```
 
-- 描画のときに掛けるので、値を変えても (スライダーで動かすなど) 何も作り
-  直しません
-- 見た目だけの設定です。不透明度が 0 のレイヤーの地物にも当たり
-  判定があり、選べます。邪魔にならないようにするには非表示にしてください
-- 独自の型の描画器は、この値を `context.opacity` で受け取り、自分の
-  アルファに掛けます ([独自の型](custom-types.ja.md))
+- 地図を描くときに掛けるので、スライダーなどで値を変えても負担は
+  小さく済みます
+- 見た目だけの設定です。不透明度 0 のレイヤーの地物も当たり判定があり、
+  選べます。レイヤーを邪魔にならないようにするには、隠してください
+- 独自の描画は、この値を `RenderContext` の `opacity` として受け取り、
+  自分の不透明度に掛けます ([独自の地物の型](custom-types.ja.md))
 
-## 区切りと枠
+## 地図のレイヤーを挟む
 
-描いたものは全体で 1 つの MapLibre のカスタムレイヤーなので、MapLibre の
-レイヤー (ベクタータイルやラスター) は、そのすべての下か上のどちらかに
-なります。そうしたレイヤーを描画のレイヤーの間に置くには、レイヤーの
-並びの項目の 1 つを区切りとして印を付けます。すると描画は、区切りと区切り
-の間ごとに 1 つのカスタムレイヤー (枠) に分かれ、ホストは自分の MapLibre
-のレイヤーをその間に移せます。1 つの地物を `beforeId` で MapLibre の
-レイヤーの間に置くことはできません。動かせるのは区切りの間ごとの
-まとまりです。
+描画は地図の 1 つのレイヤーで描かれるので、地図のレイヤー (ベクター
+タイル、ラスター) は描画全体の下か上のどちらかになります。そうした
+レイヤーを描画のレイヤーのあいだに入れるには、重なりの順に自前の項目を
+足し、`isExternalEntry` でそれが文書の外から来たものだとインスタンスに
+伝えます。すると描画はその項目で区切られ、項目のあいだに続くレイヤーの
+並びごとに地図のレイヤーが 1 つ作られます。アプリケーションは、自分の
+地図のレイヤーをその並びのあいだへ動かします。1 つの地物だけを地図の
+レイヤーのあいだに置くことはできず、描画の並びがまとめて動きます。
 
 <!-- docs-check:
 declare const parcels: string;
-declare const notes: string;
 -->
 
 ```ts
 const SEPARATOR = 'sep:';
 
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   isExternalEntry: (id) => id.startsWith(SEPARATOR),
 });
 
-// 道路 (MapLibre のレイヤー) を parcels と notes の間に
-draw.setLayerOrder([parcels, `${SEPARATOR}roads`, notes]);
+// 地図の道路を parcels のレイヤーのすぐ手前に入れる
+const doc = draw.document.toJSON();
+doc.layerOrder.splice(doc.layerOrder.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
+await draw.document.load(doc);
 
-function placeNativeLayers(): void {
-  const order = draw.getLayerOrder();
-  const slots = draw.getRenderSlots();
+function placeMapLayers(): void {
+  const order = draw.getStore().getLayerOrder();
+  const stack = draw.getLayerStack();
   order.forEach((entry, index) => {
     if (!entry.startsWith(SEPARATOR)) return;
-    // 区切りの上の枠のすぐ下、無ければ最前面
-    const above = slots.find((slot) => slot.from > index);
+    // 項目の上にある並びのすぐ下へ。無ければ一番上へ
+    const above = stack.find((run) => run.from > index);
     map.moveLayer(entry.slice(SEPARATOR.length), above?.layerId);
   });
 }
 
-placeNativeLayers();
-draw.on('draw.renderslots.change', placeNativeLayers);
+placeMapLayers();
+draw.on('layerStack.changed', placeMapLayers);
 ```
 
-- `getRenderSlots()` は枠を背面から返します。どの枠も、レイヤーの並びの
-  上の区間 `[from, to)` と、自分のカスタムレイヤーの ID を持っています
-- 区切りが無ければ枠は `maplibre-gl-draw-layer` の 1 つだけです
-- `draw.renderslots.change` は、枠が追加されたり削除されたり、区間が
-  変わったりしたときに発火します。そのときに MapLibre のレイヤーを置き
-  直してください
+- 自前の項目は、文書を通して重なりの順に入ります。読み込む文書の
+  `layerOrder` か、インスタンスに渡す Store に持たせます。
+  `layers.reorder` はレイヤーだけを動かし、自前の項目はそれぞれの位置に
+  残します
+- `draw.getStore().getLayerOrder()` は、自前の項目も含めた重なりの順の
+  全体を返します
+- `draw.getLayerStack()` は並びを奥から返します。それぞれが、重なりの順の
+  範囲 `[from, to)` と、それを描く地図のレイヤーの ID を持ちます
+- 自前の項目が無ければ並びは 1 つで、`maplibre-gl-draw-layer` です
+- 並びが増減したときや範囲が変わったときに `layerStack.changed` が
+  届きます。そのときに地図のレイヤーを置き直してください
+- `order: 'layer-order'` のデータセットは、同じ順の中の自分の ID の位置に
+  描かれます ([大量のデータを表示する](large-data.ja.md))
 
 ## 関連する例
 
-- [style-rules](../../examples/style-rules/) では、レイヤーを
-  追加し、スタイル規則を設定します
-- [read-only](../../examples/read-only/) では、レイヤーをロックし、
-  `isFeatureLocked` で確かめます
+- [style-rules](../../examples/style-rules/) では、レイヤーを足して
+  スタイルの規則を付けます
+- [read-only](../../examples/read-only/) では、レイヤーをロックします
 
 ## リファレンス
 
-- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
-  (レイヤー、グループ、並びのメソッドと `getRenderSlots`)
-- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) と
+- [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
+  と [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
+- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md)、
+  [`LayerInput`](../api/maplibre-gl-draw/interfaces/LayerInput.md)、
   [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)
-- [`RenderSlot`](../api/maplibre-gl-draw/interfaces/RenderSlot.md)
-- [`isFeatureLocked`](../api/maplibre-gl-draw/functions/isFeatureLocked.md)
+- [`MoveTarget`](../api/maplibre-gl-draw/type-aliases/MoveTarget.md)
+- [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`getLayerStack`)
+  と [`LayerStackEntry`](../api/maplibre-gl-draw/interfaces/LayerStackEntry.md)
 - [イベント](../reference/events.md)

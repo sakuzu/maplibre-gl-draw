@@ -2,15 +2,15 @@
 
 地物の見た目は 3 つのところから決まります。地物自身の
 `style`、そのレイヤーのスタイル規則、インスタンスの既定値です。この
-手引きでは、それぞれの設定と、それらが適用される順番、規則から得られる
+手引きでは、それぞれの設定、それらが適用される順番、規則から得られる
 凡例、ライブラリーが返す文字列 (ホストが自分の言語に差し替えられます) を
 説明します。
 
 ## 最小のコード
 
 ```ts
-// レイヤーのフィーチャーを属性で塗り分ける
-draw.updateLayer(layerId, {
+// レイヤーの地物を属性で塗り分ける
+draw.layers.update(layerId, {
   styleRule: {
     kind: 'categorical',
     property: 'landuse',
@@ -19,8 +19,8 @@ draw.updateLayer(layerId, {
   },
 });
 
-// 1 つのフィーチャーは規則によらず自分の色を保つ
-draw.updateFeature(featureId, { style: { fillColor: '#ff9800' } });
+// 1 つの地物は規則によらず自分の色を保つ
+draw.features.update(featureId, { style: { fillColor: '#ff9800' } });
 ```
 
 規則はレイヤーを描くときに評価されるので、`landuse` が変わった
@@ -33,7 +33,7 @@ draw.updateFeature(featureId, { style: { fillColor: '#ff9800' } });
 
 | 型 | キー |
 | --- | --- |
-| 点 | `pointColor`、`pointRadius`、`pointShape` |
+| 点 | `pointColor`、`pointRadius`、`pointShape`、`pointOpacity` |
 | 線 | `strokeColor`、`strokeOpacity`、`strokeWidth`、`lineStyle` |
 | 面 | 線のキー、`fillColor`、`fillOpacity` |
 | `Image` | `imageOpacity` |
@@ -42,28 +42,45 @@ draw.updateFeature(featureId, { style: { fillColor: '#ff9800' } });
 `Freehand`、面は `Polygon`、`MultiPolygon`、`Circle` です。
 
 ```ts
-draw.addFeature({
+draw.features.create({
   type: 'LineString',
-  coordinates: [
-    [139.7, 35.68],
-    [139.71, 35.69],
-  ],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [139.7, 35.68],
+      [139.71, 35.69],
+    ],
+  },
   style: { strokeColor: '#1e88e5', strokeWidth: 4, lineStyle: 'dashed' },
 });
 ```
 
-- 色は `#rgb` か `#rrggbb` で、不透明度は 0 から 1 です
+`features.update` は、スタイルをキーごとに併合します。渡したキーだけが
+変わり、ほかのキーはそのまま残ります。`undefined` を渡したキーは消え、
+その地物には規則の色か既定値がまた使われます。
+
+```ts
+// 太くし、色は規則の色に戻す
+draw.features.update(featureId, {
+  style: { strokeWidth: 6, strokeColor: undefined },
+});
+```
+
+- 色は CSS の色 (`#1e88e5`、`rgb(30 136 229)`、`hsl(...)`、`tomato`)
+  で、不透明度は 0 から 1 です。型や形の合わない値は、コード
+  `invalid-input` の `DrawError` を投げます
 - `lineStyle` は `solid`、`dashed`、`dotted` のどれかです
-- `strokeWidth` は、地物を描いたときのズーム (`properties.createdZoom`)
-  での幅をピクセルで表します。その後は紙に描いた線のように、形と同じく
-  地図に合わせて太くなったり細くなったりします。描画モードは、
-  インスタンスを `scaleWithZoom: false` で作ったとき以外は
-  `createdZoom` を書きます。`createdZoom` を持たない地物 (API で足した
-  地物や、このオプションで描いた地物) は、どのズームでも画面上の
-  ピクセルでの幅を保ちます
+- `strokeWidth` は、地物を描いたときのズーム、つまり基準のズーム
+  (プロパティー `maplibre-gl-draw:createdZoom`) での幅をピクセルで
+  表します。その後は紙に描いた線のように、形と同じく地図に合わせて
+  太くなったり細くなったりします
+- 描画モードは、オプション `scaleWithZoom` が `false` のとき以外は
+  基準のズームを書きます。基準のズームを持たない地物
+  (`features.create` で作った地物や、このオプションを切って描いた地物)
+  は、どのズームでも画面上のピクセルでの幅を保ちます
 - 点は、どのズームでも画面上の大きさを保ちます
 - `pointShape` は `circle`、`square`、`triangle`、`star` のどれかで、
-  既定値の `shape` より優先されます。そのため、1 つのインスタンスの中で
+  既定値の形より優先されます。そのため、1 つのインスタンスの中で
   点の形を混ぜられます。当たり判定は、形によらず、その形を囲む円で
   行います
 - ロックされた地物はスタイルを変えられません
@@ -74,40 +91,48 @@ draw.addFeature({
 
 ## 既定値
 
-自分のスタイルを持たない地物と、描画中のプレビューの見た目は、
-インスタンスに `Options.style` で 1 度だけ設定します。ここでの色は、
-各成分が 0 から 1 の RGBA の配列です。
+自分のスタイルを持たない地物の見た目は、インスタンスのオプション
+`style` で設定します。種類ごとに 1 つの `FeatureStyle` を渡します。
+種類は `point`、`line`、`polygon`、`circle`、`image` です。省略した
+キーは組み込みの既定値のままです。
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   style: {
-    lineString: {
-      stroke: {
-        width: 3,
-        color: [0.12, 0.53, 0.9, 1],
-        opacity: 1,
-        lineStyle: 'solid',
-      },
+    point: { pointColor: 'tomato', pointRadius: 6, pointShape: 'square' },
+    line: { strokeColor: '#1e88e5', strokeWidth: 3 },
+    polygon: { strokeColor: '#1a3380', fillColor: '#1a3380', fillOpacity: 0.15 },
+  },
+  previewStyle: { strokeColor: '#ff6f00' },
+  selectionStyle: {
+    boxSelection: {
+      fillColor: '#ff6f00',
+      fillOpacity: 0.1,
+      strokeColor: '#ff6f00',
+      strokeWidth: 1,
     },
   },
 });
 ```
 
-設定のまとまりは `point`、`lineString`、`polygon` (`stroke` と `fill`
-を持ちます)、`tentative` (描画のプレビュー) です。選択の枠とハンドルは
-`Options.selectionStyle` で、矩形選択の矩形は `Options.renderingStyle`
-で設定します。既定の値は型のリファレンスに載っています
-([`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)、
-[`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md))。
+- `previewStyle` は描いている途中の形の見た目です。線のキーはその線と
+  頂点の輪郭に、点のキーはその頂点に使われます
+- `selectionStyle` は、選択を囲む枠とそのハンドル (拡縮、回転、頂点、
+  中点、半径のハンドル、円の中心、矩形選択の矩形) の見た目です。渡した
+  部分は、その部分の既定値を置き換えるので、部分ごとにすべての項目を
+  渡してください。色は CSS の色、大きさは CSS ピクセルです
+- `circle` を省略すると `polygon` が使われます。`image` が受け取るのは
+  `imageOpacity` だけです
 
-`point` の `shape` (スタイルで `pointShape` を指定していない点の形) と
-ハンドルの `shape` は、`circle`、`square`、`triangle` (頂点が上)、
-`star` (5 つの角を持ち、先端が上) のどれかです。三角形と星は、同じ
-`size` と縁取りの円の中に収まり、縁取りはその輪郭の内側に描かれ、当たり
-判定はその円で行います。`icon` は拡張の描画器が描くための名前で、組み込みの
-描画器は円として描きます。
+どれもインスタンスの動作中に変えられます。`options.update` は、渡した
+値をすでに設定されている値に併合します。
+
+```ts
+draw.options.update({ style: { polygon: { fillOpacity: 0.4 } } });
+draw.options.update({ scaleWithZoom: false });
+```
 
 ## スタイル規則
 
@@ -126,7 +151,7 @@ declare const otherLayerId: string;
 -->
 
 ```ts
-draw.updateLayer(layerId, {
+draw.layers.update(layerId, {
   styleRule: {
     kind: 'graduated',
     property: 'population',
@@ -136,7 +161,7 @@ draw.updateLayer(layerId, {
   },
 });
 
-draw.updateLayer(otherLayerId, {
+draw.layers.update(otherLayerId, {
   styleRule: {
     kind: 'continuous',
     property: 'height',
@@ -148,21 +173,23 @@ draw.updateLayer(otherLayerId, {
 });
 
 // 規則を外す
-draw.updateLayer(layerId, { styleRule: undefined });
+draw.layers.update(layerId, { styleRule: undefined });
 ```
 
+- 規則の色は `#rrggbb` で書いてください
 - `categorical` は、文字列、数値、真偽値を文字列にしたもの
   (`String(value)`) を `map` のキーと照らし合わせます
 - `graduated` は、昇順に並んだ n 個の `breaks` と n + 1 個の `colors` を
   取ります。`breaks[i]` 未満の値には `colors[i]` が、どの境界値未満でも
   ない値には最後の色が使われます
 - `continuous` は、`ramp` の 2 色を `min` から `max` まで OKLab 色空間で
-  補間するので、中間の色が濁りません。範囲外の値は端の値として扱います
-- `styleRule` はレイヤーの普通の項目です。保存され、独自の形式で書き
-  出され、ほかの変更と同じように `draw.layer.update` で通知されます
+  混ぜるので、中間の色が濁りません。範囲外の値には、近い方の端の色が
+  使われます
+- `styleRule` はレイヤーの普通の項目です。文書と一緒に保存され、変更は
+  ほかの変更と同じように `layer.updated` で届きます
 
 データセットでも同じ型の規則を使えます。
-[大量のデータ](large-data.ja.md) を参照してください。
+[大量のデータを表示する](large-data.ja.md) を参照してください。
 
 ## どの色が使われるか
 
@@ -182,6 +209,15 @@ draw.updateLayer(layerId, { styleRule: undefined });
 - `graduated` と `continuous` が受け付けるのは数値だけです。数字の
   文字列には `other` が使われます
 
+`features.getAppliedStyle(id)` は、地物が実際に描かれる見た目を、
+すべてのキーを埋めて返します。インスペクターのパネルに表示するときに
+使えます。
+
+```ts
+const look = draw.features.getAppliedStyle(featureId);
+if (look) console.log(look.fillColor, look.strokeWidth, look.lineStyle);
+```
+
 評価の処理は純関数としても公開しているので、表の行を地図と同じ色で塗る
 など、ほかの用途にも使えます。
 
@@ -190,18 +226,10 @@ declare const rule: import('@sakuzu/maplibre-gl-draw').StyleRule;
 -->
 
 ```ts
-import {
-  evaluateStyleRule,
-  getStyleRuleChannel,
-  resolveFeatureStyle,
-} from '@sakuzu/maplibre-gl-draw';
+import { evaluateStyleRule, getStyleRuleChannel } from '@sakuzu/maplibre-gl-draw';
 
-const color = evaluateStyleRule(rule, feature.properties); // '#RRGGBB'
-const style = resolveFeatureStyle(
-  feature,
-  rule,
-  getStyleRuleChannel(feature.type),
-);
+const color = evaluateStyleRule(rule, feature.properties);
+const channel = getStyleRuleChannel(feature.type); // 'point'、'stroke'、'fill' のどれか
 ```
 
 ## 凡例
@@ -212,7 +240,7 @@ const style = resolveFeatureStyle(
 ```ts
 import { deriveLegend } from '@sakuzu/maplibre-gl-draw';
 
-const layer = draw.getLayer(layerId);
+const layer = draw.layers.get(layerId);
 const entries = layer?.styleRule ? deriveLegend(layer.styleRule) : [];
 
 const list = document.querySelector('#legend');
@@ -239,22 +267,27 @@ list?.replaceChildren(
 ## メッセージ
 
 ライブラリーが値として返す文字列 (凡例のラベルや、吸着のガイドの
-説明) は、すべてメッセージの表から取られます。既定は英語の
-`MESSAGES_EN` で、ライブラリーに入っている言語はこれだけです。
-`Options.messages` で、インスタンスごとに項目を差し替えられます。
-指定しなかった項目は英語の既定のままです。
+説明) は、すべてメッセージの表から取られます。既定は英語で、
+ライブラリーに入っている言語はこれだけです。オプション `messages` で、
+インスタンスごとに項目を差し替えられます。指定しなかった項目は英語の
+既定のままです。
 
 <!-- docs-check:
 declare const rule: import('@sakuzu/maplibre-gl-draw').StyleRule;
 -->
 
 ```ts
-const draw = createMapLibreGLDraw(map, {
+import { createDraw, deriveLegend } from '@sakuzu/maplibre-gl-draw';
+
+const draw = createDraw(map, {
   messages: {
     legendOther: 'Autres',
     legendBelow: (upper) => `Moins de ${upper}`,
   },
 });
+
+// 表は後から変えられる
+draw.options.update({ messages: { legendAll: 'Tout' } });
 
 // deriveLegend はインスタンスを持たないので、表を引数で受け取る
 deriveLegend(rule, { legendOther: 'Autres' });
@@ -265,24 +298,28 @@ deriveLegend(rule, { legendOther: 'Autres' });
 使えます。ロケールの自動判定は行いません。
 
 ライブラリーが新しい地物、レイヤー、グループに付ける名前の語
-(`Layer 1`) は、この表には含まれません。`Options.autoName` で翻訳して
-ください ([自動の名前](drawing.ja.md#ほかの言語の名前))。
+(`Layer 1`) は、この表には含まれません。オプション `autoName` で翻訳して
+ください ([描画と編集](drawing.ja.md))。
 
 ## 関連する例
 
 - [style-rules](../../examples/style-rules/) では、レイヤーに
-  各種類の規則を設定し、`deriveLegend` で凡例を組み立て、`Options.style`
-  と `Options.messages` を設定します
+  各種類の規則を設定し、`deriveLegend` で凡例を組み立て、オプション
+  `style` と `messages` を設定します
 
 ## リファレンス
 
 - [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)
+  と
+  [`FeatureStyleResolved`](../api/maplibre-gl-draw/type-aliases/FeatureStyleResolved.md)
 - [`StyleRule`](../api/maplibre-gl-draw/type-aliases/StyleRule.md)
 - [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
   と [`LegendEntry`](../api/maplibre-gl-draw/interfaces/LegendEntry.md)
 - [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   と
-  [`resolveFeatureStyle`](../api/maplibre-gl-draw/functions/resolveFeatureStyle.md)
-- [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
-- [`Messages`](../api/maplibre-gl-draw/interfaces/Messages.md) と
-  [`MESSAGES_EN`](../api/maplibre-gl-draw/variables/MESSAGES_EN.md)
+  [`getStyleRuleChannel`](../api/maplibre-gl-draw/functions/getStyleRuleChannel.md)
+- [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
+  (`style`、`previewStyle`、`selectionStyle`、`scaleWithZoom`、
+  `messages`) と
+  [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
+- [`Messages`](../api/maplibre-gl-draw/interfaces/Messages.md)

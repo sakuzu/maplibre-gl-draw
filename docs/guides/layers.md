@@ -2,110 +2,128 @@
 
 Every feature lives in a layer, and features of one layer can be gathered
 into groups. This guide covers the layers, the active layer that receives
-new features, groups, locking, the draw order, and how to put MapLibre's
-own layers between the layers of the drawing.
+new features, groups, locking, the stacking order, and how to put the
+layers of the map between the layers of the drawing.
 
 ## Minimal code
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
-// A default layer ("Layer 1") exists; add a second one and draw into it
-// (addLayer returns null when the instance is read-only)
-const notes = draw.addLayer('Notes');
-if (notes !== null) {
-  draw.setActiveLayer(notes);
+// The document starts with one empty layer; add a second one and draw
+// into it (create returns null while the instance is read-only)
+const notes = draw.layers.create({ name: 'Notes' });
+if (notes) {
+  draw.layers.setActive(notes.id);
   draw.setMode('draw_point');
 
   // Later: lock it, so that its features can be selected but not edited
-  draw.updateLayer(notes, { locked: true });
+  draw.layers.update(notes.id, { locked: true });
 }
 ```
 
 ## Layers
 
-A `Layer` has a `name`, `visible`, `locked`, an `opacity`, an `order` of
-the items it holds (feature and group IDs, the end is the front) and an
-optional `styleRule` ([Styles](styles.md)).
+A `Layer` has a `name`, `visible`, `locked`, an `opacity`, the `items` it
+holds (the IDs of its features and groups, from the back), an optional
+`styleRule` ([Styles](styles.md)) and optional `metadata` of your own.
 
 | Method | Does |
 | --- | --- |
-| `addLayer(name?)` | adds a layer at the front and returns its ID |
-| `updateLayer(id, updates)` | changes fields of a layer |
-| `deleteLayer(id)` | deletes a layer with its features and groups |
-| `getAllLayers()`, `getLayer(id)` | reads |
+| `layers.create(input)` | adds a layer, at the front unless `index` is given |
+| `layers.update(id, patch)` | changes the keys given |
+| `layers.delete(id)` | deletes a layer with its features and groups |
+| `layers.get(id)`, `list()`, `count()`, `has(id)` | read |
 
-While the instance is read-only, `addLayer` adds nothing and returns
-`null`, as `addFeature` and `addGroup` do ([Read-only](read-only.md)).
+`create` and `update` return the layer as it was stored. While the
+instance is read-only they change nothing and return `null`, and `delete`
+returns `false` ([Read-only](read-only.md)). An ID that does not exist
+throws a `DrawError` with the code `not-found`. The methods whose name ends
+in `Many` do the same for several layers in one transaction.
 
-A layer or a group added without a name is named by the automatic naming
+```ts
+const roads = draw.layers.create({ name: 'Roads', opacity: 0.8, index: 0 });
+const hidden = draw.layers.list({ visible: false });
+```
+
+A layer or a group created without a name is named by the automatic naming
 (`Layer 2`, `Group 1`), in the words of the `autoName` option
 ([Automatic names](drawing.md#automatic-names)).
 
-On creation a default layer with the ID `default-layer` is created. With
-`initDefaultLayer: false` no layer is created, and the host creates the
-layers itself, for example when it restores a structure from its own data.
+When the instance is created, the document starts with one empty layer.
+With `initDefaultLayer: false` no layer is created, and the application
+creates the layers itself, for example when it restores them from its own
+data.
 
-`deleteLayer` deletes whatever the layer holds. `draw.deleteSelection()`
-and the Delete key, when a layer is selected, keep at least one layer and
-do not delete a layer that holds a locked feature or group.
+`layers.delete` deletes whatever the layer holds, and returns `false` for a
+layer that is locked or holds a locked feature or group. Deleting the
+selection (`selection.delete()` and the Delete key) with layers selected
+keeps at least one layer.
 
-Changes emit `draw.layer.create`, `draw.layer.update`, `draw.layer.delete`
-and `draw.layer.reorder`.
+Changes emit `layer.created`, `layer.updated`, `layer.deleted` and
+`layer.reordered`.
 
 ## The active layer
 
-New features go into the active layer. `setActiveLayer(id)` sets it and
-`getActiveLayer()` reads it. When the active layer is deleted, the first
-layer becomes active.
+New features go into the active layer. `layers.setActive(id)` sets it and
+`layers.getActive()` returns it. A locked layer cannot become active:
+`setActive` returns `false` for it. When the active layer is deleted, the
+first layer becomes active.
 
 User drawing writes only into a layer that exists, is not locked and is
-visible (neither hidden for everyone nor locally hidden). When the active
-layer is not writable, a drawing goes into the first writable layer, and
-the active layer comes back once it is writable again. While no layer is
-writable, `setMode` refuses the drawing modes. This rule is for user
-drawing only: `addFeature` and `load` accept any existing layer.
+visible (neither hidden for everyone nor hidden on this client). When the
+active layer is not writable, a drawing goes into the first writable layer,
+and the active layer comes back once it is writable again. While no layer
+is writable, `setMode` refuses the drawing modes. This rule is for user
+drawing only: `features.create` and `document.load` accept any existing
+layer.
 
-## Draw order
+## Stacking order
 
-The end of an array is the front at every level:
+The front is at the end of every list:
 
-1. between layers, the layer order (`getLayerOrder()`)
-2. inside a layer, `layer.order` (features and groups)
+1. between layers, the order of `layers.list()`
+2. inside a layer, `layer.items` (features and groups)
 3. inside a group, `group.featureIds`
 
-`getAllFeatures()` returns every feature in this order, from the back.
+`features.list()` returns every feature in this order, from the back.
+`layers.reorder` takes the IDs of every layer from the back, and
+`features.move` and `groups.move` place features and groups. Without an
+`index` a move goes to the front of its destination; `index: 0` is the
+back.
 
 <!-- docs-check:
-declare const notes: string;
+declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
 -->
 
 ```ts
-// Put the notes layer behind the default layer
-draw.setLayerOrder([notes, 'default-layer']);
+// Put the notes layer behind every other layer
+const others = draw.layers.list().filter((layer) => layer.id !== notes.id);
+draw.layers.reorder([notes.id, ...others.map((layer) => layer.id)]);
 
 // Bring one feature to the front of its layer
-const layer = draw.getLayer('default-layer');
-if (layer) draw.reorderInLayer(featureId, layer.id, layer.order.length - 1);
+const target = draw.features.get(featureId);
+if (target) draw.features.move(target.id, { layerId: target.layerId });
 
 // Move a feature or a group to another layer
-draw.moveToLayer(featureId, notes);
+draw.features.move(featureId, { layerId: notes.id });
+draw.groups.move(groupId, { layerId: notes.id, index: 0 });
 ```
 
-The layer order is part of the document: `export('native')` saves it and
-`load()` replaces it as a whole, and a replaced store holds it. It
-can also hold entries of your own that are not layers: the ID of a
-dataset ([Large data](large-data.md)) and separators
-(below). Their meaning is yours; the library keeps each at its position.
+- A feature moved to a layer leaves its group; `{ groupId }` moves it into
+  a group of any layer, and `{ groupId: null }` takes it out of its group
+  and puts it just in front of the group
+- `moveMany` moves several features or groups and keeps their order among
+  them
+- A move of a locked item, or into a locked layer or group, returns
+  `false` and changes nothing
+- `feature.moved` reports each feature that moved, with where it came from
+  and where it went
 
-- `setLayerOrder` keeps an ID that is not a layer. It drops empty strings
-  and keeps a repeated ID at its first position
-- `addLayer` puts the new layer at the front, and `deleteLayer` takes only
-  that layer's ID out. Nothing else removes an entry, so an entry of yours
-  stays until you set an order without it
-- An ID that names nothing is skipped when drawing
+The stacking order is part of the document: `document.toJSON()` writes it
+in `layerOrder`, and `document.load` of a document replaces it.
 
 ## Groups
 
@@ -119,35 +137,35 @@ declare const idB: string;
 
 ```ts
 // null while read-only
-const groupId = draw.addGroup([idA, idB], draw.getActiveLayer(), 'Site');
+const site = draw.groups.create({ featureIds: [idA, idB], name: 'Site' });
 
 // Or from the current selection, like Cmd/Ctrl+G
-draw.select([idA, idB]);
-const created = draw.groupSelection(); // null when it cannot group
+draw.selection.set('feature', [idA, idB]);
+const created = draw.selection.group(); // null when it cannot group
 ```
 
-`groupSelection` groups when two or more features are selected, all in the
-same layer, and none of them already in a group. The group takes the place
-of the frontmost selected feature in the layer's order.
+`groups.create` throws a `DrawError` when the features are not all in the
+same layer. `selection.group()` groups when two or more features are
+selected, all in the same layer, and none of them already in a group. The
+group takes the place of the frontmost of its features in the layer.
 
 | Method | Does |
 | --- | --- |
-| `addFeatureToGroup(featureId, groupId, index?)` | moves a feature in |
-| `removeFeatureFromGroup(featureId)` | puts it right after the group |
-| `reorderInGroup(featureId, groupId, index)` | reorders inside |
-| `ungroupSelection()` | dissolves or takes members out |
-| `ungroupGroup(groupId)` | dissolves one group |
-| `deleteGroup(groupId)` | deletes the group, keeps the features |
+| `features.move(id, { groupId })` | moves a feature into a group |
+| `features.move(id, { groupId: null })` | takes it out, in front of the group |
+| `features.move(id, { groupId, index })` | reorders inside the group |
+| `groups.delete(id)` | dissolves a group, keeps the features |
+| `selection.ungroup()` | dissolves the selected groups |
 
-- `ungroupSelection` dissolves a selected group, or takes the selected
-  members out of their group; it is what Shift+Cmd/Ctrl+G does
-- Dissolving or deleting a group puts its features where the group was, in
-  their order
-- A group left empty (its last member removed or deleted) is deleted
-  automatically
-- A feature is always listed in exactly one place: in its group's
-  `featureIds` when it has a `groupId`, otherwise in its layer's `order`.
-  Changing `layerId` or `groupId` with `updateFeature` moves it
+- Dissolving a group puts its features where the group was, in their order
+- Shift+Cmd/Ctrl+G dissolves a selected group, or takes the selected
+  features out of their group
+- A group left empty (its last feature moved out or deleted) is deleted
+  as well
+- A feature is always listed in exactly one place: in the `featureIds` of
+  its group when it has a `groupId`, otherwise in the `items` of its layer
+
+Changes emit `group.created`, `group.updated` and `group.deleted`.
 
 ## Locking
 
@@ -155,24 +173,33 @@ of the frontmost selected feature in the layer's order.
 and refuses every other edit.
 
 ```ts
-draw.updateFeature(featureId, { locked: true });
-draw.updateGroup(groupId, { locked: true });
-draw.updateLayer(layerId, { locked: true });
+draw.features.update(featureId, { locked: true });
+draw.groups.update(groupId, { locked: true });
+draw.layers.update(layerId, { locked: true });
 ```
 
 - The lock is inherited: a feature is locked when it, its group or its
-  layer is locked. `isFeatureLocked(feature, draw.getStore())` answers
-  that
-- A locked feature can be selected, and `getSelectedFeatures()` includes
-  it
+  layer is locked
+- A locked feature can be selected, and `selection.features()` includes it
 - It cannot be moved, resized, rotated, vertex-edited or deleted, it shows
   no handles, and box selection skips it
-- `updateFeature`, `updateGroup` and `updateLayer` return `false` for an
-  update of a locked item that changes anything other than `locked` and
-  `visible`
+- `update` returns `null` for a locked item when the patch changes anything
+  other than `locked` and `visible`, and `delete` and `move` return `false`
 - The Delete key keeps locked features: a selected group loses only its
-  unlocked members, and a layer that holds a locked item is not deleted
-- The geometry operations skip locked features
+  unlocked features, and a layer that holds a locked item is not deleted
+- The geometry operations refuse locked features
+
+The inherited lock is read from the three items:
+
+```ts
+function isLocked(id: string): boolean {
+  const f = draw.features.get(id);
+  if (!f) return false;
+  const group = f.groupId ? draw.groups.get(f.groupId) : undefined;
+  const layer = draw.layers.get(f.layerId);
+  return f.locked || group?.locked === true || layer?.locked === true;
+}
+```
 
 To stop every edit at once without touching the data, use read-only or the
 interaction lock ([Read-only](read-only.md)).
@@ -180,87 +207,99 @@ interaction lock ([Read-only](read-only.md)).
 ## Visibility
 
 `visible: false` on a feature, a group or a layer hides it for everyone
-who shares the document; it is saved and exported. To hide something on
-this client only, use `setLocallyHidden` ([Read-only](read-only.md)).
+who shares the document; it is saved and written out. To hide something on
+this client only, use `draw.hidden.add(id)` ([Read-only](read-only.md)).
 Hidden features are not drawn, hit-tested, snapped to or used by the
-geometry operations.
+geometry operations, and they cannot be selected.
 
 ## Opacity
 
-`opacity` (0 to 1) fades a whole layer. It is multiplied into the alpha of
-everything drawn for the layer: fills, lines, points, images, and what the
-renderers of custom types and feature companions draw.
+`opacity` (0 to 1) fades a whole layer. It is multiplied into the opacity
+of everything drawn for the layer: fills, lines, points, images, and what
+custom feature types draw.
 
 ```ts
-draw.updateLayer(layerId, { opacity: 0.4 });
+draw.layers.update(layerId, { opacity: 0.4 });
 ```
 
-- It is applied at draw time, so changing it (a slider, say) rebuilds
-  nothing
+- It is applied as the map is drawn, so changing it (with a slider, say)
+  is cheap
 - It is only a look: a feature in a layer at opacity 0 is still
   hit-tested and can be selected. To take a layer out of the way, hide it
-- A custom renderer receives the value as `context.opacity` and
-  multiplies it into its own alpha ([Custom types](custom-types.md))
+- A custom renderer receives the value as `opacity` of its
+  `RenderContext` and multiplies it into its own ([Custom types](custom-types.md))
 
-## Separators and frames
+## Map layers between the layers
 
-The drawing is one MapLibre custom layer, so a MapLibre layer (vector
-tiles, raster) is either below or above all of it. To put such a layer
-between the layers of the drawing, mark an entry of the layer order as a
-separator. The drawing is then split into frames, one custom layer per
-interval between separators, and the host moves its MapLibre layer between
-them. A single feature cannot be placed between MapLibre layers with
-`beforeId`; a whole interval of the drawing moves as one.
+The drawing is drawn by one layer of the map, so a layer of the map
+(vector tiles, raster) is either below or above all of it. To put such a
+layer between the layers of the drawing, add an entry of your own to the
+stacking order and tell the instance, with `isExternalEntry`, that it
+comes from outside the document. The drawing is then divided at those
+entries, one map layer per run of layers between them, and the application
+moves its map layer between the runs. A single feature cannot be placed
+between layers of the map; a whole run of the drawing moves as one.
 
 <!-- docs-check:
 declare const parcels: string;
-declare const notes: string;
 -->
 
 ```ts
 const SEPARATOR = 'sep:';
 
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   isExternalEntry: (id) => id.startsWith(SEPARATOR),
 });
 
-// Roads (a MapLibre layer) between the parcels and the notes
-draw.setLayerOrder([parcels, `${SEPARATOR}roads`, notes]);
+// The roads of the map go just in front of the parcels layer
+const doc = draw.document.toJSON();
+doc.layerOrder.splice(doc.layerOrder.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
+await draw.document.load(doc);
 
-function placeNativeLayers(): void {
-  const order = draw.getLayerOrder();
-  const slots = draw.getRenderSlots();
+function placeMapLayers(): void {
+  const order = draw.getStore().getLayerOrder();
+  const stack = draw.getLayerStack();
   order.forEach((entry, index) => {
     if (!entry.startsWith(SEPARATOR)) return;
-    // Just below the frame above the separator, or at the top
-    const above = slots.find((slot) => slot.from > index);
+    // Just below the run above the entry, or at the top
+    const above = stack.find((run) => run.from > index);
     map.moveLayer(entry.slice(SEPARATOR.length), above?.layerId);
   });
 }
 
-placeNativeLayers();
-draw.on('draw.renderslots.change', placeNativeLayers);
+placeMapLayers();
+draw.on('layerStack.changed', placeMapLayers);
 ```
 
-- `getRenderSlots()` returns the frames from the back, each with its
-  interval `[from, to)` on the layer order and the ID of its custom layer
-- Without separators there is one frame, `maplibre-gl-draw-layer`
-- `draw.renderslots.change` fires when frames are added or removed or an
-  interval changes; place the MapLibre layers again then
+- The entries of your own go into the stacking order through the
+  document: the `layerOrder` of a document you load, or the Store you give
+  the instance. `layers.reorder` moves only the layers and keeps each
+  entry of your own at its position
+- `draw.getStore().getLayerOrder()` returns the whole stacking order, the
+  entries of your own included
+- `draw.getLayerStack()` returns the runs from the back, each with its
+  range `[from, to)` on the stacking order and the ID of the map layer
+  that draws it
+- Without entries of your own there is one run, `maplibre-gl-draw-layer`
+- `layerStack.changed` fires when runs are added or removed or a range
+  changes; place the map layers again then
+- A dataset with `order: 'layer-order'` is drawn at the position of its ID
+  in the same order ([Showing large data](large-data.md))
 
 ## Examples
 
 - [style-rules](../../examples/style-rules/) adds layers and gives
   them style rules
-- [read-only](../../examples/read-only/) locks a layer and checks
-  `isFeatureLocked`
+- [read-only](../../examples/read-only/) locks a layer
 
 ## Reference
 
-- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
-  (the layer, group and order methods, `getRenderSlots`)
-- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) and
+- [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
+  and [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
+- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md),
+  [`LayerInput`](../api/maplibre-gl-draw/interfaces/LayerInput.md) and
   [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)
-- [`RenderSlot`](../api/maplibre-gl-draw/interfaces/RenderSlot.md)
-- [`isFeatureLocked`](../api/maplibre-gl-draw/functions/isFeatureLocked.md)
+- [`MoveTarget`](../api/maplibre-gl-draw/type-aliases/MoveTarget.md)
+- [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`getLayerStack`)
+  and [`LayerStackEntry`](../api/maplibre-gl-draw/interfaces/LayerStackEntry.md)
 - [Events](../reference/events.md)

@@ -9,7 +9,7 @@ strings the library returns, which a host can replace for its language.
 
 ```ts
 // Color the features of a layer by an attribute
-draw.updateLayer(layerId, {
+draw.layers.update(layerId, {
   styleRule: {
     kind: 'categorical',
     property: 'landuse',
@@ -19,7 +19,7 @@ draw.updateLayer(layerId, {
 });
 
 // One feature keeps its own color whatever the rule says
-draw.updateFeature(featureId, { style: { fillColor: '#ff9800' } });
+draw.features.update(featureId, { style: { fillColor: '#ff9800' } });
 ```
 
 The rule is evaluated when the layer is drawn, so a feature whose
@@ -32,7 +32,7 @@ takes the rule color or the default.
 
 | Types | Keys |
 | --- | --- |
-| points | `pointColor`, `pointRadius`, `pointShape` |
+| points | `pointColor`, `pointRadius`, `pointShape`, `pointOpacity` |
 | lines | `strokeColor`, `strokeOpacity`, `strokeWidth`, `lineStyle` |
 | areas | the line keys, `fillColor`, `fillOpacity` |
 | `Image` | `imageOpacity` |
@@ -42,28 +42,45 @@ Points are `Point` and `MultiPoint`; lines are `LineString`,
 `Circle`.
 
 ```ts
-draw.addFeature({
+draw.features.create({
   type: 'LineString',
-  coordinates: [
-    [139.7, 35.68],
-    [139.71, 35.69],
-  ],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [139.7, 35.68],
+      [139.71, 35.69],
+    ],
+  },
   style: { strokeColor: '#1e88e5', strokeWidth: 4, lineStyle: 'dashed' },
 });
 ```
 
-- Colors are `#rgb` or `#rrggbb`; opacities run from 0 to 1
+`features.update` merges the style key by key: the keys you give change,
+the others stay, and a key given as `undefined` is removed, so the
+feature takes the rule color or the default again.
+
+```ts
+// Thicker, and back to the color of the rule
+draw.features.update(featureId, {
+  style: { strokeWidth: 6, strokeColor: undefined },
+});
+```
+
+- Colors are CSS colors (`#1e88e5`, `rgb(30 136 229)`, `hsl(...)`,
+  `tomato`); opacities run from 0 to 1. A value of the wrong type or
+  form throws a `DrawError` with the code `invalid-input`
 - `lineStyle` is `solid`, `dashed` or `dotted`
-- `strokeWidth` is in pixels at the zoom the feature was drawn at
-  (`properties.createdZoom`), and the line then grows and shrinks with the
-  map like its geometry, like a line drawn on paper. The drawing modes
-  write `createdZoom` unless the instance is created with
-  `scaleWithZoom: false`. A feature without `createdZoom` (one added
-  through the API, or drawn with that option) keeps its width in pixels on
-  the screen at every zoom
+- `strokeWidth` is in pixels at the zoom the feature was drawn at, its
+  reference zoom (the property `maplibre-gl-draw:createdZoom`). The line
+  then grows and shrinks with the map like its geometry, like a line
+  drawn on paper
+- The drawing modes write the reference zoom unless the option
+  `scaleWithZoom` is `false`. A feature without it (one created with
+  `features.create`, or drawn with that option off) keeps its width in
+  pixels on the screen at every zoom
 - A point keeps its size on screen at every zoom
 - `pointShape` is `circle`, `square`, `triangle` or `star`, and wins over
-  the `shape` of the defaults, so the points of one instance can mix
+  the shape of the defaults, so the points of one instance can mix
   shapes. Whatever the shape, a point is hit like the circle that encloses
   it
 - A locked feature refuses a style change ([Layers and groups](layers.md))
@@ -73,41 +90,50 @@ draw.addFeature({
 
 ## Defaults
 
-The look of a feature with no style of its own, and of the preview while
-drawing, is set once for the instance with `Options.style`. Colors here
-are RGBA arrays with components from 0 to 1.
+The look of a feature with no style of its own is set for the instance
+with the option `style`, one `FeatureStyle` per kind: `point`, `line`,
+`polygon`, `circle` and `image`. A key left out keeps the built-in
+default.
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   style: {
-    lineString: {
-      stroke: {
-        width: 3,
-        color: [0.12, 0.53, 0.9, 1],
-        opacity: 1,
-        lineStyle: 'solid',
-      },
+    point: { pointColor: 'tomato', pointRadius: 6, pointShape: 'square' },
+    line: { strokeColor: '#1e88e5', strokeWidth: 3 },
+    polygon: { strokeColor: '#1a3380', fillColor: '#1a3380', fillOpacity: 0.15 },
+  },
+  previewStyle: { strokeColor: '#ff6f00' },
+  selectionStyle: {
+    boxSelection: {
+      fillColor: '#ff6f00',
+      fillOpacity: 0.1,
+      strokeColor: '#ff6f00',
+      strokeWidth: 1,
     },
   },
 });
 ```
 
-The groups are `point`, `lineString`, `polygon` (with `stroke` and `fill`)
-and `tentative` (the drawing preview). The selection frame and handles are
-set with `Options.selectionStyle`, and the box of a box selection with
-`Options.renderingStyle`. The default values are listed on the types
-([`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md),
-[`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md)).
+- `previewStyle` is the look of the shape being drawn: its stroke keys
+  give its lines and the outlines of its vertices, its point keys its
+  vertices
+- `selectionStyle` is the look of the box around the selection and of its
+  handles (resize, rotate, vertex, midpoint and radius handles, the center
+  of a circle and the box of a box selection). Each part you give
+  replaces the default of that part, so give it whole. Its colors are CSS
+  colors and its sizes CSS pixels
+- `circle` falls back to `polygon` when it is left out, and `image` takes
+  only `imageOpacity`
 
-The `shape` of `point` (the shape of a point whose style names no
-`pointShape`) and of the handles is `circle`, `square`, `triangle`
-(a vertex pointing up) or `star` (five points, a tip pointing up). The
-triangle and the star fit inside the circle of the same `size` and stroke,
-their stroke is drawn inside that outline, and they are hit like that
-circle. `icon` is a name for an extension renderer to draw; the built-in
-renderers draw it as a circle.
+Every one of them can change while the instance runs. `options.update`
+merges what you give into the values already set:
+
+```ts
+draw.options.update({ style: { polygon: { fillOpacity: 0.4 } } });
+draw.options.update({ scaleWithZoom: false });
+```
 
 ## Style rules
 
@@ -126,7 +152,7 @@ declare const otherLayerId: string;
 -->
 
 ```ts
-draw.updateLayer(layerId, {
+draw.layers.update(layerId, {
   styleRule: {
     kind: 'graduated',
     property: 'population',
@@ -136,7 +162,7 @@ draw.updateLayer(layerId, {
   },
 });
 
-draw.updateLayer(otherLayerId, {
+draw.layers.update(otherLayerId, {
   styleRule: {
     kind: 'continuous',
     property: 'height',
@@ -148,23 +174,24 @@ draw.updateLayer(otherLayerId, {
 });
 
 // Remove the rule
-draw.updateLayer(layerId, { styleRule: undefined });
+draw.layers.update(layerId, { styleRule: undefined });
 ```
 
+- Write the colors of a rule as `#rrggbb`
 - `categorical` matches strings, numbers and booleans by their text
   (`String(value)`) against the keys of `map`
 - `graduated` takes n ascending `breaks` and n + 1 `colors`: a value below
   `breaks[i]` gets `colors[i]`, and a value below none of them gets the
   last color
-- `continuous` interpolates the two colors of `ramp` from `min` to `max`
-  in the OKLab color space, so the middle does not turn muddy; values out
-  of range are clamped
-- `styleRule` is an ordinary field of the layer: it is saved, exported in
-  the native format, and notified by `draw.layer.update` like any other
+- `continuous` blends the two colors of `ramp` from `min` to `max` in the
+  OKLab color space, so the middle does not turn muddy; values out of
+  range take the color of the nearer end
+- `styleRule` is an ordinary field of the layer: it is saved with the
+  document, and a change of it arrives as `layer.updated` like any other
   change
 
 A dataset takes the same rule type; see
-[Large data](large-data.md).
+[Showing large data](large-data.md).
 
 ## Which color wins
 
@@ -182,7 +209,15 @@ A dataset takes the same rule type; see
 - `graduated` and `continuous` accept numbers only; a numeric string gets
   `other`
 
-The evaluation is exposed as pure functions for other uses, such as
+`features.getAppliedStyle(id)` returns the look a feature is drawn with,
+every key filled in, which an inspector panel can show:
+
+```ts
+const look = draw.features.getAppliedStyle(featureId);
+if (look) console.log(look.fillColor, look.strokeWidth, look.lineStyle);
+```
+
+The evaluation is also exposed as pure functions for other uses, such as
 coloring a table row the same way as the map:
 
 <!-- docs-check:
@@ -190,18 +225,10 @@ declare const rule: import('@sakuzu/maplibre-gl-draw').StyleRule;
 -->
 
 ```ts
-import {
-  evaluateStyleRule,
-  getStyleRuleChannel,
-  resolveFeatureStyle,
-} from '@sakuzu/maplibre-gl-draw';
+import { evaluateStyleRule, getStyleRuleChannel } from '@sakuzu/maplibre-gl-draw';
 
-const color = evaluateStyleRule(rule, feature.properties); // '#RRGGBB'
-const style = resolveFeatureStyle(
-  feature,
-  rule,
-  getStyleRuleChannel(feature.type),
-);
+const color = evaluateStyleRule(rule, feature.properties);
+const channel = getStyleRuleChannel(feature.type); // 'point', 'stroke' or 'fill'
 ```
 
 ## Legends
@@ -212,7 +239,7 @@ draws no legend; the host builds it.
 ```ts
 import { deriveLegend } from '@sakuzu/maplibre-gl-draw';
 
-const layer = draw.getLayer(layerId);
+const layer = draw.layers.get(layerId);
 const entries = layer?.styleRule ? deriveLegend(layer.styleRule) : [];
 
 const list = document.querySelector('#legend');
@@ -240,21 +267,26 @@ to the host.
 
 Every string the library returns as a value (the legend labels, the
 descriptions of the snapping guides) comes from a table of messages. The
-default is `MESSAGES_EN`, in English, the only language the library ships.
-Replace entries for an instance with `Options.messages`; the entries left
-out keep the English default.
+defaults are in English, the only language the library ships. Replace
+entries for an instance with the option `messages`; the entries left out
+keep the English default.
 
 <!-- docs-check:
 declare const rule: import('@sakuzu/maplibre-gl-draw').StyleRule;
 -->
 
 ```ts
-const draw = createMapLibreGLDraw(map, {
+import { createDraw, deriveLegend } from '@sakuzu/maplibre-gl-draw';
+
+const draw = createDraw(map, {
   messages: {
     legendOther: 'Autres',
     legendBelow: (upper) => `Moins de ${upper}`,
   },
 });
+
+// The table can change later
+draw.options.update({ messages: { legendAll: 'Tout' } });
 
 // deriveLegend has no instance, so it takes the table as an argument
 deriveLegend(rule, { legendOther: 'Autres' });
@@ -265,24 +297,28 @@ turned into strings. The table belongs to the instance, so two maps on a
 page can use different languages. There is no locale detection.
 
 The words of the names the library gives new features, layers and groups
-(`Layer 1`) are not in this table. Translate them with `Options.autoName`
-([Automatic names](drawing.md#names-in-another-language)).
+(`Layer 1`) are not in this table. Translate them with the option
+`autoName` ([Drawing and editing](drawing.md)).
 
 ## Examples
 
-- [style-rules](../../examples/style-rules/) gives layers each kind
-  of rule, builds a legend with `deriveLegend`, and sets `Options.style`
-  and `Options.messages`
+- [style-rules](../../examples/style-rules/) gives a layer each kind
+  of rule, builds a legend with `deriveLegend`, and sets the options
+  `style` and `messages`
 
 ## Reference
 
 - [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)
+  and
+  [`FeatureStyleResolved`](../api/maplibre-gl-draw/type-aliases/FeatureStyleResolved.md)
 - [`StyleRule`](../api/maplibre-gl-draw/type-aliases/StyleRule.md)
 - [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
   and [`LegendEntry`](../api/maplibre-gl-draw/interfaces/LegendEntry.md)
 - [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   and
-  [`resolveFeatureStyle`](../api/maplibre-gl-draw/functions/resolveFeatureStyle.md)
-- [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
-- [`Messages`](../api/maplibre-gl-draw/interfaces/Messages.md) and
-  [`MESSAGES_EN`](../api/maplibre-gl-draw/variables/MESSAGES_EN.md)
+  [`getStyleRuleChannel`](../api/maplibre-gl-draw/functions/getStyleRuleChannel.md)
+- [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
+  (`style`, `previewStyle`, `selectionStyle`, `scaleWithZoom`,
+  `messages`) and
+  [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
+- [`Messages`](../api/maplibre-gl-draw/interfaces/Messages.md)
