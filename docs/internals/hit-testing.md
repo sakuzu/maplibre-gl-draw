@@ -349,10 +349,10 @@ entries within one notification does not matter.
   so the index follows the shape being dragged. The tentative geometry of a
   drawing mode is not a feature and is not indexed
 - A type added with `draw.extensions.featureTypes` is measured with the
-  `getBoundingBox` of its engine handler, and adding it re-measures the features of that
-  type. When its extent changes for a reason the Store does not see (a
-  font that arrives later, for example), the plugin calls
-  `ctx.invalidateFeatures(type)`, which reaches `invalidateType(type)`
+  `getBoundingBox` of its engine handler, and adding it re-measures the
+  features of that type. When its extent changes for a reason the Store
+  does not see (a font that arrives later, for example), the extension
+  calls `ctx.invalidate({ type })`, which reaches `invalidateType(type)`
 - `setTileSize()` re-derives every feature, since the extent of an Image
   depends on the tile size
 - `destroy()` of the draw instance stops the subscription and empties the

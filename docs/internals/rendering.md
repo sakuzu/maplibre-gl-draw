@@ -1921,9 +1921,9 @@ to physical pixels when drawn. All reads of the ratio go through
   (`PixelRatioInput = number | (() => number) | PixelRatioProvider`), so a
   change reaches every reader from the next frame on. Extension renderers
   get the resolved value as `RenderContext.pixelRatio`
-- `rendering.renderScale` of the options multiplies a factor on top (default 1). A host
-  that shows the map scaled down uses it to shrink what is fixed in screen
-  pixels by the same ratio
+- `rendering.renderScale` of the options multiplies a factor on top
+  (default 1). A host that shows the map scaled down uses it to shrink what
+  is fixed in screen pixels by the same ratio
 - Retained batches bake the ratio and are rebuilt when it changes: the
   Store path compares `builtPixelRatio`, datasets use
   `syncDevicePixelRatio()`
