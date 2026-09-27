@@ -656,11 +656,27 @@ export class SelectionHandlesRenderer {
   }
 
   /**
+   * Draws the auxiliary handles of the extensions with the look of the vertex handles, the
+   * size their hit test uses
+   */
+  drawAuxiliaryHandles(positions: readonly Coordinate[], zoom: number): void {
+    this.drawHandlesWithStyle(
+      positions.map((position) => ({ position })),
+      this.config.vertexHandle.point,
+      zoom,
+    );
+  }
+
+  /**
    * Draws a group of handles with a single style
    *
    * When there are two or more of them and instancing is available, they are drawn together.
    */
-  private drawHandlesWithStyle(handles: HandleInfo[], style: PointStyle, zoom: number): void {
+  private drawHandlesWithStyle(
+    handles: ReadonlyArray<Pick<HandleInfo, 'position'>>,
+    style: PointStyle,
+    zoom: number,
+  ): void {
     if (handles.length === 0) return;
 
     if (!this.pointInstanceRenderer || handles.length < 2) {

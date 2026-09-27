@@ -41,6 +41,7 @@ vi.mock('../ui/selection-ui-drawer.js', () => ({
     });
   },
   renderFollowedVertices: () => {},
+  renderGlobalAuxiliaryHandles: () => {},
 }));
 
 /** Counts of the GL objects created and deleted, and the loss flag */

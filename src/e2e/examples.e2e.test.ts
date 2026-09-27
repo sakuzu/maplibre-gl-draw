@@ -22,7 +22,15 @@ import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
-import { click, type E2EWindow, launchBrowser, type PagePoint, pageOf, settle } from './harness.js';
+import {
+  click,
+  drag,
+  type E2EWindow,
+  launchBrowser,
+  type PagePoint,
+  pageOf,
+  settle,
+} from './harness.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES = join(here, '../../examples');
@@ -196,6 +204,43 @@ function output(page: Page): Promise<string> {
   return page.evaluate(() => document.getElementById('output')?.textContent ?? '');
 }
 
+/**
+ * The colors of the canvas within 2 CSS px of where a coordinate is drawn, read in the render
+ * event of the next frame (the drawing buffer is cleared after it is shown)
+ */
+function colorsAround(page: Page, lngLat: number[]): Promise<Array<[number, number, number]>> {
+  return page.evaluate(
+    (coord) =>
+      new Promise<Array<[number, number, number]>>((resolve) => {
+        const { map } = window as unknown as E2EWindow;
+        map.once('render', () => {
+          const canvas = map.getCanvas();
+          const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
+          const ratio = gl.drawingBufferWidth / canvas.clientWidth;
+          const p = map.project(coord as [number, number]);
+          const r = Math.round(2 * ratio);
+          const x = Math.round(p.x * ratio) - r;
+          const y = gl.drawingBufferHeight - 1 - Math.round(p.y * ratio) - r;
+          const size = 2 * r + 1;
+          const pixels = new Uint8Array(size * size * 4);
+          gl.readPixels(x, y, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          const colors: Array<[number, number, number]> = [];
+          for (let i = 0; i < pixels.length; i += 4) {
+            colors.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+          }
+          resolve(colors);
+        });
+        map.triggerRepaint();
+      }),
+    lngLat,
+  );
+}
+
+/** Whether a color is the white of the fill of a handle */
+function isWhite([r, g, b]: [number, number, number]): boolean {
+  return r >= 250 && g >= 250 && b >= 250;
+}
+
 /** Clicks the vertices of a closed ring, the last click on the first vertex */
 async function clickRing(page: Page, points: PagePoint[]): Promise<void> {
   for (const point of [...points, points[0]]) await click(page, point);
@@ -366,6 +411,43 @@ describe('the examples', () => {
     expect(
       await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
     ).toEqual([route.id]);
+    await close();
+  });
+
+  it('custom-feature-type shows the handles of its definition and drags one', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-type');
+    await page.click('#add-route');
+    const route = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      const all = draw.features.list();
+      return all[all.length - 1];
+    });
+    const [first] = (route.geometry as GeoJSON.LineString).coordinates;
+    // Not selected: no handle, so nothing white where the first vertex is
+    expect((await colorsAround(page, first)).some(isWhite)).toBe(false);
+
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      route.id,
+    );
+    await settle(page);
+    // Selected: the handle is drawn there with the look of a vertex handle
+    expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
+
+    // The handle takes the drag, and the definition moves the vertex
+    const from = await pageOf(page, first);
+    await drag(page, from, { x: from.x - 40, y: from.y + 30 });
+    const moved = await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.features.get(id)?.geometry,
+      route.id,
+    );
+    const [movedFirst, movedSecond] = (moved as GeoJSON.LineString).coordinates;
+    expect(movedFirst[0]).toBeLessThan(first[0]);
+    expect(movedFirst[1]).toBeLessThan(first[1]);
+    expect(movedSecond).toEqual((route.geometry as GeoJSON.LineString).coordinates[1]);
     await close();
   });
 

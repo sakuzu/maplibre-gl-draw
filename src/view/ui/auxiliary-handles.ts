@@ -5,10 +5,10 @@
  * Extension point for the auxiliary handles
  *
  * A general-purpose hook for showing and grabbing handles on the selected feature that are
- * "neither a vertex nor a resize handle". All core holds is the hit testing and the drag
- * delegation; drawing the handles is the responsibility of the registering side (the plugin
- * of an extension implementation). core knows nothing at all about the meaning of a handle
- * (it only carries the position and the identifier).
+ * "neither a vertex nor a resize handle". Core draws them with the look of the vertex handles
+ * (the selection UI), hit tests them at the same size and delegates their drags. core knows
+ * nothing at all about the meaning of a handle (it only carries the position and the
+ * identifier).
  *
  * There are two ways to emit handles: those bound to the selected feature (getHandles) and
  * those that can always be emitted regardless of the selection (getGlobalHandles). The
@@ -80,9 +80,8 @@ export interface AuxiliaryHandleHit {
  * A source of handles on the selected feature that are neither vertices nor resize handles,
  * and the receiver of their drags.
  *
- * A `HandleProvider` of `draw.extensions.handleProviders` is installed as one. The engine hit tests
- * the handles and delegates their drags; drawing them is the provider's job (with an overlay
- * renderer, for example).
+ * A `HandleProvider` of `draw.extensions.handleProviders` is installed as one. The engine draws
+ * the handles with the look of the vertex handles, hit tests them and delegates their drags.
  */
 export interface AuxiliaryHandleProvider {
   /** Identifier unique within the registry (re-registering with the same id overwrites) */

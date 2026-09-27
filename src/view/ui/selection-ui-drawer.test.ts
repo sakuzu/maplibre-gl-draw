@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests of drawing the following vertices (renderFollowedVertices)
+ * Tests of drawing the following vertices (renderFollowedVertices) and the auxiliary handles
+ * of the extensions
  *
  * Features that follow along when a shared vertex is moved are not selected, so they do not
  * take the path of the selection UI. This verifies that the separate path, which reads the
@@ -14,8 +15,14 @@ import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
+import type { AuxiliaryHandleProvider } from './auxiliary-handles.js';
+import { createSelectionScope } from './selection-scope.js';
 import type { SelectionUIDrawerDeps } from './selection-ui-drawer.js';
-import { renderFollowedVertices } from './selection-ui-drawer.js';
+import {
+  renderFollowedVertices,
+  renderGlobalAuxiliaryHandles,
+  renderSelectionUI,
+} from './selection-ui-drawer.js';
 
 const ZOOM = 10;
 const PROJECTION_DATA = {} as CustomRenderMethodInput['defaultProjectionData'];
@@ -126,5 +133,74 @@ describe('renderFollowedVertices', () => {
     store.setLocallyHidden('f2', true);
     renderFollowedVertices(followed, store, ZOOM, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
+  });
+});
+
+describe('the auxiliary handles of the extensions', () => {
+  let auxiliary: Coordinate[][];
+  let auxDeps: SelectionUIDrawerDeps;
+
+  const provider: AuxiliaryHandleProvider = {
+    id: 'pins',
+    getHandles: (feature) => [{ id: 'a', position: [feature.id === 'f2' ? 12 : 0, 3] }],
+    getGlobalHandles: () => [{ id: 'g', position: [50, 50] }],
+    onHandleDragStart: () => true,
+    onHandleDragMove: () => {},
+    onHandleDragEnd: () => {},
+  };
+
+  beforeEach(() => {
+    auxiliary = [];
+    const scope = createSelectionScope();
+    scope.auxiliaryHandles.register(provider);
+    const box = {
+      topLeft: [10, 10],
+      topRight: [20, 10],
+      bottomRight: [20, 0],
+      bottomLeft: [10, 0],
+      center: [15, 5],
+    };
+    auxDeps = {
+      ...deps,
+      scope,
+      map: {
+        ...deps.map,
+        getCanvas: () => ({ clientWidth: 100, clientHeight: 100 }),
+      } as unknown as MapLibreMap,
+      selectionUIRenderer: {
+        setTransform: vi.fn(),
+        setProjectionData: vi.fn(),
+        draw: vi.fn(),
+        computeCombinedFeatureBoundingBox: () => box,
+        computeFeatureBoundingBox: () => box,
+      },
+      selectionHandlesRenderer: {
+        ...deps.selectionHandlesRenderer,
+        drawAllHandles: vi.fn(),
+        drawAuxiliaryHandles: (positions: Coordinate[]) => auxiliary.push([...positions]),
+      },
+    } as unknown as SelectionUIDrawerDeps;
+  });
+
+  it('draws the handles of the selected feature with the other handles', () => {
+    const feature = store.getFeature('f2') as Feature;
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, null);
+    expect(auxiliary).toEqual([[[12, 3]]]);
+  });
+
+  it('hides them while another operation runs and while the selection is locked', () => {
+    const feature = store.getFeature('f2') as Feature;
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'move' });
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, null, null, true);
+    expect(auxiliary).toEqual([]);
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'auxiliary' });
+    expect(auxiliary).toHaveLength(1);
+  });
+
+  it('draws the handles that belong to no feature', () => {
+    renderGlobalAuxiliaryHandles(ZOOM, PROJECTION_DATA, auxDeps, null);
+    expect(auxiliary).toEqual([[[50, 50]]]);
+    renderGlobalAuxiliaryHandles(ZOOM, PROJECTION_DATA, auxDeps, { operation: 'vertex' });
+    expect(auxiliary).toHaveLength(1);
   });
 });

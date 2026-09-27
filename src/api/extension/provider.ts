@@ -54,7 +54,10 @@ export interface SnapProvider {
 export interface HandleProvider {
   /** The name it is registered under */
   readonly name: string;
-  /** The handles of a selected feature. */
+  /**
+   * The handles of a selected feature. The engine draws them with the look of the vertex
+   * handles, hit tests them at the same size, and gives their drags to `onDrag`.
+   */
   handles(feature: Feature, ctx: ScreenContext): Handle[];
   /**
    * The handles that belong to no feature, shown whatever is selected; they are hit and

@@ -65,7 +65,11 @@ export interface FeatureTypeDefinition {
    * @returns The corners of the extent, or `null` when the feature has nothing to draw
    */
   bounds?(feature: Feature, ctx: ScreenContext): { min: ScreenPoint; max: ScreenPoint } | null;
-  /** The handles that resize or reshape a selected feature. */
+  /**
+   * The handles that resize or reshape a selected feature. The engine draws them with the
+   * look of the vertex handles, hit tests them at the same size, and gives their drags to
+   * `onHandleDrag`.
+   */
   handles?(feature: Feature, ctx: ScreenContext): Handle[];
   /**
    * The change a drag of one of its handles makes.

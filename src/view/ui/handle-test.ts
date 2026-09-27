@@ -380,8 +380,8 @@ function hitTestCircleRadiusHandle(
  *
  * Enumerating the handles is left to the callback (the aggregation of the providers), while
  * the test is done with the same screen-px rectangle as the existing handles. To keep the
- * grab feel uniform, the test size is the same as for the vertex handles (rendering is the
- * provider's responsibility, so core knows only the positions).
+ * grab feel uniform, the test size is the same as for the vertex handles, which is also the
+ * size the selection UI draws them at.
  */
 function hitTestAuxiliaryHandles(
   feature: Feature,

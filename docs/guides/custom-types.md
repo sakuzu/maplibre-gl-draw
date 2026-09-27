@@ -280,11 +280,12 @@ const reshapeRoute: FeatureTypeDefinition = {
 };
 ```
 
-The library hit tests the handles and hands the drag over, but it does
-not draw them. Draw them yourself, for example with an overlay that
-marks the handles of the selected features (see
-[Overlays](#overlays)). Nothing is dragged while the drawing is
-read-only, under the interaction lock, or while the feature is locked.
+The library draws the handles of the selected feature with the look of
+its vertex handles (the `vertexHandle` of `selectionStyle`), hit tests
+them at the same size, and hands the drag over. The handles are hidden
+while another handle is dragged, and nothing is shown or dragged while
+the drawing is read-only, under the interaction lock, or while the
+feature is locked.
 
 `snapCandidates` returns the positions a pointer snaps to near a
 feature of the type, in place of the vertices and edges of its
@@ -413,7 +414,8 @@ event)` returns the patch a drag makes, as `onHandleDrag` of a
 definition does. `globalHandles(screen)` returns handles that belong to
 no feature and are shown whatever is selected; their drag arrives with
 `feature` as `null`, and the provider writes what the drag changes
-itself. As with a definition, the provider draws its handles.
+itself. As with a definition, the library draws the handles with the
+look of its vertex handles.
 
 ### Companions
 
