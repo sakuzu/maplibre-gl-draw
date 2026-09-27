@@ -13,17 +13,17 @@
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import type { DragOperationType, Feature } from '../../../store/types.js';
 import { getSelectedFeatureIds } from '../../../view/ui/helper.js';
-import type { ModeContext } from '../../handler.js';
+import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 
 /** The Store a drag writes to */
-export type DragStore = ModeContext['store'];
+export type DragStore = EngineModeContext['store'];
 
 /**
  * The selection scope of the draw instance the drag belongs to (the resize and rotate
  * strategies of custom types, and the auxiliary handle providers). Null before a drag starts
  */
-export type DragScope = ModeContext['selectionScope'] | null;
+export type DragScope = EngineModeContext['selectionScope'] | null;
 
 /**
  * One running drag operation

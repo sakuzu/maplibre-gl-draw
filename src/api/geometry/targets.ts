@@ -14,9 +14,6 @@ import type {
 import { generateCirclePolygon } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
-import { isFeatureLocked } from '../../store/lock.js';
-import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
 
 /**
@@ -149,38 +146,4 @@ export function toResultGeometry(
   if (parts.length === 0) return null;
   if (parts.length === 1) return { type: 'Polygon', coordinates: parts[0] };
   return { type: 'MultiPolygon', coordinates: parts };
-}
-
-/** The IDs of the current feature selection (empty on a group or layer selection). */
-export function currentSelectionIds(store: Store): string[] {
-  const selection = store.getSelection();
-  return selection.type === 'feature' ? selection.ids : [];
-}
-
-/**
- * Resolves the targets of an operation in z order (the head is the backmost, the tail is the
- * frontmost).
- *
- * The order follows getDisplayFeatures (= listFeaturesInOrder with the locally hidden features
- * removed). That is "the order between the layers -> the order within a layer -> the
- * featureIds within a group", which is the draw order of core itself. Hidden features (both
- * the shared visible and the local hidden) do not appear in this list, so they are
- * automatically excluded from the targets here.
- * Locked features (the effective lock) are excluded explicitly.
- *
- * @param ids The target IDs. When undefined, the current selection
- * @param accept The acceptance test, on the type and so on
- */
-export function resolveTargetFeatures(
-  store: Store,
-  ids: string[] | undefined,
-  accept: (feature: Feature) => boolean,
-): Feature[] {
-  const wanted = ids ?? currentSelectionIds(store);
-  if (wanted.length === 0) return [];
-
-  const wantedIds = new Set(wanted);
-  return getDisplayFeatures(store).filter(
-    (feature) => wantedIds.has(feature.id) && accept(feature) && !isFeatureLocked(feature, store),
-  );
 }

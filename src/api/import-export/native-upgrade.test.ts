@@ -8,9 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { Data } from '../../store/types.js';
-import type { Context } from '../context.js';
+import { createResourceDeps } from '../../test-utils.js';
+import { createDocument } from '../v2/impl/document.js';
 import { NATIVE_VERSION } from './constants.js';
-import { createImportExportAPI } from './index.js';
 import { upgradeNativeData } from './native-upgrade.js';
 
 /** Upgrades the data and reads it as data of the current version */
@@ -98,7 +98,7 @@ function document2() {
   };
 }
 
-function createTestContext(): Context {
+function createTestContext() {
   const store = new MemoryStore();
   store.createLayer({
     id: 'default-layer',
@@ -110,13 +110,7 @@ function createTestContext(): Context {
     styleRule: undefined,
     metadata: undefined,
   });
-  let idCounter = 0;
-  return {
-    store,
-    generateFeatureId: () => `feature-${++idCounter}`,
-    getCurrentLayerId: () => 'default-layer',
-    autoNameGenerator: { generateName: () => undefined },
-  } as unknown as Context;
+  return { store, document: createDocument(createResourceDeps(store), () => {}) };
 }
 
 describe('upgradeNativeData', () => {
@@ -272,12 +266,11 @@ describe('upgradeNativeData', () => {
 describe('loading native data of version 2', () => {
   it('loads it into the model of the current version', async () => {
     const context = createTestContext();
-    const api = createImportExportAPI(context);
 
-    const result = await api.load(document2());
+    const result = await context.document.load(document2() as never);
 
     const { store } = context;
-    expect(result.format).toBe('native');
+    expect(result?.format).toBe('native');
     expect(store.getFeature('c')).toMatchObject({
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [3, 4] },
@@ -305,10 +298,9 @@ describe('loading native data of version 2', () => {
 
   it('exports it again in the current version', async () => {
     const context = createTestContext();
-    const api = createImportExportAPI(context);
-    await api.load(document2());
+    await context.document.load(document2() as never);
 
-    const exported = JSON.parse(api.export('native').data);
+    const exported = JSON.parse(JSON.stringify(context.document.toJSON()));
 
     expect(exported.version).toBe(NATIVE_VERSION);
     const point = exported.features.find((f: { id: string }) => f.id === 'p');
@@ -318,26 +310,26 @@ describe('loading native data of version 2', () => {
     expect(exported.groups[0].layerId).toBe('l1');
     // The exported data loads again as it is
     const again = createTestContext();
-    await createImportExportAPI(again).load(exported);
+    await again.document.load(exported);
     expect(again.store.getFeature('p')?.geometry).toEqual({ type: 'Point', coordinates: [1, 2] });
   });
 
   it('rejects data of version 2 with coordinates that do not match the type', async () => {
     const context = createTestContext();
-    const api = createImportExportAPI(context);
     const data = document2();
     data.features[5] = feature2('poly', 'Polygon', [
       [0, 0],
       [1, 1],
     ]);
 
-    await expect(api.load(data)).rejects.toThrow('Invalid native data');
+    await expect(context.document.load(data as never)).rejects.toThrow('Invalid native data');
   });
 
   it('still rejects data of version 1', async () => {
     const context = createTestContext();
-    const api = createImportExportAPI(context);
 
-    await expect(api.load({ ...document2(), version: '1.0.0' })).rejects.toThrow(/version 1\.0\.0/);
+    await expect(
+      context.document.load({ ...document2(), version: '1.0.0' } as never),
+    ).rejects.toThrow(/version 1\.0\.0/);
   });
 });

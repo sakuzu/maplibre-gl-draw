@@ -11,12 +11,12 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../../dispatcher/types.js';
 import type {
-  CustomFeatureRenderer,
-  CustomOverlayRenderer,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  EngineOverlayRenderer,
+  FeatureTypeRenderer,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../../extension/index.js';
-import { createMapStub } from '../../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../../../view/feature-companion.js';
 import { calculateOffsetUniforms } from '../../../view/shaders/helpers.js';
 import type { TerrainContext } from '../../../view/terrain/context.js';
@@ -44,7 +44,7 @@ const PROJECTION = { mainMatrix: new Float32Array(16) } as unknown as Projection
 const GL = {} as WebGL2RenderingContext;
 
 /** The context the engine gives its own renderers, with spies for the shared renderers */
-function baseContext(): CustomRendererDrawContext {
+function baseContext(): FrameDrawContext {
   return {
     shaderData: { vertexShaderPrelude: 'prelude', define: '#define X', variantName: 'mercator' },
     centerLngLat: [139.7, 35.6],
@@ -55,7 +55,7 @@ function baseContext(): CustomRendererDrawContext {
     sdfLineRenderer: { draw: vi.fn(), drawClosed: vi.fn() },
     fillShaderManager: { drawPolygonRings: vi.fn() },
     pointShapeRenderer: { draw: vi.fn() },
-  } as unknown as CustomRendererDrawContext;
+  } as unknown as FrameDrawContext;
 }
 
 function drag(type: DragNormalizedEvent['type'], lng: number, lat: number): DragNormalizedEvent {
@@ -72,7 +72,7 @@ function drag(type: DragNormalizedEvent['type'], lng: number, lat: number): Drag
 
 describe('a custom feature type', () => {
   let engine: Engine;
-  let registered: CustomFeatureRenderer | null;
+  let registered: FeatureTypeRenderer | null;
   const handle: Handle = { id: 'corner', position: [1.5, 1], kind: 'resize', cursor: 'ew-resize' };
   const definition = {
     type: 'pin',
@@ -121,7 +121,7 @@ describe('a custom feature type', () => {
 
   it('is drawn by its renderer with a RenderContext', () => {
     expect(registered).not.toBeNull();
-    const adapter = registered as unknown as CustomFeatureRenderer;
+    const adapter = registered as unknown as FeatureTypeRenderer;
     const map = {} as MapLibreMap;
     adapter.onAdd(GL, map);
     expect(definition.renderer.onAdd).toHaveBeenCalledWith(map, GL);
@@ -187,14 +187,14 @@ describe('a custom feature type', () => {
   });
 
   it('is hit by its hit test, which selects it in select mode', () => {
-    engine.facade.input.click([1.1, 1]);
+    createSyntheticInput(engine).click([1.1, 1]);
     expect(definition.hitTest).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'p1' }),
       expect.objectContaining({ point: [510, 200], tolerancePx: expect.any(Number) }),
     );
     expect(engine.context.store.getSelection().ids).toEqual(['p1']);
 
-    engine.facade.input.click([3, 3]);
+    createSyntheticInput(engine).click([3, 3]);
     expect(engine.context.store.getSelection().ids).toEqual([]);
   });
 
@@ -244,7 +244,7 @@ describe('a custom feature type', () => {
   it('takes nothing back from the engine once it is removed', () => {
     engine.extensions.collections.featureTypes.remove('pin');
     expect(engine.context.selectionScope.auxiliaryHandles.list()).toEqual([]);
-    engine.facade.input.click([1.1, 1]);
+    createSyntheticInput(engine).click([1.1, 1]);
     expect(engine.context.store.getSelection().ids).toEqual([]);
   });
 });
@@ -274,8 +274,8 @@ describe('the providers of snapping candidates', () => {
 
 describe('the overlays', () => {
   it('draw by order, then by the order they were added, and leave with the last one', () => {
-    const added: CustomOverlayRenderer[] = [];
-    const removed: CustomOverlayRenderer[] = [];
+    const added: EngineOverlayRenderer[] = [];
+    const removed: EngineOverlayRenderer[] = [];
     const stack = createOverlayStack(
       {
         addOverlayRenderer(renderer) {
@@ -298,7 +298,7 @@ describe('the overlays', () => {
     const removeB = stack.add(overlay('b'));
     const removeC = stack.add(overlay('c', -1));
     expect(added).toHaveLength(2);
-    const [above, perLayer] = added as [CustomOverlayRenderer, LayerAwareOverlayRenderer];
+    const [above, perLayer] = added as [EngineOverlayRenderer, LayeredOverlayRenderer];
 
     const gl = new Proxy({}, { get: () => () => {} }) as WebGL2RenderingContext;
     above.onAdd(gl, {} as MapLibreMap);

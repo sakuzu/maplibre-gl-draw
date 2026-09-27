@@ -21,7 +21,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
-import type { CustomOverlayRenderer, CustomRendererDrawContext } from '../extension/index.js';
+import type { EngineOverlayRenderer, FrameDrawContext } from '../extension/index.js';
 import type { PointStyle } from '../shared/types/style.js';
 import type { SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
 import type { SnapService, SnapTargetKind } from './types.js';
@@ -136,7 +136,7 @@ export interface SnapIndicatorRendererDeps {
  *
  * @internal
  */
-export class SnapIndicatorRenderer implements CustomOverlayRenderer {
+export class SnapIndicatorRenderer implements EngineOverlayRenderer {
   readonly name = 'snap-indicator';
   readonly order = 'overlay' as const;
 
@@ -154,7 +154,7 @@ export class SnapIndicatorRenderer implements CustomOverlayRenderer {
     // It uses the existing drawing primitives, so it holds no GPU resources of its own
   }
 
-  draw(projectionData: ProjectionData, zoom: number, context: CustomRendererDrawContext): void {
+  draw(projectionData: ProjectionData, zoom: number, context: FrameDrawContext): void {
     const result = this.snapService.getResult();
     if (!result?.target) return;
 

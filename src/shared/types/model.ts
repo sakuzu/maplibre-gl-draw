@@ -36,7 +36,7 @@ export type FeatureCoordinates = Position | Position[] | Position[][] | Position
  * MultiPolygon, Image, Circle and Freehand. The type decides the kind of `Feature.geometry`:
  * a Circle and an Image hold the Point of their center and their anchor, and a Freehand holds
  * a LineString. Any other string names a custom type, which an extension adds with
- * `registerFeatureHandler` ({@link CustomFeatureHandler}).
+ * `registerFeatureHandler` ({@link FeatureTypeHandler}).
  *
  * The Multi types come from imports and from the results of geometry operations; no drawing
  * mode creates them.
@@ -471,7 +471,7 @@ export interface Layer {
    *
    * It is multiplied into the alpha of everything drawn for the layer (fills, lines, points,
    * images, and what the renderers of custom types and feature companions draw, which receive
-   * it as `CustomRendererDrawContext.opacity`). It is applied at draw time, so changing it is
+   * it as `FrameDrawContext.opacity`). It is applied at draw time, so changing it is
    * cheap: nothing is rebuilt. It is only a look: hit testing ignores it, and a feature in a
    * layer at opacity 0 can still be selected.
    */
@@ -867,11 +867,6 @@ export interface SkippedFeature {
 }
 
 /**
- * The format `export()` writes: the native format ({@link Data}) or GeoJSON
- */
-export type ExportFormat = 'native' | 'geojson';
-
-/**
  * Options of `export()`: the file name, and which features or layers to export
  */
 export interface ExportOptions {
@@ -881,20 +876,6 @@ export interface ExportOptions {
   featureIds?: string[];
   /** Export only certain layers */
   layerIds?: string[];
-}
-
-/**
- * What `export()` returns: the data as a string, with its MIME type and a file name
- */
-export interface ExportResult {
-  /** The export format */
-  format: ExportFormat;
-  /** The exported data */
-  data: string;
-  /** The MIME type */
-  mimeType: string;
-  /** The recommended file name */
-  fileName: string;
 }
 
 /**

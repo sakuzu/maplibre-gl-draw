@@ -2,21 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The option and dependency types of the draw.geometry namespace
+ * The option and dependency types of the operations on areas of `draw.features`
  */
 
-import type { EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 
 /**
- * The options of `draw.geometry.buffer` (see {@link GeometryOperations.buffer})
+ * The options of `draw.features.buffer`
  *
- * @example
- * ```typescript
- * draw.geometry.buffer({ distanceMeters: 250, segments: 32 });
- * ```
+ * @internal
  */
-export interface GeometryBufferOptions {
+export interface BufferOptions {
   /**
    * The buffer distance (in meters). A negative value shrinks (area types only); 0 or a value
    * that is not finite does nothing
@@ -29,9 +25,12 @@ export interface GeometryBufferOptions {
   segments?: number;
 }
 
-/** The dependencies of the geometry operations (a bare Store is enough for tests) */
-export interface GeometryApiDeps {
+/**
+ * The dependencies of the geometry operations (a bare Store is enough for tests)
+ *
+ * @internal
+ */
+export interface GeometryDeps {
   store: Store;
-  eventEmitter: EventEmitter;
   generateFeatureId: () => string;
 }

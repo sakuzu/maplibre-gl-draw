@@ -64,7 +64,7 @@ export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = {
 
 /**
  * The precise hit test of one feature type, as registered through the `hitTest` of a
- * `CustomFeatureHandler`.
+ * `FeatureTypeHandler`.
  *
  * The library first narrows the candidates with its spatial index and then calls `test` on
  * each candidate from the front; the first that returns `true` receives the click. The

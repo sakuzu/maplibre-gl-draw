@@ -41,7 +41,7 @@ import type {
   Map as MapLibreMap,
 } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
-import type { CustomFeatureHandler, CustomOverlayRenderer } from '../../extension/index.js';
+import type { EngineOverlayRenderer, FeatureTypeHandler } from '../../extension/index.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
@@ -90,7 +90,7 @@ export interface CustomLayerDeps {
   selectionConfig: SelectionUIConfig;
   renderingConfig: RenderingConfig;
   /** Custom feature handlers (for the extension implementations) */
-  customFeatureHandlers?: CustomFeatureHandler[];
+  customFeatureHandlers?: FeatureTypeHandler[];
   /**
    * Datasets (read-only layers that show large amounts of data)
    *
@@ -154,16 +154,16 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    *
    * @returns the function that removes it again (removeOverlayRenderer)
    */
-  addOverlayRenderer(renderer: CustomOverlayRenderer): () => void;
+  addOverlayRenderer(renderer: EngineOverlayRenderer): () => void;
   /** Removes an overlay renderer; it gets its onRemove when the GPU side exists */
-  removeOverlayRenderer(renderer: CustomOverlayRenderer): void;
+  removeOverlayRenderer(renderer: EngineOverlayRenderer): void;
   /**
    * Registers the renderer of a custom feature type
    *
    * @returns the function that cancels the registration (it does not remove a later
    *   registration of the same type)
    */
-  registerFeatureRenderer(type: string, renderer: CustomFeatureHandler['renderer']): () => void;
+  registerFeatureRenderer(type: string, renderer: FeatureTypeHandler['renderer']): () => void;
   /** The list of slots (the first = the backmost). Just itself when there is no separator */
   getRenderSlots(): RenderSlot[];
   /**
@@ -257,7 +257,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   const featureCompanions = deps.featureCompanions;
 
   // Map of the custom feature handlers
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
   if (customFeatureHandlers) {
     for (const handler of customFeatureHandlers) {
       customRenderers.set(handler.type, handler.renderer);
@@ -277,7 +277,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   };
   /** The ordered list of the features to display (the immediate path; follows the Store) */
   const displayList = new DisplayListCache(store);
-  const dynamicOverlayRenderers: CustomOverlayRenderer[] = [];
+  const dynamicOverlayRenderers: EngineOverlayRenderer[] = [];
 
   /**
    * Terrain state of this draw instance
@@ -672,7 +672,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   }
 
   /** Whether a feature renderer is still registered for some type */
-  function isRegisteredRenderer(renderer: CustomFeatureHandler['renderer']): boolean {
+  function isRegisteredRenderer(renderer: FeatureTypeHandler['renderer']): boolean {
     for (const registered of customRenderers.values()) {
       if (registered === renderer) return true;
     }
@@ -711,7 +711,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engineRemove();
     },
 
-    addOverlayRenderer(renderer: CustomOverlayRenderer): () => void {
+    addOverlayRenderer(renderer: EngineOverlayRenderer): () => void {
       dynamicOverlayRenderers.push(renderer);
       // An element involved in the rendering was added, so the prepared retained batches are
       // rebuilt
@@ -723,7 +723,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       return () => customLayer.removeOverlayRenderer(renderer);
     },
 
-    removeOverlayRenderer(renderer: CustomOverlayRenderer): void {
+    removeOverlayRenderer(renderer: EngineOverlayRenderer): void {
       const index = dynamicOverlayRenderers.indexOf(renderer);
       if (index === -1) return;
       dynamicOverlayRenderers.splice(index, 1);
@@ -733,7 +733,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.mapInstance?.triggerRepaint();
     },
 
-    registerFeatureRenderer(type: string, renderer: CustomFeatureHandler['renderer']): () => void {
+    registerFeatureRenderer(type: string, renderer: FeatureTypeHandler['renderer']): () => void {
       const replaced = customRenderers.get(type);
       customRenderers.set(type, renderer);
       // Adding a custom type changes the classification of the features (whether they can be

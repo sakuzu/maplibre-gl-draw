@@ -33,7 +33,7 @@ import type {
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { SelectModeDragHandler } from './drag-handler.js';
 
 // A polygon that is a translated unit square (a closed ring)
@@ -106,7 +106,7 @@ let spatialIndex: StoreSpatialIndex;
 /** The ids of the features the Store reported as updated (the index follows them) */
 let indexUpdates: string[];
 let map: ReturnType<typeof makeMap>;
-let context: ModeContext;
+let context: EngineModeContext;
 let handler: SelectModeDragHandler;
 
 function addFeature(feature: Feature): void {
@@ -182,7 +182,7 @@ beforeEach(() => {
     map,
     pluginManager: undefined,
     selectionScope: createSelectionScope(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
   handler = new SelectModeDragHandler();
 });
 
@@ -1151,11 +1151,11 @@ describe('drag delegation for auxiliary handles', () => {
       registerProvider(true);
     });
 
-    it('it does not fire the drag:start / drag:end hooks (kept off the editing scope)', () => {
-      const runHook = vi.fn();
+    it('it does not announce drag.started / drag.ended (kept off the editing scope)', () => {
+      const emit = vi.fn();
       const contextWithPlugins = {
         ...context,
-        pluginManager: { runHook } as unknown as NonNullable<ModeContext['pluginManager']>,
+        eventEmitter: { emit, on: vi.fn(), off: vi.fn() },
       };
       store.setSelection('feature', ['f1']);
       const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
@@ -1168,9 +1168,9 @@ describe('drag delegation for auxiliary handles', () => {
       handler.endDrag(contextWithPlugins, dragEvent(6, 6));
 
       expect(onHandleDragEnd).toHaveBeenCalledTimes(1);
-      const hookNames = runHook.mock.calls.map((call) => call[0]);
-      expect(hookNames).not.toContain('drag:start');
-      expect(hookNames).not.toContain('drag:end');
+      const signals = emit.mock.calls.map((call) => call[0]);
+      expect(signals).not.toContain('drag.started');
+      expect(signals).not.toContain('drag.ended');
     });
 
     it('the hit information and the start event are passed to the provider', () => {
@@ -1523,11 +1523,11 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
     expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 50, 50)));
   });
 
-  it('pairs drag:start with drag:end carrying the dragged features', () => {
-    const runHook = vi.fn();
+  it('pairs drag.started with drag.ended carrying the dragged features', () => {
+    const emit = vi.fn();
     const withPlugins = {
       ...context,
-      pluginManager: { runHook } as unknown as NonNullable<ModeContext['pluginManager']>,
+      eventEmitter: { emit, on: vi.fn(), off: vi.fn() },
     };
     startMoveDrag(['f1'], [0, 0], withPlugins);
     handler.updateDrag(dragEvent(3, 4, [0, 0]), withPlugins);
@@ -1536,18 +1536,18 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
     handler.reset(store);
     handler.reset(store);
 
-    const calls = runHook.mock.calls.map((call) => [call[0], call[1]]);
+    const calls = emit.mock.calls.map((call) => [call[0], call[1]]);
     expect(calls).toEqual([
-      ['drag:start', { featureIds: ['f1'] }],
-      ['drag:end', { featureIds: ['f1'] }],
+      ['drag.started', { kind: 'feature', featureIds: ['f1'] }],
+      ['drag.ended', { kind: 'feature', featureIds: ['f1'], cancelled: true }],
     ]);
   });
 
   it('endDrag reports the dragged features even when the selection was cleared', () => {
-    const runHook = vi.fn();
+    const emit = vi.fn();
     const withPlugins = {
       ...context,
-      pluginManager: { runHook } as unknown as NonNullable<ModeContext['pluginManager']>,
+      eventEmitter: { emit, on: vi.fn(), off: vi.fn() },
     };
     startMoveDrag(['f1'], [0, 0], withPlugins);
     handler.updateDrag(dragEvent(3, 4, [0, 0]), withPlugins);
@@ -1555,11 +1555,11 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
 
     handler.endDrag(withPlugins);
 
-    expect(runHook).toHaveBeenLastCalledWith(
-      'drag:end',
-      { featureIds: ['f1'] },
-      { source: 'local' },
-    );
+    expect(emit).toHaveBeenLastCalledWith('drag.ended', {
+      kind: 'feature',
+      featureIds: ['f1'],
+      cancelled: false,
+    });
     expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
   });
 });

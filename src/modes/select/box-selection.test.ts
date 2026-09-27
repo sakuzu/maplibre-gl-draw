@@ -14,7 +14,7 @@ import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { boxRects, queryFeaturesInBox } from './box-selection.js';
 
 function point(id: string, layerId: string, coord: [number, number], visible = true): Feature {
@@ -77,7 +77,7 @@ describe('queryFeaturesInBox filtering', () => {
         get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
       },
       selectionScope: createSelectionScope(),
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
 
     const boxSelection = { startPoint: [-10, -10], endPoint: [10, 10] } as unknown as BoxSelection;
     const result = queryFeaturesInBox(boxSelection, context);
@@ -117,7 +117,7 @@ describe('queryFeaturesInBox filtering', () => {
         get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
       },
       selectionScope: createSelectionScope(),
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
 
     const boxSelection = { startPoint: [-10, -10], endPoint: [10, 10] } as unknown as BoxSelection;
     const result = queryFeaturesInBox(boxSelection, context);
@@ -170,7 +170,7 @@ describe('boxRects across the antimeridian', () => {
         get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
       },
       selectionScope: createSelectionScope(),
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
 
     const boxSelection = { startPoint: [170, 0], endPoint: [190, 10] } as unknown as BoxSelection;
 

@@ -35,7 +35,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
-import type { CustomRendererDrawContext } from '../extension/index.js';
+import type { FrameDrawContext } from '../extension/index.js';
 import type { LngLat, ScreenPoint } from '../shared/math/index.js';
 import type { Coordinate, Feature, Layer } from '../store/types.js';
 
@@ -100,7 +100,7 @@ export interface FeatureCompanionProvider {
     feature: Feature,
     projectionData: ProjectionData,
     zoom: number,
-    context: CustomRendererDrawContext,
+    context: FrameDrawContext,
   ): void;
   /**
    * Called in the z scan of click resolution, after the feature itself misses and before
@@ -259,7 +259,7 @@ export function drawFeatureCompanionsInFrame(
   projectionData: ProjectionData,
   zoom: number,
   layer: Layer | undefined,
-  context: CustomRendererDrawContext,
+  context: FrameDrawContext,
   restoreBlendState?: () => void,
 ): boolean {
   if (!registry.any()) return false;

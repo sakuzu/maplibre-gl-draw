@@ -10,14 +10,14 @@
  * is closed and reopened around it" and that "for features without companions the frame is
  * not touched at all".
  *
- * core does not interpret the contents of ProjectionData and CustomRendererDrawContext and
+ * core does not interpret the contents of ProjectionData and FrameDrawContext and
  * only passes them straight to the provider, so stubs carrying an identifiable marker are
  * enough.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CustomRendererDrawContext } from '../extension/index.js';
+import type { FrameDrawContext } from '../extension/index.js';
 import type { Coordinate, Feature, Layer } from '../store/types.js';
 import type {
   CompanionBatchFrame,
@@ -34,7 +34,7 @@ import {
 } from './feature-companion.js';
 
 const PROJECTION = { projection: 'stub' } as unknown as ProjectionData;
-const DRAW_CONTEXT = { pixelRatio: 2 } as unknown as CustomRendererDrawContext;
+const DRAW_CONTEXT = { pixelRatio: 2 } as unknown as FrameDrawContext;
 const LAYER: Layer = {
   id: 'l1',
   name: 'l1',

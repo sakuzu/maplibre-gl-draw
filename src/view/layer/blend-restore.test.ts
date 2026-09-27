@@ -20,9 +20,9 @@ import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { createDatasetManager } from '../../dataset/manager.js';
 import type {
-  CustomFeatureHandler,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  FeatureTypeHandler,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
@@ -116,21 +116,21 @@ function run(options: {
 
   // The renderer of a custom type (as an external renderer may do) rewrites
   // the blend state
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
   customRenderers.set('Marker', {
     draw: (feature: { id: string }): void => {
       paintLog.push(`${feature.id}@${blend}`);
       blend = 'foreign';
     },
-  } as unknown as CustomFeatureHandler['renderer']);
+  } as unknown as FeatureTypeHandler['renderer']);
 
-  const layerAwareRenderers: LayerAwareOverlayRenderer[] = options.layerAware
+  const layerAwareRenderers: LayeredOverlayRenderer[] = options.layerAware
     ? [
         {
           drawForLayer: (): void => {
             blend = 'foreign';
           },
-        } as unknown as LayerAwareOverlayRenderer,
+        } as unknown as LayeredOverlayRenderer,
       ]
     : [];
 
@@ -156,7 +156,7 @@ function run(options: {
     {} as unknown as ProjectionData,
     14,
     customRenderers,
-    {} as unknown as CustomRendererDrawContext,
+    {} as unknown as FrameDrawContext,
     createFeatureCompanionRegistry(),
     layerAwareRenderers,
     manager,

@@ -18,7 +18,7 @@
  *   - The tentative feature being drawn (it is not a feature of the Store, so it never
  *     enters in the first place)
  *
- * For a custom feature type, CustomFeatureHandler.getSnapTargets is used when it is
+ * For a custom feature type, FeatureTypeHandler.getSnapTargets is used when it is
  * registered (the vertex provider calls it).
  */
 

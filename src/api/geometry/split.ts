@@ -8,9 +8,9 @@
 import { splitArea } from '../../geometry/split.js';
 import type { MultiPolygonCoordinates } from '../../geometry/types.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
-import { applyResult, emitApplied } from './apply.js';
+import { applyResult } from './apply.js';
 import { toAreaCoordinates, toResultGeometry, toSplitPaths } from './targets.js';
-import type { GeometryApiDeps } from './types.js';
+import type { GeometryDeps } from './types.js';
 
 /**
  * Runs the split and replaces the polygon with the group of features that result from the
@@ -27,13 +27,12 @@ import type { GeometryApiDeps } from './types.js';
  * @param select Whether the results become the selection
  */
 export function runSplit(
-  deps: GeometryApiDeps,
+  deps: GeometryDeps,
   area: Feature,
   line: Feature,
   select = true,
 ): string[] {
   const { store } = deps;
-  const inputIds = [area.id, line.id];
   const source = toAreaCoordinates(area);
   const paths = toSplitPaths(line);
 
@@ -54,15 +53,7 @@ export function runSplit(
   }
 
   if (geometries.length < 2) {
-    // The line did not divide the polygon. The inputs are not changed at all; only the
-    // notification is emitted.
-    emitApplied(deps.eventEmitter, {
-      operation: 'split',
-      inputIds,
-      resultId: null,
-      resultIds: [],
-      status: 'empty',
-    });
+    // The line did not divide the polygon. The inputs are not changed at all.
     return [];
   }
 
@@ -83,12 +74,5 @@ export function runSplit(
     return ids;
   });
 
-  emitApplied(deps.eventEmitter, {
-    operation: 'split',
-    inputIds,
-    resultId: resultIds[0],
-    resultIds,
-    status: 'applied',
-  });
   return resultIds;
 }

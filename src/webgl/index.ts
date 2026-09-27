@@ -14,48 +14,52 @@
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by section
 
 // Shaders and projection
-export { DEFAULT_TILE_SIZE } from '../shared/math/index.js';
+export { DEFAULT_TILE_SIZE } from '../shared/math/constants.js';
 export {
   calculateLngLatOffset,
   createProgram,
   OFFSET_MODE_GLSL,
-  ProjectionUniformManager,
-} from '../view/index.js';
+} from '../view/shaders/helpers.js';
+export { ProjectionUniformManager } from '../view/shaders/projection.js';
 
 // Blending and billboards
-export { applyDrawBlendState, drawBillboardsWithoutDepth } from '../view/index.js';
+export { applyDrawBlendState } from '../view/layer/blend.js';
+export { drawBillboardsWithoutDepth } from '../view/renderers/point/billboard-depth.js';
 
 // Quads
-export type { QuadDrapeGlyphs, QuadVertices } from '../view/index.js';
-export {
-  computeQuadVertices,
-  drawQuadSurfaceOnTerrain,
-  QUAD_GLYPH_STRIDE,
-  QuadShader,
-} from '../view/index.js';
+export type { QuadDrapeGlyphs } from '../view/terrain/drape/quad.js';
+export type { QuadVertices } from '../view/shaders/quad.js';
+export { computeQuadVertices, drawQuadSurfaceOnTerrain, QuadShader } from '../view/shaders/quad.js';
+export { QUAD_GLYPH_STRIDE } from '../view/terrain/drape/quad-glyphs.js';
 
 // Lines
-export type { SDFStrokeOptions, SDFStrokeStyle, WidthUnit } from '../view/index.js';
-export { getStrokeDashPattern as dashPattern, splitIntoDashes } from '../view/index.js';
+export type { SDFStrokeOptions, SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
+export type { WidthUnit } from '../view/renderers/stroke.js';
+export {
+  getStrokeDashPattern as dashPattern,
+  splitIntoDashes,
+} from '../view/renderers/line/dash.js';
 
 // Terrain
-export { densifyPath, terrainTessellationStep } from '../view/index.js';
+export { terrainTessellationStep } from '../view/terrain/polygon.js';
+export { densifyPath } from '../view/terrain/tessellation.js';
 
 // Hit testing
-export { PointHitTestStrategy } from '../dispatcher/index.js';
+export { PointHitTestStrategy } from '../dispatcher/hit-test/strategies/point.js';
 
 // Supporting types
+export type { BlendCapableGL } from '../view/layer/blend.js';
+export type { DashSegment } from '../view/renderers/line/dash.js';
+export type { ProjectionUniformLocations } from '../view/shaders/projection.js';
 export type {
-  BlendCapableGL,
-  DashSegment,
   DrapeQuadCorners,
-  MercatorRect,
-  ProjectionUniformLocations,
   QuadDrapeColor,
   QuadDrapeFill,
   QuadDrapeSurface,
-  TerrainContext,
-  TerrainRenderState,
+} from '../view/terrain/drape/quad.js';
+export type { TerrainContext, TerrainRenderState } from '../view/terrain/context.js';
+export type {
+  MercatorRect,
   TessellationStep,
   TessellationTiling,
-} from '../view/index.js';
+} from '../view/terrain/tessellation.js';

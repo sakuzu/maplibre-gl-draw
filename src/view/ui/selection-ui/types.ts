@@ -11,8 +11,8 @@ import type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 
 // BoundingBoxCoords is a basic type (operations/ reads it too), defined in shared/.
-// CustomResizeCalculator is an extension contract, defined in extension/.
-export type { CustomResizeCalculator } from '../../../extension/index.js';
+// TypeResizeCalculator is an extension contract, defined in extension/.
+export type { TypeResizeCalculator } from '../../../extension/index.js';
 export type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
 
 /**

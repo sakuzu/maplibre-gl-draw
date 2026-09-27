@@ -11,7 +11,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { CustomRendererDrawContext } from '../extension/index.js';
+import type { FrameDrawContext } from '../extension/index.js';
 import type { SDFStrokeOptions, SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import { SnapIndicatorRenderer } from './indicator.js';
@@ -57,7 +57,7 @@ interface LineCall {
   zoom: number;
 }
 
-function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): CustomRendererDrawContext {
+function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): FrameDrawContext {
   return {
     pointShapeRenderer: {
       draw: (coord: [number, number], style: PointStyle, zoom: number) => {
@@ -74,7 +74,7 @@ function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): CustomRende
         lineCalls.push({ coords, style, options, zoom });
       },
     },
-  } as unknown as CustomRendererDrawContext;
+  } as unknown as FrameDrawContext;
 }
 
 const PROJECTION = {} as ProjectionData;

@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMapStub } from '../../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../../test-utils.js';
 import type { Engine } from '../../engine.js';
 import { createEngine } from '../../engine.js';
 import type { Draw } from '../draw.js';
@@ -301,7 +301,7 @@ describe('the input of the plugins and the modes', () => {
     engine.extensions.collections.plugins.add(plugin('p', { input: { onClick } }));
     engine.modeManager.setMode('draw_point');
 
-    engine.facade.input.click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
 
     expect(onClick).toHaveBeenCalledWith(
       expect.objectContaining({ lngLat: [1, 1], point: [500, 200], pointerType: 'mouse' }),
@@ -313,7 +313,7 @@ describe('the input of the plugins and the modes', () => {
   it('lets the mode receive a click the plugin does not consume', () => {
     engine.extensions.collections.plugins.add(plugin('p', { input: { onClick: () => false } }));
     engine.modeManager.setMode('draw_point');
-    engine.facade.input.click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
     expect(engine.context.store.listFeatures()).toHaveLength(1);
   });
 
@@ -333,8 +333,8 @@ describe('the input of the plugins and the modes', () => {
       },
     }));
     engine.modeManager.setMode('probe');
-    engine.facade.input.click([1, 1]);
-    engine.facade.input.key('a');
+    createSyntheticInput(engine).click([1, 1]);
+    createSyntheticInput(engine).key('a');
     expect(received).toEqual(['move', 'click 1,1', 'key a']);
   });
 
@@ -342,7 +342,7 @@ describe('the input of the plugins and the modes', () => {
     const onCancel = vi.fn();
     engine.extensions.collections.modes.add('probe', () => ({ onCancel }));
     engine.modeManager.setMode('probe');
-    engine.facade.input.key('Escape');
+    createSyntheticInput(engine).key('Escape');
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
@@ -372,10 +372,10 @@ describe('the input of the plugins and the modes', () => {
     const filterSelection = vi.fn((ids: readonly string[]) => ids.filter((id) => id !== 'refused'));
     engine.extensions.collections.plugins.add(plugin('p', { interaction: { filterSelection } }));
 
-    engine.facade.input.click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
     expect(store.getSelection().ids).toEqual(['kept']);
 
-    engine.facade.input.click([-1, -1]);
+    createSyntheticInput(engine).click([-1, -1]);
     expect(filterSelection).toHaveBeenLastCalledWith(['refused']);
     expect(store.getSelection().ids).toEqual([]);
   });
@@ -396,8 +396,8 @@ describe('the input of the plugins and the modes', () => {
     });
     const onFeatureClick = vi.fn(() => true);
     engine.extensions.collections.plugins.add(plugin('p', { interaction: { onFeatureClick } }));
-    engine.facade.input.click([1, 1]);
-    engine.facade.input.click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
     expect(onFeatureClick).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'f' }),
       expect.objectContaining({ lngLat: [1, 1] }),
@@ -506,7 +506,7 @@ describe('the built-in modes written to the contract', () => {
 
   it('draws a point, selects it and returns to select', () => {
     engine.modeManager.setMode('draw_point');
-    engine.facade.input.click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
     const [feature] = engine.context.store.listFeatures();
     expect(feature.geometry).toEqual({ type: 'Point', coordinates: [1, 1] });
     expect(engine.context.store.getSelection().ids).toEqual([feature.id]);
@@ -515,9 +515,9 @@ describe('the built-in modes written to the contract', () => {
 
   it('draws a circle with two clicks', () => {
     engine.modeManager.setMode('draw_circle');
-    engine.facade.input.click([1, 1]);
+    createSyntheticInput(engine).click([1, 1]);
     expect(engine.context.store.getTentative()?.type).toBe('Circle');
-    engine.facade.input.click([1, 1.5]);
+    createSyntheticInput(engine).click([1, 1.5]);
     const [feature] = engine.context.store.listFeatures();
     expect(feature.type).toBe('Circle');
     expect(feature.properties['maplibre-gl-draw:radiusMeters']).toBeGreaterThan(1000);
@@ -526,11 +526,11 @@ describe('the built-in modes written to the contract', () => {
 
   it('drops the circle being drawn on Escape, and leaves on a second Escape', () => {
     engine.modeManager.setMode('draw_circle');
-    engine.facade.input.click([1, 1]);
-    engine.facade.input.key('Escape');
+    createSyntheticInput(engine).click([1, 1]);
+    createSyntheticInput(engine).key('Escape');
     expect(engine.context.store.getTentative()).toBeNull();
     expect(engine.modeManager.getMode()).toBe('draw_circle');
-    engine.facade.input.key('Escape');
+    createSyntheticInput(engine).key('Escape');
     expect(engine.modeManager.getMode()).toBe('select');
   });
 });

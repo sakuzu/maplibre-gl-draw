@@ -16,7 +16,7 @@
 
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CustomOverlayRenderer } from '../../extension/index.js';
+import type { EngineOverlayRenderer } from '../../extension/index.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
@@ -147,7 +147,7 @@ function createMapStub(): { map: MapLibreMap; canvas: EventTarget } {
 }
 
 /** An overlay renderer that records its lifecycle */
-function createOverlaySpy(): CustomOverlayRenderer & { log: string[] } {
+function createOverlaySpy(): EngineOverlayRenderer & { log: string[] } {
   const log: string[] = [];
   return {
     name: 'spy',

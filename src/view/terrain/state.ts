@@ -9,7 +9,7 @@
  * (`context.ts`; how a shared global broke with several instances is written there). Every
  * accessor takes that context explicitly: the renderers of a CustomLayer receive their
  * instance's context at construction, and extension renderers receive it in the draw context
- * (`CustomRendererDrawContext.terrain`). Nothing here reads "the instance drawn last".
+ * (`FrameDrawContext.terrain`). Nothing here reads "the instance drawn last".
  *
  * When the terrain is disabled, `INACTIVE_TERRAIN_STATE` is held and the shader's
  * `u_terrain_on` becomes 0. The vertex computation when it is 0 is exactly identical to

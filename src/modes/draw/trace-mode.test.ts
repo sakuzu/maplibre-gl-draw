@@ -13,13 +13,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Engine } from '../../api/engine.js';
 import { createEngine } from '../../api/engine.js';
-import type { InputOperations } from '../../api/input-api.js';
 import type { Draw } from '../../api/v2/draw.js';
 import { createDrawOnEngine } from '../../api/v2/impl/create-draw.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature } from '../../store/types.js';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { ModeManager } from '../manager.js';
 
 const ZOOM = 14;
@@ -83,7 +82,7 @@ let engine: Engine;
 let draw: Draw;
 let store: Store;
 let modeManager: ModeManager;
-let input: InputOperations;
+let input: ReturnType<typeof createSyntheticInput>;
 /** The layer the features are in */
 let layerId: string;
 
@@ -117,7 +116,7 @@ function setup(): void {
   engine.enterDefaultMode();
   store = engine.context.store;
   modeManager = engine.modeManager;
-  input = engine.facade.input;
+  input = createSyntheticInput(engine);
   layerId = store.listLayers()[0].id;
 
   store.createFeature({

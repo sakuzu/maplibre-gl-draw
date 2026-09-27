@@ -24,7 +24,7 @@ import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, Mode } from '../../store/types.js';
 import { createModeHarness } from '../../test-utils.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawFreehandMode } from './freehand.js';
 
@@ -154,7 +154,7 @@ function setup(): void {
     getCurrentLayerId: () => 'l1',
     setMode: (mode: Mode) => modeManager.setMode(mode),
     getSnapResult: () => snapService.getResult(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
 
   modeManager.setContext(context);
   modeManager.start();

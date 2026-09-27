@@ -19,7 +19,7 @@ import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
 import { createModeHarness } from '../../test-utils.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
 import { drawCircleMode } from './circle.js';
 import { drawFreehandMode } from './freehand.js';
@@ -124,7 +124,7 @@ beforeEach(() => {
     generateFeatureId: () => `f${++idCounter}`,
     getCurrentLayerId: getWritableLayerId,
     setMode: (mode: Mode) => manager.setMode(mode),
-  } as unknown as ModeContext);
+  } as unknown as EngineModeContext);
   manager.start();
 });
 

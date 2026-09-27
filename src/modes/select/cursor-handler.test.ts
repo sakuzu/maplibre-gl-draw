@@ -17,7 +17,7 @@ import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature } from '../../store/types.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
 
 function polygon(id: string, layerId: string): Feature {
@@ -67,7 +67,7 @@ function makeMap(canvas: { style: { cursor: string } }) {
 
 let store: MemoryStore;
 let canvas: { style: { cursor: string } };
-let context: ModeContext;
+let context: EngineModeContext;
 let hit: Feature | null;
 
 // The screen coordinate of the polygon center (5,5). Being inside the bbox, it normally becomes
@@ -97,7 +97,7 @@ beforeEach(() => {
     // A stub for the unified z traversal (it returns only Store features)
     hitTestTopmost: () => (hit ? { kind: 'store', feature: hit } : null),
     selectionScope: createSelectionScope(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
 });
 
 describe('updateCursorForSelection', () => {

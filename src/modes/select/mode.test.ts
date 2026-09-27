@@ -13,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HitTestResult } from '../../dispatcher/hit-test/index.js';
+import type { HitTestResult } from '../../dispatcher/hit-test/strategies/base.js';
 import type {
   DragNormalizedEvent,
   KeyNormalizedEvent,
@@ -24,7 +24,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { Feature } from '../../store/types.js';
 import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { SelectMode } from './mode.js';
 
 function polygon(id: string, layerId: string): Feature {
@@ -111,7 +111,7 @@ function dragEvent(): DragNormalizedEvent {
 let store: MemoryStore;
 let map: ReturnType<typeof makeMap>;
 let hit: HitTestResult | null;
-let context: ModeContext;
+let context: EngineModeContext;
 let mode: SelectMode;
 
 beforeEach(() => {
@@ -138,7 +138,7 @@ beforeEach(() => {
     hitTestTopmost: () => (hit ? { kind: 'store', feature: hit.feature } : null),
     pluginManager: undefined,
     selectionScope: createSelectionScope(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
   mode = new SelectMode();
   mode.onStart(context);
 });
@@ -391,7 +391,7 @@ describe('SelectMode: box selection frames', () => {
     context.spatialIndex = { findNear: () => [], findInBounds: () => ['f1'] };
     context.boxSelectionRegistry = {
       get: () => ({ intersects: () => true }),
-    } as unknown as ModeContext['boxSelectionRegistry'];
+    } as unknown as EngineModeContext['boxSelectionRegistry'];
     const changes: unknown[] = [];
     store.subscribe((c) => {
       if (c.selection) changes.push(c.selection);

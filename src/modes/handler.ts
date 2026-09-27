@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * ModeHandler
+ * The modes of the engine: the handler the mode manager runs and the context it hands to the
+ * modes that are built in without the extension contract (select and image)
  *
- * Handler interface for the drawing modes.
- * Every mode implements this interface.
+ * The modes of the extension contract reach the engine through the bridge of
+ * `api/impl/input.ts`, which turns them into handlers of this shape.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -19,21 +20,50 @@ import type { Mode } from '../store/types.js';
 
 /**
  * An input whose coordinates go through snapping, as asked about by
- * {@link ModeHandler.isSnapEnabledFor}.
+ * {@link EngineModeHandler.isSnapEnabledFor}.
  *
  * Corresponds one to one with the inputs whose coordinates InputRouter passes through snapping
  * (click / mousemove / dragstart / dragmove / dragend).
+ *
+ * @internal
  */
-export type SnapInputType = 'click' | 'mousemove' | 'dragstart' | 'dragmove' | 'dragend';
+export type SnapInputKind = 'click' | 'mousemove' | 'dragstart' | 'dragmove' | 'dragend';
 
 /**
- * The services of the draw instance a mode works with, passed to
- * {@link ModeHandler.onStart}.
+ * What the select mode asks the plugins: the interaction hooks of the installed plugins, in
+ * the order they were added. A plugin that throws is reported and skipped.
+ *
+ * @internal
+ */
+export interface PluginInteractions {
+  /** Narrows the features a click or a box would select */
+  filterSelectionCandidates(candidateIds: string[]): string[];
+  /** Offers a click on a feature to the plugins; true when one consumed it */
+  handleFeatureClick(featureId: string, event?: MouseNormalizedEvent): boolean;
+  /** Offers a double click on a feature to the plugins; true when one consumed it */
+  handleFeatureDoubleClick(featureId: string, event?: MouseNormalizedEvent): boolean;
+  /** Whether a plugin is in the middle of an interaction of its own */
+  isPluginInteracting(): boolean;
+  /** Asks the plugins to finish their interaction */
+  finishPluginInteraction(): void;
+  /** Asks the plugins to abandon their interaction */
+  cancelPluginInteraction(): void;
+  /** The element of the interaction in progress, where a click inside is not a click outside */
+  getPluginInteractionContainer(): HTMLElement | null;
+  /** Tells the plugins that a drawing committed a feature */
+  notifyFeatureCreated(featureId: string): void;
+}
+
+/**
+ * The services of the draw instance an engine mode works with, passed to
+ * {@link EngineModeHandler.onStart}.
  *
  * Note: the redraw is triggered automatically by RenderCoordinator subscribing to Store changes,
  *       so a mode does not need to call requestRepaint() explicitly.
+ *
+ * @internal
  */
-export interface ModeContext {
+export interface EngineModeContext {
   /** The map the draw instance is attached to */
   map: MapLibreMap;
   /** The Store of the document; a mode writes features through it */
@@ -66,7 +96,7 @@ export interface ModeContext {
    * agree, and a second draw instance on the page never takes part.
    */
   selectionScope: import('../view/ui/selection-scope.js').SelectionScope;
-  /** The emitter of the `draw.*` events of the draw instance */
+  /** The emitter of the signals of the engine (the drag, the image request) */
   eventEmitter: import('../shared/utils/event-emitter.js').EventEmitter;
   /** The resolved colors and sizes of the selection UI */
   selectionStyle: import('../shared/config/selection.js').SelectionUIConfig;
@@ -95,8 +125,8 @@ export interface ModeContext {
   autoNameGenerator: import('../shared/utils/name-generator.js').AutoNameGenerator;
   /** The box selection strategies by feature type */
   boxSelectionRegistry: import('../dispatcher/hit-test/box-strategy.js').BoxSelectionStrategyRegistry;
-  /** The plugin manager of the draw instance (omitted when none is set up) */
-  pluginManager?: import('../plugins/plugin-manager.js').PluginManager;
+  /** The interaction hooks of the plugins (omitted when none are set up) */
+  plugins?: PluginInteractions;
   /** Requests a mode change, as `draw.setMode` does (the same refusals apply) */
   setMode: (mode: Mode) => void;
   /** Generates a new unique feature id */
@@ -120,72 +150,17 @@ export interface ModeContext {
    * the screen.
    */
   scaleWithZoom: boolean;
-  /**
-   * Gets the most recent snapping result (always null when snapping is not configured)
-   *
-   * This is the only read port through which a mode learns about snapping. InputRouter passes
-   * the coordinates of click / mousemove through snapping before delivering them to the mode,
-   * so at the time of onClick / onMouseMove the result readable here is the snapping result
-   * corresponding to the event that was just delivered (tracing reads it).
-   */
-  getSnapResult?: () => import('../snapping/types.js').SnapResult | null;
-  /**
-   * Gets a feature of a dataset (omitted when it is not configured)
-   *
-   * This is the port through which a mode resolves to a feature a snap target that was snapped
-   * to data (a dataset). It is a feature that is not in the Store, so it cannot
-   * be looked up with store.getFeature (tracing reads it).
-   */
-  getDatasetFeature?: (
-    datasetId: string,
-    featureId: string,
-  ) => import('../store/types.js').Feature | null;
-  /**
-   * Looks up, by extent, the features of the datasets usable for tracing
-   *
-   * This is the port for adding the features of data (a dataset) to the material
-   * of the edge graph. It returns an empty array when snapping to data is disabled.
-   */
-  getDatasetTraceFeatures?: (
-    bbox: import('../store/types.js').BoundingBox,
-  ) => import('../store/types.js').Feature[];
 }
 
 /**
- * The implementation of an interaction mode: it receives the normalized input while it is the
- * current mode.
- *
- * Register a custom mode with `draw.registerMode(name, factory)` or `Plugin.modes`, and enter
- * it with `draw.setMode(name)`. The context is passed in `onStart()` and the implementation
- * keeps it in a field; it is not passed to the event handlers. Every handler is optional. The
+ * A mode as the mode manager runs it: it receives the normalized input while it is the
+ * current mode. The context is passed in `onStart()`; every handler is optional. The
  * coordinates of the pointer events have already gone through snapping (see
  * `isSnapEnabledFor`).
  *
- * @example
- * ```ts
- * import type { ModeContext, ModeHandler, MouseNormalizedEvent } from '@sakuzu/maplibre-gl-draw';
- *
- * // A mode that logs the clicked position and returns to select on Escape
- * class ProbeMode implements ModeHandler {
- *   readonly modeName = 'probe';
- *   private context: ModeContext | null = null;
- *
- *   onStart(context: ModeContext): void {
- *     this.context = context;
- *   }
- *   onClick(event: MouseNormalizedEvent): void {
- *     console.log(event.lngLat.lng, event.lngLat.lat);
- *   }
- *   onKeyDown(event: { key: string }): void {
- *     if (event.key === 'Escape') this.context?.setMode('select');
- *   }
- * }
- *
- * draw.registerMode('probe', () => new ProbeMode());
- * draw.setMode('probe');
- * ```
+ * @internal
  */
-export interface ModeHandler {
+export interface EngineModeHandler {
   /** The name the mode is registered under */
   readonly modeName: Mode;
 
@@ -193,15 +168,14 @@ export interface ModeHandler {
    * Whether the mode writes new features into a layer
    *
    * A mode that declares true is entered only while a layer can be written (while
-   * `ModeContext.getCurrentLayerId` returns a non-empty string); otherwise setMode is ignored
-   * and the current mode is kept. The built-in drawing modes declare it, and a plugin mode
-   * that creates features declares it to get the same gate. The declaration does not remove
+   * `EngineModeContext.getCurrentLayerId` returns a non-empty string); otherwise setMode is
+   * ignored and the current mode is kept. The drawing modes declare it. The declaration does not remove
    * the check at commit time: the layer can stop being writable while the mode is active.
    */
   readonly writesFeatures?: boolean;
 
   /** Called when the mode becomes the current mode; keep the context for later */
-  onStart?(context: ModeContext): void;
+  onStart?(context: EngineModeContext): void;
 
   /** Called when another mode replaces it or the draw instance is destroyed */
   onStop?(): void;
@@ -262,7 +236,7 @@ export interface ModeHandler {
   /**
    * Called after a selection change
    *
-   * Used to update the internal state of the mode when the selection is changed from a plugin.
+   * Used to update the internal state of the mode when the selection is changed from outside.
    */
   onSelectionChange?(): void;
 
@@ -312,10 +286,12 @@ export interface ModeHandler {
    * @param inputType the type of the input for which snapping is about to be applied
    * @returns true if snapping is to be applied
    */
-  isSnapEnabledFor?(inputType: SnapInputType): boolean;
+  isSnapEnabledFor?(inputType: SnapInputKind): boolean;
 }
 
 /**
- * Creates a new {@link ModeHandler}; called every time the mode is entered.
+ * Creates a new {@link EngineModeHandler}; called every time the mode is entered.
+ *
+ * @internal
  */
-export type ModeFactory = () => ModeHandler;
+export type EngineModeFactory = () => EngineModeHandler;

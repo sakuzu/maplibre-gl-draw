@@ -15,7 +15,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
@@ -437,13 +437,13 @@ function createHarness(
   const paintLog: string[] = [];
   const immediate = createImmediateProbe(paintLog);
 
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
   for (const type of options.customTypes ?? []) {
     customRenderers.set(type, {
       draw: (feature: { id: string }): void => {
         paintLog.push(feature.id);
       },
-    } as unknown as CustomFeatureHandler['renderer']);
+    } as unknown as FeatureTypeHandler['renderer']);
   }
 
   // The set of visible ids (passed only when specified). The number of calls is counted too, to
@@ -472,7 +472,7 @@ function createHarness(
     batchManager: immediate.target,
     customRenderers,
     companions,
-    customRendererContext: {} as unknown as CustomRendererDrawContext,
+    customRendererContext: {} as unknown as FrameDrawContext,
     getVisibleIds,
   };
 
@@ -856,7 +856,7 @@ describe('z-order', () => {
       draw: (): void => {
         order.push('custom');
       },
-    } as unknown as CustomFeatureHandler['renderer']);
+    } as unknown as FeatureTypeHandler['renderer']);
     h.deps.restoreBlendState = (): void => {
       order.push('restore');
     };

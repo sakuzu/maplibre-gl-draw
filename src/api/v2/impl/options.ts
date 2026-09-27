@@ -22,7 +22,7 @@ import type { Color, PointStyle, StrokeStyle } from '../../../shared/types/style
 import type { AutoNameConfig } from '../../../shared/utils/name-generator.js';
 import { DrawStore } from '../../../store/draw-store.js';
 import type { DocumentStore } from '../../../store/store.js';
-import type { Options } from '../../context.js';
+import type { EngineOptions } from '../../context.js';
 import type { Engine } from '../../engine.js';
 import { describeStyleProblem } from '../../import-export/style-validation.js';
 import type { FeatureStyle } from '../model.js';
@@ -477,9 +477,9 @@ function toAutoName(autoName: RuntimeOptions['autoName']): AutoNameConfig | bool
 export function toEngineOptions(
   options: DrawOptions,
   isExternalEntry: (id: string) => boolean,
-): Options {
+): EngineOptions {
   const runtime = runtimePart(options);
-  const result: Options = {
+  const result: EngineOptions = {
     messages: runtime.messages,
     autoName: toAutoName(runtime.autoName),
     // Always given, so that the engine gets copies it can change in place

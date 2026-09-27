@@ -9,7 +9,6 @@ import { differenceAll, intersectionAll, unionAll } from '../../../geometry/bool
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../../geometry/types.js';
 import type { FeatureStyleConfig } from '../../../shared/config/feature-style.js';
 import type { Color } from '../../../shared/types/style.js';
-import type { GeometryOperationName } from '../../../shared/utils/event-emitter.js';
 import { getBoundingBox } from '../../../shared/utils/feature-bbox.js';
 import { listEveryFeatureInOrder } from '../../../store/ordering.js';
 import type { Store } from '../../../store/store.js';
@@ -18,7 +17,7 @@ import type {
   FeatureStyle as StoredFeatureStyle,
 } from '../../../store/types.js';
 import { getStyleRuleChannel, resolveFeatureStyle } from '../../../view/style-rule.js';
-import { applyResult, emitApplied } from '../../geometry/apply.js';
+import { applyResult } from '../../geometry/apply.js';
 import { runBuffer } from '../../geometry/buffer.js';
 import { runSplit } from '../../geometry/split.js';
 import {
@@ -28,7 +27,7 @@ import {
   toAreaCoordinates,
   toResultGeometry,
 } from '../../geometry/targets.js';
-import type { GeometryApiDeps } from '../../geometry/types.js';
+import type { GeometryDeps } from '../../geometry/types.js';
 import { describeGeometryProblem } from '../../import-export/geometry-validation.js';
 import { setOwnProperty } from '../../import-export/own-property.js';
 import { describeStyleProblem } from '../../import-export/style-validation.js';
@@ -81,9 +80,8 @@ const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'locked', 'bbox'] 
  */
 export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   const { store } = deps;
-  const geometryDeps: GeometryApiDeps = {
+  const geometryDeps: GeometryDeps = {
     store,
-    eventEmitter: deps.eventEmitter,
     generateFeatureId: deps.generateId,
   };
 
@@ -241,7 +239,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     union(ids) {
       const inputs = requireAreas(ids, 2);
       if (refuseChange(inputs)) return null;
-      return runAreaOperation('union', inputs, inputs[inputs.length - 1], inputs, unionAll);
+      return runAreaOperation(inputs, inputs[inputs.length - 1], inputs, unionAll);
     },
 
     difference(id, subtractIds) {
@@ -252,7 +250,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       }
       if (refuseChange([subject])) return null;
       const inputs = inStackingOrder([subject, ...others]);
-      return runAreaOperation('subtract', inputs, subject, [subject], (areas) =>
+      return runAreaOperation(inputs, subject, [subject], (areas) =>
         differenceAll(
           areas[inputs.indexOf(subject)],
           areas.filter((_, index) => inputs[index] !== subject),
@@ -263,13 +261,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     intersection(ids) {
       const inputs = requireAreas(ids, 2);
       if (refuseChange(inputs)) return null;
-      return runAreaOperation(
-        'intersect',
-        inputs,
-        inputs[inputs.length - 1],
-        inputs,
-        intersectionAll,
-      );
+      return runAreaOperation(inputs, inputs[inputs.length - 1], inputs, intersectionAll);
     },
 
     split(id, lineId) {
@@ -339,25 +331,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
    * @returns The result, or null when the result has no area (nothing changes then)
    */
   function runAreaOperation(
-    operation: GeometryOperationName,
     inputs: StoredFeature[],
     anchor: StoredFeature,
     removed: StoredFeature[],
     compute: (areas: AreaCoordinates[]) => MultiPolygonCoordinates,
   ): Feature | null {
-    const inputIds = inputs.map((feature) => feature.id);
     const areas = inputs.map((feature) => toAreaCoordinates(feature) as AreaCoordinates);
     const geometry = toResultGeometry(compute(areas));
-    if (geometry === null) {
-      emitApplied(deps.eventEmitter, {
-        operation,
-        inputIds,
-        resultId: null,
-        resultIds: [],
-        status: 'empty',
-      });
-      return null;
-    }
+    if (geometry === null) return null;
     const resultId = store.transact(() =>
       applyResult(geometryDeps, {
         anchor,
@@ -365,13 +346,6 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
         geometry,
       }),
     );
-    emitApplied(deps.eventEmitter, {
-      operation,
-      inputIds,
-      resultId,
-      resultIds: [resultId],
-      status: 'applied',
-    });
     return store.getFeature(resultId) ?? null;
   }
 }

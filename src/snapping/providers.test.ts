@@ -25,7 +25,8 @@ import type {
 } from '../store/types.js';
 import { createSnapTargetsRegistry, type SnapTargetsRegistry } from './custom-targets.js';
 import { degreesPerPixel } from './geometry.js';
-import { createGuideSnapProvider } from './providers/guide.js';
+import type { GuideSnapProviderDeps, GuideSnapProviderOptions } from './providers/guide.js';
+import { createSteppedGuideSnapProvider } from './providers/guide.js';
 import { createStoreIntersectionSnapProvider } from './providers/intersection.js';
 import {
   createBuiltInSnapProviders,
@@ -39,6 +40,12 @@ import type {
   SnapSegmentCandidate,
 } from './types.js';
 import { isSegmentCandidate } from './types.js';
+
+/** A guide provider at a fixed step (the default step when none is given) */
+function guideProvider(deps: GuideSnapProviderDeps, options: GuideSnapProviderOptions = {}) {
+  const { northStepDegrees, ...rest } = options;
+  return createSteppedGuideSnapProvider(deps, () => northStepDegrees as number, rest);
+}
 
 const ZOOM = 14;
 
@@ -734,7 +741,7 @@ describe('the built-in guide provider', () => {
   ): SnapSegmentCandidate[] {
     store.setMode(mode);
     store.setTentative(tentative);
-    return createGuideSnapProvider({ store }, options)
+    return guideProvider({ store }, options)
       .candidates(WIDE_BBOX, providerContext())
       .filter(isSegmentCandidate);
   }
@@ -816,7 +823,7 @@ describe('the built-in guide provider', () => {
         2,
       ),
     );
-    const candidates = createGuideSnapProvider(
+    const candidates = guideProvider(
       { store },
       { messages: { snapNorth: '北基準', snapExtension: '延長線' } },
     )
@@ -1000,7 +1007,7 @@ describe('the step angle of the built-in guide provider', () => {
       store.setMode('draw_line');
       store.setTentative(FIRST_POINT);
       expect(
-        createGuideSnapProvider({ store }, { northStepDegrees: step }).candidates(
+        guideProvider({ store }, { northStepDegrees: step }).candidates(
           WIDE_BBOX,
           providerContext(),
         ),

@@ -2,21 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The common part of the geometry operations: placing a result where its input was, and
- * announcing what an operation did
+ * The common part of the geometry operations: placing a result where its input was
  *
  *   applyResult   creates one result, deletes the inputs and places it (outside a transaction)
  *   commitResult  wraps applyResult in one transaction and moves the selection
- *   emitApplied   emits draw.geometry.applied
  */
 
 import type { DrawPropertyName } from '../../shared/properties.js';
 import { setDrawProperty } from '../../shared/properties.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import type { EventEmitter, GeometryAppliedPayload } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
-import type { GeometryApiDeps } from './types.js';
+import type { GeometryDeps } from './types.js';
 
 /**
  * The parametric properties of Circle. They are not inherited by a result that has been
@@ -121,7 +118,7 @@ export interface CommitParams {
  * It does not open a transaction. Because the caller wraps it in store.transact, even a case
  * with several results, such as the buffer, is gathered into one StateChanges.
  */
-export function applyResult(deps: GeometryApiDeps, params: CommitParams): string {
+export function applyResult(deps: GeometryDeps, params: CommitParams): string {
   const { store, generateFeatureId } = deps;
   const { anchor, removedIds, geometry } = params;
 
@@ -150,25 +147,4 @@ export function applyResult(deps: GeometryApiDeps, params: CommitParams): string
 
   moveToPlacement(store, result.id, placement);
   return result.id;
-}
-
-/**
- * Creates the result feature and deletes the inputs in one transaction, and moves the
- * selection to the result.
- *
- * A subscriber receives it as one StateChanges, which is what makes it one step for anything
- * that records changes.
- */
-export function commitResult(deps: GeometryApiDeps, params: CommitParams): string {
-  const { store } = deps;
-  return store.transact(() => {
-    const resultId = applyResult(deps, params);
-    store.setSelection('feature', [resultId]);
-    return resultId;
-  });
-}
-
-/** Emits draw.geometry.applied. */
-export function emitApplied(eventEmitter: EventEmitter, payload: GeometryAppliedPayload): void {
-  eventEmitter.emit('geometry.applied', payload);
 }

@@ -17,7 +17,7 @@ import {
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 
 /** The distance an arrow key moves the selection (pixels; with Shift, NUDGE_LARGE) */
 const NUDGE_SMALL = 1;
@@ -37,7 +37,7 @@ const ARROW_DIRECTIONS: Readonly<Record<string, readonly [number, number]>> = {
  * The behavior is identical to the API's groupSelection (the key, the menu and the API place the
  * new group at the same position).
  */
-export function handleGroupShortcut(context: ModeContext): void {
+export function handleGroupShortcut(context: EngineModeContext): void {
   const { store, autoNameGenerator, generateFeatureId } = context;
   if (store.isReadOnly() || store.isInteractionLocked()) return;
   groupSelection(store, generateFeatureId, autoNameGenerator);
@@ -50,7 +50,7 @@ export function handleGroupShortcut(context: ModeContext): void {
  * consistent): a group selection is dissolved, and for a member feature selection only that
  * member leaves.
  */
-export function handleUngroupShortcut(context: ModeContext): void {
+export function handleUngroupShortcut(context: EngineModeContext): void {
   const { store } = context;
   if (store.isReadOnly() || store.isInteractionLocked()) return;
   ungroupSelection(store);
@@ -60,7 +60,7 @@ export function handleUngroupShortcut(context: ModeContext): void {
  * Handling of the Delete / Backspace key: deletes what is selected, exactly like
  * `draw.deleteSelection()` (vertices, features, groups or layers; locked items are kept).
  */
-export function handleDeleteShortcut(context: ModeContext): void {
+export function handleDeleteShortcut(context: EngineModeContext): void {
   deleteSelection(context.store);
 }
 
@@ -74,7 +74,7 @@ export function handleDeleteShortcut(context: ModeContext): void {
  *   the map (MapLibre pans with it)
  */
 export function handleNudgeShortcut(
-  context: ModeContext,
+  context: EngineModeContext,
   key: string,
   modifiers: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean },
 ): boolean {
@@ -118,7 +118,7 @@ function firstCoordinate(coordinates: FeatureCoordinates): Coordinate | null {
 /**
  * Handling of the Escape key
  */
-export function handleEscapeShortcut(context: ModeContext): void {
+export function handleEscapeShortcut(context: EngineModeContext): void {
   const { store, map } = context;
   const boxSelection = store.getBoxSelection();
 

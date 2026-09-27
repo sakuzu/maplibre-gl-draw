@@ -10,9 +10,9 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type {
-  CustomFeatureHandler,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  FeatureTypeHandler,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
@@ -74,10 +74,10 @@ export function renderLayers(
   selectedIdSet: Set<string>,
   defaultProjectionData: ProjectionData,
   zoom: number,
-  customRenderers: Map<string, CustomFeatureHandler['renderer']>,
-  customRendererContext: CustomRendererDrawContext,
+  customRenderers: Map<string, FeatureTypeHandler['renderer']>,
+  customRendererContext: FrameDrawContext,
   companions: FeatureCompanionRegistry,
-  layerAwareRenderers: LayerAwareOverlayRenderer[],
+  layerAwareRenderers: LayeredOverlayRenderer[],
   datasets?: DatasetManager,
   storeRetained?: StoreRetainedCache,
   restoreBlendState?: () => void,
@@ -258,10 +258,7 @@ export function renderLayers(
  * The same object is returned when the opacity is already the one of the context, so a map whose
  * layers are all opaque allocates nothing per layer.
  */
-export function layerRendererContext(
-  base: CustomRendererDrawContext,
-  layer: Layer,
-): CustomRendererDrawContext {
+export function layerRendererContext(base: FrameDrawContext, layer: Layer): FrameDrawContext {
   const opacity = layerDrawFactors(layer).opacity;
   return base.opacity === opacity ? base : { ...base, opacity };
 }

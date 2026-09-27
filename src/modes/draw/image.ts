@@ -10,7 +10,7 @@
 
 import type { KeyNormalizedEvent } from '../../dispatcher/types.js';
 import type { Coordinate, Mode } from '../../store/types.js';
-import type { ModeContext, ModeHandler } from '../handler.js';
+import type { EngineModeContext, EngineModeHandler } from '../handler.js';
 import { resolveCommitLayer } from './commit-layer.js';
 
 /**
@@ -18,13 +18,13 @@ import { resolveCommitLayer } from './commit-layer.js';
  *
  * @internal
  */
-export class DrawImageMode implements ModeHandler {
+export class DrawImageMode implements EngineModeHandler {
   readonly modeName: Mode = 'draw_image';
   readonly writesFeatures = true;
 
-  private context!: ModeContext;
+  private context!: EngineModeContext;
 
-  onStart(context: ModeContext): void {
+  onStart(context: EngineModeContext): void {
     this.context = context;
     const { map, store, eventEmitter } = this.context;
 

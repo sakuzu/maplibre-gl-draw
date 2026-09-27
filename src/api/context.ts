@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Context
- *
- * The dependency container of MapLibreGLDraw
+ * The context of the engine: the options it was built with, resolved, and the components
+ * every part of the engine shares
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -55,183 +54,46 @@ import { resolveWritableLayerId } from '../store/writable-layer.js';
 import { createSelectionScope, type SelectionScope } from '../view/ui/selection-scope.js';
 
 /**
- * The options of {@link createMapLibreGLDraw}. Every option can be omitted.
- *
- * @example
- * ```typescript
- * const draw = createMapLibreGLDraw(map, {
- *   defaultMode: 'select',
- *   clickTolerance: 8,
- *   snap: { tolerancePx: 12, kinds: { guide: false } },
- *   trace: { enabled: false },
- *   topology: { sharedVertexDrag: true },
- *   autoName: false,
- * });
- * ```
- */
-export interface Options {
-  /** The mode the instance starts in (default `'select'`) */
-  defaultMode?: Mode;
-  /**
-   * How far from a feature a click still hits it, in CSS pixels (default 6)
-   */
-  clickTolerance?: number;
-  /**
-   * How far the mouse moves with the button down before a press becomes a drag, in CSS
-   * pixels (default 3)
-   */
-  dragThreshold?: number;
-  /**
-   * The default drawing style of the features, per geometry (points, lines, polygons and so
-   * on); the given parts replace the built-in defaults, and a feature's own `style` wins over
-   * both
-   */
-  style?: Partial<FeatureStyleConfig>;
-  /**
-   * The look of the selection UI: the bounding box, the resize, rotate, vertex and midpoint
-   * handles, and the radius handle, center marker and radius line of a circle (see
-   * {@link SelectionUIConfig} for the defaults)
-   */
-  selectionStyle?: Partial<SelectionUIConfig>;
-  /**
-   * The look of the box selection rectangle and the switches of the rendering paths (see
-   * {@link RenderingConfig} for the defaults)
-   */
-  renderingStyle?: Partial<RenderingConfig>;
-  /**
-   * The automatic names of new features, layers and groups, such as `Polygon 1` and
-   * `Layer 2` (default: enabled)
-   *
-   * `false` turns it off, and an {@link AutoNameConfig} changes the words or the format. A
-   * number used once is not reused. The words are English by default; a host that shows
-   * another language translates them here (`typeNames`), not through {@link Options.messages}.
-   */
-  autoName?: AutoNameConfig | boolean;
-
-  /**
-   * Whether the line widths of the features drawn in a drawing mode follow the zoom (default
-   * true)
-   *
-   * By default a drawing mode records the zoom a feature is drawn at in `properties`, under
-   * `maplibre-gl-draw:createdZoom`, and the widths of its lines and outlines are those of that
-   * zoom: they double with each zoom level in and halve with each level out, like lines drawn
-   * on paper. An application that wants the widths to stay the same on the screen at every
-   * zoom sets `false`; a drawn feature then gets no created zoom, like a feature added through
-   * the API. It does not change features already drawn: the widths follow
-   * `maplibre-gl-draw:createdZoom` wherever it is set, so a feature added through the API can
-   * set it too. An Image always scales with the map.
-   */
-  scaleWithZoom?: boolean;
-
-  /**
-   * The snapping configuration
-   *
-   * When omitted, it is enabled with a tolerance of 10 CSS pixels, it is released while Alt
-   * is held, every kind of target (vertex, edge, intersection, guide) is on, and the
-   * datasets are targets. The candidates come from the vertices and edges of
-   * the Store; more are added with `draw.snapping.register()`. Change it at runtime with
-   * {@link MapLibreGLDraw.snapping}.
-   */
-  snap?: SnapOptions;
-
-  /**
-   * The topology configuration (when omitted, everything is disabled)
-   *
-   * The settings that keep editing from breaking boundaries shared by adjacent features.
-   * With `sharedVertexDrag: true`, dragging a vertex in select mode also moves, by the same
-   * amount, every vertex of other visible, unlocked features at exactly the same coordinates,
-   * and the drag commits as one change. The modifier of `snap.disableKey` held at the start of
-   * a drag releases it for that drag. Change it at runtime with
-   * {@link MapLibreGLDraw.topology}.
-   */
-  topology?: Partial<TopologyConfig>;
-
-  /**
-   * The trace configuration (when omitted, it is enabled)
-   *
-   * While drawing (draw_line / draw_polygon), when the previous click and this click both
-   * snapped to the boundary of the same feature, the vertex sequence between them is taken in
-   * automatically. With `enabled: false` a click adds only the point clicked. Change it at
-   * runtime with {@link MapLibreGLDraw.tracing}.
-   */
-  trace?: TraceOptions;
-
-  /**
-   * The document store (when omitted, a new {@link MemoryStore} is used)
-   *
-   * Give a {@link DocumentStore} of your own to keep the document elsewhere; the library
-   * keeps the local state (selection, mode, read-only and so on) around
-   * it. A {@link Store} such as a MemoryStore is used as it is.
-   */
-  store?: DocumentStore | Store;
-
-  /**
-   * Whether to create a default layer on initialization (default: true)
-   *
-   * When it is false, creating the layers becomes the responsibility of the application.
-   * Use it when restoring the layer structure from an external data source, or
-   * when managing the layers on your own. Until a layer exists, the drawing modes cannot be
-   * entered.
-   */
-  initDefaultLayer?: boolean;
-
-  /**
-   * The predicate that identifies the "external entries" of the stacking order (when omitted,
-   * it is always false)
-   *
-   * The entries of the layer order for which it returns true are separators, and this library
-   * does not draw them. Each interval between separators is drawn by its own MapLibre custom
-   * layer (a frame), so the host can place its native layers (vector tiles, raster) between
-   * the frames. {@link MapLibreGLDraw.getRenderSlots} lists the frames, and the
-   * `draw.renderslots.change` event announces their changes.
-   *
-   * @example
-   * ```typescript
-   * const draw = createMapLibreGLDraw(map, {
-   *   isExternalEntry: (id) => id.startsWith('native:'),
-   * });
-   * draw.on('draw.renderslots.change', ({ slots }) => placeNativeLayers(slots));
-   * ```
-   */
-  isExternalEntry?: (entryId: string) => boolean;
-
-  /**
-   * The render scale (when omitted, the map's `getPixelRatio()` is read each time)
-   *
-   * Line widths, point sizes and outlines are drawn by converting CSS pixels into physical
-   * pixels, so the scale of the backing store being drawn into is needed. By default it is
-   * the ratio of the map, which follows the `pixelRatio` the maplibre Map was created with
-   * and the device. Pass a value only to draw at another scale than the map's.
-   */
-  pixelRatio?: number;
-
-  /**
-   * The strings the library returns as values (when omitted, {@link MESSAGES_EN})
-   *
-   * The given entries replace the English defaults for this instance only; the entries
-   * left out keep the default. Legend labels and the descriptions of the snapping guides
-   * come from this table. The library ships English only and does no locale detection.
-   * The words of generated names ("Layer 1") are not here: they come from
-   * {@link Options.autoName}.
-   *
-   * @example
-   * ```typescript
-   * const draw = createMapLibreGLDraw(map, {
-   *   messages: {
-   *     legendOther: 'Autres',
-   *     legendBelow: (upper) => `Moins de ${upper}`,
-   *   },
-   * });
-   * ```
-   */
-  messages?: Partial<Messages>;
-}
-
-/**
- * The default options
+ * The options of the engine, in the shapes of its components. `createDraw` translates the
+ * options of the draw instance into these (see `toEngineOptions` of `impl/options.ts`).
  *
  * @internal
  */
+export interface EngineOptions {
+  /** The mode entered when the engine starts */
+  defaultMode?: Mode;
+  /** How far from a feature a click still hits it, in pixels */
+  clickTolerance?: number;
+  /** How far the mouse moves before a press becomes a drag, in pixels */
+  dragThreshold?: number;
+  /** The default look of the features */
+  style?: Partial<FeatureStyleConfig>;
+  /** The look of the selection */
+  selectionStyle?: Partial<SelectionUIConfig>;
+  /** The switches and looks of the rendering */
+  renderingStyle?: Partial<RenderingConfig>;
+  /** The automatic names of new features, layers and groups */
+  autoName?: AutoNameConfig | boolean;
+  /** Whether the line widths of new features follow the zoom */
+  scaleWithZoom?: boolean;
+  /** The snapping */
+  snap?: SnapOptions;
+  /** The shared vertices */
+  topology?: Partial<TopologyConfig>;
+  /** The tracing along edges */
+  trace?: TraceOptions;
+  /** The Store to keep the document in, instead of an in-memory one */
+  store?: DocumentStore | Store;
+  /** Whether the document starts with one empty layer (true by default) */
+  initDefaultLayer?: boolean;
+  /** Tells the entries of the stacking order that are outside the document */
+  isExternalEntry?: (entryId: string) => boolean;
+  /** The pixel ratio to draw with, instead of the one of the map */
+  pixelRatio?: number;
+  /** The strings the engine shows */
+  messages?: Partial<Messages>;
+}
+
 export const DEFAULT_OPTIONS = {
   defaultMode: 'select' as Mode,
   // One default for the hit test and the topmost hit (see DEFAULT_HIT_TEST_OPTIONS)
@@ -243,7 +105,7 @@ export const DEFAULT_OPTIONS = {
 /**
  * Context
  *
- * The container that holds the internal components of MapLibreGLDraw
+ * The container that holds the internal components of one engine
  *
  * @internal
  */
@@ -259,18 +121,16 @@ export interface Context {
   selectionStyle: SelectionUIConfig;
   renderingConfig: RenderingConfig;
   /**
-   * The topology configuration (it is rewritten at runtime; the actual object draw.topology
-   * operates on)
+   * The topology configuration (the actual object `draw.options.update` changes at runtime)
    */
   topology: TopologyConfig;
   /**
-   * The trace configuration (it is rewritten at runtime; the actual object draw.tracing
-   * operates on)
+   * The trace configuration (the actual object `draw.options.update` changes at runtime)
    */
   trace: TraceConfig;
   options: Required<
     Omit<
-      Options,
+      EngineOptions,
       | 'style'
       | 'selectionStyle'
       | 'renderingStyle'
@@ -286,7 +146,7 @@ export interface Context {
     >
   >;
   /**
-   * The messages table of this instance (Options.messages over `MESSAGES_EN`). Every string
+   * The messages table of this instance (EngineOptions.messages over `MESSAGES_EN`). Every string
    * the library returns as a value is read from here
    */
   messages: Messages;
@@ -298,14 +158,14 @@ export interface Context {
    */
   pixelRatio?: number;
   /** The predicate that identifies the "external entries" of the stacking order
-   * (Options.isExternalEntry) */
+   * (EngineOptions.isExternalEntry) */
   isExternalEntry?: (entryId: string) => boolean;
   /**
    * The source of the render scale (it includes the render scale that can be changed at
    * runtime)
    *
    * `pixelRatioSource.resolve` is distributed to each renderer and retained batch as a
-   * `PixelRatioInput`. A change made by `draw.setRenderScale()` propagates through here to
+   * `PixelRatioInput`. A change made through `draw.options.update` propagates through here to
    * every place that reads it directly.
    */
   pixelRatioSource: PixelRatioSource;
@@ -345,7 +205,7 @@ export interface Context {
  *
  * @internal
  */
-export function createContext(map: MapLibreMap, options: Options = {}): Context {
+export function createContext(map: MapLibreMap, options: EngineOptions = {}): Context {
   const opts = {
     ...DEFAULT_OPTIONS,
     ...options,
@@ -371,14 +231,14 @@ export function createContext(map: MapLibreMap, options: Options = {}): Context 
     : DEFAULT_RENDERING_CONFIG;
 
   // Merge the topology configuration (everything is disabled by default). It is the actual
-  // object draw.topology rewrites, so always copy it so that the default object is not shared
+  // object the runtime options change, so always copy it so that the default is not shared
   const topology: TopologyConfig = mergeTopologyConfig(
     DEFAULT_TOPOLOGY_CONFIG,
     options.topology ?? {},
   );
 
-  // Merge the trace configuration (it is enabled by default). It is the actual object
-  // draw.tracing rewrites, so always copy it so that the default object is not shared
+  // Merge the trace configuration (it is enabled by default). It is the actual object the
+  // runtime options change, so always copy it so that the default is not shared
   const trace: TraceConfig = mergeTraceConfig(DEFAULT_TRACE_CONFIG, options.trace ?? {});
 
   // The internal components
@@ -413,8 +273,8 @@ export function createContext(map: MapLibreMap, options: Options = {}): Context 
   });
 
   // Create the snapping service (enabled by default, tolerance 10px, temporarily disabled
-  // with Alt). The candidates come only from the built-in providers (the vertices and edges of
-  // the Store); external providers are added with draw.snapping.register().
+  // with Alt). The candidates come from the built-in providers (the vertices and edges of the
+  // Store); the snap providers of the extensions are added through the extension host.
   const snapOptions: ResolvedSnapOptions = {
     ...DEFAULT_SNAP_OPTIONS,
     ...options.snap,

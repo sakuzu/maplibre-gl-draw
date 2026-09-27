@@ -16,7 +16,7 @@ import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import type { Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
-import type { ModeContext } from '../../handler.js';
+import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragScope, DragStore } from './operation.js';
 import { dragStartLngLat, selectedFeaturesOf } from './operation.js';
@@ -87,7 +87,7 @@ export function startResizeDrag(
   handle: HandleType,
   bbox: BoundingBoxCoords,
   features: Feature[],
-  map: ModeContext['map'],
+  map: EngineModeContext['map'],
   scope: DragScope,
 ): ResizeDrag {
   // A box thinner than 1 pixel on screen is not stretched along that axis (converted into

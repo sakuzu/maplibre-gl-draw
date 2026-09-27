@@ -11,14 +11,14 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createSelectionApi } from '../../api/selection-api.js';
 import { groupSelection } from '../../operations/layer-operations.js';
+import { deleteSelection } from '../../operations/selection-operations.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { handleDeleteShortcut, handleGroupShortcut } from './shortcut-handler.js';
 
 /** Records the ids the Store reported as deleted (the spatial index drops exactly those) */
@@ -48,13 +48,13 @@ function feature(id: string, layerId: string): Feature {
 let store: MemoryStore;
 let spatial: DeletionLog;
 let index: StoreSpatialIndex;
-let context: ModeContext;
+let context: EngineModeContext;
 
 beforeEach(() => {
   store = new MemoryStore();
   spatial = new DeletionLog(store);
   index = new StoreSpatialIndex(store);
-  context = { store, spatialIndex: index } as unknown as ModeContext;
+  context = { store, spatialIndex: index } as unknown as EngineModeContext;
 });
 
 describe('handleDeleteShortcut with a group selection', () => {
@@ -306,9 +306,9 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
   }
 
   it('deletes the unlocked features in one change and returns true', () => {
-    const viaApi = run((s) => createSelectionApi({ store: s }).deleteSelection());
+    const viaApi = run((s) => deleteSelection(s));
     const viaKey = run((s) => {
-      handleDeleteShortcut({ store: s } as unknown as ModeContext);
+      handleDeleteShortcut({ store: s } as unknown as EngineModeContext);
       return undefined;
     });
 
@@ -346,7 +346,7 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
     store.setSelection('feature', ['line']);
     store.setSelectedVertices({ featureId: 'line', vertices: [{ ring: 0, index: 1 }] });
 
-    expect(createSelectionApi({ store }).deleteSelection()).toBe(true);
+    expect(deleteSelection(store)).toBe(true);
     expect(coordinatesOf(store.getFeature('line'))).toEqual([
       [0, 0],
       [2, 0],
@@ -367,25 +367,24 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
     });
     store.createFeature(feature('f1', 'l1'));
     store.createFeature({ ...feature('f2', 'l1'), locked: true });
-    const api = createSelectionApi({ store });
 
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
 
     store.setSelection('feature', ['f2']);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
 
     store.setSelection('feature', ['f1']);
     store.setReadOnly(true);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
     store.setReadOnly(false);
     store.setInteractionLock(true);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
     expect(store.getFeature('f1')).toBeDefined();
 
     // The last layer is kept, so deleting it deletes nothing
     store.setInteractionLock(false);
     store.setSelection('layer', ['l1']);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
     expect(store.getLayer('l1')).toBeDefined();
   });
 });
@@ -414,7 +413,7 @@ describe('the group shortcut places the group where draw.groupSelection does', (
       store: viaKey,
       autoNameGenerator: new AutoNameGenerator(viaKey),
       generateFeatureId: () => 'g',
-    } as unknown as ModeContext);
+    } as unknown as EngineModeContext);
 
     const viaApi = build();
     groupSelection(viaApi, () => 'g', new AutoNameGenerator(viaApi));

@@ -352,26 +352,6 @@ export const DEFAULT_SELECTION_CONFIG: SelectionUIConfig = {
 };
 
 /**
- * Style changes on hover
- */
-export const HOVER_STYLE_MODIFIERS = {
-  /** Enlargement factor for the size */
-  sizeMultiplier: 1.2,
-  /** Increase in opacity */
-  opacityIncrease: 0.2,
-};
-
-/**
- * Style changes while dragging
- */
-export const DRAGGING_STYLE_MODIFIERS = {
-  /** Reduction factor for the size */
-  sizeMultiplier: 0.9,
-  /** Opacity */
-  opacity: 0.8,
-};
-
-/**
  * Threshold at which handle thinning kicks in
  *
  * Only features whose total number of vertex handles and midpoint handles exceeds this are

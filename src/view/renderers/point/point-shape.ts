@@ -409,7 +409,7 @@ void main() {
     }
 
     // Billboards are drawn without the depth test (see the note in billboard-depth.ts). A
-    // hand-drawn Point can arrive here through a CustomFeatureRenderer, so wrapping only the
+    // hand-drawn Point can arrive here through a FeatureTypeRenderer, so wrapping only the
     // instanced side would leave the points of this path as half circles.
     drawBillboardsWithoutDepth(gl, () => {
       // Draw the fill

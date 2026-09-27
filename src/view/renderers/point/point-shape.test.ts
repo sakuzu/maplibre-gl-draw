@@ -5,7 +5,7 @@
  * Tests that the per-point shape renderer (PointShapeRenderer) draws billboards without the
  * depth test.
  *
- * A hand-drawn Point may be taken over by a CustomFeatureRenderer and arrive on this path.
+ * A hand-drawn Point may be taken over by a FeatureTypeRenderer and arrive on this path.
  * When only the instanced side (point-instance) was wrapped, hand-drawn points alone were eaten
  * by the terrain and stayed as half circles. Here, that the depth test is always disabled during
  * the draw calls, and that the original state is restored once drawing is finished, are verified

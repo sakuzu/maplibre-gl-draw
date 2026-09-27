@@ -250,7 +250,7 @@ export interface SnapProvider {
 /**
  * A function that returns the snapping candidates of a custom feature type
  *
- * This is the shape passed to CustomFeatureHandler.getSnapTargets. The built-in
+ * This is the shape passed to FeatureTypeHandler.getSnapTargets. The built-in
  * vertex provider calls it when it is registered for the target type.
  *
  * @internal

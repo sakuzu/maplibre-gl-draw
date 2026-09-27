@@ -13,10 +13,10 @@
 import type { Position } from 'geojson';
 import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
 import type {
-  CustomFeatureRenderer,
-  CustomOverlayRenderer,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  EngineOverlayRenderer,
+  FeatureTypeRenderer,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../../extension/index.js';
 import { toColor } from '../../../shared/color.js';
 import type { Feature as StoredFeature } from '../../../store/types.js';
@@ -66,7 +66,7 @@ export function terrainAnchorsOf(
 /** The offsets of each projection matrix of a frame */
 const offsetsByMatrix = new WeakMap<object, OffsetUniforms>();
 
-function offsetOf(base: CustomRendererDrawContext): OffsetUniforms {
+function offsetOf(base: FrameDrawContext): OffsetUniforms {
   let offset = offsetsByMatrix.get(base.mainMatrixArray);
   if (!offset) {
     offset = calculateOffsetUniforms(base.centerLngLat, base.mainMatrixArray);
@@ -90,7 +90,7 @@ function pair(position: Position): [number, number] {
  */
 export function createRenderContext(
   gl: WebGL2RenderingContext,
-  base: CustomRendererDrawContext,
+  base: FrameDrawContext,
   projection: ProjectionData,
   zoom: number,
   anchors: TerrainAnchors,
@@ -179,14 +179,14 @@ interface Attachment {
  */
 function createContextCache(deps: RenderAdapterDeps) {
   let last: {
-    base: CustomRendererDrawContext;
+    base: FrameDrawContext;
     projection: ProjectionData;
     zoom: number;
     context: RenderContext;
   } | null = null;
   return (
     gl: WebGL2RenderingContext,
-    base: CustomRendererDrawContext,
+    base: FrameDrawContext,
     projection: ProjectionData,
     zoom: number,
   ): RenderContext => {
@@ -215,7 +215,7 @@ export function adaptFeatureRenderer(
   type: string,
   renderer: FeatureRenderer,
   deps: RenderAdapterDeps,
-): CustomFeatureRenderer {
+): FeatureTypeRenderer {
   let attachment: Attachment | null = null;
   const contextFor = createContextCache(deps);
   return {
@@ -255,7 +255,7 @@ export function createCompanionDrawer(
     feature: StoredFeature,
     projectionData: ProjectionData,
     zoom: number,
-    context: CustomRendererDrawContext,
+    context: FrameDrawContext,
   ): void => {
     const gl = getGl();
     if (!gl) return;
@@ -270,7 +270,7 @@ export function createCompanionDrawer(
 /** Where the overlays of the contract are put into the engine */
 export interface OverlayHost {
   /** Adds a renderer of the engine; returns the function that removes it */
-  addOverlayRenderer(renderer: CustomOverlayRenderer): () => void;
+  addOverlayRenderer(renderer: EngineOverlayRenderer): () => void;
 }
 
 /**
@@ -310,7 +310,7 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
   const each = (
     projectionData: ProjectionData,
     zoom: number,
-    context: CustomRendererDrawContext,
+    context: FrameDrawContext,
     call: (overlay: OverlayRenderer, ctx: RenderContext) => void,
   ): void => {
     if (!attachment) return;
@@ -333,7 +333,7 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
     for (const overlay of sorted()) overlay.onRemove(map, gl);
   };
 
-  const above: CustomOverlayRenderer = {
+  const above: EngineOverlayRenderer = {
     name: 'extension-overlays',
     order: 'overlay',
     onAdd,
@@ -343,7 +343,7 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
     onRemove,
     hasPendingWork: () => overlays.some((entry) => entry.overlay.hasPendingWork?.() === true),
   };
-  const perLayer: LayerAwareOverlayRenderer = {
+  const perLayer: LayeredOverlayRenderer = {
     name: 'extension-overlays-per-layer',
     order: 'overlay',
     // The resources are created and released by the other renderer

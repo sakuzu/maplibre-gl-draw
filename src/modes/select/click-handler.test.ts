@@ -22,7 +22,7 @@ import {
   type FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { handleSelectClick } from './click-handler.js';
 
 function polygon(id: string, layerId: string): Feature {
@@ -77,7 +77,7 @@ function makeMap() {
 
 let store: MemoryStore;
 let top: TopHit | null;
-let context: ModeContext;
+let context: EngineModeContext;
 /** There is one companion rendering provider per draw instance */
 let companions: FeatureCompanionRegistry = createFeatureCompanionRegistry();
 let onCompanionClick: ReturnType<typeof vi.fn<FeatureCompanionProvider['onCompanionClick']>>;
@@ -121,7 +121,7 @@ beforeEach(() => {
     featureCompanions: companions,
     pluginManager: undefined,
     selectionScope: createSelectionScope(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
 });
 
 describe('consumption of a companion click', () => {

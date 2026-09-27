@@ -16,9 +16,9 @@ import { drawProperties } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
-import { applyResult, emitApplied } from './apply.js';
+import { applyResult } from './apply.js';
 import { toBufferGeometry, toResultGeometry } from './targets.js';
-import type { GeometryApiDeps, GeometryBufferOptions } from './types.js';
+import type { BufferOptions, GeometryDeps } from './types.js';
 
 /** The content of one result created by the buffer (an input and its result geometry). */
 interface BufferPlan {
@@ -55,7 +55,7 @@ function planCircleBuffer(input: Feature, distanceMeters: number): BufferPlan | 
  * Plans the buffer of one input. null when the result is empty or the operation is not
  * defined.
  */
-function planBuffer(input: Feature, options: GeometryBufferOptions): BufferPlan | null {
+function planBuffer(input: Feature, options: BufferOptions): BufferPlan | null {
   const { distanceMeters, segments } = options;
   if (input.type === 'Circle') return planCircleBuffer(input, distanceMeters);
 
@@ -83,9 +83,9 @@ function planBuffer(input: Feature, options: GeometryBufferOptions): BufferPlan 
  * @param select Whether the results become the selection
  */
 export function runBuffer(
-  deps: GeometryApiDeps,
+  deps: GeometryDeps,
   inputs: Feature[],
-  options: GeometryBufferOptions,
+  options: BufferOptions,
   select = true,
 ): string[] {
   const { store } = deps;
@@ -96,15 +96,7 @@ export function runBuffer(
   }
 
   if (plans.length === 0) {
-    // Every input was skipped or had an empty result. The Store is not changed at all; only
-    // the notification is emitted.
-    emitApplied(deps.eventEmitter, {
-      operation: 'buffer',
-      inputIds: inputs.map((input) => input.id),
-      resultId: null,
-      resultIds: [],
-      status: 'empty',
-    });
+    // Every input was skipped or had an empty result. The Store is not changed at all.
     return [];
   }
 
@@ -121,12 +113,5 @@ export function runBuffer(
     return ids;
   });
 
-  emitApplied(deps.eventEmitter, {
-    operation: 'buffer',
-    inputIds: plans.map((plan) => plan.input.id),
-    resultId: resultIds[0],
-    resultIds,
-    status: 'applied',
-  });
   return resultIds;
 }

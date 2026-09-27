@@ -154,17 +154,6 @@ export function forEachCoordinateDeep(
 }
 
 /**
- * Gets every coordinate as a flat array
- */
-export function flattenCoordinatesDeep(coords: FeatureCoordinates): Coordinate[] {
-  const result: Coordinate[] = [];
-  forEachCoordinateDeep(coords, (coord) => {
-    result.push(coord);
-  });
-  return result;
-}
-
-/**
  * Whether the feature type supports vertex editing (vertex handles / midpoint handles)
  *
  * LineString / Polygon and the Multi types are supported. Point / Circle / Freehand /

@@ -12,7 +12,7 @@ import { addVertex, computeVertexMove, startVertexMove } from '../../../operatio
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import { hasVertexRef } from '../../../shared/utils/vertex-ref.js';
 import type { Coordinate, VertexRef } from '../../../store/types.js';
-import type { ModeContext } from '../../handler.js';
+import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
 import { dragStartLngLat } from './operation.js';
@@ -27,7 +27,10 @@ import { dragStartLngLat } from './operation.js';
  * deal with raw DOM events). Pressing or releasing the key mid-drag does not change the set.
  * When disableKey is 'none', no modifier-key-based temporary disabling is performed.
  */
-function isSharedVertexDragSuppressed(event: DragNormalizedEvent, context: ModeContext): boolean {
+function isSharedVertexDragSuppressed(
+  event: DragNormalizedEvent,
+  context: EngineModeContext,
+): boolean {
   const disableKey = context.snapOptions?.disableKey ?? 'alt';
   if (disableKey === 'none') return false;
   return event.modifiers?.[disableKey] === true;
@@ -98,7 +101,7 @@ export function startVertexDrag(
   event: DragNormalizedEvent,
   featureId: string,
   vertexRef: VertexRef,
-  context: ModeContext,
+  context: EngineModeContext,
 ): VertexDrag | null {
   const { store, spatialIndex } = context;
   const feature = store.getFeature(featureId);

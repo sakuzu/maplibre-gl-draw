@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The renderer contracts of an extension
+ * The renderer contracts of the engine
  *
- * The shapes an extension implements to draw with the WebGL context of a draw instance: the
- * renderer of a custom feature type and the overlay renderers. They are types only and sit low
- * in the layer order, so the view and snapping layers read them without reaching up into api.
+ * The shapes the engine draws with in the WebGL context of a draw instance: the renderer of a
+ * feature type that is not built in and the overlay renderers. The renderers of the extension
+ * contract reach the engine through the adapters of `api/impl/render-context.ts`, which hand
+ * them a `RenderContext` made from the {@link FrameDrawContext} of the frame. They are types
+ * only and sit low in the layer order, so the view and snapping layers read them without
+ * reaching up into api.
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
@@ -16,12 +19,12 @@ import type { FillShaderManager } from '../view/renderers/polygon/fill.js';
 import type { TerrainContext } from '../view/terrain/context.js';
 
 /**
- * Rendering context for custom renderers
+ * The values of one frame the engine draws with: the shader data, the offset information and
+ * the shared renderers
  *
- * Provides the shader data and offset information needed when using QuadShader and the like.
- * It also holds references to the shared renderers, which makes high-quality rendering possible.
+ * @internal
  */
-export interface CustomRendererDrawContext {
+export interface FrameDrawContext {
   /** Shader data (vertexShaderPrelude, define, variantName) */
   shaderData: {
     vertexShaderPrelude: string;
@@ -35,9 +38,8 @@ export interface CustomRendererDrawContext {
   /**
    * The resolved rendering scale factor (the conversion factor from CSS pixels to device pixels)
    *
-   * It is the value of `pixelRatio` in Options when one has been injected, and otherwise the
-   * `window.devicePixelRatio` read in that frame. Renderers on the extension side use this
-   * instead of reading `window.devicePixelRatio` directly.
+   * It is the pixel ratio of the options when one has been given, and otherwise the
+   * `window.devicePixelRatio` read in that frame.
    */
   pixelRatio: number;
   /**
@@ -55,7 +57,7 @@ export interface CustomRendererDrawContext {
    *
    * Core multiplies it into everything it draws for the layer, and a renderer multiplies it
    * into its own alpha, so that what it draws fades with the layer. It is the opacity of the
-   * layer of the feature for a {@link CustomFeatureRenderer} and a feature companion, and 1 for
+   * layer of the feature for a {@link FeatureTypeRenderer} and a feature companion, and 1 for
    * an overlay (which does not belong to a layer). The shared renderers of this context do not
    * apply it by themselves. It changes nothing about hit testing: a feature in a layer at
    * opacity 0 can still be selected.
@@ -73,46 +75,15 @@ export interface CustomRendererDrawContext {
 }
 
 /**
- * Draws the features of a custom feature type with the WebGL context of the map
+ * Draws the features of a feature type that is not built in with the WebGL context of the map
  *
- * It is the `renderer` of a {@link CustomFeatureHandler}. `onAdd` runs when the draw layer is
+ * It is the `renderer` of a {@link FeatureTypeHandler}. `onAdd` runs when the draw layer is
  * added to the map (create the WebGL resources there), `draw` runs for each visible feature of
- * the type in stacking order on every frame, and `onRemove` runs when the layer is removed. The
- * shared renderers of the context draw lines, fills and point shapes the same way the built-in
- * types are drawn, terrain included.
+ * the type in stacking order on every frame, and `onRemove` runs when the layer is removed.
  *
- * @example
- * ```ts
- * import type { CustomFeatureRenderer, PointStyle } from '@sakuzu/maplibre-gl-draw';
- *
- * const markerStyle: PointStyle = {
- *   shape: 'square',
- *   size: 14,
- *   fillColor: [0, 0.4, 1, 1],
- *   fillOpacity: 1,
- *   strokeColor: [1, 1, 1, 1],
- *   strokeWidth: 2,
- *   strokeOpacity: 1,
- * };
- *
- * const markerRenderer: CustomFeatureRenderer = {
- *   name: 'marker',
- *   onAdd() {}, // nothing to create: the shared point renderer does the drawing
- *   draw(feature, _projectionData, zoom, context) {
- *     const coordinate = (feature.geometry as GeoJSON.Point).coordinates as [number, number];
- *     // Fade with the layer: the opacity of the layer is multiplied into the alpha
- *     const style = {
- *       ...markerStyle,
- *       fillOpacity: markerStyle.fillOpacity * context.opacity,
- *       strokeOpacity: markerStyle.strokeOpacity * context.opacity,
- *     };
- *     context.pointShapeRenderer.draw(coordinate, style, zoom, feature.id);
- *   },
- *   onRemove() {},
- * };
- * ```
+ * @internal
  */
-export interface CustomFeatureRenderer {
+export interface FeatureTypeRenderer {
   /** Renderer name (for debugging) */
   readonly name: string;
 
@@ -140,7 +111,7 @@ export interface CustomFeatureRenderer {
     },
     projectionData: ProjectionData,
     zoom: number,
-    context: CustomRendererDrawContext,
+    context: FrameDrawContext,
   ): void;
 
   /**
@@ -150,11 +121,11 @@ export interface CustomFeatureRenderer {
 }
 
 /**
- * Custom renderer
+ * An overlay renderer of the engine: drawing that belongs to no feature
  *
- * Responsible for overlay rendering (independent of features).
+ * @internal
  */
-export interface CustomOverlayRenderer {
+export interface EngineOverlayRenderer {
   /** Renderer name (for debugging) */
   readonly name: string;
 
@@ -178,7 +149,7 @@ export interface CustomOverlayRenderer {
    * @param zoom The current zoom level
    * @param context The rendering context (shared renderers, shader data and so on)
    */
-  draw(projectionData: ProjectionData, zoom: number, context: CustomRendererDrawContext): void;
+  draw(projectionData: ProjectionData, zoom: number, context: FrameDrawContext): void;
 
   /**
    * Releases the WebGL resources
@@ -199,12 +170,14 @@ export interface CustomOverlayRenderer {
 }
 
 /**
- * Layer-aware overlay renderer
+ * An overlay renderer that also draws per layer
  *
- * An extension of CustomOverlayRenderer that supports rendering per layer.
- * Used for rendering that follows the layer order, such as Tentative.
+ * An extension of EngineOverlayRenderer that supports rendering per layer.
+ * Used for rendering that follows the layer order, such as the geometry being drawn.
+ *
+ * @internal
  */
-export interface LayerAwareOverlayRenderer extends CustomOverlayRenderer {
+export interface LayeredOverlayRenderer extends EngineOverlayRenderer {
   /**
    * Performs the rendering that corresponds to the given layer (lines and fills only)
    *
@@ -221,7 +194,7 @@ export interface LayerAwareOverlayRenderer extends CustomOverlayRenderer {
     layerId: string,
     projectionData: ProjectionData,
     zoom: number,
-    context: CustomRendererDrawContext,
+    context: FrameDrawContext,
   ): void;
 
   /**
@@ -234,9 +207,5 @@ export interface LayerAwareOverlayRenderer extends CustomOverlayRenderer {
    * @param zoom The current zoom level
    * @param context The rendering context
    */
-  drawVertices?(
-    projectionData: ProjectionData,
-    zoom: number,
-    context: CustomRendererDrawContext,
-  ): void;
+  drawVertices?(projectionData: ProjectionData, zoom: number, context: FrameDrawContext): void;
 }

@@ -68,59 +68,11 @@ export function getRotation(feature: Feature): number {
 }
 
 /**
- * Sets the rotation in degrees, in a `properties` object (the properties of a
- * {@link FeatureInput} before `addFeature`, say)
- */
-export function setRotation(properties: Record<string, unknown>, rotation: number): void {
-  setDrawProperty(properties, 'rotation', rotation);
-}
-
-/**
  * Gets the scale of the feature (`maplibre-gl-draw:scale` in `properties`, 1 when unset),
  * which resizing an Image changes
  */
 export function getScale(feature: Feature): number {
   return getDrawProperty(feature, 'scale') ?? 1;
-}
-
-/**
- * Sets the scale of the feature
- */
-export function setScale(properties: Record<string, unknown>, scale: number): void {
-  setDrawProperty(properties, 'scale', scale);
-}
-
-/**
- * Gets the name of the feature
- */
-export function getFeatureName(feature: Feature): string | undefined {
-  const value = feature.properties.name;
-  return typeof value === 'string' ? value : undefined;
-}
-
-/**
- * Sets the name of the feature
- */
-export function setFeatureName(properties: Record<string, unknown>, name: string): void {
-  properties.name = name;
-}
-
-/**
- * Gets the description of the feature
- */
-export function getFeatureDescription(feature: Feature): string | undefined {
-  const value = feature.properties.description;
-  return typeof value === 'string' ? value : undefined;
-}
-
-/**
- * Sets the description of the feature
- */
-export function setFeatureDescription(
-  properties: Record<string, unknown>,
-  description: string,
-): void {
-  properties.description = description;
 }
 
 /**

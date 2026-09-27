@@ -18,7 +18,7 @@ import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from
 import { LngLatBounds } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HitTestStrategy } from '../../dispatcher/hit-test/strategies/base.js';
-import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
@@ -228,7 +228,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
         feature: { id: string },
         projectionData: ProjectionData,
         _zoom: number,
-        context: CustomRendererDrawContext,
+        context: FrameDrawContext,
       ) => {
         draws.push({
           id: feature.id,
@@ -238,7 +238,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
       },
     },
     hitTest: { featureType: 'Probe' } as unknown as HitTestStrategy,
-  } as unknown as CustomFeatureHandler;
+  } as unknown as FeatureTypeHandler;
 
   const spatialIndex = new StoreSpatialIndex(store);
   spatialIndex.setCustomBoundingBoxCalculator('Probe', (feature) => {

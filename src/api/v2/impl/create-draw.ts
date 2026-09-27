@@ -49,7 +49,6 @@ export function createDrawOnEngine(
     getActiveLayerId: context.getActiveLayerId,
     setActiveLayerId: context.setActiveLayerId,
     featureStyle: context.featureStyle,
-    eventEmitter: context.eventEmitter,
     spatialIndex: context.spatialIndex,
   };
   const features = createFeatures(deps);

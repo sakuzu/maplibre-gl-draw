@@ -13,9 +13,11 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { drawLineMode } from '../modes/draw/line.js';
 import { createModeHarness, keyInput, pointerInput } from '../test-utils.js';
+import type { Context } from './context.js';
 import { createContext } from './context.js';
-import { createFeatureApi } from './feature-api.js';
-import { createImportExportAPI } from './import-export/index.js';
+import { createDocument } from './v2/impl/document.js';
+import { createFeatures } from './v2/impl/features.js';
+import type { ResourceDeps } from './v2/impl/shared.js';
 
 const canvas = { style: { cursor: '' } };
 const map = {
@@ -26,10 +28,23 @@ const map = {
   dragPan: { enable: () => {}, disable: () => {} },
 } as unknown as MapLibreMap;
 
+/** The dependencies of the resources over the context of an engine */
+function depsOf(context: Context): ResourceDeps {
+  return {
+    store: context.store,
+    generateId: context.generateFeatureId,
+    autoNameGenerator: context.autoNameGenerator,
+    getActiveLayerId: context.getActiveLayerId,
+    setActiveLayerId: context.setActiveLayerId,
+    featureStyle: context.featureStyle,
+    spatialIndex: context.spatialIndex,
+  };
+}
+
 describe('the spatial index derived from the Store', () => {
   it('stays empty when GeoJSON is loaded while read-only', async () => {
     const context = createContext(map);
-    const io = createImportExportAPI(context);
+    const io = createDocument(depsOf(context), () => {});
     context.store.setReadOnly(true);
 
     await io.load({
@@ -45,13 +60,13 @@ describe('the spatial index derived from the Store', () => {
 
   it('keeps the existing features when the native format is loaded while read-only', async () => {
     const context = createContext(map);
-    const io = createImportExportAPI(context);
-    const api = createFeatureApi({
-      store: context.store,
-      generateFeatureId: context.generateFeatureId,
-      getActiveLayerId: context.getActiveLayerId,
+    const io = createDocument(depsOf(context), () => {});
+    const features = createFeatures(depsOf(context));
+    features.create({
+      id: 'kept',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [2, 2] },
     });
-    api.addFeature({ id: 'kept', type: 'Point', geometry: { type: 'Point', coordinates: [2, 2] } });
     context.store.setReadOnly(true);
 
     await io.load({
@@ -62,7 +77,7 @@ describe('the spatial index derived from the Store', () => {
       layerOrder: ['default-layer'],
       groups: [],
       features: [],
-    });
+    } as never);
 
     expect(context.store.getFeature('kept')).toBeDefined();
     expect(context.spatialIndex.findNear([2, 2], 0.001)).toEqual(['kept']);
@@ -90,12 +105,8 @@ describe('the spatial index derived from the Store', () => {
 
   it('re-indexes a Circle whose radius changes through its properties', () => {
     const context = createContext(map);
-    const api = createFeatureApi({
-      store: context.store,
-      generateFeatureId: context.generateFeatureId,
-      getActiveLayerId: context.getActiveLayerId,
-    });
-    api.addFeature({
+    const features = createFeatures(depsOf(context));
+    features.create({
       id: 'c1',
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
@@ -103,7 +114,7 @@ describe('the spatial index derived from the Store', () => {
     });
     expect(context.spatialIndex.findNear([0.5, 0], 0.001)).toEqual([]);
 
-    api.updateFeature('c1', { properties: { 'maplibre-gl-draw:radiusMeters': 100_000 } });
+    features.update('c1', { properties: { 'maplibre-gl-draw:radiusMeters': 100_000 } });
 
     expect(context.spatialIndex.findNear([0.5, 0], 0.001)).toEqual(['c1']);
   });

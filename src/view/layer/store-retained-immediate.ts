@@ -10,7 +10,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
@@ -39,9 +39,9 @@ export interface StoreRetainedDrawDeps {
   /** Immediate-mode draw target that draws the features which cannot be retained */
   batchManager: StoreImmediateTarget;
   /** Renderers of the custom feature types (type name → renderer) */
-  customRenderers: Map<string, CustomFeatureHandler['renderer']>;
+  customRenderers: Map<string, FeatureTypeHandler['renderer']>;
   /** Draw context passed to a custom renderer */
-  customRendererContext: CustomRendererDrawContext;
+  customRendererContext: FrameDrawContext;
   /** Providers of companion drawing and companion hits (those of this draw instance) */
   companions: FeatureCompanionRegistry;
   /**

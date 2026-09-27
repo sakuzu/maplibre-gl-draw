@@ -18,10 +18,10 @@ import type { Feature } from '../../../store/types.js';
 import type {
   AdditionalResizeHandlesCalculator,
   CustomBoundingBoxCalculator,
-  CustomResizeCalculator,
   PointFrameExtent,
   PointFrameExtentProvider,
   ResizeStrategy,
+  TypeResizeCalculator,
 } from './types.js';
 
 /**
@@ -56,9 +56,9 @@ export interface SelectionExtensionRegistry {
   getAdditionalResizeHandlesCalculator(type: string): AdditionalResizeHandlesCalculator | undefined;
 
   /** Registers how a feature type is resized, replacing the built-in computation */
-  registerCustomResize(type: string, calculator: CustomResizeCalculator): () => void;
+  registerCustomResize(type: string, calculator: TypeResizeCalculator): () => void;
   /** Returns the custom resize calculator of a type, or `undefined` */
-  getCustomResizeCalculator(type: string): CustomResizeCalculator | undefined;
+  getCustomResizeCalculator(type: string): TypeResizeCalculator | undefined;
 
   /** Registers whether a feature type resizes by its coordinates or by its scale */
   registerResizeStrategy(type: string, strategy: ResizeStrategy): () => void;
@@ -106,7 +106,7 @@ function registerIn<T>(map: Map<string, T>, type: string, value: T): () => void 
 export function createSelectionExtensionRegistry(): SelectionExtensionRegistry {
   const boundingBoxes = new Map<string, CustomBoundingBoxCalculator>();
   const additionalHandles = new Map<string, AdditionalResizeHandlesCalculator>();
-  const customResizes = new Map<string, CustomResizeCalculator>();
+  const customResizes = new Map<string, TypeResizeCalculator>();
   const resizeStrategies = new Map<string, ResizeStrategy>();
   const pointFrameExtents = new Map<string, PointFrameExtentProvider>();
   let tileSize = DEFAULT_REGISTRY_TILE_SIZE;

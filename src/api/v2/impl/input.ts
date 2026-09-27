@@ -16,7 +16,7 @@ import type {
   MouseNormalizedEvent,
   NormalizedEvent,
 } from '../../../dispatcher/types.js';
-import type { ModeHandler as EngineModeHandler, SnapInputType } from '../../../modes/handler.js';
+import type { EngineModeHandler, SnapInputKind } from '../../../modes/handler.js';
 import type { SnapResult as StoredSnapResult } from '../../../snapping/types.js';
 import type {
   DrawKeyEvent,
@@ -106,7 +106,7 @@ export function deliver(
 }
 
 /** The receiver of the contract each snapped input of the engine goes to */
-const SNAP_RECEIVERS: Record<SnapInputType, NonNullable<SnapPreference['unsnapped']>[number]> = {
+const SNAP_RECEIVERS: Record<SnapInputKind, NonNullable<SnapPreference['unsnapped']>[number]> = {
   click: 'onClick',
   mousemove: 'onPointerMove',
   dragstart: 'onDragStart',

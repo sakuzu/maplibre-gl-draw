@@ -23,7 +23,7 @@
  * module-level "current" context: every reader (state.ts / anchor.ts / occlusion.ts /
  * polygon.ts) takes the context explicitly. The renderers of a CustomLayer receive their
  * instance's context at construction, extension renderers receive it in the draw context
- * (`CustomRendererDrawContext.terrain`), hit testing uses the anchor projection bound per map
+ * (`FrameDrawContext.terrain`), hit testing uses the anchor projection bound per map
  * (`installAnchorProjector`), and plugins use the projection bound to their instance
  * (`PluginContext.projectAnchor`). A read from outside rendering therefore always sees its own
  * instance, never "the instance drawn last".
@@ -229,7 +229,7 @@ export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
  * The terrain state of one draw instance.
  *
  * Treat it as an opaque handle: a custom renderer receives it as
- * `CustomRendererDrawContext.terrain` and passes it to the renderers and to the terrain
+ * `FrameDrawContext.terrain` and passes it to the renderers and to the terrain
  * functions (such as {@link drawQuadSurfaceOnTerrain} and {@link terrainTessellationStep}).
  * Constructing one gives a state with no terrain.
  */

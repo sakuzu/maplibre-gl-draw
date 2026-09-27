@@ -6,19 +6,20 @@
  * contexts the extensions receive, and the route of the input to the plugins and the modes of
  * the contract
  *
- * The engine builds one host. Every extension is installed into the registries the engine
- * already reads (the mode manager, the plugin manager, the hit testing, the selection, the
- * snapping and the drawing), through the adapters of `adapters.ts`, `input.ts` and
- * `render-context.ts`.
+ * The engine builds one host. The plugins live in the host itself: the select mode asks them
+ * through {@link ExtensionHost.interactions} and the input reaches them through
+ * {@link ExtensionHost.input}. Every other extension is installed into the registries the
+ * engine already reads (the mode manager, the hit testing, the selection, the snapping and the
+ * drawing), through the adapters of `adapters.ts`, `input.ts` and `render-context.ts`.
  */
 
 import type { BBox } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { HitTestTopmost } from '../../../dispatcher/hit-test/topmost.js';
 import type { ExtensionInputRoute } from '../../../dispatcher/input-router.js';
+import type { MouseNormalizedEvent } from '../../../dispatcher/types.js';
+import type { PluginInteractions } from '../../../modes/handler.js';
 import type { ModeManager } from '../../../modes/manager.js';
-import type { Plugin as EnginePlugin } from '../../../plugins/plugin.js';
-import type { PluginManager } from '../../../plugins/plugin-manager.js';
 import type { BoundingBox, Feature as StoredFeature } from '../../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../../view/layer/index.js';
@@ -72,7 +73,6 @@ export interface ExtensionHostDeps {
   readonly context: Context;
   readonly customLayer: CustomLayerInterface;
   readonly modeManager: ModeManager;
-  readonly pluginManager: PluginManager;
   readonly featureCompanions: FeatureCompanionRegistry;
   /** The frontmost hit at a point, with the click tolerance */
   readonly hitTestTopmost: HitTestTopmost;
@@ -94,6 +94,8 @@ export interface ExtensionHost {
   readonly collections: ExtensionsCollections;
   /** The route of the input to the plugins and the modes of the contract */
   readonly input: ExtensionInputRoute;
+  /** The interaction hooks of the plugins, which the select mode asks */
+  readonly interactions: PluginInteractions;
   /** Gives the host the draw instance the contexts hand out */
   attach(draw: Draw): void;
   /** Starts listening to the map (the pointer leaving it) */
@@ -108,7 +110,7 @@ export interface ExtensionHost {
  * @internal
  */
 export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
-  const { map, context, customLayer, modeManager, pluginManager, featureCompanions } = deps;
+  const { map, context, customLayer, modeManager, featureCompanions } = deps;
   const { store } = context;
   const terrain = customLayer.getTerrainContext();
   let destroyed = false;
@@ -162,7 +164,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
             throw new TypeError('A plugin must have onAdd');
           }
         },
-        isTakenElsewhere: (name) => pluginManager.getPluginNames().includes(name),
         install: (_, plugin) => installPlugin(plugin),
       }),
     ),
@@ -300,8 +301,8 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   };
 
   /**
-   * Installs a plugin: into the plugin manager of the engine, which consults it where the
-   * select mode consults the plugins, with a context that records what the plugin adds
+   * Installs a plugin: calls its onAdd with a context that records what the plugin adds, and
+   * returns the removal, which calls its onRemove and removes what it added
    */
   function installPlugin(plugin: Plugin): () => void {
     const subscriptions = createSubscriptions();
@@ -327,52 +328,90 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       drawing: base.drawing,
       extensions: createExtensionsCollections(registries, (remove) => added.push(remove)),
     };
-    const interaction = () => plugin.interaction;
-    const featureOf = (id: string): Feature | undefined =>
-      store.getFeature(id) as Feature | undefined;
-
-    const enginePlugin: EnginePlugin = {
-      name: plugin.name,
-      api: plugin.api as EnginePlugin['api'],
-      onInstall() {
-        try {
-          plugin.onAdd(pluginContext);
-        } catch (error) {
-          disposeAll();
-          throw error;
-        }
-      },
-      onUninstall() {
-        try {
-          plugin.onRemove?.();
-        } finally {
-          disposeAll();
-        }
-      },
-      filterSelection: (ids) => interaction()?.filterSelection?.(ids) ?? ids,
-      onFeatureClick(featureId: string, event?: unknown) {
-        const handler = interaction()?.onFeatureClick;
-        const feature = featureOf(featureId);
-        if (!handler || !feature || !event) return false;
-        return handler.call(plugin.interaction, feature, toPointerEvent(event as never)) === true;
-      },
-      onFeatureDoubleClick(featureId: string, event?: unknown) {
-        const handler = interaction()?.onFeatureDoubleClick;
-        const feature = featureOf(featureId);
-        if (!handler || !feature || !event) return false;
-        return handler.call(plugin.interaction, feature, toPointerEvent(event as never)) === true;
-      },
-      onFeatureCreated(featureId) {
-        const feature = featureOf(featureId);
-        if (feature) interaction()?.onDrawCommit?.(feature);
-      },
-      isInteracting: () => interaction()?.isBusy?.() === true,
-      finishInteraction: () => interaction()?.finish?.(),
-      cancelInteraction: () => interaction()?.cancel?.(),
-      getInteractionContainer: () => interaction()?.container?.() ?? null,
+    try {
+      plugin.onAdd(pluginContext);
+    } catch (error) {
+      disposeAll();
+      throw error;
+    }
+    return () => {
+      try {
+        plugin.onRemove?.();
+      } catch (error) {
+        console.error(`Error in plugin "${plugin.name}" onRemove:`, error);
+      } finally {
+        disposeAll();
+      }
     };
-    return pluginManager.register(enginePlugin);
   }
+
+  /** Calls a hook of every plugin in turn; one that throws is reported and skipped */
+  function eachPlugin(hook: string, call: (plugin: Plugin) => boolean | undefined): boolean {
+    for (const plugin of registries.plugins.values()) {
+      try {
+        if (call(plugin) === true) return true;
+      } catch (error) {
+        console.error(`Error in plugin "${plugin.name}" ${hook}:`, error);
+      }
+    }
+    return false;
+  }
+  const featureOf = (id: string): Feature | undefined =>
+    store.getFeature(id) as Feature | undefined;
+  const click =
+    (hook: 'onFeatureClick' | 'onFeatureDoubleClick') =>
+    (featureId: string, event?: MouseNormalizedEvent): boolean => {
+      const feature = featureOf(featureId);
+      if (!feature || !event) return false;
+      return eachPlugin(hook, (plugin) => {
+        const handler = plugin.interaction?.[hook];
+        return handler?.call(plugin.interaction, feature, toPointerEvent(event)) === true;
+      });
+    };
+  const interactions: PluginInteractions = {
+    filterSelectionCandidates(candidateIds) {
+      let filtered = candidateIds;
+      eachPlugin('filterSelection', (plugin) => {
+        const filter = plugin.interaction?.filterSelection;
+        if (filter) filtered = filter.call(plugin.interaction, filtered);
+        return false;
+      });
+      return filtered;
+    },
+    handleFeatureClick: click('onFeatureClick'),
+    handleFeatureDoubleClick: click('onFeatureDoubleClick'),
+    isPluginInteracting: () =>
+      eachPlugin('isBusy', (plugin) => plugin.interaction?.isBusy?.() === true),
+    finishPluginInteraction() {
+      eachPlugin('finish', (plugin) => {
+        plugin.interaction?.finish?.();
+        return false;
+      });
+    },
+    cancelPluginInteraction() {
+      eachPlugin('cancel', (plugin) => {
+        plugin.interaction?.cancel?.();
+        return false;
+      });
+    },
+    getPluginInteractionContainer() {
+      let container: HTMLElement | null = null;
+      eachPlugin('container', (plugin) => {
+        if (plugin.interaction?.isBusy?.() !== true) return false;
+        container = plugin.interaction.container?.() ?? null;
+        return container !== null;
+      });
+      return container;
+    },
+    notifyFeatureCreated(featureId) {
+      const feature = featureOf(featureId);
+      if (!feature) return;
+      eachPlugin('onDrawCommit', (plugin) => {
+        plugin.interaction?.onDrawCommit?.(feature);
+        return false;
+      });
+    },
+  };
 
   const input = createInputRoute(() => registries.plugins.values());
   const onPointerLeave = (): void =>
@@ -382,6 +421,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   return {
     collections,
     input,
+    interactions,
     attach(draw) {
       attached = draw;
     },

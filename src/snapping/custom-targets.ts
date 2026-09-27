@@ -4,7 +4,7 @@
 /**
  * Registry of the snapping candidates of custom feature types
  *
- * It holds CustomFeatureHandler.getSnapTargets per type. The built-in providers consult it
+ * It holds FeatureTypeHandler.getSnapTargets per type. The built-in providers consult it
  * for the type of the target feature (a registered type contributes its own candidates and is
  * skipped by the standard vertex, edge and intersection candidates).
  *

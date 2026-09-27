@@ -12,7 +12,7 @@
  * drags), and each is passed on under its name here.
  */
 
-import type { EventEmitter, EventMap } from '../../../shared/utils/event-emitter.js';
+import type { EngineSignals, EventEmitter } from '../../../shared/utils/event-emitter.js';
 import type { Store } from '../../../store/store.js';
 import type {
   StateChanges,
@@ -331,7 +331,10 @@ export function toDocumentChange(changes: StateChanges): DocumentChange | null {
  */
 export function connectEngineEvents(hub: EventHub, emitter: EventEmitter): () => void {
   const stops: Array<() => void> = [];
-  const listen = <K extends keyof EventMap>(event: K, listener: (data: EventMap[K]) => void) => {
+  const listen = <K extends keyof EngineSignals>(
+    event: K,
+    listener: (data: EngineSignals[K]) => void,
+  ) => {
     emitter.on(event, listener);
     stops.push(() => emitter.off(event, listener));
   };
@@ -355,7 +358,7 @@ export function connectEngineEvents(hub: EventHub, emitter: EventEmitter): () =>
   listen('image.request', ({ coordinate, zoom, layerId }) => {
     hub.emit('image.requested', { lngLat: [coordinate[0], coordinate[1]], zoom, layerId });
   });
-  listen('renderslots.change', ({ slots }) => {
+  listen('layerStack.change', ({ slots }) => {
     hub.emit('layerStack.changed', {
       entries: slots.map(({ layerId, from, to }) => ({ layerId, from, to })),
     });
@@ -376,7 +379,7 @@ export function connectEngineEvents(hub: EventHub, emitter: EventEmitter): () =>
 }
 
 /** The snapping result of the engine in the shape of the API */
-function toSnapResult(result: EventMap['snap.change']): SnapResult {
+function toSnapResult(result: EngineSignals['snap.change']): SnapResult {
   const snap: SnapResult = { lngLat: [result.lngLat.lng, result.lngLat.lat] };
   const target = result.target;
   if (!target) return snap;

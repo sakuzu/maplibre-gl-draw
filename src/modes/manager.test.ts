@@ -12,7 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryStore } from '../store/memory.js';
 import type { Mode } from '../store/types.js';
-import type { ModeHandler } from './handler.js';
+import type { EngineModeHandler } from './handler.js';
 import { ModeManagerImpl, type ModeManagerOptions } from './manager.js';
 
 /** A manager with a plain handler registered for select and the given drawing modes */
@@ -117,7 +117,7 @@ describe('unregistered modes in ModeManagerImpl.setMode', () => {
   it('returns the same false for every refusal and true for an entered mode', () => {
     const store = new MemoryStore();
     const manager = createManager(store, ['draw_point', 'draw_line'], {
-      canEnter: (handler: ModeHandler) => handler.modeName !== 'draw_line',
+      canEnter: (handler: EngineModeHandler) => handler.modeName !== 'draw_line',
     });
 
     expect(manager.setMode('draw_line')).toBe(false);

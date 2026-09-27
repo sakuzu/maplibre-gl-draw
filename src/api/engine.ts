@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The engine of a draw instance: it builds the context, the event bridge, the rendering,
- * the input handling, the modes and the plugin manager, and registers the release of each
- * one for destroy.
+ * The engine of a draw instance: it builds the context, the rendering, the input handling,
+ * the modes, the extensions and the events, and registers the release of each one for
+ * destroy.
  *
  * The Store is the single source of truth: input goes through the dispatcher into the Store,
- * and the view and the events follow the Store's notifications. The public objects of the
- * instance are built on the pieces the engine returns.
+ * and the view and the events follow the Store's notifications. The draw instance is built
+ * on the pieces the engine returns.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -19,6 +19,7 @@ import { effectiveZoomForCamera } from '../dataset/thinning.js';
 import { TriangulationScheduler } from '../dataset/triangulation.js';
 import { toleranceDegrees } from '../dispatcher/hit-test/local-frame.js';
 import { createTopmostHitTester } from '../dispatcher/hit-test/topmost.js';
+import type { InputRouter } from '../dispatcher/input-router.js';
 import { createInputRouter } from '../dispatcher/input-router.js';
 import { createInputNormalizer } from '../dispatcher/normalizer.js';
 import {
@@ -29,16 +30,11 @@ import {
   drawPointMode,
   drawPolygonMode,
 } from '../modes/draw/index.js';
-import type { ModeContext } from '../modes/handler.js';
+import type { EngineModeContext } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
 import { SelectMode } from '../modes/select/mode.js';
-import type { PluginContext } from '../plugins/plugin.js';
-import { createPluginContext } from '../plugins/plugin-context.js';
-import type { PluginManager } from '../plugins/plugin-manager.js';
-import { createPluginManager } from '../plugins/plugin-manager.js';
 import { SnapIndicatorRenderer } from '../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../snapping/providers/display.js';
-import { EventBridgeImpl } from '../store/event-bridge.js';
 import type { Mode } from '../store/types.js';
 import { createRenderCoordinator } from '../view/coordinator.js';
 import { createFeatureCompanionRegistry } from '../view/feature-companion.js';
@@ -46,12 +42,8 @@ import { attachSlotLayers } from '../view/layer/attach.js';
 import type { CustomLayerInterface } from '../view/layer/index.js';
 import { createCustomLayer } from '../view/layer/index.js';
 import { DEFAULT_VIEWPORT_EXPANSION_FACTOR, getExpandedViewportBounds } from '../view/viewport.js';
-import type { MapLibreGLDraw } from './api.js';
-import { createDrawAPI } from './api.js';
-import type { Context, Options } from './context.js';
+import type { Context, EngineOptions } from './context.js';
 import { createContext } from './context.js';
-import type { ImportExportAPI } from './import-export/index.js';
-import { createImportExportAPI } from './import-export/index.js';
 import type { EventHub } from './v2/impl/events.js';
 import { connectEngineEvents, connectStoreEvents, createEventHub } from './v2/impl/events.js';
 import type { ExtensionHost } from './v2/impl/extension-host.js';
@@ -105,12 +97,10 @@ export interface Engine {
   readonly customLayer: CustomLayerInterface;
   /** The modes */
   readonly modeManager: ModeManager;
-  /** The plugins */
-  readonly pluginManager: PluginManager;
-  /** Loading and writing out the document */
-  readonly importExport: ImportExportAPI;
   /** The datasets */
   readonly datasets: DatasetManager;
+  /** The router of the input (the tests hand it synthetic events) */
+  readonly inputRouter: InputRouter;
   /** The extensions of the extension contract: plugins, modes, feature types and the rest */
   readonly extensions: ExtensionHost;
   /**
@@ -125,16 +115,11 @@ export interface Engine {
     /** Turns the time slicing of the triangulation and of the drape on or off */
     setTimeSlicing(enabled: boolean): void;
   };
-  /**
-   * The public object of the first version of the API, built on this engine. The plugins
-   * reach the instance through it until they have a context of their own
-   */
-  readonly facade: MapLibreGLDraw;
   /** Whether destroy has run */
   isDestroyed(): boolean;
   /**
    * Enters the default mode of the options. The engine does it by itself unless it was built
-   * with `deferDefaultMode`, so that the public object the modes reach is attached first
+   * with `deferDefaultMode`, so that the draw instance the modes reach is attached first
    */
   enterDefaultMode(): void;
   /** Releases everything the engine acquired, in the reverse order (a second call is ignored) */
@@ -148,7 +133,7 @@ export interface Engine {
  */
 export function createEngine(
   map: MapLibreMap,
-  options: Options = {},
+  options: EngineOptions = {},
   build: {
     /** Leaves the entering of the default mode to `enterDefaultMode` */
     deferDefaultMode?: boolean;
@@ -178,9 +163,6 @@ export function createEngine(
     context.selectionScope.clear();
     context.snapTargets.clear();
   });
-
-  // 2. Create the EventBridge
-  const eventBridge = new EventBridgeImpl(store, eventEmitter);
 
   const triangulationScheduler = new TriangulationScheduler();
   triangulationScheduler.setSlicing(renderingConfig.timeSlicing !== false);
@@ -219,8 +201,7 @@ export function createEngine(
     get timeSlicing() {
       return renderingConfig.timeSlicing;
     },
-    // Announce the datasets that come and go and their reordering (draw.dataset.add,
-    // draw.dataset.remove and draw.dataset.reorder)
+    // Announce the datasets that come and go and their reordering
     onDatasetAdd: (datasetId) => eventEmitter.emit('dataset.add', { datasetId }),
     onDatasetRemove: (datasetId) => eventEmitter.emit('dataset.remove', { datasetId }),
     onDatasetsReorder: (order) => eventEmitter.emit('dataset.reorder', { order }),
@@ -297,11 +278,10 @@ export function createEngine(
     // this instance (the modes hit test against the same scope)
     selectionScope: context.selectionScope,
     // The separators of the stacking order (external entries) and the frames.
-    // Additions and removals of separators are announced by an event
-    // (draw.renderslots.change)
+    // Additions and removals of separators are announced (layerStack.changed)
     isExternalEntry: context.isExternalEntry,
-    onSlotsChange: (slots) => eventEmitter.emit('renderslots.change', { slots }),
-    // The failure to load the image of an Image feature (draw.load.error)
+    onSlotsChange: (slots) => eventEmitter.emit('layerStack.change', { slots }),
+    // The failure to load the image of an Image feature (an error event)
     onImageError: (featureId, error) =>
       eventEmitter.emit('load.error', { source: 'image', featureId, error }),
   });
@@ -324,16 +304,6 @@ export function createEngine(
   modeManager.registerMode('select', () => new SelectMode());
   modeManager.registerMode('draw_image', () => new DrawImageMode());
 
-  // 6. Create the PluginManager.
-  // The PluginContext is initialized lazily after the PluginManager is created
-  let pluginContext: PluginContext | null = null;
-  const pluginManager = createPluginManager(() => {
-    if (!pluginContext) {
-      throw new Error('PluginContext not initialized');
-    }
-    return pluginContext;
-  }, modeManager);
-
   // 6.5 Create the host of the extensions of the extension contract, and add the built-in
   // modes written to that contract through it
   const extensions = createExtensionHost({
@@ -341,7 +311,6 @@ export function createEngine(
     context,
     customLayer,
     modeManager,
-    pluginManager,
     featureCompanions,
     hitTestTopmost,
     hitTestTopmostWith: (tolerancePx) =>
@@ -367,10 +336,8 @@ export function createEngine(
     { name: 'draw_freehand', factory: drawFreehandMode },
   ]);
 
-  // 7. Create the import/export API
-  const importExportAPI = createImportExportAPI(context);
-
-  const modeContext: ModeContext = {
+  // 7. The context of the modes of the engine (select and image)
+  const modeContext: EngineModeContext = {
     map,
     store,
     spatialIndex,
@@ -384,7 +351,7 @@ export function createEngine(
     trace,
     autoNameGenerator: context.autoNameGenerator,
     boxSelectionRegistry: context.boxSelectionRegistry,
-    pluginManager,
+    plugins: extensions.interactions,
     generateFeatureId: context.generateFeatureId,
     getCurrentLayerId: context.getWritableLayerId,
     // Read when a feature is committed, so a change of the option applies at once
@@ -395,65 +362,8 @@ export function createEngine(
     // The key that temporarily disables shared vertices is shared with the
     // disableKey of the snapping
     snapOptions: context.snapOptions,
-    // The only opening through which a mode learns about snapping (the
-    // SnapService itself is not passed)
-    getSnapResult: () => snapService?.getResult() ?? null,
-    // The opening that resolves a snap target on data into a feature (read by
-    // the tracing)
-    getDatasetFeature: (datasetId, featureId) => displaySnap.getFeature(datasetId, featureId),
-    // The features of the data put on the edge graph of the tracing (empty
-    // when snapping to data is disabled)
-    getDatasetTraceFeatures: (bbox) =>
-      snapService.isDatasetsEnabled() ? displaySnap.queryFeatures(bbox) : [],
   };
   modeManager.setContext(modeContext);
-
-  // 7. Initialize the PluginContext.
-  // Helper function that looks up which layer an item belongs to
-  const findLayerForItem = (itemId: string): string | undefined => {
-    for (const layer of store.listLayers()) {
-      if (layer.items.includes(itemId)) {
-        return layer.id;
-      }
-    }
-    return undefined;
-  };
-
-  // Helper function that looks up which group a feature belongs to
-  const findGroupForFeature = (featureId: string): string | undefined => {
-    for (const group of store.listGroups()) {
-      if (group.featureIds.includes(featureId)) {
-        return group.id;
-      }
-    }
-    return undefined;
-  };
-
-  // Initialize the PluginContext.
-  // The implementations of all PluginContext methods are gathered in
-  // createPluginContext.
-  // The draw instance is referenced lazily (through the closure, to cope
-  // with the circular initialization).
-  let drawApi: MapLibreGLDraw | null = null;
-  pluginContext = createPluginContext({
-    store,
-    eventEmitter,
-    autoNameGenerator: context.autoNameGenerator,
-    spatialIndex,
-    getActiveLayerId: context.getActiveLayerId,
-    findLayerForItem,
-    findGroupForFeature,
-    getModeManager: () => modeManager,
-    // The anchors and the selection extents of this instance (never another instance's)
-    terrain: customLayer.getTerrainContext(),
-    selectionExtensions: context.selectionScope.extensions,
-    getDraw: () => {
-      if (!drawApi) {
-        throw new Error('MapLibreGLDraw not initialized');
-      }
-      return drawApi;
-    },
-  });
 
   // 7. Create the InputNormalizer and the InputRouter.
   // The hit testing of the datasets comes in as an
@@ -478,7 +388,6 @@ export function createEngine(
     modeManager,
     context: modeContext,
     map,
-    pluginManager,
     displayInteractions,
     // Emit a click in select mode as a public event (draw.map.click)
     notifyMapClick: (payload) => eventEmitter.emit('map.click', payload),
@@ -486,8 +395,7 @@ export function createEngine(
     extensionInput: extensions.input,
   });
 
-  // 7. Set up
-  eventBridge.start();
+  // 8. Set up
   // The events of the instance follow the Store and the signals of the engine
   const events = createEventHub();
   const stopStoreEvents = connectStoreEvents(events, store);
@@ -499,11 +407,10 @@ export function createEngine(
   });
   renderCoordinator.start();
 
-  // Keep the render slots on the map. The slots are added as soon as the style
-  // accepts layers, whenever the draw instance is created (before, during or
-  // after the map loads), and they are restored after a style change. The
-  // native layers of the separators are placed between the slots by the host,
-  // which receives 'draw.renderslots.change'
+  // Keep the frames of the stacking order on the map. They are added as soon as the style
+  // accepts layers, whenever the draw instance is created (before, during or after the map
+  // loads), and they are restored after a style change. The native layers of the separators
+  // are placed between the frames by the host, which receives layerStack.changed
   teardown.add(attachSlotLayers(map, () => customLayer.getSlotLayers()));
 
   inputNormalizer.attach();
@@ -528,33 +435,31 @@ export function createEngine(
   };
   if (!build.deferDefaultMode) enterDefaultMode();
 
-  // 9. Create the public API
-  drawApi = createDrawAPI(
-    context,
-    { inputNormalizer, inputRouter },
-    eventBridge,
-    customLayer,
-    importExportAPI,
-    { modeManager, renderCoordinator },
-    { pluginManager, spatialIndex, datasets, featureCompanions },
-  );
-
-  // The public API releases what it created itself (the input, the modes, the rendering, the
-  // plugins and the layers on the map) first, then the rest goes in the reverse order
-  teardown.add(drawApi.destroy);
-  // The extensions of the extension contract go first, while everything they use is there
+  // 9. The release of what was set up above: the input, the modes, the rendering and the
+  // layers on the map, then the rest in the reverse order
+  teardown.add(() => {
+    inputRouter.stop();
+    inputNormalizer.detach();
+    modeManager.stop();
+    renderCoordinator.stop();
+    context.autoNameGenerator.dispose();
+    // There can be several frames, so remove all of them
+    for (const layer of customLayer.getSlotLayers()) {
+      if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+    }
+    // After the plugins are removed (their onRemove can still read the index)
+    spatialIndex.destroy();
+  });
+  // The extensions go first, while everything they use is there
   teardown.add(() => extensions.destroy());
-  drawApi.destroy = () => teardown.run();
-  ignoreRegistrationsAfterDestroy(drawApi, () => teardown.done);
 
   return {
     map,
     context,
     customLayer,
     modeManager,
-    pluginManager,
-    importExport: importExportAPI,
     datasets,
+    inputRouter,
     extensions,
     events,
     runtime: {
@@ -564,34 +469,8 @@ export function createEngine(
         triangulationScheduler.setSlicing(enabled);
       },
     },
-    facade: drawApi,
     isDestroyed: () => teardown.done,
     enterDefaultMode,
     destroy: () => teardown.run(),
   };
-}
-
-/**
- * Makes the registrations of a destroyed instance do nothing
- *
- * Every other call on a destroyed instance works on its inert Store and reaches neither the
- * map nor a timer, but a registration would install something (a plugin, a mode, a renderer,
- * a provider) that nothing is left to release. They are ignored instead and return a cancel
- * function that does nothing.
- */
-function ignoreRegistrationsAfterDestroy(draw: MapLibreGLDraw, isDestroyed: () => boolean): void {
-  const noop = (): void => {};
-  const guard = <A extends unknown[], R>(
-    fn: (...args: A) => R,
-    whenDestroyed: R,
-  ): ((...args: A) => R) => {
-    return (...args: A) => (isDestroyed() ? whenDestroyed : fn(...args));
-  };
-  draw.addPlugin = guard(draw.addPlugin, noop);
-  draw.registerMode = guard(draw.registerMode, noop);
-  draw.registerFeatureHandler = guard(draw.registerFeatureHandler, noop);
-  draw.addOverlayRenderer = guard(draw.addOverlayRenderer, noop);
-  draw.registerAuxiliaryHandleProvider = guard(draw.registerAuxiliaryHandleProvider, noop);
-  draw.registerFeatureCompanionProvider = guard(draw.registerFeatureCompanionProvider, noop);
-  draw.snapping.register = guard(draw.snapping.register, noop);
 }

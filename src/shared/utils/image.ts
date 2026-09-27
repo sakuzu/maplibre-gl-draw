@@ -135,10 +135,3 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
     img.src = dataUrl;
   });
 }
-
-/**
- * Tests whether it is an image file
- */
-export function isImageFile(file: File): boolean {
-  return file.type.startsWith('image/');
-}

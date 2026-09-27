@@ -6,7 +6,7 @@
  *
  * Intersection test strategy interface for box selection.
  * Like HitTestStrategy, it defines the test logic per Feature type.
- * Tests for custom types can be added through CustomFeatureHandler.
+ * Tests for custom types can be added through FeatureTypeHandler.
  */
 
 import type { BoundingBox, Feature, FeatureType } from '../../store/types.js';
@@ -14,7 +14,7 @@ import { registerRestoring } from './strategies/base.js';
 
 /**
  * The test of one feature type against the rectangle of a box selection in select mode, as
- * registered through the `boxSelection` of a `CustomFeatureHandler`. A box that crosses the
+ * registered through the `boxSelection` of a `FeatureTypeHandler`. A box that crosses the
  * ±180 degree meridian is tested as two rectangles.
  *
  * @example

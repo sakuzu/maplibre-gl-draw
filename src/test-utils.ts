@@ -21,6 +21,8 @@ import { createSelection } from './api/v2/impl/selection.js';
 import type { ResourceDeps } from './api/v2/impl/shared.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
+import type { InputRouter } from './dispatcher/input-router.js';
+import type { KeyNormalizedEvent, ModifierKeys, MouseNormalizedEvent } from './dispatcher/types.js';
 import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
@@ -210,7 +212,6 @@ export function createResourceDeps(store: Store): ResourceDeps & { emitter: Even
       if (store.getLayer(id)) active = id;
     },
     featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
-    eventEmitter: emitter,
     emitter,
   };
 }
@@ -328,5 +329,110 @@ export function keyInput(key: string) {
     key,
     modifiers: { shift: false, ctrl: false, alt: false, meta: false },
     original: {} as KeyboardEvent,
+  };
+}
+
+/** A position of a synthetic input: `[lng, lat]` or `{ lng, lat }` */
+export type SyntheticLngLat = [number, number] | { lng: number; lat: number };
+
+/** The modifier keys of a synthetic input; the ones left out are up */
+export interface SyntheticModifiers {
+  shift?: boolean;
+  ctrl?: boolean;
+  alt?: boolean;
+  meta?: boolean;
+}
+
+/**
+ * Synthetic input for the tests: normalized events handed to the input router of an engine,
+ * as a real pointer and keyboard would produce them (the screen point comes from
+ * `map.project`)
+ */
+export function createSyntheticInput(engine: {
+  map: Pick<MapLibreMap, 'project'>;
+  inputRouter: InputRouter;
+}) {
+  const { map, inputRouter } = engine;
+  const toModifiers = (modifiers: SyntheticModifiers = {}): ModifierKeys => ({
+    shift: modifiers.shift ?? false,
+    ctrl: modifiers.ctrl ?? false,
+    alt: modifiers.alt ?? false,
+    meta: modifiers.meta ?? false,
+  });
+  const inert = (fields: Record<string, unknown>) => ({
+    target: null,
+    currentTarget: null,
+    defaultPrevented: false,
+    preventDefault(): void {},
+    stopPropagation(): void {},
+    stopImmediatePropagation(): void {},
+    ...fields,
+  });
+  const mouse = (
+    type: MouseNormalizedEvent['type'],
+    lngLat: SyntheticLngLat,
+    options: { modifiers?: SyntheticModifiers; snap?: boolean } = {},
+  ): MouseNormalizedEvent => {
+    const { lng, lat } = Array.isArray(lngLat) ? { lng: lngLat[0], lat: lngLat[1] } : lngLat;
+    const projected = map.project([lng, lat]);
+    const point = { x: projected.x, y: projected.y };
+    const modifiers = toModifiers(options.modifiers);
+    return {
+      type,
+      point,
+      lngLat: { lng, lat },
+      originalEvent: inert({
+        type,
+        button: 0,
+        buttons: 0,
+        clientX: point.x,
+        clientY: point.y,
+        shiftKey: modifiers.shift,
+        ctrlKey: modifiers.ctrl,
+        altKey: modifiers.alt,
+        metaKey: modifiers.meta,
+      }) as unknown as MouseEvent,
+      modifiers,
+      snap: options.snap ?? true,
+    };
+  };
+  const codeOf = (key: string): string => {
+    if (/^[a-zA-Z]$/.test(key)) return `Key${key.toUpperCase()}`;
+    if (/^[0-9]$/.test(key)) return `Digit${key}`;
+    if (key === ' ') return 'Space';
+    return key;
+  };
+  return {
+    /** A move to the position, then a click there */
+    click(lngLat: SyntheticLngLat, options?: { modifiers?: SyntheticModifiers; snap?: boolean }) {
+      inputRouter.dispatch(mouse('mousemove', lngLat, options));
+      inputRouter.dispatch(mouse('click', lngLat, options));
+    },
+    /** A move to the position */
+    move(lngLat: SyntheticLngLat, options?: { modifiers?: SyntheticModifiers; snap?: boolean }) {
+      inputRouter.dispatch(mouse('mousemove', lngLat, options));
+    },
+    /** A key press */
+    key(key: string, options: { modifiers?: SyntheticModifiers; code?: string } = {}) {
+      const modifiers = toModifiers(options.modifiers);
+      const code = options.code ?? codeOf(key);
+      const event: KeyNormalizedEvent = {
+        type: 'keydown',
+        key,
+        code,
+        modifiers,
+        originalEvent: inert({
+          type: 'keydown',
+          key,
+          code,
+          repeat: false,
+          shiftKey: modifiers.shift,
+          ctrlKey: modifiers.ctrl,
+          altKey: modifiers.alt,
+          metaKey: modifiers.meta,
+        }) as unknown as KeyboardEvent,
+      };
+      inputRouter.dispatch(event);
+    },
   };
 }

@@ -9,7 +9,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import type { ModeContext } from '../../../modes/handler.js';
+import type { EngineModeContext } from '../../../modes/handler.js';
 import { SelectModeDragHandler } from '../../../modes/select/drag-handler.js';
 import { MemoryStore } from '../../../store/memory.js';
 import { createMapStub } from '../../../test-utils.js';
@@ -356,7 +356,7 @@ describe('the signals of the engine', () => {
     emitter.emit('snap.change', { lngLat: { lng: 1, lat: 2 } });
     emitter.emit('map.click', { lngLat: [3, 4], point: { x: 5, y: 6 } });
     emitter.emit('image.request', { coordinate: [7, 8], zoom: 9, layerId: 'l' });
-    emitter.emit('renderslots.change', { slots: [{ layerId: 'slot', from: 0, to: 2 }] });
+    emitter.emit('layerStack.change', { slots: [{ layerId: 'slot', from: 0, to: 2 }] });
     const cause = new Error('bad image');
     emitter.emit('load.error', { source: 'image', featureId: 'img', error: cause });
 
@@ -413,7 +413,7 @@ describe('the signals of the engine', () => {
       map: { dragPan, getCanvas: () => ({ style: {} }), getZoom: () => 10 },
       eventEmitter,
       selectionScope: engine.context.selectionScope,
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
     const drag = (lng: number, lat: number): DragNormalizedEvent => ({
       type: 'dragstart',
       point: { x: lng * 10, y: -lat * 10 },

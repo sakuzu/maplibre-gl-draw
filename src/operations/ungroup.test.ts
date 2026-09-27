@@ -2,19 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Behavior tests for ungroupSelection / ungroupGroup (following Felt)
+ * Behavior tests for ungroupSelection
  *
  * - a group selected -> the group is broken up (the children are expanded in place)
  * - a member feature selected -> only that feature leaves (the group is kept, and is
  *   deleted automatically when it becomes empty)
- * - ungroupGroup(id) -> the given group is broken up
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { MemoryStore } from '../store/memory.js';
 import type { Feature } from '../store/types.js';
-import { groupSelection, ungroupGroup, ungroupSelection } from './layer-operations.js';
+import { groupSelection, ungroupSelection } from './layer-operations.js';
 
 function feature(id: string): Feature {
   return {
@@ -129,20 +128,5 @@ describe('ungroupSelection', () => {
     ungroupSelection(store);
 
     expect(store.getGroup(gid)).toBeDefined();
-  });
-});
-
-describe('ungroupGroup', () => {
-  it('breaks up the given group (independently of the selection)', () => {
-    const gid = makeGroup();
-    // Even with a different selection (none), the given grp can be broken up
-    store.setSelection(null, []);
-
-    ungroupGroup(store, gid);
-
-    expect(store.getGroup(gid)).toBeUndefined();
-    expect(store.getFeature('f1')?.groupId).toBeUndefined();
-    expect(store.getFeature('f2')?.groupId).toBeUndefined();
-    expect(store.getLayer('l1')?.items).toEqual(['f1', 'f2', 'f3']);
   });
 });

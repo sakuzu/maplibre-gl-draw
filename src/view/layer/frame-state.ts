@@ -13,9 +13,9 @@
 
 import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type {
-  CustomOverlayRenderer,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  EngineOverlayRenderer,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
@@ -70,7 +70,7 @@ export interface CopyPass {
   readonly view: RenderLayersView | undefined;
   readonly projectionData: CustomRenderMethodInput['defaultProjectionData'];
   readonly offsetUniforms: OffsetUniforms;
-  readonly customRendererContext: CustomRendererDrawContext;
+  readonly customRendererContext: FrameDrawContext;
   /** The features drawn in immediate mode on this copy */
   readonly features: Feature[];
   /** The selected features whose selection UI is drawn on this copy */
@@ -106,9 +106,9 @@ export interface FrameState {
   readonly features: Feature[];
   readonly selectedIdSet: Set<string>;
   readonly selectedFeatures: Feature[];
-  readonly customRendererContext: CustomRendererDrawContext;
-  readonly layerAwareRenderers: LayerAwareOverlayRenderer[];
-  readonly otherRenderers: CustomOverlayRenderer[];
+  readonly customRendererContext: FrameDrawContext;
+  readonly layerAwareRenderers: LayeredOverlayRenderer[];
+  readonly otherRenderers: EngineOverlayRenderer[];
   readonly quadDrapeFrame: QuadDrapeFrame | null;
   readonly restoreBlendState: () => void;
   /** Whether the drape can be drawn (the shaders and the plan are ready) */
@@ -260,7 +260,7 @@ export interface FrameBuildInput {
   terrainState: TerrainRenderState;
   /** Whether the retained batches of the Store rendering exist */
   retainedAvailable: boolean;
-  overlayRenderers: readonly CustomOverlayRenderer[];
+  overlayRenderers: readonly EngineOverlayRenderer[];
   segments: readonly RenderSegment[];
 }
 
@@ -402,7 +402,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   const quadDrapeFrame = buildQuadDrapeFrame(input, mapTerrain);
 
   // Context for the custom renderers
-  const customRendererContext: CustomRendererDrawContext = {
+  const customRendererContext: FrameDrawContext = {
     shaderData,
     centerLngLat,
     mainMatrixArray,
@@ -416,11 +416,11 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   };
 
   // Separate the layer-aware overlay renderers from the rest
-  const layerAwareRenderers: LayerAwareOverlayRenderer[] = [];
-  const otherRenderers: CustomOverlayRenderer[] = [];
+  const layerAwareRenderers: LayeredOverlayRenderer[] = [];
+  const otherRenderers: EngineOverlayRenderer[] = [];
   for (const renderer of input.overlayRenderers) {
     if ('drawForLayer' in renderer && typeof renderer.drawForLayer === 'function') {
-      layerAwareRenderers.push(renderer as LayerAwareOverlayRenderer);
+      layerAwareRenderers.push(renderer as LayeredOverlayRenderer);
     } else {
       otherRenderers.push(renderer);
     }

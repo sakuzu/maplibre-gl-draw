@@ -12,12 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Coordinate } from '../../store/types.js';
-import {
-  flattenCoordinatesDeep,
-  isCoordinate,
-  isMultiFeatureType,
-  mapCoordinatesDeep,
-} from './coordinates.js';
+import { isCoordinate, isMultiFeatureType, mapCoordinatesDeep } from './coordinates.js';
 
 const shift = (coord: Coordinate): Coordinate => [coord[0] + 1, coord[1] + 2];
 
@@ -136,33 +131,5 @@ describe('mapCoordinatesDeep', () => {
     const coords: Coordinate[][][] = [[[[0, 0]]]].map((p) => p as Coordinate[][]);
     mapCoordinatesDeep(coords, shift);
     expect(coords).toEqual([[[[0, 0]]]]);
-  });
-});
-
-describe('flattenCoordinatesDeep', () => {
-  it('flattens the coordinates of every part and every ring of a MultiPolygon', () => {
-    const parts: Coordinate[][][] = [
-      [
-        [
-          [0, 0],
-          [1, 1],
-        ],
-      ],
-      [
-        [
-          [10, 10],
-          [11, 11],
-        ],
-        [[20, 20]],
-      ],
-    ];
-
-    expect(flattenCoordinatesDeep(parts)).toEqual([
-      [0, 0],
-      [1, 1],
-      [10, 10],
-      [11, 11],
-      [20, 20],
-    ]);
   });
 });

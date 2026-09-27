@@ -520,7 +520,7 @@ void main() {
  * (the fill texture + a separate draw of the text).
  *
  * @param terrain The terrain state of the draw instance being drawn
- *   (`CustomRendererDrawContext.terrain`)
+ *   (`FrameDrawContext.terrain`)
  * @param corners The corners of the quad in degrees
  * @param surface The fill and the text
  * @param opacity The opacity, 0..1

@@ -97,7 +97,7 @@ const LAYER_1 = [
   'FillStyle',
   'findTracePath',
   'GeometryAppliedPayload',
-  'GeometryBufferOptions',
+  'BufferOptions',
   'GeometryOperationName',
   'GeometryOperations',
   'getCreatedZoom',

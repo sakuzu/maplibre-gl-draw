@@ -20,9 +20,9 @@ import { describe, expect, it } from 'vitest';
 import type { DatasetManager } from '../../dataset/manager.js';
 import { createDatasetManager } from '../../dataset/manager.js';
 import type {
-  CustomFeatureHandler,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  FeatureTypeHandler,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
@@ -129,14 +129,14 @@ function runRenderLayers(
     getTentative: (): null => null,
   } as unknown as Store;
 
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
-  const makeCustomRenderer = (): CustomFeatureHandler['renderer'] =>
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
+  const makeCustomRenderer = (): FeatureTypeHandler['renderer'] =>
     ({
       draw: (feature: { id: string }): void => {
         // A custom feature is painted immediately
         paintLog.push(feature.id);
       },
-    }) as unknown as CustomFeatureHandler['renderer'];
+    }) as unknown as FeatureTypeHandler['renderer'];
   // Custom feature types an extension could register (Marker / Sticker, plus Point taken over)
   customRenderers.set('Marker', makeCustomRenderer());
   customRenderers.set('Sticker', makeCustomRenderer());
@@ -150,9 +150,9 @@ function runRenderLayers(
     {} as unknown as ProjectionData,
     14,
     customRenderers,
-    {} as unknown as CustomRendererDrawContext,
+    {} as unknown as FrameDrawContext,
     createFeatureCompanionRegistry(),
-    [] as LayerAwareOverlayRenderer[],
+    [] as LayeredOverlayRenderer[],
     datasets,
     undefined,
     undefined,
@@ -459,10 +459,10 @@ describe('viewport of renderLayers', () => {
       new Set<string>(),
       {} as unknown as ProjectionData,
       14,
-      new Map<string, CustomFeatureHandler['renderer']>(),
-      {} as unknown as CustomRendererDrawContext,
+      new Map<string, FeatureTypeHandler['renderer']>(),
+      {} as unknown as FrameDrawContext,
       createFeatureCompanionRegistry(),
-      [] as LayerAwareOverlayRenderer[],
+      [] as LayeredOverlayRenderer[],
       display,
     );
 
@@ -532,10 +532,10 @@ describe('renderLayers and the retained mode of the Store', () => {
       new Set<string>(),
       {} as unknown as ProjectionData,
       14,
-      new Map<string, CustomFeatureHandler['renderer']>(),
-      {} as unknown as CustomRendererDrawContext,
+      new Map<string, FeatureTypeHandler['renderer']>(),
+      {} as unknown as FrameDrawContext,
       createFeatureCompanionRegistry(),
-      [] as LayerAwareOverlayRenderer[],
+      [] as LayeredOverlayRenderer[],
       undefined,
       createStoreRetained(log),
     );
@@ -626,10 +626,10 @@ describe('renderLayers and the visible id set of immediate chunks', () => {
       new Set<string>(),
       {} as unknown as ProjectionData,
       14,
-      new Map<string, CustomFeatureHandler['renderer']>(),
-      {} as unknown as CustomRendererDrawContext,
+      new Map<string, FeatureTypeHandler['renderer']>(),
+      {} as unknown as FrameDrawContext,
       createFeatureCompanionRegistry(),
-      [] as LayerAwareOverlayRenderer[],
+      [] as LayeredOverlayRenderer[],
       undefined,
       createStoreRetained(seen, callsPerLayer),
     );
@@ -712,7 +712,7 @@ describe('renderLayers and the opacity of the layers', () => {
     } as unknown as Store;
   }
 
-  const baseContext = { opacity: 1 } as unknown as CustomRendererDrawContext;
+  const baseContext = { opacity: 1 } as unknown as FrameDrawContext;
 
   it('passes each custom renderer the opacity of its layer, and overlays 1 (immediate mode)', () => {
     const seen: string[] = [];
@@ -720,31 +720,21 @@ describe('renderLayers and the opacity of the layers', () => {
       batchManager: { beginFrame: () => {}, processFeature: () => false, endFrame: () => {} },
       tentativeRenderer: { drawGeometry: (): void => {} },
     } as unknown as Renderers;
-    const customRenderers = new Map<string, CustomFeatureHandler['renderer']>([
+    const customRenderers = new Map<string, FeatureTypeHandler['renderer']>([
       [
         'Marker',
         {
-          draw: (
-            feature: { id: string },
-            _p: unknown,
-            _z: number,
-            context: CustomRendererDrawContext,
-          ) => {
+          draw: (feature: { id: string }, _p: unknown, _z: number, context: FrameDrawContext) => {
             seen.push(`${feature.id}:${context.opacity}`);
           },
-        } as unknown as CustomFeatureHandler['renderer'],
+        } as unknown as FeatureTypeHandler['renderer'],
       ],
     ]);
     const overlay = {
-      drawForLayer: (
-        layerId: string,
-        _p: unknown,
-        _z: number,
-        context: CustomRendererDrawContext,
-      ) => {
+      drawForLayer: (layerId: string, _p: unknown, _z: number, context: FrameDrawContext) => {
         seen.push(`overlay:${layerId}:${context.opacity}`);
       },
-    } as unknown as LayerAwareOverlayRenderer;
+    } as unknown as LayeredOverlayRenderer;
 
     renderLayers(
       r,

@@ -15,7 +15,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DisplayInteractions } from '../dataset/interaction.js';
-import type { ModeContext, ModeHandler, SnapInputType } from '../modes/handler.js';
+import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
@@ -56,7 +56,7 @@ class FakeNormalizer {
 }
 
 /** A mode handler that only records the events it receives */
-class RecordingMode implements ModeHandler {
+class RecordingMode implements EngineModeHandler {
   modeName = 'select';
   clicks: MouseNormalizedEvent[] = [];
   moves: MouseNormalizedEvent[] = [];
@@ -72,7 +72,7 @@ class RecordingMode implements ModeHandler {
    *
    * Assigning it inside a test produces the case where the mode implements the hook.
    */
-  isSnapEnabledFor?: (inputType: SnapInputType) => boolean;
+  isSnapEnabledFor?: (inputType: SnapInputKind) => boolean;
 
   getSnapPreference(): { featureId: string; datasetId?: string } | null {
     return this.snapPreference;
@@ -174,7 +174,7 @@ function startRouter(
   const modeManager = {
     getHandler: () => mode,
   } as unknown as ModeManager;
-  const context = { store, map } as unknown as ModeContext;
+  const context = { store, map } as unknown as EngineModeContext;
 
   const router = createInputRouter({
     normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
@@ -414,7 +414,7 @@ describe('Snapping of InputRouter', () => {
     const router = createInputRouter({
       normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
       modeManager: { getHandler: () => mode } as unknown as ModeManager,
-      context: { store, map } as unknown as ModeContext,
+      context: { store, map } as unknown as EngineModeContext,
       map,
     });
     router.start();

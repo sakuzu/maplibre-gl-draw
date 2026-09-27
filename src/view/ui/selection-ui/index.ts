@@ -27,8 +27,8 @@ export type {
   AdditionalResizeHandlesCalculator,
   BoundingBoxCoords,
   CustomBoundingBoxCalculator,
-  CustomResizeCalculator,
   PointFrameExtent,
   PointFrameExtentProvider,
   ResizeStrategy,
+  TypeResizeCalculator,
 } from './types.js';

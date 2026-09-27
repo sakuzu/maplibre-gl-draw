@@ -9,7 +9,7 @@
  * draw instance are passed in as an argument ({@link ResizeExtensions}).
  */
 
-import type { CustomResizeResult } from '../extension/index.js';
+import type { TypeResizeResult } from '../extension/index.js';
 import type { HandleType } from '../shared/config/constants.js';
 import { fromPlane, toPlane } from '../shared/math/mercator-plane.js';
 import { getDrawProperty, hasDrawProperty } from '../shared/properties.js';
@@ -26,7 +26,7 @@ export type ResizeCalculator = (
   state: ResizeState,
   currentLngLat: { lng: number; lat: number },
   feature: Feature,
-) => CustomResizeResult | null;
+) => TypeResizeResult | null;
 
 /**
  * The extension points the resize reads from the draw instance
