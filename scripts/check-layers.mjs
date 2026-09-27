@@ -29,6 +29,7 @@ const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const RANK = {
   geometry: 0,
   shared: 1,
+  table: 1.2,
   extension: 1.5,
   store: 2,
   view: 3,

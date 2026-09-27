@@ -4,11 +4,11 @@
 // A TypeDoc plugin that sorts the API reference by task instead of by kind.
 //
 // The sources already group the public symbols: the section comments of each entry point
-// (src/index.ts, src/geometry/index.ts, src/webgl/index.ts) and of the MapLibreGLDraw interface (src/api/api.ts).
-// This plugin reads those comments and gives every symbol a category, and every member of
-// MapLibreGLDraw a group, so that the grouping lives in one place, next to the code. A symbol
-// outside any section, or a section this file does not know, fails the build, so that the
-// reference cannot fall out of step with the sources.
+// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/webgl/index.ts) and of the
+// MapLibreGLDraw interface (src/api/api.ts). This plugin reads those comments and gives every
+// symbol a category, and every member of MapLibreGLDraw a group, so that the grouping lives in
+// one place, next to the code. A symbol outside any section, or a section this file does not
+// know, fails the build, so that the reference cannot fall out of step with the sources.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -145,6 +145,7 @@ export function load(app) {
     const entries = [
       { module: 'maplibre-gl-draw', file: 'src/index.ts', rename: (s) => categoryOf.get(s) },
       { module: 'geometry', file: 'src/geometry/index.ts', rename: (s) => s },
+      { module: 'table', file: 'src/table/index.ts', rename: (s) => s },
       {
         module: 'webgl',
         file: 'src/webgl/index.ts',

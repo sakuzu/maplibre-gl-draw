@@ -10,7 +10,7 @@
  */
 
 import type { BoundingBox } from '../shared/types/model.js';
-import { buildPackedRTree, type PackedRTree, searchPackedRTree } from './packed-rtree.js';
+import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../table/packed-rtree.js';
 
 /**
  * Spatial index of a dataset

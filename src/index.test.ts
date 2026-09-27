@@ -66,17 +66,9 @@ const LAYER_1 = [
   'DatasetOrder',
   'DatasetPlacement',
   'DatasetCollisionThinning',
-  'DatasetColumn',
-  'DatasetColumnarGeometry',
-  'DatasetColumnarGeometryType',
-  'DatasetColumnarInput',
-  'DatasetColumnarMixedGeometry',
-  'DatasetColumnarPrepared',
-  'DatasetDictionaryCodes',
-  'DatasetDictionaryColumn',
-  'DatasetFeatureInput',
   'DatasetFeatureProvider',
   'DatasetHoverPayload',
+  'DatasetRow',
   'DatasetThinningStats',
   'DatasetZoomScale',
   'DocumentStore',
@@ -541,8 +533,9 @@ describe('the emitted declarations', () => {
   const outDir = resolve(ROOT, '__api_check__');
   const main = resolve(outDir, 'index.d.ts');
   const geometry = resolve(outDir, 'geometry/index.d.ts');
+  const table = resolve(outDir, 'table/index.d.ts');
   const webgl = resolve(outDir, 'webgl/index.d.ts');
-  const entries = [main, geometry, webgl];
+  const entries = [main, geometry, table, webgl];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -566,9 +559,9 @@ describe('the emitted declarations', () => {
 
   it('export every named type that a layer 1 declaration refers to, from layer 1', () => {
     setup();
-    expect(findForgottenExports(program, files, [main, geometry], [main, geometry])).toEqual(
-      [...PENDING_LAYER_1].sort(byName),
-    );
+    expect(
+      findForgottenExports(program, files, [main, geometry, table], [main, geometry, table]),
+    ).toEqual([...PENDING_LAYER_1].sort(byName));
   }, 60_000);
 
   it('export every named type that a layer 2 declaration refers to', () => {

@@ -263,7 +263,7 @@ excluded from `npm test`. The browser is installed once with
 
 ## End-to-End Tests of the Examples
 
-Every example under `examples/NN-*/` (from `basic` to `columnar-worker`)
+Every example under `examples/NN-*/` (from `basic` to `table-worker`)
 is also a test. The intent is that each example is opened in headless
 Chromium, must render without errors (the map and the library's layers
 appear and nothing is logged to the console as an error), and then

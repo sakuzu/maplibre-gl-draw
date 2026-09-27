@@ -26,6 +26,7 @@ import type {
 } from '../../extension/index.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
@@ -132,7 +133,7 @@ function run(options: {
   manager?.add({
     id: 'data',
     order: 'above-store',
-    features: [{ id: 'data-1', type: 'Point', coordinates: [0, 0] }],
+    rows: [toRow({ id: 'data-1', type: 'Point', coordinates: [0, 0] })],
   });
 
   renderLayers(

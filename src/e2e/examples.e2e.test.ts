@@ -214,7 +214,7 @@ describe('the examples', () => {
       'plugin',
       'custom-feature-type',
       'large-data',
-      'columnar-worker',
+      'table-worker',
     ]) {
       expect(index).toContain(`./${name}/`);
       expect(site.has(`${name}/index.html`)).toBe(true);
@@ -382,10 +382,10 @@ describe('the examples', () => {
     await close();
   });
 
-  it('columnar-worker shows the 200,000 rows of the Worker and reports the one clicked', {
+  it('table-worker shows the 200,000 rows of the Worker and reports the one clicked', {
     timeout: TIMEOUT,
   }, async () => {
-    const { page, close } = await openExample('columnar-worker');
+    const { page, close } = await openExample('table-worker');
     await page.evaluate(() => (window as unknown as { loaded: Promise<void> }).loaded);
     const total = await page.evaluate(
       () => (window as unknown as E2EWindow).draw.getDataset('places')?.getThinningStats().total,

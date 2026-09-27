@@ -13,6 +13,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import type { BoundingBox, Feature } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import type {
   PointInstanceDataFull,
   RetainedPointBatch,
@@ -20,17 +21,17 @@ import type {
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
-import type { DatasetFeatureInput } from './types.js';
+import type { DatasetRow } from './types.js';
 
 /** Viewport covering the whole globe */
 const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
-function point(id: string, coord: [number, number], extra?: Partial<Feature>): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: coord, ...extra };
+function point(id: string, coord: [number, number], extra?: Partial<Feature>): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: coord, ...extra });
 }
 
-function multiPoint(id: string, coords: [number, number][]): DatasetFeatureInput {
-  return { id, type: 'MultiPoint', coordinates: coords };
+function multiPoint(id: string, coords: [number, number][]): DatasetRow {
+  return toRow({ id, type: 'MultiPoint', coordinates: coords });
 }
 
 function createManager(): DatasetManager {
@@ -156,7 +157,7 @@ describe('externalPointRender (the retained path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
       externalPointRender: (feature) => feature.id === 'icon',
     });
 
@@ -170,7 +171,7 @@ describe('externalPointRender (the retained path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [point('icon', [1, 1])],
+      rows: [point('icon', [1, 1])],
       externalPointRender: () => true,
     });
 
@@ -183,7 +184,7 @@ describe('externalPointRender (the retained path)', () => {
 
   it('every point is pushed onto a retained batch when there is no predicate', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a', [0, 0]), point('b', [1, 1])] });
+    manager.add({ id: 'c1', rows: [point('a', [0, 0]), point('b', [1, 1])] });
 
     const { points } = drawRetained(manager);
 
@@ -197,7 +198,7 @@ describe('externalPointRender (the retained path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [
+      rows: [
         multiPoint('m', [
           [0, 0],
           [1, 1],
@@ -215,15 +216,15 @@ describe('externalPointRender (the retained path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [
-        {
+      rows: [
+        toRow({
           id: 'l',
           type: 'LineString',
           coordinates: [
             [0, 0],
             [1, 1],
           ],
-        },
+        }),
         point('icon', [2, 2]),
       ],
       externalPointRender: () => true,
@@ -242,7 +243,7 @@ describe('externalPointRender (the immediate path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
       externalPointRender: (feature) => feature.id === 'icon',
     });
 
@@ -253,7 +254,7 @@ describe('externalPointRender (the immediate path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      features: [point('icon', [0, 0])],
+      rows: [point('icon', [0, 0])],
       externalPointRender: () => true,
     });
 
@@ -262,7 +263,7 @@ describe('externalPointRender (the immediate path)', () => {
 
   it('every point is pushed as before when there is no predicate', () => {
     const manager = createManager();
-    manager.add({ id: 'c1', features: [point('a', [0, 0]), point('b', [1, 1])] });
+    manager.add({ id: 'c1', rows: [point('a', [0, 0]), point('b', [1, 1])] });
 
     expect(drawImmediate(manager)[0].map((f) => f.id)).toEqual(['a', 'b']);
   });
@@ -273,7 +274,7 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
     });
 
     // Draw once to have the retained batches built (no predicate yet, so both points go in)
@@ -291,7 +292,7 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
       externalPointRender: (feature) => feature.id === 'icon',
     });
 
@@ -306,7 +307,7 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
     });
 
     expect(drawImmediate(manager)[0].map((f) => f.id)).toEqual(['plain', 'icon']);
@@ -320,7 +321,7 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('icon', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
+      rows: [point('icon', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
     });
     dataset.setSelectedIds(['icon']);
 
@@ -336,7 +337,7 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
 
   it('the change is reported with change (reason: style)', () => {
     const manager = createManager();
-    const dataset = manager.add({ id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = manager.add({ id: 'c1', rows: [point('a', [0, 0])] });
     const reasons: string[] = [];
     dataset.on('change', (payload) => reasons.push(payload.reason));
 
@@ -351,7 +352,7 @@ describe('externalPointRender (the selection path)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('icon', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
+      rows: [point('icon', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
       externalPointRender: () => true,
     });
 
@@ -369,7 +370,7 @@ describe('externalPointRender (the selection path)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('a', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
+      rows: [point('a', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
     });
 
     dataset.setSelectedIds(['a']);
@@ -384,7 +385,7 @@ describe('externalPointRender (the selection path)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      features: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
       externalPointRender: (feature) => feature.id === 'icon',
     });
 

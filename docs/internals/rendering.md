@@ -1054,10 +1054,10 @@ the selection, the thinning and the terrain drape are written against it,
 so a new input form is one more implementation.
 
 - `FeatureArraySource` (`source.ts`) holds an array of features
-  (`features`, `setFeatures`, a provider). Its collector resolves the style
+  (`rows`, `setRows`, a provider). Its collector resolves the style
   of each feature as the Store path does
-- `ColumnarSource` (`columnar/source.ts`) holds a columnar table
-  (`columnar`, `setColumnar`). Its collector reads the coordinates from the
+- `TableSource` (`table-source.ts`) holds a table
+  (`table`, `setTable`). Its collector reads the coordinates from the
   typed arrays of the table and packs points and lines straight into the
   arrays of the GPU (`buildRetainedPacked` of the point renderer,
   `buildRetainedPackedBatch` of the line renderer), with no object per row.
@@ -1068,16 +1068,17 @@ so a new input form is one more implementation.
   renderers with a feature that carries only that color. The packed arrays
   hold the same values as the arrays of objects, so both forms draw the
   same picture (`view/renderers/packed.test.ts`,
-  `dataset/columnar/dataset.test.ts` and `e2e/columnar.e2e.test.ts`
+  `dataset/table-dataset.test.ts` and `e2e/table.e2e.test.ts`
   compare them)
 - The bboxes, the chunks and the spatial index of a table come from
-  `prepareDatasetColumnar` (`columnar/prepare.ts`), a pure function that
-  runs in a Worker. The public subpath `@sakuzu/maplibre-gl-draw/columnar`
-  exports only it and `columnarTransferables`, and its runtime imports are
-  checked to stay pure (`dataset/columnar/index.test.ts`). Without it,
-  `setColumnar` computes the same arrays on the main thread
+  `prepareTable` (`table/prepare.ts`), a pure function that runs in a
+  Worker. The public subpath `@sakuzu/maplibre-gl-draw/table` exports it
+  with `transferList`, the building of a table from GeoJSON and the types
+  of a table, and its runtime imports are checked to stay pure
+  (`table/index.test.ts`). Without it, `setTable` computes the same
+  arrays on the main thread
 - A table builds a feature for a row only when one is asked for: a hit,
-  the selection, `getFeatures`, `collectVisible`, `getRowFeature`, the
+  the selection, `getFeatures`, `collectVisible`, `getRow`, the
   predicate of `externalPointRender` (for the point rows), a row drawn in
   immediate mode (a dashed line or outline, a point shape without
   instancing), and the lines and polygons handed to the terrain drape.
@@ -1090,11 +1091,11 @@ so a new input form is one more implementation.
 
 ### Spatial chunks
 
-`partitionRows()` (`dataset/partition.ts`) splits the rows at the median
+`partitionRows()` (`table/partition.ts`) splits the rows at the median
 of the centers of their bboxes along the axis of the larger extent, the way
 a k-d tree is built, until a range is small enough. It reads only typed
 arrays (the bboxes and the vertex counts), so the same function splits an
-array of features and, in a Worker, a columnar table. A chunk holds the
+array of features and, in a Worker, a table. A chunk holds the
 numbers of its rows, not the features.
 
 - A range stops when it has at most `CHUNK_TARGET_SIZE` (96) features and
@@ -1114,7 +1115,7 @@ numbers of its rows, not the features.
   of the spatial index
 - Culling at draw time is an AABB test between the chunk bbox and the view.
   Hit testing uses the spatial index of the rows instead, a static R-tree
-  packed into typed arrays (`dataset/packed-rtree.ts`), built in one pass
+  packed into typed arrays (`table/packed-rtree.ts`), built in one pass
   when the contents are replaced
 
 ### Chunk batches
@@ -1170,7 +1171,7 @@ baked flat before terrain was active is re-baked once terrain is live.
 The batches of a chunk are discarded and rebuilt only when something baked
 into them changes:
 
-- `setFeatures()`, `setColumnar()` or a provider response (the chunking
+- `setRows()`, `setTable()` or a provider response (the chunking
   starts over)
 - `setStyleRule()`, `setBaseStyle()` (colors change; chunks are kept)
 - `setExternalPointRender()` (see

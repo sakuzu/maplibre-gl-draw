@@ -27,12 +27,12 @@ The package has four entry points.
   operations, buffer, splitting, predicates, measurement). They do not
   depend on maplibre-gl, the DOM or the instance, so they also run in
   Node and in workers
-- `@sakuzu/maplibre-gl-draw/columnar` — the preparation of a columnar
-  table for a dataset (`prepareDatasetColumnar`), whose rows have one
-  geometry type or several, and the list of its buffers for
-  `postMessage` (`columnarTransferables`). It
-  depends on neither maplibre-gl nor WebGL nor the DOM, so a Worker that
-  reads a file can use it
+- `@sakuzu/maplibre-gl-draw/table` — the building of a table for a
+  dataset from GeoJSON (`tableFromFeatures`, `createTableBuilder`), whose
+  rows have one geometry type or several, its preparation
+  (`prepareTable`) and the list of its buffers for `postMessage`
+  (`transferList`). It depends on neither maplibre-gl nor WebGL nor the
+  DOM, so a Worker that reads a file can use it
 - `@sakuzu/maplibre-gl-draw/webgl` — building blocks for custom shaders
   (the GLSL snippet and the projection uniforms, the quad shader, the
   blend and billboard helpers, the dash and terrain subdivision rules).
@@ -50,7 +50,7 @@ use the library, and what an extension needs to plug into an extension
 point (`Plugin`, `PluginContext`, `ModeHandler`, `CustomFeatureHandler`,
 the snapping provider, the hit test strategy and so on). It also
 includes the pure functions for style rules and property access. The
-geometry and columnar entries follow the same rules as layer 1.
+geometry and table entries follow the same rules as layer 1.
 
 Layer 2 is the entry `@sakuzu/maplibre-gl-draw/webgl`: building blocks
 for people who write their own shaders and want them to draw the way
@@ -92,10 +92,11 @@ npm install
 npm run site:dev
 ```
 
-`npm run docs:api` runs typedoc on the three entry points and writes
+`npm run docs:api` runs typedoc on the four entry points and writes
 Markdown to `docs/api/`, sorted by task: the categories come from the
-section comments of `src/index.ts` and `src/geometry/index.ts`, and the
-groups of `MapLibreGLDraw` from the section comments of its declaration
+section comments of the entry files (`src/index.ts`,
+`src/geometry/index.ts`, `src/table/index.ts` and `src/webgl/index.ts`),
+and the groups of `MapLibreGLDraw` from the section comments of its declaration
 (`scripts/typedoc-categories.mjs`). A symbol outside any section fails
 the build. Each page shows the declaration, its description, the default
 values of options, and examples where they help.

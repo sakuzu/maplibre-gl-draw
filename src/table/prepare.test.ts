@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the preparation of a columnar table (the part that runs in a Worker)
+ * Tests for the preparation of a table (the part that runs in a Worker)
  */
 
 import { describe, expect, it } from 'vitest';
-import { chunkTargetSizeFor, partitionIntoChunks } from '../chunk.js';
-import { searchPackedRTree } from '../packed-rtree.js';
-import { normalizeDisplayFeature } from '../types.js';
-import { columnarTransferables, prepareDatasetColumnar } from './prepare.js';
-import type { DatasetColumnarGeometry, DatasetColumnarInput } from './types.js';
+import { chunkTargetSizeFor, partitionIntoChunks } from '../dataset/chunk.js';
+import { displayFeature } from '../test-utils.js';
+import { searchPackedRTree } from './packed-rtree.js';
+import { prepareTable, transferList } from './prepare.js';
+import type { Table, TableGeometry } from './types.js';
 
 /** 2,000 points on a spiral, as a table */
 function points(count = 2_000): {
-  input: DatasetColumnarInput & { geometry: DatasetColumnarGeometry };
+  input: Table & { geometry: TableGeometry };
   coords: Array<[number, number]>;
 } {
   const coords: Array<[number, number]> = [];
@@ -32,12 +32,12 @@ function points(count = 2_000): {
   };
 }
 
-describe('prepareDatasetColumnar', () => {
+describe('prepareTable', () => {
   it('splits the rows into the same chunks as the same features', () => {
     const { input, coords } = points();
-    const prepared = prepareDatasetColumnar(input);
+    const prepared = prepareTable(input);
     const features = coords.map((coordinates, i) =>
-      normalizeDisplayFeature({ id: String(i), type: 'Point', coordinates }),
+      displayFeature({ id: String(i), type: 'Point', coordinates }),
     );
     const chunks = partitionIntoChunks(features, chunkTargetSizeFor(features.length));
     expect(prepared.chunkOffsets.length - 1).toBe(chunks.length);
@@ -58,7 +58,7 @@ describe('prepareDatasetColumnar', () => {
 
   it('builds the spatial index of the hit testing', () => {
     const { input, coords } = points();
-    const prepared = prepareDatasetColumnar(input);
+    const prepared = prepareTable(input);
     const found = searchPackedRTree(
       {
         nodeSize: prepared.indexNodeSize,
@@ -75,6 +75,14 @@ describe('prepareDatasetColumnar', () => {
     expect(found).toContain(1234);
   });
 
+  it('returns the table with its prepared arrays', () => {
+    const { input } = points(10);
+    const prepared = prepareTable(input);
+    expect(prepared.table).toBe(input);
+    expect(prepared.length).toBe(10);
+    expect(prepared.bounds).toHaveLength(40);
+  });
+
   it('lists every buffer once for the transfer', () => {
     const { input } = points(10);
     const shared = new Float64Array(20);
@@ -87,8 +95,8 @@ describe('prepareDatasetColumnar', () => {
       },
       ids: { codes: new Int32Array(10), dictionary: ['id'] },
     };
-    const prepared = prepareDatasetColumnar(table);
-    const buffers = columnarTransferables(table, prepared);
+    const prepared = prepareTable(table);
+    const buffers = transferList(prepared);
     expect(new Set(buffers).size).toBe(buffers.length);
     expect(buffers).toContain(table.geometry.coords.buffer);
     expect(buffers).toContain(shared.buffer);
@@ -103,7 +111,7 @@ describe('prepareDatasetColumnar', () => {
     const point = Float64Array.of(1, 1);
     const line = Float64Array.of(0, 0, 2, 2);
     const lineOffsets = Int32Array.of(0, 2);
-    const table: DatasetColumnarInput = {
+    const table: Table = {
       length: 2,
       geometry: {
         type: 'Mixed',
@@ -115,9 +123,9 @@ describe('prepareDatasetColumnar', () => {
         ],
       },
     };
-    const prepared = prepareDatasetColumnar(table);
+    const prepared = prepareTable(table);
     expect(Array.from(prepared.bounds)).toEqual([1, 1, 1, 1, 0, 0, 2, 2]);
-    const buffers = columnarTransferables(table);
+    const buffers = transferList(table);
     expect(buffers).toEqual(
       [types, offsets, point, line, lineOffsets].map((array) => array.buffer),
     );

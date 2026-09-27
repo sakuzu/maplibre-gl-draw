@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../store/types.js';
+import { displayFeature } from '../test-utils.js';
 import type { RenderableTerrainTile } from '../view/terrain/detect.js';
 import { mercatorX, mercatorY, type TessellationStep } from '../view/terrain/tessellation.js';
 import { buildTessellationTiling, tilingSignature } from '../view/terrain/tiling.js';
@@ -23,7 +24,6 @@ import {
   partitionIntoChunks,
 } from './chunk.js';
 import { needsRetessellation } from './dataset.js';
-import { normalizeDisplayFeature } from './types.js';
 
 /** Tile (x, y) at zoom z. tileID is not used to compute the fingerprint */
 const tile = (z: number, x: number, y: number): RenderableTerrainTile =>
@@ -37,7 +37,7 @@ function createPoints(count: number, step = 1): Feature[] {
   for (let i = 0; i < count; i++) {
     const col = i % columns;
     const row = Math.floor(i / columns);
-    features[i] = normalizeDisplayFeature({
+    features[i] = displayFeature({
       id: `f${i}`,
       type: 'Point',
       coordinates: [col * step, row * step],
@@ -82,7 +82,7 @@ describe('the number of chunks', () => {
     const features: Feature[] = [];
     for (let i = 0; i < 2_000; i++) {
       features.push(
-        normalizeDisplayFeature({
+        displayFeature({
           id: `p${i}`,
           type: 'Point',
           coordinates: [139.5 + (i % 50) * 0.001, 35.6 + Math.floor(i / 50) * 0.001],
@@ -90,7 +90,7 @@ describe('the number of chunks', () => {
       );
     }
     features.push(
-      normalizeDisplayFeature({
+      displayFeature({
         id: 'world',
         type: 'LineString',
         coordinates: [
@@ -175,8 +175,8 @@ describe('the draw order of the chunks', () => {
 describe('the bbox of a chunk', () => {
   it('it is the union of the bboxes of the features contained', () => {
     const features = [
-      normalizeDisplayFeature({ id: 'a', type: 'Point', coordinates: [0, 0] }),
-      normalizeDisplayFeature({ id: 'b', type: 'Point', coordinates: [10, 5] }),
+      displayFeature({ id: 'a', type: 'Point', coordinates: [0, 0] }),
+      displayFeature({ id: 'b', type: 'Point', coordinates: [10, 5] }),
     ];
 
     const [chunk] = partitionIntoChunks(features);
@@ -187,7 +187,7 @@ describe('the bbox of a chunk', () => {
   it('the splitting does not break even when everything is at the same coordinate', () => {
     const features: Feature[] = [];
     for (let i = 0; i < 600; i++) {
-      features.push(normalizeDisplayFeature({ id: `f${i}`, type: 'Point', coordinates: [1, 2] }));
+      features.push(displayFeature({ id: `f${i}`, type: 'Point', coordinates: [1, 2] }));
     }
 
     const chunks = partitionIntoChunks(features);
@@ -331,7 +331,7 @@ describe('the splitting by the amount of work', () => {
     // 20 small points
     for (let i = 0; i < 20; i++) {
       features.push(
-        normalizeDisplayFeature({
+        displayFeature({
           id: `p${i}`,
           type: 'Point',
           coordinates: [139.5 + i * 0.01, 35.6],
@@ -341,7 +341,7 @@ describe('the splitting by the amount of work', () => {
     // 1 line with 50,000 vertices (it exceeds the target vertex count on its own)
     const dense: [number, number][] = [];
     for (let i = 0; i < 50_000; i++) dense.push([139.6 + i * 1e-6, 35.7]);
-    features.push(normalizeDisplayFeature({ id: 'big', type: 'LineString', coordinates: dense }));
+    features.push(displayFeature({ id: 'big', type: 'LineString', coordinates: dense }));
 
     const chunks = partitionIntoChunks(features);
 

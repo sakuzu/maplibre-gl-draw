@@ -21,6 +21,7 @@ import earcut from 'earcut';
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
+import { toRow } from '../test-utils.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
 import type { RetainedPointBatch } from '../view/renderers/point/point-instance.js';
@@ -41,7 +42,7 @@ import {
   TRIANGULATION_SLICE_MS,
   TriangulationScheduler,
 } from './triangulation.js';
-import type { DatasetFeatureInput } from './types.js';
+import type { DatasetRow } from './types.js';
 
 /** The fake clock and launching of the slices */
 interface FakeRuntime {
@@ -367,12 +368,12 @@ describe('the wiring with a dataset', () => {
   }
 
   /** A display feature with a closed star-shaped ring */
-  function starPolygon(id: string, count: number): DatasetFeatureInput {
+  function starPolygon(id: string, count: number): DatasetRow {
     const flat = starCoords(count);
     const ring: Array<[number, number]> = [];
     for (let i = 0; i < count; i++) ring.push([flat[i * 2], flat[i * 2 + 1]]);
     ring.push(ring[0]);
-    return { id, type: 'Polygon', coordinates: [ring] };
+    return toRow({ id, type: 'Polygon', coordinates: [ring] });
   }
 
   it('no fill until the triangulation is done, then the chunk is rebuilt and filled', () => {
@@ -387,7 +388,7 @@ describe('the wiring with a dataset', () => {
     });
     const probe = createProbe();
 
-    manager.add({ id: 'water', features: [starPolygon('big', 400)] });
+    manager.add({ id: 'water', rows: [starPolygon('big', 400)] });
     manager.draw('below-store', probe.target, {} as ProjectionData, 10);
 
     // The first build shows no fill (only the outline)
@@ -416,7 +417,7 @@ describe('the wiring with a dataset', () => {
     });
     const probe = createProbe();
 
-    manager.add({ id: 'water', features: [starPolygon('big', 400)] });
+    manager.add({ id: 'water', rows: [starPolygon('big', 400)] });
     manager.draw('below-store', probe.target, {} as ProjectionData, 10);
     expect(scheduler.pendingCount).toBe(1);
 

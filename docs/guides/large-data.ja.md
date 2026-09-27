@@ -58,18 +58,21 @@ const draw = createMapLibreGLDraw(map);
 
 const parcels = draw.addDataset({
   id: 'parcels',
-  features: [
+  rows: [
     {
+      type: 'Feature',
       id: 'p-1',
-      type: 'Polygon',
-      coordinates: [
-        [
-          [139.70, 35.68],
-          [139.71, 35.68],
-          [139.71, 35.69],
-          [139.70, 35.68],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [139.70, 35.68],
+            [139.71, 35.68],
+            [139.71, 35.69],
+            [139.70, 35.68],
+          ],
         ],
-      ],
+      },
       properties: { population: 4200 },
     },
   ],
@@ -98,24 +101,25 @@ parcels.on('click', ({ feature }) => {
 
 | 手元のデータ | オプション | 置き換え方 |
 | --- | --- | --- |
-| GeoJSON などの地物の配列 | `features` | `setFeatures` |
-| GeoParquet、Arrow、FlatGeobuf の表 | `columnar` | `setColumnar` |
+| GeoJSON の地物の配列 | `rows` | `setRows` |
+| GeoParquet、Arrow、FlatGeobuf の表 | `table` | `setTable` |
 | 範囲を渡すと答えるサーバー | `provider` | `invalidateProviderCache` |
 
 ### 地物の配列で渡す
 
-地物の形は描いた地物と同じ (`id`、`type`、`coordinates`、
-`properties`、`style`) で、穴のある多角形や Multi 型も渡せます。
-`layerId`、`locked`、`visible` は省けます。3 つ目の要素 (GeoJSON の
-標高) を持つ座標は、経度と緯度だけに切り詰めます。
+行は GeoJSON の地物 (`id`、`geometry`、`properties`) で、穴のある
+多角形や Multi 型も渡せます。行ごとのスタイルを `style` に持たせる
+こともできます。幾何の無い行は、位置を保ちますが、描かれず、クリック
+も当たりません。3 つ目の要素 (標高) を持つ座標は、経度と緯度だけに
+切り詰めます。
 
-中身は `setFeatures` で丸ごと置き換えます。一部だけを更新する方法は
+中身は `setRows` で丸ごと置き換えます。一部だけを更新する方法は
 ないので、新しい配列を作って渡してください。
 
 <!-- docs-check: with datasets -->
 
 ```ts
-parcels.setFeatures(nextFeatures);
+parcels.setRows(nextRows);
 ```
 
 ### 表を列の形で渡す
@@ -123,14 +127,16 @@ parcels.setFeatures(nextFeatures);
 GeoParquet、Arrow、FlatGeobuf から読んだ表は、もともと列の集まり
 です。渡すためだけに行ごとに地物のオブジェクトを作ると、描くよりも
 時間がかかります。点が 100 万件なら、時間とメモリーの大半がそこに
-使われます。`columnar` は、GeoArrow と同じ並びのまま行を受け取り
+使われます。`table` は、GeoArrow と同じ並びのまま行を受け取り
 ます。座標は 1 つの `Float64Array` に、行と部分と環の区切りは
-`Int32Array` に、属性は列にします。
+`Int32Array` に、属性は列にします。サブパス
+`@sakuzu/maplibre-gl-draw/table` の `tableFromFeatures` と
+`createTableBuilder` は、GeoJSON からこの並びを作ります。
 
 ```ts
 const places = draw.addDataset({
   id: 'places',
-  columnar: {
+  table: {
     length: 3,
     geometry: {
       type: 'Point',
@@ -175,7 +181,7 @@ const places = draw.addDataset({
 - 渡すのは、規則と自分のコードが読む列だけで十分です
 
 データセットは配列を写さずに持ち、そのまま読みます。持っている間は
-配列を書き換えず、表を替えるときは `setColumnar` を使ってください。
+配列を書き換えず、表を替えるときは `setTable` を使ってください。
 行が地物のオブジェクトになるのは、求められたときだけです。
 
 - `click` と `hover` は、その行の地物と行の番号 `row` を渡します。
@@ -198,7 +204,7 @@ const places = draw.addDataset({
 ```ts
 draw.addDataset({
   id: 'network',
-  columnar: {
+  table: {
     length: 3,
     geometry: {
       type: 'Mixed',
@@ -222,35 +228,30 @@ draw.addDataset({
 - 子の中の行の順序は自由です。描く順序は表の行の順序です
 - `types[i]` が負の行は幾何を持ちません。`validity` もその上で効き
   ます
-- `prepareDatasetColumnar` と `columnarTransferables` も、この形を
-  受け取ります
+- `prepareTable` と `transferList` も、この形を受け取ります
 
 ### 表を Worker で読む
 
 データセットは描く前に、各行の外接矩形を計算し、行を空間のチャンク
 に分け、クリックのための空間索引を作ります。大きな表ではこれに画面
 が止まるほどの時間がかかるので、表を読む場所で済ませます。サブパス
-`@sakuzu/maplibre-gl-draw/columnar` の `prepareDatasetColumnar` が
-この処理をします。このサブパスは maplibre も WebGL も読み込まない
-ので、Worker で使えます。`columnarTransferables` は、写さずに移す
+`@sakuzu/maplibre-gl-draw/table` の `prepareTable` がこの処理をし、
+結果を表と一緒に返します。このサブパスは maplibre も WebGL も読み
+込まないので、Worker で使えます。`transferList` は、写さずに移す
 バッファーの一覧を返します。
 
 <!-- docs-check:
-declare function readTable(data: unknown): Promise<import('@sakuzu/maplibre-gl-draw').DatasetColumnarInput>;
+declare function readTable(data: unknown): Promise<import('@sakuzu/maplibre-gl-draw/table').Table>;
 -->
 
 ```ts
 // worker.ts
-import {
-  columnarTransferables,
-  prepareDatasetColumnar,
-} from '@sakuzu/maplibre-gl-draw/columnar';
+import { prepareTable, transferList } from '@sakuzu/maplibre-gl-draw/table';
 
 self.onmessage = async (event) => {
-  const input = await readTable(event.data); // your reader returns a DatasetColumnarInput
-  const prepared = prepareDatasetColumnar(input);
-  const transfer = columnarTransferables(input, prepared);
-  self.postMessage({ input, prepared }, { transfer });
+  const table = await readTable(event.data); // your reader returns a Table
+  const prepared = prepareTable(table);
+  self.postMessage(prepared, { transfer: transferList(prepared) });
 };
 ```
 
@@ -264,17 +265,15 @@ const worker = new Worker(new URL('./worker.ts', import.meta.url), {
   type: 'module',
 });
 worker.onmessage = (event) => {
-  const { input, prepared } = event.data;
-  places.setColumnar(input, prepared);
+  places.setTable(event.data);
 };
 worker.postMessage(file);
 ```
 
-`prepared` を渡すと、本体のスレッドはどれも計算し直さず、最初の
-クリックのときには索引ができています。渡さなければ、`setColumnar`
-が同じ配列を自分で計算します。`prepared` はその表だけのもので、行の
-数が違う表のものを渡すと例外になります。`addDataset` でも、
-`columnar` と並べて `prepared` オプションで渡せます。
+下ごしらえ済みの表を渡すと、本体のスレッドはどれも計算し直さず、
+最初のクリックのときには索引ができています。下ごしらえをしていない
+表なら、`setTable` が同じ配列を自分で計算します。`addDataset` でも、
+どちらも `table` オプションで渡せます。
 
 ### 見えている範囲の分だけ取り寄せる
 
@@ -287,7 +286,7 @@ draw.addDataset({
   provider: async (bbox, zoom) => {
     const query = `${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY}`;
     const res = await fetch(`/api/parcels?bbox=${query}&z=${zoom}`);
-    return res.json();
+    return (await res.json()).features;
   },
 });
 ```
@@ -381,7 +380,7 @@ draw.moveDataset('parcels', { index: 0 }); // backmost of its side
 <!-- docs-check: with datasets -->
 
 ```ts
-draw.addDataset({ id: 'parcels', features, order: 'layer-order' });
+draw.addDataset({ id: 'parcels', rows, order: 'layer-order' });
 draw.setLayerOrder(['base', 'parcels', 'notes']);
 ```
 
@@ -403,13 +402,13 @@ draw.setLayerOrder(['base', 'parcels', 'notes']);
 増えます。
 
 <!-- docs-check:
-declare const features: import('@sakuzu/maplibre-gl-draw').DatasetFeatureInput[];
+declare const rows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
 -->
 
 ```ts
 const places = draw.addDataset({
   id: 'places',
-  features,
+  rows,
   collisionThinning: { enabled: true, fullDisplayZoom: 17, marginPx: 2 },
 });
 
@@ -535,7 +534,7 @@ function placeText(): void {
 | `getRowType(row)` | 幾何の種類 |
 | `getRowBounds(row)` | 空間索引が持つ外接矩形 |
 | `getRowPoint(row)` | `Point` の `[lng, lat]` |
-| `getRowFeature(row)` | スタイルを当てた地物。`collectVisible` が返すものと同じ |
+| `getRow(row)` | スタイルを当てた地物。`collectVisible` が返すものと同じ |
 | `findRow(id)` | id の行。無ければ `null` (最初の呼び出しで id の索引を作る) |
 
 行の番号は `click` と `hover` の `row` と同じで、中身が差し替えられる
@@ -554,7 +553,7 @@ for (const row of places.collectDrawnRows(extent)) {
   const cell = `${Math.floor(point[0] / 0.01)}:${Math.floor(point[1] / 0.01)}`;
   if (taken.has(cell)) continue;
   taken.add(cell);
-  const feature = places.getRowFeature(row);
+  const feature = places.getRow(row);
   if (feature) names.push(String(feature.properties.name));
 }
 ```
@@ -563,7 +562,7 @@ for (const row of places.collectDrawnRows(extent)) {
 
 `setVisible(false)` にすると描画と当たり判定は止まりますが、地物と
 GPU の資源は持ったままです。そのため、`setVisible(true)` にすると
-次のフレームで表示されます。非表示の間も、`setFeatures`、
+次のフレームで表示されます。非表示の間も、`setRows`、
 `setStyleRule`、provider は働きます。`remove()` (または
 `removeDataset(id)`) で、すべてを解放します。
 
@@ -612,7 +611,7 @@ draw.on('draw.dataset.remove', ({ datasetId }) => {
 ```ts
 draw.addDataset({
   id: 'stations',
-  features,
+  rows,
   externalPointRender: (feature) => feature.properties.kind === 'station',
 });
 ```
@@ -663,7 +662,7 @@ async function whenPictureComplete(): Promise<void> {
 - [データセット](../../examples/large-data/) では、属性で色を分けた
   5 万のマス目と、見えている範囲の分だけ取り寄せる点を表示し、
   間引き、クリック、並べ替えを試せます
-- [100 万の点](../../examples/columnar-worker/) では、20 万件か
+- [100 万の点](../../examples/table-worker/) では、20 万件か
   100 万件の点を Worker で列として作り、そこで下ごしらえをして、
   写さずに渡します
 
@@ -676,8 +675,8 @@ async function whenPictureComplete(): Promise<void> {
   をはじめとするデータセットのメソッド
 - [Dataset](../api/maplibre-gl-draw/interfaces/Dataset.md)
 - [DatasetOptions](../api/maplibre-gl-draw/interfaces/DatasetOptions.md)
-- [DatasetColumnarInput](../api/maplibre-gl-draw/interfaces/DatasetColumnarInput.md)
-  と [prepareDatasetColumnar](../api/columnar/functions/prepareDatasetColumnar.md)
+- [Table](../api/table/interfaces/Table.md)
+  と [prepareTable](../api/table/functions/prepareTable.md)
 - [DatasetCollisionThinning](../api/maplibre-gl-draw/interfaces/DatasetCollisionThinning.md)
 - [DatasetChangePayload](../api/maplibre-gl-draw/interfaces/DatasetChangePayload.md)
 - `draw.dataset.click`、`draw.dataset.add`、`draw.dataset.remove`、

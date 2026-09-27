@@ -10,13 +10,13 @@
  * GPU arrays. The drawing, the hit testing, the selection, the thinning and the analytic drape
  * are written against it, so a new input form is one more implementation of this contract.
  *
- * - `FeatureArraySource` (here): an array of features (`features`, `setFeatures`, a provider)
- * - `ColumnarSource` (`columnar/source.ts`): a columnar table (`columnar`, `setColumnar`)
+ * - `FeatureArraySource` (here): an array of features (`rows`, `setRows`, a provider)
+ * - `TableSource` (`table-source.ts`): a table (`table`, `setTable`)
  */
 
 import type { Feature } from '../shared/types/model.js';
+import { chunkTargetSizeFor } from '../table/partition.js';
 import { computeFeatureBounds, type DisplayChunk, partitionIntoChunks } from './chunk.js';
-import { chunkTargetSizeFor } from './partition.js';
 import type { ChunkCollector, CollectOptions } from './retained.js';
 import { collectFeatures } from './retained.js';
 import { maxStylePointRadiusOf } from './selection.js';
@@ -94,6 +94,8 @@ export class FeatureArraySource implements DisplaySource {
   readonly maxStylePointRadius: number;
   /** The row of each id, built on the first request */
   private rowById: Map<string, number> | null = null;
+  /** The features of the rows with a geometry, found on the first request */
+  private withGeometry: Feature[] | null = null;
 
   /**
    * @param list The normalized features, in draw order
@@ -127,7 +129,7 @@ export class FeatureArraySource implements DisplaySource {
     const rows: number[] = [];
     if (ids.size === 0) return rows;
     for (let row = 0; row < this.list.length; row++) {
-      if (ids.has(this.list[row].id)) rows.push(row);
+      if (ids.has(this.list[row].id) && this.hasGeometry(row)) rows.push(row);
     }
     return rows;
   }
@@ -142,7 +144,12 @@ export class FeatureArraySource implements DisplaySource {
   }
 
   features(): Feature[] {
-    return this.list;
+    if (!this.withGeometry) {
+      // The rows without a geometry (NaN coordinates) are left out, as a table leaves them out
+      const all = this.list.every((_, row) => this.hasGeometry(row));
+      this.withGeometry = all ? this.list : this.list.filter((_, row) => this.hasGeometry(row));
+    }
+    return this.withGeometry;
   }
 
   thinningRole(row: number): ThinningRole {

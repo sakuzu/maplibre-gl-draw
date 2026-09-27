@@ -85,8 +85,8 @@ declare module 'svelte' {
       datasets: `
 declare const parcels: import('@sakuzu/maplibre-gl-draw').Dataset;
 declare const places: import('@sakuzu/maplibre-gl-draw').Dataset;
-declare const features: import('@sakuzu/maplibre-gl-draw').DatasetFeatureInput[];
-declare const nextFeatures: import('@sakuzu/maplibre-gl-draw').DatasetFeatureInput[];
+declare const rows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
+declare const nextRows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
 `,
     },
   },

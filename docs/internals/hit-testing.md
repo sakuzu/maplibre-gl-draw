@@ -670,10 +670,10 @@ where input is dispatched: the InputRouter intercepts the click and the
   feature later in the array is in front
 - Candidates come from the spatial index of each dataset (a static
   R-tree over the bboxes of its rows, packed into typed arrays:
-  `dataset/packed-rtree.ts`), and the precise test borrows
+  `table/packed-rtree.ts`), and the precise test borrows
   `HitTestService.hitTestFeature()`. The test is the same as for Store
   features, including the Multi types and holes. A dataset given as a
-  columnar table builds the features of the candidate rows only, and the
+  table builds the features of the candidate rows only, and the
   hit carries the row as well as the feature
 - A hit shows no selection UI and does not change the Store selection. It
   only fires the `click` and `hover` events

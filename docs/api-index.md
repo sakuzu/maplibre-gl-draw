@@ -44,9 +44,9 @@ you need the others.
   build circles and buffers, combine polygons, test whether a point lies
   in a polygon, and tidy shapes. They also work in code that does not use
   the drawing engine (workers, servers, tests).
-- `@sakuzu/maplibre-gl-draw/columnar` ({@link columnar | the reference}):
-  the preparation of a columnar table for a dataset, importable in a
-  Worker.
+- `@sakuzu/maplibre-gl-draw/table` ({@link table | the reference}):
+  the parts for reading a large table in a Worker and putting it on the
+  map as a dataset.
 - `@sakuzu/maplibre-gl-draw/webgl` ({@link webgl | the reference}):
   building blocks for custom shaders. They may change in a minor
   release; everything else follows semantic versioning.
