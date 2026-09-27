@@ -20,10 +20,12 @@ npm run dev    # 表示される一覧から basic のページを開く
 ## 1. インストール
 
 ```sh
-npm install @sakuzu/maplibre-gl-draw maplibre-gl
+npm install @sakuzu/maplibre-gl-draw
 ```
 
-パッケージは ESM だけです。maplibre-gl は peer dependency で、版は
+パッケージは ESM だけです。maplibre-gl は peer dependency です。アプリに
+すでに入っている maplibre-gl を使い、まだ入っていなければ npm 7 以降は
+一緒にインストールされます。版は
 `~6.11.1` (6.11 系の修正版) が必要です。6.12 以降は結合点を点検してから
 対応します。v5 には対応しません。公開しているコードは ES2020 で、ブラウザーには WebGL2 が必要です。
 maplibre-gl v6 が WebGL2 で対応しているブラウザーで動きます。

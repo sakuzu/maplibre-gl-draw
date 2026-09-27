@@ -39,8 +39,12 @@ features:
 ## インストール
 
 ```sh
-npm install @sakuzu/maplibre-gl-draw maplibre-gl
+npm install @sakuzu/maplibre-gl-draw
 ```
+
+maplibre-gl は peer dependency です。アプリにすでに入っている
+maplibre-gl を使います。まだ入っていなければ、npm 7 以降は一緒に
+インストールされます。
 
 続けて [はじめかた](getting-started.ja.md) に沿って、最初の面を
 描いてください。
