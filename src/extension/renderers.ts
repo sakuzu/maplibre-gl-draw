@@ -13,6 +13,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import type { Feature } from '../shared/types/model.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
 import type { FillShaderManager } from '../view/renderers/polygon/fill.js';
@@ -102,13 +103,7 @@ export interface FeatureTypeRenderer {
    *   the layer of the feature, which the renderer multiplies into its own alpha)
    */
   draw(
-    feature: {
-      id: string;
-      type: string;
-      coordinates: unknown;
-      properties: Record<string, unknown>;
-      style?: unknown;
-    },
+    feature: Feature,
     projectionData: ProjectionData,
     zoom: number,
     context: FrameDrawContext,

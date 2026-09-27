@@ -11,7 +11,6 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
-import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
@@ -111,18 +110,7 @@ export function drawFeaturesImmediate(
       // To keep the draw order (painter's algorithm), the core batch that has accumulated is
       // flushed first and only then the custom feature is drawn immediately.
       batchManager.endFrame();
-      customRenderer.draw(
-        {
-          id: feature.id,
-          type: feature.type,
-          coordinates: coordinatesOf(feature),
-          properties: feature.properties,
-          style: feature.style,
-        },
-        projectionData,
-        zoom,
-        customRendererContext,
-      );
+      customRenderer.draw(feature, projectionData, zoom, customRendererContext);
       // Re-establish the blend state that the external renderer may have rewritten
       deps.restoreBlendState?.();
       batchManager.beginFrame(projectionData, zoom, layer);

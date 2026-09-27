@@ -14,7 +14,6 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
-import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -206,18 +205,7 @@ export function renderLayers(
           // A batch is not painted until endFrame, so without flushing here a custom feature
           // would ignore layer.order and be drawn before the core features of the same layer.
           r.batchManager.endFrame();
-          customRenderer.draw(
-            {
-              id: feature.id,
-              type: feature.type,
-              coordinates: coordinatesOf(feature),
-              properties: feature.properties,
-              style: feature.style,
-            },
-            defaultProjectionData,
-            zoom,
-            layerContext,
-          );
+          customRenderer.draw(feature, defaultProjectionData, zoom, layerContext);
           // Re-establish the blend state that the external renderer may have rewritten.
           restoreBlendState?.();
           // Restart the batch for the core features that follow.
