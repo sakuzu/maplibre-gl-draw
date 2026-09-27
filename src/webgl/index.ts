@@ -48,6 +48,7 @@ export { densifyPath } from '../view/terrain/tessellation.js';
 export { PointHitTestStrategy } from '../dispatcher/hit-test/strategies/point.js';
 
 // Supporting types
+export type { Coordinate } from '../shared/types/model.js';
 export type { BlendCapableGL } from '../view/layer/blend.js';
 export type { DashSegment } from '../view/renderers/line/dash.js';
 export type { ProjectionUniformLocations } from '../view/shaders/projection.js';

@@ -17,7 +17,7 @@ export interface SDFStrokeStyle {
   /** The line width in CSS px (at `createdZoom` when the options give one) */
   width: number;
   /** The color as `[r, g, b, a]`, each 0..1 */
-  color: Color;
+  color: [number, number, number, number];
   /** The opacity, 0..1, multiplied into the color */
   opacity: number;
   /** Solid, dashed or dotted */

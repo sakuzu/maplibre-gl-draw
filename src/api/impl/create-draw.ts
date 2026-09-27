@@ -5,7 +5,8 @@
  * `createDraw`: the draw instance on the engine, with its resources
  */
 
-import type { CreateDraw, Draw } from '../draw.js';
+import type { Map as MaplibreMap } from 'maplibre-gl';
+import type { Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawOptions } from '../options.js';
 import { createDatasets } from './datasets.js';
@@ -108,7 +109,7 @@ export function createDrawOnEngine(
  *
  * @internal
  */
-export const createDraw: CreateDraw = (map, options = {}) => {
+export function createDraw(map: MaplibreMap, options: DrawOptions = {}): Draw {
   checkDrawOptions(options);
   // The engine asks this function, so that the option can change while the instance runs
   let isExternalEntry = options.isExternalEntry;
@@ -122,4 +123,4 @@ export const createDraw: CreateDraw = (map, options = {}) => {
   });
   engine.enterDefaultMode();
   return draw;
-};
+}

@@ -129,13 +129,17 @@ export interface Draw {
 }
 
 /**
- * The function that puts a draw instance on a map.
+ * Puts a draw instance on a map and returns it.
+ *
+ * It can be called before, while or after the map loads. The layers are added as soon as the
+ * style accepts them, and added again after `setStyle`. Unless `initDefaultLayer: false` is
+ * given, the document starts with one empty layer. Several instances can share a page, each on
+ * its own map.
  *
  * @param map - The map to draw on
- * @param options - The options
+ * @param options - The options; every one can be omitted
  * @returns The draw instance
  */
-export type CreateDraw = (map: MaplibreMap, options?: DrawOptions) => Draw;
-
-/** Puts a draw instance on a map and returns it. */
-export const createDraw: CreateDraw = (map, options) => createDrawInstance(map, options);
+export function createDraw(map: MaplibreMap, options?: DrawOptions): Draw {
+  return createDrawInstance(map, options);
+}

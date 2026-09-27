@@ -4,13 +4,14 @@
 /**
  * The public surface of the package
  *
- * - The names that src/index.ts (layer 1) and src/webgl/index.ts (layer 2) export are
- *   pinned in two lists (see "The public surface" in CONTRIBUTING.md). Adding or removing a
- *   name means editing these lists as well, so every change to the surface is deliberate.
+ * - The names that the four entries export are pinned in four lists (see "The public
+ *   surface" in CONTRIBUTING.md): src/index.ts, src/geometry/index.ts and src/table/index.ts
+ *   (layer 1) and src/webgl/index.ts (layer 2). Adding or removing a name means editing these
+ *   lists as well, so every change to the surface is deliberate.
  * - The emitted declarations (with `stripInternal`) are self-contained: nothing that a
  *   public declaration needs was stripped as `@internal`, and every named type that a
- *   public declaration refers to is exported too, except the pinned list of known gaps.
- *   A layer 1 declaration counts only the exports of layer 1.
+ *   public declaration refers to is exported too. A layer 1 declaration counts only the
+ *   exports of layer 1.
  */
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,210 +20,183 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Layer 1: the public API (follows semver) */
-const LAYER_1 = [
-  'AdditionalHandleInfo',
-  'AdditionalResizeHandlesCalculator',
-  'applyRuleColor',
-  'AutoNameConfig',
-  'AutoNameType',
-  'AuxiliaryHandle',
-  'AuxiliaryHandleContext',
-  'AuxiliaryHandleHit',
-  'AuxiliaryHandleProvider',
-  'BoundingBox',
-  'BoundingBoxCoords',
-  'BoundingBoxCoordsSimple',
-  'BoundingBoxStyle',
-  'BoxSelection',
-  'BoxSelectionStrategy',
-  'BoxSelectionStyleConfig',
-  'buildTraceGraph',
-  'CenterMarkerStyle',
-  'Color',
-  'CompanionHit',
-  'CompanionHitContext',
-  'Coordinate',
-  'createGuideSnapProvider',
-  'createMapLibreGLDraw',
-  'CustomBoundingBoxCalculator',
-  'CustomFeatureHandler',
-  'CustomFeatureRenderer',
-  'CustomOverlayRenderer',
-  'CustomRendererDrawContext',
-  'CustomResizeCalculator',
-  'CustomResizeResult',
-  'Data',
-  'DEFAULT_SNAP_GUIDE_LINE_STYLE',
-  'DEFAULT_SNAP_INDICATOR_STYLES',
-  'deriveLegend',
-  'DatasetBaseStyle',
-  'DatasetChangePayload',
-  'DatasetClickEventPayload',
-  'DatasetClickPayload',
+/**
+ * The main entry (layer 1, follows semver): the symbols of the design, and the types of the
+ * collections and resources of `Draw`, which its declaration refers to
+ */
+const MAIN = [
+  'AutoNameOptions',
+  'CompanionProvider',
+  'createDraw',
   'Dataset',
-  'DatasetEventMap',
+  'DatasetBaseStyle',
+  'DatasetCollisionThinning',
+  'DatasetEvents',
   'DatasetOptions',
   'DatasetOrder',
   'DatasetPlacement',
-  'DatasetCollisionThinning',
-  'DatasetFeatureProvider',
-  'DatasetHoverPayload',
+  'DatasetProvider',
   'DatasetRow',
+  'DatasetsCollection',
   'DatasetThinningStats',
   'DatasetZoomScale',
-  'DocumentStore',
-  'DragEndData',
-  'DragNormalizedEvent',
-  'DragOperationType',
-  'DragStartData',
-  'DragState',
+  'deriveLegend',
+  'DocumentChange',
+  'DocumentResource',
+  'Draw',
+  'DRAW_PROPERTY_PREFIX',
+  'DrawDocument',
+  'DrawError',
+  'DrawErrorCode',
+  'DrawEventListener',
+  'DrawEvents',
+  'DrawKeyEvent',
+  'DrawOptions',
+  'DrawPointerEvent',
+  'DrawProperties',
   'evaluateStyleRule',
-  'EventListener',
-  'EventMap',
-  'EventPayloads',
-  'ExportFormat',
-  'ExportOptions',
-  'ExportResult',
+  'ExtensionContext',
+  'ExtensionsCollections',
   'Feature',
-  'FeatureCompanionProvider',
-  'FeatureCoordinates',
+  'FeatureFilter',
   'FeatureInput',
-  'FeatureLockStore',
-  'FeaturesChangePayload',
+  'FeaturePatch',
+  'FeatureRenderer',
+  'FeaturesCollection',
   'FeatureStyle',
-  'FeatureStyleConfig',
+  'FeatureStyleResolved',
   'FeatureType',
+  'FeatureTypeDefinition',
+  'FeatureTypesCollection',
   'FileData',
-  'FillStyle',
-  'findTracePath',
-  'GeometryAppliedPayload',
-  'BufferOptions',
-  'GeometryOperationName',
-  'GeometryOperations',
-  'getCreatedZoom',
-  'getRotation',
-  'getScale',
+  'FillRenderer',
   'getStyleRuleChannel',
   'Group',
-  'GuideSnapProviderDeps',
-  'GuideSnapProviderOptions',
-  'HandleInfo',
-  'HandleType',
-  'HitTestOptions',
-  'HitTestResult',
-  'HitTestStrategy',
-  'Hooks',
-  'HoverEvent',
-  'ImageProperties',
-  'InputOperations',
-  'InteractionGateStore',
-  'isFeatureLocked',
-  'isGroupLocked',
-  'isInteractionBlocked',
-  'KeyNormalizedEvent',
+  'GroupFilter',
+  'GroupInput',
+  'GroupPatch',
+  'GroupsCollection',
+  'Handle',
+  'HandleProvider',
+  'HiddenCollection',
+  'Hit',
+  'HitTestContext',
+  'InputHandlers',
+  'isDrawProperty',
   'Layer',
-  'LayerAwareOverlayRenderer',
+  'LayerFilter',
+  'LayerInput',
+  'LayerPatch',
+  'LayersCollection',
+  'LayerStackEntry',
   'LegendEntry',
-  'LineStringFeatureStyle',
+  'LineRenderer',
   'LineStyle',
-  'LngLat',
-  'LoadErrorPayload',
   'LoadOptions',
   'LoadResult',
-  'MapClickEventPayload',
-  'MapLibreGLDraw',
-  'MemoryStore',
+  'LoadSource',
   'Messages',
-  'MESSAGES_EN',
   'Metadata',
-  'MidpointHandleStyle',
+  'MetadataResource',
   'Mode',
   'ModeContext',
   'ModeFactory',
   'ModeHandler',
-  'ModifierKeys',
-  'MouseLeaveEvent',
-  'MouseNormalizedEvent',
-  'MutationContext',
-  'NormalizedEvent',
-  'Options',
-  'PixelRatioInput',
-  'PixelRatioProvider',
+  'MODES',
+  'ModesCollection',
+  'Modifiers',
+  'MoveTarget',
+  'NameGenerator',
+  'OffsetUniforms',
+  'OptionsResource',
+  'OverlayRenderer',
+  'OverlaysCollection',
   'Plugin',
   'PluginContext',
-  'PointerOriginalEvent',
-  'PointerType',
-  'PointFeatureStyle',
-  'PointFrameExtent',
-  'PointFrameExtentProvider',
+  'PluginsCollection',
+  'PointRenderer',
   'PointShape',
-  'PointStyle',
-  'PolygonFeatureStyle',
-  'RadiusHandleStyle',
-  'RadiusLineStyle',
-  'RenderingConfig',
-  'RenderSlot',
-  'ResizeHandleStyle',
-  'ResizeState',
-  'ResizeStrategy',
-  'ResolvedCollisionThinning',
-  'ResolvedSnapOptions',
-  'resolveFeatureStyle',
-  'resolveRuleColor',
-  'RotateHandleStyle',
-  'RotateInfo',
+  'Position',
+  'ProvidersCollection',
+  'RenderContext',
+  'RenderingOptions',
+  'RuntimeOptions',
+  'ScreenContext',
   'ScreenPoint',
   'Selection',
+  'SelectionResource',
+  'SelectionStyleOptions',
   'SelectionType',
-  'SelectionUIConfig',
-  'setCreatedZoom',
-  'setRotation',
+  'ShaderData',
   'SkippedFeature',
   'SnapCandidate',
   'SnapContext',
-  'SnapDisableKey',
-  'SnapExcludeVertex',
-  'SnapIndicatorStyles',
-  'SnapInputType',
-  'SnapLngLat',
-  'SnapOptions',
-  'SnappingOperations',
-  'SnapPointCandidate',
+  'SnappingOptions',
+  'SnapPreference',
   'SnapProvider',
-  'SnapProviderContext',
   'SnapResult',
-  'SnapSegmentCandidate',
-  'SnapTarget',
-  'SnapTargetKind',
-  'SnapTargetSegment',
-  'StateChanges',
   'Store',
   'StoreView',
-  'StrokeStyle',
   'StyleRule',
-  'StyleRuleChannel',
-  'SyntheticInputOptions',
-  'SyntheticKeyOptions',
-  'SyntheticLngLat',
-  'SyntheticModifiers',
-  'TentativeState',
-  'TentativeStyle',
-  'TopologyConfig',
-  'TopologyOperations',
-  'TraceGraph',
-  'TraceGraphEdge',
-  'TraceGraphEndpoint',
-  'TraceGraphNode',
-  'TraceOptions',
-  'TracingOperations',
-  'UiState',
-  'UpdateFeatureOptions',
+  'TerrainAnchors',
+  'TerrainDiagnostics',
+  'TopologyOptions',
+  'TracingOptions',
   'UpdateSource',
-  'VertexHandleStyle',
-  'VertexHit',
   'VertexRef',
   'VertexSelection',
+  'VertexSelectionResource',
+];
+
+/** The geometry entry (layer 1) */
+const GEOMETRY = [
+  'along',
+  'area',
+  'bbox',
+  'BBox',
+  'bboxContains',
+  'bboxIntersects',
+  'bearing',
+  'buffer',
+  'centroid',
+  'circle',
+  'contains',
+  'destination',
+  'difference',
+  'distance',
+  'EARTH_RADIUS_METERS',
+  'GeometryError',
+  'GeometryErrorCode',
+  'intersection',
+  'length',
+  'makeValid',
+  'metersToDegrees',
+  'midpoint',
+  'nearestPointOnLine',
+  'overlaps',
+  'perimeter',
+  'pointInPolygon',
+  'pointOnSurface',
+  'rewind',
+  'simplify',
+  'split',
+  'union',
+];
+
+/** The table entry (layer 1) */
+const TABLE = [
+  'Column',
+  'createTableBuilder',
+  'DictionaryColumn',
+  'GeometryType',
+  'PreparedTable',
+  'prepareTable',
+  'Table',
+  'TableBuilder',
+  'tableFromFeatures',
+  'TableGeometry',
+  'TableMixedGeometry',
+  'transferList',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
@@ -231,6 +205,7 @@ const WEBGL = [
   'BlendCapableGL',
   'calculateLngLatOffset',
   'computeQuadVertices',
+  'Coordinate',
   'createProgram',
   'dashPattern',
   'DashSegment',
@@ -259,47 +234,6 @@ const WEBGL = [
   'terrainTessellationStep',
   'TessellationStep',
   'TessellationTiling',
-  'WidthUnit',
-];
-
-/**
- * Types that the declarations of layer 1 still refer to but that layer 1 does not export:
- * the services and renderers of the 1.0 contexts (ModeContext, PluginContext,
- * CustomRendererDrawContext) and the terrain diagnostics. The rewrite of layer 1 for 2.0
- * removes these references; until then the list pins them, so that no new one slips in. The
- * three that the webgl entry exports (SDFStrokeOptions, SDFStrokeStyle, WidthUnit) are here
- * because a layer 1 declaration must not depend on layer 2.
- */
-const PENDING_LAYER_1 = [
-  'AutoNameGenerator',
-  'AuxiliaryHandleRegistry',
-  'BoxSelectionStrategyRegistry',
-  'EventEmitter',
-  'FeatureCompanionHitResult',
-  'FeatureCompanionRegistry',
-  'FillShaderManager',
-  'HitTestService',
-  'HitTestTopmost',
-  'HookName',
-  'OffsetUniforms',
-  'PluginManager',
-  'PointShapeRenderer',
-  'SDFLineRenderer',
-  'SDFStrokeOptions',
-  'SDFStrokeStyle',
-  'SelectionExtensionRegistry',
-  'SelectionScope',
-  'ShaderData',
-  'SpatialQuery',
-  'TerrainContext',
-  'TerrainDiagnostics',
-  'TerrainDrapeDebug',
-  'TerrainRenderDiagnostics',
-  'TerrainRenderState',
-  'TopHit',
-  'TopmostHitTestOptions',
-  'TraceConfig',
-  'UnprojectFunction',
   'WidthUnit',
 ];
 
@@ -342,51 +276,33 @@ function readExports(file: string): { names: string[]; values: string[]; star: n
   return { names, values, star };
 }
 
-describe('the export list of src/index.ts', () => {
-  it('names every export, with no export *', () => {
-    expect(readExports('src/index.ts').star).toBe(0);
-  });
+/** The checks of the export list of one entry */
+function describeEntry(file: string, list: readonly string[], load: () => Promise<object>): void {
+  describe(`the export list of ${file}`, () => {
+    it('names every export, with no export *', () => {
+      expect(readExports(file).star).toBe(0);
+    });
 
-  it('matches layer 1', () => {
-    expect([...readExports('src/index.ts').names].sort(byName)).toEqual([...LAYER_1].sort(byName));
-  });
+    it('matches the pinned list', () => {
+      expect([...readExports(file).names].sort(byName)).toEqual([...list].sort(byName));
+    });
 
-  it('exports at runtime exactly the value names of the list', async () => {
-    const runtime = Object.keys(await import('./index.js')).sort(byName);
-    expect(runtime).toEqual(readExports('src/index.ts').values.sort(byName));
+    it('exports at runtime exactly the value names of the list', async () => {
+      const runtime = Object.keys(await load()).sort(byName);
+      expect(runtime).toEqual(readExports(file).values.sort(byName));
+    });
   });
-});
+}
 
-describe('the export list of src/webgl/index.ts', () => {
-  it('names every export, with no export *', () => {
-    expect(readExports('src/webgl/index.ts').star).toBe(0);
-  });
+describeEntry('src/index.ts', MAIN, () => import('./index.js'));
+describeEntry('src/geometry/index.ts', GEOMETRY, () => import('./geometry/index.js'));
+describeEntry('src/table/index.ts', TABLE, () => import('./table/index.js'));
+describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
-  it('matches layer 2', () => {
-    expect([...readExports('src/webgl/index.ts').names].sort(byName)).toEqual(
-      [...WEBGL].sort(byName),
-    );
-  });
-
-  it('shares no name with the main entry', () => {
-    expect(LAYER_1.filter((name) => WEBGL.includes(name))).toEqual([]);
-  });
-
-  it('exports at runtime exactly the value names of the list', async () => {
-    const runtime = Object.keys(await import('./webgl/index.js')).sort(byName);
-    expect(runtime).toEqual(readExports('src/webgl/index.ts').values.sort(byName));
-  });
-});
-
-// The main entry of 2.0, until it replaces src/index.ts
-describe('the export list of src/api/v2/index.ts', () => {
-  it('names every export, with no export *', () => {
-    expect(readExports('src/api/v2/index.ts').star).toBe(0);
-  });
-
-  it('exports at runtime exactly the value names of the list', async () => {
-    const runtime = Object.keys(await import('./api/index.js')).sort(byName);
-    expect(runtime).toEqual(readExports('src/api/v2/index.ts').values.sort(byName));
+describe('the four entries', () => {
+  it('share no name', () => {
+    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...WEBGL];
+    expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual([]);
   });
 });
 
@@ -545,8 +461,7 @@ describe('the emitted declarations', () => {
   const geometry = resolve(outDir, 'geometry/index.d.ts');
   const table = resolve(outDir, 'table/index.d.ts');
   const webgl = resolve(outDir, 'webgl/index.d.ts');
-  const next = resolve(outDir, 'api/v2/index.d.ts');
-  const entries = [main, geometry, table, webgl, next];
+  const entries = [main, geometry, table, webgl];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -572,16 +487,11 @@ describe('the emitted declarations', () => {
     setup();
     expect(
       findForgottenExports(program, files, [main, geometry, table], [main, geometry, table]),
-    ).toEqual([...PENDING_LAYER_1].sort(byName));
+    ).toEqual([]);
   }, 60_000);
 
   it('export every named type that a layer 2 declaration refers to', () => {
     setup();
     expect(findForgottenExports(program, files, entries, [webgl])).toEqual([]);
-  }, 60_000);
-
-  it('export every named type that a declaration of the 2.0 main entry refers to', () => {
-    setup();
-    expect(findForgottenExports(program, files, [next, geometry, table], [next])).toEqual([]);
   }, 60_000);
 });

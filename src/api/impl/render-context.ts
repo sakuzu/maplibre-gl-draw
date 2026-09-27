@@ -17,7 +17,7 @@ import type {
   FeatureTypeRenderer,
   FrameDrawContext,
   LayeredOverlayRenderer,
-} from '../../extension/index.js';
+} from '../../extension/renderers.js';
 import { toColor } from '../../shared/color.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import { applyDrawBlendState } from '../../view/layer/blend.js';

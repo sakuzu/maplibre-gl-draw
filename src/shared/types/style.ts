@@ -53,7 +53,7 @@ export interface PointStyle {
   iconId?: string;
 }
 
-/** The dash pattern of a line: solid, dashed or dotted */
+/** The dash pattern of a line: solid, dashed or dotted. */
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
 
 /**

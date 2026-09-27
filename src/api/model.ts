@@ -18,6 +18,7 @@ import type {
 } from 'geojson';
 import type { Messages } from '../messages.js';
 import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
+import type { LineStyle } from '../shared/types/style.js';
 import {
   deriveLegend as deriveRuleLegend,
   evaluateStyleRule as evaluateRule,
@@ -46,8 +47,8 @@ export type FeatureType =
   | 'Image'
   | (string & {});
 
-/** The dash pattern of a line: solid, dashed or dotted. */
-export type LineStyle = 'solid' | 'dashed' | 'dotted';
+// The dash pattern of a line is the one the shared line renderer draws
+export type { LineStyle };
 
 /** The shape of a point marker. */
 export type PointShape = 'circle' | 'square' | 'triangle' | 'star';

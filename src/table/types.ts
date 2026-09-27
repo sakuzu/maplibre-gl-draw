@@ -167,7 +167,7 @@ export type Column =
  *
  * Build one with {@link tableFromFeatures} or {@link createTableBuilder}, or take the output of
  * a GeoArrow reader as it is: the layout is the same. Pass it as `table` to
- * {@link maplibre-gl-draw!MapLibreGLDraw.addDataset | addDataset} or to
+ * {@link maplibre-gl-draw!DatasetsCollection.add | draw.datasets.add} or to
  * {@link maplibre-gl-draw!Dataset.setTable | Dataset.setTable}.
  *
  * Nothing is copied: the dataset keeps and reads the arrays, so do not change them while the
@@ -228,7 +228,7 @@ export interface Table {
  * Besides the table it carries the bbox of each row, the spatial chunks and the spatial index
  * of the hit testing, all in typed arrays, so it can be sent from a Worker without a copy
  * ({@link transferList}). Treat everything but `table` as opaque: pass the whole object as
- * `table` to {@link maplibre-gl-draw!MapLibreGLDraw.addDataset | addDataset} or to
+ * `table` to {@link maplibre-gl-draw!DatasetsCollection.add | draw.datasets.add} or to
  * {@link maplibre-gl-draw!Dataset.setTable | Dataset.setTable}.
  */
 export interface PreparedTable {

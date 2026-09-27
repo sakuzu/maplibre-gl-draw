@@ -8,28 +8,31 @@
  * Distances are measured in the local frame of hit testing (local-frame.ts).
  */
 
+import type { Feature, FeatureType } from '../../../api/model.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
-import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
+import type { Coordinate } from '../../../store/types.js';
 import { latitudeScale, localDistance } from '../local-frame.js';
-import type { HitTestStrategy } from './base.js';
 
 /**
  * The built-in hit test of `Point` features: hit within the tolerance of the position.
  *
- * The distance is measured in the local frame of the click (see {@link HitTestStrategy}).
- * A custom type drawn as a point can reuse it, or extend it to widen the hit area.
+ * The distance is measured in a local frame around the click, where a degree of longitude is
+ * scaled by the cosine of the latitude. A feature type drawn as a point can reuse it, or
+ * extend it to widen the hit area. The engine uses it as the hit test of its points.
  */
-export class PointHitTestStrategy implements HitTestStrategy {
+export class PointHitTestStrategy {
   /** The feature type, `'Point'` */
   readonly geometryType: FeatureType = 'Point';
 
-  test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
+  /** Whether the feature is within `toleranceLngLat` degrees of the coordinate */
+  test(feature: Feature, coordinate: [number, number], toleranceLngLat: number): boolean {
     const pointCoord = coordinatesOf(feature) as Coordinate;
     const dist = localDistance(coordinate, pointCoord, latitudeScale(coordinate[1]));
     return dist <= toleranceLngLat;
   }
 
-  distance(feature: Feature, coordinate: Coordinate): number {
+  /** The distance from the coordinate to the feature, in degrees of the local frame */
+  distance(feature: Feature, coordinate: [number, number]): number {
     const pointCoord = coordinatesOf(feature) as Coordinate;
     return localDistance(coordinate, pointCoord, latitudeScale(coordinate[1]));
   }
