@@ -544,7 +544,7 @@ export class SelectionHandlesRenderer {
     zoom: number,
     options?: {
       activeVertex?: VertexRef;
-      selectedVertices?: VertexRef[];
+      selectedVertices?: readonly VertexRef[];
       visibleSet?: VisibleHandleSet | null;
     },
   ): void {
@@ -646,7 +646,11 @@ export class SelectionHandlesRenderer {
    * ring, so even when it is included in the references only one handle is drawn, as the
    * first vertex.
    */
-  drawFollowedVertexHandles(feature: Feature, followedVertices: VertexRef[], zoom: number): void {
+  drawFollowedVertexHandles(
+    feature: Feature,
+    followedVertices: readonly VertexRef[],
+    zoom: number,
+  ): void {
     if (followedVertices.length === 0) return;
 
     const handles = computeVertexHandles(feature).filter((h) =>
@@ -760,7 +764,7 @@ export class SelectionHandlesRenderer {
       /** When specified, only that vertex is drawn (used while editing a vertex/midpoint) */
       activeVertex?: VertexRef;
       /** References of the selected vertices (for highlighting) */
-      selectedVertices?: VertexRef[];
+      selectedVertices?: readonly VertexRef[];
       /**
        * Callback that computes the additional resize handles (it receives the bbox after
        * the margin is applied)

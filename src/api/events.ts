@@ -11,8 +11,9 @@
 import type { Position } from 'geojson';
 import type { Dataset, DatasetRow } from './datasets.js';
 import type { DrawError } from './errors.js';
+import type { Hit } from './extension/provider.js';
 import type { UpdateSource } from './extension/store.js';
-import type { Feature, Group, Layer, LoadResult, Metadata, MoveTarget } from './model.js';
+import type { Feature, FileData, Group, Layer, LoadResult, Metadata, MoveTarget } from './model.js';
 import type {
   LayerStackEntry,
   Mode,
@@ -29,6 +30,11 @@ export type ScreenPoint = [number, number];
  * Everything one transaction changed, as `document.changed` and the subscribers of the Store
  * receive it. It arrives once per transaction, and each category is present only when the
  * transaction changed it.
+ *
+ * `document.changed` fires only for a transaction that changed the document (features, layers,
+ * groups, metadata or files); the selection, the editing and the mode are carried along when
+ * the same transaction changed them. A change of the state of this client alone has its own
+ * event (`selection.changed`, `mode.changed` and so on).
  */
 export interface DocumentChange {
   /** Where the writes came from */
@@ -82,6 +88,8 @@ export interface DocumentChange {
   mode?: { mode: Mode; previous: Mode };
   /** The new metadata and the one before it */
   metadata?: { metadata: Metadata; previous: Metadata };
+  /** The embedded files created and deleted */
+  files?: { created?: FileData[]; deleted?: FileData[] };
 }
 
 /**
@@ -112,7 +120,12 @@ export interface DrawEvents {
   'group.deleted': { group: Group; source: string };
   /** The title or the description changed */
   'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
-  /** Every change of one transaction; it arrives once per transaction */
+  /**
+   * Every change of one transaction that changed the document (features, layers, groups,
+   * metadata or files); it arrives once per such transaction, after the events of the
+   * resources. A change of the selection, the mode or another state of this client alone does
+   * not fire it.
+   */
   'document.changed': DocumentChange;
   /** A document was loaded */
   'document.loaded': { result: LoadResult; source: string };
@@ -129,10 +142,20 @@ export interface DrawEvents {
   'drag.ended': { kind: 'feature' | 'vertex' | 'handle'; featureIds: string[]; cancelled: boolean };
   /** The mode changed */
   'mode.changed': { mode: Mode; previous: Mode };
+  /** The items this client hides changed; `ids` is the whole set after the change */
+  'hidden.changed': { ids: readonly string[] };
+  /** Read-only was turned on or off */
+  'readOnly.changed': { readOnly: boolean };
+  /** The interaction lock was turned on or off */
+  'interactionLock.changed': { locked: boolean };
   /** The snapping target changed */
   'snap.changed': { result: SnapResult | null };
-  /** A place without a feature was clicked */
-  'map.clicked': { lngLat: Position; point: ScreenPoint };
+  /**
+   * A click on the map in the select mode, whether it hit something or not. `lngLat` is the
+   * position of the pointer before snapping, and `hit` the frontmost thing under it (a feature,
+   * a row of a dataset, a companion), or `null` when the click hit nothing
+   */
+  'map.clicked': { lngLat: Position; point: ScreenPoint; hit: Hit | null };
   /** A row of a dataset was clicked */
   'dataset.clicked': {
     datasetId: string;
@@ -149,7 +172,9 @@ export interface DrawEvents {
   'dataset.reordered': { order: readonly string[]; previous: readonly string[] };
   /**
    * The image mode asks for an image to place at a position: the application picks a file
-   * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`
+   * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`. `lngLat` is
+   * the clicked position when a click led to the mode (a listener of `map.clicked` entered it),
+   * and the center of the map when the mode was entered otherwise
    */
   'image.requested': { lngLat: Position; zoom: number; layerId: string };
   /** The divisions of the stacking order changed */

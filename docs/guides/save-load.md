@@ -132,9 +132,9 @@ input?.addEventListener('change', async () => {
   color, an opacity outside 0 to 1) is dropped, and the feature is kept
 - A GeoJSON feature whose ID is already taken gets a new ID, so a file
   written by `toGeoJSON()` can be loaded back into the same drawing
-- GeoJSON features go into the layer named by their
-  `maplibre-gl-draw:layerId` when it exists, otherwise into the layer of
-  `options.layerId`, otherwise into the active layer
+- GeoJSON features go into the layer of `options.layerId` when it is
+  given, otherwise into the layer named by their `maplibre-gl-draw:layerId`
+  when it exists, otherwise into the active layer
 - Multi geometries are kept as Multi features; `flattenMulti: true` splits
   them into single features. A `GeometryCollection` is folded into at most
   one Multi feature per geometry type
@@ -212,23 +212,15 @@ mode, which asks the application for a file with `image.requested`.
 
 ## Saving as you go
 
-`document.changed` arrives once per transaction with everything that
-changed in it, so it is the place to save after each edit. It also
-carries the changes of the selection and the mode, which the document
-does not keep; save only when the document changed:
+`document.changed` arrives once per transaction that changed the
+document, with everything that changed in it, so it is the place to save
+after each edit. A change of the selection or of the mode alone does not
+fire it:
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('document.changed', (change) => {
-  const documentChanged =
-    change.features ??
-    change.layers ??
-    change.groups ??
-    change.layerReorder ??
-    change.groupReorder ??
-    change.metadata;
-  if (!documentChanged) return;
+draw.on('document.changed', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
@@ -288,24 +280,31 @@ const store: Store = createServerStore();
 const draw = createDraw(map, { store });
 ```
 
-The store holds the document: the features, the layers and their
-stacking order, the groups, the files and the metadata. The instance
-reads and writes the document through its methods, subscribes to it and
-groups writes with its `transact`. The state of this client (the
-selection, the mode, read-only, the interaction lock and the hidden
-items) stays in the instance around the store, which never sees
-read-only: the instance refuses those writes before they reach it.
+The store holds the document (the features, the layers and their
+stacking order, the groups, the files and the metadata) and the state of
+this client (the selection, the features being edited, the selected
+vertices, the mode, read-only, the interaction lock and the hidden items).
+The instance reads and writes both only through the methods of `Store`,
+subscribes to it and groups writes with its `transact`. It does not call
+the writes of the document while `isReadOnly()` is true. The shape being
+drawn, the box selection and the drag stay in the instance.
 
 A store of your own keeps a few rules:
 
+- The IDs of features and groups are unique together, and so are the IDs
+  of layers and those of files
 - Every feature is listed in exactly one place: in the `featureIds` of its
-  group when it has a `groupId`, otherwise in the `items` of its layer
+  group when it has a `groupId`, otherwise in the `items` of its layer.
+  Every group is in the `items` of one layer, and its `layerId` names that
+  layer
 - An object it has returned or notified is never changed afterwards; a
   change stores a new object
 - A write whose argument cannot apply (an ID that does not exist, a layer
   or group that names nothing, an ID taken twice) changes nothing
 - `transact` groups the changes of a function into one notification of
-  `subscribe`
+  `subscribe`, so a load that replaces the whole document is one
+  `DocumentChange`. A write of the selection, the editing or the mode is
+  notified with its category
 - A change it applies from outside the instance is notified like a local
   one, with the source `'remote'`. The instance draws it, and a deleted
   item leaves the selection
@@ -324,7 +323,7 @@ document, or to put an earlier state of it back, is in every
 - one transaction is one change, so a geometry operation, a group or a
   drag of several features comes as one step
 - `source` tells where it came from: `'local'` for edits and calls of the
-  API, `'batch'` for a GeoJSON load, `'silent'` for a load of a document
+  API, `'load'` for a GeoJSON load, `'silent'` for a load of a document
   of the library, `'remote'` for a store of your own, and any value you
   pass to `transact`
 - an update in the middle of a drag carries `isIntermediate: true`; the

@@ -84,7 +84,7 @@ export interface Selection {
   /** Selection type (null means nothing is selected) */
   type: SelectionType | null;
   /** IDs of the selected items */
-  ids: string[];
+  ids: readonly string[];
 }
 
 /**
@@ -124,7 +124,7 @@ export interface VertexSelection {
   /** The ID of the feature whose vertices are selected */
   featureId: string;
   /** The selected vertices */
-  vertices: VertexRef[];
+  vertices: readonly VertexRef[];
 }
 
 /**
@@ -460,7 +460,7 @@ export interface Layer {
    *
    * A feature in a group is listed in `Group.featureIds` instead.
    */
-  items: string[];
+  items: readonly string[];
   /** Free-form data of the host, saved and exported with the layer */
   metadata: Record<string, unknown> | undefined;
   /**
@@ -491,7 +491,7 @@ export interface Group {
   /** The display name */
   name: string;
   /** The IDs of the members, back to front (the last is the frontmost) */
-  featureIds: string[];
+  featureIds: readonly string[];
   /**
    * Whether the group is locked (every member is then locked, see {@link isFeatureLocked})
    */
@@ -562,9 +562,11 @@ export interface TentativeState {
  * - local: an operation of the user or a call of the API (the default)
  * - silent: a change that a subscriber recording changes leaves out: loading a native file, which replaces
  *   the whole document, and clearing the selection when a mode starts
- * - batch: loading a GeoJSON file, a bulk change recorded as one step (it is one transaction,
- *   which is what makes it one notification)
- * - remote: a change that came from outside the instance. A replaced {@link DocumentStore}
+ * - load: loading a GeoJSON file or replacing the features with one, recorded as one step (it
+ *   is one transaction, which is what makes it one notification)
+ * - batch: a bulk change of a host or an extension recorded as one step; core does not write
+ *   it
+ * - remote: a change that came from outside the instance. A replaced Store (see StoreContract)
  *   writes it for the changes it applies from elsewhere, so that subscribers can tell them from
  *   local edits and core keeps the local editing state (a vertex selection) consistent with them
  * - import: for a host or an extension that loads data by its own means; core does not write
@@ -575,6 +577,7 @@ export interface TentativeState {
 export type UpdateSource =
   | 'local'
   | 'silent'
+  | 'load'
   | 'batch'
   | 'remote'
   | 'import'
@@ -602,15 +605,15 @@ export interface UpdateFeatureOptions {
  *
  * `subscribe` of the Store delivers one per outermost transaction (or per write outside
  * one). Each category is present only when the transaction changed it. The document
- * categories (features, layers, groups, layerReorder, groupReorder, metadata) are what a
- * {@link DocumentStore} notifies; the others are local state of this client.
+ * categories (features, layers, groups, layerReorder, groupReorder, metadata, files) are what a
+ * DocumentStore notifies; the others are local state of this client.
  */
 export interface StoreChange {
   /**
    * The source of the operation
    *
    * Used by subscribers to identify the source of the operation. Core writes 'local',
-   * 'silent' and 'batch', and a replaced store writes 'remote' for the changes it applies
+   * 'silent' and 'load', and a replaced store writes 'remote' for the changes it applies
    * from outside (see {@link UpdateSource}); plugins and external store implementations can
    * use their own values.
    */
@@ -708,6 +711,11 @@ export interface StoreChange {
     metadata: Metadata;
     previous: Metadata;
   };
+  /** The embedded files created and deleted */
+  files?: {
+    created?: FileData[];
+    deleted?: FileData[];
+  };
 }
 
 /**
@@ -760,7 +768,7 @@ export interface Data {
   layers?: Layer[];
   /**
    * The stacking order, from the back: every layer of `layers` once, and the entries of the
-   * application that are not layers (see {@link DocumentStore.setLayerOrder}) at their
+   * application that are not layers (see the stacking order of StoreContract) at their
    * positions
    */
   layerOrder: string[];

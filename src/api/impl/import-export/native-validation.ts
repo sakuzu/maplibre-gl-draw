@@ -11,13 +11,14 @@
  */
 
 import type { Data, Feature, FileData, Group, Layer } from '../../../store/types.js';
+import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 import { describeGeometryProblem } from './geometry-validation.js';
 import { sanitizeFeatureStyle } from './style-validation.js';
 
 function fail(message: string): never {
-  throw new Error(`Invalid native data: ${message}`);
+  throw new DrawError('invalid-input', `Invalid native data: ${message}`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

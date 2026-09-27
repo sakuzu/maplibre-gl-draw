@@ -168,8 +168,8 @@ A plugin reacts to changes through the events, with the same names as
 change, for every write whatever made it: the API, a drawing mode, a
 drag, the Delete key, a load, another plugin, or a Store you supplied.
 
-- `document.changed` arrives once per transaction with everything it
-  changed, and its `source`
+- `document.changed` arrives once per transaction that changed the
+  document, with everything it changed and its `source`
 - `feature.updated` carries `intermediate: true` while a drag goes on;
   a final update always follows
 - `drag.started` and `drag.ended` surround a move, a resize, a

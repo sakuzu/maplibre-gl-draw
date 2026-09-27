@@ -340,7 +340,7 @@ function renderSingleSelectionHandles(
   selectionHandlesRenderer: SelectionHandlesRenderer,
   operation: DragState['operation'] | null,
   dragState: DragState | null,
-  selectedVertexRefs: VertexRef[] | undefined,
+  selectedVertexRefs: readonly VertexRef[] | undefined,
   visibleSet: VisibleHandleSet | undefined,
   scope: SelectionScope,
 ): void {
@@ -451,7 +451,7 @@ function renderNonCircleHandles(
   selectionHandlesRenderer: SelectionHandlesRenderer,
   operation: DragState['operation'] | null,
   dragState: DragState | null,
-  selectedVertexRefs: VertexRef[] | undefined,
+  selectedVertexRefs: readonly VertexRef[] | undefined,
   visibleSet: VisibleHandleSet | undefined,
   scope: SelectionScope,
 ): void {

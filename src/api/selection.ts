@@ -55,9 +55,11 @@ export interface SelectionResource {
    */
   group(): Group | null;
   /**
-   * Ungroups the selected groups.
+   * Takes what is selected out of the groups, as the shortcut Shift+Cmd+G (Shift+Ctrl+G) does:
+   * the selected groups are dissolved, their features taking their place in the layer, and
+   * selected features that are in a group leave it (the group stays unless it becomes empty).
    *
-   * @returns False when no group is selected or the change is refused
+   * @returns False when nothing selected is a group or in one, or the document is read-only
    */
   ungroup(): boolean;
   /**

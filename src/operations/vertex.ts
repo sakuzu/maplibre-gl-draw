@@ -517,7 +517,7 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
  */
 export function startVertexMove(
   feature: Feature,
-  vertices: VertexRef[],
+  vertices: readonly VertexRef[],
   startLngLat: { lng: number; lat: number },
 ): VertexState | null {
   if (vertices.length === 0) return null;

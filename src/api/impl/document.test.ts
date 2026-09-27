@@ -132,6 +132,116 @@ describe('draw.document', () => {
     expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
   });
 
+  it('rejects every failure with a DrawError: a broken embedded image and an unreadable image', async () => {
+    const brokenImage = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            'maplibre-gl-draw:featureType': 'Image',
+            'maplibre-gl-draw:imageData': 'data:image/png;base64,not-an-image',
+            'maplibre-gl-draw:imageMimeType': 'image/png',
+          },
+          geometry: { type: 'Point', coordinates: [0, 0] },
+        },
+      ],
+    };
+    await expect(doc.load(brokenImage as never)).rejects.toMatchObject({
+      name: 'DrawError',
+      code: 'invalid-input',
+    });
+    const notAnImage = new File(['not an image'], 'x.png', { type: 'image/png' });
+    await expect(doc.load(notAnImage, { coordinate: [0, 0] })).rejects.toMatchObject({
+      name: 'DrawError',
+      code: 'unsupported-format',
+    });
+    await expect(doc.load(notAnImage)).rejects.toMatchObject({
+      name: 'DrawError',
+      code: 'invalid-input',
+    });
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
+  });
+
+  it('puts every feature into the layer given to the load, over the one the feature names', async () => {
+    store.createLayer({
+      id: 'l2',
+      name: 'l2',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
+    const named = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          properties: { 'maplibre-gl-draw:layerId': 'l1', 'maplibre-gl-draw:groupId': 'nowhere' },
+          geometry: { type: 'Point' as const, coordinates: [3, 4] },
+        },
+      ],
+    };
+    const into = await doc.load(named, { layerId: 'l2' });
+    expect(store.getFeature(into?.featureIds[0] ?? '')?.layerId).toBe('l2');
+    const own = await doc.load(named);
+    expect(store.getFeature(own?.featureIds[0] ?? '')?.layerId).toBe('l1');
+  });
+
+  it('replaces the features and groups with GeoJSON in one transaction, keeping the layers', async () => {
+    store.createFeature({
+      id: 'b',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      layerId: 'l1',
+      groupId: undefined,
+      properties: {},
+      style: {},
+      visible: true,
+      locked: false,
+    });
+    store.createGroup({
+      id: 'g',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['a', 'b'],
+      visible: true,
+      locked: false,
+    });
+    const notifications: Array<string | undefined> = [];
+    store.subscribe((change) => notifications.push(change.source));
+    // The file reuses the ID of a feature it replaces
+    const file = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          id: 'a',
+          properties: { 'maplibre-gl-draw:groupId': 'g' },
+          geometry: { type: 'Point' as const, coordinates: [5, 6] },
+        },
+      ],
+    };
+    const result = await doc.load(file, { mode: 'replace' });
+    expect(result).toMatchObject({ format: 'geojson', featureIds: ['a'], replaced: true });
+    expect(notifications).toEqual(['load']);
+    expect(store.listFeatures().map((f) => [f.id, f.groupId])).toEqual([['a', undefined]]);
+    expect(store.getFeature('a')?.geometry).toEqual({ type: 'Point', coordinates: [5, 6] });
+    expect(store.listGroups()).toEqual([]);
+    expect(store.listLayers().map((l) => l.id)).toEqual(['l1']);
+    expect(store.getLayer('l1')?.items).toEqual(['a']);
+  });
+
+  it('loads a document of the library in one transaction', async () => {
+    const saved = doc.toJSON();
+    const notifications: Array<string | undefined> = [];
+    store.subscribe((change) => notifications.push(change.source));
+    await doc.load(saved);
+    expect(notifications).toEqual(['silent']);
+  });
+
   it('returns null while read-only', async () => {
     store.setReadOnly(true);
     expect(await doc.load(geojson)).toBeNull();

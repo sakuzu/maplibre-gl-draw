@@ -2025,7 +2025,7 @@ by its own id.
   `deleteLayer` removes its own id. Removing a dataset id is the
   caller's job: `removeDataset` does not touch `layerOrder`,
   since the dataset layer does not know the Store
-- The sequence is part of the document (the `DocumentStore` contract): the
+- The sequence is part of the document (the `StoreContract` rules): the
   native format writes it whole as `layerOrder` and a native load replaces
   it whole, and a replaced store holds it with the entries of the
   host. The datasets themselves are not in the document; the host adds

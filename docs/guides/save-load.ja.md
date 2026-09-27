@@ -129,9 +129,9 @@ input?.addEventListener('change', async () => {
 - ID がすでに使われている GeoJSON の地物には新しい ID を振り
   ます。そのため、`toGeoJSON()` で書き出したファイルを同じ描画に
   読み戻せます
-- GeoJSON の地物は、`maplibre-gl-draw:layerId` のレイヤーがあれば
-  そのレイヤーに、無ければ `options.layerId` のレイヤーに、それも無ければ
-  アクティブなレイヤーに入ります
+- GeoJSON の地物は、`options.layerId` を指定すればそのレイヤーに、
+  無ければ `maplibre-gl-draw:layerId` のレイヤーがあればそのレイヤーに、
+  それも無ければアクティブなレイヤーに入ります
 - Multi の形状は Multi の地物のまま保ちます。`flattenMulti: true`
   を指定すると単一の地物に分けます。`GeometryCollection` は、
   形状の型ごとに多くても 1 つの Multi の地物にまとめます
@@ -211,23 +211,14 @@ await draw.document.load(imageFile, {
 
 ## 変更のたびに保存する
 
-`document.changed` は、トランザクション 1 つごとに、その中で変わった
-ものをすべて載せて 1 度だけ届きます。編集のたびに保存するなら、この
-イベントを使います。このイベントは、文書が持たない選択やモードの
-変更も運ぶので、文書が変わったときだけ保存してください。
+`document.changed` は、文書を変えたトランザクション 1 つごとに、その中で
+変わったものをすべて載せて 1 度だけ届きます。編集のたびに保存するなら、
+このイベントを使います。選択やモードだけの変更では届きません。
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('document.changed', (change) => {
-  const documentChanged =
-    change.features ??
-    change.layers ??
-    change.groups ??
-    change.layerReorder ??
-    change.groupReorder ??
-    change.metadata;
-  if (!documentChanged) return;
+draw.on('document.changed', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
@@ -287,23 +278,29 @@ const store: Store = createServerStore();
 const draw = createDraw(map, { store });
 ```
 
-ストアが持つのは文書です。地物、レイヤーとその重なりの順、グループ、
-ファイル、メタデータを持ちます。インスタンスは、そのメソッドで文書を
-読み書きし、変更を購読し、書き込みを `transact` でまとめます。この端末の
-状態 (選択、モード、読み取り専用、操作ロック、隠している項目) は、
-インスタンスがストアの外側で持ちます。ストアは読み取り専用を知りません。
-インスタンスが、ストアに届く前に書き込みを断るからです。
+ストアが持つのは、文書 (地物、レイヤーとその重なりの順、グループ、
+ファイル、メタデータ) と、この端末の状態 (選択、編集中の地物、選んだ
+頂点、モード、読み取り専用、操作ロック、隠している項目) です。
+インスタンスは、どちらも `Store` のメソッドだけで読み書きし、変更を
+購読し、書き込みを `transact` でまとめます。`isReadOnly()` が true の
+あいだは、文書の書き込みを呼びません。描いている途中の形、範囲選択、
+ドラッグは、インスタンスが持ちます。
 
 自前のストアは、いくつかの約束を守ります。
 
+- 地物とグループの ID は、合わせて重なりません。レイヤーの ID と
+  ファイルの ID も、それぞれ重なりません
 - どの地物も、ちょうど 1 つの場所に並びます。`groupId` を持つ地物は
   グループの `featureIds` に、持たない地物はレイヤーの `items` に並び
-  ます
+  ます。どのグループも 1 つのレイヤーの `items` に並び、その
+  `layerId` はそのレイヤーを指します
 - 返したり通知したりしたオブジェクトは、後から変えません。変更の
   ときは新しいオブジェクトを保存します
 - 当てはまらない引数 (存在しない ID、何も指さないレイヤーやグループ、
   重なった ID) の書き込みは、何も変えません
-- `transact` は、関数の中の変更を `subscribe` の 1 つの通知にまとめます
+- `transact` は、関数の中の変更を `subscribe` の 1 つの通知にまとめます。
+  そのため、文書全体を置き換える読み込みは 1 つの `DocumentChange` に
+  なります。選択、編集、モードの書き込みは、その欄を付けて通知します
 - インスタンスの外から適用した変更も、ローカルの変更と同じように、
   出どころ `'remote'` を付けて通知します。インスタンスはそれを描き、
   削除された項目は選択から外れます
@@ -321,7 +318,7 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 - 1 つのトランザクションが 1 つの変更になるので、幾何演算、グループ化、
   複数の地物のドラッグは 1 つの手順として届きます
 - `source` は変更の出どころを示します。編集と API の呼び出しなら
-  `'local'`、GeoJSON の読み込みなら `'batch'`、ライブラリーの文書の
+  `'local'`、GeoJSON の読み込みなら `'load'`、ライブラリーの文書の
   読み込みなら `'silent'`、自前のストアなら `'remote'` で、`transact` に
   渡した任意の値も入ります
 - ドラッグの途中の更新には `isIntermediate: true` が付きます。その後に

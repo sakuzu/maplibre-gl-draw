@@ -124,7 +124,11 @@ export interface Draw {
 
   // Lifecycle
 
-  /** Removes the instance from the map and releases everything it holds. */
+  /**
+   * Removes the instance from the map and releases everything it holds. A second call does
+   * nothing; every other method of the instance and of its collections then throws `DrawError`
+   * with the code `invalid-state` (`document.load` rejects with it).
+   */
   destroy(): void;
 }
 

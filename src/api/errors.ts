@@ -17,7 +17,7 @@
  * - `invalid-input`: an input of the wrong shape or value
  * - `unsupported-format`: a source that cannot be read
  * - `invalid-state`: a call that is not possible in the current situation, such as deleting
- *   a feature while it is being drawn
+ *   a feature while it is being drawn, or any call on an instance that was destroyed
  */
 export type DrawErrorCode =
   | 'not-found'

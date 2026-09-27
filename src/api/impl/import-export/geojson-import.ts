@@ -25,6 +25,7 @@ import type {
   LoadResult,
   SkippedFeature,
 } from '../../../store/types.js';
+import { DrawError } from '../../errors.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { foldLegacyImageStyle } from './legacy-image-style.js';
@@ -660,14 +661,21 @@ export async function loadGeoJSON(
   // Feature and group IDs share the entries of layer.order, so an id taken by either (or by
   // an earlier feature of this import) is replaced with a new one. This is what makes a
   // GeoJSON exported from a store loadable into the same store again.
+  // With replace, the features and groups of the document are gone by the time the new ones
+  // are written, so only the IDs of this import can collide
+  const replace = options?.replace === true;
   const takenIds = new Set<string>();
   const isTaken = (id: string): boolean =>
-    takenIds.has(id) || store.getFeature(id) !== undefined || store.getGroup(id) !== undefined;
+    takenIds.has(id) ||
+    (!replace && (store.getFeature(id) !== undefined || store.getGroup(id) !== undefined));
   const resolveId = (id: string): string => {
     let resolved = id;
     for (let attempt = 0; isTaken(resolved); attempt++) {
       if (attempt >= MAX_ID_ATTEMPTS) {
-        throw new Error('Failed to generate a unique feature id for the GeoJSON import');
+        throw new DrawError(
+          'invalid-input',
+          'Failed to generate a unique feature id for the GeoJSON import',
+        );
       }
       resolved = generateFeatureId();
     }
@@ -675,14 +683,19 @@ export async function loadGeoJSON(
     return resolved;
   };
 
+  const forcedLayerId = options?.layerId;
   for (const { feature } of results) {
     feature.id = resolveId(feature.id);
-    // References are resolved against this store: a layer it does not have falls back to
-    // the current layer, and a group it does not have is dropped (a feature pointing at a
-    // missing group would belong to no layer order and never be drawn).
-    if (!store.getLayer(feature.layerId)) feature.layerId = layerId;
-    if (feature.groupId !== undefined && !store.getGroup(feature.groupId)) {
-      delete feature.groupId;
+    // References are resolved against this store: a layer given to the load wins over the one
+    // the feature names, a layer the store does not have falls back to the current layer, and a
+    // group it does not have (or a group of another layer, or any group when the groups are
+    // replaced) is dropped: a feature pointing at a missing group would belong to no layer
+    // order and never be drawn.
+    if (forcedLayerId !== undefined) feature.layerId = forcedLayerId;
+    else if (!store.getLayer(feature.layerId)) feature.layerId = layerId;
+    if (feature.groupId !== undefined) {
+      const group = replace ? undefined : store.getGroup(feature.groupId);
+      if (!group || group.layerId !== feature.layerId) delete feature.groupId;
     }
   }
 
@@ -694,7 +707,8 @@ export async function loadGeoJSON(
     if (!result.fileData) continue;
     const content = await normalizeEmbeddedFile(result.fileData.dataURL, result.fileData.mimeType);
     if (!content) {
-      throw new Error(
+      throw new DrawError(
+        'invalid-input',
         `Invalid GeoJSON: the image data of feature "${result.feature.id}" is not an embedded ` +
           'PNG / JPEG / WebP / GIF data URL of its declared type',
       );
@@ -702,11 +716,15 @@ export async function loadGeoJSON(
     result.fileData = { ...result.fileData, ...content };
   }
 
-  // 2. Write. Written with batch: the whole import is one notification, one step for a
-  //    subscriber that records changes. Hosts that rebuild a view should subscribe to the
-  //    per-flush `features.change` event rather than the per-feature events.
+  // 2. Write. Written with the source load in one transaction, the deletion of a replace
+  //    included: the whole import is one notification, one step for a subscriber that records
+  //    changes.
   const featureIds: string[] = [];
   store.transact(() => {
+    if (replace) {
+      for (const feature of store.listFeatures()) store.deleteFeature(feature.id);
+      for (const group of store.listGroups()) store.deleteGroup(group.id);
+    }
     for (const result of results) {
       // When there is image data, add the file first
       if (result.fileData) {
@@ -722,12 +740,12 @@ export async function loadGeoJSON(
       store.createFeature(result.feature);
       featureIds.push(result.feature.id);
     }
-  }, 'batch');
+  }, 'load');
 
   return {
     format: 'geojson',
     featureIds,
-    replaced: false,
+    replaced: replace,
     skipped,
   };
 }

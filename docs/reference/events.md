@@ -92,6 +92,9 @@ change is made.
 | `selection.changed` | `{ selection: Selection; previous: Selection }` |
 | `vertexSelection.changed` | `{ selection; previous }` |
 | `mode.changed` | `{ mode; previous }` |
+| `hidden.changed` | `{ ids }` |
+| `readOnly.changed` | `{ readOnly }` |
+| `interactionLock.changed` | `{ locked }` |
 
 ### Input
 
@@ -100,7 +103,7 @@ change is made.
 | `drag.started` | `{ kind; featureIds }` |
 | `drag.ended` | `{ kind; featureIds; cancelled }` |
 | `snap.changed` | `{ result: SnapResult \| null }` |
-| `map.clicked` | `{ lngLat; point }` |
+| `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
 | `dataset.clicked` | `{ datasetId; rowIndex; row; lngLat; point }` |
 | `image.requested` | `{ lngLat; zoom; layerId }` |
 
@@ -150,7 +153,8 @@ the new `items`, and inside a group as `group.updated` with the new
 
 ### One event per transaction
 
-`document.changed` fires once per transaction, after every other event of
+`document.changed` fires once per transaction that changed the document
+(features, layers, groups, metadata or files), after every other event of
 it, with a [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
 that holds every change of the transaction by category. A category is
 present only when the transaction changed it.
@@ -164,6 +168,7 @@ present only when the transaction changed it.
 | `layerReorder` | The new order of the items of a layer |
 | `groupReorder` | The new order of the features of a group |
 | `metadata` | The new title and description, and the ones before |
+| `files` | The embedded files created and deleted |
 | `selection` | The new selection and the one before |
 | `editing` | The IDs of the features whose editing started and ended |
 | `mode` | The new mode and the one before |
@@ -172,14 +177,17 @@ A listener that rebuilds a view on any change (a feature list, a legend)
 listens to `document.changed`, so that a load of 1,000 features costs one
 rebuild instead of 1,000.
 
-`document.changed` also fires for a change of the selection or of the mode
-alone. A listener that saves the document checks for the categories it
-saves (`features`, `layers`, `groups`, `layerReorder`, `groupReorder`,
-`metadata`) before saving.
+A change of the selection, of the editing or of the mode alone does not
+fire `document.changed`: it has its own event. When the same transaction
+also changed the document, `document.changed` carries them along in
+`selection`, `editing` and `mode`. A listener that saves the document can
+therefore save on every `document.changed`.
 
 Neither the shape being drawn nor the state of a drag fires
 `document.changed`. Hiding an item on this client (`draw.hidden`),
-read-only and the interaction lock fire no event at all.
+read-only and the interaction lock fire `hidden.changed`,
+`readOnly.changed` and `interactionLock.changed`, and never
+`document.changed`.
 
 ### Order within one transaction
 
@@ -196,7 +204,8 @@ The events of one transaction are emitted in this order.
 7. `selection.changed`
 8. `mode.changed`
 9. `vertexSelection.changed`
-10. `document.changed`
+10. `hidden.changed`, `readOnly.changed`, then `interactionLock.changed`
+11. `document.changed`
 
 ## Sources
 
@@ -207,16 +216,17 @@ came from.
 | Source | Writes |
 | --- | --- |
 | `local` | The user's operations and the calls of the API: the default |
-| `batch` | A GeoJSON load, a bulk change meant to be one step |
+| `load` | A GeoJSON load, with the replacement of `mode: 'replace'` |
+| `batch` | A bulk change meant to be one step |
 | `silent` | A load of the native format; a recorder of changes leaves it out |
 | `remote` | A change a replaced Store applies from outside the instance |
 | `import` | Data an application or an extension loads by its own means |
 | any other | Given to `transact`, by an extension or by a replaced Store |
 
-The library itself writes `local`, `batch` and `silent`. A load of GeoJSON
-with `mode: 'replace'` adds the features with `batch` and then deletes the
-features and groups that were there before with `silent`, in a second
-transaction. An image file is loaded with `local`.
+The library itself writes `local`, `load` and `silent`. A load of GeoJSON
+is one transaction with `load`: with `mode: 'replace'`, deleting the
+features and groups that were there before is part of it, so it fires one
+`document.changed`. An image file is loaded with `local`.
 
 The library keeps no history of changes. `source` and the transaction
 boundary are what a listener that records changes goes by (see
@@ -268,7 +278,7 @@ stacking order, from the back, including the entries that are not layers.
 Fires after `draw.document.load()` read something, when every event of the
 load has fired. `result` is the `LoadResult` the promise resolves to, and
 `source` is the source of its writes: `silent` for the native format,
-`batch` for GeoJSON and `local` for an image. A load refused because the
+`load` for GeoJSON and `local` for an image. A load refused because the
 document is read-only, and a load that fails, fire nothing.
 
 ### selection.changed
@@ -282,6 +292,17 @@ only what can be seen, so hiding or deleting a selected item fires it too.
 Fires when the selected vertices change. `selection` is `null` when no
 vertex is selected.
 
+### hidden.changed
+
+Fires when the items this client hides change: `draw.hidden`, or the
+deletion of a hidden item. `ids` is the whole set after the change, not the
+difference.
+
+### readOnly.changed and interactionLock.changed
+
+Fire when `draw.setReadOnly` or `draw.setInteractionLocked` changes the
+value. Setting the value it already has fires nothing.
+
 ### snap.changed
 
 Fires while drawing or editing, when the target of the snapping changes.
@@ -290,8 +311,10 @@ Use it for a status line such as "snapped to a vertex".
 
 ### map.clicked
 
-A click in the select mode, whether it hit a feature, a row of a dataset or
-nothing. `lngLat` is the position of the pointer before snapping. It does
+Every click on the map in the select mode, whether it hit a feature, a row
+of a dataset or nothing. `lngLat` is the position of the pointer before
+snapping, and `hit` the frontmost thing under it (`kind` is `feature`,
+`dataset` or `companion`), or `null` when the click hit nothing. It does
 not change the selection, and it does not fire in the drawing modes nor for
 a click that an extension consumed. Use it when you need "a click anywhere
 on the map", such as placing a marker of your own.
@@ -309,9 +332,11 @@ feature of the document, or on nothing, does not fire it: listen to
 Fires when the mode `draw_image` starts. The library does not open a file
 dialog: your application picks the file and loads it with
 `draw.document.load(file, { coordinate: lngLat, zoom, layerId })`.
-`lngLat` is the center of the map, and `layerId` the layer the image goes
-into. The mode returns to `select` right after, and the mode cannot start
-while no layer can be written.
+`lngLat` is the clicked position when a click led to the mode (a listener
+of `map.clicked` entered it), and the center of the map when the mode was
+entered otherwise, such as by `draw.setMode('draw_image')` from a button.
+`layerId` is the layer the image goes into. The mode returns to `select`
+right after, and the mode cannot start while no layer can be written.
 
 ### dataset.added and dataset.removed
 

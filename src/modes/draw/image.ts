@@ -36,9 +36,11 @@ export class DrawImageMode implements EngineModeHandler {
       store.setSelection(null, []);
     }, 'silent');
 
-    // Get the center coordinate and the zoom of the map
+    // The position of the click that led here (a listener of the click entered the mode), or
+    // else the center of the map
+    const clicked = this.context.getClickPosition?.() ?? null;
     const center = map.getCenter();
-    const coordinate: Coordinate = [center.lng, center.lat];
+    const coordinate: Coordinate = clicked ? [clicked[0], clicked[1]] : [center.lng, center.lat];
     const zoom = map.getZoom();
     // Nothing is requested when no layer can be written (the mode returns to select)
     const layerId = resolveCommitLayer(this.context);

@@ -18,8 +18,10 @@ import type { Mode, Selection, SelectionType, VertexSelection } from '../state.j
  *
  * - `local`: an operation of the user or a call of the API (the default)
  * - `silent`: a change that a subscriber recording changes leaves out, such as replacing the
- *   whole document on load
- * - `batch`: a bulk change recorded as one step, such as loading GeoJSON
+ *   whole document on a load of the native format
+ * - `load`: a load of GeoJSON, with the replacement of `mode: 'replace'`, in one transaction
+ * - `batch`: a bulk change of an application or an extension recorded as one step; the
+ *   library does not write it
  * - `remote`: a change a replaced Store applies from outside the instance
  * - `import`: data an application or an extension loads by its own means
  *
@@ -28,6 +30,7 @@ import type { Mode, Selection, SelectionType, VertexSelection } from '../state.j
 export type UpdateSource =
   | 'local'
   | 'silent'
+  | 'load'
   | 'batch'
   | 'remote'
   | 'import'

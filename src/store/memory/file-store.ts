@@ -5,8 +5,8 @@
  * FileStore
  *
  * A Map wrapper for embedded files (FileData) such as images. It provides only CRUD,
- * independently of Feature / Layer / Group. Change notification is unnecessary (because the
- * rendering pipeline references the binary data directly).
+ * independently of Feature / Layer / Group. The Store around it notifies the files created and
+ * deleted.
  */
 
 import type { FileData } from '../types.js';

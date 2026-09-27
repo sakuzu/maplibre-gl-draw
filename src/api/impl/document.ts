@@ -7,7 +7,7 @@
 
 import type { FeatureCollection } from 'geojson';
 import type { Store } from '../../store/store.js';
-import type { Coordinate, LoadResult as StoredLoadResult } from '../../store/types.js';
+import type { Coordinate } from '../../store/types.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
@@ -35,7 +35,7 @@ type ReadSource = { kind: 'data'; data: unknown } | { kind: 'image'; file: File 
 /** The source of the writes of a load of each format, as its notification carries it */
 const LOAD_SOURCES: Readonly<Record<LoadResult['format'], string>> = {
   native: 'silent',
-  geojson: 'batch',
+  geojson: 'load',
   image: 'local',
 };
 
@@ -53,7 +53,13 @@ export function createDocument(
   const { store } = deps;
 
   const load = async (source: LoadSource, options: LoadOptions = {}) => {
-    const result = await read(source, options);
+    let result: LoadResult | null;
+    try {
+      result = await read(source, options);
+    } catch (error) {
+      // Whatever went wrong, the promise rejects with a DrawError
+      throw asDrawError('invalid-input', error);
+    }
     if (result) onLoaded?.(result, LOAD_SOURCES[result.format]);
     return result;
   };
@@ -86,18 +92,20 @@ export function createDocument(
 
     if (read.kind === 'image') {
       if (!options.coordinate) throw invalidInput('An image needs the coordinate option');
-      return withReplace(store, mode === 'replace', () =>
-        loadImage(
-          read.file,
-          {
-            coordinate: options.coordinate as Coordinate,
-            zoom: options.zoom,
-            layerId,
-            flattenMulti: options.flattenMulti,
-          },
-          importDeps,
-        ),
+      const replace = mode === 'replace';
+      const result = await loadImage(
+        read.file,
+        {
+          coordinate: options.coordinate as Coordinate,
+          zoom: options.zoom,
+          layerId,
+          flattenMulti: options.flattenMulti,
+        },
+        importDeps,
+        // With replace, the features and groups go in the transaction that adds the image
+        replace ? () => deleteFeaturesAndGroups(store) : undefined,
       );
+      return replace ? { ...result, replaced: true } : result;
     }
 
     const { data } = read;
@@ -118,30 +126,20 @@ export function createDocument(
         'The source is neither a document of the library nor GeoJSON',
       );
     }
-    return withReplace(store, mode === 'replace', () =>
-      loadGeoJSON(collection, importDeps, { flattenMulti: options.flattenMulti }),
-    );
+    // The layer given to the load wins over the one a feature names; with replace, the
+    // features and groups are replaced in the transaction that writes the new ones
+    return loadGeoJSON(collection, importDeps, {
+      flattenMulti: options.flattenMulti,
+      layerId,
+      replace: mode === 'replace',
+    });
   }
 }
 
-/**
- * Runs a load that adds features; with `replace`, the features and groups that were there
- * before are deleted once the load has succeeded, so a failed load loses nothing
- */
-async function withReplace(
-  store: Store,
-  replace: boolean,
-  load: () => Promise<StoredLoadResult>,
-): Promise<LoadResult> {
-  const previous = replace ? store.listFeatures().map((feature) => feature.id) : [];
-  const previousGroups = replace ? store.listGroups().map((group) => group.id) : [];
-  const result = await load();
-  if (!replace) return result;
-  store.transact(() => {
-    for (const id of previous) if (store.getFeature(id)) store.deleteFeature(id);
-    for (const id of previousGroups) if (store.getGroup(id)) store.deleteGroup(id);
-  }, 'silent');
-  return { ...result, replaced: true };
+/** Deletes every feature and group of the document, keeping the layers */
+function deleteFeaturesAndGroups(store: Store): void {
+  for (const feature of store.listFeatures()) store.deleteFeature(feature.id);
+  for (const group of store.listGroups()) store.deleteGroup(group.id);
 }
 
 /** Reads a file or a string into data, or keeps an image file as it is */
@@ -155,7 +153,13 @@ async function readSource(source: LoadSource): Promise<ReadSource> {
           : new File([source], name || 'image', { type: source.type });
       return { kind: 'image', file };
     }
-    return { kind: 'data', data: parseJSON(await source.text()) };
+    let text: string;
+    try {
+      text = await source.text();
+    } catch (error) {
+      throw asDrawError('unsupported-format', error);
+    }
+    return { kind: 'data', data: parseJSON(text) };
   }
   if (typeof source === 'string') return { kind: 'data', data: parseJSON(source) };
   return { kind: 'data', data: source };

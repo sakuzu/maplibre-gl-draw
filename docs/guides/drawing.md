@@ -118,8 +118,10 @@ first writable layer when the active one is locked or hidden.
 ### Images
 
 The library does not open a file dialog. Entering `draw_image` emits
-`image.requested` with the center of the map, the zoom and the layer to
-place the image in, and returns to `select` at once. The application shows
+`image.requested` with a position, the zoom and the layer to place the
+image in, and returns to `select` at once. The position is the clicked one
+when a click led to the mode (a listener of `map.clicked` entered it), and
+the center of the map otherwise. The application shows
 its own file picker and passes the file to `draw.document.load`:
 
 ```ts

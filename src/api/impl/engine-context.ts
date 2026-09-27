@@ -52,7 +52,7 @@ import {
 import { toStore } from '../../store/draw-store.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
-import type { DocumentStore, Store } from '../../store/store.js';
+import type { Store, StoreContract } from '../../store/store.js';
 import type { Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
 import { createSelectionScope, type SelectionScope } from '../../view/ui/selection-scope.js';
@@ -86,8 +86,12 @@ export interface EngineOptions {
   topology?: Partial<TopologyConfig>;
   /** The tracing along edges */
   trace?: TraceOptions;
-  /** The Store to keep the document in, instead of an in-memory one */
-  store?: DocumentStore | Store;
+  /**
+   * The Store to keep the document and the state of this client in, instead of an in-memory
+   * one: a Store of core, or one of the host that is read and written only through the public
+   * contract
+   */
+  store?: StoreContract | Store;
   /** Whether the document starts with one empty layer (true by default) */
   initDefaultLayer?: boolean;
   /** Tells the entries of the stacking order that are outside the document */

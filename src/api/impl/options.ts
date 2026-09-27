@@ -21,7 +21,7 @@ import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js';
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import { DrawStore } from '../../store/draw-store.js';
-import type { DocumentStore } from '../../store/store.js';
+import type { Store } from '../extension/store.js';
 import type { FeatureStyle } from '../model.js';
 import type {
   DrawOptions,
@@ -224,6 +224,54 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
   isExternalEntry: func,
 };
 
+/** The members of the public Store the instance calls; `abortIntermediateUpdates` is optional */
+const STORE_METHODS = [
+  'getFeature',
+  'listFeatures',
+  'listFeaturesInOrder',
+  'getLayer',
+  'listLayers',
+  'getLayerOrder',
+  'getGroup',
+  'listGroups',
+  'getFile',
+  'listFiles',
+  'getMetadata',
+  'getSelection',
+  'getEditingIds',
+  'getVertexSelection',
+  'getMode',
+  'isReadOnly',
+  'isInteractionLocked',
+  'isHidden',
+  'listHidden',
+  'subscribe',
+  'transact',
+  'createFeature',
+  'updateFeature',
+  'deleteFeature',
+  'createLayer',
+  'updateLayer',
+  'deleteLayer',
+  'setLayerOrder',
+  'reorderInLayer',
+  'reorderInGroup',
+  'createGroup',
+  'updateGroup',
+  'deleteGroup',
+  'createFile',
+  'deleteFile',
+  'setMetadata',
+  'setSelection',
+  'startEditing',
+  'endEditing',
+  'setSelectedVertices',
+  'setMode',
+  'setReadOnly',
+  'setInteractionLock',
+  'setLocallyHidden',
+] as const satisfies ReadonlyArray<keyof Store>;
+
 /**
  * Checks the options of `createDraw`
  *
@@ -242,8 +290,10 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
         throw invalidInput(`${what} must be a Store`);
       }
       const store = value as Record_;
-      for (const method of ['subscribe', 'transact', 'getFeature', 'createFeature']) {
-        if (typeof store[method] !== 'function') throw invalidInput(`${what} must be a Store`);
+      for (const method of STORE_METHODS) {
+        if (typeof store[method] !== 'function') {
+          throw invalidInput(`${what} must be a Store: ${method} is missing`, { member: method });
+        }
       }
     },
   });
@@ -513,12 +563,9 @@ export function toEngineOptions(
   if (runtime.clickTolerance !== undefined) result.clickTolerance = runtime.clickTolerance;
   if (runtime.dragThreshold !== undefined) result.dragThreshold = runtime.dragThreshold;
   if (options.store !== undefined) {
-    // A Store of the library is used as it is; the Store of an application keeps the document,
-    // and the instance keeps the state of this client around it
-    result.store =
-      options.store instanceof DrawStore
-        ? options.store
-        : (options.store as unknown as DocumentStore);
+    // A Store of the library is used as it is; the Store of an application is read and written
+    // through the public contract only, and the instance keeps the drawing state around it
+    result.store = options.store;
   }
   return result;
 }

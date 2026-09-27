@@ -12,7 +12,7 @@ import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { EngineModeContext } from '../../modes/handler.js';
 import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
 import { MemoryStore } from '../../store/memory.js';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
 import type { Draw } from '../draw.js';
@@ -20,6 +20,7 @@ import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
 import type { Feature } from '../model.js';
+import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { createEventHub } from './events.js';
@@ -46,6 +47,9 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'drag.started',
   'drag.ended',
   'mode.changed',
+  'hidden.changed',
+  'readOnly.changed',
+  'interactionLock.changed',
   'snap.changed',
   'map.clicked',
   'dataset.clicked',
@@ -225,22 +229,47 @@ describe('document.changed', () => {
     }
   });
 
-  it('carries the change of the Store without the state only the drawing reads', () => {
+  it('does not fire for a change of the selection, the mode or the drawing state alone', () => {
+    const a = draw.features.create(pointInput()) as Feature;
     const received: DrawEvents['document.changed'][] = [];
     draw.on('document.changed', (change) => received.push(change));
+    draw.selection.set('feature', [a.id]);
+    draw.selection.clear();
     draw.setMode('draw_line');
-    expect(received.find((change) => change.mode)?.mode).toEqual({
-      mode: 'draw_line',
-      previous: 'select',
-    });
-    for (const change of received) {
-      expect(change).not.toHaveProperty('tentative');
-      expect(change).not.toHaveProperty('uiStateChanged');
-    }
-    // A notification of the drawing state alone is not a change of the document
-    const count = received.length;
     store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'x' });
-    expect(received).toHaveLength(count);
+    draw.setMode('select');
+    draw.hidden.add(a.id);
+    draw.hidden.remove(a.id);
+    draw.setReadOnly(true);
+    draw.setReadOnly(false);
+    draw.setInteractionLocked(true);
+    draw.setInteractionLocked(false);
+    expect(received).toEqual([]);
+  });
+
+  it('carries the selection of a transaction that also changed the document', () => {
+    const received: DrawEvents['document.changed'][] = [];
+    draw.on('document.changed', (change) => received.push(change));
+    draw.transact(() => {
+      const a = draw.features.create(pointInput()) as Feature;
+      draw.selection.set('feature', [a.id]);
+    });
+    expect(received).toHaveLength(1);
+    expect(received[0].features?.created).toHaveLength(1);
+    expect(received[0].selection?.ids).toHaveLength(1);
+    expect(received[0]).not.toHaveProperty('tentative');
+    expect(received[0]).not.toHaveProperty('uiStateChanged');
+  });
+
+  it('fires for a transaction that changed the files alone', () => {
+    const received: DrawEvents['document.changed'][] = [];
+    draw.on('document.changed', (change) => received.push(change));
+    store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'data:image/png;base64,' });
+    store.deleteFile('f1');
+    expect(received.map((change) => change.files)).toEqual([
+      { created: [expect.objectContaining({ id: 'f1' })] },
+      { deleted: [expect.objectContaining({ id: 'f1' })] },
+    ]);
   });
 
   it('document.loaded carries the result and the source of the writes', async () => {
@@ -250,10 +279,10 @@ describe('document.changed', () => {
         { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1, 2] } },
       ],
     });
-    expect(payloadsOf(events, 'document.loaded')).toEqual([{ result, source: 'batch' }]);
+    expect(payloadsOf(events, 'document.loaded')).toEqual([{ result, source: 'load' }]);
     // The features of the load arrive in one document.changed with the same source
     const changes = payloadsOf(events, 'document.changed');
-    expect(changes[changes.length - 1]?.source).toBe('batch');
+    expect(changes[changes.length - 1]?.source).toBe('load');
   });
 });
 
@@ -281,6 +310,39 @@ describe('the events of the state of this client', () => {
       previous: null,
     });
     expect(changes[1]).toMatchObject({ selection: null, previous: { featureId: line.id } });
+  });
+
+  it('hidden.changed carries the whole hidden set after the change', () => {
+    const a = draw.features.create(pointInput()) as Feature;
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    draw.hidden.add(a.id);
+    draw.hidden.add(b.id);
+    draw.hidden.add(b.id);
+    draw.features.delete(a.id);
+    draw.hidden.clear();
+    expect(payloadsOf(events, 'hidden.changed')).toEqual([
+      { ids: [a.id] },
+      { ids: [a.id, b.id] },
+      { ids: [b.id] },
+      { ids: [] },
+    ]);
+  });
+
+  it('readOnly.changed and interactionLock.changed fire when the value changes', () => {
+    draw.setReadOnly(true);
+    draw.setReadOnly(true);
+    draw.setReadOnly(false);
+    draw.setInteractionLocked(true);
+    draw.setInteractionLocked(true);
+    draw.setInteractionLocked(false);
+    expect(payloadsOf(events, 'readOnly.changed')).toEqual([
+      { readOnly: true },
+      { readOnly: false },
+    ]);
+    expect(payloadsOf(events, 'interactionLock.changed')).toEqual([
+      { locked: true },
+      { locked: false },
+    ]);
   });
 
   it('mode.changed carries the mode and the one before it', () => {
@@ -369,7 +431,9 @@ describe('the signals of the engine', () => {
       },
       { result: null },
     ]);
-    expect(payloadsOf(signals, 'map.clicked')).toEqual([{ lngLat: [3, 4], point: [5, 6] }]);
+    expect(payloadsOf(signals, 'map.clicked')).toEqual([
+      { lngLat: [3, 4], point: [5, 6], hit: null },
+    ]);
     expect(payloadsOf(signals, 'image.requested')).toEqual([
       { lngLat: [7, 8], zoom: 9, layerId: 'l' },
     ]);
@@ -382,6 +446,28 @@ describe('the signals of the engine', () => {
     expect(failure.error).toBeInstanceOf(DrawError);
     expect(failure.error.code).toBe('unsupported-format');
     expect(failure.error.details).toEqual({ cause });
+  });
+
+  it('map.clicked fires for every click of the select mode, with what it hit or null', () => {
+    const draw = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    const point = draw.features.create(pointInput(1, 1)) as Feature;
+    const input = createSyntheticInput(engine);
+    input.click([1, 1]);
+    input.click([-0.5, -0.5]);
+    const clicks = payloadsOf(signals, 'map.clicked');
+    expect(clicks).toHaveLength(2);
+    expect(clicks[0]).toMatchObject({
+      lngLat: [1, 1],
+      point: [500, 200],
+      hit: { kind: 'feature', id: point.id, featureId: point.id },
+    });
+    expect(clicks[1]).toEqual({ lngLat: [-0.5, -0.5], point: [350, 350], hit: null });
+
+    // Not in a drawing mode
+    draw.setMode('draw_point');
+    input.click([0.5, 0.5]);
+    expect(payloadsOf(signals, 'map.clicked')).toHaveLength(2);
   });
 
   it('drag.started and drag.ended come from the drags of the select mode', () => {

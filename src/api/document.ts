@@ -19,8 +19,11 @@ export interface DocumentResource {
    * `replace` for a document of the library and `merge` for GeoJSON when it is left out.
    *
    * @returns What was read, or `null` when the document is read-only
-   * @throws `DrawError` (the promise rejects) with the code `unsupported-format` when the
-   *   source cannot be read, or `invalid-input` when a document of the library is not valid
+   * @throws `DrawError` (the promise rejects; every failure is a `DrawError`) with the code
+   *   `unsupported-format` when the source cannot be read (text that is not JSON, data that is
+   *   neither a document of the library nor GeoJSON, an image file that cannot be decoded), or
+   *   `invalid-input` when the document is not valid (a document of the library that breaks
+   *   its format, an embedded image that is broken, an image without `coordinate`)
    */
   load(source: LoadSource, options?: LoadOptions): Promise<LoadResult | null>;
   /** The whole document in the format of the library. */

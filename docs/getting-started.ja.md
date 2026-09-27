@@ -176,7 +176,7 @@ draw.on('document.changed', ({ features, source }) => {
 
 `updated` の各項目には、`feature` と変わる前の `previous` が入ります。
 `source` は変更の出どころを表し、たとえば利用者の編集と API の呼び出し
-なら `'local'`、GeoJSON の読み込みなら `'batch'` です。同じイベントで、
+なら `'local'`、GeoJSON の読み込みなら `'load'` です。同じイベントで、
 レイヤー、グループ、文書の題の変更も届きます。
 
 API は、次の規則を押さえておくと分かりやすくなります。

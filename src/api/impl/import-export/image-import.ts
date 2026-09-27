@@ -10,9 +10,13 @@ import { processImageFile } from '../../../shared/utils/image.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
 import type { Store } from '../../../store/store.js';
 import type { Feature, FileData, LoadOptions, LoadResult } from '../../../store/types.js';
+import { DrawError } from '../../errors.js';
 
 /**
  * Imports an image file and creates an Image feature
+ *
+ * @param beforeWrite - Runs first in the transaction that writes the image, such as the
+ *   deletion of a replace
  */
 export async function loadImage(
   file: File,
@@ -23,13 +27,22 @@ export async function loadImage(
     generateFeatureId: () => string;
     getCurrentLayerId: () => string;
   },
+  beforeWrite?: () => void,
 ): Promise<LoadResult> {
   if (!options.coordinate) {
-    throw new Error('Image files require coordinate option');
+    throw new DrawError('invalid-input', 'Image files require coordinate option');
   }
 
   const { store, autoNameGenerator, generateFeatureId, getCurrentLayerId } = deps;
-  const processed = await processImageFile(file);
+  let processed: Awaited<ReturnType<typeof processImageFile>>;
+  try {
+    processed = await processImageFile(file);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DrawError('unsupported-format', `The image cannot be read: ${message}`, {
+      cause: error,
+    });
+  }
 
   // Create the FileData
   const fileId = generateFeatureId();
@@ -65,6 +78,7 @@ export async function loadImage(
 
   // Create the file and the feature in a transaction
   store.transact(() => {
+    beforeWrite?.();
     store.createFile(fileData);
     store.createFeature(feature);
     store.setSelection('feature', [featureId]);
