@@ -43,3 +43,20 @@ export { densifyPath, terrainTessellationStep } from '../view/index.js';
 
 // Hit testing
 export { PointHitTestStrategy } from '../dispatcher/index.js';
+
+// Supporting types
+export type {
+  BlendCapableGL,
+  DashSegment,
+  DrapeQuadCorners,
+  MercatorRect,
+  OffsetUniforms,
+  ProjectionUniformLocations,
+  QuadDrapeColor,
+  QuadDrapeFill,
+  QuadDrapeSurface,
+  TerrainContext,
+  TerrainRenderState,
+  TessellationStep,
+  TessellationTiling,
+} from '../view/index.js';

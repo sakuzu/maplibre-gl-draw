@@ -230,7 +230,7 @@ export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
  *
  * Treat it as an opaque handle: a custom renderer receives it as
  * `CustomRendererDrawContext.terrain` and passes it to the renderers and to the terrain
- * functions (such as {@link anchorElevationMeters} and {@link drawQuadSurfaceOnTerrain}).
+ * functions (such as {@link drawQuadSurfaceOnTerrain} and {@link terrainTessellationStep}).
  * Constructing one gives a state with no terrain.
  */
 export class TerrainContext {

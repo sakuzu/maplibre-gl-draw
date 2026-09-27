@@ -9,7 +9,7 @@
  *   name means editing these lists as well, so every change to the surface is deliberate.
  * - The emitted declarations (with `stripInternal`) are self-contained: nothing that a
  *   public declaration needs was stripped as `@internal`, and every named type that a
- *   public declaration refers to is exported too, except the pinned lists of known gaps.
+ *   public declaration refers to is exported too, except the pinned list of known gaps.
  *   A layer 1 declaration counts only the exports of layer 1.
  */
 import { dirname, resolve } from 'node:path';
@@ -237,25 +237,38 @@ const LAYER_1 = [
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
 const WEBGL = [
   'applyDrawBlendState',
+  'BlendCapableGL',
   'calculateLngLatOffset',
   'computeQuadVertices',
   'createProgram',
   'dashPattern',
+  'DashSegment',
   'DEFAULT_TILE_SIZE',
   'densifyPath',
+  'DrapeQuadCorners',
   'drawBillboardsWithoutDepth',
   'drawQuadSurfaceOnTerrain',
+  'MercatorRect',
   'OFFSET_MODE_GLSL',
+  'OffsetUniforms',
   'PointHitTestStrategy',
+  'ProjectionUniformLocations',
   'ProjectionUniformManager',
   'QUAD_GLYPH_STRIDE',
+  'QuadDrapeColor',
+  'QuadDrapeFill',
   'QuadDrapeGlyphs',
+  'QuadDrapeSurface',
   'QuadShader',
   'QuadVertices',
   'SDFStrokeOptions',
   'SDFStrokeStyle',
   'splitIntoDashes',
+  'TerrainContext',
+  'TerrainRenderState',
   'terrainTessellationStep',
+  'TessellationStep',
+  'TessellationTiling',
   'WidthUnit',
 ];
 
@@ -298,28 +311,6 @@ const PENDING_LAYER_1 = [
   'TraceConfig',
   'UnprojectFunction',
   'WidthUnit',
-];
-
-/**
- * Types that the building blocks of src/webgl/index.ts refer to without exporting them (the
- * parameter and field types of the quad, projection, dash and terrain helpers). The entry
- * keeps to the symbol list of its design; a caller names these types through the functions
- * that take them (for example `Parameters<typeof drawQuadSurfaceOnTerrain>`).
- */
-const WEBGL_UNEXPORTED = [
-  'BlendCapableGL',
-  'DashSegment',
-  'DrapeQuadCorners',
-  'MercatorRect',
-  'OffsetUniforms',
-  'ProjectionUniformLocations',
-  'QuadDrapeColor',
-  'QuadDrapeFill',
-  'QuadDrapeSurface',
-  'TerrainContext',
-  'TerrainRenderState',
-  'TessellationStep',
-  'TessellationTiling',
 ];
 
 function byName(a: string, b: string): number {
@@ -582,8 +573,6 @@ describe('the emitted declarations', () => {
 
   it('export every named type that a layer 2 declaration refers to', () => {
     setup();
-    expect(findForgottenExports(program, files, entries, [webgl])).toEqual(
-      [...WEBGL_UNEXPORTED].sort(byName),
-    );
+    expect(findForgottenExports(program, files, entries, [webgl])).toEqual([]);
   }, 60_000);
 });

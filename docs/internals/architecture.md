@@ -986,8 +986,8 @@ tag, which `stripInternal` removes from the declarations.
 `src/index.test.ts` pins both lists (`LAYER_1` and `WEBGL`), checks that
 the runtime exports match, and emits the declarations to check that they
 type-check on their own and that every type a public declaration refers to
-is exported (a layer 1 declaration only by layer 1), apart from two pinned
-lists of known gaps.
+is exported (a layer 1 declaration only by layer 1), apart from a pinned
+list of known gaps in layer 1.
 
 ## Dependencies
 

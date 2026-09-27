@@ -40,6 +40,7 @@ const WEBGL_CATEGORIES = [
   'Lines',
   'Terrain',
   'Hit testing',
+  'Supporting types',
 ];
 
 /** The sections of the MapLibreGLDraw interface, merged into groups (in this order) */
