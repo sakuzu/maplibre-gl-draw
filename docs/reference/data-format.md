@@ -543,11 +543,12 @@ and the type name goes into `maplibre-gl-draw:featureType` as it is. An
 Image and a Circle become a `Point`, and a Freehand becomes a
 `LineString`.
 
-On load, a `Point` or a `LineString` with the marker gets its type back.
-The marker is ignored, and the kind of the geometry kept, when it is not a
-non-empty string, when it names a GeoJSON geometry type in any letter case,
-or when it names a built-in type of another kind (`Image` on a
-`LineString`, for example).
+On load, a feature with the marker gets its type back, whatever the kind
+of its geometry: the marker wins over the kind. The marker is ignored,
+and the kind of the geometry kept, when it is not a non-empty string,
+when it names a GeoJSON geometry type in any letter case, or when it
+names a built-in type of another kind (`Image` on a `LineString`, for
+example).
 
 ### Import
 

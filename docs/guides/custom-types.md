@@ -73,8 +73,8 @@ other feature.
 - The native format keeps the type as it is
 - GeoJSON has no type of its own for it, so the export writes the
   geometry with the name of the type in the property
-  `maplibre-gl-draw:featureType`. Loading the file restores the type
-  for a `Point` or a `LineString` geometry
+  `maplibre-gl-draw:featureType`. Loading the file restores the type,
+  whatever the kind of the geometry
   ([data format](../reference/data-format.md))
 - The names of the built-in types are taken:
   `draw.extensions.featureTypes.add` throws `already-exists` for them

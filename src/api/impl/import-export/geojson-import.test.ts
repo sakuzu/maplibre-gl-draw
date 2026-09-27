@@ -11,6 +11,7 @@ import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../../store/memory.js';
 import type { Feature } from '../../../store/types.js';
+import { convertFeatureToGeoJSON } from './geojson-export.js';
 import { loadGeoJSON } from './geojson-import.js';
 
 function feature(geometry: unknown, properties: Record<string, unknown> = {}): unknown {
@@ -237,6 +238,64 @@ describe('loadGeoJSON', () => {
       );
 
       expect(store.getFeature(result.featureIds[0])?.type).toBe('circle');
+    });
+
+    it('restores a custom type whatever its geometry, through an export and a load', async () => {
+      const layerId = store.listLayers()[0]?.id ?? 'layer';
+      const custom = (id: string, type: string, geometry: GeoJSON.Geometry): Feature => ({
+        id,
+        type,
+        geometry,
+        layerId,
+        groupId: undefined,
+        properties: {},
+        style: {},
+        visible: true,
+        locked: false,
+      });
+      const ring = [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ];
+      const originals = [
+        custom('a', 'Parcel', { type: 'Polygon', coordinates: [ring] }),
+        custom('b', 'Zone', { type: 'MultiPolygon', coordinates: [[ring]] }),
+        custom('c', 'Stops', {
+          type: 'MultiPoint',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        }),
+        custom('d', 'Routes', { type: 'MultiLineString', coordinates: [ring.slice(0, 2)] }),
+        custom('e', 'Pin', { type: 'Point', coordinates: [0, 0] }),
+      ];
+      const exported = originals.map((f) => convertFeatureToGeoJSON(f, store));
+      const result = await loadGeoJSON(featureCollection(...exported), deps);
+      expect(result.skipped).toEqual([]);
+      expect(result.featureIds.map((id) => store.getFeature(id)?.type)).toEqual([
+        'Parcel',
+        'Zone',
+        'Stops',
+        'Routes',
+        'Pin',
+      ]);
+    });
+
+    it('keeps the geometry type for a built-in marker of another shape', async () => {
+      const result = await loadGeoJSON(
+        featureCollection(
+          feature(
+            { type: 'Polygon', coordinates: [SQUARE] },
+            { 'maplibre-gl-draw:featureType': 'Circle' },
+          ),
+        ),
+        deps,
+      );
+
+      expect(store.getFeature(result.featureIds[0])?.type).toBe('Polygon');
     });
 
     it('ignores a marker that is not a string', async () => {

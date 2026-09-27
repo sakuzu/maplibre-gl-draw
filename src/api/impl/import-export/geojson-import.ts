@@ -95,10 +95,11 @@ function convertSingleGeometry(
     }
 
     case 'Polygon':
+      // A custom type whose geometry is an area comes back from its marker as the others do
       return {
         feature: {
           ...base,
-          type: 'Polygon',
+          type: resolveFeatureType('Polygon', featureType),
           geometry,
         },
       };
@@ -118,6 +119,7 @@ function convertMultiGeometry(
   geometry: GeoJSON.MultiPoint | GeoJSON.MultiLineString | GeoJSON.MultiPolygon,
   meta: GeoJSONFeatureMeta,
   userProperties: Record<string, unknown>,
+  featureType: unknown,
 ): ConvertedFeatureResult[] | null {
   if (geometry.coordinates.length === 0) return null;
 
@@ -131,7 +133,7 @@ function convertMultiGeometry(
         style: meta.style,
         locked: meta.locked,
         visible: meta.visible,
-        type: geometry.type,
+        type: resolveFeatureType(geometry.type, featureType),
         geometry,
       },
     },
@@ -275,20 +277,30 @@ const GEOMETRY_TYPE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Resolves the feature type of a Point or LineString from the featureType marker
+ * Resolves the feature type of a geometry from the featureType marker
  *
  * The marker restores a type that GeoJSON has no geometry for (Image, Circle, Freehand and
- * custom types). The export writes the type name as it is, and the marker is read as that exact
- * name. It is used only when it is a non-empty string, does not name a GeoJSON geometry type
- * (in any letter case), and names a type whose coordinates have the shape of the geometry.
- * Anything else is ignored and the geometry type is kept, so the marker can never pair a type
- * with coordinates of another shape.
+ * custom types, whatever their geometry). The export writes the type name as it is, and the
+ * marker is read as that exact name: it wins over the kind of the geometry. It is used only
+ * when it is a non-empty string, does not name a GeoJSON geometry type (in any letter case),
+ * and does not name a built-in type whose coordinates have another shape. Anything else is
+ * ignored and the geometry type is kept, so the marker can never pair a built-in type with
+ * coordinates of another shape.
  */
-function resolveFeatureType(geometryType: 'Point' | 'LineString', marker: unknown): string {
+function resolveFeatureType(
+  geometryType:
+    | 'Point'
+    | 'LineString'
+    | 'Polygon'
+    | 'MultiPoint'
+    | 'MultiLineString'
+    | 'MultiPolygon',
+  marker: unknown,
+): string {
   if (typeof marker !== 'string' || marker === '') return geometryType;
   if (GEOMETRY_TYPE_NAMES.has(marker.toLowerCase())) return geometryType;
   const expectedDepth = COORDINATE_DEPTH[marker];
-  const actualDepth = geometryType === 'Point' ? 0 : 1;
+  const actualDepth = COORDINATE_DEPTH[geometryType];
   return expectedDepth === undefined || expectedDepth === actualDepth ? marker : geometryType;
 }
 
@@ -551,7 +563,7 @@ export function convertGeoJSONToFeature(
 
       case 'MultiPoint':
         if (!flattenMulti) {
-          return convertMultiGeometry(geometry, meta, userProperties);
+          return convertMultiGeometry(geometry, meta, userProperties, featureType);
         }
         return flattenMultiGeometry(
           geometry.coordinates,
@@ -565,7 +577,7 @@ export function convertGeoJSONToFeature(
 
       case 'MultiLineString':
         if (!flattenMulti) {
-          return convertMultiGeometry(geometry, meta, userProperties);
+          return convertMultiGeometry(geometry, meta, userProperties, featureType);
         }
         return flattenMultiGeometry(
           geometry.coordinates,
@@ -579,7 +591,7 @@ export function convertGeoJSONToFeature(
 
       case 'MultiPolygon':
         if (!flattenMulti) {
-          return convertMultiGeometry(geometry, meta, userProperties);
+          return convertMultiGeometry(geometry, meta, userProperties, featureType);
         }
         return flattenMultiGeometry(
           geometry.coordinates,

@@ -69,8 +69,8 @@ GeoJSON の図形であるふつうの地物です。ほかの地物と同じよ
 - ライブラリーの形式は型をそのまま保ちます
 - GeoJSON にはこの型に当たる種類が無いので、書き出しは図形をそのまま
   書き、型の名前をプロパティー `maplibre-gl-draw:featureType` に書き
-  ます。そのファイルを読み込むと、`Point` か `LineString` の図形の
-  ときに型が戻ります ([データ形式](../reference/data-format.md))
+  ます。そのファイルを読み込むと、図形の種類にかかわらず型が戻ります
+  ([データ形式](../reference/data-format.md))
 - 組み込みの型の名前は使われているので、
   `draw.extensions.featureTypes.add` はそれらに `already-exists` を
   投げます
