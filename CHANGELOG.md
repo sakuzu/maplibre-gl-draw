@@ -97,7 +97,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `features.move`, `features.moveMany`, `groups.move` and
   `groups.moveMany`, which take a `MoveTarget`; `selection.add`,
   `selection.remove` and `selection.move`; `hidden.clear`;
-  `features.getAppliedStyle`.
+  `features.getAppliedStyle`; `features.isEditable`, which answers for
+  read-only and the locks of a feature, its group and its layer.
 - The events `feature.moved`, `document.loaded`,
   `vertexSelection.changed`, `drag.started` and `drag.ended`.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
@@ -783,7 +784,7 @@ releases.
 | `VertexHit`, `SnapExcludeVertex` | (removed) | |
 | `HookName` | (removed) | |
 | `FeatureLockStore`, `InteractionGateStore` | (removed) | Read `locked` |
-| `isFeatureLocked`, `isGroupLocked` | (removed) | |
+| `isFeatureLocked`, `isGroupLocked` | `features.isEditable` | Read-only too |
 | `isInteractionBlocked` | (removed) | `isInteractionLocked` |
 | `MemoryStore` | (removed) | Leave `store` out |
 | `MESSAGES_EN` | (removed) | Pass only your words |

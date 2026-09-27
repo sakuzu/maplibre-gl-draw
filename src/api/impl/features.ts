@@ -230,6 +230,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 
     moveMany,
 
+    isEditable(id) {
+      const feature = require(id);
+      return !store.isReadOnly() && !featureLocked(store, feature);
+    },
+
     getAppliedStyle(id) {
       const feature = store.getFeature(id);
       if (!feature) return undefined;

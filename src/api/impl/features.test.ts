@@ -414,6 +414,34 @@ describe('move and moveMany', () => {
   });
 });
 
+describe('isEditable', () => {
+  it('is false for a lock of the feature, its group or its layer, and while read-only', () => {
+    features.createMany([point('a'), point('b', { locked: true }), point('c', { layerId: 'l2' })]);
+    store.createGroup({
+      id: 'g',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: [],
+      visible: true,
+      locked: false,
+    });
+    features.create(point('d', { groupId: 'g' }));
+    expect(['a', 'b', 'c', 'd'].map((id) => features.isEditable(id))).toEqual([
+      true,
+      false,
+      true,
+      true,
+    ]);
+    store.updateGroup('g', { locked: true });
+    expect(features.isEditable('d')).toBe(false);
+    store.updateLayer('l2', { locked: true });
+    expect(features.isEditable('c')).toBe(false);
+    store.setReadOnly(true);
+    expect(features.isEditable('a')).toBe(false);
+    expect(codeOf(() => features.isEditable('x'))).toBe('not-found');
+  });
+});
+
 describe('getAppliedStyle', () => {
   it('puts the defaults, the layer rule and the style of the feature on top of each other', () => {
     features.create(area('a', [0, 0, 1, 1], { properties: { kind: 'x' } }));

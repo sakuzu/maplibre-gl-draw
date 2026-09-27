@@ -86,26 +86,20 @@ start an edit. Writes from code are not stopped.
 It is the same "select but do not edit" as a lock on a feature
 ([Layers and groups](layers.md)), applied to every feature at once. To
 ask whether the user can edit a feature right now, whatever the reason,
-look at the switches and at the locks of the feature, its group and its
-layer:
+look at the interaction lock and at `features.isEditable(id)`, which
+answers for read-only and for the locks of the feature, its group and
+its layer:
 
 <!-- docs-check:
 declare function showEditButton(): void;
 -->
 
 ```ts
-import type { Feature } from '@sakuzu/maplibre-gl-draw';
-
-function canEdit(target: Feature): boolean {
-  if (draw.isReadOnly() || draw.isInteractionLocked() || target.locked) return false;
-  if (target.groupId !== undefined && draw.groups.get(target.groupId)?.locked) {
-    return false;
-  }
-  return draw.layers.get(target.layerId)?.locked !== true;
+function canEdit(id: string): boolean {
+  return !draw.isInteractionLocked() && draw.features.isEditable(id);
 }
 
-const selected = draw.features.get(featureId);
-if (selected && canEdit(selected)) showEditButton();
+if (draw.features.has(featureId) && canEdit(featureId)) showEditButton();
 ```
 
 ### Which one to use

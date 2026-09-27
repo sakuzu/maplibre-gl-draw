@@ -51,6 +51,14 @@ export interface FeaturesCollection {
   /** Whether a feature with this ID exists. */
   has(id: string): boolean;
   /**
+   * Whether the feature can be edited now: the document is not read-only, and neither the
+   * feature nor its group nor its layer is locked. A refused edit returns `null` or `false`
+   * for the same reasons.
+   *
+   * @throws `DrawError` with the code `not-found` when there is no feature with this ID
+   */
+  isEditable(id: string): boolean;
+  /**
    * Creates a feature and returns it as it was stored.
    *
    * @returns The new feature, or `null` when the document is read-only

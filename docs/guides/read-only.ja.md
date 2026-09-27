@@ -92,26 +92,20 @@ draw.features.create({
 これは、地物のロック ([レイヤーとグループ](layers.ja.md)) と同じ
 「選択はできるが編集はできない」状態を、すべての地物に一度に
 かけるものです。理由にかかわらず、利用者がある地物を今編集できるかを
-知るには、2 つの切り替えを確かめ、さらに地物、そのグループ、
-そのレイヤーのロックを見ます。
+知るには、操作ロックと `features.isEditable(id)` を見ます。
+`isEditable` は、読み取り専用と、地物、そのグループ、そのレイヤーの
+ロックをまとめて答えます。
 
 <!-- docs-check:
 declare function showEditButton(): void;
 -->
 
 ```ts
-import type { Feature } from '@sakuzu/maplibre-gl-draw';
-
-function canEdit(target: Feature): boolean {
-  if (draw.isReadOnly() || draw.isInteractionLocked() || target.locked) return false;
-  if (target.groupId !== undefined && draw.groups.get(target.groupId)?.locked) {
-    return false;
-  }
-  return draw.layers.get(target.layerId)?.locked !== true;
+function canEdit(id: string): boolean {
+  return !draw.isInteractionLocked() && draw.features.isEditable(id);
 }
 
-const selected = draw.features.get(featureId);
-if (selected && canEdit(selected)) showEditButton();
+if (draw.features.has(featureId) && canEdit(featureId)) showEditButton();
 ```
 
 ### どちらを使うか
