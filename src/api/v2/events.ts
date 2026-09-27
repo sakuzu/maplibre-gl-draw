@@ -140,8 +140,11 @@ export interface DrawEvents {
   'dataset.removed': { datasetId: string };
   /** The stacking order of the datasets changed */
   'dataset.reordered': { order: readonly string[]; previous: readonly string[] };
-  /** The data of an image is needed */
-  'image.requested': { featureId: string; fileId: string };
+  /**
+   * The image mode asks for an image to place at a position: the application picks a file
+   * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`
+   */
+  'image.requested': { lngLat: Position; zoom: number; layerId: string };
   /** The divisions of the stacking order changed */
   'layerStack.changed': { entries: readonly LayerStackEntry[] };
   /** Loading or reading an image failed */

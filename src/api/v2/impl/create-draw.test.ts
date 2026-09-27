@@ -126,9 +126,6 @@ describe('transact', () => {
 describe('the parts later steps provide', () => {
   it('throws when they are called', () => {
     const message = 'not implemented (api-2)';
-    expect(() => draw.on('document.changed', () => {})).toThrow(message);
-    expect(() => draw.off('document.changed', () => {})).toThrow(message);
-    expect(() => draw.once('document.changed', () => {})).toThrow(message);
     expect(() => draw.hasPendingWork()).toThrow(message);
     expect(() => draw.getLayerStack()).toThrow(message);
     expect(() => draw.debug.terrain()).toThrow(message);

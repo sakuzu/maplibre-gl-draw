@@ -52,6 +52,8 @@ import type { Context, Options } from './context.js';
 import { createContext } from './context.js';
 import type { ImportExportAPI } from './import-export/index.js';
 import { createImportExportAPI } from './import-export/index.js';
+import type { EventHub } from './v2/impl/events.js';
+import { connectEngineEvents, connectStoreEvents, createEventHub } from './v2/impl/events.js';
 
 /**
  * The releases of one draw instance, run in the reverse order of the acquisitions
@@ -107,6 +109,11 @@ export interface Engine {
   readonly importExport: ImportExportAPI;
   /** The datasets */
   readonly datasets: DatasetManager;
+  /**
+   * The emitter of `DrawEvents`, the events of the instance that the application and the
+   * extensions subscribe to
+   */
+  readonly events: EventHub;
   /**
    * The public object of the first version of the API, built on this engine. The plugins
    * reach the instance through it until they have a context of their own
@@ -419,6 +426,15 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
 
   // 7. Set up
   eventBridge.start();
+  // The events of the instance follow the Store and the signals of the engine
+  const events = createEventHub();
+  const stopStoreEvents = connectStoreEvents(events, store);
+  const stopEngineEvents = connectEngineEvents(events, eventEmitter);
+  teardown.add(() => {
+    stopStoreEvents();
+    stopEngineEvents();
+    events.clear();
+  });
   renderCoordinator.start();
 
   // Keep the render slots on the map. The slots are added as soon as the style
@@ -471,6 +487,7 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     pluginManager,
     importExport: importExportAPI,
     datasets,
+    events,
     facade: drawApi,
     isDestroyed: () => teardown.done,
     destroy: () => teardown.run(),

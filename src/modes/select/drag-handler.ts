@@ -14,6 +14,7 @@
  */
 
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
+import type { EventEmitter, EventMap } from '../../shared/utils/event-emitter.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Feature } from '../../store/types.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
@@ -27,6 +28,9 @@ import type { DragOperation, DragScope } from './drag/operation.js';
 import { startRadiusDrag } from './drag/radius.js';
 import { startResizeDrag, startRotateDrag } from './drag/transform.js';
 import { startMidpointDrag, startVertexDrag } from './drag/vertex.js';
+
+/** What a drag grabbed: the features, a vertex or a handle of the selection */
+type DragKind = EventMap['drag.started']['kind'];
 
 /**
  * SelectModeDragHandler
@@ -48,6 +52,9 @@ export class SelectModeDragHandler {
    */
   private hookedFeatureIds: string[] | null = null;
   private hookPluginManager: ModeContext['pluginManager'] | null = null;
+  /** What the announced drag grabbed, and the emitter its end is announced on */
+  private announcedKind: DragKind | null = null;
+  private announcer: EventEmitter | null = null;
   /**
    * The selection scope of the draw instance the current drag belongs to (the resize and
    * rotate strategies of custom types, and the auxiliary handle providers). Set by startDrag
@@ -123,6 +130,7 @@ export class SelectModeDragHandler {
       pluginManager?.runHook('drag:start', { featureIds: [...selectedIds] }, { source: 'local' });
       this.hookedFeatureIds = [...selectedIds];
       this.hookPluginManager = pluginManager ?? null;
+      this.announce(hitResult.type, [...selectedIds], context.eventEmitter);
     }
 
     // Disable MapLibre's map dragging
@@ -233,7 +241,7 @@ export class SelectModeDragHandler {
 
       // Notify plugins that the drag has ended (paired with drag:start, with the same IDs even
       // when the selection changed during the drag; auxiliary handles are excluded)
-      if (!wasAuxiliary) this.endDragHook(pluginManager);
+      if (!wasAuxiliary) this.endDragHook(pluginManager, false);
     } finally {
       // Re-enable MapLibre's map dragging
       context.map.dragPan.enable();
@@ -259,18 +267,39 @@ export class SelectModeDragHandler {
     this.writes.discard(store);
     store?.setFollowedVertices?.(null);
     // An aborted drag still closes what drag:start opened (after the features are restored)
-    this.endDragHook(this.hookPluginManager ?? undefined);
+    this.endDragHook(this.hookPluginManager ?? undefined, true);
   }
 
   /**
    * Sends the drag:end that pairs with the drag:start of the current drag, once
    */
-  private endDragHook(pluginManager: ModeContext['pluginManager']): void {
+  private endDragHook(pluginManager: ModeContext['pluginManager'], cancelled: boolean): void {
     const featureIds = this.hookedFeatureIds;
+    const kind = this.announcedKind;
+    const announcer = this.announcer;
     this.hookedFeatureIds = null;
     this.hookPluginManager = null;
+    this.announcedKind = null;
+    this.announcer = null;
     if (!featureIds) return;
     pluginManager?.runHook('drag:end', { featureIds }, { source: 'local' });
+    if (kind) announcer?.emit('drag.ended', { kind, featureIds: [...featureIds], cancelled });
+  }
+
+  /**
+   * Announces the start of a drag on the emitter of the instance; its end is announced with
+   * the same IDs, committed or cancelled
+   */
+  private announce(
+    type: HandleHitResult['type'],
+    featureIds: string[],
+    emitter: EventEmitter | undefined,
+  ): void {
+    const kind: DragKind =
+      type === 'move' ? 'feature' : type === 'vertex' || type === 'midpoint' ? 'vertex' : 'handle';
+    this.announcedKind = kind;
+    this.announcer = emitter ?? null;
+    emitter?.emit('drag.started', { kind, featureIds: [...featureIds] });
   }
 
   /**

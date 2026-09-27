@@ -77,7 +77,7 @@ function toEngineOptions(options: DrawOptions): Options {
  */
 export const createDraw: CreateDraw = (map, options = {}) => {
   const engine = createEngine(map, toEngineOptions(options));
-  const { context, modeManager } = engine;
+  const { context, modeManager, events } = engine;
   const { store } = context;
   const view: StoreView = store;
 
@@ -103,7 +103,9 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     vertexSelection: createVertexSelection(deps),
     metadata: createMetadata(deps),
     options: pending('options'),
-    document: createDocument(deps),
+    document: createDocument(deps, (result, source) =>
+      events.emit('document.loaded', { result, source }),
+    ),
     extensions: pending('extensions'),
 
     getMap: () => map,
@@ -128,9 +130,9 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     },
 
     transact: (fn, transactOptions) => store.transact(fn, transactOptions?.source),
-    on: () => notImplemented('on'),
-    off: () => notImplemented('off'),
-    once: () => notImplemented('once'),
+    on: (event, listener) => events.on(event, listener),
+    off: (event, listener) => events.off(event, listener),
+    once: (event, listener) => events.once(event, listener),
 
     hasPendingWork: () => notImplemented('hasPendingWork'),
     getLayerStack: () => notImplemented('getLayerStack'),
