@@ -242,11 +242,11 @@ async function drawAndRead(
     async ({ kind, form, key }) => {
       const w = window as unknown as Record<string, unknown> & {
         map: import('maplibre-gl').Map;
-        draw: import('../index.js').MapLibreGLDraw;
+        draw: import('../index.js').Draw;
         e2e: { prepareTable: (input: unknown) => unknown };
       };
       const { map, draw } = w;
-      for (const c of draw.getDatasets()) draw.removeDataset(c.id);
+      draw.datasets.removeMany(draw.datasets.list().map((dataset) => dataset.id));
       const style = w.STYLE as object;
       const options =
         form === 'rows'
@@ -254,11 +254,11 @@ async function drawAndRead(
           : form === 'table'
             ? { table: (w.tableOf as (k: string) => unknown)(kind) }
             : { table: w.e2e.prepareTable((w.tableOf as (k: string) => unknown)(kind)) };
-      draw.addDataset({
+      draw.datasets.add({
         id: 'data',
         ...style,
         ...(options as object),
-      } as Parameters<typeof draw.addDataset>[0]);
+      } as Parameters<typeof draw.datasets.add>[0]);
       w.captured ??= {};
       const captured = w.captured as Record<string, Uint8Array>;
       const read = (): Promise<Uint8Array> =>
@@ -327,17 +327,17 @@ async function clickRow(
 ): Promise<{ id: string; row: number; properties: unknown; coordinates: unknown } | null> {
   await page.evaluate(() => {
     const w = window as unknown as {
-      draw: import('../index.js').MapLibreGLDraw;
+      draw: import('../index.js').Draw;
       clicked: unknown;
     };
     w.clicked = null;
-    w.draw.getDataset('data')?.on('click', ({ feature, row }) => {
+    w.draw.datasets.get('data')?.on('clicked', ({ row, rowIndex }) => {
       w.clicked = {
-        id: feature.id,
-        row,
-        properties: feature.properties,
+        id: row.id,
+        row: rowIndex,
+        properties: row.properties,
         // In the page: the helpers of the library are not loaded here
-        coordinates: (feature.geometry as { coordinates: unknown }).coordinates,
+        coordinates: (row.geometry as { coordinates: unknown }).coordinates,
       };
     });
   });

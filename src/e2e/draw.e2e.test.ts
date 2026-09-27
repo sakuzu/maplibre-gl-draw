@@ -63,9 +63,21 @@ async function setMode(page: Page, name: string): Promise<boolean> {
   return ok;
 }
 
-/** The tentative feature of the drawing in progress, or null */
-async function tentative(page: Page): Promise<unknown> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.getStore().getTentative());
+/** Whether a drawing is in progress, read through the context of a probe plugin */
+async function isDrawing(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const { draw } = window as unknown as E2EWindow;
+    const probe = window as unknown as { e2eDrawing?: { isDrawing(): boolean } };
+    if (!probe.e2eDrawing) {
+      draw.extensions.plugins.add({
+        name: 'e2e-probe',
+        onAdd(ctx) {
+          probe.e2eDrawing = ctx.drawing;
+        },
+      });
+    }
+    return probe.e2eDrawing?.isDrawing() === true;
+  });
 }
 
 async function clearAll(page: Page): Promise<void> {
@@ -73,7 +85,7 @@ async function clearAll(page: Page): Promise<void> {
     const { draw } = window as unknown as E2EWindow;
     draw.setReadOnly(false);
     draw.setMode('select');
-    draw.deleteAllFeatures();
+    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
   });
   await settle(page);
 }
@@ -135,7 +147,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(0, 120));
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
     // The first Escape discards the line being drawn, the second leaves the mode
     expect(await mode(page)).toBe('draw_line');
     await press(page, 'Escape');
@@ -161,7 +173,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(200, 100));
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
     expect(await mode(page)).toBe('draw_polygon');
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
@@ -182,7 +194,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await page.mouse.move(at(-100, -100).x, at(-100, -100).y, { steps: 4 });
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
   });
 
   it('draws a freehand stroke with a drag, and Escape during a stroke discards it', async () => {
@@ -203,7 +215,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await page.mouse.up();
     await settle(page);
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
 
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
@@ -307,7 +319,7 @@ describe('drawing on a pitched and rotated map', () => {
     await page.evaluate((camera) => {
       const { map, draw } = window as unknown as E2EWindow;
       map.jumpTo({ ...camera, pitch: 0, bearing: 0 });
-      draw.snapping.setEnabled(true);
+      draw.options.update({ snapping: { enabled: true } });
     }, FLAT);
   });
 
@@ -315,7 +327,9 @@ describe('drawing on a pitched and rotated map', () => {
     await clearAll(page);
     // Snapping is turned off: its constraints (a right angle, the extension of an edge) are
     // taken on the ground and would rightly pull a vertex off the pointer
-    await page.evaluate(() => (window as unknown as E2EWindow).draw.snapping.setEnabled(false));
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: false } }),
+    );
     const corners = [at(-60, -30), at(60, -40), at(70, 60), at(-70, 50)];
     await setMode(page, 'draw_polygon');
     for (const p of [...corners, corners[0]]) await click(page, p);

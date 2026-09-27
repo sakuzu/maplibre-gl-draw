@@ -166,8 +166,8 @@ async function show(page: Page, features: FeatureInput[]): Promise<void> {
   await page.evaluate((list) => {
     const { draw } = window as unknown as E2EWindow;
     draw.setMode('select');
-    draw.deleteAllFeatures();
-    for (const feature of list) draw.addFeature(feature);
+    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    draw.features.createMany(list);
   }, features);
   await settle(page);
 }
@@ -289,7 +289,7 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
         if (!context) throw new Error('No 2D canvas');
         context.fillStyle = '#FF00FF';
         context.fillRect(0, 0, 64, 64);
-        await draw.load({
+        await draw.document.load({
           version: '3.0.0',
           metadata: { title: 'image' },
           layerOrder: ['images'],
@@ -386,7 +386,7 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       // No guide along the parallel: only the line being drawn is there
-      draw.snapping.setEnabled(false);
+      draw.options.update({ snapping: { enabled: false } });
       draw.setMode('draw_line');
     });
     await click(page, west);
@@ -394,7 +394,9 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await settle(page);
     const drawing = await readPicture(page);
     await page.keyboard.press('Escape');
-    await page.evaluate(() => (window as unknown as E2EWindow).draw.snapping.setEnabled(true));
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: true } }),
+    );
     await settle(page);
 
     // The line being drawn is dashed: a dash reaches within 6 px of any point of it
@@ -482,7 +484,7 @@ describe('the points near the edge of the sphere', () => {
     await page.evaluate((coord) => {
       const { map, draw } = window as unknown as E2EWindow;
       map.removeLayer('reference');
-      draw.addFeature({
+      draw.features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates: coord },
         style: { pointColor: '#00FF00', pointRadius: 6 },

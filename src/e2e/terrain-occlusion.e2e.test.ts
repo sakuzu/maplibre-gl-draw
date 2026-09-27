@@ -59,7 +59,7 @@ interface Sample {
 
 interface TestWindow {
   map: import('maplibre-gl').Map;
-  draw: import('../index.js').MapLibreGLDraw;
+  draw: import('../index.js').Draw;
   e2e: {
     terrain: {
       addTestTerrain(map: import('maplibre-gl').Map, exaggeration: number): Promise<void>;
@@ -95,13 +95,11 @@ afterAll(async () => {
 async function clear(): Promise<void> {
   await page.evaluate(() => {
     const { draw } = window as unknown as TestWindow;
-    draw.deleteAllFeatures();
-    for (const dataset of draw.getDatasets()) {
-      draw.removeDataset(dataset.id);
-    }
+    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    draw.datasets.removeMany(draw.datasets.list().map((dataset) => dataset.id));
     // A solid line on the plain keeps the drape in use: the dashed features are drawn after
     // it, in the same frame
-    draw.addFeature({
+    draw.features.create({
       type: 'LineString',
       geometry: {
         type: 'LineString',
@@ -141,7 +139,7 @@ async function capture(): Promise<void> {
     for (let i = 0; i < 12; i++) await read();
     for (let i = 0; i < 100 && !(map.loaded() && map.areTilesLoaded()); i++) await read();
     await read();
-    return draw.getTerrainDiagnostics().drape;
+    return draw.debug.terrain().drape;
   });
   expect(drape.used, `the drape is not in use (${drape.reason})`).toBe(true);
 }
@@ -308,10 +306,10 @@ const IN_FRONT: LngLat[] = [
 /** The style of a line or an outline in one of the two paths */
 type Stroke = 'solid' | 'dashed';
 
-/** Adds a Store feature */
-async function addFeature(feature: FeatureInput): Promise<string> {
+/** Adds a feature of the document */
+async function createFeature(feature: FeatureInput): Promise<string> {
   const id = await page.evaluate(
-    (f) => (window as unknown as TestWindow).draw.addFeature(f),
+    (f) => (window as unknown as TestWindow).draw.features.create(f)?.id ?? null,
     feature,
   );
   if (id === null) throw new Error('the feature was not added');
@@ -361,7 +359,7 @@ async function expectHiddenBehindThePeak(
 describe('the terrain hides what lies behind the peak', () => {
   it.each(['solid', 'dashed'] as const)('a %s line over the peak', async (stroke) => {
     await clear();
-    await addFeature(lineOf(LINE_OVER_THE_PEAK, BLUE, stroke));
+    await createFeature(lineOf(LINE_OVER_THE_PEAK, BLUE, stroke));
     await capture();
     const samples = await samplePath(LINE_OVER_THE_PEAK);
     // The gaps of the dashes leave some visible samples bare
@@ -377,8 +375,8 @@ describe('the terrain hides what lies behind the peak', () => {
     'polygons with a %s outline behind and in front of the peak',
     async (stroke) => {
       await clear();
-      await addFeature(polygonOf(BEHIND, RED, stroke));
-      await addFeature(polygonOf(IN_FRONT, RED, stroke));
+      await createFeature(polygonOf(BEHIND, RED, stroke));
+      await createFeature(polygonOf(IN_FRONT, RED, stroke));
       await capture();
       const behind = await sampleArea(BEHIND);
       const front = await sampleArea(IN_FRONT);
@@ -397,21 +395,21 @@ describe('the terrain hides what lies behind the peak', () => {
     async (stroke) => {
       await clear();
       await page.evaluate(
-        ({ rows }) => {
+        ({ rows, fill }) => {
           const { draw } = window as unknown as TestWindow;
-          draw.addDataset({ id: 'dataset', rows });
+          // The look of the rows is the base style of the dataset
+          draw.datasets.add({ id: 'dataset', rows, baseStyle: { fill } });
         },
         {
-          rows: [BEHIND, IN_FRONT].map((ring, i): DatasetRow => {
-            const polygon = polygonOf(ring, RED, stroke);
-            return {
+          rows: [BEHIND, IN_FRONT].map(
+            (ring, i): DatasetRow => ({
               type: 'Feature',
               id: `area-${i}`,
               geometry: { type: 'Polygon', coordinates: [ring] },
-              properties: polygon.properties ?? {},
-              style: polygon.style as DatasetRow['style'],
-            };
-          }),
+              properties: polygonOf(ring, RED, stroke).properties ?? {},
+            }),
+          ),
+          fill: polygonOf(BEHIND, RED, stroke).style ?? {},
         },
       );
       await capture();
@@ -452,7 +450,7 @@ describe('the symbols and the selection stay in front of the terrain', () => {
       [[FRONT_POINT[0] + 0.004, FRONT_POINT[1]], 'star'],
       [[HIDDEN_POINT[0] + 0.004, HIDDEN_POINT[1]], 'star'],
     ] as const) {
-      await addFeature({
+      await createFeature({
         type: 'Point',
         geometry: { type: 'Point', coordinates: coord },
         style: { pointColor: RED, pointRadius: 9, pointShape: shape },
@@ -475,14 +473,14 @@ describe('the symbols and the selection stay in front of the terrain', () => {
 
   it('the handles of a selected line are drawn at a hidden vertex too', async () => {
     await clear();
-    const id = await addFeature(lineOf(LINE_OVER_THE_PEAK, BLUE, 'dashed'));
+    const id = await createFeature(lineOf(LINE_OVER_THE_PEAK, BLUE, 'dashed'));
     const far = LINE_OVER_THE_PEAK[LINE_OVER_THE_PEAK.length - 1];
     const [sample] = await samplePath([far, far]);
     expect(sample.hidden).toBe(true);
     await capture();
     const ground = await colorAt(far);
     await page.evaluate((featureId) => {
-      (window as unknown as TestWindow).draw.select(featureId);
+      (window as unknown as TestWindow).draw.selection.set('feature', [featureId]);
     }, id);
     await capture();
     const selected = await colorAt(far);
