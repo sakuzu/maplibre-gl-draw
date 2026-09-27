@@ -182,7 +182,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
           modeManager.registerMode(name, () => {
             const handle = createModeContext(modeServices, screen);
             try {
-              return bridgeMode(name, factory(handle.context), handle.dispose);
+              return bridgeMode(name, factory(handle.context), handle.dispose, handle.entering);
             } catch (error) {
               handle.dispose();
               throw error;

@@ -393,7 +393,9 @@ draw.setMode('draw_rectangle');
   最初の頂点のような頂点を目立たせます
 - `hitTest(point)` は画面の点にある一番手前の地物かデータセットの行を
   返し、`snap(point)` はその点が吸着する先を返します
-- `cursor.set(cursor)` と `cursor.reset()` は地図のカーソルを変えます
+- `cursor.set(cursor)` と `cursor.reset()` は地図のカーソルを変えます。
+  `reset` はモードが `onEnter` で決めたカーソルに戻し、モードが決めた
+  カーソルはモードを出るときに外れます
 - `writableLayer()` は新しい地物が入るレイヤーを返します。受けられる
   レイヤーが無ければ `null` です
 - `listTraceRows(bbox)` は、形がなぞれるデータセットの行を返します

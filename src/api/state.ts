@@ -65,8 +65,11 @@ export interface SnapResult {
   lngLat: Position;
   /** What was snapped to */
   target?: {
-    /** The kind of the target */
-    kind: 'vertex' | 'edge' | 'intersection' | 'guide';
+    /**
+     * The kind of the target; a kind of its own that a snap provider gave its candidate is
+     * kept as it is
+     */
+    kind: 'vertex' | 'edge' | 'intersection' | 'guide' | (string & {});
     /** The ID of the feature, for a target of the document */
     featureId?: string;
     /** The ID of the dataset, for a target of a dataset */

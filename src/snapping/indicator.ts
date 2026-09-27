@@ -176,7 +176,8 @@ export class SnapIndicatorRenderer implements EngineOverlayRenderer {
       );
     }
 
-    const style = this.styles[target.kind];
+    // A kind of a provider's own is shown as a vertex
+    const style = this.styles[target.kind as SnapTargetKind] ?? this.styles.vertex;
     context.pointShapeRenderer.draw([result.lngLat.lng, result.lngLat.lat], style, zoom);
   }
 

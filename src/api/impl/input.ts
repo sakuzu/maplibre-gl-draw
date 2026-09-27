@@ -132,15 +132,22 @@ export interface BridgedMode extends EngineModeHandler {
  * engine calls on its own modes.
  *
  * @param onExit - Called after the mode was left, to end what its context holds
+ * @param entering - Runs the entering of the mode, so that its context knows the cursor the
+ *   mode sets then
  * @internal
  */
-export function bridgeMode(name: string, handler: ModeHandler, onExit: () => void): BridgedMode {
+export function bridgeMode(
+  name: string,
+  handler: ModeHandler,
+  onExit: () => void,
+  entering: (run: () => void) => void = (run) => run(),
+): BridgedMode {
   const bridged: BridgedMode = {
     [BRIDGED]: handler,
     modeName: name,
     writesFeatures: handler.writes === true,
     onStart() {
-      handler.onEnter?.();
+      entering(() => handler.onEnter?.());
     },
     onStop() {
       try {

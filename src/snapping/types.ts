@@ -154,6 +154,11 @@ export interface SnapPointCandidate {
   description?: string;
   /** The priority among candidates of the same kind at the same distance; higher wins */
   priority?: number;
+  /**
+   * The kind of its own a provider gave the candidate, passed on as `SnapTarget.kind`; the
+   * candidate is ranked and switched on and off by `kind`
+   */
+  ownKind?: string;
 }
 
 /**

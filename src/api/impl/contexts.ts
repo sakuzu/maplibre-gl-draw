@@ -454,7 +454,12 @@ export function toHit(
  */
 export interface ModeContextHandle {
   readonly context: ModeContext;
-  /** Ends the subscriptions of the mode and drops what it previewed */
+  /**
+   * Runs the entering of the mode: a cursor it sets meanwhile becomes the cursor of the mode,
+   * which `cursor.reset` goes back to
+   */
+  entering(run: () => void): void;
+  /** Ends the subscriptions of the mode and takes back the cursor it set */
   dispose(): void;
 }
 
@@ -473,6 +478,11 @@ export function createModeContext(
   const base = createExtensionContext(services, screen, subscriptions);
   /** The ID the shape being drawn will have once it is committed */
   let pendingId: string | null = null;
+  /** The cursor the mode set while it was entered, which `cursor.reset` goes back to */
+  let modeCursor = '';
+  let entering = false;
+  /** Whether the mode has set a cursor, which is taken back when it is left */
+  let cursorSet = false;
 
   const clearPreview = (): void => {
     pendingId = null;
@@ -555,10 +565,12 @@ export function createModeContext(
     },
     cursor: {
       set(cursor) {
+        if (entering) modeCursor = cursor;
+        cursorSet = true;
         map.getCanvas().style.cursor = cursor;
       },
       reset() {
-        map.getCanvas().style.cursor = '';
+        map.getCanvas().style.cursor = modeCursor;
       },
     },
     get selectionStyle() {
@@ -585,8 +597,18 @@ export function createModeContext(
 
   return {
     context,
+    entering(run) {
+      entering = true;
+      try {
+        run();
+      } finally {
+        entering = false;
+      }
+    },
     dispose() {
       subscriptions.endAll();
+      if (cursorSet) map.getCanvas().style.cursor = '';
+      cursorSet = false;
     },
   };
 }

@@ -401,7 +401,9 @@ draw.extensions.snapProviders.add(grid);
 The context gives the pointer on the screen and on the map, the
 tolerance in pixels, `screen`, and `excludeIds`, the features that must
 not be snapped to, such as the one being drawn. `priority` breaks ties
-between candidates at the same distance; the higher one wins.
+between candidates at the same distance; the higher one wins. A `kind`
+of your own is ranked as a vertex and reaches the snapping result
+(`target.kind`) as it is.
 
 ### Handles
 
@@ -459,8 +461,9 @@ draw.extensions.companionProviders.add(halo);
   index you keep
 - `draw` is called just before the feature itself
 - `hitTest` is asked when the pointer missed the feature itself, before
-  the feature behind it. A hit calls `onClick` and leaves the selection
-  as it is
+  the feature behind it. A hit calls `onClick`: when it returns true the
+  click is consumed and the selection stays as it is; otherwise the
+  select mode takes the click as one on the feature
 
 ## Your own shaders
 

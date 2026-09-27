@@ -302,7 +302,7 @@ export function createModeHarness(options: {
     register(name: string, factory: ModeFactory): () => void {
       return modeManager.registerMode(name, () => {
         const handle = createModeContext(services, screen);
-        return bridgeMode(name, factory(handle.context), handle.dispose);
+        return bridgeMode(name, factory(handle.context), handle.dispose, handle.entering);
       });
     },
   };

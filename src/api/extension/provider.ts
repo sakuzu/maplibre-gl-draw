@@ -92,10 +92,11 @@ export interface CompanionProvider {
    */
   hitTest(feature: Feature, ctx: HitTestContext): Hit | null;
   /**
-   * A companion was clicked. The click never changes the selection.
+   * A companion was clicked.
    *
    * @param hit - What `hitTest` returned
-   * @returns True when the provider handled the click
+   * @returns True to consume the click, which then changes nothing else; false, or nothing,
+   *   to leave it to the select mode as a click on the feature
    */
   onClick?(feature: Feature, hit: Hit, event: DrawPointerEvent): boolean;
 }

@@ -362,9 +362,10 @@ function toSnapContext(ctx: SnapProviderContext, screen: ScreenContext): SnapCon
 
 /** A snapping candidate of the contract as a candidate of the engine (a point) */
 function toEngineCandidate(candidate: SnapCandidate, featureId?: string): EngineSnapCandidate {
-  const kind = ENGINE_KINDS.has(candidate.kind) ? (candidate.kind as SnapTargetKind) : 'vertex';
+  const own = !ENGINE_KINDS.has(candidate.kind);
   return {
-    kind,
+    kind: own ? 'vertex' : (candidate.kind as SnapTargetKind),
+    ...(own && { ownKind: candidate.kind }),
     coordinate: [candidate.position[0], candidate.position[1]],
     ...(featureId !== undefined && { featureId }),
     ...(candidate.source !== undefined && { description: candidate.source }),
@@ -472,8 +473,13 @@ export function adaptCompanionProvider(
     onCompanionClick(featureId, hit, event?: unknown) {
       const feature = deps.store.getFeature(featureId);
       const own = (hit as { contractHit?: Hit }).contractHit;
-      if (!feature || !own || !provider.onClick || !event) return;
-      provider.onClick(feature as Feature, own, toPointerEvent(event as DragNormalizedEvent));
+      if (!feature || !own || !provider.onClick || !event) return false;
+      const handled = provider.onClick(
+        feature as Feature,
+        own,
+        toPointerEvent(event as DragNormalizedEvent),
+      );
+      return handled === true;
     },
   };
 }

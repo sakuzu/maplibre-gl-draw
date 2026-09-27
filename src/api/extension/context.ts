@@ -190,7 +190,10 @@ export interface ModeContext extends ExtensionContext {
   readonly cursor: {
     /** Sets the cursor, as a CSS cursor value */
     set(cursor: string): void;
-    /** Goes back to the cursor of the mode */
+    /**
+     * Goes back to the cursor of the mode: the one it set in `onEnter`, or the cursor of the
+     * map when it set none there. The cursor the mode set is taken back when it is left.
+     */
     reset(): void;
   };
   /** The look of the selected features. */

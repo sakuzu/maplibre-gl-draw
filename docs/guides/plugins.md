@@ -396,7 +396,8 @@ A `ModeContext` has everything of the context of a plugin but
 - `hitTest(point)` returns the topmost feature or dataset row at a
   point on the screen, and `snap(point)` where that point snaps to
 - `cursor.set(cursor)` and `cursor.reset()` change the cursor of the
-  map
+  map; `reset` goes back to the cursor the mode set in `onEnter`, and
+  the cursor the mode set is taken back when it is left
 - `writableLayer()` returns the layer a new feature goes into, or
   `null` when no layer can take one
 - `listTraceRows(bbox)` returns the rows of datasets that a shape can

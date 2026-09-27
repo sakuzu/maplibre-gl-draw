@@ -113,13 +113,19 @@ export interface FeatureCompanionProvider {
    */
   hitTest(feature: Feature, point: ScreenPoint, context: CompanionHitContext): CompanionHit | null;
   /**
-   * The notification of a consumed click.
+   * The notification of a click on the companion.
    *
    * @param featureId The ID of the feature that owns the companion
    * @param hit The hit returned by hitTest
    * @param event The click, when the engine has one to give
+   * @returns False to leave the click to the select mode, as a click on the feature that owns
+   *   the companion; anything else consumes it
    */
-  onCompanionClick(featureId: string, hit: CompanionHit, event?: MouseNormalizedEvent): void;
+  onCompanionClick(
+    featureId: string,
+    hit: CompanionHit,
+    event?: MouseNormalizedEvent,
+  ): boolean | undefined;
 }
 
 /**
@@ -304,20 +310,25 @@ export function hitTestFeatureCompanions(
 }
 
 /**
- * Hands a consumed click back to the provider
+ * Hands a click on a companion to its provider
  *
  * If the provider has already been unregistered, nothing happens (the click stays
  * consumed and the selection state does not change).
  *
+ * @returns Whether the click was consumed; false when the provider leaves it to the select
+ *   mode
  * @internal
  */
 export function notifyFeatureCompanionClick(
   registry: FeatureCompanionRegistry,
   result: FeatureCompanionHitResult,
   event?: MouseNormalizedEvent,
-): void {
+): boolean {
   const provider = registry.get(result.providerId);
-  if (!provider) return;
-  if (event === undefined) provider.onCompanionClick(result.featureId, result.hit);
-  else provider.onCompanionClick(result.featureId, result.hit, event);
+  if (!provider) return true;
+  const consumed =
+    event === undefined
+      ? provider.onCompanionClick(result.featureId, result.hit)
+      : provider.onCompanionClick(result.featureId, result.hit, event);
+  return consumed !== false;
 }

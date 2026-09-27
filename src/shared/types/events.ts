@@ -90,8 +90,11 @@ export interface SnapTargetSegment {
  * by the rendering of the guide line.
  */
 export interface SnapTarget {
-  /** The kind of the target */
-  kind: SnapTargetKind;
+  /**
+   * The kind of the target: one of the engine, or the kind of its own a provider of the
+   * extension contract gave its candidate (ranked as a vertex)
+   */
+  kind: SnapTargetKind | (string & Record<never, never>);
   /** The feature ID of the target (only for candidates originating from the Store) */
   featureId?: string;
   /**

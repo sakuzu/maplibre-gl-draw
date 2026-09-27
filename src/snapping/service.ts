@@ -231,6 +231,7 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
     best: BestCandidate | null,
     coordinate: Coordinate,
     target: SnapTarget,
+    priority: number,
     cursor: Coordinate,
     perPixel: DegreesPerPixel,
     preferred: boolean,
@@ -239,7 +240,6 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
     const distancePx = distanceInPixels(coordinate, cursor, perPixel);
     if (distancePx > options.tolerancePx) return best;
 
-    const priority = SNAP_KIND_PRIORITY[target.kind];
     if (best && !isBetterCandidate(best, priority, distancePx, preferred, rank)) {
       return best;
     }
@@ -333,7 +333,9 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
           }
 
           // The target keeps the stored coordinates (it names the geometry that was snapped to)
-          const target: SnapTarget = { kind: candidate.kind };
+          const target: SnapTarget = {
+            kind: (!isSegmentCandidate(candidate) && candidate.ownKind) || candidate.kind,
+          };
           if (candidate.featureId !== undefined) target.featureId = candidate.featureId;
           if (candidate.datasetId !== undefined) target.datasetId = candidate.datasetId;
           if (candidate.description !== undefined) target.description = candidate.description;
@@ -354,7 +356,8 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
             candidate.datasetId === ctx.preferFeature.datasetId;
 
           const rank = isSegmentCandidate(candidate) ? 0 : (candidate.priority ?? 0);
-          best = evaluate(best, coordinate, target, cursor, perPixel, preferred, rank);
+          const priority = SNAP_KIND_PRIORITY[candidate.kind];
+          best = evaluate(best, coordinate, target, priority, cursor, perPixel, preferred, rank);
         }
       }
     }

@@ -532,6 +532,90 @@ describe('ModeContext.commitFeature', () => {
   });
 });
 
+describe('the providers and the cursor of a mode', () => {
+  let engine: Engine;
+  let ctx: ModeContext;
+
+  beforeEach(() => {
+    engine = engineWithDraw();
+    engine.extensions.collections.modes.add('probe', (context) => {
+      ctx = context;
+      return { onEnter: () => ctx.cursor.set('crosshair') };
+    });
+    engine.extensions.collections.modes.add('plain', () => ({}));
+  });
+  afterEach(() => {
+    engine.destroy();
+  });
+
+  it('keeps the kind of its own that a snap provider gives its candidate', () => {
+    engine.extensions.collections.snapProviders.add({
+      name: 'grid',
+      candidates: () => [{ position: [1, 1], kind: 'grid-node', source: 'grid' }],
+    });
+    const changes: Array<string | undefined> = [];
+    engine.events.on('snap.changed', ({ result }) => changes.push(result?.target?.kind));
+    engine.modeManager.setMode('probe');
+    const { x, y } = engine.map.project([1, 1]);
+    const result = ctx.snap([x, y]);
+    expect(result.lngLat).toEqual([1, 1]);
+    expect(result.target).toMatchObject({ kind: 'grid-node', description: 'grid' });
+    expect(changes).toContain('grid-node');
+  });
+
+  it('goes back to the cursor the mode set when it was entered, and takes it back on leaving', () => {
+    const canvas = engine.map.getCanvas();
+    engine.modeManager.setMode('probe');
+    expect(canvas.style.cursor).toBe('crosshair');
+    ctx.cursor.set('pointer');
+    ctx.cursor.reset();
+    expect(canvas.style.cursor).toBe('crosshair');
+    engine.modeManager.setMode('plain');
+    expect(canvas.style.cursor).toBe('');
+  });
+
+  it('lets onClick of a companion consume the click or leave it to the select mode', () => {
+    const { store } = engine.context;
+    const layerId = store.listLayers()[0].id;
+    store.createFeature({
+      id: 'far',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [3, 3] },
+      layerId,
+      groupId: undefined,
+      properties: {},
+      style: {},
+      visible: true,
+      locked: false,
+    });
+    let consume = true;
+    const clicked: string[] = [];
+    engine.extensions.collections.companionProviders.add({
+      name: 'halo',
+      has: (feature) => feature.id === 'far',
+      draw() {},
+      hitTest: (feature) => ({
+        kind: 'companion',
+        id: 'halo',
+        featureId: feature.id,
+        distancePx: 0,
+      }),
+      onClick(feature) {
+        clicked.push(feature.id);
+        return consume;
+      },
+    });
+    engine.modeManager.setMode('select');
+    createSyntheticInput(engine).click([0, 0]);
+    expect(clicked).toEqual(['far']);
+    expect(store.getSelection().ids).toEqual([]);
+    consume = false;
+    createSyntheticInput(engine).click([0, 0]);
+    expect(clicked).toEqual(['far', 'far']);
+    expect(store.getSelection().ids).toEqual(['far']);
+  });
+});
+
 describe('a Store that replaces its whole document', () => {
   /** A Store of the library that can announce a replacement of its whole document */
   class ReplacingStore extends MemoryStore {

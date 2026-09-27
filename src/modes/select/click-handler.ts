@@ -173,14 +173,16 @@ function handleFeatureClick(
   const { store } = context;
   const orderedFeatures = getDisplayFeatures(store);
 
-  const top = context.hitTestTopmost(event.point, { orderedFeatures });
+  let top = context.hitTestTopmost(event.point, { orderedFeatures });
 
-  // A feature companion is in the foreground: the provider receives the click and core changes
-  // the selection in no way at all (not even clearing it as an empty click would). Core does not
-  // know what the companion is, so its job ends at consuming the click and reporting it.
+  // A feature companion is in the foreground: the provider receives the click. When it consumes
+  // it, core changes the selection in no way at all (not even clearing it as an empty click
+  // would); when it leaves it, the click is one on the feature that owns the companion
   if (top?.kind === 'companion') {
-    notifyFeatureCompanionClick(context.featureCompanions, top.companion, event);
-    return;
+    if (notifyFeatureCompanionClick(context.featureCompanions, top.companion, event)) return;
+    const owner = store.getFeature(top.companion.featureId);
+    if (!owner) return;
+    top = { kind: 'store', feature: owner };
   }
 
   // When there is nothing, and when a dataset is in the foreground, Store

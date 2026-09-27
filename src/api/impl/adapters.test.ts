@@ -229,7 +229,7 @@ describe('a custom feature type', () => {
     expect(updates[updates.length - 1]).not.toBe(true);
   });
 
-  it('offers its snapping candidates', () => {
+  it('offers its snapping candidates, keeping a kind of its own', () => {
     const result = engine.context.snapService.resolve(
       { lng: 1, lat: 1 },
       { x: 500, y: 200 },
@@ -237,7 +237,7 @@ describe('a custom feature type', () => {
     );
     expect(result.lngLat).toEqual({ lng: 1.001, lat: 1.001 });
     expect(result.target).toEqual(
-      expect.objectContaining({ kind: 'vertex', featureId: 'p1', description: 'pin' }),
+      expect.objectContaining({ kind: 'anchor', featureId: 'p1', description: 'pin' }),
     );
   });
 
