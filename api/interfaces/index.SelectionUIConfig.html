@@ -1,0 +1,163 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>SelectionUIConfig | @sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">SelectionUIConfig</a></li></ul>
+<h1>Interface SelectionUIConfig</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>How the selection UI looks: the box around the selection and its handles</p>
+<p>Give the parts to change through the <code>selectionStyle</code> option of <code>createMapLibreGLDraw</code>;
+the parts left out keep their defaults. Sizes and widths are in CSS pixels and stay the
+same at every zoom.</p>
+<p>A single selection shows the box with the resize handles at its corners and the rotate
+handle above it; a line or a polygon also shows its vertex and midpoint handles, and a Circle
+its center marker, radius line and radius handle. A multiple selection shows one box around
+every selected feature, with the resize and rotate handles, and a box without handles around
+each feature. A locked feature shows the box without handles.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">draw</span><span class="hl-1"> = </span><span class="hl-2">createMapLibreGLDraw</span><span class="hl-1">(</span><span class="hl-0">map</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-0">selectionStyle:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-0">boundingBox:</span><span class="hl-1"> {</span><br/><span class="hl-1">      </span><span class="hl-0">stroke:</span><span class="hl-1"> { </span><span class="hl-0">width:</span><span class="hl-1"> </span><span class="hl-9">1</span><span class="hl-1">, </span><span class="hl-0">color:</span><span class="hl-1"> [</span><span class="hl-9">0</span><span class="hl-1">, </span><span class="hl-9">0.4</span><span class="hl-1">, </span><span class="hl-9">1</span><span class="hl-1">, </span><span class="hl-9">1</span><span class="hl-1">], </span><span class="hl-0">opacity:</span><span class="hl-1"> </span><span class="hl-9">1</span><span class="hl-1">, </span><span class="hl-0">lineStyle:</span><span class="hl-1"> </span><span class="hl-4">&#39;solid&#39;</span><span class="hl-1"> },</span><br/><span class="hl-1">      </span><span class="hl-0">margin:</span><span class="hl-1"> </span><span class="hl-9">6</span><span class="hl-1">,</span><br/><span class="hl-1">    },</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">SelectionUIConfig</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#boundingbox">boundingBox</a><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBoxStyle.html" class="tsd-signature-type tsd-kind-interface">BoundingBoxStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#centermarker">centerMarker</a><span class="tsd-signature-symbol">:</span> <a href="index.CenterMarkerStyle.html" class="tsd-signature-type tsd-kind-interface">CenterMarkerStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#midpointhandle">midpointHandle</a><span class="tsd-signature-symbol">:</span> <a href="index.MidpointHandleStyle.html" class="tsd-signature-type tsd-kind-interface">MidpointHandleStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#radiushandle">radiusHandle</a><span class="tsd-signature-symbol">:</span> <a href="index.RadiusHandleStyle.html" class="tsd-signature-type tsd-kind-interface">RadiusHandleStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#radiusline">radiusLine</a><span class="tsd-signature-symbol">:</span> <a href="index.RadiusLineStyle.html" class="tsd-signature-type tsd-kind-interface">RadiusLineStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#resizehandle">resizeHandle</a><span class="tsd-signature-symbol">:</span> <a href="index.ResizeHandleStyle.html" class="tsd-signature-type tsd-kind-interface">ResizeHandleStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#rotatehandle">rotateHandle</a><span class="tsd-signature-symbol">:</span> <a href="index.RotateHandleStyle.html" class="tsd-signature-type tsd-kind-interface">RotateHandleStyle</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#vertexhandle">vertexHandle</a><span class="tsd-signature-symbol">:</span> <a href="index.VertexHandleStyle.html" class="tsd-signature-type tsd-kind-interface">VertexHandleStyle</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L175">src/shared/config/selection.ts:175</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#boundingbox" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>bounding<wbr/>Box</span></a>
+<a href="#centermarker" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>center<wbr/>Marker</span></a>
+<a href="#midpointhandle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>midpoint<wbr/>Handle</span></a>
+<a href="#radiushandle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius<wbr/>Handle</span></a>
+<a href="#radiusline" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius<wbr/>Line</span></a>
+<a href="#resizehandle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>resize<wbr/>Handle</span></a>
+<a href="#rotatehandle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>rotate<wbr/>Handle</span></a>
+<a href="#vertexhandle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>vertex<wbr/>Handle</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="boundingbox"><span>bounding<wbr/>Box</span><a href="#boundingbox" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">boundingBox</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBoxStyle.html" class="tsd-signature-type tsd-kind-interface">BoundingBoxStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>The box around the selection</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value">Default Value<a href="#default-value" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p><code>#FF2D55</code>, 2 px, solid, 10 px from the features</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L181">src/shared/config/selection.ts:181</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="centermarker"><span>center<wbr/>Marker</span><a href="#centermarker" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">centerMarker</span><span class="tsd-signature-symbol">:</span> <a href="index.CenterMarkerStyle.html" class="tsd-signature-type tsd-kind-interface">CenterMarkerStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>For a Circle: the center marker</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-1">Default Value<a href="#default-value-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>a 6 px white circle with a 1 px <code>#FF2D55</code> outline</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L217">src/shared/config/selection.ts:217</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="midpointhandle"><span>midpoint<wbr/>Handle</span><a href="#midpointhandle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">midpointHandle</span><span class="tsd-signature-symbol">:</span> <a href="index.MidpointHandleStyle.html" class="tsd-signature-type tsd-kind-interface">MidpointHandleStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>The midpoint handles</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-2">Default Value<a href="#default-value-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>8 px white circles with a 1.5 px <code>#FF2D55</code> outline</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L205">src/shared/config/selection.ts:205</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="radiushandle"><span>radius<wbr/>Handle</span><a href="#radiushandle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">radiusHandle</span><span class="tsd-signature-symbol">:</span> <a href="index.RadiusHandleStyle.html" class="tsd-signature-type tsd-kind-interface">RadiusHandleStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>For a Circle: the radius handle</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-3">Default Value<a href="#default-value-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>a 10 px white circle with a 1 px <code>#FF2D55</code> outline</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L211">src/shared/config/selection.ts:211</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="radiusline"><span>radius<wbr/>Line</span><a href="#radiusline" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">radiusLine</span><span class="tsd-signature-symbol">:</span> <a href="index.RadiusLineStyle.html" class="tsd-signature-type tsd-kind-interface">RadiusLineStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>For a Circle: the radius line (the dashed line from the center to the radius handle)</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-4">Default Value<a href="#default-value-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p><code>#FF2D55</code>, 1 px, dashed 3 px / 3 px</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L223">src/shared/config/selection.ts:223</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="resizehandle"><span>resize<wbr/>Handle</span><a href="#resizehandle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">resizeHandle</span><span class="tsd-signature-symbol">:</span> <a href="index.ResizeHandleStyle.html" class="tsd-signature-type tsd-kind-interface">ResizeHandleStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>The resize handles at the four corners of the box</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-5">Default Value<a href="#default-value-5" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>10 px <code>#FF2D55</code> squares without an outline</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L187">src/shared/config/selection.ts:187</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="rotatehandle"><span>rotate<wbr/>Handle</span><a href="#rotatehandle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">rotateHandle</span><span class="tsd-signature-symbol">:</span> <a href="index.RotateHandleStyle.html" class="tsd-signature-type tsd-kind-interface">RotateHandleStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>The rotate handle above the box</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-6">Default Value<a href="#default-value-6" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>a 10 px <code>#FF2D55</code> circle, 10 px above the box, joined by a 2 px line</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L193">src/shared/config/selection.ts:193</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="vertexhandle"><span>vertex<wbr/>Handle</span><a href="#vertexhandle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">vertexHandle</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexHandleStyle.html" class="tsd-signature-type tsd-kind-interface">VertexHandleStyle</a></div>
+<div class="tsd-comment tsd-typography"><p>The vertex handles</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-defaultValue">
+<h4 class="tsd-anchor-link" id="default-value-7">Default Value<a href="#default-value-7" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>12 px white circles with a 2 px <code>#FF2D55</code> outline (3 px when selected)</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/shared/config/selection.ts#L199">src/shared/config/selection.ts:199</a></li></ul></aside></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
+<div><a href="#boundingbox"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>bounding<wbr/>Box</span></a><a href="#centermarker"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>center<wbr/>Marker</span></a><a href="#midpointhandle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>midpoint<wbr/>Handle</span></a><a href="#radiushandle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius<wbr/>Handle</span></a><a href="#radiusline"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>radius<wbr/>Line</span></a><a href="#resizehandle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>resize<wbr/>Handle</span></a><a href="#rotatehandle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>rotate<wbr/>Handle</span></a><a href="#vertexhandle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>vertex<wbr/>Handle</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

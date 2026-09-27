@@ -1,0 +1,406 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>ModeHandler | @sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">ModeHandler</a></li></ul>
+<h1>Interface ModeHandler</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>The implementation of an interaction mode: it receives the normalized input while it is the
+current mode.</p>
+<p>Register a custom mode with <code>draw.registerMode(name, factory)</code> or <code>Plugin.modes</code>, and enter
+it with <code>draw.setMode(name)</code>. The context is passed in <code>onStart()</code> and the implementation
+keeps it in a field; it is not passed to the event handlers. Every handler is optional. The
+coordinates of the pointer events have already gone through snapping (see
+<code>isSnapEnabledFor</code>).</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-3">import</span><span class="hl-1"> </span><span class="hl-3">type</span><span class="hl-1"> { </span><span class="hl-0">ModeContext</span><span class="hl-1">, </span><span class="hl-0">ModeHandler</span><span class="hl-1">, </span><span class="hl-0">MouseNormalizedEvent</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-4">&#39;@sakuzu/maplibre-gl-draw&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-7">// A mode that logs the clicked position and returns to select on Escape</span><br/><span class="hl-5">class</span><span class="hl-1"> </span><span class="hl-8">ProbeMode</span><span class="hl-1"> </span><span class="hl-5">implements</span><span class="hl-1"> </span><span class="hl-8">ModeHandler</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-5">readonly</span><span class="hl-1"> </span><span class="hl-0">modeName</span><span class="hl-1"> = </span><span class="hl-4">&#39;probe&#39;</span><span class="hl-1">;</span><br/><span class="hl-1">  </span><span class="hl-5">private</span><span class="hl-1"> </span><span class="hl-0">context</span><span class="hl-1">: </span><span class="hl-8">ModeContext</span><span class="hl-1"> | </span><span class="hl-8">null</span><span class="hl-1"> = </span><span class="hl-5">null</span><span class="hl-1">;</span><br/><br/><span class="hl-1">  </span><span class="hl-2">onStart</span><span class="hl-1">(</span><span class="hl-0">context</span><span class="hl-1">: </span><span class="hl-8">ModeContext</span><span class="hl-1">): </span><span class="hl-8">void</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-5">this</span><span class="hl-1">.</span><span class="hl-0">context</span><span class="hl-1"> = </span><span class="hl-0">context</span><span class="hl-1">;</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">  </span><span class="hl-2">onClick</span><span class="hl-1">(</span><span class="hl-0">event</span><span class="hl-1">: </span><span class="hl-8">MouseNormalizedEvent</span><span class="hl-1">): </span><span class="hl-8">void</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-0">console</span><span class="hl-1">.</span><span class="hl-2">log</span><span class="hl-1">(</span><span class="hl-0">event</span><span class="hl-1">.</span><span class="hl-0">lngLat</span><span class="hl-1">.</span><span class="hl-0">lng</span><span class="hl-1">, </span><span class="hl-0">event</span><span class="hl-1">.</span><span class="hl-0">lngLat</span><span class="hl-1">.</span><span class="hl-0">lat</span><span class="hl-1">);</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">  </span><span class="hl-2">onKeyDown</span><span class="hl-1">(</span><span class="hl-0">event</span><span class="hl-1">: { </span><span class="hl-0">key</span><span class="hl-1">: </span><span class="hl-8">string</span><span class="hl-1"> }): </span><span class="hl-8">void</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-0">event</span><span class="hl-1">.</span><span class="hl-0">key</span><span class="hl-1"> === </span><span class="hl-4">&#39;Escape&#39;</span><span class="hl-1">) </span><span class="hl-5">this</span><span class="hl-1">.</span><span class="hl-0">context</span><span class="hl-1">?.</span><span class="hl-2">setMode</span><span class="hl-1">(</span><span class="hl-4">&#39;select&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span><br/><br/><span class="hl-0">draw</span><span class="hl-1">.</span><span class="hl-2">registerMode</span><span class="hl-1">(</span><span class="hl-4">&#39;probe&#39;</span><span class="hl-1">, () </span><span class="hl-5">=&gt;</span><span class="hl-1"> </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-2">ProbeMode</span><span class="hl-1">());</span><br/><span class="hl-0">draw</span><span class="hl-1">.</span><span class="hl-2">setMode</span><span class="hl-1">(</span><span class="hl-4">&#39;probe&#39;</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ModeHandler</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#modename">modeName</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#writesfeatures">writesFeatures</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getsnappreference-1">getSnapPreference</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">datasetId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">featureId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#issnapenabledfor-1">isSnapEnabledFor</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">inputType</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.SnapInputType.html" class="tsd-signature-type tsd-kind-type-alias">SnapInputType</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onclick-1">onClick</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondoubleclick-1">onDoubleClick</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragcancel-1">onDragCancel</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragend-1">onDragEnd</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragmove-1">onDragMove</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragstart-1">onDragStart</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onexternalstatechange-1">onExternalStateChange</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onkeydown-1">onKeyDown</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.KeyNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">KeyNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onkeyup-1">onKeyUp</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.KeyNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">KeyNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onmousedown-1">onMouseDown</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onmousemove-1">onMouseMove</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onmouseup-1">onMouseUp</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onselectionchange-1">onSelectionChange</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onstart-1">onStart</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">context</span><span class="tsd-signature-symbol">:</span> <a href="index.ModeContext.html" class="tsd-signature-type tsd-kind-interface">ModeContext</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onstop-1">onStop</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#redovertex-1">redoVertex</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#undovertex-1">undoVertex</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L187">src/modes/handler.ts:187</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#modename" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>mode<wbr/>Name</span></a>
+<a href="#writesfeatures" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>writes<wbr/>Features?</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#getsnappreference" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Snap<wbr/>Preference?</span></a>
+<a href="#issnapenabledfor" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Snap<wbr/>Enabled<wbr/>For?</span></a>
+<a href="#onclick" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Click?</span></a>
+<a href="#ondoubleclick" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Double<wbr/>Click?</span></a>
+<a href="#ondragcancel" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>Cancel?</span></a>
+<a href="#ondragend" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>End?</span></a>
+<a href="#ondragmove" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>Move?</span></a>
+<a href="#ondragstart" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>Start?</span></a>
+<a href="#onexternalstatechange" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>External<wbr/>State<wbr/>Change?</span></a>
+<a href="#onkeydown" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Key<wbr/>Down?</span></a>
+<a href="#onkeyup" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Key<wbr/>Up?</span></a>
+<a href="#onmousedown" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Mouse<wbr/>Down?</span></a>
+<a href="#onmousemove" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Mouse<wbr/>Move?</span></a>
+<a href="#onmouseup" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Mouse<wbr/>Up?</span></a>
+<a href="#onselectionchange" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Selection<wbr/>Change?</span></a>
+<a href="#onstart" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Start?</span></a>
+<a href="#onstop" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Stop?</span></a>
+<a href="#redovertex" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>redo<wbr/>Vertex?</span></a>
+<a href="#undovertex" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>undo<wbr/>Vertex?</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="modename"><code class="tsd-tag">Readonly</code><span>mode<wbr/>Name</span><a href="#modename" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">modeName</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a></div>
+<div class="tsd-comment tsd-typography"><p>The name the mode is registered under</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L189">src/modes/handler.ts:189</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="writesfeatures"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>writes<wbr/>Features</span><a href="#writesfeatures" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">writesFeatures</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>Whether the mode writes new features into a layer</p>
+<p>A mode that declares true is entered only while a layer can be written (while
+<code>ModeContext.getCurrentLayerId</code> returns a non-empty string); otherwise setMode is ignored
+and the current mode is kept. The built-in drawing modes declare it, and a plugin mode
+that creates features declares it to get the same gate. The declaration does not remove
+the check at commit time: the layer can stop being writable while the mode is active.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L200">src/modes/handler.ts:200</a></li></ul></aside></section></section></details>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getsnappreference"><code class="tsd-tag">Optional</code><span>get<wbr/>Snap<wbr/>Preference</span><a href="#getsnappreference" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getsnappreference-1"><span class="tsd-kind-call-signature">getSnapPreference</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">datasetId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">featureId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getsnappreference-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the feature to prefer when snapping candidates are tied</p>
+<p>Read by InputRouter right before it passes the coordinates through snapping, and passed as
+the preferFeature of SnapContext. A drawing mode returns the anchor of the trace (the
+boundary it started tracing along), which prevents the snap target from jumping to another
+feature whose coordinates overlap exactly.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">datasetId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">featureId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>the feature to prefer, or null if there is none</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L294">src/modes/handler.ts:294</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="issnapenabledfor"><code class="tsd-tag">Optional</code><span>is<wbr/>Snap<wbr/>Enabled<wbr/>For</span><a href="#issnapenabledfor" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="issnapenabledfor-1"><span class="tsd-kind-call-signature">isSnapEnabledFor</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">inputType</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.SnapInputType.html" class="tsd-signature-type tsd-kind-type-alias">SnapInputType</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#issnapenabledfor-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns, per input type, whether snapping is to be applied</p>
+<p>Read by InputRouter right before it passes the coordinates through snapping. An input type
+for which false is returned does not go through SnapService and reaches the mode with its
+raw coordinates. When this is omitted (and when true is returned), snapping is applied as
+before.</p>
+<p>The tolerance (10 pixels by default) is a value premised on &quot;once per click&quot;, so in a
+drag-driven drawing that passes several hundred points in a single stroke (freehand), the
+intermediate sample points are pulled one after another to nearby vertices and a line drawn
+straight ends up bent. A port that can be switched off per input type is provided so that
+only the inside of the stroke can be let through untouched (the start point and the end
+point can remain snapped).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">inputType</span>: <a href="../types/index.SnapInputType.html" class="tsd-signature-type tsd-kind-type-alias">SnapInputType</a></span>
+<div class="tsd-comment tsd-typography"><p>the type of the input for which snapping is about to be applied</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><p>true if snapping is to be applied</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L314">src/modes/handler.ts:314</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onclick"><code class="tsd-tag">Optional</code><span>on<wbr/>Click</span><a href="#onclick" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onclick-1"><span class="tsd-kind-call-signature">onClick</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onclick-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a click</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L209">src/modes/handler.ts:209</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="ondoubleclick"><code class="tsd-tag">Optional</code><span>on<wbr/>Double<wbr/>Click</span><a href="#ondoubleclick" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="ondoubleclick-1"><span class="tsd-kind-call-signature">onDoubleClick</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#ondoubleclick-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a double click</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L212">src/modes/handler.ts:212</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="ondragcancel"><code class="tsd-tag">Optional</code><span>on<wbr/>Drag<wbr/>Cancel</span><a href="#ondragcancel" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="ondragcancel-1"><span class="tsd-kind-call-signature">onDragCancel</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#ondragcancel-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called when a press ends without a release (a second finger touched the screen, or the
+browser cancelled the touch)</p>
+<p>Nothing is decided: the mode abandons the press, restores what the press changed and
+gives the pan back to MapLibre. It can arrive before onDragStart (a press that has not
+become a drag yet). The coordinates are the last known position.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L243">src/modes/handler.ts:243</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="ondragend"><code class="tsd-tag">Optional</code><span>on<wbr/>Drag<wbr/>End</span><a href="#ondragend" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="ondragend-1"><span class="tsd-kind-call-signature">onDragEnd</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#ondragend-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called when a drag ends</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L233">src/modes/handler.ts:233</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="ondragmove"><code class="tsd-tag">Optional</code><span>on<wbr/>Drag<wbr/>Move</span><a href="#ondragmove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="ondragmove-1"><span class="tsd-kind-call-signature">onDragMove</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#ondragmove-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called during a drag</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L230">src/modes/handler.ts:230</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="ondragstart"><code class="tsd-tag">Optional</code><span>on<wbr/>Drag<wbr/>Start</span><a href="#ondragstart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="ondragstart-1"><span class="tsd-kind-call-signature">onDragStart</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#ondragstart-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called when a drag starts</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.DragNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">DragNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L227">src/modes/handler.ts:227</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onexternalstatechange"><code class="tsd-tag">Optional</code><span>on<wbr/>External<wbr/>State<wbr/>Change</span><a href="#onexternalstatechange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onexternalstatechange-1"><span class="tsd-kind-call-signature">onExternalStateChange</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onexternalstatechange-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called after an external state change</p>
+<p>Used to reset the internal state of the mode after an external state change
+(a change applied from outside the mode) has been carried out.
+Example: when the state is changed externally while drawing in the Circle mode,
+the drawing state is reset.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L259">src/modes/handler.ts:259</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onkeydown"><code class="tsd-tag">Optional</code><span>on<wbr/>Key<wbr/>Down</span><a href="#onkeydown" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onkeydown-1"><span class="tsd-kind-call-signature">onKeyDown</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.KeyNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">KeyNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onkeydown-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a key down (normalized)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.KeyNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">KeyNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L246">src/modes/handler.ts:246</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onkeyup"><code class="tsd-tag">Optional</code><span>on<wbr/>Key<wbr/>Up</span><a href="#onkeyup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onkeyup-1"><span class="tsd-kind-call-signature">onKeyUp</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.KeyNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">KeyNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onkeyup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a key up (normalized)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.KeyNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">KeyNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L249">src/modes/handler.ts:249</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onmousedown"><code class="tsd-tag">Optional</code><span>on<wbr/>Mouse<wbr/>Down</span><a href="#onmousedown" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onmousedown-1"><span class="tsd-kind-call-signature">onMouseDown</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#onmousedown-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a mouse down</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><p>returning true consumes the event (stops the propagation to MapLibre)</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L221">src/modes/handler.ts:221</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onmousemove"><code class="tsd-tag">Optional</code><span>on<wbr/>Mouse<wbr/>Move</span><a href="#onmousemove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onmousemove-1"><span class="tsd-kind-call-signature">onMouseMove</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onmousemove-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a mouse move</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L215">src/modes/handler.ts:215</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onmouseup"><code class="tsd-tag">Optional</code><span>on<wbr/>Mouse<wbr/>Up</span><a href="#onmouseup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onmouseup-1"><span class="tsd-kind-call-signature">onMouseUp</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onmouseup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called on a mouse up</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a href="index.MouseNormalizedEvent.html" class="tsd-signature-type tsd-kind-interface">MouseNormalizedEvent</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L224">src/modes/handler.ts:224</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onselectionchange"><code class="tsd-tag">Optional</code><span>on<wbr/>Selection<wbr/>Change</span><a href="#onselectionchange" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onselectionchange-1"><span class="tsd-kind-call-signature">onSelectionChange</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onselectionchange-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called after a selection change</p>
+<p>Used to update the internal state of the mode when the selection is changed from a plugin.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L266">src/modes/handler.ts:266</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onstart"><code class="tsd-tag">Optional</code><span>on<wbr/>Start</span><a href="#onstart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onstart-1"><span class="tsd-kind-call-signature">onStart</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">context</span><span class="tsd-signature-symbol">:</span> <a href="index.ModeContext.html" class="tsd-signature-type tsd-kind-interface">ModeContext</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onstart-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called when the mode becomes the current mode; keep the context for later</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">context</span>: <a href="index.ModeContext.html" class="tsd-signature-type tsd-kind-interface">ModeContext</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L203">src/modes/handler.ts:203</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="onstop"><code class="tsd-tag">Optional</code><span>on<wbr/>Stop</span><a href="#onstop" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="onstop-1"><span class="tsd-kind-call-signature">onStop</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#onstop-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Called when another mode replaces it or the draw instance is destroyed</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L206">src/modes/handler.ts:206</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="redovertex"><code class="tsd-tag">Optional</code><span>redo<wbr/>Vertex</span><a href="#redovertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="redovertex-1"><span class="tsd-kind-call-signature">redoVertex</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#redovertex-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Redoes a vertex that was undone</p>
+<p>Called when Cmd+Shift+Z/Ctrl+Y is pressed while drawing.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><p>whether the redo was carried out</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L282">src/modes/handler.ts:282</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="undovertex"><code class="tsd-tag">Optional</code><span>undo<wbr/>Vertex</span><a href="#undovertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="undovertex-1"><span class="tsd-kind-call-signature">undoVertex</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#undovertex-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Undoes a vertex while drawing</p>
+<p>Called when Cmd+Z/Ctrl+Z is pressed while drawing a LineString/Polygon.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><p>whether the undo was carried out</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/modes/handler.ts#L274">src/modes/handler.ts:274</a></li></ul></aside></div></li></ul></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
+<div><a href="#modename"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>mode<wbr/>Name</span></a><a href="#writesfeatures"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>writes<wbr/>Features</span></a></div></details>
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
+<div><a href="#getsnappreference"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Snap<wbr/>Preference</span></a><a href="#issnapenabledfor"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Snap<wbr/>Enabled<wbr/>For</span></a><a href="#onclick"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Click</span></a><a href="#ondoubleclick"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Double<wbr/>Click</span></a><a href="#ondragcancel"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>Cancel</span></a><a href="#ondragend"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>End</span></a><a href="#ondragmove"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>Move</span></a><a href="#ondragstart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Drag<wbr/>Start</span></a><a href="#onexternalstatechange"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>External<wbr/>State<wbr/>Change</span></a><a href="#onkeydown"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Key<wbr/>Down</span></a><a href="#onkeyup"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Key<wbr/>Up</span></a><a href="#onmousedown"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Mouse<wbr/>Down</span></a><a href="#onmousemove"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Mouse<wbr/>Move</span></a><a href="#onmouseup"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Mouse<wbr/>Up</span></a><a href="#onselectionchange"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Selection<wbr/>Change</span></a><a href="#onstart"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Start</span></a><a href="#onstop"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on<wbr/>Stop</span></a><a href="#redovertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>redo<wbr/>Vertex</span></a><a href="#undovertex"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>undo<wbr/>Vertex</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

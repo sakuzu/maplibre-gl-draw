@@ -1,0 +1,255 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>Options | @sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">Options</a></li></ul>
+<h1>Interface Options</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>The options of <a href="../functions/index.createMapLibreGLDraw.html" class="tsd-kind-function">createMapLibreGLDraw</a>. Every option can be omitted.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="typescript"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">draw</span><span class="hl-1"> = </span><span class="hl-2">createMapLibreGLDraw</span><span class="hl-1">(</span><span class="hl-0">map</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-0">defaultMode:</span><span class="hl-1"> </span><span class="hl-4">&#39;select&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-0">clickTolerance:</span><span class="hl-1"> </span><span class="hl-9">8</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-0">snap:</span><span class="hl-1"> { </span><span class="hl-0">tolerancePx:</span><span class="hl-1"> </span><span class="hl-9">12</span><span class="hl-1">, </span><span class="hl-0">kinds:</span><span class="hl-1"> { </span><span class="hl-0">guide:</span><span class="hl-1"> </span><span class="hl-5">false</span><span class="hl-1"> } },</span><br/><span class="hl-1">  </span><span class="hl-0">trace:</span><span class="hl-1"> { </span><span class="hl-0">enabled:</span><span class="hl-1"> </span><span class="hl-5">false</span><span class="hl-1"> },</span><br/><span class="hl-1">  </span><span class="hl-0">topology:</span><span class="hl-1"> { </span><span class="hl-0">sharedVertexDrag:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1"> },</span><br/><span class="hl-1">  </span><span class="hl-0">autoName:</span><span class="hl-1"> </span><span class="hl-5">false</span><span class="hl-1">,</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Options</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#autoname">autoName</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <a href="index.AutoNameConfig.html" class="tsd-signature-type tsd-kind-interface">AutoNameConfig</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#clicktolerance">clickTolerance</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#defaultmode">defaultMode</a><span class="tsd-signature-symbol">?:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#dragthreshold">dragThreshold</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#initdefaultlayer">initDefaultLayer</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#isexternalentry">isExternalEntry</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">entryId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#messages">messages</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Messages.html" class="tsd-signature-type tsd-kind-interface">Messages</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#pixelratio">pixelRatio</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#renderingstyle">renderingStyle</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.RenderingConfig.html" class="tsd-signature-type tsd-kind-interface">RenderingConfig</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#scalewithzoom">scaleWithZoom</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#selectionstyle">selectionStyle</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.SelectionUIConfig.html" class="tsd-signature-type tsd-kind-interface">SelectionUIConfig</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#snap">snap</a><span class="tsd-signature-symbol">?:</span> <a href="index.SnapOptions.html" class="tsd-signature-type tsd-kind-interface">SnapOptions</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#store">store</a><span class="tsd-signature-symbol">?:</span> <a href="index.DocumentStore.html" class="tsd-signature-type tsd-kind-interface">DocumentStore</a> <span class="tsd-signature-symbol">|</span> <a href="index.Store.html" class="tsd-signature-type tsd-kind-interface">Store</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#style">style</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.FeatureStyleConfig.html" class="tsd-signature-type tsd-kind-interface">FeatureStyleConfig</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#topology">topology</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.TopologyConfig.html" class="tsd-signature-type tsd-kind-interface">TopologyConfig</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#trace">trace</a><span class="tsd-signature-symbol">?:</span> <a href="index.TraceOptions.html" class="tsd-signature-type tsd-kind-interface">TraceOptions</a><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L72">src/api/context.ts:72</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#autoname" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>auto<wbr/>Name?</span></a>
+<a href="#clicktolerance" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>click<wbr/>Tolerance?</span></a>
+<a href="#defaultmode" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default<wbr/>Mode?</span></a>
+<a href="#dragthreshold" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>drag<wbr/>Threshold?</span></a>
+<a href="#initdefaultlayer" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>init<wbr/>Default<wbr/>Layer?</span></a>
+<a href="#isexternalentry" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>is<wbr/>External<wbr/>Entry?</span></a>
+<a href="#messages" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>messages?</span></a>
+<a href="#pixelratio" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pixel<wbr/>Ratio?</span></a>
+<a href="#renderingstyle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>rendering<wbr/>Style?</span></a>
+<a href="#scalewithzoom" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scale<wbr/>With<wbr/>Zoom?</span></a>
+<a href="#selectionstyle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>selection<wbr/>Style?</span></a>
+<a href="#snap" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>snap?</span></a>
+<a href="#store" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>store?</span></a>
+<a href="#style" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>style?</span></a>
+<a href="#topology" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>topology?</span></a>
+<a href="#trace" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>trace?</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="autoname"><code class="tsd-tag">Optional</code><span>auto<wbr/>Name</span><a href="#autoname" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">autoName</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <a href="index.AutoNameConfig.html" class="tsd-signature-type tsd-kind-interface">AutoNameConfig</a></div>
+<div class="tsd-comment tsd-typography"><p>The automatic names of new features, layers and groups, such as <code>Polygon 1</code> and
+<code>Layer 2</code> (default: enabled)</p>
+<p><code>false</code> turns it off, and an <a href="index.AutoNameConfig.html" class="tsd-kind-interface">AutoNameConfig</a> changes the words or the format. A
+number used once is not reused. The words are English by default; a host that shows
+another language translates them here (<code>typeNames</code>), not through <a href="#messages" class="tsd-kind-property">Options.messages</a>.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L109">src/api/context.ts:109</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="clicktolerance"><code class="tsd-tag">Optional</code><span>click<wbr/>Tolerance</span><a href="#clicktolerance" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">clickTolerance</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-comment tsd-typography"><p>How far from a feature a click still hits it, in CSS pixels (default 6)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L78">src/api/context.ts:78</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="defaultmode"><code class="tsd-tag">Optional</code><span>default<wbr/>Mode</span><a href="#defaultmode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">defaultMode</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a></div>
+<div class="tsd-comment tsd-typography"><p>The mode the instance starts in (default <code>'select'</code>)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L74">src/api/context.ts:74</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="dragthreshold"><code class="tsd-tag">Optional</code><span>drag<wbr/>Threshold</span><a href="#dragthreshold" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">dragThreshold</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-comment tsd-typography"><p>How far the mouse moves with the button down before a press becomes a drag, in CSS
+pixels (default 3)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L83">src/api/context.ts:83</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="initdefaultlayer"><code class="tsd-tag">Optional</code><span>init<wbr/>Default<wbr/>Layer</span><a href="#initdefaultlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">initDefaultLayer</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>Whether to create a default layer on initialization (default: true)</p>
+<p>When it is false, creating the layers becomes the responsibility of the application.
+Use it when restoring the layer structure from an external data source, or
+when managing the layers on your own. Until a layer exists, the drawing modes cannot be
+entered.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L176">src/api/context.ts:176</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="isexternalentry"><code class="tsd-tag">Optional</code><span>is<wbr/>External<wbr/>Entry</span><a href="#isexternalentry" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">isExternalEntry</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">entryId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>The predicate that identifies the &quot;external entries&quot; of the stacking order (when omitted,
+it is always false)</p>
+<p>The entries of the layer order for which it returns true are separators, and this library
+does not draw them. Each interval between separators is drawn by its own MapLibre custom
+layer (a frame), so the host can place its native layers (vector tiles, raster) between
+the frames. <a href="index.MapLibreGLDraw.html#getrenderslots" class="tsd-kind-method">MapLibreGLDraw.getRenderSlots</a> lists the frames, and the
+<code>draw.renderslots.change</code> event announces their changes.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-1">Example<a href="#example-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="typescript"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">draw</span><span class="hl-1"> = </span><span class="hl-2">createMapLibreGLDraw</span><span class="hl-1">(</span><span class="hl-0">map</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-2">isExternalEntry</span><span class="hl-0">:</span><span class="hl-1"> (</span><span class="hl-0">id</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> </span><span class="hl-0">id</span><span class="hl-1">.</span><span class="hl-2">startsWith</span><span class="hl-1">(</span><span class="hl-4">&#39;native:&#39;</span><span class="hl-1">),</span><br/><span class="hl-1">});</span><br/><span class="hl-0">draw</span><span class="hl-1">.</span><span class="hl-2">on</span><span class="hl-1">(</span><span class="hl-4">&#39;draw.renderslots.change&#39;</span><span class="hl-1">, ({ </span><span class="hl-0">slots</span><span class="hl-1"> }) </span><span class="hl-5">=&gt;</span><span class="hl-1"> </span><span class="hl-2">placeNativeLayers</span><span class="hl-1">(</span><span class="hl-0">slots</span><span class="hl-1">));</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L196">src/api/context.ts:196</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="messages"><code class="tsd-tag">Optional</code><span>messages</span><a href="#messages" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">messages</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Messages.html" class="tsd-signature-type tsd-kind-interface">Messages</a><span class="tsd-signature-symbol">&gt;</span></div>
+<div class="tsd-comment tsd-typography"><p>The strings the library returns as values (when omitted, <a href="../variables/index.MESSAGES_EN.html" class="tsd-kind-variable">MESSAGES_EN</a>)</p>
+<p>The given entries replace the English defaults for this instance only; the entries
+left out keep the default. Legend labels and the descriptions of the snapping guides
+come from this table. The library ships English only and does no locale detection.
+The words of generated names (&quot;Layer 1&quot;) are not here: they come from
+<a href="#autoname" class="tsd-kind-property">Options.autoName</a>.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example-2">Example<a href="#example-2" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="typescript"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">draw</span><span class="hl-1"> = </span><span class="hl-2">createMapLibreGLDraw</span><span class="hl-1">(</span><span class="hl-0">map</span><span class="hl-1">, {</span><br/><span class="hl-1">  </span><span class="hl-0">messages:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-0">legendOther:</span><span class="hl-1"> </span><span class="hl-4">&#39;Autres&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-2">legendBelow</span><span class="hl-0">:</span><span class="hl-1"> (</span><span class="hl-0">upper</span><span class="hl-1">) </span><span class="hl-5">=&gt;</span><span class="hl-1"> </span><span class="hl-4">`Moins de </span><span class="hl-5">${</span><span class="hl-0">upper</span><span class="hl-5">}</span><span class="hl-4">`</span><span class="hl-1">,</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">});</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L227">src/api/context.ts:227</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="pixelratio"><code class="tsd-tag">Optional</code><span>pixel<wbr/>Ratio</span><a href="#pixelratio" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">pixelRatio</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
+<div class="tsd-comment tsd-typography"><p>The render scale (when omitted, the map's <code>getPixelRatio()</code> is read each time)</p>
+<p>Line widths, point sizes and outlines are drawn by converting CSS pixels into physical
+pixels, so the scale of the backing store being drawn into is needed. By default it is
+the ratio of the map, which follows the <code>pixelRatio</code> the maplibre Map was created with
+and the device. Pass a value only to draw at another scale than the map's.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L206">src/api/context.ts:206</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="renderingstyle"><code class="tsd-tag">Optional</code><span>rendering<wbr/>Style</span><a href="#renderingstyle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">renderingStyle</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.RenderingConfig.html" class="tsd-signature-type tsd-kind-interface">RenderingConfig</a><span class="tsd-signature-symbol">&gt;</span></div>
+<div class="tsd-comment tsd-typography"><p>The look of the box selection rectangle and the switches of the rendering paths (see
+<a href="index.RenderingConfig.html" class="tsd-kind-interface">RenderingConfig</a> for the defaults)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L100">src/api/context.ts:100</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="scalewithzoom"><code class="tsd-tag">Optional</code><span>scale<wbr/>With<wbr/>Zoom</span><a href="#scalewithzoom" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">scaleWithZoom</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>Whether the line widths of the features drawn in a drawing mode follow the zoom (default
+true)</p>
+<p>By default a drawing mode records the zoom a feature is drawn at in
+<code>properties.createdZoom</code>, and the widths of its lines and outlines are those of that zoom:
+they double with each zoom level in and halve with each level out, like lines drawn on
+paper. An application that wants the widths to stay the same on the screen at every zoom
+sets <code>false</code>; a drawn feature then gets no created zoom, like a feature added through the
+API. It does not change features already drawn: the widths follow
+<code>properties.createdZoom</code> wherever it is set, so a feature added through the API can set it
+too. An Image always scales with the map.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L124">src/api/context.ts:124</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="selectionstyle"><code class="tsd-tag">Optional</code><span>selection<wbr/>Style</span><a href="#selectionstyle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">selectionStyle</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.SelectionUIConfig.html" class="tsd-signature-type tsd-kind-interface">SelectionUIConfig</a><span class="tsd-signature-symbol">&gt;</span></div>
+<div class="tsd-comment tsd-typography"><p>The look of the selection UI: the bounding box, the resize, rotate, vertex and midpoint
+handles, and the radius handle, center marker and radius line of a circle (see
+<a href="index.SelectionUIConfig.html" class="tsd-kind-interface">SelectionUIConfig</a> for the defaults)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L95">src/api/context.ts:95</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="snap"><code class="tsd-tag">Optional</code><span>snap</span><a href="#snap" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">snap</span><span class="tsd-signature-symbol">?:</span> <a href="index.SnapOptions.html" class="tsd-signature-type tsd-kind-interface">SnapOptions</a></div>
+<div class="tsd-comment tsd-typography"><p>The snapping configuration</p>
+<p>When omitted, it is enabled with a tolerance of 10 CSS pixels, it is released while Alt
+is held, every kind of target (vertex, edge, intersection, guide) is on, and the
+datasets are targets. The candidates come from the vertices and edges of
+the Store; more are added with <code>draw.snapping.register()</code>. Change it at runtime with
+<a href="index.MapLibreGLDraw.html#snapping" class="tsd-kind-property">MapLibreGLDraw.snapping</a>.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L135">src/api/context.ts:135</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="store"><code class="tsd-tag">Optional</code><span>store</span><a href="#store" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">store</span><span class="tsd-signature-symbol">?:</span> <a href="index.DocumentStore.html" class="tsd-signature-type tsd-kind-interface">DocumentStore</a> <span class="tsd-signature-symbol">|</span> <a href="index.Store.html" class="tsd-signature-type tsd-kind-interface">Store</a></div>
+<div class="tsd-comment tsd-typography"><p>The document store (when omitted, a new <a href="../variables/index.MemoryStore.html" class="tsd-kind-variable">MemoryStore</a> is used)</p>
+<p>Give a <a href="index.DocumentStore.html" class="tsd-kind-interface">DocumentStore</a> of your own to keep the document elsewhere; the library
+keeps the local state (selection, mode, read-only and so on) around
+it. A <a href="index.Store.html" class="tsd-kind-interface">Store</a> such as a MemoryStore is used as it is.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L166">src/api/context.ts:166</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="style"><code class="tsd-tag">Optional</code><span>style</span><a href="#style" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">style</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.FeatureStyleConfig.html" class="tsd-signature-type tsd-kind-interface">FeatureStyleConfig</a><span class="tsd-signature-symbol">&gt;</span></div>
+<div class="tsd-comment tsd-typography"><p>The default drawing style of the features, per geometry (points, lines, polygons and so
+on); the given parts replace the built-in defaults, and a feature's own <code>style</code> wins over
+both</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L89">src/api/context.ts:89</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="topology"><code class="tsd-tag">Optional</code><span>topology</span><a href="#topology" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">topology</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.TopologyConfig.html" class="tsd-signature-type tsd-kind-interface">TopologyConfig</a><span class="tsd-signature-symbol">&gt;</span></div>
+<div class="tsd-comment tsd-typography"><p>The topology configuration (when omitted, everything is disabled)</p>
+<p>The settings that keep editing from breaking boundaries shared by adjacent features.
+With <code>sharedVertexDrag: true</code>, dragging a vertex in select mode also moves, by the same
+amount, every vertex of other visible, unlocked features at exactly the same coordinates,
+and the drag commits as one change. The modifier of <code>snap.disableKey</code> held at the start of
+a drag releases it for that drag. Change it at runtime with
+<a href="index.MapLibreGLDraw.html#topology" class="tsd-kind-property">MapLibreGLDraw.topology</a>.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L147">src/api/context.ts:147</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="trace"><code class="tsd-tag">Optional</code><span>trace</span><a href="#trace" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">trace</span><span class="tsd-signature-symbol">?:</span> <a href="index.TraceOptions.html" class="tsd-signature-type tsd-kind-interface">TraceOptions</a></div>
+<div class="tsd-comment tsd-typography"><p>The trace configuration (when omitted, it is enabled)</p>
+<p>While drawing (draw_line / draw_polygon), when the previous click and this click both
+snapped to the boundary of the same feature, the vertex sequence between them is taken in
+automatically. With <code>enabled: false</code> a click adds only the point clicked. Change it at
+runtime with <a href="index.MapLibreGLDraw.html#tracing" class="tsd-kind-property">MapLibreGLDraw.tracing</a>.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/api/context.ts#L157">src/api/context.ts:157</a></li></ul></aside></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
+<div><a href="#autoname"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>auto<wbr/>Name</span></a><a href="#clicktolerance"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>click<wbr/>Tolerance</span></a><a href="#defaultmode"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>default<wbr/>Mode</span></a><a href="#dragthreshold"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>drag<wbr/>Threshold</span></a><a href="#initdefaultlayer"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>init<wbr/>Default<wbr/>Layer</span></a><a href="#isexternalentry"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>is<wbr/>External<wbr/>Entry</span></a><a href="#messages"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>messages</span></a><a href="#pixelratio"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>pixel<wbr/>Ratio</span></a><a href="#renderingstyle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>rendering<wbr/>Style</span></a><a href="#scalewithzoom"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>scale<wbr/>With<wbr/>Zoom</span></a><a href="#selectionstyle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>selection<wbr/>Style</span></a><a href="#snap"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>snap</span></a><a href="#store"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>store</span></a><a href="#style"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>style</span></a><a href="#topology"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>topology</span></a><a href="#trace"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>trace</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

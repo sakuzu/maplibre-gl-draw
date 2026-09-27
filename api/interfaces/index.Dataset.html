@@ -1,0 +1,654 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>Dataset | @sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">Dataset</a></li></ul>
+<h1>Interface Dataset</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>A set of features drawn fast with attribute-driven styles, outside the Store.</p>
+<p>It is meant for overlaying tens of thousands of read-only records, such as parcels or a
+table of places. The features never enter the Store, so none of the following applies to
+them: editing, undo / redo, the <code>draw.feature.*</code> events, the selection UI, and
+<code>getAllFeatures()</code> / <code>export()</code>. A caller who wants to edit one copies it into the Store with
+<code>addFeature</code>; the library does not relate the two. Create one with
+<a href="index.MapLibreGLDraw.html#adddataset" class="tsd-kind-method">MapLibreGLDraw.addDataset</a>.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">parcels</span><span class="hl-1"> = </span><span class="hl-0">draw</span><span class="hl-1">.</span><span class="hl-2">addDataset</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-0">id:</span><span class="hl-1"> </span><span class="hl-4">&#39;parcels&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-0">features:</span><span class="hl-1"> [</span><br/><span class="hl-1">    {</span><br/><span class="hl-1">      </span><span class="hl-0">id:</span><span class="hl-1"> </span><span class="hl-4">&#39;p1&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-0">type:</span><span class="hl-1"> </span><span class="hl-4">&#39;Polygon&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-0">coordinates:</span><span class="hl-1"> [[[</span><span class="hl-9">139.76</span><span class="hl-1">, </span><span class="hl-9">35.68</span><span class="hl-1">], [</span><span class="hl-9">139.77</span><span class="hl-1">, </span><span class="hl-9">35.68</span><span class="hl-1">], [</span><span class="hl-9">139.77</span><span class="hl-1">, </span><span class="hl-9">35.69</span><span class="hl-1">], [</span><span class="hl-9">139.76</span><span class="hl-1">, </span><span class="hl-9">35.68</span><span class="hl-1">]]],</span><br/><span class="hl-1">      </span><span class="hl-0">properties:</span><span class="hl-1"> { </span><span class="hl-0">population:</span><span class="hl-1"> </span><span class="hl-9">4200</span><span class="hl-1"> },</span><br/><span class="hl-1">    },</span><br/><span class="hl-1">  ],</span><br/><span class="hl-1">  </span><span class="hl-0">styleRule:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-0">kind:</span><span class="hl-1"> </span><span class="hl-4">&#39;graduated&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-0">property:</span><span class="hl-1"> </span><span class="hl-4">&#39;population&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-0">breaks:</span><span class="hl-1"> [</span><span class="hl-9">1000</span><span class="hl-1">, </span><span class="hl-9">5000</span><span class="hl-1">],</span><br/><span class="hl-1">    </span><span class="hl-0">colors:</span><span class="hl-1"> [</span><span class="hl-4">&#39;#eff3ff&#39;</span><span class="hl-1">, </span><span class="hl-4">&#39;#6baed6&#39;</span><span class="hl-1">, </span><span class="hl-4">&#39;#2171b5&#39;</span><span class="hl-1">],</span><br/><span class="hl-1">    </span><span class="hl-0">other:</span><span class="hl-1"> </span><span class="hl-4">&#39;#cccccc&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">  </span><span class="hl-0">interactive:</span><span class="hl-1"> </span><span class="hl-5">true</span><span class="hl-1">,</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">unsubscribe</span><span class="hl-1"> = </span><span class="hl-0">parcels</span><span class="hl-1">.</span><span class="hl-2">on</span><span class="hl-1">(</span><span class="hl-4">&#39;click&#39;</span><span class="hl-1">, ({ </span><span class="hl-0">feature</span><span class="hl-1"> }) </span><span class="hl-5">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-0">console</span><span class="hl-1">.</span><span class="hl-2">log</span><span class="hl-1">(</span><span class="hl-0">feature</span><span class="hl-1">.</span><span class="hl-0">id</span><span class="hl-1">, </span><span class="hl-0">feature</span><span class="hl-1">.</span><span class="hl-0">properties</span><span class="hl-1">);</span><br/><span class="hl-1">});</span><br/><br/><span class="hl-0">parcels</span><span class="hl-1">.</span><span class="hl-2">setVisible</span><span class="hl-1">(</span><span class="hl-5">false</span><span class="hl-1">); </span><span class="hl-7">// hide without discarding the features</span><br/><span class="hl-0">parcels</span><span class="hl-1">.</span><span class="hl-2">remove</span><span class="hl-1">(); </span><span class="hl-7">// the same as draw.removeDataset(&#39;parcels&#39;)</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">Dataset</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#id">id</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#interactive">interactive</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#order">order</a><span class="tsd-signature-symbol">:</span> <a href="../types/index.DatasetOrder.html" class="tsd-signature-type tsd-kind-type-alias">DatasetOrder</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#visible">visible</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#collectdrawnrows-1">collectDrawnRows</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">bounds</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Int32Array</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#collectvisible-1">collectVisible</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">bounds</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#findrow-1">findRow</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getbasestyle-1">getBaseStyle</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><br/>        <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.StyleRuleChannel.html" class="tsd-signature-type tsd-kind-type-alias">StyleRuleChannel</a><span class="tsd-signature-symbol">,</span> <a href="index.FeatureStyle.html" class="tsd-signature-type tsd-kind-interface">FeatureStyle</a> <span class="tsd-signature-symbol">|</span> <a href="index.ImageStyle.html" class="tsd-signature-type tsd-kind-interface">ImageStyle</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">&gt;</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getcollisionthinning-1">getCollisionThinning</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.ResolvedCollisionThinning.html" class="tsd-signature-type tsd-kind-interface">ResolvedCollisionThinning</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getdrawnrowsrevision-1">getDrawnRowsRevision</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getfeatures-1">getFeatures</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getrowbounds-1">getRowBounds</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getrowfeature-1">getRowFeature</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getrowid-1">getRowId</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getrowpoint-1">getRowPoint</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Coordinate.html" class="tsd-signature-type tsd-kind-type-alias">Coordinate</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getrowtype-1">getRowType</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.FeatureType.html" class="tsd-signature-type tsd-kind-type-alias">FeatureType</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getselectedids-1">getSelectedIds</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getthinningstats-1">getThinningStats</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetThinningStats.html" class="tsd-signature-type tsd-kind-interface">DatasetThinningStats</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getvisiblefeatureids-1">getVisibleFeatureIds</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">ReadonlySet</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getzoomscale-1">getZoomScale</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.DatasetZoomScale.html" class="tsd-signature-type tsd-kind-type-alias">DatasetZoomScale</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#invalidateprovidercache-1">invalidateProviderCache</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#off-1">off</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a> <span class="tsd-signature-keyword">extends</span> <span class="tsd-signature-keyword">keyof</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">handler</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">payload</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">[</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#on-1">on</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a> <span class="tsd-signature-keyword">extends</span> <span class="tsd-signature-keyword">keyof</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">handler</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">payload</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">[</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#remove-1">remove</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setbasestyle-1">setBaseStyle</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">style</span><span class="tsd-signature-symbol">:</span><br/>            <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><br/>                <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.StyleRuleChannel.html" class="tsd-signature-type tsd-kind-type-alias">StyleRuleChannel</a><span class="tsd-signature-symbol">,</span> <a href="index.FeatureStyle.html" class="tsd-signature-type tsd-kind-interface">FeatureStyle</a> <span class="tsd-signature-symbol">|</span> <a href="index.ImageStyle.html" class="tsd-signature-type tsd-kind-interface">ImageStyle</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>            <span class="tsd-signature-symbol">&gt;</span><br/>            <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setcollisionthinning-1">setCollisionThinning</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetCollisionThinning.html" class="tsd-signature-type tsd-kind-interface">DatasetCollisionThinning</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setcolumnar-1">setColumnar</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetColumnarInput.html" class="tsd-signature-type tsd-kind-interface">DatasetColumnarInput</a><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">prepared</span><span class="tsd-signature-symbol">?:</span> <a href="index.DatasetColumnarPrepared.html" class="tsd-signature-type tsd-kind-interface">DatasetColumnarPrepared</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setexternalpointrender-1">setExternalPointRender</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">predicate</span><span class="tsd-signature-symbol">:</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>) <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setfeatures-1">setFeatures</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">features</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetFeatureInput.html" class="tsd-signature-type tsd-kind-interface">DatasetFeatureInput</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setselectedids-1">setSelectedIds</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setstylerule-1">setStyleRule</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">rule</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.StyleRule.html" class="tsd-signature-type tsd-kind-type-alias">StyleRule</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setvisible-1">setVisible</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">visible</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setzoomscale-1">setZoomScale</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">zoomScale</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.DatasetZoomScale.html" class="tsd-signature-type tsd-kind-type-alias">DatasetZoomScale</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L341">src/display/types.ts:341</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="properties">Properties<a href="#properties" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#id" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>id</span></a>
+<a href="#interactive" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>interactive</span></a>
+<a href="#order" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>order</span></a>
+<a href="#visible" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>visible</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#collectdrawnrows" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>collect<wbr/>Drawn<wbr/>Rows</span></a>
+<a href="#collectvisible" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>collect<wbr/>Visible</span></a>
+<a href="#findrow" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Row</span></a>
+<a href="#getbasestyle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Base<wbr/>Style</span></a>
+<a href="#getcollisionthinning" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Collision<wbr/>Thinning</span></a>
+<a href="#getdrawnrowsrevision" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Drawn<wbr/>Rows<wbr/>Revision</span></a>
+<a href="#getfeatures" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Features</span></a>
+<a href="#getrowbounds" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Bounds</span></a>
+<a href="#getrowfeature" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Feature</span></a>
+<a href="#getrowid" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Id</span></a>
+<a href="#getrowpoint" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Point</span></a>
+<a href="#getrowtype" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Type</span></a>
+<a href="#getselectedids" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Selected<wbr/>Ids</span></a>
+<a href="#getthinningstats" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Thinning<wbr/>Stats</span></a>
+<a href="#getvisiblefeatureids" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Visible<wbr/>Feature<wbr/>Ids</span></a>
+<a href="#getzoomscale" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Zoom<wbr/>Scale</span></a>
+<a href="#invalidateprovidercache" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>invalidate<wbr/>Provider<wbr/>Cache</span></a>
+<a href="#off" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>off</span></a>
+<a href="#on" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on</span></a>
+<a href="#remove" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>remove</span></a>
+<a href="#setbasestyle" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Base<wbr/>Style</span></a>
+<a href="#setcollisionthinning" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Collision<wbr/>Thinning</span></a>
+<a href="#setcolumnar" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Columnar</span></a>
+<a href="#setexternalpointrender" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>External<wbr/>Point<wbr/>Render</span></a>
+<a href="#setfeatures" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Features</span></a>
+<a href="#setselectedids" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Selected<wbr/>Ids</span></a>
+<a href="#setstylerule" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Style<wbr/>Rule</span></a>
+<a href="#setvisible" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Visible</span></a>
+<a href="#setzoomscale" class="tsd-index-link"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Zoom<wbr/>Scale</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="properties-1">Properties<a href="#properties-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="id"><code class="tsd-tag">Readonly</code><span>id</span><a href="#id" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+<div class="tsd-comment tsd-typography"><p>The dataset id given at creation</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L343">src/display/types.ts:343</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="interactive"><code class="tsd-tag">Readonly</code><span>interactive</span><a href="#interactive" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">interactive</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>Whether click / hover are fired (hits are blocked even with false)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L351">src/display/types.ts:351</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="order"><code class="tsd-tag">Readonly</code><span>order</span><a href="#order" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">order</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.DatasetOrder.html" class="tsd-signature-type tsd-kind-type-alias">DatasetOrder</a></div>
+<div class="tsd-comment tsd-typography"><p>Where it is drawn relative to the Store (the current side)</p>
+<p>When the side is changed with <code>moveDataset</code>, this value becomes the new side.</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L349">src/display/types.ts:349</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="visible"><code class="tsd-tag">Readonly</code><span>visible</span><a href="#visible" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">visible</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span></div>
+<div class="tsd-comment tsd-typography"><p>Whether it is shown (true by default)</p>
+</div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L353">src/display/types.ts:353</a></li></ul></aside></section></section></details>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="collectdrawnrows"><span>collect<wbr/>Drawn<wbr/>Rows</span><a href="#collectdrawnrows" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="collectdrawnrows-1"><span class="tsd-kind-call-signature">collectDrawnRows</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">bounds</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Int32Array</span><a href="#collectdrawnrows-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the rows that intersect the range and are drawn now, in draw order</p>
+<p>It is the counterpart of <code>collectVisible</code> narrowed to the drawn rows, by row number: a row
+is kept when its bbox intersects the range, it has a geometry, it is not hidden
+(<code>visible: false</code>) and it survived the collision thinning (every row survives while the
+thinning is off). A point handed to <code>externalPointRender</code> counts as drawn. The visibility
+of the dataset itself is not looked at (as in <code>collectVisible</code>).</p>
+<p>&quot;Drawn now&quot; means the rows of the zoom band of the most recent frame: a frame decides the
+band before anything of it is drawn, and draws exactly these rows (see
+<a href="#getdrawnrowsrevision" class="tsd-kind-method">Dataset.getDrawnRowsRevision</a> for when they change). A layer that draws in the same
+frame reads the rows of that frame.</p>
+<p>The narrowing uses the spatial index and builds no feature, so the cost is proportional to
+the number of rows in the range. It is the entry point for code that walks only what is
+drawn, such as placing text next to points: choose rows with the <code>getRow*</code> reads and build
+the features of the chosen ones alone with <code>getRowFeature</code>.</p>
+<p>A row is the one reported as <code>row</code> by <code>click</code> and <code>hover</code>: the index in the features given
+(or in the result of the provider), or the row of the columnar table. The numbers hold until
+the contents are replaced (a <code>change</code> with the reason <code>features</code>).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">bounds</span>: <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a></span>
+<div class="tsd-comment tsd-typography"><p>The range in degrees (<code>minX</code> / <code>maxX</code> are longitudes, <code>minY</code> / <code>maxY</code>
+latitudes)</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Int32Array</span></h4><p>New array of rows, in ascending order. Empty when nothing is drawn in the range</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L465">src/display/types.ts:465</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="collectvisible"><span>collect<wbr/>Visible</span><a href="#collectvisible" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="collectvisible-1"><span class="tsd-kind-call-signature">collectVisible</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">bounds</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><a href="#collectvisible-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the features that intersect the displayed range, in draw order (with the rule colors
+and the base style applied)</p>
+<p>The narrowing uses the spatial index (rbush), so however many tens of thousands are held,
+the cost is proportional to the number that intersect. It is the entry point for a caller
+who wants to &quot;walk only what is visible&quot; (collecting label candidates, for example).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">bounds</span>: <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a></span>
+<div class="tsd-comment tsd-typography"><p>The range in degrees (<code>minX</code> / <code>maxX</code> are longitudes, <code>minY</code> / <code>maxY</code>
+latitudes)</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span></h4><p>New array of features. Empty when nothing intersects</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L436">src/display/types.ts:436</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="findrow"><span>find<wbr/>Row</span><a href="#findrow" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="findrow-1"><span class="tsd-kind-call-signature">findRow</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#findrow-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The row of a feature id: the reverse of <code>getRowId</code></p>
+<p>The first call builds an index of the ids (one pass over the rows), and the calls after it
+are a lookup, until the contents are replaced. The ids of a dataset are expected to be
+unique; when several rows share one, the last (frontmost) row is returned. A row without a
+geometry is found too (it is never drawn).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>null when no row has the id</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L510">src/display/types.ts:510</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getbasestyle"><span>get<wbr/>Base<wbr/>Style</span><a href="#getbasestyle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getbasestyle-1"><span class="tsd-kind-call-signature">getBaseStyle</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><br/>    <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.StyleRuleChannel.html" class="tsd-signature-type tsd-kind-type-alias">StyleRuleChannel</a><span class="tsd-signature-symbol">,</span> <a href="index.FeatureStyle.html" class="tsd-signature-type tsd-kind-interface">FeatureStyle</a> <span class="tsd-signature-symbol">|</span> <a href="index.ImageStyle.html" class="tsd-signature-type tsd-kind-interface">ImageStyle</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">&gt;</span><br/><span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#getbasestyle-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The base style in effect (undefined when not set)</p>
+<p><code>getFeatures</code> returns the features before the base style is merged in, so a caller who needs
+the effective appearance (the radius of a point, for example) reads this as well.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><br/>        <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.StyleRuleChannel.html" class="tsd-signature-type tsd-kind-type-alias">StyleRuleChannel</a><span class="tsd-signature-symbol">,</span> <a href="index.FeatureStyle.html" class="tsd-signature-type tsd-kind-interface">FeatureStyle</a> <span class="tsd-signature-symbol">|</span> <a href="index.ImageStyle.html" class="tsd-signature-type tsd-kind-interface">ImageStyle</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">&gt;</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L414">src/display/types.ts:414</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getcollisionthinning"><span>get<wbr/>Collision<wbr/>Thinning</span><a href="#getcollisionthinning" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getcollisionthinning-1"><span class="tsd-kind-call-signature">getCollisionThinning</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.ResolvedCollisionThinning.html" class="tsd-signature-type tsd-kind-interface">ResolvedCollisionThinning</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getcollisionthinning-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The collision thinning in effect (null when not set)</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.ResolvedCollisionThinning.html" class="tsd-signature-type tsd-kind-interface">ResolvedCollisionThinning</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L546">src/display/types.ts:546</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getdrawnrowsrevision"><span>get<wbr/>Drawn<wbr/>Rows<wbr/>Revision</span><a href="#getdrawnrowsrevision" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getdrawnrowsrevision-1"><span class="tsd-kind-call-signature">getDrawnRowsRevision</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><a href="#getdrawnrowsrevision-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>A number that advances whenever the drawn rows change: the contents replaced, or the rows
+the collision thinning draws (a band entered by a frame, the settings, the style, the zoom
+factors)</p>
+<p>Reading it costs nothing, so it is the key for a cache of what is derived from the drawn
+rows (the text placed next to the drawn points, say): the same number means the same rows
+for <code>collectDrawnRows</code>, <code>getVisibleFeatureIds</code>, <code>getThinningStats</code> and the hit testing. A
+layer that draws in the same frame as the dataset can compare it when it draws, and see a
+new band in the very frame that draws it, before the <code>change</code> event of that frame arrives.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">number</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L574">src/display/types.ts:574</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getfeatures"><span>get<wbr/>Features</span><a href="#getfeatures" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getfeatures-1"><span class="tsd-kind-call-signature">getFeatures</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><a href="#getfeatures-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The features currently held, in draw order, as normalized by the dataset. The rule
+colors and the base style are not merged in (use <code>collectVisible</code> for that)</p>
+<p>For a columnar table every row with a geometry is built into a feature on the first call
+(and kept), which costs as much as giving the rows as features in the first place.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L422">src/display/types.ts:422</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getrowbounds"><span>get<wbr/>Row<wbr/>Bounds</span><a href="#getrowbounds" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getrowbounds-1"><span class="tsd-kind-call-signature">getRowBounds</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getrowbounds-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The bounding box of a row in degrees, without building its feature (the box the spatial
+index holds for it)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">row</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.BoundingBox.html" class="tsd-signature-type tsd-kind-interface">BoundingBox</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>null for a row without a geometry, or out of range</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L493">src/display/types.ts:493</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getrowfeature"><span>get<wbr/>Row<wbr/>Feature</span><a href="#getrowfeature" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getrowfeature-1"><span class="tsd-kind-call-signature">getRowFeature</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getrowfeature-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The feature of a row, with the rule colors and the base style applied (the same feature
+<code>collectVisible</code> returns for that row)</p>
+<p>A row of a columnar table is built into a feature on each call.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">row</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>null when the row is out of range</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L474">src/display/types.ts:474</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getrowid"><span>get<wbr/>Row<wbr/>Id</span><a href="#getrowid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getrowid-1"><span class="tsd-kind-call-signature">getRowId</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getrowid-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The id of a row, without building its feature</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">row</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>null when the row is out of range</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L480">src/display/types.ts:480</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getrowpoint"><span>get<wbr/>Row<wbr/>Point</span><a href="#getrowpoint" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getrowpoint-1"><span class="tsd-kind-call-signature">getRowPoint</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Coordinate.html" class="tsd-signature-type tsd-kind-type-alias">Coordinate</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getrowpoint-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The <code>[lng, lat]</code> of a row whose geometry is a <code>Point</code>, without building its feature</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">row</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/index.Coordinate.html" class="tsd-signature-type tsd-kind-type-alias">Coordinate</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>null for any other row (another type, no geometry, out of range)</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L499">src/display/types.ts:499</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getrowtype"><span>get<wbr/>Row<wbr/>Type</span><a href="#getrowtype" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getrowtype-1"><span class="tsd-kind-call-signature">getRowType</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">row</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.FeatureType.html" class="tsd-signature-type tsd-kind-type-alias">FeatureType</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getrowtype-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The geometry type of a row, without building its feature</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">row</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/index.FeatureType.html" class="tsd-signature-type tsd-kind-type-alias">FeatureType</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>null for a row without a geometry, or out of range</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L486">src/display/types.ts:486</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getselectedids"><span>get<wbr/>Selected<wbr/>Ids</span><a href="#getselectedids" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getselectedids-1"><span class="tsd-kind-call-signature">getSelectedIds</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><a href="#getselectedids-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The ids of the selected features (in draw order)</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L525">src/display/types.ts:525</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getthinningstats"><span>get<wbr/>Thinning<wbr/>Stats</span><a href="#getthinningstats" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getthinningstats-1"><span class="tsd-kind-call-signature">getThinningStats</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetThinningStats.html" class="tsd-signature-type tsd-kind-interface">DatasetThinningStats</a><a href="#getthinningstats-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The state of the thinning: how many of the features are drawn, in which band (the rows of
+<a href="#collectdrawnrows" class="tsd-kind-method">Dataset.collectDrawnRows</a>)</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.DatasetThinningStats.html" class="tsd-signature-type tsd-kind-interface">DatasetThinningStats</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L562">src/display/types.ts:562</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getvisiblefeatureids"><span>get<wbr/>Visible<wbr/>Feature<wbr/>Ids</span><a href="#getvisiblefeatureids" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getvisiblefeatureids-1"><span class="tsd-kind-call-signature">getVisibleFeatureIds</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">ReadonlySet</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getvisiblefeatureids-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The set of feature ids that are drawn (null when no thinning is in effect)</p>
+<p>null means &quot;every feature is drawn&quot; (the set of all of them is not built). The rows are
+those of <a href="#collectdrawnrows" class="tsd-kind-method">Dataset.collectDrawnRows</a>. The set is built on the first request after each
+change of the drawn rows, one pass over every row, so code that walks the drawn points of
+a range reads <code>collectDrawnRows</code> instead, and code that caches something per set of drawn
+rows keys it on <a href="#getdrawnrowsrevision" class="tsd-kind-method">Dataset.getDrawnRowsRevision</a>.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">ReadonlySet</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L557">src/display/types.ts:557</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="getzoomscale"><span>get<wbr/>Zoom<wbr/>Scale</span><a href="#getzoomscale" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="getzoomscale-1"><span class="tsd-kind-call-signature">getZoomScale</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.DatasetZoomScale.html" class="tsd-signature-type tsd-kind-type-alias">DatasetZoomScale</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getzoomscale-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The zoom-dependent drawing factors in effect (null when not set)</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="../types/index.DatasetZoomScale.html" class="tsd-signature-type tsd-kind-type-alias">DatasetZoomScale</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L395">src/display/types.ts:395</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="invalidateprovidercache"><span>invalidate<wbr/>Provider<wbr/>Cache</span><a href="#invalidateprovidercache" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="invalidateprovidercache-1"><span class="tsd-kind-call-signature">invalidateProviderCache</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#invalidateprovidercache-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Discards the cache of the fetch results of the provider</p>
+<p>It is called when what the provider returns has itself changed (a filter being applied
+again, for example). It empties the cache, fetches again even for the same displayed range,
+and throws away any response in flight together with its result. After discarding it, it
+fetches again for the current displayed range.</p>
+<p>It does nothing for a dataset without a provider.</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L586">src/display/types.ts:586</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="off"><span>off</span><a href="#off" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="off-1"><span class="tsd-kind-call-signature">off</span><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a> <span class="tsd-signature-keyword">extends</span> <span class="tsd-signature-keyword">keyof</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">handler</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">payload</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">[</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#off-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Cancels a subscription made with <code>on</code>. A handler that is not subscribed is ignored</p>
+</div>
+<section class="tsd-panel">
+<h4>Type Parameters</h4>
+<ul class="tsd-type-parameter-list">
+<li><span id="offk"><span class="tsd-kind-type-parameter">K</span> <span class="tsd-signature-keyword">extends</span> <span class="tsd-signature-keyword">keyof</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a></span></li></ul></section>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a></span></li>
+<li><span><span class="tsd-kind-parameter">handler</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">payload</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">[</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#offk">K</a><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L600">src/display/types.ts:600</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="on"><span>on</span><a href="#on" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="on-1"><span class="tsd-kind-call-signature">on</span><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a> <span class="tsd-signature-keyword">extends</span> <span class="tsd-signature-keyword">keyof</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">handler</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">payload</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">[</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><a href="#on-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Subscribes to an event</p>
+<p>click / hover fire only with interactive: true. change fires regardless of interactive.</p>
+</div>
+<section class="tsd-panel">
+<h4>Type Parameters</h4>
+<ul class="tsd-type-parameter-list">
+<li><span id="onk"><span class="tsd-kind-type-parameter">K</span> <span class="tsd-signature-keyword">extends</span> <span class="tsd-signature-keyword">keyof</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a></span></li></ul></section>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">event</span>: <a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a></span></li>
+<li><span><span class="tsd-kind-parameter">handler</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">payload</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetEventMap.html" class="tsd-signature-type tsd-kind-interface">DatasetEventMap</a><span class="tsd-signature-symbol">[</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#onk">K</a><span class="tsd-signature-symbol">]</span><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></h4><p>A function that cancels the subscription</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L595">src/display/types.ts:595</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="remove"><span>remove</span><a href="#remove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="remove-1"><span class="tsd-kind-call-signature">remove</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#remove-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Removes the dataset and releases its GPU resources; the same as
+<a href="index.MapLibreGLDraw.html#removedataset" class="tsd-kind-method">MapLibreGLDraw.removeDataset</a>, including the <code>draw.dataset.remove</code> event.
+Calling it again does nothing</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L610">src/display/types.ts:610</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setbasestyle"><span>set<wbr/>Base<wbr/>Style</span><a href="#setbasestyle" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setbasestyle-1"><span class="tsd-kind-call-signature">setBaseStyle</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">style</span><span class="tsd-signature-symbol">:</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><br/>            <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.StyleRuleChannel.html" class="tsd-signature-type tsd-kind-type-alias">StyleRuleChannel</a><span class="tsd-signature-symbol">,</span> <a href="index.FeatureStyle.html" class="tsd-signature-type tsd-kind-interface">FeatureStyle</a> <span class="tsd-signature-symbol">|</span> <a href="index.ImageStyle.html" class="tsd-signature-type tsd-kind-interface">ImageStyle</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-signature-symbol">&gt;</span><br/>        <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setbasestyle-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces the base style (undefined clears it)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">style</span>: <br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><br/>        <span class="tsd-signature-type">Record</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/index.StyleRuleChannel.html" class="tsd-signature-type tsd-kind-type-alias">StyleRuleChannel</a><span class="tsd-signature-symbol">,</span> <a href="index.FeatureStyle.html" class="tsd-signature-type tsd-kind-interface">FeatureStyle</a> <span class="tsd-signature-symbol">|</span> <a href="index.ImageStyle.html" class="tsd-signature-type tsd-kind-interface">ImageStyle</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">&gt;</span><br/>    <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L397">src/display/types.ts:397</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setcollisionthinning"><span>set<wbr/>Collision<wbr/>Thinning</span><a href="#setcollisionthinning" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setcollisionthinning-1"><span class="tsd-kind-call-signature">setCollisionThinning</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetCollisionThinning.html" class="tsd-signature-type tsd-kind-interface">DatasetCollisionThinning</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setcollisionthinning-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets the collision thinning of the point markers (null disables it)</p>
+<p>While it is enabled, point markers that overlap on screen are not drawn. The test uses the
+size actually drawn (the radius + the outline + the margin) and the winners are decided from
+all of the features of the dataset for each integer zoom band (this does not depend on
+the view, so panning does not swap them). At zooms at or above <code>fullDisplayZoom</code> the thinning
+stops and every feature is drawn. When there is a pitch, the band and <code>fullDisplayZoom</code> are
+decided with &quot;the shallowest effective zoom on screen&quot; (so that only the distance does not
+get squashed).</p>
+<p>The band follows the zoom being drawn by itself: every frame decides it from the zoom it
+draws with, during a zoom or pitch gesture as well, so there is nothing to call when the
+camera moves or before drawing once at a given camera (a snapshot, a print). Changing the
+settings picks the winners at once, for the band of the most recent frame, and the next
+frame draws them (only the points are rebuilt).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">options</span>: <a href="index.DatasetCollisionThinning.html" class="tsd-signature-type tsd-kind-interface">DatasetCollisionThinning</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L544">src/display/types.ts:544</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setcolumnar"><span>set<wbr/>Columnar</span><a href="#setcolumnar" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setcolumnar-1"><span class="tsd-kind-call-signature">setColumnar</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetColumnarInput.html" class="tsd-signature-type tsd-kind-interface">DatasetColumnarInput</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">prepared</span><span class="tsd-signature-symbol">?:</span> <a href="index.DatasetColumnarPrepared.html" class="tsd-signature-type tsd-kind-interface">DatasetColumnarPrepared</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setcolumnar-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces all the rows that are shown with a columnar table (there is no partial update).
+The selection drops the ids that disappear</p>
+<p>The arrays are kept and read as they are, not copied. The rows are packed straight into the
+GPU arrays, and a row becomes a feature only when it is asked for (a hit, the selection,
+<code>getFeatures</code>, <code>collectVisible</code>). The bboxes, the spatial chunks and the spatial index of the
+hit testing are computed here unless <code>prepared</code> brings them.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">input</span>: <a href="index.DatasetColumnarInput.html" class="tsd-signature-type tsd-kind-interface">DatasetColumnarInput</a></span>
+<div class="tsd-comment tsd-typography"><p>The table</p>
+</div></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">prepared</span>: <a href="index.DatasetColumnarPrepared.html" class="tsd-signature-type tsd-kind-interface">DatasetColumnarPrepared</a></span>
+<div class="tsd-comment tsd-typography"><p>What <code>prepareDatasetColumnar</code> (from <code>@sakuzu/maplibre-gl-draw/columnar</code>)
+computed for this table, typically in the Worker that read it</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-throws">
+<h4 class="tsd-anchor-link" id="throws">Throws<a href="#throws" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p>when the shape of the table does not add up, or when <code>prepared</code> was made for a table
+of another length</p>
+</div></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L382">src/display/types.ts:382</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setexternalpointrender"><span>set<wbr/>External<wbr/>Point<wbr/>Render</span><a href="#setexternalpointrender" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setexternalpointrender-1"><span class="tsd-kind-call-signature">setExternalPointRender</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">predicate</span><span class="tsd-signature-symbol">:</span> (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>) <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setexternalpointrender-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces the predicate that picks out the points drawn by an external renderer (undefined
+clears it)</p>
+<p>It has the same meaning as the <code>externalPointRender</code> option at creation. The test is baked
+into the retained batches, so replacing it rebuilds them (without a rebuild, a circle that
+should have stopped being drawn would remain, and one that should be drawn again would not
+appear).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">predicate</span>: (<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">boolean</span>) <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L407">src/display/types.ts:407</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setfeatures"><span>set<wbr/>Features</span><a href="#setfeatures" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setfeatures-1"><span class="tsd-kind-call-signature">setFeatures</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">features</span><span class="tsd-signature-symbol">:</span> <a href="index.DatasetFeatureInput.html" class="tsd-signature-type tsd-kind-interface">DatasetFeatureInput</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setfeatures-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces all the features that are shown (there is no partial update). The selection
+drops the ids that disappear</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">features</span>: <a href="index.DatasetFeatureInput.html" class="tsd-signature-type tsd-kind-interface">DatasetFeatureInput</a><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L366">src/display/types.ts:366</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setselectedids"><span>set<wbr/>Selected<wbr/>Ids</span><a href="#setselectedids" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setselectedids-1"><span class="tsd-kind-call-signature">setSelectedIds</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setselectedids-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces the selected features</p>
+<p>The selection is a state of the dataset and is independent of the selection of the Store. A
+selected feature is drawn with a highlight (the same key color as the selection UI) on top
+of the retained rendering. The retained batches are not touched, so switching the selection
+never rebuilds a GPU resource.</p>
+<p>An id that is not held is ignored. An id that disappears through setFeatures or through a
+provider result is dropped from the selection automatically.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">ids</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L523">src/display/types.ts:523</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setstylerule"><span>set<wbr/>Style<wbr/>Rule</span><a href="#setstylerule" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setstylerule-1"><span class="tsd-kind-call-signature">setStyleRule</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">rule</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.StyleRule.html" class="tsd-signature-type tsd-kind-type-alias">StyleRule</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setstylerule-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces the style rule (undefined clears it)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">rule</span>: <a href="../types/index.StyleRule.html" class="tsd-signature-type tsd-kind-type-alias">StyleRule</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L384">src/display/types.ts:384</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setvisible"><span>set<wbr/>Visible</span><a href="#setvisible" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setvisible-1"><span class="tsd-kind-call-signature">setVisible</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">visible</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setvisible-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Switches between shown and hidden</p>
+<p>While it is hidden, neither the rendering nor the hit testing happens, but the features held
+and the GPU resources stay as they are (showing it again takes effect immediately).</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">visible</span>: <span class="tsd-signature-type">boolean</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L361">src/display/types.ts:361</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member">
+<h3 class="tsd-anchor-link" id="setzoomscale"><span>set<wbr/>Zoom<wbr/>Scale</span><a href="#setzoomscale" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="">
+<div class="tsd-signature tsd-anchor-link" id="setzoomscale-1"><span class="tsd-kind-call-signature">setZoomScale</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">zoomScale</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.DatasetZoomScale.html" class="tsd-signature-type tsd-kind-type-alias">DatasetZoomScale</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setzoomscale-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces the zoom-dependent drawing factors (null clears them)</p>
+<p>The factors are only multiplied in at draw time, so the retained batches are not rebuilt
+(they take effect from the next frame). With the collision thinning on, the footprints of
+the points change with the scale: the winners are picked again at once and, when they
+changed, the next frame rebuilds the points alone.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">zoomScale</span>: <a href="../types/index.DatasetZoomScale.html" class="tsd-signature-type tsd-kind-type-alias">DatasetZoomScale</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/display/types.ts#L393">src/display/types.ts:393</a></li></ul></aside></div></li></ul></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Properties"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Properties</summary>
+<div><a href="#id"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>id</span></a><a href="#interactive"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>interactive</span></a><a href="#order"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>order</span></a><a href="#visible"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Property"><use href="../assets/icons.svg#icon-1024"></use></svg><span>visible</span></a></div></details>
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
+<div><a href="#collectdrawnrows"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>collect<wbr/>Drawn<wbr/>Rows</span></a><a href="#collectvisible"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>collect<wbr/>Visible</span></a><a href="#findrow"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>find<wbr/>Row</span></a><a href="#getbasestyle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Base<wbr/>Style</span></a><a href="#getcollisionthinning"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Collision<wbr/>Thinning</span></a><a href="#getdrawnrowsrevision"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Drawn<wbr/>Rows<wbr/>Revision</span></a><a href="#getfeatures"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Features</span></a><a href="#getrowbounds"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Bounds</span></a><a href="#getrowfeature"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Feature</span></a><a href="#getrowid"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Id</span></a><a href="#getrowpoint"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Point</span></a><a href="#getrowtype"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Row<wbr/>Type</span></a><a href="#getselectedids"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Selected<wbr/>Ids</span></a><a href="#getthinningstats"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Thinning<wbr/>Stats</span></a><a href="#getvisiblefeatureids"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Visible<wbr/>Feature<wbr/>Ids</span></a><a href="#getzoomscale"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Zoom<wbr/>Scale</span></a><a href="#invalidateprovidercache"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>invalidate<wbr/>Provider<wbr/>Cache</span></a><a href="#off"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>off</span></a><a href="#on"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>on</span></a><a href="#remove"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>remove</span></a><a href="#setbasestyle"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Base<wbr/>Style</span></a><a href="#setcollisionthinning"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Collision<wbr/>Thinning</span></a><a href="#setcolumnar"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Columnar</span></a><a href="#setexternalpointrender"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>External<wbr/>Point<wbr/>Render</span></a><a href="#setfeatures"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Features</span></a><a href="#setselectedids"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Selected<wbr/>Ids</span></a><a href="#setstylerule"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Style<wbr/>Rule</span></a><a href="#setvisible"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Visible</span></a><a href="#setzoomscale"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Zoom<wbr/>Scale</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

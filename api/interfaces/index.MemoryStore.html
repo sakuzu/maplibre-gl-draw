@@ -1,0 +1,925 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>MemoryStore | @sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb" aria-label="Breadcrumb">
+<li><a href="../modules/index.html">index</a></li>
+<li><a href="" aria-current="page">MemoryStore</a></li></ul>
+<h1>Interface MemoryStore</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>The in-memory Store, the default</p>
+<p><code>new MemoryStore()</code> is a complete Store (the document and the local state); it is what
+<code>createMapLibreGLDraw</code> uses when no store is given.</p>
+<p>It keeps its own copy of what it is given and freezes what it returns. A feature, a layer
+or a group it has returned or notified never changes afterwards (a change replaces it), and
+writing into one throws a <code>TypeError</code> instead of changing the store behind its
+notifications.</p>
+</div>
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-example">
+<h4 class="tsd-anchor-link" id="example">Example<a href="#example" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><pre><code class="ts"><span class="hl-7">// Create the store yourself to keep a reference to it (to read it in a test, say)</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">store</span><span class="hl-1"> = </span><span class="hl-5">new</span><span class="hl-1"> </span><span class="hl-2">MemoryStore</span><span class="hl-1">();</span><br/><span class="hl-5">const</span><span class="hl-1"> </span><span class="hl-6">draw</span><span class="hl-1"> = </span><span class="hl-2">createMapLibreGLDraw</span><span class="hl-1">(</span><span class="hl-0">map</span><span class="hl-1">, { </span><span class="hl-0">store</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+</div></div></section>
+<div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">MemoryStore</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#abortintermediateupdates-1">abortIntermediateUpdates</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#createfeature-1">createFeature</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#createfile-1">createFile</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">file</span><span class="tsd-signature-symbol">:</span> <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#creategroup-1">createGroup</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">group</span><span class="tsd-signature-symbol">:</span> <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#createlayer-1">createLayer</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">layer</span><span class="tsd-signature-symbol">:</span> <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#deletefeature-1">deleteFeature</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#deletefile-1">deleteFile</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#deletegroup-1">deleteGroup</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#deletelayer-1">deleteLayer</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#endediting-1">endEditing</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getallfeatures-1">getAllFeatures</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getallfiles-1">getAllFiles</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getallgroups-1">getAllGroups</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getalllayers-1">getAllLayers</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getboxselection-1">getBoxSelection</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.BoxSelection.html" class="tsd-signature-type tsd-kind-interface">BoxSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getdragstate-1">getDragState</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.DragState.html" class="tsd-signature-type tsd-kind-interface">DragState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#geteditingids-1">getEditingIds</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getfeature-1">getFeature</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getfile-1">getFile</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getfollowedvertices-1">getFollowedVertices</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getgroup-1">getGroup</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getlayer-1">getLayer</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getlayerorder-1">getLayerOrder</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getlocallyhidden-1">getLocallyHidden</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">ReadonlySet</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getmetadata-1">getMetadata</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Metadata.html" class="tsd-signature-type tsd-kind-interface">Metadata</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getmode-1">getMode</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getorderedfeatures-1">getOrderedFeatures</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getselectedvertices-1">getSelectedVertices</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#getselection-1">getSelection</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Selection.html" class="tsd-signature-type tsd-kind-interface">Selection</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#gettentative-1">getTentative</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.TentativeState.html" class="tsd-signature-type tsd-kind-interface">TentativeState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isinteractionlocked-1">isInteractionLocked</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#islocallyhidden-1">isLocallyHidden</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isreadonly-1">isReadOnly</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#reorderingroup-1">reorderInGroup</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">featureId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">groupId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">newIndex</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#reorderinlayer-1">reorderInLayer</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">itemId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">layerId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">newIndex</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setboxselection-1">setBoxSelection</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">box</span><span class="tsd-signature-symbol">:</span> <a href="index.BoxSelection.html" class="tsd-signature-type tsd-kind-interface">BoxSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setdragstate-1">setDragState</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">state</span><span class="tsd-signature-symbol">:</span> <a href="index.DragState.html" class="tsd-signature-type tsd-kind-interface">DragState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setfollowedvertices-1">setFollowedVertices</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">selections</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setinteractionlock-1">setInteractionLock</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">value</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setlayerorder-1">setLayerOrder</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">order</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setlocallyhidden-1">setLocallyHidden</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">hidden</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setmetadata-1">setMetadata</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">metadata</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Metadata.html" class="tsd-signature-type tsd-kind-interface">Metadata</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setmode-1">setMode</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">mode</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setreadonly-1">setReadOnly</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">value</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setselectedvertices-1">setSelectedVertices</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">selection</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#setselection-1">setSelection</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">type</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.SelectionType.html" class="tsd-signature-type tsd-kind-type-alias">SelectionType</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#settentative-1">setTentative</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">state</span><span class="tsd-signature-symbol">:</span> <a href="index.TentativeState.html" class="tsd-signature-type tsd-kind-interface">TentativeState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#startediting-1">startEditing</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#subscribe-1">subscribe</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">listener</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">changes</span><span class="tsd-signature-symbol">:</span> <a href="index.StateChanges.html" class="tsd-signature-type tsd-kind-interface">StateChanges</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#transact-1">transact</a><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#transactt">T</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">fn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="index.Store.html#transactt">T</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">source</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.UpdateSource.html" class="tsd-signature-type tsd-kind-type-alias">UpdateSource</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="index.Store.html#transactt">T</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#updatefeature-1">updateFeature</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">updates</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="index.UpdateFeatureOptions.html" class="tsd-signature-type tsd-kind-interface">UpdateFeatureOptions</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#updategroup-1">updateGroup</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">updates</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#updatelayer-1">updateLayer</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">updates</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
+<section class="tsd-panel tsd-hierarchy" data-refl="1163">
+<h4>Hierarchy (<a href="../hierarchy.html#index.MemoryStore">View Summary</a>)</h4>
+<ul class="tsd-hierarchy">
+<li class="tsd-hierarchy-item"><a href="index.Store.html" class="tsd-signature-type tsd-kind-interface">Store</a>
+<ul class="tsd-hierarchy">
+<li class="tsd-hierarchy-item"><span class="tsd-hierarchy-target">MemoryStore</span></li></ul></li></ul></section><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/memory.ts#L54">src/store/memory.ts:54</a></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/memory.ts#L57">src/store/memory.ts:57</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h5 class="tsd-index-heading uppercase">Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading tsd-anchor-link" id="methods">Methods<a href="#methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<div class="tsd-index-list"><a href="#abortintermediateupdates" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>abort<wbr/>Intermediate<wbr/>Updates?</span></a>
+<a href="#createfeature" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Feature</span></a>
+<a href="#createfile" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>File</span></a>
+<a href="#creategroup" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Group</span></a>
+<a href="#createlayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Layer</span></a>
+<a href="#deletefeature" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Feature</span></a>
+<a href="#deletefile" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>File</span></a>
+<a href="#deletegroup" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Group</span></a>
+<a href="#deletelayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Layer</span></a>
+<a href="#endediting" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>end<wbr/>Editing</span></a>
+<a href="#getallfeatures" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Features</span></a>
+<a href="#getallfiles" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Files</span></a>
+<a href="#getallgroups" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Groups</span></a>
+<a href="#getalllayers" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Layers</span></a>
+<a href="#getboxselection" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Box<wbr/>Selection</span></a>
+<a href="#getdragstate" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Drag<wbr/>State</span></a>
+<a href="#geteditingids" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Editing<wbr/>Ids</span></a>
+<a href="#getfeature" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Feature</span></a>
+<a href="#getfile" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>File</span></a>
+<a href="#getfollowedvertices" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Followed<wbr/>Vertices</span></a>
+<a href="#getgroup" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Group</span></a>
+<a href="#getlayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Layer</span></a>
+<a href="#getlayerorder" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Layer<wbr/>Order</span></a>
+<a href="#getlocallyhidden" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Locally<wbr/>Hidden</span></a>
+<a href="#getmetadata" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Metadata</span></a>
+<a href="#getmode" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Mode</span></a>
+<a href="#getorderedfeatures" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Ordered<wbr/>Features</span></a>
+<a href="#getselectedvertices" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Selected<wbr/>Vertices</span></a>
+<a href="#getselection" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Selection</span></a>
+<a href="#gettentative" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Tentative</span></a>
+<a href="#isinteractionlocked" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Interaction<wbr/>Locked</span></a>
+<a href="#islocallyhidden" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Locally<wbr/>Hidden</span></a>
+<a href="#isreadonly" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Read<wbr/>Only</span></a>
+<a href="#reorderingroup" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>reorder<wbr/>In<wbr/>Group</span></a>
+<a href="#reorderinlayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>reorder<wbr/>In<wbr/>Layer</span></a>
+<a href="#setboxselection" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Box<wbr/>Selection</span></a>
+<a href="#setdragstate" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Drag<wbr/>State</span></a>
+<a href="#setfollowedvertices" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Followed<wbr/>Vertices</span></a>
+<a href="#setinteractionlock" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Interaction<wbr/>Lock</span></a>
+<a href="#setlayerorder" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Layer<wbr/>Order</span></a>
+<a href="#setlocallyhidden" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Locally<wbr/>Hidden</span></a>
+<a href="#setmetadata" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Metadata</span></a>
+<a href="#setmode" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Mode</span></a>
+<a href="#setreadonly" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Read<wbr/>Only</span></a>
+<a href="#setselectedvertices" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Selected<wbr/>Vertices</span></a>
+<a href="#setselection" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Selection</span></a>
+<a href="#settentative" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Tentative</span></a>
+<a href="#startediting" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>start<wbr/>Editing</span></a>
+<a href="#subscribe" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>subscribe</span></a>
+<a href="#transact" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>transact</span></a>
+<a href="#updatefeature" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Feature</span></a>
+<a href="#updategroup" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Group</span></a>
+<a href="#updatelayer" class="tsd-index-link tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Layer</span></a>
+</div></section></div></details></section></section>
+<details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
+<section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="abortintermediateupdates"><code class="tsd-tag">Optional</code><span>abort<wbr/>Intermediate<wbr/>Updates</span><a href="#abortintermediateupdates" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="abortintermediateupdates-1"><span class="tsd-kind-call-signature">abortIntermediateUpdates</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#abortintermediateupdates-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Discards uncommitted intermediate states (see DocumentStore)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">ids</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#abortintermediateupdates">abortIntermediateUpdates</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L445">src/store/store.ts:445</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="createfeature"><span>create<wbr/>Feature</span><a href="#createfeature" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="createfeature-1"><span class="tsd-kind-call-signature">createFeature</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#createfeature-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates a feature (see <a href="index.DocumentStore.html#createfeature" class="tsd-kind-method">DocumentStore.createFeature</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">feature</span>: <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#createfeature">createFeature</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L441">src/store/store.ts:441</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="createfile"><span>create<wbr/>File</span><a href="#createfile" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="createfile-1"><span class="tsd-kind-call-signature">createFile</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">file</span><span class="tsd-signature-symbol">:</span> <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#createfile-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Stores a file (see <a href="index.DocumentStore.html#createfile" class="tsd-kind-method">DocumentStore.createFile</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">file</span>: <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#createfile">createFile</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L470">src/store/store.ts:470</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="creategroup"><span>create<wbr/>Group</span><a href="#creategroup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="creategroup-1"><span class="tsd-kind-call-signature">createGroup</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">group</span><span class="tsd-signature-symbol">:</span> <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#creategroup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates a group (see <a href="index.DocumentStore.html#creategroup" class="tsd-kind-method">DocumentStore.createGroup</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">group</span>: <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#creategroup">createGroup</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L463">src/store/store.ts:463</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="createlayer"><span>create<wbr/>Layer</span><a href="#createlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="createlayer-1"><span class="tsd-kind-call-signature">createLayer</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">layer</span><span class="tsd-signature-symbol">:</span> <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#createlayer-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates a layer (see <a href="index.DocumentStore.html#createlayer" class="tsd-kind-method">DocumentStore.createLayer</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">layer</span>: <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#createlayer">createLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L450">src/store/store.ts:450</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="deletefeature"><span>delete<wbr/>Feature</span><a href="#deletefeature" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="deletefeature-1"><span class="tsd-kind-call-signature">deleteFeature</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#deletefeature-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Deletes a feature (see <a href="index.DocumentStore.html#deletefeature" class="tsd-kind-method">DocumentStore.deleteFeature</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#deletefeature">deleteFeature</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L447">src/store/store.ts:447</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="deletefile"><span>delete<wbr/>File</span><a href="#deletefile" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="deletefile-1"><span class="tsd-kind-call-signature">deleteFile</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#deletefile-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Deletes a file (see <a href="index.DocumentStore.html#deletefile" class="tsd-kind-method">DocumentStore.deleteFile</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#deletefile">deleteFile</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L472">src/store/store.ts:472</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="deletegroup"><span>delete<wbr/>Group</span><a href="#deletegroup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="deletegroup-1"><span class="tsd-kind-call-signature">deleteGroup</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#deletegroup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Deletes a group, keeping its members (see <a href="index.DocumentStore.html#deletegroup" class="tsd-kind-method">DocumentStore.deleteGroup</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#deletegroup">deleteGroup</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L467">src/store/store.ts:467</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="deletelayer"><span>delete<wbr/>Layer</span><a href="#deletelayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="deletelayer-1"><span class="tsd-kind-call-signature">deleteLayer</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#deletelayer-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Deletes a layer with its content (see <a href="index.DocumentStore.html#deletelayer" class="tsd-kind-method">DocumentStore.deleteLayer</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#deletelayer">deleteLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L454">src/store/store.ts:454</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="endediting"><span>end<wbr/>Editing</span><a href="#endediting" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="endediting-1"><span class="tsd-kind-call-signature">endEditing</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#endediting-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Ends the editing of features</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">ids</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#endediting">endEditing</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L262">src/store/store.ts:262</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getallfeatures"><span>get<wbr/>All<wbr/>Features</span><a href="#getallfeatures" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getallfeatures-1"><span class="tsd-kind-call-signature">getAllFeatures</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><a href="#getallfeatures-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Every feature, in no particular order</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getallfeatures">getAllFeatures</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L353">src/store/store.ts:353</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getallfiles"><span>get<wbr/>All<wbr/>Files</span><a href="#getallfiles" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getallfiles-1"><span class="tsd-kind-call-signature">getAllFiles</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a><span class="tsd-signature-symbol">[]</span><a href="#getallfiles-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Every file</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getallfiles">getAllFiles</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L369">src/store/store.ts:369</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getallgroups"><span>get<wbr/>All<wbr/>Groups</span><a href="#getallgroups" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getallgroups-1"><span class="tsd-kind-call-signature">getAllGroups</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">[]</span><a href="#getallgroups-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Every group, in no particular order</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getallgroups">getAllGroups</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L365">src/store/store.ts:365</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getalllayers"><span>get<wbr/>All<wbr/>Layers</span><a href="#getalllayers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getalllayers-1"><span class="tsd-kind-call-signature">getAllLayers</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">[]</span><a href="#getalllayers-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Every layer, in no particular order</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getalllayers">getAllLayers</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L359">src/store/store.ts:359</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getboxselection"><span>get<wbr/>Box<wbr/>Selection</span><a href="#getboxselection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getboxselection-1"><span class="tsd-kind-call-signature">getBoxSelection</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.BoxSelection.html" class="tsd-signature-type tsd-kind-interface">BoxSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getboxselection-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The box selection in progress, or null</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.BoxSelection.html" class="tsd-signature-type tsd-kind-interface">BoxSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getboxselection">getBoxSelection</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L381">src/store/store.ts:381</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getdragstate"><span>get<wbr/>Drag<wbr/>State</span><a href="#getdragstate" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getdragstate-1"><span class="tsd-kind-call-signature">getDragState</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.DragState.html" class="tsd-signature-type tsd-kind-interface">DragState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getdragstate-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The drag in progress, or null</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.DragState.html" class="tsd-signature-type tsd-kind-interface">DragState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getdragstate">getDragState</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L383">src/store/store.ts:383</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="geteditingids"><span>get<wbr/>Editing<wbr/>Ids</span><a href="#geteditingids" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="geteditingids-1"><span class="tsd-kind-call-signature">getEditingIds</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><a href="#geteditingids-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The IDs of the features being edited (their vertex handles are shown)</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#geteditingids">getEditingIds</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L377">src/store/store.ts:377</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getfeature"><span>get<wbr/>Feature</span><a href="#getfeature" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getfeature-1"><span class="tsd-kind-call-signature">getFeature</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#getfeature-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the feature with this ID, or undefined</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getfeature">getFeature</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L351">src/store/store.ts:351</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getfile"><span>get<wbr/>File</span><a href="#getfile" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getfile-1"><span class="tsd-kind-call-signature">getFile</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#getfile-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the file with this ID, or undefined</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.FileData.html" class="tsd-signature-type tsd-kind-interface">FileData</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getfile">getFile</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L367">src/store/store.ts:367</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getfollowedvertices"><span>get<wbr/>Followed<wbr/>Vertices</span><a href="#getfollowedvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getfollowedvertices-1"><span class="tsd-kind-call-signature">getFollowedVertices</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getfollowedvertices-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The vertices that follow along when shared vertices move together (null except during a
+drag)</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getfollowedvertices">getFollowedVertices</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L390">src/store/store.ts:390</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getgroup"><span>get<wbr/>Group</span><a href="#getgroup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getgroup-1"><span class="tsd-kind-call-signature">getGroup</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#getgroup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the group with this ID, or undefined</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getgroup">getGroup</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L363">src/store/store.ts:363</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getlayer"><span>get<wbr/>Layer</span><a href="#getlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getlayer-1"><span class="tsd-kind-call-signature">getLayer</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span><a href="#getlayer-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the layer with this ID, or undefined</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">undefined</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getlayer">getLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L357">src/store/store.ts:357</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getlayerorder"><span>get<wbr/>Layer<wbr/>Order</span><a href="#getlayerorder" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getlayerorder-1"><span class="tsd-kind-call-signature">getLayerOrder</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><a href="#getlayerorder-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The stacking order of the layers, back to front</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getlayerorder">getLayerOrder</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L361">src/store/store.ts:361</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getlocallyhidden"><span>get<wbr/>Locally<wbr/>Hidden</span><a href="#getlocallyhidden" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getlocallyhidden-1"><span class="tsd-kind-call-signature">getLocallyHidden</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">ReadonlySet</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span><a href="#getlocallyhidden-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Every ID hidden on this client only</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">ReadonlySet</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getlocallyhidden">getLocallyHidden</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L400">src/store/store.ts:400</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getmetadata"><span>get<wbr/>Metadata</span><a href="#getmetadata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getmetadata-1"><span class="tsd-kind-call-signature">getMetadata</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Metadata.html" class="tsd-signature-type tsd-kind-interface">Metadata</a><a href="#getmetadata-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the metadata of the document</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Metadata.html" class="tsd-signature-type tsd-kind-interface">Metadata</a></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getmetadata">getMetadata</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L371">src/store/store.ts:371</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getmode"><span>get<wbr/>Mode</span><a href="#getmode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getmode-1"><span class="tsd-kind-call-signature">getMode</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a><a href="#getmode-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The current mode</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getmode">getMode</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L392">src/store/store.ts:392</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getorderedfeatures"><span>get<wbr/>Ordered<wbr/>Features</span><a href="#getorderedfeatures" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getorderedfeatures-1"><span class="tsd-kind-call-signature">getOrderedFeatures</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span><a href="#getorderedfeatures-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The visible features in drawing order, back to front</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getorderedfeatures">getOrderedFeatures</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L355">src/store/store.ts:355</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getselectedvertices"><span>get<wbr/>Selected<wbr/>Vertices</span><a href="#getselectedvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getselectedvertices-1"><span class="tsd-kind-call-signature">getSelectedVertices</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#getselectedvertices-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The selected vertices, or null when no vertex is selected</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getselectedvertices">getSelectedVertices</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L385">src/store/store.ts:385</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="getselection"><span>get<wbr/>Selection</span><a href="#getselection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="getselection-1"><span class="tsd-kind-call-signature">getSelection</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.Selection.html" class="tsd-signature-type tsd-kind-interface">Selection</a><a href="#getselection-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Returns the current selection</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.Selection.html" class="tsd-signature-type tsd-kind-interface">Selection</a></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#getselection">getSelection</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L375">src/store/store.ts:375</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="gettentative"><span>get<wbr/>Tentative</span><a href="#gettentative" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="gettentative-1"><span class="tsd-kind-call-signature">getTentative</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <a href="index.TentativeState.html" class="tsd-signature-type tsd-kind-interface">TentativeState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#gettentative-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>The geometry being drawn, or null when nothing is being drawn</p>
+</div>
+<h4 class="tsd-returns-title">Returns <a href="index.TentativeState.html" class="tsd-signature-type tsd-kind-interface">TentativeState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#gettentative">getTentative</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L379">src/store/store.ts:379</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="isinteractionlocked"><span>is<wbr/>Interaction<wbr/>Locked</span><a href="#isinteractionlocked" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="isinteractionlocked-1"><span class="tsd-kind-call-signature">isInteractionLocked</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#isinteractionlocked-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Whether the interaction lock is on</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#isinteractionlocked">isInteractionLocked</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L396">src/store/store.ts:396</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="islocallyhidden"><span>is<wbr/>Locally<wbr/>Hidden</span><a href="#islocallyhidden" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="islocallyhidden-1"><span class="tsd-kind-call-signature">isLocallyHidden</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#islocallyhidden-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Whether this feature, group or layer is hidden on this client only</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#islocallyhidden">isLocallyHidden</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L398">src/store/store.ts:398</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="isreadonly"><span>is<wbr/>Read<wbr/>Only</span><a href="#isreadonly" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="isreadonly-1"><span class="tsd-kind-call-signature">isReadOnly</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#isreadonly-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Whether the Store is read-only</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#isreadonly">isReadOnly</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L394">src/store/store.ts:394</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="reorderingroup"><span>reorder<wbr/>In<wbr/>Group</span><a href="#reorderingroup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="reorderingroup-1"><span class="tsd-kind-call-signature">reorderInGroup</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">featureId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">groupId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">newIndex</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#reorderingroup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Moves a feature within a group (see <a href="index.DocumentStore.html#reorderingroup" class="tsd-kind-method">DocumentStore.reorderInGroup</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">featureId</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">groupId</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">newIndex</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#reorderingroup">reorderInGroup</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L460">src/store/store.ts:460</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="reorderinlayer"><span>reorder<wbr/>In<wbr/>Layer</span><a href="#reorderinlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="reorderinlayer-1"><span class="tsd-kind-call-signature">reorderInLayer</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">itemId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">layerId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">newIndex</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#reorderinlayer-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Moves an item within a layer (see <a href="index.DocumentStore.html#reorderinlayer" class="tsd-kind-method">DocumentStore.reorderInLayer</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">itemId</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">layerId</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">newIndex</span>: <span class="tsd-signature-type">number</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#reorderinlayer">reorderInLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L458">src/store/store.ts:458</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setboxselection"><span>set<wbr/>Box<wbr/>Selection</span><a href="#setboxselection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setboxselection-1"><span class="tsd-kind-call-signature">setBoxSelection</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">box</span><span class="tsd-signature-symbol">:</span> <a href="index.BoxSelection.html" class="tsd-signature-type tsd-kind-interface">BoxSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setboxselection-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets or clears the box selection in progress</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">box</span>: <a href="index.BoxSelection.html" class="tsd-signature-type tsd-kind-interface">BoxSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setboxselection">setBoxSelection</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L274">src/store/store.ts:274</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setdragstate"><span>set<wbr/>Drag<wbr/>State</span><a href="#setdragstate" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setdragstate-1"><span class="tsd-kind-call-signature">setDragState</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">state</span><span class="tsd-signature-symbol">:</span> <a href="index.DragState.html" class="tsd-signature-type tsd-kind-interface">DragState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setdragstate-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets or clears the drag in progress</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">state</span>: <a href="index.DragState.html" class="tsd-signature-type tsd-kind-interface">DragState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setdragstate">setDragState</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L280">src/store/store.ts:280</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setfollowedvertices"><span>set<wbr/>Followed<wbr/>Vertices</span><a href="#setfollowedvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setfollowedvertices-1"><span class="tsd-kind-call-signature">setFollowedVertices</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">selections</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setfollowedvertices-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets the vertices that follow along (back to null when the drag ends)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">selections</span>: <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a><span class="tsd-signature-symbol">[]</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setfollowedvertices">setFollowedVertices</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L294">src/store/store.ts:294</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setinteractionlock"><span>set<wbr/>Interaction<wbr/>Lock</span><a href="#setinteractionlock" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setinteractionlock-1"><span class="tsd-kind-call-signature">setInteractionLock</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">value</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setinteractionlock-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Turns the interaction lock on or off</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">value</span>: <span class="tsd-signature-type">boolean</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setinteractionlock">setInteractionLock</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L317">src/store/store.ts:317</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setlayerorder"><span>set<wbr/>Layer<wbr/>Order</span><a href="#setlayerorder" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setlayerorder-1"><span class="tsd-kind-call-signature">setLayerOrder</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">order</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#setlayerorder-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets the stacking order of the layers (see <a href="index.DocumentStore.html#setlayerorder" class="tsd-kind-method">DocumentStore.setLayerOrder</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">order</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setlayerorder">setLayerOrder</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L456">src/store/store.ts:456</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setlocallyhidden"><span>set<wbr/>Locally<wbr/>Hidden</span><a href="#setlocallyhidden" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setlocallyhidden-1"><span class="tsd-kind-call-signature">setLocallyHidden</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">hidden</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setlocallyhidden-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Hides or shows a feature, a group or a layer on this client only</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">hidden</span>: <span class="tsd-signature-type">boolean</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setlocallyhidden">setLocallyHidden</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L324">src/store/store.ts:324</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setmetadata"><span>set<wbr/>Metadata</span><a href="#setmetadata" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setmetadata-1"><span class="tsd-kind-call-signature">setMetadata</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">metadata</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Metadata.html" class="tsd-signature-type tsd-kind-interface">Metadata</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#setmetadata-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets the metadata, merging (see <a href="index.DocumentStore.html#setmetadata" class="tsd-kind-method">DocumentStore.setMetadata</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">metadata</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Metadata.html" class="tsd-signature-type tsd-kind-interface">Metadata</a><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setmetadata">setMetadata</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L475">src/store/store.ts:475</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setmode"><span>set<wbr/>Mode</span><a href="#setmode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setmode-1"><span class="tsd-kind-call-signature">setMode</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">mode</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setmode-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Records the current mode (the mode manager calls it; the host calls <code>draw.setMode</code>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">mode</span>: <a href="../types/index.Mode.html" class="tsd-signature-type tsd-kind-type-alias">Mode</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setmode">setMode</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L300">src/store/store.ts:300</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setreadonly"><span>set<wbr/>Read<wbr/>Only</span><a href="#setreadonly" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setreadonly-1"><span class="tsd-kind-call-signature">setReadOnly</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">value</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setreadonly-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Turns read-only on or off</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">value</span>: <span class="tsd-signature-type">boolean</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setreadonly">setReadOnly</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L308">src/store/store.ts:308</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setselectedvertices"><span>set<wbr/>Selected<wbr/>Vertices</span><a href="#setselectedvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setselectedvertices-1"><span class="tsd-kind-call-signature">setSelectedVertices</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">selection</span><span class="tsd-signature-symbol">:</span> <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setselectedvertices-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets or clears the selected vertices</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">selection</span>: <a href="index.VertexSelection.html" class="tsd-signature-type tsd-kind-interface">VertexSelection</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setselectedvertices">setSelectedVertices</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L286">src/store/store.ts:286</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="setselection"><span>set<wbr/>Selection</span><a href="#setselection" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="setselection-1"><span class="tsd-kind-call-signature">setSelection</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">type</span><span class="tsd-signature-symbol">:</span> <a href="../types/index.SelectionType.html" class="tsd-signature-type tsd-kind-type-alias">SelectionType</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#setselection-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Replaces the selection (<code>null</code> and an empty array clear it)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">type</span>: <a href="../types/index.SelectionType.html" class="tsd-signature-type tsd-kind-type-alias">SelectionType</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li>
+<li><span><span class="tsd-kind-parameter">ids</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#setselection">setSelection</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L254">src/store/store.ts:254</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="settentative"><span>set<wbr/>Tentative</span><a href="#settentative" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="settentative-1"><span class="tsd-kind-call-signature">setTentative</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">state</span><span class="tsd-signature-symbol">:</span> <a href="index.TentativeState.html" class="tsd-signature-type tsd-kind-interface">TentativeState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#settentative-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Sets or clears the geometry being drawn</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">state</span>: <a href="index.TentativeState.html" class="tsd-signature-type tsd-kind-interface">TentativeState</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#settentative">setTentative</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L268">src/store/store.ts:268</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="startediting"><span>start<wbr/>Editing</span><a href="#startediting" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="startediting-1"><span class="tsd-kind-call-signature">startEditing</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ids</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><a href="#startediting-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Marks features as being edited</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">ids</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#startediting">startEditing</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L260">src/store/store.ts:260</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="subscribe"><span>subscribe</span><a href="#subscribe" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="subscribe-1"><span class="tsd-kind-call-signature">subscribe</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">listener</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">changes</span><span class="tsd-signature-symbol">:</span> <a href="index.StateChanges.html" class="tsd-signature-type tsd-kind-interface">StateChanges</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span><a href="#subscribe-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Subscribes to the changes of the document and of the local state</p>
+<p>One notification per outermost transaction (or per write outside one). A listener
+that throws is reported with console.error and does not stop the listeners after it.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">listener</span>: <span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">changes</span><span class="tsd-signature-symbol">:</span> <a href="index.StateChanges.html" class="tsd-signature-type tsd-kind-interface">StateChanges</a><span class="tsd-signature-symbol">)</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <span class="tsd-signature-type">void</span></h4><p>The unsubscribe function</p>
+<aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#subscribe">subscribe</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L410">src/store/store.ts:410</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="transact"><span>transact</span><a href="#transact" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="transact-1"><span class="tsd-kind-call-signature">transact</span><span class="tsd-signature-symbol">&lt;</span><a class="tsd-signature-type tsd-kind-type-parameter" href="#transactt">T</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">fn</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="index.Store.html#transactt">T</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">source</span><span class="tsd-signature-symbol">?:</span> <a href="../types/index.UpdateSource.html" class="tsd-signature-type tsd-kind-type-alias">UpdateSource</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="index.Store.html#transactt">T</a><a href="#transact-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Runs fn and notifies every change it makes as a single StateChanges</p>
+<p>Not atomic: when fn throws, the writes made before the throw stay applied, they are
+notified, and the exception is rethrown.</p>
+</div>
+<section class="tsd-panel">
+<h4>Type Parameters</h4>
+<ul class="tsd-type-parameter-list">
+<li><span id="transactt"><span class="tsd-kind-type-parameter">T</span></span></li></ul></section>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">fn</span>: <span class="tsd-signature-symbol">()</span> <span class="tsd-signature-symbol">=&gt;</span> <a class="tsd-signature-type tsd-kind-type-parameter" href="index.Store.html#transactt">T</a></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">source</span>: <a href="../types/index.UpdateSource.html" class="tsd-signature-type tsd-kind-type-alias">UpdateSource</a></span>
+<div class="tsd-comment tsd-typography"><p>The source carried by the notification ('local' when omitted; the source
+of the outermost transaction applies)</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a class="tsd-signature-type tsd-kind-type-parameter" href="index.Store.html#transactt">T</a></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#transact">transact</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L420">src/store/store.ts:420</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="updatefeature"><span>update<wbr/>Feature</span><a href="#updatefeature" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="updatefeature-1"><span class="tsd-kind-call-signature">updateFeature</span><span class="tsd-signature-symbol">(</span><br/>    <span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">updates</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="index.UpdateFeatureOptions.html" class="tsd-signature-type tsd-kind-interface">UpdateFeatureOptions</a><span class="tsd-signature-symbol">,</span><br/><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#updatefeature-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Updates a feature (see <a href="index.DocumentStore.html#updatefeature" class="tsd-kind-method">DocumentStore.updateFeature</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">updates</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">&gt;</span></span></li>
+<li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">options</span>: <a href="index.UpdateFeatureOptions.html" class="tsd-signature-type tsd-kind-interface">UpdateFeatureOptions</a></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#updatefeature">updateFeature</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L443">src/store/store.ts:443</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="updategroup"><span>update<wbr/>Group</span><a href="#updategroup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="updategroup-1"><span class="tsd-kind-call-signature">updateGroup</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">updates</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#updategroup-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Updates a group (see <a href="index.DocumentStore.html#updategroup" class="tsd-kind-method">DocumentStore.updateGroup</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">updates</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Group.html" class="tsd-signature-type tsd-kind-interface">Group</a><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#updategroup">updateGroup</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L465">src/store/store.ts:465</a></li></ul></aside></div></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-inherited">
+<h3 class="tsd-anchor-link" id="updatelayer"><span>update<wbr/>Layer</span><a href="#updatelayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-inherited">
+<li class="tsd-is-inherited">
+<div class="tsd-signature tsd-anchor-link" id="updatelayer-1"><span class="tsd-kind-call-signature">updateLayer</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">id</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">updates</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><a href="#updatelayer-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Updates a layer (see <a href="index.DocumentStore.html#updatelayer" class="tsd-kind-method">DocumentStore.updateLayer</a>)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li><span><span class="tsd-kind-parameter">id</span>: <span class="tsd-signature-type">string</span></span></li>
+<li><span><span class="tsd-kind-parameter">updates</span>: <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="index.Layer.html" class="tsd-signature-type tsd-kind-interface">Layer</a><span class="tsd-signature-symbol">&gt;</span></span></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
+<p>Inherited from <a href="index.Store.html">Store</a>.<a href="index.Store.html#updatelayer">updateLayer</a></p>
+<ul>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/store/store.ts#L452">src/store/store.ts:452</a></li></ul></aside></div></li></ul></section></section></details></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<details open class="tsd-accordion tsd-page-navigation-section"><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>Methods</summary>
+<div><a href="#abortintermediateupdates" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>abort<wbr/>Intermediate<wbr/>Updates</span></a><a href="#createfeature" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Feature</span></a><a href="#createfile" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>File</span></a><a href="#creategroup" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Group</span></a><a href="#createlayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>create<wbr/>Layer</span></a><a href="#deletefeature" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Feature</span></a><a href="#deletefile" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>File</span></a><a href="#deletegroup" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Group</span></a><a href="#deletelayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>delete<wbr/>Layer</span></a><a href="#endediting" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>end<wbr/>Editing</span></a><a href="#getallfeatures" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Features</span></a><a href="#getallfiles" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Files</span></a><a href="#getallgroups" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Groups</span></a><a href="#getalllayers" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>All<wbr/>Layers</span></a><a href="#getboxselection" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Box<wbr/>Selection</span></a><a href="#getdragstate" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Drag<wbr/>State</span></a><a href="#geteditingids" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Editing<wbr/>Ids</span></a><a href="#getfeature" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Feature</span></a><a href="#getfile" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>File</span></a><a href="#getfollowedvertices" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Followed<wbr/>Vertices</span></a><a href="#getgroup" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Group</span></a><a href="#getlayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Layer</span></a><a href="#getlayerorder" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Layer<wbr/>Order</span></a><a href="#getlocallyhidden" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Locally<wbr/>Hidden</span></a><a href="#getmetadata" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Metadata</span></a><a href="#getmode" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Mode</span></a><a href="#getorderedfeatures" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Ordered<wbr/>Features</span></a><a href="#getselectedvertices" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Selected<wbr/>Vertices</span></a><a href="#getselection" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Selection</span></a><a href="#gettentative" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>get<wbr/>Tentative</span></a><a href="#isinteractionlocked" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Interaction<wbr/>Locked</span></a><a href="#islocallyhidden" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Locally<wbr/>Hidden</span></a><a href="#isreadonly" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>is<wbr/>Read<wbr/>Only</span></a><a href="#reorderingroup" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>reorder<wbr/>In<wbr/>Group</span></a><a href="#reorderinlayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>reorder<wbr/>In<wbr/>Layer</span></a><a href="#setboxselection" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Box<wbr/>Selection</span></a><a href="#setdragstate" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Drag<wbr/>State</span></a><a href="#setfollowedvertices" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Followed<wbr/>Vertices</span></a><a href="#setinteractionlock" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Interaction<wbr/>Lock</span></a><a href="#setlayerorder" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Layer<wbr/>Order</span></a><a href="#setlocallyhidden" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Locally<wbr/>Hidden</span></a><a href="#setmetadata" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Metadata</span></a><a href="#setmode" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Mode</span></a><a href="#setreadonly" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Read<wbr/>Only</span></a><a href="#setselectedvertices" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Selected<wbr/>Vertices</span></a><a href="#setselection" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Selection</span></a><a href="#settentative" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>set<wbr/>Tentative</span></a><a href="#startediting" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>start<wbr/>Editing</span></a><a href="#subscribe" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>subscribe</span></a><a href="#transact" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>transact</span></a><a href="#updatefeature" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Feature</span></a><a href="#updategroup" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Group</span></a><a href="#updatelayer" class="tsd-is-inherited"><svg class="tsd-kind-icon" viewBox="0 0 24 24" aria-label="Method"><use href="../assets/icons.svg#icon-2048"></use></svg><span>update<wbr/>Layer</span></a></div></details></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>

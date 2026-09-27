@@ -1,0 +1,83 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>maplibre-gl-draw examples</title>
+    <style>
+      body {
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 16px;
+        font: 16px/1.6 system-ui, sans-serif;
+        color: #1f2328;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      .links {
+        font-size: 14px;
+      }
+      span {
+        display: block;
+        color: #59636e;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>maplibre-gl-draw examples</h1>
+    <p>Each example is one page with its code in <code>main.ts</code> next to it.</p>
+    <p class="links">
+      <a href="../">Playground</a> ·
+      <a href="../api/">API reference</a> ·
+      <a href="https://github.com/sakuzu/maplibre-gl-draw/tree/main/examples">Source on GitHub</a>
+    </p>
+    <ol>
+      <li>
+        <a href="./basic/">Basic</a>
+        <span>Drawing polygons, the change events, saving and restoring</span>
+      </li>
+      <li>
+        <a href="./save-load/">Export and load</a>
+        <span>Export as GeoJSON and in the native format, loading files dropped on the map</span>
+      </li>
+      <li>
+        <a href="./style-rules/">Style rules</a>
+        <span>The four kinds of style rule that color features by a property, with a legend</span>
+      </li>
+      <li>
+        <a href="./snapping-and-geometry/">Snapping and geometry</a>
+        <span>Snapping, tracing a boundary, moving shared vertices, union, subtract, buffer and split</span>
+      </li>
+      <li>
+        <a href="./terrain/">3D terrain</a>
+        <span>Drawing and selecting on 3D terrain</span>
+      </li>
+      <li>
+        <a href="./read-only/">Read-only</a>
+        <span>The read-only mode, the interaction lock and locked layers</span>
+      </li>
+      <li>
+        <a href="./plugin/">Plugin</a>
+        <span>A plugin with a hook and a mode of its own</span>
+      </li>
+      <li>
+        <a href="./custom-feature-type/">Custom feature type</a>
+        <span>A kind of feature with its own renderer and hit test</span>
+      </li>
+      <li>
+        <a href="./large-data/">Datasets</a>
+        <span>50,000 cells colored by a property, and points fetched for the part of the map in view</span>
+      </li>
+      <li>
+        <a href="./columnar-worker/">A million points</a>
+        <span>A million points read in a Worker</span>
+      </li>
+    </ol>
+  </body>
+</html>
