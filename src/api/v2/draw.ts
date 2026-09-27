@@ -9,7 +9,7 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
 import type { DrawEvents } from './events.js';
-import type { StoreView } from './extension-placeholders.js';
+import type { StoreView } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
 import type { FeaturesCollection } from './features.js';
 import type { GroupsCollection } from './groups.js';

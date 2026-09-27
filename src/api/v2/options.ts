@@ -7,7 +7,7 @@
  */
 
 import type { Messages } from '../../messages.js';
-import type { Store } from './extension-placeholders.js';
+import type { Store } from './extension/store.js';
 import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
 import type { Mode } from './state.js';
 

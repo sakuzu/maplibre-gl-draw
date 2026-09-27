@@ -110,9 +110,41 @@ export type {
 } from './datasets.js';
 
 // Store
-export type { StateChanges, Store, StoreView, UpdateSource } from './extension-placeholders.js';
+export type { StateChanges, Store, StoreView, UpdateSource } from './extension/index.js';
 
 // Extensions
+export type {
+  CompanionProvider,
+  DrawKeyEvent,
+  DrawPointerEvent,
+  ExtensionContext,
+  FeatureRenderer,
+  FeatureTypeDefinition,
+  FillRenderer,
+  Handle,
+  HandleProvider,
+  Hit,
+  HitTestContext,
+  InputHandlers,
+  LineRenderer,
+  ModeContext,
+  ModeFactory,
+  ModeHandler,
+  Modifiers,
+  NameGenerator,
+  OffsetUniforms,
+  OverlayRenderer,
+  Plugin,
+  PluginContext,
+  PointRenderer,
+  RenderContext,
+  ScreenContext,
+  ShaderData,
+  SnapCandidate,
+  SnapContext,
+  SnapProvider,
+  TerrainAnchors,
+} from './extension/index.js';
 export type {
   ExtensionsCollections,
   FeatureTypesCollection,
@@ -121,15 +153,6 @@ export type {
   PluginsCollection,
   ProvidersCollection,
 } from './extensions.js';
-export type {
-  CompanionProvider,
-  FeatureTypeDefinition,
-  HandleProvider,
-  ModeFactory,
-  OverlayRenderer,
-  Plugin,
-  SnapProvider,
-} from './extension-placeholders.js';
 
 // Style rule functions
 export { deriveLegend, evaluateStyleRule, getStyleRuleChannel } from './model.js';
