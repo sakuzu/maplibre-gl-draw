@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { generateCirclePolygon } from '../../../geometry/index.js';
+import { generateCirclePolygon } from '../../../geometry/circle.js';
 import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { computeBoundingBox, rotateBoundingBox } from './bounding-box.js';

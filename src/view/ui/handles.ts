@@ -8,7 +8,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import { destinationPoint } from '../../geometry/index.js';
+import { destinationPoint } from '../../geometry/distance.js';
 import type { HandleType } from '../../shared/config/constants.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { mercatorMidpoint } from '../../shared/math/globe-subdivision.js';

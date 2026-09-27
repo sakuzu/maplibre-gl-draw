@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { destinationPoint, haversineDistanceMeters } from '../../geometry/index.js';
+import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type { PointShapeRenderer, PointStyle } from '../renderers/point/point-shape.js';

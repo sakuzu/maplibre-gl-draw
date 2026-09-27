@@ -22,7 +22,7 @@
  *   types.ts    the option and dependency types
  */
 
-import { differenceAll, intersectionAll, unionAll } from '../geometry/index.js';
+import { differenceAll, intersectionAll, unionAll } from '../geometry/boolean.js';
 import type { MapLibreGLDraw } from './api.js';
 import { resolveSubtractInputs, runAreaOperation } from './geometry/boolean.js';
 import { runBuffer } from './geometry/buffer.js';

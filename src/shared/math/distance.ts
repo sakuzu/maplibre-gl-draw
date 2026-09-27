@@ -5,13 +5,14 @@
  * Distance computation utilities
  */
 
-import { toRadians } from '../../geometry/index.js';
+import { toRadians } from '../../geometry/units.js';
 import type { Coordinate } from '../types/model.js';
 import { DEFAULT_TILE_SIZE, EARTH } from './constants.js';
 
 // The actual angle conversion and geodesic distance live in the geometry module (single
 // implementation)
-export { haversineDistanceMeters, toDegrees, toRadians } from '../../geometry/index.js';
+export { haversineDistanceMeters } from '../../geometry/distance.js';
+export { toDegrees, toRadians } from '../../geometry/units.js';
 
 /**
  * Distance between two points (a simple version that returns a distance in degrees from

@@ -21,14 +21,6 @@ import { EARTH_RADIUS_METERS, toDegrees, toRadians } from './units.js';
  * @param coord1 A position `[lng, lat]` in degrees
  * @param coord2 A position `[lng, lat]` in degrees
  * @returns The distance in meters. 0 for identical positions
- *
- * @example
- * ```ts
- * import { haversineDistanceMeters } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // Tokyo Station to Osaka Station
- * haversineDistanceMeters([139.767, 35.681], [135.495, 34.702]); // about 403,139 m
- * ```
  */
 export function haversineDistanceMeters(coord1: Coordinate, coord2: Coordinate): number {
   const R = EARTH_RADIUS_METERS;
@@ -56,14 +48,6 @@ export function haversineDistanceMeters(coord1: Coordinate, coord2: Coordinate):
  * @param to The end `[lng, lat]` in degrees
  * @returns The bearing in degrees, clockwise with north as 0, in the range [0, 360). 0 when
  *   the two positions are identical
- *
- * @example
- * ```ts
- * import { initialBearingDegrees } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * initialBearingDegrees([0, 0], [1, 0]); // 90 (due east)
- * initialBearingDegrees([0, 0], [0, 1]); // 0 (due north)
- * ```
  */
 export function initialBearingDegrees(from: Coordinate, to: Coordinate): number {
   const [lng1, lat1] = from;
@@ -106,14 +90,6 @@ export function initialBearingDegrees(from: Coordinate, to: Coordinate): number 
  *   goes the opposite way
  * @param bearingDegrees The initial bearing in degrees, clockwise with north as 0
  * @returns The position reached, `[lng, lat]` in degrees
- *
- * @example
- * ```ts
- * import { destinationPoint } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // 1 km due east of Tokyo Station
- * destinationPoint([139.767, 35.681], 1000, 90); // [139.77807..., 35.68099...]
- * ```
  */
 export function destinationPoint(
   origin: Coordinate,

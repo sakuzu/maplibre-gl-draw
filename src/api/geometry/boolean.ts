@@ -5,7 +5,7 @@
  * The boolean editing operations (union / subtract / intersect) on the area types
  */
 
-import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/index.js';
+import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import type { GeometryOperationName } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';

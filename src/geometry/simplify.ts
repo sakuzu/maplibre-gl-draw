@@ -85,13 +85,6 @@ function markKeep(
  *   simplified line
  * @returns The simplified vertices as a new array. A copy of the input for 2 positions or
  *   fewer, for a tolerance that is not positive, and for a ring that would collapse
- *
- * @example
- * ```ts
- * import { simplify } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * simplify([[0, 0], [1, 0.00001], [2, 0], [3, 1]], 0.001); // [[0, 0], [2, 0], [3, 1]]
- * ```
  */
 export function simplify(path: Coordinate[], toleranceDegrees: number): Coordinate[] {
   if (path.length <= 2 || !(toleranceDegrees > 0)) {

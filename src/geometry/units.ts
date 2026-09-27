@@ -9,7 +9,7 @@
  */
 
 /**
- * The radius of the sphere every geodesic function of this module uses, in meters.
+ * The radius in meters of the sphere on which every function of this entry measures.
  *
  * The value is the mean Earth radius, 6,371,000 m. Distances, bearings, areas, circles and
  * buffers all assume this sphere rather than an ellipsoid, so a result differs from an
@@ -22,13 +22,6 @@ export const EARTH_RADIUS_METERS = 6371000;
  *
  * @param degrees The angle in degrees
  * @returns The angle in radians. NaN and infinities pass through unchanged
- *
- * @example
- * ```ts
- * import { toRadians } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * toRadians(180); // Math.PI
- * ```
  */
 export function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
@@ -42,4 +35,20 @@ export function toRadians(degrees: number): number {
  */
 export function toDegrees(radians: number): number {
   return (radians * 180) / Math.PI;
+}
+
+/**
+ * Converts a distance at a latitude into degrees of longitude and latitude.
+ *
+ * On the sphere of {@link EARTH_RADIUS_METERS}: a degree of latitude is always the same
+ * length, and a degree of longitude shrinks with the cosine of the latitude. Use it to turn a
+ * tolerance in meters into one in degrees. Near the poles the longitude grows without bound.
+ *
+ * @param meters The distance in meters
+ * @param latitude The latitude in degrees at which the distance is taken
+ * @returns The distance in degrees of longitude (`lng`) and of latitude (`lat`)
+ */
+export function metersToDegrees(meters: number, latitude: number): { lng: number; lat: number } {
+  const lat = toDegrees(meters / EARTH_RADIUS_METERS);
+  return { lng: lat / Math.cos(toRadians(latitude)), lat };
 }

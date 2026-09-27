@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { normalizeMultiPolygonOrientation } from '../../geometry/index.js';
+import { normalizeMultiPolygonOrientation } from '../../geometry/simplify.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature, Group, Layer, StyleRule } from '../../store/types.js';
 import type { Context } from '../context.js';

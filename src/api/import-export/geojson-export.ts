@@ -22,7 +22,7 @@
 import {
   normalizeMultiPolygonOrientation,
   normalizePolygonOrientation,
-} from '../../geometry/index.js';
+} from '../../geometry/simplify.js';
 import type { Store } from '../../store/store.js';
 import type { ExportOptions, Feature } from '../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS, GEOJSON_PREFIX, LIBRARY_PROPERTIES } from './constants.js';

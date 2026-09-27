@@ -6,7 +6,7 @@
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import { haversineDistanceMeters, initialBearingDegrees } from '../../../geometry/index.js';
+import { haversineDistanceMeters, initialBearingDegrees } from '../../../geometry/distance.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';

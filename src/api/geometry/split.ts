@@ -5,8 +5,8 @@
  * The split: cuts a polygon with a line into several features
  */
 
-import type { MultiPolygonCoordinates } from '../../geometry/index.js';
-import { splitArea } from '../../geometry/index.js';
+import { splitArea } from '../../geometry/split.js';
+import type { MultiPolygonCoordinates } from '../../geometry/types.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../store/types.js';
 import { applyResult, emitApplied } from './apply.js';
 import { toAreaCoordinates, toResultGeometry, toSplitPaths } from './targets.js';

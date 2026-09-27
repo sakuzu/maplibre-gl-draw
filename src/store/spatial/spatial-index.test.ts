@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { generateCirclePolygon } from '../../geometry/index.js';
+import { generateCirclePolygon } from '../../geometry/circle.js';
 import type { Coordinate, Feature } from '../types.js';
 import { getBoundingBox, RBushSpatialIndex } from './spatial-index.js';
 

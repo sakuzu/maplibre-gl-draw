@@ -41,14 +41,6 @@ import { EARTH_RADIUS_METERS, toRadians } from './units.js';
  * @param radiusMeters The distance from the center in meters
  * @param angleDegrees The bearing in degrees, clockwise with north as 0
  * @returns The position `[lng, lat]` in degrees
- *
- * @example
- * ```ts
- * import { getPointAtAngle } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // 1 km due east of Tokyo Station, on the same parallel
- * getPointAtAngle([139.767, 35.681], 1000, 90); // [139.77807..., 35.681]
- * ```
  */
 export function getPointAtAngle(
   center: Coordinate,

@@ -13,7 +13,7 @@ import { toRadians } from './distance.js';
 
 // The actual generation of a coordinate from a bearing lives in the geometry module (single
 // implementation)
-export { getPointAtAngle } from '../../geometry/index.js';
+export { getPointAtAngle } from '../../geometry/angle.js';
 
 /**
  * Computes the angle between two points (the bearing as seen from the center)

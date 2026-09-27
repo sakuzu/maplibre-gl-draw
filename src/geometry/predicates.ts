@@ -51,15 +51,6 @@ function pointInRing(point: Coordinate, ring: Ring): boolean {
  * @param polygon Polygon or MultiPolygon coordinates in degrees
  * @returns `true` when the point is inside an outer ring and inside none of its holes (in
  *   any part of a MultiPolygon). `false` for empty coordinates
- *
- * @example
- * ```ts
- * import { pointInPolygon } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const square: [number, number][][] = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
- * pointInPolygon([0.5, 0.5], square); // true
- * pointInPolygon([2, 0.5], square); // false
- * ```
  */
 export function pointInPolygon(point: Coordinate, polygon: AreaCoordinates): boolean {
   for (const part of toMultiPolygonCoordinates(polygon)) {

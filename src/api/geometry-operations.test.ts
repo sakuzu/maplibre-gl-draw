@@ -13,8 +13,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AreaCoordinates } from '../geometry/index.js';
-import { getPointAtAngle, pointInPolygon, unionAll } from '../geometry/index.js';
+import { getPointAtAngle } from '../geometry/angle.js';
+import { unionAll } from '../geometry/boolean.js';
+import { pointInPolygon } from '../geometry/predicates.js';
+import type { AreaCoordinates } from '../geometry/types.js';
 import { generateCirclePolygon } from '../shared/math/index.js';
 import type { GeometryAppliedPayload } from '../shared/utils/event-emitter.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';

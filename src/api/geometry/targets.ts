@@ -10,7 +10,7 @@ import type {
   AreaCoordinates,
   GeometryInput,
   MultiPolygonCoordinates,
-} from '../../geometry/index.js';
+} from '../../geometry/types.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';

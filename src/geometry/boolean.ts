@@ -127,15 +127,6 @@ function normalize(coordinates: MultiPolygonCoordinates): MultiPolygonCoordinate
  *   the input has no area
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import { normalizeArea } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // A self-intersecting bow tie becomes two triangles
- * normalizeArea([[[0, 0], [1, 1], [1, 0], [0, 1], [0, 0]]]);
- * // [[[[0, 0], [0.5, 0.5], [0, 1], [0, 0]]], [[[0.5, 0.5], [1, 0], [1, 1], [0.5, 0.5]]]]
- * ```
  */
 export function normalizeArea(coordinates: AreaCoordinates): MultiPolygonCoordinates {
   return normalize(sanitize(coordinates));
@@ -154,16 +145,6 @@ export function normalizeArea(coordinates: AreaCoordinates): MultiPolygonCoordin
  *   several parts. An empty array when neither input has an area
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import type { PolygonCoordinates } from '@sakuzu/maplibre-gl-draw/geometry';
- * import { union } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const a: PolygonCoordinates = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
- * const b: PolygonCoordinates = [[[0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1], [0.5, 0]]];
- * union(a, b); // [[[[0, 0], [1.5, 0], [1.5, 1], [0, 1], [0, 0]]]]
- * ```
  */
 export function union(a: AreaCoordinates, b: AreaCoordinates): MultiPolygonCoordinates {
   const left = sanitize(a);
@@ -188,16 +169,6 @@ export function union(a: AreaCoordinates, b: AreaCoordinates): MultiPolygonCoord
  *   when `a` has no area or `b` covers it. `a` normalized when `b` has no area
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import type { PolygonCoordinates } from '@sakuzu/maplibre-gl-draw/geometry';
- * import { difference } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const a: PolygonCoordinates = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
- * const b: PolygonCoordinates = [[[0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1], [0.5, 0]]];
- * difference(a, b); // [[[[0, 0], [0.5, 0], [0.5, 1], [0, 1], [0, 0]]]]
- * ```
  */
 export function difference(a: AreaCoordinates, b: AreaCoordinates): MultiPolygonCoordinates {
   const left = sanitize(a);
@@ -221,16 +192,6 @@ export function difference(a: AreaCoordinates, b: AreaCoordinates): MultiPolygon
  *   area
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import type { PolygonCoordinates } from '@sakuzu/maplibre-gl-draw/geometry';
- * import { intersection } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const a: PolygonCoordinates = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
- * const b: PolygonCoordinates = [[[0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1], [0.5, 0]]];
- * intersection(a, b); // [[[[0.5, 0], [1, 0], [1, 1], [0.5, 1], [0.5, 0]]]]
- * ```
  */
 export function intersection(a: AreaCoordinates, b: AreaCoordinates): MultiPolygonCoordinates {
   const left = sanitize(a);
@@ -274,18 +235,6 @@ export function clip(
  *   empty array and when no element has an area
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import { unionAll } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * const merged = unionAll([
- *   [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
- *   [[[0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1], [0.5, 0]]],
- *   [[[5, 5], [6, 5], [6, 6], [5, 5]]],
- * ]);
- * merged.length; // 2 (the overlapping squares fuse; the triangle stays apart)
- * ```
  */
 export function unionAll(geometries: AreaCoordinates[]): MultiPolygonCoordinates {
   const parts = geometries.map(sanitize).filter((part) => part.length > 0);
