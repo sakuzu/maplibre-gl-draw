@@ -64,7 +64,7 @@ export interface SceneLayer {
  */
 export function buildDocument(title: string, layers: SceneLayer[], files: FileData[] = []): Data {
   return {
-    version: '2.0.0',
+    version: '3.0.0',
     metadata: { title },
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({

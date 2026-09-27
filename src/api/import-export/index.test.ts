@@ -1930,6 +1930,62 @@ describe('createImportExportAPI', () => {
     }
   });
 
+  describe('GeoJSON export writes the geometry and the properties as they are', () => {
+    it('writes a Circle as its Point with the prefixed radius and the type marker', () => {
+      const api = createImportExportAPI(context);
+      context.store.createFeature(
+        createTestFeature('c1', {
+          type: 'Circle',
+          geometry: { type: 'Point', coordinates: [139.7, 35.6] },
+          properties: {
+            'maplibre-gl-draw:radiusMeters': 250,
+            'maplibre-gl-draw:radiusHandleAngle': 90,
+            name: 'Circle',
+          },
+        }),
+      );
+
+      const [feature] = JSON.parse(api.export('geojson').data).features;
+
+      expect(feature.geometry).toEqual({ type: 'Point', coordinates: [139.7, 35.6] });
+      expect(feature.properties).toMatchObject({
+        'maplibre-gl-draw:radiusMeters': 250,
+        'maplibre-gl-draw:radiusHandleAngle': 90,
+        'maplibre-gl-draw:featureType': 'Circle',
+        name: 'Circle',
+      });
+    });
+
+    it('brings a Circle back with its radius on the round trip', async () => {
+      const api = createImportExportAPI(context);
+      context.store.createFeature(
+        createTestFeature('c1', {
+          type: 'Circle',
+          geometry: { type: 'Point', coordinates: [139.7, 35.6] },
+          properties: { 'maplibre-gl-draw:radiusMeters': 250 },
+        }),
+      );
+      const doc = JSON.parse(api.export('geojson').data);
+
+      const context2 = createTestContext();
+      const result = await createImportExportAPI(context2).load(doc);
+
+      const circle = context2.store.getFeature(result.featureIds[0]);
+      expect(circle?.type).toBe('Circle');
+      expect(circle?.properties).toEqual({ 'maplibre-gl-draw:radiusMeters': 250 });
+    });
+
+    it('writes no type marker for a feature whose type is its geometry type', () => {
+      const api = createImportExportAPI(context);
+      context.store.createFeature(createTestFeature('p1'));
+
+      const [feature] = JSON.parse(api.export('geojson').data).features;
+
+      expect(feature.properties).not.toHaveProperty(['maplibre-gl-draw:featureType']);
+      expect(feature.properties).not.toHaveProperty(['maplibre-gl-draw:style']);
+    });
+  });
+
   describe('the version of native data', () => {
     function nativeData(version: string) {
       return {
@@ -1947,7 +2003,7 @@ describe('createImportExportAPI', () => {
     it('rejects another major version and keeps the existing data', async () => {
       const api = createImportExportAPI(context);
 
-      await expect(api.load(nativeData('3.0.0'))).rejects.toThrow(/version 3\.0\.0/);
+      await expect(api.load(nativeData('4.0.0'))).rejects.toThrow(/version 4\.0\.0/);
       await expect(api.load(nativeData('1.2.0'))).rejects.toThrow(/version 1\.2\.0/);
       expect(context.store.getFeature('existing')).toBeDefined();
       expect(context.store.getFeature('incoming')).toBeUndefined();
@@ -1965,8 +2021,8 @@ describe('createImportExportAPI', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        await api.load(nativeData('2.9.0'));
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('2.9.0'));
+        await api.load(nativeData('3.9.0'));
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('3.9.0'));
       } finally {
         warn.mockRestore();
       }

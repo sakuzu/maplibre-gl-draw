@@ -73,7 +73,7 @@ describe('the spatial index derived from the Store', () => {
     context.store.setReadOnly(true);
 
     await io.load({
-      version: '2.0.0',
+      version: '3.0.0',
       layers: [
         { id: 'default-layer', name: 'L', visible: true, locked: false, opacity: 1, items: [] },
       ],

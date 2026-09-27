@@ -24,7 +24,8 @@ export function isNativeFormat(data: unknown): data is Data {
         f !== null &&
         'id' in f &&
         'type' in f &&
-        'geometry' in f &&
+        // `coordinates` in data of version 2, which is upgraded on load
+        ('geometry' in f || 'coordinates' in f) &&
         'layerId' in f,
     )
   );

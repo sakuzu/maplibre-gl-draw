@@ -57,6 +57,7 @@ function validateGroup(group: unknown, index: number): Group {
   if (typeof group.name !== 'string') fail(`${where} has no string name`);
   if (typeof group.visible !== 'boolean') fail(`${where} has no boolean visible`);
   if (typeof group.locked !== 'boolean') fail(`${where} has no boolean locked`);
+  if (typeof group.layerId !== 'string') fail(`${where} has no string layerId`);
   if (!Array.isArray(group.featureIds) || !group.featureIds.every((id) => typeof id === 'string')) {
     fail(`${where} has no featureIds array of strings`);
   }

@@ -290,17 +290,17 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
         context.fillStyle = '#FF00FF';
         context.fillRect(0, 0, 64, 64);
         await draw.load({
-          version: '2.0.0',
+          version: '3.0.0',
           metadata: { title: 'image' },
           layerOrder: ['images'],
           layers: [
-            { id: 'images', name: 'Images', visible: true, locked: false, opacity: 1, order: [id] },
+            { id: 'images', name: 'Images', visible: true, locked: false, opacity: 1, items: [id] },
           ],
           features: [
             {
               id,
               type: 'Image',
-              coordinates: [0, 30],
+              geometry: { type: 'Point', coordinates: [0, 30] },
               layerId: 'images',
               visible: true,
               locked: false,

@@ -24,7 +24,6 @@ import {
   normalizePolygonOrientation,
 } from '../../geometry/simplify.js';
 import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../shared/properties.js';
-import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { ExportOptions, Feature } from '../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS } from './constants.js';
@@ -88,31 +87,48 @@ function exportPolygon(rings: Position[][]): Position[][] {
   return wrapRings(normalizePolygonOrientation(rings.map(roundLine)));
 }
 
-/** Whether it is a single coordinate ([lng, lat]) */
-function isCoordinatePair(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    typeof value[0] === 'number' &&
-    typeof value[1] === 'number'
-  );
-}
-
-/** Whether it is a sequence of points ([[lng, lat], …], two or more points) */
-function isCoordinatePairArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length >= 2 && value.every(isCoordinatePair);
+/**
+ * The geometry as it is exported: the positions rounded, the rings oriented by the right-hand
+ * rule and the longitudes brought into [-180, 180] (null for a GeometryCollection, which no
+ * feature holds)
+ */
+function exportGeometry(geometry: GeoJSON.Geometry): GeoJSON.Geometry | null {
+  switch (geometry.type) {
+    case 'Point':
+      return { type: 'Point', coordinates: exportPosition(geometry.coordinates as Position) };
+    case 'LineString':
+      return { type: 'LineString', coordinates: exportLine(geometry.coordinates as Position[]) };
+    case 'Polygon':
+      return { type: 'Polygon', coordinates: exportPolygon(geometry.coordinates as Position[][]) };
+    case 'MultiPoint':
+      return { type: 'MultiPoint', coordinates: exportLine(geometry.coordinates as Position[]) };
+    case 'MultiLineString':
+      return {
+        type: 'MultiLineString',
+        coordinates: (geometry.coordinates as Position[][]).map(exportLine),
+      };
+    case 'MultiPolygon':
+      return {
+        type: 'MultiPolygon',
+        coordinates: normalizeMultiPolygonOrientation(
+          (geometry.coordinates as Position[][][]).map((rings) => rings.map(roundLine)),
+        ).map(wrapRings),
+      };
+    default:
+      return null;
+  }
 }
 
 /**
  * Converts an internal Feature into a GeoJSON Feature
  *
- * Conforms to docs/reference/data-format.md:
- *   - includes the metadata in properties with the maplibre-gl-draw: prefix, and writes
- *     name and description as plain keys
- *   - rounds the positions and orients the rings (see the top of this file)
- *   - a Point is written out as a Point geometry
- *   - the Multi types (MultiPoint / MultiLineString / MultiPolygon) are written out as they are
- *   - an Image is written out as a Point geometry and identified by featureType
+ * Conforms to docs/reference/data-format.md. The geometry and the properties are written as
+ * they are: the values of this library already carry the maplibre-gl-draw: prefix, and name
+ * and description are plain keys. Besides:
+ *   - the fields of the feature (id, layer, group, visibility, lock, style) are added to the
+ *     properties with the maplibre-gl-draw: prefix
+ *   - the positions are rounded and the rings oriented (see the top of this file)
+ *   - a type that is not the type of its geometry is identified by featureType
  *   - for an Image feature, the image data is embedded as Base64
  */
 export function convertFeatureToGeoJSON(
@@ -144,91 +160,27 @@ export function convertFeatureToGeoJSON(
     properties[`${DRAW_PROPERTY_PREFIX}style`] = feature.style;
   }
 
-  let geometry: GeoJSON.Geometry;
+  const geometry = exportGeometry(feature.geometry);
+  if (!geometry) {
+    console.warn(`Unsupported geometry for GeoJSON export: ${feature.geometry.type}`);
+    return null;
+  }
 
-  switch (feature.type) {
-    case 'Point':
-      geometry = { type: 'Point', coordinates: exportPosition(coordinatesOf(feature) as Position) };
-      break;
+  // A type that GeoJSON has no geometry for (Image, Circle, Freehand and custom types) makes
+  // the round trip through the featureType marker, which carries the type name as it is (a
+  // name such as MyShape keeps its inner capital). The import restores the type from it.
+  if (feature.type !== feature.geometry.type) {
+    properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
+  }
 
-    case 'LineString':
-      geometry = {
-        type: 'LineString',
-        coordinates: exportLine(coordinatesOf(feature) as Position[]),
-      };
-      break;
-
-    case 'Polygon':
-      geometry = {
-        type: 'Polygon',
-        coordinates: exportPolygon(coordinatesOf(feature) as Position[][]),
-      };
-      break;
-
-    // The Multi types are written out to GeoJSON with their part structure preserved
-    case 'MultiPoint':
-      geometry = {
-        type: 'MultiPoint',
-        coordinates: exportLine(coordinatesOf(feature) as Position[]),
-      };
-      break;
-
-    case 'MultiLineString':
-      geometry = {
-        type: 'MultiLineString',
-        coordinates: (coordinatesOf(feature) as Position[][]).map(exportLine),
-      };
-      break;
-
-    case 'MultiPolygon':
-      geometry = {
-        type: 'MultiPolygon',
-        coordinates: normalizeMultiPolygonOrientation(
-          (coordinatesOf(feature) as Position[][][]).map((rings) => rings.map(roundLine)),
-        ).map(wrapRings),
-      };
-      break;
-
-    case 'Image': {
-      // An Image is written out as a Point geometry and identified by featureType
-      geometry = { type: 'Point', coordinates: exportPosition(coordinatesOf(feature) as Position) };
-      properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
-
-      // Embed the image data as Base64
-      const imageFileId = getDrawProperty(feature, 'imageFileId');
-      if (imageFileId) {
-        const fileData = store.getFile(imageFileId);
-        if (fileData) {
-          properties[`${DRAW_PROPERTY_PREFIX}imageData`] = fileData.dataURL;
-          properties[`${DRAW_PROPERTY_PREFIX}imageMimeType`] = fileData.mimeType;
-        }
-      }
-      break;
+  // Embed the image data of an Image as Base64
+  if (feature.type === 'Image') {
+    const imageFileId = getDrawProperty(feature, 'imageFileId');
+    const fileData = imageFileId ? store.getFile(imageFileId) : undefined;
+    if (fileData) {
+      properties[`${DRAW_PROPERTY_PREFIX}imageData`] = fileData.dataURL;
+      properties[`${DRAW_PROPERTY_PREFIX}imageMimeType`] = fileData.mimeType;
     }
-
-    default:
-      // Custom types (Circle, and the types registered from outside) are dispatched by the shape of their
-      // geometry, and the type itself makes the round trip through the featureType marker,
-      // which carries the type name as it is (a name such as MyShape keeps its inner capital).
-      // A type with a single point is written out as a Point, and a type with a sequence of
-      // points as a LineString. In both cases the import side restores
-      // the original type from the same marker.
-      if (isCoordinatePair(coordinatesOf(feature))) {
-        geometry = {
-          type: 'Point',
-          coordinates: exportPosition(coordinatesOf(feature) as Position),
-        };
-        properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
-      } else if (isCoordinatePairArray(coordinatesOf(feature))) {
-        geometry = {
-          type: 'LineString',
-          coordinates: exportLine(coordinatesOf(feature) as Position[]),
-        };
-        properties[`${DRAW_PROPERTY_PREFIX}featureType`] = feature.type;
-      } else {
-        console.warn(`Unsupported feature type for GeoJSON export: ${feature.type}`);
-        return null;
-      }
   }
 
   return {

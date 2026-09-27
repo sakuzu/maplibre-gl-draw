@@ -14,7 +14,6 @@ import {
   hasDrawProperty,
   setDrawProperty,
 } from '../../shared/properties.js';
-import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { createId } from '../../shared/utils/id.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { Store } from '../../store/store.js';
@@ -78,11 +77,7 @@ function convertSingleGeometry(
     case 'Point': {
       const type = resolveFeatureType('Point', featureType);
       return {
-        feature: {
-          ...base,
-          type,
-          geometry: geometryFromCoordinates(type, geometry.coordinates as [number, number]),
-        },
+        feature: { ...base, type, geometry },
         // The embedded image belongs only to a feature that really is an Image
         fileData: type === 'Image' ? fileData : undefined,
       };
@@ -94,11 +89,7 @@ function convertSingleGeometry(
       // (this pairs with the default branch on export).
       const type = resolveFeatureType('LineString', featureType);
       return {
-        feature: {
-          ...base,
-          type,
-          geometry: geometryFromCoordinates(type, geometry.coordinates as [number, number][]),
-        },
+        feature: { ...base, type, geometry },
       };
     }
 
@@ -107,7 +98,7 @@ function convertSingleGeometry(
         feature: {
           ...base,
           type: 'Polygon',
-          geometry: { type: 'Polygon', coordinates: geometry.coordinates as Coordinate[][] },
+          geometry,
         },
       };
 
@@ -140,10 +131,7 @@ function convertMultiGeometry(
         locked: meta.locked,
         visible: meta.visible,
         type: geometry.type,
-        geometry: geometryFromCoordinates(
-          geometry.type,
-          geometry.coordinates as Coordinate[] | Coordinate[][] | Coordinate[][][],
-        ),
+        geometry,
       },
     },
   ];
@@ -262,7 +250,7 @@ function convertGeometryCollection(
         locked: meta.locked,
         visible: meta.visible,
         type,
-        geometry: geometryFromCoordinates(type, coordinates),
+        geometry: { type, coordinates } as GeoJSON.Geometry,
       },
     });
   };

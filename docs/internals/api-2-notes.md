@@ -106,7 +106,19 @@ reads them.
 ## The native format
 
 The version of the native format goes from `2.0.0` to `3.0.0`. Data of
-version 2 is upgraded on load: `coordinates` becomes `geometry`, the
-values of the library in `properties` get their prefix, `order` becomes
-`items`, and each group gets the `layerId` of the layer that lists it.
+version 2 is upgraded on load (`src/api/import-export/native-upgrade.ts`):
+`coordinates` becomes `geometry`, the values of the library in
+`properties` get their prefix, `order` becomes `items`, and each group
+gets the `layerId` of the layer that lists it (or of its first member).
 Data of version 1 is still rejected, as before.
+
+## GeoJSON
+
+The GeoJSON export writes the geometry of a feature and its `properties`
+as they are, with the positions rounded and the rings oriented as before.
+A feature whose type is not the type of its geometry (an Image, a Circle,
+a Freehand or a custom type) carries the `featureType` marker. In 1.0 a
+custom type whose coordinates were neither a position nor a list of
+positions was left out of the export; it is now written with its
+geometry and the marker, and the import reads it back as the geometry
+type, since the marker is read only on a Point or a LineString.

@@ -26,10 +26,15 @@ interface Coordinate {
 
 type FeatureType = 'Point' | 'LineString' | 'Polygon' | 'Image' | 'Sticker';
 
+interface DrawGeometry {
+  type: 'Point' | 'LineString' | 'Polygon';
+  coordinates: Coordinate | Coordinate[] | Coordinate[][];
+}
+
 interface DrawFeature {
   id: string;
   type: FeatureType;
-  coordinates: Coordinate | Coordinate[] | Coordinate[][];
+  geometry: DrawGeometry;
   layerId: string;
   groupId?: string;
   properties: Record<string, unknown>;
@@ -44,7 +49,7 @@ interface DrawLayer {
   visible: boolean;
   locked: boolean;
   opacity: number;
-  order: string[];
+  items: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -118,7 +123,7 @@ function generatePoint(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'Point',
-    coordinates: randomCoordinate(),
+    geometry: { type: 'Point', coordinates: randomCoordinate() },
     layerId,
     properties: {},
     style: {
@@ -143,7 +148,7 @@ function generateLineString(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates },
     layerId,
     properties: { 'maplibre-gl-draw:createdZoom': 14 },
     style: {
@@ -178,7 +183,7 @@ function generatePolygon(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [coordinates],
+    geometry: { type: 'Polygon', coordinates: [coordinates] },
     layerId,
     properties: { 'maplibre-gl-draw:createdZoom': 14 },
     style: {
@@ -199,7 +204,7 @@ function generateSticker(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'Sticker',
-    coordinates: randomCoordinate(),
+    geometry: { type: 'Point', coordinates: randomCoordinate() },
     layerId,
     properties: {
       'maplibre-gl-draw:createdZoom': 12,
@@ -242,7 +247,7 @@ function generateTestData(count: number): MapLibreGLDrawData {
   }
 
   return {
-    version: '2.0.0',
+    version: '3.0.0',
     created: new Date().toISOString(),
     modified: new Date().toISOString(),
     metadata: {
@@ -256,7 +261,7 @@ function generateTestData(count: number): MapLibreGLDrawData {
         visible: true,
         locked: false,
         opacity: 1,
-        order,
+        items: order,
       },
     ],
     layerOrder: [layerId],

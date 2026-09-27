@@ -9,6 +9,7 @@ import { getDrawProperty } from '../../shared/properties.js';
 import type { Store } from '../../store/store.js';
 import type { Data, ExportOptions, FileData, LoadResult } from '../../store/types.js';
 import { NATIVE_VERSION } from './constants.js';
+import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
 
 /** The layer that survives the replacement (it is updated in place when the data has it) */
@@ -79,8 +80,10 @@ export async function loadNative(data: Data, deps: { store: Store }): Promise<Lo
   // still intact.
   const retainedLayerIds = new Set<string>();
   if (store.getLayer(DEFAULT_LAYER_ID)) retainedLayerIds.add(DEFAULT_LAYER_ID);
+  // Data of an earlier major version is brought to the current one first
+  const upgraded = upgradeNativeData(data) as Data;
   const { layers, layerOrder, groups, features, files } = await validateNativeData(
-    data,
+    upgraded,
     retainedLayerIds,
   );
   const featureIds = features.map((f) => f.id);
@@ -143,8 +146,8 @@ export async function loadNative(data: Data, deps: { store: Store }): Promise<Lo
     store.setLayerOrder([...retainedUnlisted, ...layerOrder]);
 
     // 7. Import the metadata
-    if (data.metadata) {
-      store.setMetadata(data.metadata);
+    if (upgraded.metadata) {
+      store.setMetadata(upgraded.metadata);
     }
   }, 'silent');
 

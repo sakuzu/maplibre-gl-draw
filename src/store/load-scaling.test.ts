@@ -115,7 +115,7 @@ function generate(count: number): Data {
     }
     layers[li].items = [...groupIds, ...ids.slice(cursor)];
   }
-  return { version: '2.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
+  return { version: '3.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
 }
 
 // Measurement equivalent to a browser: wires up the EventBridge plus an O(N) idempotent

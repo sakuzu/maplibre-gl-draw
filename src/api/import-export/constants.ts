@@ -9,10 +9,14 @@
  * Version of the native format
  *
  * Semantic versioning. A minor version only adds fields; a major version can change the
- * meaning of any field, and data of another major version is rejected. 2.0.0 made the
- * stacking order (`layerOrder`) a required part of the data.
+ * meaning of any field. Data of an earlier major version is upgraded on load when there is a
+ * step for it (native-upgrade.ts), and data of any other major version is rejected. 2.0.0 made
+ * the stacking order (`layerOrder`) a required part of the data. 3.0.0 holds the geometry of
+ * a feature as GeoJSON, the values of the library in `properties` under the
+ * `maplibre-gl-draw:` prefix, the items of a layer in `items` and the layer of a group in
+ * `layerId`.
  */
-export const NATIVE_VERSION = '2.0.0';
+export const NATIVE_VERSION = '3.0.0';
 
 /**
  * The number of decimal places the GeoJSON export keeps in a coordinate
