@@ -55,8 +55,9 @@ export interface FeaturesCollection {
    *
    * @returns The new feature, or `null` when the document is read-only
    * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape,
-   *   `already-exists` when its ID is taken, or `not-found` when its layer or group does not
-   *   exist
+   *   `already-exists` when its ID is taken, `not-found` when its layer or group does not
+   *   exist, or `invalid-state` when the input names no layer and the document has no layer
+   *   to put it in
    */
   create(input: FeatureInput): Feature | null;
   /**
@@ -132,7 +133,8 @@ export interface FeaturesCollection {
    *
    * @returns The new feature, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when one of the features is not an area
+   *   `invalid-input` when fewer than two areas are given or one of the features is not an
+   *   area
    */
   union(ids: readonly string[]): Feature | null;
   /**
@@ -151,7 +153,8 @@ export interface FeaturesCollection {
    *
    * @returns The resulting feature, or `null` when the operation is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when one of the IDs does not exist, or
-   *   `invalid-input` when one of the features is not an area
+   *   `invalid-input` when fewer than two areas are given or one of the features is not an
+   *   area
    */
   intersection(ids: readonly string[]): Feature | null;
   /**
