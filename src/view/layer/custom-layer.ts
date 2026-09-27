@@ -183,6 +183,12 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    * `MapLibreGLDraw.hasPendingWork`)
    */
   hasPendingWork(): boolean;
+  /**
+   * Draws again from the configuration: the GPU side is built again from the styles and the
+   * switches of the rendering, the caches are dropped and the slots follow the separators.
+   * Called after the options of the instance changed at runtime
+   */
+  refresh(): void;
 }
 
 /**
@@ -289,7 +295,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     store,
     terrain: terrainContext,
     datasets,
-    timeSlicing: renderingConfig.timeSlicing,
+    // Read at each build, so a change of the rendering switches applies to the next one
+    get timeSlicing() {
+      return renderingConfig.timeSlicing;
+    },
   });
   const styleZoom = new StyleZoom();
   const slots = new SlotManager({
@@ -761,6 +770,21 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         if (renderer.hasPendingWork?.()) return true;
       }
       return false;
+    },
+
+    refresh(): void {
+      renderScope.earcut.clear();
+      renderScope.styleRules.clear();
+      displayList.invalidate();
+      drape.invalidate();
+      if (!engine.mapInstance) return;
+      // The renderers and the retained batches read the configuration when they are built
+      if (engine.renderers) {
+        releaseGpuResources();
+        buildGpuResources();
+      }
+      slots.sync();
+      engine.mapInstance.triggerRepaint();
     },
   };
 

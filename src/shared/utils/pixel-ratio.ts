@@ -133,6 +133,12 @@ export function resolveContentPixelRatio(pixelRatio?: PixelRatioInput): number {
  */
 export interface PixelRatioSource extends PixelRatioProvider {
   /**
+   * Replaces the pixel ratio given at creation; `undefined` goes back to the ratio of the map
+   *
+   * @returns Whether the value changed
+   */
+  setPixelRatio: (pixelRatio: number | undefined) => boolean;
+  /**
    * Sets the factor of the rendering pixel ratio
    *
    * It accepts only finite positive values (anything else is ignored). It returns true only
@@ -155,8 +161,16 @@ export function createPixelRatioSource(
   fallback?: () => number,
 ): PixelRatioSource {
   let renderScale = 1;
-  const input: PixelRatioInput | undefined = usable(pixelRatio) ? pixelRatio : fallback;
+  let given = usable(pixelRatio) ? pixelRatio : undefined;
+  let input: PixelRatioInput | undefined = given ?? fallback;
   return {
+    setPixelRatio: (value: number | undefined) => {
+      const next = usable(value) ? value : undefined;
+      if (next === given) return false;
+      given = next;
+      input = given ?? fallback;
+      return true;
+    },
     resolve: () => resolvePixelRatio(input) * renderScale,
     getRenderScale: () => renderScale,
     setRenderScale: (scale: number) => {

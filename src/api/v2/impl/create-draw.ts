@@ -5,32 +5,19 @@
  * `createDraw`: the draw instance on the engine, with its resources
  */
 
-import { DrawStore } from '../../../store/draw-store.js';
-import type { Options } from '../../context.js';
 import { createEngine } from '../../engine.js';
 import type { CreateDraw, Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
-import type { DrawOptions } from '../options.js';
 import { createDocument } from './document.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createHidden } from './hidden.js';
 import { createLayers } from './layers.js';
 import { createMetadata } from './metadata.js';
+import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound } from './shared.js';
-
-/** The options the engine takes as they are */
-const ENGINE_OPTION_KEYS = [
-  'defaultMode',
-  'initDefaultLayer',
-  'messages',
-  'scaleWithZoom',
-  'clickTolerance',
-  'dragThreshold',
-  'isExternalEntry',
-] as const;
 
 /** Throws for a part of the API that a later step of the 2.0 work provides */
 function notImplemented(name: string): never {
@@ -50,33 +37,23 @@ function pending<T>(name: string): T {
   }) as T;
 }
 
-/** The options of the engine for the options of `createDraw` */
-function toEngineOptions(options: DrawOptions): Options {
-  const result: Options = {};
-  for (const [key, value] of Object.entries(options)) {
-    if (value === undefined) continue;
-    if ((ENGINE_OPTION_KEYS as readonly string[]).includes(key)) {
-      (result as Record<string, unknown>)[key] = value;
-    } else if (key === 'store') {
-      // Only a Store of this library is taken until the option of a Store of the application
-      if (!(value instanceof DrawStore)) notImplemented('the store option with another Store');
-      result.store = value;
-    } else if (key === 'rendering' && Object.keys(value).every((k) => k === 'pixelRatio')) {
-      result.pixelRatio = (value as { pixelRatio?: number }).pixelRatio;
-    } else {
-      notImplemented(`the option ${key}`);
-    }
-  }
-  return result;
-}
-
 /**
  * Puts a draw instance on a map and returns it.
  *
  * @internal
  */
 export const createDraw: CreateDraw = (map, options = {}) => {
-  const engine = createEngine(map, toEngineOptions(options));
+  checkDrawOptions(options);
+  // The engine asks this function, so that the option can change while the instance runs
+  let isExternalEntry = options.isExternalEntry;
+  const engine = createEngine(
+    map,
+    toEngineOptions(options, (id) => isExternalEntry?.(id) === true),
+  );
+  const drawOptions = createOptions(engine, options, (fn) => {
+    isExternalEntry = fn;
+  });
+  drawOptions.applyCreation();
   const { context, modeManager, events } = engine;
   const { store } = context;
   const view: StoreView = store;
@@ -102,7 +79,7 @@ export const createDraw: CreateDraw = (map, options = {}) => {
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
     metadata: createMetadata(deps),
-    options: pending('options'),
+    options: { get: drawOptions.get, update: drawOptions.update },
     document: createDocument(deps, (result, source) =>
       events.emit('document.loaded', { result, source }),
     ),

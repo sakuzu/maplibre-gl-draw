@@ -47,10 +47,16 @@ describe('createDraw', () => {
     other.destroy();
   });
 
-  it('throws for an option a later step provides', () => {
-    expect(() => createDraw(createMapStub().map, { snapping: { enabled: false } })).toThrow(
-      'not implemented (api-2)',
-    );
+  it('throws invalid-input for an unknown option or a value of the wrong type', () => {
+    const map = createMapStub().map;
+    for (const options of [{ unknown: 1 }, { snapping: { enabled: 'yes' } }, { style: 'red' }]) {
+      try {
+        createDraw(map, options as never);
+        expect.unreachable();
+      } catch (error) {
+        expect((error as DrawError).code).toBe('invalid-input');
+      }
+    }
   });
 });
 
@@ -129,7 +135,6 @@ describe('the parts later steps provide', () => {
     expect(() => draw.hasPendingWork()).toThrow(message);
     expect(() => draw.getLayerStack()).toThrow(message);
     expect(() => draw.debug.terrain()).toThrow(message);
-    expect(() => draw.options.get()).toThrow(message);
     expect(() => draw.datasets.list()).toThrow(message);
     expect(() => draw.extensions.plugins.list()).toThrow(message);
   });

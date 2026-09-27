@@ -377,6 +377,18 @@ export function resolveSnapKinds(
  */
 export interface SnapService {
   /**
+   * Changes how close the pointer must come to a candidate, in screen px
+   *
+   * @param px The new tolerance
+   */
+  setTolerance(px: number): void;
+  /**
+   * Changes the modifier key that stops snapping while it is held
+   *
+   * @param key The new key
+   */
+  setDisableKey(key: SnapDisableKey): void;
+  /**
    * Resolves a coordinate by snapping
    *
    * @param lngLat The input coordinate (the cursor position)

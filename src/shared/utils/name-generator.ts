@@ -164,7 +164,7 @@ export function normalizeAutoNameConfig(
  */
 export class AutoNameGenerator {
   private readonly store: NameSource;
-  private readonly config: AutoNameConfig;
+  private config: AutoNameConfig;
   /** Counter that remembers the largest number already generated per type */
   private readonly counters: Map<string, number> = new Map();
   /** Counter keys whose full scan is done (Layer/Group go into the same Set) */
@@ -197,6 +197,23 @@ export class AutoNameGenerator {
    */
   isEnabled(): boolean {
     return this.config.enabled;
+  }
+
+  /**
+   * Replaces the configuration: whether names are generated, the words of the types and the
+   * format. The numbers already used are not used again; the names already in the document
+   * are read again in the new words.
+   */
+  configure(config: AutoNameConfig | boolean): void {
+    this.config = normalizeAutoNameConfig(config);
+    this.scannedTypes.clear();
+    if (this.config.enabled && !this.unsubscribe) {
+      this.unsubscribe = this.store.subscribe((changes) => {
+        this.observeChanges(changes);
+      });
+    } else if (!this.config.enabled) {
+      this.dispose();
+    }
   }
 
   /**

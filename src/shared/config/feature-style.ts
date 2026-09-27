@@ -149,6 +149,18 @@ export interface FeatureStyleConfig {
    */
   polygon: PolygonFeatureStyle;
   /**
+   * Circle, when it looks different from the polygons
+   *
+   * @defaultValue the look of the polygons
+   */
+  circle?: PolygonFeatureStyle;
+  /**
+   * The opacity of an Image that has none of its own
+   *
+   * @defaultValue 1
+   */
+  image?: { opacity: number };
+  /**
    * The geometry being drawn
    *
    * @defaultValue `#FF0077` 2 px lines (dashed to the cursor) and 10 px white vertices
@@ -310,5 +322,19 @@ export function mergeFeatureStyleConfig(
         ...override.tentative?.circleRadiusHandle,
       },
     },
+    ...mergeOptionalPart('circle', base, override),
+    ...mergeOptionalPart('image', base, override),
   };
+}
+
+/** An optional part of the configuration: the override over the base, when either has it */
+function mergeOptionalPart<K extends 'circle' | 'image'>(
+  key: K,
+  base: FeatureStyleConfig,
+  override: Partial<FeatureStyleConfig>,
+): Partial<Pick<FeatureStyleConfig, K>> {
+  const value = override[key] ?? base[key];
+  return value === undefined
+    ? {}
+    : ({ [key]: structuredClone(value) } as Pick<FeatureStyleConfig, K>);
 }

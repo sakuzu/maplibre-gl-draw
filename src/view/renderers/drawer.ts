@@ -161,12 +161,15 @@ export class FeatureDrawer {
         );
       }
     } else if (feature.type === 'Image') {
+      // An image without an opacity of its own takes the one of the instance
+      const imageOpacity =
+        feature.style.imageOpacity === undefined ? (this.featureStyle.image?.opacity ?? 1) : 1;
       this.imageRenderer.draw(
         feature,
         projectionData,
         zoom,
         () => this.map.triggerRepaint(),
-        opacity,
+        opacity * imageOpacity,
       );
     } else if (feature.type === 'Circle') {
       this.drawCircle(feature, projectionData, zoom, layer, opacity);
@@ -262,8 +265,12 @@ export class FeatureDrawer {
     fillColor: Color;
     strokeStyle: SDFStrokeStyle;
   } {
-    const defaultFillColor = this.featureStyle.polygon.fill.color;
-    const defaultStrokeStyle = this.featureStyle.polygon.stroke;
+    const look =
+      feature?.type === 'Circle' && this.featureStyle.circle
+        ? this.featureStyle.circle
+        : this.featureStyle.polygon;
+    const defaultFillColor = look.fill.color;
+    const defaultStrokeStyle = look.stroke;
     const style = this.resolveStyle(feature, layer, 'fill');
 
     if (!style) {
