@@ -89,7 +89,8 @@ The front is at the end of every list:
 3. inside a group, `group.featureIds`
 
 `features.list()` returns every feature in this order, from the back.
-`layers.reorder` takes the IDs of every layer from the back, and
+`layers.reorder` takes the IDs of every layer from the back (and may
+place other entries of the stacking order, below), and
 `features.move` and `groups.move` place features and groups. Without an
 `index` a move goes to the front of its destination; `index: 0` is the
 back.
@@ -252,9 +253,9 @@ const draw = createDraw(map, {
 });
 
 // The roads of the map go just in front of the parcels layer
-const doc = draw.document.toJSON();
-doc.layerOrder.splice(doc.layerOrder.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
-await draw.document.load(doc);
+const ids = draw.layers.list().map((layer) => layer.id);
+ids.splice(ids.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
+draw.layers.reorder(ids);
 
 function placeMapLayers(): void {
   const order = draw.getStore().getLayerOrder();
@@ -271,10 +272,12 @@ placeMapLayers();
 draw.on('layerStack.changed', placeMapLayers);
 ```
 
-- The entries of your own go into the stacking order through the
-  document: the `layerOrder` of a document you load, or the Store you give
-  the instance. `layers.reorder` moves only the layers and keeps each
-  entry of your own at its position
+- The entries of your own go into the stacking order with
+  `layers.reorder`, which takes the IDs `isExternalEntry` recognizes
+  besides the IDs of the layers, or through the document: the
+  `layerOrder` of a document you load, or the Store you give the
+  instance. An entry that `layers.reorder` is not given keeps its
+  position
 - `draw.getStore().getLayerOrder()` returns the whole stacking order, the
   entries of your own included
 - `draw.getLayerStack()` returns the runs from the back, each with its

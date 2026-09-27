@@ -411,9 +411,21 @@ draw.datasets.move('parcels', { index: 0 }); // その側でいちばん後ろ
 
 `layer-order` のデータセットは、その ID が文書の重なりの順
 (`draw.getStore().getLayerOrder()`) にある間だけ描かれ、位置もその
-順だけで決まります。`draw.layers.reorder` は、そうした項目をその場に
-残します。この項目は、読み込んだ文書 (その重なりの順は ID を位置
-ごと保ちます) か、`store` オプションで渡した自分の Store から入ります。
+順だけで決まります。ID は `draw.layers.reorder` で入れます。このメソッドは
+レイヤーの ID のほかに `layer-order` のデータセットの ID を受け取り、
+渡されなかった項目はその場に残します。この項目は、読み込んだ文書
+(その重なりの順は ID を位置ごと保ちます) か、`store` オプションで
+渡した自分の Store からも入ります。
+
+<!-- docs-check:
+declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
+declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
+-->
+
+```ts
+draw.datasets.add({ id: 'parcels', rows: [], order: 'layer-order' });
+draw.layers.reorder([roads.id, 'parcels', notes.id]); // 2 つのレイヤーの間
+```
 
 データセットを取り除いても、重なりの順は書き換えません。データセットの
 無い ID が残っていても、飛ばして描きます。

@@ -201,6 +201,18 @@ describe('reorder', () => {
     expect(codeOf(() => layers.reorder(['a', 'b', 'x']))).toBe('not-found');
   });
 
+  it('places the entries it is told may stand in the stacking order', () => {
+    layers = createLayers(createResourceDeps(store), (id) => id === 'dataset' || id === 'base');
+    store.setLayerOrder(['a', 'kept', 'b', 'c']);
+    expect(layers.reorder(['c', 'dataset', 'b', 'a', 'base'])).toBe(true);
+    expect(store.getLayerOrder()).toEqual(['c', 'kept', 'dataset', 'b', 'a', 'base']);
+    expect(layers.reorder(['base', 'a', 'b', 'dataset', 'c'])).toBe(true);
+    expect(store.getLayerOrder()).toEqual(['base', 'kept', 'a', 'b', 'dataset', 'c']);
+    expect(codeOf(() => layers.reorder(['a', 'b', 'c', 'kept']))).toBe('not-found');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'c', 'base', 'base']))).toBe('invalid-input');
+    expect(codeOf(() => layers.reorder(['a', 'b', 'base']))).toBe('invalid-input');
+  });
+
   it('refuses while read-only', () => {
     store.setReadOnly(true);
     expect(layers.reorder(['c', 'b', 'a'])).toBe(false);

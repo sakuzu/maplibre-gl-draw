@@ -416,10 +416,21 @@ draw.datasets.move('parcels', { index: 0 }); // backmost of its side
 
 A `layer-order` dataset is drawn only while its ID is in the stacking
 order of the document (`draw.getStore().getLayerOrder()`), and it is
-placed by that order alone. `draw.layers.reorder` keeps such an entry
-where it is. The entry comes with a loaded document, whose stacking
-order keeps the ID at its position, or from a Store of your own passed
-as the `store` option.
+placed by that order alone. Put the ID there with `draw.layers.reorder`,
+which takes the IDs of `layer-order` datasets besides the IDs of the
+layers; an entry it is not given keeps its position. The entry also comes
+with a loaded document, whose stacking order keeps the ID at its
+position, or from a Store of your own passed as the `store` option.
+
+<!-- docs-check:
+declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
+declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
+-->
+
+```ts
+draw.datasets.add({ id: 'parcels', rows: [], order: 'layer-order' });
+draw.layers.reorder([roads.id, 'parcels', notes.id]); // between the two layers
+```
 
 Removing the dataset does not edit the stacking order. An ID left there
 without a dataset is skipped.

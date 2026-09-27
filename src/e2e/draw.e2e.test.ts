@@ -307,6 +307,35 @@ describe('drawing with the real pointer on a flat map', () => {
   });
 });
 
+describe('the stacking order on a real map', () => {
+  it('places external entries and layer-order datasets with reorder, and the runs follow', async () => {
+    const result = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.options.update({ isExternalEntry: (id) => id.startsWith('base:') });
+      const [first] = draw.layers.list();
+      const itemsBefore = [...first.items];
+      draw.layers.create({ id: 'e2e-second' });
+      draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layer-order' });
+      draw.layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
+      const placed = {
+        order: [...draw.getStore().getLayerOrder()],
+        runs: draw.getLayerStack().map(({ from, to }) => [from, to]),
+        items: draw.layers.list().map((layer) => [...layer.items]),
+      };
+      draw.layers.delete('e2e-second');
+      draw.datasets.remove('e2e-parcels');
+      draw.options.update({ isExternalEntry: () => false });
+      return { ...placed, firstId: first.id, itemsBefore };
+    });
+    expect(result.order).toEqual([result.firstId, 'base:roads', 'e2e-parcels', 'e2e-second']);
+    expect(result.runs).toEqual([
+      [0, 1],
+      [2, 4],
+    ]);
+    expect(result.items).toEqual([result.itemsBefore, []]);
+  });
+});
+
 describe('drawing on a pitched and rotated map', () => {
   beforeAll(async () => {
     await page.evaluate(() =>

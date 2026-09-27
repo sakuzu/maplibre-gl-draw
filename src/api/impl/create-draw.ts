@@ -57,7 +57,11 @@ export function createDrawOnEngine(
 
   const draw: Draw = {
     features,
-    layers: createLayers(deps),
+    layers: createLayers(
+      deps,
+      (id) =>
+        engine.datasets.get(id)?.order === 'layer-order' || context.isExternalEntry?.(id) === true,
+    ),
     groups,
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps),

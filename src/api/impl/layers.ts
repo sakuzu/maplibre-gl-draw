@@ -45,9 +45,14 @@ const FILTER_KEYS = ['visible', 'locked'] as const;
 /**
  * Creates `draw.layers`
  *
+ * @param isStackEntry - Whether an ID that is not a layer may stand in the stacking order: a
+ *   dataset whose order is `layer-order`, or an entry the `isExternalEntry` option recognizes
  * @internal
  */
-export function createLayers(deps: ResourceDeps): LayersCollection {
+export function createLayers(
+  deps: ResourceDeps,
+  isStackEntry: (id: string) => boolean = () => false,
+): LayersCollection {
   const { store } = deps;
 
   const require = (id: unknown): StoredLayer => {
@@ -166,16 +171,21 @@ export function createLayers(deps: ResourceDeps): LayersCollection {
       if (!Array.isArray(order) || order.some((id) => typeof id !== 'string')) {
         throw invalidInput('The order must be an array of strings');
       }
-      for (const id of order) require(id);
-      const layerIds = new Set(order);
-      if (layerIds.size !== order.length || layerIds.size !== store.listLayers().length) {
-        throw invalidInput('The order must list every layer once');
+      for (const id of order) {
+        if (!store.getLayer(id) && !isStackEntry(id)) throw notFound('layer', id);
+      }
+      const listed = new Set(order);
+      const layerCount = order.filter((id) => store.getLayer(id)).length;
+      if (listed.size !== order.length || layerCount !== store.listLayers().length) {
+        throw invalidInput('The order must list every layer once, and no entry twice');
       }
       if (store.isReadOnly()) return false;
-      // The entries from outside the document keep their positions; the layers fill the rest
+      // An entry left out of the order keeps its position; the entries given fill the rest
       const next = [...order];
       const current = store.getLayerOrder();
-      const merged = current.map((id) => (store.getLayer(id) ? (next.shift() as string) : id));
+      const merged = current.map((id) =>
+        listed.has(id) || store.getLayer(id) ? (next.shift() as string) : id,
+      );
       merged.push(...next);
       return store.setLayerOrder(merged);
     },

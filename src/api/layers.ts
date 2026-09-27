@@ -95,10 +95,16 @@ export interface LayersCollection {
   /**
    * Changes the stacking order.
    *
-   * @param order - The IDs of every layer, from the back
+   * Besides the layers, the order may place the datasets whose order is `layer-order` and the
+   * entries the `isExternalEntry` option recognizes. An entry of the stacking order that is
+   * not a layer and is left out of `order` keeps its position; the entries given fill the
+   * other positions in the order given, and those new to the stacking order go to the front.
+   *
+   * @param order - The IDs of every layer, and of the other entries to place, from the back
    * @returns True when the order changed, false when the change is refused (read-only)
-   * @throws `DrawError` with the code `invalid-input` when the IDs are not every layer once,
-   *   or `not-found` when one of them does not exist
+   * @throws `DrawError` with the code `invalid-input` when the IDs do not list every layer
+   *   or list an ID twice, or `not-found` when one of them is not a layer, a `layer-order`
+   *   dataset or an entry the `isExternalEntry` option recognizes
    */
   reorder(order: readonly string[]): boolean;
   /**

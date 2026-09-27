@@ -90,7 +90,8 @@ Delete キー) は、少なくとも 1 つのレイヤーを残します。
 3. グループの中では、`group.featureIds`
 
 `features.list()` は、すべての地物をこの順に奥から返します。
-`layers.reorder` はすべてのレイヤーの ID を奥から並べて受け取り、
+`layers.reorder` はすべてのレイヤーの ID を奥から並べて受け取り
+(重なりの順のほかの項目も置けます。後で述べます)、
 `features.move` と `groups.move` が地物とグループを置きます。`index` を
 渡さない移動は移動先の手前に置き、`index: 0` は一番奥です。
 
@@ -254,9 +255,9 @@ const draw = createDraw(map, {
 });
 
 // 地図の道路を parcels のレイヤーのすぐ手前に入れる
-const doc = draw.document.toJSON();
-doc.layerOrder.splice(doc.layerOrder.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
-await draw.document.load(doc);
+const ids = draw.layers.list().map((layer) => layer.id);
+ids.splice(ids.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
+draw.layers.reorder(ids);
 
 function placeMapLayers(): void {
   const order = draw.getStore().getLayerOrder();
@@ -273,10 +274,11 @@ placeMapLayers();
 draw.on('layerStack.changed', placeMapLayers);
 ```
 
-- 自前の項目は、文書を通して重なりの順に入ります。読み込む文書の
-  `layerOrder` か、インスタンスに渡す Store に持たせます。
-  `layers.reorder` はレイヤーだけを動かし、自前の項目はそれぞれの位置に
-  残します
+- 自前の項目は、`layers.reorder` で重なりの順に入ります。このメソッドは
+  レイヤーの ID のほかに `isExternalEntry` が認める ID を受け取ります。
+  文書を通して入れることもでき、読み込む文書の `layerOrder` か、
+  インスタンスに渡す Store に持たせます。`layers.reorder` に渡さなかった
+  項目は、その位置に残ります
 - `draw.getStore().getLayerOrder()` は、自前の項目も含めた重なりの順の
   全体を返します
 - `draw.getLayerStack()` は並びを奥から返します。それぞれが、重なりの順の
