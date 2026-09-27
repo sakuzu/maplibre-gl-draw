@@ -82,12 +82,28 @@ version, so the `npm version` step below is skipped for it. Its section
 says that it is the first public release and summarizes what the package
 does, instead of listing the changes made before any release.
 
+npm cannot create a package by trusted publishing, so `1.0.0` is
+published by hand, with `npm publish` from a clean checkout of the
+release commit and the maintainer's 2FA, before its tag is pushed. The
+release workflow then skips the publish step for a version that is
+already on npm and creates the GitHub release. After that, the trusted
+publisher is registered and tokens are disallowed:
+
+```sh
+npm trust github @sakuzu/maplibre-gl-draw --file release.yml \
+  --repo sakuzu/maplibre-gl-draw --env npm --allow-publish --yes
+npm access set mfa=publish @sakuzu/maplibre-gl-draw
+```
+
+`1.0.0` carries no provenance statement; every later version does.
+
 ## Steps
 
-Run the steps on an up-to-date `main` with a clean working tree. The
-package is never published from a local machine: the release workflow
-publishes it from GitHub Actions, so that npm attaches a provenance
-statement tying the published files to the tagged commit.
+Run the steps on an up-to-date `main` with a clean working tree. After
+the first release, the package is never published from a local machine:
+the release workflow publishes it from GitHub Actions by trusted
+publishing, so that npm attaches a provenance statement tying the
+published files to the tagged commit.
 
 1. Install from the lock file and run every gate, the documentation
    gate included (see [The documentation gate](#the-documentation-gate)).

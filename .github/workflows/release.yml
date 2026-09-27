@@ -32,16 +32,20 @@ jobs:
           # Trusted publishing needs npm 11.5.1 or later, which Node 24 carries
           node-version: 24
           cache: npm
-          registry-url: https://registry.npmjs.org
       - run: npm ci
       - name: Release notes (also checks the tag against package.json)
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+      # Authenticates by OIDC (trusted publishing); no token is stored. npm cannot create a
+      # package by trusted publishing, so the first release was published by hand before its tag
+      # was pushed, and a version that is already on npm is skipped.
       - name: Publish to npm
-        run: npm publish --provenance --access public
-        env:
-          # Only the first release uses a token. Later releases authenticate by OIDC (trusted
-          # publishing), which npm tries first; the secret is deleted after the first release.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          spec="$(node -p "const p = require('./package.json'); p.name + '@' + p.version")"
+          if npm view "$spec" version >/dev/null 2>&1; then
+            echo "$spec is already on npm; skipping the publish step"
+          else
+            npm publish --provenance --access public
+          fi
       - name: GitHub release
         run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
         env:
