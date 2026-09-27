@@ -410,8 +410,12 @@ function prepareFeature(
   };
 }
 
-/** Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch */
-function preparePatch(feature: StoredFeature, patch: FeaturePatch): Partial<StoredFeature> {
+/**
+ * Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch
+ *
+ * @internal
+ */
+export function preparePatch(feature: StoredFeature, patch: FeaturePatch): Partial<StoredFeature> {
   requireRecord(patch, 'The patch');
   const record = patch as unknown as Record<string, unknown>;
   onlyKeys(record, PATCH_KEYS, 'The patch');

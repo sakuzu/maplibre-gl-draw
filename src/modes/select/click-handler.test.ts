@@ -134,7 +134,7 @@ describe('consumption of a companion click', () => {
 
     click();
 
-    expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'c1' });
+    expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'c1' }, expect.anything());
   });
 
   it('it does not change the selection (the selected feature stays as it is)', () => {

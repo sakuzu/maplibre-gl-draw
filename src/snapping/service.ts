@@ -150,6 +150,8 @@ interface BestCandidate {
   target: SnapTarget;
   priority: number;
   distancePx: number;
+  /** The priority the candidate gave itself (0 when it gave none); higher wins a tie */
+  rank: number;
   /** Whether the candidate matches ctx.preferFeature (used as the tie-break on a tie) */
   preferred: boolean;
 }
@@ -162,9 +164,11 @@ function isBetterCandidate(
   priority: number,
   distancePx: number,
   preferred: boolean,
+  rank: number,
 ): boolean {
   if (best.priority !== priority) return priority < best.priority;
   if (best.distancePx !== distancePx) return distancePx < best.distancePx;
+  if (best.rank !== rank) return rank > best.rank;
   // Only on a complete tie does a candidate of the preferred feature overturn the one
   // that arrived first
   return preferred && !best.preferred;
@@ -230,15 +234,16 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
     cursor: Coordinate,
     perPixel: DegreesPerPixel,
     preferred: boolean,
+    rank: number,
   ): BestCandidate | null {
     const distancePx = distanceInPixels(coordinate, cursor, perPixel);
     if (distancePx > options.tolerancePx) return best;
 
     const priority = SNAP_KIND_PRIORITY[target.kind];
-    if (best && !isBetterCandidate(best, priority, distancePx, preferred)) {
+    if (best && !isBetterCandidate(best, priority, distancePx, preferred, rank)) {
       return best;
     }
-    return { coordinate, target, priority, distancePx, preferred };
+    return { coordinate, target, priority, distancePx, rank, preferred };
   }
 
   /** How far a longitude moves to reach its copy nearest to the cursor (0 in most cases) */
@@ -348,7 +353,8 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
             candidate.featureId === ctx.preferFeature.featureId &&
             candidate.datasetId === ctx.preferFeature.datasetId;
 
-          best = evaluate(best, coordinate, target, cursor, perPixel, preferred);
+          const rank = isSegmentCandidate(candidate) ? 0 : (candidate.priority ?? 0);
+          best = evaluate(best, coordinate, target, cursor, perPixel, preferred, rank);
         }
       }
     }

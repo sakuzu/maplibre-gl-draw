@@ -178,6 +178,8 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    * The terrain state of this draw instance (the anchor projection of the plugins reads it)
    */
   getTerrainContext(): TerrainContext;
+  /** The WebGL context of the map while the drawing is on it, or null */
+  getGL(): WebGL2RenderingContext | null;
   /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `MapLibreGLDraw.hasPendingWork`)
@@ -752,6 +754,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     },
     getTerrainContext(): TerrainContext {
       return terrainContext;
+    },
+
+    getGL(): WebGL2RenderingContext | null {
+      return engine.renderers ? engine.gl : null;
     },
 
     hasPendingWork(): boolean {

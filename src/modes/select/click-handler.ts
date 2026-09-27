@@ -79,7 +79,7 @@ export function handleSelectDoubleClick(event: MouseNormalizedEvent, context: Mo
   if (filtered.length > 0) {
     store.setSelection('feature', filtered);
   }
-  context.pluginManager?.handleFeatureDoubleClick(top.feature.id);
+  context.pluginManager?.handleFeatureDoubleClick(top.feature.id, event);
 }
 
 /**
@@ -175,7 +175,7 @@ function handleFeatureClick(
   // the selection in no way at all (not even clearing it as an empty click would). Core does not
   // know what the companion is, so its job ends at consuming the click and reporting it.
   if (top?.kind === 'companion') {
-    notifyFeatureCompanionClick(context.featureCompanions, top.companion);
+    notifyFeatureCompanionClick(context.featureCompanions, top.companion, event);
     return;
   }
 
@@ -192,7 +192,7 @@ function handleFeatureClick(
 
   // Re-clicking an already selected feature -> delegate to the plugins
   if (!event.modifiers.shift && selectedIds.length === 1 && selectedIds.includes(feature.id)) {
-    if (context.pluginManager?.handleFeatureClick(feature.id)) {
+    if (context.pluginManager?.handleFeatureClick(feature.id, event)) {
       return;
     }
   }

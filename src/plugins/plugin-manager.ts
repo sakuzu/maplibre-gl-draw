@@ -96,16 +96,18 @@ export interface PluginManager {
   /**
    * Notify the plugins that an already selected feature was clicked
    *
+   * @param event The click, which the plugins of the extension contract receive
    * @returns true when any plugin handled it
    */
-  handleFeatureClick(featureId: string): boolean;
+  handleFeatureClick(featureId: string, event?: MouseNormalizedEvent): boolean;
 
   /**
    * Notify the plugins that a feature was double-clicked
    *
+   * @param event The double click, which the plugins of the extension contract receive
    * @returns true when any plugin handled it
    */
-  handleFeatureDoubleClick(featureId: string): boolean;
+  handleFeatureDoubleClick(featureId: string, event?: MouseNormalizedEvent): boolean;
 
   /**
    * Whether any plugin is in the middle of an interaction
@@ -347,11 +349,14 @@ export function createPluginManager(
     return filtered;
   }
 
-  function handleFeatureClick(featureId: string): boolean {
+  /** A click hook, called with the event too (the plugins of the extension contract read it) */
+  type ClickHook = (featureId: string, event?: MouseNormalizedEvent) => boolean;
+
+  function handleFeatureClick(featureId: string, event?: MouseNormalizedEvent): boolean {
     for (const plugin of plugins.values()) {
       if (plugin.onFeatureClick) {
         try {
-          if (plugin.onFeatureClick(featureId)) {
+          if ((plugin.onFeatureClick as ClickHook).call(plugin, featureId, event)) {
             return true;
           }
         } catch (error) {
@@ -362,11 +367,11 @@ export function createPluginManager(
     return false;
   }
 
-  function handleFeatureDoubleClick(featureId: string): boolean {
+  function handleFeatureDoubleClick(featureId: string, event?: MouseNormalizedEvent): boolean {
     for (const plugin of plugins.values()) {
       if (plugin.onFeatureDoubleClick) {
         try {
-          if (plugin.onFeatureDoubleClick(featureId)) {
+          if ((plugin.onFeatureDoubleClick as ClickHook).call(plugin, featureId, event)) {
             return true;
           }
         } catch (error) {

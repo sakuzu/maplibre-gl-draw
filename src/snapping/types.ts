@@ -153,6 +153,8 @@ export interface SnapPointCandidate {
   vertex?: VertexRef;
   /** A label for the host to show, passed on as `SnapTarget.description` */
   description?: string;
+  /** The priority among candidates of the same kind at the same distance; higher wins */
+  priority?: number;
 }
 
 /**

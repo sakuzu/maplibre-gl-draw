@@ -34,6 +34,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { MouseNormalizedEvent } from '../dispatcher/types.js';
 import type { CustomRendererDrawContext } from '../extension/index.js';
 import type { LngLat, ScreenPoint } from '../shared/math/index.js';
 import type { Coordinate, Feature, Layer } from '../store/types.js';
@@ -115,8 +116,9 @@ export interface FeatureCompanionProvider {
    *
    * @param featureId The ID of the feature that owns the companion
    * @param hit The hit returned by hitTest
+   * @param event The click, when the engine has one to give
    */
-  onCompanionClick(featureId: string, hit: CompanionHit): void;
+  onCompanionClick(featureId: string, hit: CompanionHit, event?: MouseNormalizedEvent): void;
 }
 
 /**
@@ -311,6 +313,10 @@ export function hitTestFeatureCompanions(
 export function notifyFeatureCompanionClick(
   registry: FeatureCompanionRegistry,
   result: FeatureCompanionHitResult,
+  event?: MouseNormalizedEvent,
 ): void {
-  registry.get(result.providerId)?.onCompanionClick(result.featureId, result.hit);
+  const provider = registry.get(result.providerId);
+  if (!provider) return;
+  if (event === undefined) provider.onCompanionClick(result.featureId, result.hit);
+  else provider.onCompanionClick(result.featureId, result.hit, event);
 }
