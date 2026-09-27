@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Type definitions (the shapes of the native format, see src/shared/types/model.ts)
+// Type definitions (the shapes of the native format, see DrawDocument in src/api/model.ts)
 interface Coordinate {
   0: number;
   1: number;
@@ -53,7 +53,7 @@ interface DrawLayer {
   metadata?: Record<string, unknown>;
 }
 
-interface MapLibreGLDrawData {
+interface NativeDocument {
   version: string;
   created?: string;
   modified?: string;
@@ -218,7 +218,7 @@ function generateSticker(id: string, layerId: string): DrawFeature {
 }
 
 // Test data generation
-function generateTestData(count: number): MapLibreGLDrawData {
+function generateTestData(count: number): NativeDocument {
   const layerId = 'layer-1';
   const features: DrawFeature[] = [];
   const order: string[] = [];

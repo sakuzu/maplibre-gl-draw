@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { LoadOptions, MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw, LoadOptions, Mode } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 // The stylesheet of the installed maplibre-gl first, then the demo's own styles on top of it.
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -74,25 +74,25 @@ const map = new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 map.addControl(new maplibregl.GlobeControl(), 'top-right');
 
-// Create the MapLibreGLDraw
-const draw = createMapLibreGLDraw(map, {
+// Create the draw instance
+const draw = createDraw(map, {
   defaultMode: 'select',
   // The showcase document brings its own layers
   initDefaultLayer: !showcase,
-  snap: { enabled: true, tolerancePx: SNAP_TOLERANCE_PX, disableKey: 'alt' },
+  snapping: { enabled: true, tolerancePx: SNAP_TOLERANCE_PX, disableKey: 'alt' },
 });
 
-// Register the sample plugin (sample-plugin.ts). It only writes to the console, so it shows
-// that a plugin runs without adding anything to the page
-draw.addPlugin(createLoggerPlugin());
+// Add the sample plugin (sample-plugin.ts). It only writes to the console, so it shows that a
+// plugin runs without adding anything to the page
+draw.extensions.plugins.add(createLoggerPlugin());
 
 // Update the state of the delete button
 function updateDeleteButtonState() {
   const deleteBtn = document.getElementById('delete-btn') as HTMLButtonElement;
   if (!deleteBtn) return;
 
-  const selectedVertices = draw.getSelectedVertices();
-  const selection = draw.getSelection();
+  const selectedVertices = draw.vertexSelection.get();
+  const selection = draw.selection.get();
 
   deleteBtn.disabled = !(
     (selectedVertices && selectedVertices.vertices.length > 0) ||
@@ -101,21 +101,24 @@ function updateDeleteButtonState() {
 }
 
 // Set up the event listeners
-draw.on('draw.selection.change', () => {
+draw.on('selection.changed', () => {
+  updateDeleteButtonState();
+});
+draw.on('vertexSelection.changed', () => {
   updateDeleteButtonState();
 });
 
-draw.on('draw.mode.change', ({ mode }) => {
+draw.on('mode.changed', ({ mode }) => {
   updateToolbarActiveState(mode);
 });
 
 // Handler for image selection requests (registered early)
-draw.on('draw.image.request', ({ coordinate, zoom, layerId }) => {
-  openImageFileSelector(draw, coordinate, zoom, layerId);
+draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
+  openImageFileSelector(draw, [lngLat[0], lngLat[1]], zoom, layerId);
 });
 
 // Toolbar setup
-function setupToolbar(draw: MapLibreGLDraw) {
+function setupToolbar(draw: Draw) {
   const toolbar = document.getElementById('draw-toolbar');
   if (!toolbar) return;
 
@@ -123,7 +126,7 @@ function setupToolbar(draw: MapLibreGLDraw) {
   const modeButtons = toolbar.querySelectorAll<HTMLButtonElement>('[data-mode]');
   for (const btn of modeButtons) {
     btn.addEventListener('click', () => {
-      const mode = btn.dataset.mode as ReturnType<MapLibreGLDraw['getMode']>;
+      const mode = btn.dataset.mode as Mode | undefined;
       if (mode) {
         draw.setMode(mode);
       }
@@ -134,8 +137,9 @@ function setupToolbar(draw: MapLibreGLDraw) {
   const deleteBtn = document.getElementById('delete-btn') as HTMLButtonElement;
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => {
-      // The same deletion as the Delete key (vertices, features, groups or layers)
-      draw.deleteSelection();
+      // The same deletion as the Delete key: the selected vertices first, otherwise the
+      // selected features, groups or layers
+      if (!draw.vertexSelection.delete()) draw.selection.delete();
     });
   }
 
@@ -179,7 +183,7 @@ function setupToolbar(draw: MapLibreGLDraw) {
 }
 
 // Update the active state of the toolbar
-function updateToolbarActiveState(mode: ReturnType<MapLibreGLDraw['getMode']>) {
+function updateToolbarActiveState(mode: Mode) {
   const toolbar = document.getElementById('draw-toolbar');
   if (!toolbar) return;
 
@@ -196,7 +200,7 @@ function updateToolbarActiveState(mode: ReturnType<MapLibreGLDraw['getMode']>) {
 // Setup of the import feature (using event delegation)
 // The event listeners are attached to the container element so that the events keep
 // working even when the PropertyPanel is re-rendered
-function setupImportExport(draw: MapLibreGLDraw) {
+function setupImportExport(draw: Draw) {
   const propertyContainer = document.getElementById('property-panel');
   if (!propertyContainer) return;
 
@@ -269,7 +273,7 @@ function setupImportExport(draw: MapLibreGLDraw) {
 }
 
 // File export handling
-function handleExport(draw: MapLibreGLDraw): void {
+function handleExport(draw: Draw): void {
   // Remove the existing dialog if there is one
   const existingDialog = document.getElementById('export-dialog');
   if (existingDialog) {
@@ -331,12 +335,15 @@ function handleExport(draw: MapLibreGLDraw): void {
     ) as HTMLInputElement;
     const format = formatInput?.value || 'native';
 
-    const result = draw.export(format as 'native' | 'geojson');
-    const blob = new Blob([result.data], { type: result.mimeType });
+    const native = format !== 'geojson';
+    const data = native ? draw.document.toJSON() : draw.document.toGeoJSON();
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: native ? 'application/json' : 'application/geo+json',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = result.fileName;
+    a.download = `${draw.metadata.get().title || 'drawing'}${native ? '.json' : '.geojson'}`;
     a.click();
     URL.revokeObjectURL(url);
 
@@ -346,7 +353,7 @@ function handleExport(draw: MapLibreGLDraw): void {
 }
 
 // File import handling
-async function handleFileImport(file: File, draw: MapLibreGLDraw, placement?: LoadOptions) {
+async function handleFileImport(file: File, draw: Draw, placement?: LoadOptions) {
   // When "Load as an underlay (display only)" is checked, do not put it into the Store
   if (propertyPanel?.isImportAsUnderlay()) {
     await handleUnderlayImport(file);
@@ -357,7 +364,11 @@ async function handleFileImport(file: File, draw: MapLibreGLDraw, placement?: Lo
     console.log(`Importing file: ${file.name}`);
     const startTime = performance.now();
 
-    const result = await draw.load(file, placement);
+    const result = await draw.document.load(file, placement);
+    if (!result) {
+      toast?.show('Nothing is loaded while the document is read-only', 'warn');
+      return;
+    }
 
     const endTime = performance.now();
     console.log(`Import completed:`);
@@ -367,7 +378,7 @@ async function handleFileImport(file: File, draw: MapLibreGLDraw, placement?: Lo
     console.log(`  - Time: ${(endTime - startTime).toFixed(2)}ms`);
 
     // Apply the basemap from the imported metadata
-    const metadata = draw.getMetadata();
+    const metadata = draw.metadata.get();
     if (metadata.basemap) {
       const basemap = metadata.basemap;
       // Apply it only when the URL exists in BASEMAP_OPTIONS
@@ -399,7 +410,7 @@ async function handleFileImport(file: File, draw: MapLibreGLDraw, placement?: Lo
 // The library does not take drops, so the page listens to them on the map's container, turns
 // the position into a coordinate and loads each file there: an image is centered where it was
 // dropped, and a data file keeps its own positions.
-function setupMapDrop(draw: MapLibreGLDraw): void {
+function setupMapDrop(draw: Draw): void {
   const container = map.getContainer();
   container.addEventListener('dragover', (e) => e.preventDefault());
   container.addEventListener('drop', async (e) => {
@@ -414,7 +425,7 @@ function setupMapDrop(draw: MapLibreGLDraw): void {
       await handleFileImport(file, draw, {
         coordinate: [lng, lat],
         zoom: map.getZoom(),
-        layerId: draw.getActiveLayer(),
+        layerId: draw.layers.getActive()?.id,
       });
     }
   });
@@ -447,14 +458,18 @@ async function handleUnderlayImport(file: File): Promise<void> {
 }
 
 // Loading of the sample data
-async function handleSampleLoad(draw: MapLibreGLDraw): Promise<void> {
+async function handleSampleLoad(draw: Draw): Promise<void> {
   try {
     const response = await fetch(SAMPLE_DATA_URL);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     const geojson = await response.json();
-    const result = await draw.load(geojson);
+    const result = await draw.document.load(geojson);
+    if (!result) {
+      toast?.show('Nothing is loaded while the document is read-only', 'warn');
+      return;
+    }
 
     map.jumpTo({ center: SAMPLE_DATA_VIEW.center, zoom: SAMPLE_DATA_VIEW.zoom });
     propertyPanel?.refresh();
@@ -468,7 +483,7 @@ async function handleSampleLoad(draw: MapLibreGLDraw): Promise<void> {
 
 // Open the image file selection dialog
 function openImageFileSelector(
-  draw: MapLibreGLDraw,
+  draw: Draw,
   coordinate: [number, number],
   zoom: number,
   layerId: string,
@@ -485,7 +500,7 @@ function openImageFileSelector(
     if (file) {
       try {
         // load determines the file type internally and handles it appropriately
-        await draw.load(file, { coordinate, zoom, layerId });
+        await draw.document.load(file, { coordinate, zoom, layerId });
       } catch (error) {
         console.error('Failed to load file:', error);
       }
@@ -546,8 +561,8 @@ map.on('load', async () => {
   }
 
   // Create the default layer
-  if (draw.getAllLayers().length === 0) {
-    draw.addLayer('Layer 1');
+  if (draw.layers.count() === 0) {
+    draw.layers.create({ name: 'Layer 1' });
   }
 
   // LayerPanel initialization
@@ -609,7 +624,7 @@ map.on('load', async () => {
 // Exposed globally for debugging
 declare global {
   interface Window {
-    draw: MapLibreGLDraw;
+    draw: Draw;
     map: maplibregl.Map;
     layerPanel: LayerPanel | null;
     propertyPanel: PropertyPanel | null;

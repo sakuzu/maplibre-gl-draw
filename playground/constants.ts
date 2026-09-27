@@ -56,7 +56,7 @@ export const LINE_STYLE_OPTIONS = [
   { value: 'dotted', label: 'Dotted' },
 ] as const;
 
-// Snapping tolerance (keep this in sync with snap.tolerancePx of createMapLibreGLDraw)
+// Snapping tolerance (the snapping.tolerancePx option of createDraw)
 export const SNAP_TOLERANCE_PX = 10;
 
 // Kinds of style rule

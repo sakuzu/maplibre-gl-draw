@@ -12,7 +12,12 @@
  * order, switching between in front of and behind the objects, and removing.
  */
 
-import type { MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type {
+  Draw,
+  Group as DrawGroup,
+  Layer as DrawLayer,
+  MoveTarget,
+} from '@sakuzu/maplibre-gl-draw';
 import type { UnderlayRegistry } from '../gis/underlay';
 import {
   ADD_ICON,
@@ -29,10 +34,6 @@ import {
   VISIBLE_ICON,
 } from './icons';
 import type { DropPosition, SelectionType, TreeItem } from './types';
-
-// Obtain DrawLayer and DrawGroup through type inference
-type DrawLayer = ReturnType<MapLibreGLDraw['getAllLayers']>[number];
-type DrawGroup = ReturnType<MapLibreGLDraw['getAllGroups']>[number];
 
 /**
  * Drag state
@@ -58,7 +59,7 @@ interface DropTarget {
  */
 export class LayerPanel {
   private container: HTMLElement;
-  private draw: MapLibreGLDraw;
+  private draw: Draw;
   private tree: TreeItem[] = [];
   private expandedIds = new Set<string>();
   private selectedLayerId: string | null = null;
@@ -69,7 +70,7 @@ export class LayerPanel {
   private renderScheduled = false;
   private underlays: UnderlayRegistry | null;
 
-  constructor(container: HTMLElement, draw: MapLibreGLDraw, underlays?: UnderlayRegistry) {
+  constructor(container: HTMLElement, draw: Draw, underlays?: UnderlayRegistry) {
     this.container = container;
     this.draw = draw;
     this.underlays = underlays ?? null;
@@ -84,7 +85,7 @@ export class LayerPanel {
     this.subscribeEvents();
 
     // Expand every layer in the initial state
-    for (const layer of this.draw.getAllLayers()) {
+    for (const layer of this.draw.layers.list()) {
       this.expandedIds.add(layer.id);
     }
   }
@@ -103,23 +104,23 @@ export class LayerPanel {
     const scheduleRender = () => this.scheduleRender();
 
     // Feature events
-    this.draw.on('draw.feature.create', scheduleRender);
-    this.draw.on('draw.feature.update', scheduleRender);
-    this.draw.on('draw.feature.delete', scheduleRender);
+    this.draw.on('feature.created', scheduleRender);
+    this.draw.on('feature.updated', scheduleRender);
+    this.draw.on('feature.deleted', scheduleRender);
 
     // Layer events
-    this.draw.on('draw.layer.create', scheduleRender);
-    this.draw.on('draw.layer.update', scheduleRender);
-    this.draw.on('draw.layer.delete', scheduleRender);
-    this.draw.on('draw.layer.reorder', scheduleRender);
+    this.draw.on('layer.created', scheduleRender);
+    this.draw.on('layer.updated', scheduleRender);
+    this.draw.on('layer.deleted', scheduleRender);
+    this.draw.on('layer.reordered', scheduleRender);
 
     // Group events
-    this.draw.on('draw.group.create', scheduleRender);
-    this.draw.on('draw.group.update', scheduleRender);
-    this.draw.on('draw.group.delete', scheduleRender);
+    this.draw.on('group.created', scheduleRender);
+    this.draw.on('group.updated', scheduleRender);
+    this.draw.on('group.deleted', scheduleRender);
 
     // Selection events
-    this.draw.on('draw.selection.change', scheduleRender);
+    this.draw.on('selection.changed', scheduleRender);
 
     // Underlays being added or removed, and visibility toggles
     this.underlays?.onChange(scheduleRender);
@@ -142,11 +143,11 @@ export class LayerPanel {
    * Build the tree
    */
   private buildTree(): TreeItem[] {
-    const layers = this.draw.getAllLayers();
-    const groups = this.draw.getAllGroups();
-    const selectedIds = new Set(this.draw.getSelectedIds());
-    const layerOrder = this.draw.getLayerOrder();
-    const activeLayerId = this.draw.getActiveLayer();
+    const layers = this.draw.layers.list();
+    const groups = this.draw.groups.list();
+    const selectedIds = new Set(this.selectedIds());
+    const layerOrder = layers.map((layer) => layer.id);
+    const activeLayerId = this.draw.layers.getActive()?.id;
 
     // Convert the groups into a Map
     const groupMap = new Map<string, DrawGroup>();
@@ -202,10 +203,10 @@ export class LayerPanel {
           };
 
           // Add the features inside the group in reverse order
-          // Use draw.getFeature() so that hidden features are obtained as well
+          // Use draw.features.get() so that hidden features are obtained as well
           for (let k = group.featureIds.length - 1; k >= 0; k--) {
             const featureId = group.featureIds[k];
-            const feature = this.draw.getFeature(featureId);
+            const feature = this.draw.features.get(featureId);
             if (feature) {
               groupItem.children!.push({
                 type: 'feature',
@@ -223,8 +224,8 @@ export class LayerPanel {
           layerItem.children!.push(groupItem);
         } else {
           // Case of a standalone feature
-          // Use draw.getFeature() so that hidden features are obtained as well
-          const feature = this.draw.getFeature(itemId);
+          // Use draw.features.get() so that hidden features are obtained as well
+          const feature = this.draw.features.get(itemId);
           if (feature) {
             layerItem.children!.push({
               type: 'feature',
@@ -605,18 +606,17 @@ export class LayerPanel {
    * Add a layer
    */
   private addLayer(): void {
-    const layers = this.draw.getAllLayers();
-    const name = `Layer ${layers.length + 1}`;
-    const layerId = this.draw.addLayer(name);
+    const name = `Layer ${this.draw.layers.count() + 1}`;
+    const layer = this.draw.layers.create({ name });
     // null when the write was refused because the drawing is read-only
-    if (layerId !== null) this.expandedIds.add(layerId);
+    if (layer !== null) this.expandedIds.add(layer.id);
   }
 
   /**
    * Create a group
    */
   private createGroup(): void {
-    const selectedIds = this.draw.getSelectedIds();
+    const selectedIds = this.selectedIds();
     if (selectedIds.length < 2) {
       console.warn('Select two or more features to group them');
       return;
@@ -624,7 +624,7 @@ export class LayerPanel {
 
     // Check whether the selected features belong to the same layer
     const features = selectedIds
-      .map((id) => this.draw.getFeature(id))
+      .map((id) => this.draw.features.get(id))
       .filter((f): f is NonNullable<typeof f> => f !== undefined);
 
     if (features.length === 0) return;
@@ -641,18 +641,17 @@ export class LayerPanel {
     // When groupId is a stale value pointing at a deleted group, the feature is treated
     // as belonging to no group and regrouping is allowed.
     const hasGroupedFeature = features.some(
-      (f) => f.groupId && this.draw.getGroup(f.groupId) !== undefined,
+      (f) => f.groupId && this.draw.groups.get(f.groupId) !== undefined,
     );
     if (hasGroupedFeature) {
       console.warn('Features that already belong to a group cannot be regrouped');
       return;
     }
 
-    const groups = this.draw.getAllGroups();
-    const name = `Group ${groups.length + 1}`;
-    const groupId = this.draw.addGroup(selectedIds, layerId, name);
+    const name = `Group ${this.draw.groups.count() + 1}`;
+    const group = this.draw.groups.create({ featureIds: selectedIds, name });
     // null when the write was refused because the drawing is read-only
-    if (groupId !== null) this.expandedIds.add(groupId);
+    if (group !== null) this.expandedIds.add(group.id);
   }
 
   /**
@@ -672,19 +671,19 @@ export class LayerPanel {
    */
   private toggleVisibility(id: string, type: SelectionType): void {
     if (type === 'layer') {
-      const layer = this.draw.getLayer(id);
+      const layer = this.draw.layers.get(id);
       if (layer) {
-        this.draw.updateLayer(id, { visible: !layer.visible });
+        this.draw.layers.update(id, { visible: !layer.visible });
       }
     } else if (type === 'group') {
-      const group = this.draw.getGroup(id);
+      const group = this.draw.groups.get(id);
       if (group) {
-        this.draw.updateGroup(id, { visible: !group.visible });
+        this.draw.groups.update(id, { visible: !group.visible });
       }
     } else if (type === 'feature') {
-      const feature = this.draw.getFeature(id);
+      const feature = this.draw.features.get(id);
       if (feature) {
-        this.draw.updateFeature(id, { visible: !feature.visible });
+        this.draw.features.update(id, { visible: !feature.visible });
       }
     }
   }
@@ -694,19 +693,19 @@ export class LayerPanel {
    */
   private toggleLock(id: string, type: SelectionType): void {
     if (type === 'layer') {
-      const layer = this.draw.getLayer(id);
+      const layer = this.draw.layers.get(id);
       if (layer) {
-        this.draw.updateLayer(id, { locked: !layer.locked });
+        this.draw.layers.update(id, { locked: !layer.locked });
       }
     } else if (type === 'group') {
-      const group = this.draw.getGroup(id);
+      const group = this.draw.groups.get(id);
       if (group) {
-        this.draw.updateGroup(id, { locked: !group.locked });
+        this.draw.groups.update(id, { locked: !group.locked });
       }
     } else if (type === 'feature') {
-      const feature = this.draw.getFeature(id);
+      const feature = this.draw.features.get(id);
       if (feature) {
-        this.draw.updateFeature(id, { locked: !feature.locked });
+        this.draw.features.update(id, { locked: !feature.locked });
       }
     }
   }
@@ -722,26 +721,26 @@ export class LayerPanel {
    */
   private deleteItem(id: string, type: SelectionType): void {
     if (type === 'layer') {
-      if (this.draw.getAllLayers().length <= 1) {
+      if (this.draw.layers.count() <= 1) {
         console.warn('The last layer cannot be deleted');
         return;
       }
-      this.draw.deleteLayer(id);
+      this.draw.layers.delete(id);
       this.expandedIds.delete(id);
       return;
     }
 
     if (type === 'group') {
-      const group = this.draw.getGroup(id);
+      const group = this.draw.groups.get(id);
       if (group) {
         // Delete the contents of the group. The group itself is deleted automatically
         // at the moment the last feature is removed.
         for (const featureId of [...group.featureIds]) {
-          this.draw.deleteFeature(featureId);
+          this.draw.features.delete(featureId);
         }
         // When an empty group (a group with no contents) was selected, delete the group itself
-        if (this.draw.getGroup(id)) {
-          this.draw.deleteGroup(id);
+        if (this.draw.groups.get(id)) {
+          this.draw.groups.delete(id);
         }
       }
       this.expandedIds.delete(id);
@@ -749,7 +748,7 @@ export class LayerPanel {
     }
 
     // feature
-    this.draw.deleteFeature(id);
+    this.draw.features.delete(id);
   }
 
   /**
@@ -759,10 +758,10 @@ export class LayerPanel {
     if (type === 'layer') {
       this.selectedLayerId = id;
       this.selectedGroupId = null;
-      this.draw.deselect();
+      this.draw.selection.clear();
 
       // Set the active layer
-      this.draw.setActiveLayer(id);
+      this.draw.layers.setActive(id);
 
       // Dispatch a custom event
       this.container.dispatchEvent(
@@ -776,11 +775,11 @@ export class LayerPanel {
       this.selectedGroupId = id;
 
       // Select the features inside the group
-      const group = this.draw.getGroup(id);
+      const group = this.draw.groups.get(id);
       if (group && group.featureIds.length > 0) {
-        this.draw.select(group.featureIds);
+        this.draw.selection.set('feature', group.featureIds);
       } else {
-        this.draw.deselect();
+        this.draw.selection.clear();
       }
 
       // Dispatch a custom event
@@ -796,14 +795,17 @@ export class LayerPanel {
 
       if (e.shiftKey) {
         // The Shift key toggles multiple selection
-        const currentIds = this.draw.getSelectedIds();
+        const currentIds = this.selectedIds();
         if (currentIds.includes(id)) {
-          this.draw.select(currentIds.filter((fid) => fid !== id));
+          this.draw.selection.set(
+            'feature',
+            currentIds.filter((fid) => fid !== id),
+          );
         } else {
-          this.draw.select([...currentIds, id]);
+          this.draw.selection.set('feature', [...currentIds, id]);
         }
       } else {
-        this.draw.select([id]);
+        this.draw.selection.set('feature', [id]);
       }
     }
 
@@ -1174,9 +1176,9 @@ export class LayerPanel {
     }
 
     // The source is at the top level (its parent is a layer) and so is the target
-    if (sourceParentId && !this.draw.getGroup(sourceParentId)) {
+    if (sourceParentId && !this.draw.groups.get(sourceParentId)) {
       if (targetType === 'group' || (targetType === 'feature' && !targetParentId)) {
-        const layer = this.draw.getLayer(sourceParentId);
+        const layer = this.draw.layers.get(sourceParentId);
         if (layer?.items.includes(targetId)) {
           return true;
         }
@@ -1198,13 +1200,13 @@ export class LayerPanel {
     targetType: string,
   ): boolean {
     if (!sourceParentId) return false;
-    const sourceGroup = this.draw.getGroup(sourceParentId);
+    const sourceGroup = this.draw.groups.get(sourceParentId);
     if (!sourceGroup) return false;
 
     if (targetType === 'group') return true;
 
     if (targetParentId) {
-      const targetGroup = this.draw.getGroup(targetParentId);
+      const targetGroup = this.draw.groups.get(targetParentId);
       return !targetGroup;
     }
 
@@ -1221,8 +1223,8 @@ export class LayerPanel {
     if (!sourceParentId) return false;
     if (!targetParentId) return false;
 
-    const sourceGroup = this.draw.getGroup(sourceParentId);
-    const targetGroup = this.draw.getGroup(targetParentId);
+    const sourceGroup = this.draw.groups.get(sourceParentId);
+    const targetGroup = this.draw.groups.get(targetParentId);
 
     return !sourceGroup && !!targetGroup;
   }
@@ -1237,8 +1239,8 @@ export class LayerPanel {
     if (!sourceParentId) return false;
     if (!targetParentId) return false;
 
-    const sourceGroup = this.draw.getGroup(sourceParentId);
-    const targetGroup = this.draw.getGroup(targetParentId);
+    const sourceGroup = this.draw.groups.get(sourceParentId);
+    const targetGroup = this.draw.groups.get(targetParentId);
 
     return !!sourceGroup && !!targetGroup && sourceParentId !== targetParentId;
   }
@@ -1251,8 +1253,8 @@ export class LayerPanel {
     targetParentId: string | undefined,
   ): boolean {
     if (!sourceParentId || !targetParentId) return false;
-    const sourceGroup = this.draw.getGroup(sourceParentId);
-    const targetGroup = this.draw.getGroup(targetParentId);
+    const sourceGroup = this.draw.groups.get(sourceParentId);
+    const targetGroup = this.draw.groups.get(targetParentId);
     return !sourceGroup && !targetGroup && sourceParentId !== targetParentId;
   }
 
@@ -1260,7 +1262,7 @@ export class LayerPanel {
    * Find the layer that contains an item
    */
   private findLayerContainingItem(itemId: string): string | null {
-    const layers = this.draw.getAllLayers();
+    const layers = this.draw.layers.list();
     for (const layer of layers) {
       if (layer.items.includes(itemId)) {
         return layer.id;
@@ -1273,7 +1275,7 @@ export class LayerPanel {
    * Change the order of the layers
    */
   private moveLayerOrder(layerId: string, targetLayerId: string, position: DropPosition): void {
-    const order = [...this.draw.getLayerOrder()];
+    const order = this.draw.layers.list().map((layer) => layer.id);
     const currentIndex = order.indexOf(layerId);
     const targetIndex = order.indexOf(targetLayerId);
     if (currentIndex === -1 || targetIndex === -1) return;
@@ -1287,14 +1289,14 @@ export class LayerPanel {
       newIndex = currentIndex < targetIndex ? targetIndex - 1 : targetIndex;
     }
     order.splice(newIndex, 0, layerId);
-    this.draw.setLayerOrder(order);
+    this.draw.layers.reorder(order);
   }
 
   /**
    * Move an item to a layer
    */
   private moveItemToLayer(itemId: string, targetLayerId: string): void {
-    this.draw.moveToLayer(itemId, targetLayerId);
+    this.moveItem(itemId, { layerId: targetLayerId });
     this.expandedIds.add(targetLayerId);
   }
 
@@ -1307,21 +1309,21 @@ export class LayerPanel {
     sourceParentId: string | null,
   ): void {
     if (itemType === 'layer') {
-      const order = [...this.draw.getLayerOrder()];
+      const order = this.draw.layers.list().map((layer) => layer.id);
       const currentIndex = order.indexOf(itemId);
       if (currentIndex !== -1) {
         order.splice(currentIndex, 1);
         order.unshift(itemId);
-        this.draw.setLayerOrder(order);
+        this.draw.layers.reorder(order);
       }
       return;
     }
 
     // Case of a move out of a group
     if (sourceParentId) {
-      const sourceGroup = this.draw.getGroup(sourceParentId);
+      const sourceGroup = this.draw.groups.get(sourceParentId);
       if (sourceGroup) {
-        this.draw.removeFeatureFromGroup(itemId);
+        this.draw.features.move(itemId, { groupId: null });
         return;
       }
     }
@@ -1329,7 +1331,7 @@ export class LayerPanel {
     // Move an item directly under a layer to the back
     const layerId = sourceParentId ?? this.findLayerContainingItem(itemId);
     if (layerId) {
-      this.draw.reorderInLayer(itemId, layerId, 0);
+      this.moveItem(itemId, { layerId: layerId, index: 0 });
     }
   }
 
@@ -1337,7 +1339,7 @@ export class LayerPanel {
    * Put it into the group
    */
   private moveIntoGroup(itemId: string, targetGroupId: string): void {
-    this.draw.addFeatureToGroup(itemId, targetGroupId);
+    this.draw.features.move(itemId, { groupId: targetGroupId });
     this.expandedIds.add(targetGroupId);
   }
 
@@ -1348,21 +1350,21 @@ export class LayerPanel {
     const layerId = this.findLayerContainingItem(groupId);
     if (!layerId) return;
 
-    const layer = this.draw.getLayer(layerId);
+    const layer = this.draw.layers.get(layerId);
     if (!layer) return;
 
     const groupIndex = layer.items.indexOf(groupId);
     if (groupIndex === -1) return;
 
     // Take the item out of its current group
-    const currentGroup = this.draw.getGroup(this.dragState?.parentId ?? '');
+    const currentGroup = this.draw.groups.get(this.dragState?.parentId ?? '');
     if (currentGroup && currentGroup.id === groupId) {
       // Move a feature that is inside the group out of the group
-      this.draw.removeFeatureFromGroup(itemId);
+      this.draw.features.move(itemId, { groupId: null });
     } else {
       // Place a feature from outside the group below the group
-      this.draw.moveToLayer(itemId, layerId);
-      this.draw.reorderInLayer(itemId, layerId, groupIndex);
+      this.moveItem(itemId, { layerId: layerId });
+      this.moveItem(itemId, { layerId: layerId, index: groupIndex });
     }
   }
 
@@ -1375,7 +1377,7 @@ export class LayerPanel {
     _targetFeatureId: string,
     _position: DropPosition,
   ): void {
-    this.draw.addFeatureToGroup(itemId, targetGroupId);
+    this.draw.features.move(itemId, { groupId: targetGroupId });
     this.expandedIds.add(targetGroupId);
   }
 
@@ -1389,7 +1391,7 @@ export class LayerPanel {
     targetFeatureId: string,
     position: DropPosition,
   ): void {
-    const targetGroup = this.draw.getGroup(targetGroupId);
+    const targetGroup = this.draw.groups.get(targetGroupId);
     if (!targetGroup) return;
 
     // Calculate the insertion index from the position of the target feature
@@ -1399,7 +1401,7 @@ export class LayerPanel {
     const insertIndex =
       targetIndex === -1 ? undefined : position === 'before' ? targetIndex + 1 : targetIndex;
 
-    this.draw.addFeatureToGroup(itemId, targetGroupId, insertIndex);
+    this.draw.features.move(itemId, { groupId: targetGroupId, index: insertIndex });
     this.expandedIds.add(targetGroupId);
   }
 
@@ -1415,24 +1417,24 @@ export class LayerPanel {
   ): void {
     if (!parentId) return;
 
-    const group = this.draw.getGroup(parentId);
+    const group = this.draw.groups.get(parentId);
     if (group) {
       // Move inside a group
       const targetIndex = group.featureIds.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;
-      this.draw.reorderInGroup(itemId, parentId, newIndex);
+      this.draw.features.move(itemId, { groupId: parentId, index: newIndex });
     } else {
       // Move inside a layer
-      const layer = this.draw.getLayer(parentId);
+      const layer = this.draw.layers.get(parentId);
       if (!layer) return;
 
       const targetIndex = layer.items.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;
-      this.draw.reorderInLayer(itemId, parentId, newIndex);
+      this.moveItem(itemId, { layerId: parentId, index: newIndex });
     }
   }
 
@@ -1447,7 +1449,7 @@ export class LayerPanel {
   ): void {
     if (!sourceGroupId) return;
 
-    const sourceGroup = this.draw.getGroup(sourceGroupId);
+    const sourceGroup = this.draw.groups.get(sourceGroupId);
     if (!sourceGroup) return;
 
     const sourceLayerId = this.findLayerContainingItem(sourceGroupId);
@@ -1457,25 +1459,25 @@ export class LayerPanel {
     if (!targetLayerId) return;
 
     if (sourceLayerId === targetLayerId) {
-      const layer = this.draw.getLayer(sourceLayerId);
+      const layer = this.draw.layers.get(sourceLayerId);
       if (!layer) return;
 
       const targetIndex = layer.items.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const insertIndex = position === 'before' ? targetIndex + 1 : targetIndex;
-      this.draw.removeFeatureFromGroup(itemId);
-      this.draw.reorderInLayer(itemId, sourceLayerId, insertIndex);
+      this.draw.features.move(itemId, { groupId: null });
+      this.moveItem(itemId, { layerId: sourceLayerId, index: insertIndex });
     } else {
-      this.draw.moveToLayer(itemId, targetLayerId);
-      const layer = this.draw.getLayer(targetLayerId);
+      this.moveItem(itemId, { layerId: targetLayerId });
+      const layer = this.draw.layers.get(targetLayerId);
       if (!layer) return;
 
       const targetIndex = layer.items.indexOf(targetId);
       if (targetIndex === -1) return;
 
       const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;
-      this.draw.reorderInLayer(itemId, targetLayerId, newIndex);
+      this.moveItem(itemId, { layerId: targetLayerId, index: newIndex });
     }
   }
 
@@ -1488,16 +1490,31 @@ export class LayerPanel {
     targetId: string,
     position: DropPosition,
   ): void {
-    this.draw.moveToLayer(itemId, targetLayerId);
+    this.moveItem(itemId, { layerId: targetLayerId });
 
-    const layer = this.draw.getLayer(targetLayerId);
+    const layer = this.draw.layers.get(targetLayerId);
     if (!layer) return;
 
     const targetIndex = layer.items.indexOf(targetId);
     if (targetIndex === -1) return;
 
     const newIndex = position === 'before' ? targetIndex + 1 : targetIndex;
-    this.draw.reorderInLayer(itemId, targetLayerId, newIndex);
+    this.moveItem(itemId, { layerId: targetLayerId, index: newIndex });
     this.expandedIds.add(targetLayerId);
+  }
+
+  /**
+   * The IDs of the selection
+   */
+  private selectedIds(): string[] {
+    return [...this.draw.selection.get().ids];
+  }
+
+  /**
+   * Moves a feature or a group to a place in a layer, or a feature into or out of a group
+   */
+  private moveItem(itemId: string, to: MoveTarget): void {
+    if (this.draw.groups.has(itemId)) this.draw.groups.move(itemId, to);
+    else this.draw.features.move(itemId, to);
   }
 }

@@ -9,16 +9,14 @@
  * not grow the editing data structures at all.
  */
 
-import type { DatasetRow, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import type { DatasetBaseStyle, DatasetRow, StyleRule } from '@sakuzu/maplibre-gl-draw';
 
 import { DEMO_GRID, STYLE_RULE_OTHER_COLOR } from '../constants';
 
 /** Style shared by every grid polygon (the color is decided by the styleRule) */
-const GRID_STYLE = Object.freeze({
-  fillOpacity: 0.7,
-  strokeOpacity: 0,
-  strokeWidth: 0,
-});
+export const DEMO_GRID_BASE_STYLE: DatasetBaseStyle = {
+  fill: { fillOpacity: 0.7, strokeOpacity: 0, strokeWidth: 0 },
+};
 
 /** Graduated rule for the grid polygons */
 export const DEMO_GRID_STYLE_RULE: StyleRule = {
@@ -82,7 +80,6 @@ export function createGridFeatures(centerLng: number, centerLat: number): Datase
           col,
           value: cellValue(dx, dy),
         },
-        style: GRID_STYLE,
       });
     }
   }

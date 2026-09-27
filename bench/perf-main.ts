@@ -11,7 +11,7 @@
  */
 
 import type { DatasetRow } from '@sakuzu/maplibre-gl-draw';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 // The stylesheet of the installed maplibre-gl (the version the page runs against).
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -36,7 +36,7 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-const draw = createMapLibreGLDraw(map, { defaultMode: 'select' });
+const draw = createDraw(map, { defaultMode: 'select' });
 
 const el = (id: string): HTMLElement => {
   const node = document.getElementById(id);
@@ -76,7 +76,7 @@ function buildFeatures(): DatasetRow[] {
 map.on('load', () => {
   const feats = buildFeatures();
   const t0 = performance.now();
-  draw.addDataset({
+  draw.datasets.add({
     id: 'perf-grid',
     rows: feats,
     styleRule: {
@@ -186,13 +186,13 @@ runBtn.addEventListener('click', async () => {
   // Baseline: remove the dataset and run the same animation
   result.textContent = 'Measuring 1/2 (baseline: without the dataset)...';
   const saved = buildFeatures();
-  draw.removeDataset('perf-grid');
+  draw.datasets.remove('perf-grid');
   await new Promise((r) => setTimeout(r, 300));
   const base = await measureOnce();
 
   // Main measurement: put the dataset back and run the same animation
   result.textContent = 'Measuring 2/2 (with the dataset)...';
-  draw.addDataset({
+  draw.datasets.add({
     id: 'perf-grid',
     rows: saved,
     styleRule: {

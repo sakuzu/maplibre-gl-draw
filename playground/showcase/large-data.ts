@@ -5,7 +5,7 @@
  * The large-data scene: a city of editable features
  *
  * Every building, street and place of the scene is an editable feature of the Store, loaded
- * with `draw.load()`: each one can be selected, moved and reshaped. The tilted camera shows
+ * with `draw.document.load()`: each one can be selected, moved and reshaped. The tilted camera shows
  * them near at hand, where they can be told apart, and far into the distance, where they
  * become a texture. A park in the foreground is selected, with its frame and vertex handles.
  *
@@ -15,7 +15,7 @@
  * river.
  */
 
-import type { Data, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import type { DrawDocument, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import { QUIET_BASEMAP } from './overview';
@@ -34,7 +34,7 @@ const HALF_HEIGHT_KM = 4.2;
 /** The width of the land mask, in pixels */
 const MASK_WIDTH = 2048;
 
-/** The number of features, for the legend, and the time `draw.load` took, for the console */
+/** The number of features, for the legend, and the time `draw.document.load` took, for the console */
 const counts = { buildings: 0, streets: 0, places: 0, total: 0, loadMs: 0 };
 
 export const largeDataScene: ShowcaseScene = {
@@ -46,15 +46,15 @@ export const largeDataScene: ShowcaseScene = {
     await settled(map);
     const document = createCity(map);
     const started = performance.now();
-    await draw.load(document);
+    await draw.document.load(document);
     counts.loadMs = performance.now() - started;
     console.info(
       `large-data: ${counts.total} features (${counts.buildings} buildings, ` +
-        `${counts.streets} streets, ${counts.places} places), draw.load ${Math.round(counts.loadMs)} ms`,
+        `${counts.streets} streets, ${counts.places} places), draw.document.load ${Math.round(counts.loadMs)} ms`,
     );
   },
   async finish({ draw, map }) {
-    draw.select(SELECTED_FEATURE);
+    draw.selection.set('feature', [SELECTED_FEATURE]);
     addLegend(map);
   },
 };
@@ -157,7 +157,7 @@ function rectangle(
  * Builds the city over the extent around the center of the camera: streets on a bent grid,
  * blocks of houses on their lots, parks, and places on some of the houses
  */
-function createCity(map: maplibregl.Map): Data {
+function createCity(map: maplibregl.Map): DrawDocument {
   const center = map.getCenter();
   const frame = new Frame([center.lng, center.lat]);
   const isLand = landMask(map, frame);

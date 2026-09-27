@@ -8,7 +8,7 @@
  * the page, and the playground creates its map from the scene's basemap and camera.
  */
 
-import type { Data, Feature, FileData, MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw, DrawDocument, Feature, FileData } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import type { UnderlayRegistry } from '../gis/underlay';
@@ -23,7 +23,7 @@ export interface ShowcaseCamera {
 
 /** What a scene is given when it loads and when it finishes */
 export interface ShowcaseContext {
-  draw: MapLibreGLDraw;
+  draw: Draw;
   map: maplibregl.Map;
   underlays: UnderlayRegistry;
 }
@@ -62,7 +62,11 @@ export interface SceneLayer {
  * Builds a document in the native format from layers listed from the back, for a scene that
  * makes its drawing in code
  */
-export function buildDocument(title: string, layers: SceneLayer[], files: FileData[] = []): Data {
+export function buildDocument(
+  title: string,
+  layers: SceneLayer[],
+  files: FileData[] = [],
+): DrawDocument {
   return {
     version: '3.0.0',
     metadata: { title },
@@ -74,11 +78,14 @@ export function buildDocument(title: string, layers: SceneLayer[], files: FileDa
       locked: false,
       opacity: 1,
       items: layer.features.map((feature) => feature.id),
+      styleRule: undefined,
+      metadata: undefined,
     })),
     features: layers.flatMap((layer) =>
       layer.features.map((feature) => ({
         ...feature,
         layerId: layer.id,
+        groupId: undefined,
         visible: true,
         locked: false,
       })),

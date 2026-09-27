@@ -10,9 +10,9 @@
  * removing, toggling visibility and reordering in one place. The Underlays section of the
  * Layers panel looks at this registry.
  *
- * The stacking order is owned by the library (getDatasets returns them in display
+ * The stacking order is owned by the library (`draw.datasets.list()` returns them in display
  * order). The registry does not keep an order of its own, and delegates reordering to
- * moveDataset.
+ * `draw.datasets.move`.
  *
  * The attribute popup on click is also taken care of here. Every underlay goes through this
  * registry, so demo data and imported files feel exactly the same.
@@ -20,9 +20,10 @@
 
 import type {
   Dataset,
+  DatasetBaseStyle,
   DatasetOrder,
   DatasetRow,
-  MapLibreGLDraw,
+  Draw,
   StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
@@ -55,13 +56,15 @@ export interface UnderlayAddOptions {
   features: DatasetRow[];
   /** Style rule (the default color is used when omitted) */
   styleRule?: StyleRule;
+  /** The look the rule does not decide (the defaults when omitted) */
+  baseStyle?: DatasetBaseStyle;
 }
 
 /**
  * Registry of underlays
  */
 export class UnderlayRegistry {
-  private draw: MapLibreGLDraw;
+  private draw: Draw;
   private map: maplibregl.Map;
   /** Dataset ID to display name (no order is kept) */
   private names = new Map<string, string>();
@@ -70,7 +73,7 @@ export class UnderlayRegistry {
   /** Serial number for the dataset IDs created by import */
   private seq = 0;
 
-  constructor(draw: MapLibreGLDraw, map: maplibregl.Map) {
+  constructor(draw: Draw, map: maplibregl.Map) {
     this.draw = draw;
     this.map = map;
   }
@@ -81,16 +84,17 @@ export class UnderlayRegistry {
    * It is always interactive and placed at the very back. Clicking it shows the attributes.
    */
   add(options: UnderlayAddOptions): Dataset {
-    const dataset = this.draw.addDataset({
+    const dataset = this.draw.datasets.add({
       id: options.id,
       rows: options.features,
       styleRule: options.styleRule,
+      baseStyle: options.baseStyle,
       interactive: true,
       order: 'below-store',
     });
 
-    dataset.on('click', ({ feature, lngLat }) => {
-      this.showFeaturePopup(feature.properties, lngLat);
+    dataset.on('clicked', ({ row, lngLat }) => {
+      this.showFeaturePopup(row.properties ?? {}, [lngLat[0], lngLat[1]]);
     });
 
     this.names.set(options.id, options.name);
@@ -124,7 +128,7 @@ export class UnderlayRegistry {
    * below-store) and ends at the front (the very front of above-store).
    */
   list(): UnderlayEntry[] {
-    const datasets = this.draw.getDatasets();
+    const datasets = this.draw.datasets.list();
     const alive = new Set(datasets.map((dataset) => dataset.id));
 
     // If it is gone on the library side, drop it from the registry too
@@ -140,7 +144,7 @@ export class UnderlayRegistry {
         id: dataset.id,
         name,
         visible: dataset.visible,
-        count: dataset.getFeatures().length,
+        count: dataset.listRows().length,
         order: dataset.order,
       });
     }
@@ -155,17 +159,17 @@ export class UnderlayRegistry {
    * @returns true when it moved (false when it is at an end and cannot move)
    */
   move(id: string, delta: number): boolean {
-    const dataset = this.draw.getDataset(id);
+    const dataset = this.draw.datasets.get(id);
     if (!dataset) return false;
 
     // The position is counted among all datasets on the same side (so it does not jump
     // over an underlay that is outside the registry)
-    const side = this.draw.getDatasets().filter((other) => other.order === dataset.order);
+    const side = this.draw.datasets.list().filter((other) => other.order === dataset.order);
     const index = side.findIndex((other) => other.id === id);
     const next = index + delta;
     if (index < 0 || next < 0 || next >= side.length) return false;
 
-    this.draw.moveDataset(id, { index: next });
+    this.draw.datasets.move(id, { index: next });
     this.notify();
 
     return true;
@@ -177,11 +181,11 @@ export class UnderlayRegistry {
    * @returns The side after toggling (null when it does not exist)
    */
   toggleOrder(id: string): DatasetOrder | null {
-    const dataset = this.draw.getDataset(id);
+    const dataset = this.draw.datasets.get(id);
     if (!dataset) return null;
 
     const next: DatasetOrder = dataset.order === 'below-store' ? 'above-store' : 'below-store';
-    this.draw.moveDataset(id, { order: next });
+    this.draw.datasets.move(id, { order: next });
     this.notify();
 
     return next;
@@ -193,7 +197,7 @@ export class UnderlayRegistry {
    * @returns The state after toggling (null when it does not exist)
    */
   toggleVisible(id: string): boolean | null {
-    const dataset = this.draw.getDataset(id);
+    const dataset = this.draw.datasets.get(id);
     if (!dataset) return null;
 
     const next = !dataset.visible;
@@ -216,7 +220,7 @@ export class UnderlayRegistry {
     const name = this.names.get(id);
     if (name === undefined) return null;
 
-    this.draw.removeDataset(id);
+    this.draw.datasets.remove(id);
     this.names.delete(id);
     this.closePopup();
     this.notify();

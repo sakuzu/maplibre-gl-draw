@@ -27,7 +27,7 @@ export const terrainScene: ShowcaseScene = {
   mapOnly: true,
   async load({ draw, map }) {
     addTerrain(map);
-    await draw.load(createDocument());
+    await draw.document.load(createDocument());
   },
 };
 

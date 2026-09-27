@@ -7,7 +7,14 @@
  * A panel for editing the properties of the selected feature, group or layer
  */
 
-import { deriveLegend, type MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import {
+  type Draw,
+  type Feature as DrawFeature,
+  type Group as DrawGroup,
+  type Layer as DrawLayer,
+  deriveLegend,
+  type FeatureStyle,
+} from '@sakuzu/maplibre-gl-draw';
 
 import {
   BASEMAP_OPTIONS,
@@ -20,12 +27,6 @@ import {
 } from '../constants';
 import type { StyleRuleDraft, StyleRuleKind } from '../gis/style-rule';
 import { buildStyleRule, toStyleRuleDraft } from '../gis/style-rule';
-
-// Obtain DrawFeature, DrawLayer, DrawGroup and FeatureStyle through type inference
-type DrawFeature = NonNullable<ReturnType<MapLibreGLDraw['getFeature']>>;
-type DrawLayer = ReturnType<MapLibreGLDraw['getAllLayers']>[number];
-type DrawGroup = ReturnType<MapLibreGLDraw['getAllGroups']>[number];
-type FeatureStyle = NonNullable<DrawFeature['style']>;
 
 // Selection type
 type SelectionType = 'layer' | 'group' | 'feature' | null;
@@ -48,7 +49,7 @@ export interface PropertyPanelOptions {
  */
 export class PropertyPanel {
   private container: HTMLElement;
-  private draw: MapLibreGLDraw;
+  private draw: Draw;
   private activeTab: TabType = 'map';
   private selectionType: SelectionType = null;
   private selectedLayerId: string | null = null;
@@ -67,7 +68,7 @@ export class PropertyPanel {
     palette: STYLE_RULE_PALETTES[0].value,
   };
 
-  constructor(container: HTMLElement, draw: MapLibreGLDraw, options: PropertyPanelOptions = {}) {
+  constructor(container: HTMLElement, draw: Draw, options: PropertyPanelOptions = {}) {
     this.container = container;
     this.draw = draw;
     this.gisTabElement = options.gisTabElement ?? null;
@@ -100,37 +101,37 @@ export class PropertyPanel {
    * Subscribe to events
    */
   private subscribeEvents(): void {
-    this.draw.on('draw.selection.change', ({ type, ids }) => {
+    this.draw.on('selection.changed', ({ selection }) => {
       // Handle only the case of a feature selection
-      if (type === 'feature') {
-        this.onFeatureSelectionChange(ids);
+      if (selection.type === 'feature') {
+        this.onFeatureSelectionChange([...selection.ids]);
       } else {
         // A selection of any other type is treated as an empty array
         this.onFeatureSelectionChange([]);
       }
     });
 
-    this.draw.on('draw.feature.update', () => {
+    this.draw.on('feature.updated', () => {
       // Do not re-render while a slider is being dragged or text is being edited
       if (this.selectionType === 'feature' && !this.isSliderDragging && !this.isTextEditing) {
         this.render();
       }
     });
 
-    this.draw.on('draw.layer.update', () => {
+    this.draw.on('layer.updated', () => {
       if (this.selectionType === 'layer' && !this.isSliderDragging && !this.isTextEditing) {
         this.render();
       }
     });
 
-    this.draw.on('draw.group.update', () => {
+    this.draw.on('group.updated', () => {
       if (this.selectionType === 'group' && !this.isSliderDragging && !this.isTextEditing) {
         this.render();
       }
     });
 
     // Re-render when the metadata changes (remote sync and the like)
-    this.draw.on('draw.metadata.change', () => {
+    this.draw.on('metadata.updated', () => {
       if (this.activeTab === 'map' && !this.isTextEditing) {
         this.render();
       }
@@ -165,7 +166,7 @@ export class PropertyPanel {
     this.activeTab = 'feature';
 
     // Reflect the rule of the selected layer in the style rule UI
-    const layer = this.draw.getLayer(id);
+    const layer = this.draw.layers.get(id);
     this.styleRuleDraft = toStyleRuleDraft(layer?.styleRule, this.styleRuleDraft.palette);
 
     this.render();
@@ -284,7 +285,7 @@ export class PropertyPanel {
    * Render the map tab
    */
   private renderMapTab(): string {
-    const metadata = this.draw.getMetadata();
+    const metadata = this.draw.metadata.get();
     const currentBasemap = metadata.basemap || this.currentBasemap;
 
     const basemapOptions = BASEMAP_OPTIONS.map(
@@ -357,14 +358,14 @@ export class PropertyPanel {
     }
 
     if (this.selectionType === 'feature') {
-      const selectedIds = this.draw.getSelectedIds();
+      const selectedIds = this.selectedIds();
 
       if (selectedIds.length === 0) {
         return this.renderNoSelection();
       }
 
       if (selectedIds.length === 1) {
-        const feature = this.draw.getFeature(selectedIds[0]);
+        const feature = this.draw.features.get(selectedIds[0]);
         if (feature) {
           return this.renderFeatureEditor(feature);
         }
@@ -402,7 +403,7 @@ export class PropertyPanel {
    * Render the layer editor
    */
   private renderLayerEditor(): string {
-    const layer = this.draw.getLayer(this.selectedLayerId!) as DrawLayer;
+    const layer = this.draw.layers.get(this.selectedLayerId!) as DrawLayer;
     if (!layer) return this.renderNoSelection();
 
     return `
@@ -519,9 +520,8 @@ export class PropertyPanel {
       return;
     }
 
-    const values = this.draw
-      .getAllFeatures()
-      .filter((feature) => feature.layerId === layerId)
+    const values = this.draw.features
+      .list({ layerId })
       .map((feature) => feature.properties?.[this.styleRuleDraft.property.trim()]);
 
     const result = buildStyleRule(this.styleRuleDraft, values);
@@ -530,7 +530,7 @@ export class PropertyPanel {
       return;
     }
 
-    this.draw.updateLayer(layerId, { styleRule: result.rule });
+    this.draw.layers.update(layerId, { styleRule: result.rule });
     this.notify('Applied the style rule');
   }
 
@@ -542,7 +542,7 @@ export class PropertyPanel {
     if (!layerId) return;
 
     this.styleRuleDraft = { ...this.styleRuleDraft, kind: 'none' };
-    this.draw.updateLayer(layerId, { styleRule: undefined });
+    this.draw.layers.update(layerId, { styleRule: undefined });
     this.notify('Cleared the style rule');
     this.render();
   }
@@ -551,7 +551,7 @@ export class PropertyPanel {
    * Render the group editor
    */
   private renderGroupEditor(): string {
-    const group = this.draw.getGroup(this.selectedGroupId!) as DrawGroup;
+    const group = this.draw.groups.get(this.selectedGroupId!) as DrawGroup;
     if (!group) return this.renderNoSelection();
 
     return `
@@ -922,7 +922,7 @@ export class PropertyPanel {
 
       const handleChange = () => {
         const value = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value;
-        this.draw.setMetadata({ [propName]: value });
+        this.draw.metadata.update({ [propName]: value });
 
         // Dispatch a custom event when the basemap changes
         if (propName === 'basemap') {
@@ -953,10 +953,10 @@ export class PropertyPanel {
    * Color change handler
    */
   private handleColorChange(target: string, color: string): void {
-    const selectedIds = this.draw.getSelectedIds();
+    const selectedIds = this.selectedIds();
     if (selectedIds.length !== 1) return;
 
-    const feature = this.draw.getFeature(selectedIds[0]);
+    const feature = this.draw.features.get(selectedIds[0]);
     if (!feature) return;
 
     const existingStyle = (feature.style || {}) as FeatureStyle;
@@ -982,7 +982,7 @@ export class PropertyPanel {
         break;
     }
 
-    this.draw.updateFeature(selectedIds[0], { style });
+    this.draw.features.update(selectedIds[0], { style });
   }
 
   /**
@@ -999,15 +999,15 @@ export class PropertyPanel {
   private handleSliderChange(id: string, value: number): void {
     if (this.selectionType === 'layer' && this.selectedLayerId) {
       if (id === 'layer-opacity') {
-        this.draw.updateLayer(this.selectedLayerId, { opacity: value / 100 });
+        this.draw.layers.update(this.selectedLayerId, { opacity: value / 100 });
       }
       return;
     }
 
-    const selectedIds = this.draw.getSelectedIds();
+    const selectedIds = this.selectedIds();
     if (selectedIds.length !== 1) return;
 
-    const feature = this.draw.getFeature(selectedIds[0]);
+    const feature = this.draw.features.get(selectedIds[0]);
     if (!feature) return;
 
     const style = { ...(feature.style || {}) } as FeatureStyle;
@@ -1030,7 +1030,7 @@ export class PropertyPanel {
         break;
     }
 
-    this.draw.updateFeature(selectedIds[0], { style });
+    this.draw.features.update(selectedIds[0], { style });
   }
 
   /**
@@ -1052,39 +1052,39 @@ export class PropertyPanel {
   private handleTextInput(id: string, value: string): void {
     if (this.selectionType === 'layer' && this.selectedLayerId) {
       if (id === 'layer-name') {
-        this.draw.updateLayer(this.selectedLayerId, { name: value });
+        this.draw.layers.update(this.selectedLayerId, { name: value });
       }
       return;
     }
 
     if (this.selectionType === 'group' && this.selectedGroupId) {
       if (id === 'group-name') {
-        this.draw.updateGroup(this.selectedGroupId, { name: value });
+        this.draw.groups.update(this.selectedGroupId, { name: value });
       }
       return;
     }
 
-    const selectedIds = this.draw.getSelectedIds();
+    const selectedIds = this.selectedIds();
     if (selectedIds.length !== 1) return;
 
-    const feature = this.draw.getFeature(selectedIds[0]);
+    const feature = this.draw.features.get(selectedIds[0]);
     if (!feature) return;
 
     switch (id) {
       case 'feature-name':
-        this.draw.updateFeature(selectedIds[0], {
+        this.draw.features.update(selectedIds[0], {
           properties: { ...feature.properties, name: value },
         });
         break;
       case 'feature-description':
-        this.draw.updateFeature(selectedIds[0], {
+        this.draw.features.update(selectedIds[0], {
           properties: { ...feature.properties, description: value },
         });
         break;
       case 'circle-radius': {
         const radiusMeters = parseFloat(value);
         if (!Number.isNaN(radiusMeters) && radiusMeters > 0) {
-          this.draw.updateFeature(selectedIds[0], {
+          this.draw.features.update(selectedIds[0], {
             properties: { ...feature.properties, 'maplibre-gl-draw:radiusMeters': radiusMeters },
           });
         }
@@ -1097,10 +1097,10 @@ export class PropertyPanel {
    * Select change handler
    */
   private handleSelectChange(id: string, value: string): void {
-    const selectedIds = this.draw.getSelectedIds();
+    const selectedIds = this.selectedIds();
     if (selectedIds.length !== 1) return;
 
-    const feature = this.draw.getFeature(selectedIds[0]);
+    const feature = this.draw.features.get(selectedIds[0]);
     if (!feature) return;
 
     const style = { ...(feature.style || {}) } as Record<string, unknown>;
@@ -1111,6 +1111,13 @@ export class PropertyPanel {
         break;
     }
 
-    this.draw.updateFeature(selectedIds[0], { style: style as FeatureStyle });
+    this.draw.features.update(selectedIds[0], { style: style as FeatureStyle });
+  }
+
+  /**
+   * The IDs of the selection
+   */
+  private selectedIds(): string[] {
+    return [...this.draw.selection.get().ids];
   }
 }

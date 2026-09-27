@@ -18,6 +18,6 @@ export const tiltedScene: ShowcaseScene = {
   mapOnly: true,
   load: loadDocument,
   async finish({ draw }) {
-    draw.select(SELECTED_FEATURE);
+    draw.selection.set('feature', [SELECTED_FEATURE]);
   },
 };

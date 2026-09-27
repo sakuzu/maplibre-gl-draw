@@ -21,15 +21,15 @@ frame times. The target is an average of 55 fps or more with a p90 of
 
 ## bench.html
 
-The features are loaded into the Store with `draw.load()`, on a map with
-a background layer only (no network), in a fixed 1280 x 800 map. The
-address sets the conditions:
+The features are loaded into the Store with `draw.document.load()`, on a map
+with a background layer only (no network), in a fixed 1280 x 800 map.
+The address sets the conditions:
 
 | Parameter | Meaning | Default |
 | --- | --- | --- |
 | `n` | Number of features | `50000` |
 | `order` | `grouped` (by type) or `interleaved` | `grouped` |
-| `retained` | `1` for the retained batches, `0` for immediate drawing | `1` |
+| `retained` | `1` caches the geometry, `0` draws at once | `1` |
 | `autoName` | `1` turns the automatic names on | `0` |
 
 For automation, the page exposes `window.benchReady`, a Promise of the

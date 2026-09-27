@@ -4,7 +4,7 @@
 /**
  * Benchmark page for the Store rendering path
  *
- * It loads a large number of features into the Store with `draw.load()`, runs the same
+ * It loads a large number of features into the Store with `draw.document.load()`, runs the same
  * pan / zoom path and collects statistics on the frame times. It is used for comparative
  * measurements against main / perf.
  *
@@ -15,7 +15,7 @@
  *   - `n`        : total number of features (default 50000)
  *   - `order`    : `grouped` (grouped by type) / `interleaved` (types alternating)
  *   - `retained` : `1` for retained mode, `0` for immediate mode
- *                  (renderingStyle.storeRetained)
+ *                  (rendering.cacheGeometry)
  *   - `autoName` : `1` enables automatic name generation (disabled by default)
  *
  * The following are exposed on window for automation.
@@ -23,7 +23,8 @@
  *   - `window.runBench()`: runs one measurement and returns the statistics
  */
 
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Feature, Geometry } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 
 // Worker URL setup for v6 (side effect). Required before the Map is created.
@@ -88,13 +89,13 @@ const map = new maplibregl.Map({
   fadeDuration: 0,
 });
 
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   defaultMode: 'select',
-  renderingStyle: { storeRetained: retained },
+  rendering: { cacheGeometry: retained },
   // Off by default so it does not disturb the rendering performance measurement (main and
   // perf use the same conditions). Add autoName=1 to measure automatic name generation
   // itself.
-  autoName,
+  autoName: autoName ? {} : false,
 });
 
 /**
@@ -161,7 +162,7 @@ function zigzagLine(x: number, y: number): [number, number][] {
   ];
 }
 
-type GeoFeature = GeoJSON.Feature<GeoJSON.Geometry, Record<string, unknown>>;
+type GeoFeature = Feature<Geometry, Record<string, unknown>>;
 
 function makePolygon(i: number, cell: number, columns: number): GeoFeature {
   const [x, y] = cellOrigin(cell, columns);
@@ -323,7 +324,8 @@ window.benchReady = (async (): Promise<BenchInfo> => {
   });
 
   const t0 = performance.now();
-  const result = await draw.load({ type: 'FeatureCollection', features });
+  const result = await draw.document.load({ type: 'FeatureCollection', features });
+  if (!result) throw new Error('The document is read-only');
   const loadMs = performance.now() - t0;
   const firstIdleMs = await idlePromise;
 
