@@ -105,10 +105,11 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,
   `GroupPatch`, the filters, `MoveTarget`, `LoadSource`, and the `mode`
   of `LoadOptions` (`replace` or `merge`).
-- `FeatureStyle.pointOpacity`.
+- `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
+  being drawn, and `selectionStyle.boxSelection` for the selection box.
 - The contexts of the extensions: `terrain`, `names`, `screen` and
-  `invalidate` for every kind, and `hitTest`, `snap`, `commitFeature`,
-  `preview` and `cursor` for a mode.
+  `invalidate` and `drawing` for every kind, and `hitTest`, `snap`,
+  `commitFeature`, `preview`, `cursor` and `listTraceRows` for a mode.
 - In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
   `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
 - In `/table`: `tableFromFeatures`, `createTableBuilder` and
@@ -301,7 +302,9 @@ A plugin of 1.0 subscribed to the same names without `draw.`
 | The hook `drag:end` | `drag.ended` | With `cancelled` |
 
 Every event of the document (`feature.*`, `layer.*`, `group.*`,
-`metadata.updated`, `document.*`) carries `source`.
+`metadata.updated`, `document.loaded`) carries `source`. In
+`document.changed` the `source` is optional, and an update in progress
+is marked by the `isIntermediate` of that update.
 
 #### Options
 
@@ -318,12 +321,12 @@ instance runs are `RuntimeOptions`, changed with `draw.options.update`.
 | `style.lineString` | `style.line` | |
 | `style.polygon` | `style.polygon` | |
 | (none) | `style.circle`, `style.image` | |
-| `style.tentative` | (no counterpart) | |
+| `style.tentative` | `previewStyle` | A `Partial<FeatureStyle>` |
 | `selectionStyle` | `selectionStyle` | CSS colors |
 | `renderingStyle` | `rendering` | |
 | `renderingStyle.storeRetained` | `rendering.cacheGeometry` | |
 | `renderingStyle.timeSlicing` | `rendering.timeSlicing` | |
-| `renderingStyle.boxSelectionStyle` | (no counterpart) | |
+| `renderingStyle.boxSelectionStyle` | `selectionStyle.boxSelection` | |
 | `pixelRatio` | `rendering.pixelRatio` | A number |
 | (none) | `rendering.renderScale` | |
 | `autoName` | `autoName` | `AutoNameOptions` or `false` |
@@ -449,7 +452,8 @@ The `PluginContext`. Its writes took a `source`; in 2.0 wrap them in
 | `on`, `off` | `on`, `off`, `once` | Ended with the plugin |
 | `batch(fn)` | `draw.transact(fn, options)` | |
 | `notifyStateReset` | (removed) | The Store reports it |
-| `undoVertex`, `redoVertex` | (no counterpart) | |
+| `undoVertex`, `redoVertex` | `drawing.undoVertex`, `redoVertex` | |
+| (none) | `drawing.isDrawing` | |
 | `invalidateFeatures(type)` | `invalidate({ type })` | |
 | `projectAnchor(lng, lat)` | `terrain.project([lng, lat])` | |
 | `anchorElevationMeters` | `terrain.elevation` | |
@@ -474,17 +478,17 @@ The `ModeHandler` and the `ModeContext`:
 | `onExternalStateChange` | `ctx.on('document.changed')` | |
 | `onSelectionChange` | `ctx.on('selection.changed')` | |
 | (none) | `onCancel` | Escape |
-| `writesFeatures` | (no counterpart) | |
-| `undoVertex`, `redoVertex` | (no counterpart) | |
-| `getSnapPreference` | (no counterpart) | |
-| `isSnapEnabledFor` | (no counterpart) | |
+| `writesFeatures` | `writes` | |
+| `undoVertex`, `redoVertex` | `onUndoVertex`, `onRedoVertex` | |
+| `getSnapPreference` | `snapPreference` | A `SnapPreference` |
+| `isSnapEnabledFor` | `snapPreference` | |
 | `ctx.map` | `ctx.draw.getMap()` | |
 | `ctx.store` | `ctx.store`, `ctx.draw` | Read and write |
 | `ctx.spatialIndex` | `ctx.hitTest` | |
 | `ctx.hitTestService` | `ctx.hitTest` | |
 | `ctx.hitTestTopmost` | `ctx.hitTest` | |
 | `ctx.getDatasetFeature` | `ctx.hitTest` | Rows of datasets are hits |
-| `ctx.getDatasetTraceFeatures` | (no counterpart) | |
+| `ctx.getDatasetTraceFeatures` | `ctx.listTraceRows(bbox)` | |
 | `ctx.featureCompanions` | (removed) | Companions are hits |
 | `ctx.boxSelectionRegistry` | (removed) | |
 | `ctx.selectionScope` | (removed) | |
@@ -526,8 +530,8 @@ The renderers and their `RenderContext`:
 | Feature `draw(...)` | `draw(feature, ctx)` | |
 | Overlay `draw(data, zoom, ctx)` | `draw(ctx)` | |
 | `LayerAwareOverlayRenderer` | `OverlayRenderer` | `drawForLayer` |
-| Overlay `order` | (no counterpart) | |
-| Overlay `drawVertices` | (no counterpart) | |
+| Overlay `order` | `order` | A number |
+| Overlay `drawVertices` | `drawVertices(ctx)` | |
 
 The custom feature type, `CustomFeatureHandler` in 1.0 and
 `FeatureTypeDefinition` in 2.0:
@@ -545,8 +549,8 @@ The custom feature type, `CustomFeatureHandler` in 1.0 and
 | `getAdditionalResizeHandles` | `handles(feature, ctx)` | |
 | `computeCustomResize` | `onHandleDrag` | Returns a `FeaturePatch` |
 | `getSnapTargets` | `snapCandidates(feature, ctx)` | |
-| `resizeStrategy` | (no counterpart) | |
-| `candidateReachPx` | (no counterpart) | |
+| `resizeStrategy` | (removed) | `handles` and `onHandleDrag` |
+| `candidateReachPx` | `hitPaddingPx` | |
 
 The providers:
 
@@ -558,13 +562,13 @@ The providers:
 | `onHandleDragStart` | `onDrag` | Returns a `FeaturePatch` |
 | `onHandleDragMove` | `onDrag` | |
 | `onHandleDragEnd` | `onDrag` | |
-| `getGlobalHandles` | (no counterpart) | |
+| `getGlobalHandles` | `globalHandles(ctx)` | |
 | `FeatureCompanionProvider` | `CompanionProvider` | |
 | `id` | `name` | |
 | `draw` | `draw(feature, ctx)` | |
 | `hitTest(feature, point, ctx)` | `hitTest(feature, ctx)` | |
-| `has` | (no counterpart) | |
-| `onCompanionClick` | (no counterpart) | |
+| `has` | `has(feature)` | |
+| `onCompanionClick` | `onClick(feature, hit, event)` | |
 | `SnapProvider.candidates` | `candidates(ctx)` | No `bbox` argument |
 
 The registration:
@@ -603,7 +607,8 @@ The Store contract:
 
 #### Main entry
 
-Every export of the main entry of 1.0 that does not keep its name. The
+Every export of the main entry of 1.0 that does not keep its name, and
+the two types of layer 2 that stay in the main entry. The
 building blocks for custom shaders are in
 `@sakuzu/maplibre-gl-draw/webgl`, with no promise across minor
 releases.
@@ -748,6 +753,7 @@ releases.
 | `getSelectedFeatureIds` | `selection.get().ids` | |
 | `getStrokeDashPattern` | `dashPattern` | `/webgl` |
 | `getTerrainTessellationStep` | `terrainTessellationStep` | `/webgl` |
+| `ShaderData`, `OffsetUniforms` | Main entry | Now under semver |
 | `applyDrawBlendState`, `BlendCapableGL` | `/webgl` | |
 | `calculateLngLatOffset`, `computeQuadVertices` | `/webgl` | |
 | `createProgram`, `DashSegment` | `/webgl` | |
@@ -770,7 +776,7 @@ releases.
 | `InputOperations`, `SyntheticInputOptions` | (removed) | No synthetic input |
 | `SyntheticKeyOptions`, `SyntheticLngLat` | (removed) | |
 | `SyntheticModifiers`, `SnapInputType` | (removed) | |
-| `UpdateFeatureOptions` | (removed) | `intermediate` in events |
+| `UpdateFeatureOptions` | (removed) | `isIntermediate` in changes |
 | `BoxSelection`, `DragState` | (removed) | Internal state |
 | `DragOperationType`, `RotateInfo` | (removed) | |
 | `BoundingBoxCoordsSimple`, `ResizeState` | (removed) | |
@@ -801,9 +807,9 @@ releases.
 | `getContrastColor`, `getExpandedViewportBounds` | (removed) | |
 | `DEFAULT_VIEWPORT_EXPANSION_FACTOR` | (removed) | |
 | `DEFAULT_POINT_FRAME_SIZE` | (removed) | |
-| `TentativeStyle` | (no counterpart) | The look while drawing |
-| `BoxSelectionStyleConfig` | (no counterpart) | The selection box |
-| `FillStyle` | (no counterpart) | |
+| `TentativeStyle` | (removed) | `DrawOptions.previewStyle` |
+| `BoxSelectionStyleConfig` | (removed) | `boxSelection` |
+| `FillStyle` | (removed) | `boxSelection` |
 
 #### Geometry
 

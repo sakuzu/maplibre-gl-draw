@@ -59,7 +59,8 @@ GeoJSON の書き出しにもそのまま出ます。1.0 の名前はすべて�
   `layer.reordered`、`selection.changed` などです。アプリケーション
   もプラグインも、同じ一覧 `DrawEvents` を購読します。
   `document.changed` は取引ごとに 1 回、文書の変化の全部を届けます。
-  文書のイベントは、書き込みの出どころ `source` を運びます
+  地物、レイヤー、グループ、メタデータのイベントは、書き込みの
+  出どころ `source` を運びます
 
 地物は `{ id, type, geometry, layerId, groupId, properties, style,
 visible, locked }` です。`geometry` は GeoJSON の geometry で、
@@ -339,7 +340,10 @@ draw.options.update({ rendering: { renderScale: 0.5 } });
 `defaultMode`、`store`、`initDefaultLayer` 以外の設定は、実行中に
 `draw.options` で変えられます。既定の見た目の鍵は `point`、`line`、
 `polygon`、`circle`、`image` で、中身は `FeatureStyle` の鍵です。
-色はすべて CSS の色の文字列です。
+色はすべて CSS の色の文字列です。描いている途中の形の見た目は
+`previewStyle` (1.0 の `style.tentative`)、範囲選択の枠の見た目は
+`selectionStyle.boxSelection` (1.0 の
+`renderingStyle.boxSelectionStyle`) です。
 
 ### データセット
 
@@ -500,6 +504,9 @@ const removeLogger = draw.extensions.plugins.add(logger);
   代わりです)
 - `invalidate({ type, ids })` で描き直させます
   (`invalidateFeatures` の代わりです)
+- `drawing` は、描いている途中の形の頂点のための `undoVertex()`、
+  `redoVertex()`、`isDrawing()` を持ちます (1.0 の `PluginContext`
+  の `undoVertex` と `redoVertex` の代わりです)
 
 `PluginContext` には、さらに `extensions` (`draw.extensions` と同じ
 コレクション) があります。プラグインがここで足したものは、プラグイン
@@ -530,7 +537,12 @@ const removeLogger = draw.extensions.plugins.add(logger);
 さらに `commitFeature(input)` を渡します。`commitFeature` は、新しい
 地物の ID、レイヤー、自動の名前、基準のズームを、組み込みのモードと
 同じ規則で決めます。描いている途中の形は `preview.set` で見せ、
-カーソルは `cursor.set` で変えます。
+カーソルは `cursor.set` で変え、なぞる対象のデータセットの行は
+`listTraceRows(bbox)` で得ます (`getDatasetTraceFeatures` の代わり
+です)。ハンドラーでは、`writesFeatures` が `writes` に、
+`getSnapPreference` と `isSnapEnabledFor` が 1 つの
+`snapPreference` に、`undoVertex` と `redoVertex` が
+`onUndoVertex` と `onRedoVertex` になります。
 
 <!-- docs-check: skip -->
 
@@ -568,6 +580,12 @@ geometry の種類 `geometry`、描き方 `renderer` と、任意の
 ここに書きます。`HandleProvider` や `SnapProvider` は、自分のもので
 ない型に足すときに使います。`onHandleDrag` と
 `HandleProvider.onDrag` は `FeaturePatch` を返します。
+`candidateReachPx` は `hitPaddingPx` になり、`resizeStrategy` は
+無くなりました。大きさの変え方は `handles` と `onHandleDrag` で
+書きます。`HandleProvider` は、地物に付かないハンドルを
+`globalHandles` (`getGlobalHandles` の代わり) で出します。
+`CompanionProvider` は `has` をそのまま持ち、クリックを `onClick`
+(`onCompanionClick` の代わり) で受けます。
 
 ### RenderContext
 
@@ -586,8 +604,9 @@ geometry の種類 `geometry`、描き方 `renderer` と、任意の
 | `terrain`、`opacity`、`pixelRatio` | 同じ名前 |
 
 重ね描きは `draw(ctx)` で描き (`ctx.projection` と `ctx.zoom` を
-使います)、レイヤーの間には `drawForLayer(layerId, ctx)` で描き
-ます。`offset` は計算済みで届くので、`calculateOffsetUniforms` を
+使います)、レイヤーの間には `drawForLayer(layerId, ctx)` で、
+頂点の段には `drawVertices(ctx)` で描きます。重ね描きどうしの順は
+`order` で決めます。`offset` は計算済みで届くので、`calculateOffsetUniforms` を
 呼ぶ必要はありません。共有の描画器は `draw(geometry, style,
 options)` で描きます。
 
@@ -599,7 +618,9 @@ options)` で描きます。
 `applyDrawBlendState`、`QuadShader` などです。この入口は小さい版
 でも変わることがあります。main の入口は semver に従います。
 `getStrokeDashPattern` と `getTerrainTessellationStep` は、そこでは
-`dashPattern` と `terrainTessellationStep` です。1.0 が出していた
+`dashPattern` と `terrainTessellationStep` です。`RenderContext`
+の欄の型である `ShaderData` と `OffsetUniforms` は main の入口に
+残ります。1.0 が出していた
 純粋な計算 (向きのある矩形、ピクセルと度の換算、コントラストの色)
 は出さなくなりました。必要なら手元に写してください。
 

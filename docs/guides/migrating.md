@@ -55,8 +55,9 @@ Four rules hold everywhere:
 - Events are named `resource.pastParticiple`: `feature.created`,
   `layer.reordered`, `selection.changed`. Apps and plugins subscribe to
   the same list, `DrawEvents`. `document.changed` arrives once per
-  transaction with every change to the document, and each event of the
-  document carries the `source` of the write
+  transaction with every change to the document, and the events of
+  features, layers, groups and metadata carry the `source` of the
+  write
 
 A feature is `{ id, type, geometry, layerId, groupId, properties,
 style, visible, locked }`. `geometry` is a GeoJSON geometry, and
@@ -332,7 +333,10 @@ draw.options.update({ rendering: { renderScale: 0.5 } });
 Every option but `defaultMode`, `store` and `initDefaultLayer` can
 change at run time through `draw.options`. The default styles are keyed
 `point`, `line`, `polygon`, `circle` and `image`, with the keys of
-`FeatureStyle`, and every color is a CSS color string.
+`FeatureStyle`, and every color is a CSS color string. The look of the
+shape being drawn is `previewStyle` (`style.tentative` in 1.0), and the
+look of the selection box is `selectionStyle.boxSelection`
+(`renderingStyle.boxSelectionStyle` in 1.0).
 
 ### Datasets
 
@@ -486,6 +490,9 @@ Every kind of extension gets one context. They share
 - `screen`, with `project`, `unproject`, `bounds(feature)`, `zoom` and
   `pixelRatio` (`bounds` replaces `computeBoundingBox`)
 - `invalidate({ type, ids })`, which redraws (`invalidateFeatures`)
+- `drawing`, with `undoVertex()`, `redoVertex()` and `isDrawing()`,
+  for the vertices of the shape being drawn (`undoVertex` and
+  `redoVertex` of the 1.0 `PluginContext`)
 
 A `PluginContext` adds `extensions`, the collections of
 `draw.extensions`. What a plugin adds there is removed with the
@@ -516,8 +523,12 @@ input arrives as `DrawPointerEvent` (`point`, `lngLat`, `snapped`,
 `snap(point)` in place of the hit test services, and
 `commitFeature(input)`, which gives a new feature its ID, layer,
 automatic name and reference zoom the way the built-in modes do.
-`preview.set` shows the shape being drawn, and `cursor.set` changes the
-cursor.
+`preview.set` shows the shape being drawn, `cursor.set` changes the
+cursor, and `listTraceRows(bbox)` gives the rows of datasets to trace
+along (`getDatasetTraceFeatures`). On the handler, `writesFeatures` is
+`writes`, `getSnapPreference` and `isSnapEnabledFor` are one
+`snapPreference`, and `undoVertex` and `redoVertex` are `onUndoVertex`
+and `onRedoVertex`.
 
 <!-- docs-check: skip -->
 
@@ -554,7 +565,12 @@ A custom feature type is a `FeatureTypeDefinition`: its `type`, the
 Handles and snapping candidates of your own type belong there; a
 `HandleProvider` or a `SnapProvider` is for adding them to a type that
 is not yours. `onHandleDrag` and `HandleProvider.onDrag` return a
-`FeaturePatch`.
+`FeaturePatch`. `candidateReachPx` is `hitPaddingPx`, and
+`resizeStrategy` is gone: write a resize with `handles` and
+`onHandleDrag`. A `HandleProvider` gives handles that belong to no
+feature with `globalHandles` (`getGlobalHandles`), and a
+`CompanionProvider` keeps `has` and takes clicks with `onClick`
+(`onCompanionClick`).
 
 ### RenderContext
 
@@ -573,7 +589,9 @@ the order of a MapLibre custom layer.
 | `terrain`, `opacity`, `pixelRatio` | the same names |
 
 An overlay draws with `draw(ctx)` (with `ctx.projection` and
-`ctx.zoom`) and between layers with `drawForLayer(layerId, ctx)`. The
+`ctx.zoom`), between layers with `drawForLayer(layerId, ctx)` and at
+the level of the vertices with `drawVertices(ctx)`; `order` sets its
+place among the overlays. The
 `offset` is computed for you, so a call to `calculateOffsetUniforms` is
 no longer needed. The shared renderers draw with `draw(geometry,
 style, options)`.
@@ -586,7 +604,9 @@ The building blocks for custom shaders move from the main entry to
 `QuadShader` and the rest. That entry may change in a minor release;
 the main entry follows semver. `getStrokeDashPattern` and
 `getTerrainTessellationStep` are `dashPattern` and
-`terrainTessellationStep` there. The pure math that 1.0 exported
+`terrainTessellationStep` there. `ShaderData` and `OffsetUniforms`,
+the types of the fields of `RenderContext`, stay in the main entry. The
+pure math that 1.0 exported
 (oriented boxes, conversions between pixels and degrees, contrast
 colors) is not exported any more: keep your own copy.
 
