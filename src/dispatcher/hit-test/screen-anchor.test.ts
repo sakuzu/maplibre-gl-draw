@@ -34,6 +34,7 @@ function point(id: string, coord: Coordinate): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -46,7 +47,16 @@ let spatialIndex: RBushSpatialIndex;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new RBushSpatialIndex();
 });
 
@@ -138,6 +148,7 @@ describe('screen space hit testing of symbols', () => {
         ],
       },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,

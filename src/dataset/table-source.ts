@@ -198,6 +198,7 @@ class TableStyleSlots {
       type,
       geometry: geometryFromCoordinates(type, [] as unknown as FeatureCoordinates),
       layerId: '',
+      groupId: undefined,
       properties: {},
       style: this.styler.effectiveStyle(undefined, color, getStyleRuleChannel(type)) ?? {},
       locked: false,

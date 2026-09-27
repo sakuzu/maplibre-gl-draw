@@ -44,6 +44,7 @@ export async function loadImage(
   const layerId = options.layerId || getCurrentLayerId();
   const autoName = autoNameGenerator.generateName('Image');
   const feature: Feature = {
+    groupId: undefined,
     id: featureId,
     type: 'Image',
     geometry: { type: 'Point', coordinates: options.coordinate },

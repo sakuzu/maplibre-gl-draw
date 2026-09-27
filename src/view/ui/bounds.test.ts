@@ -25,6 +25,7 @@ function makeFeature(partial: Pick<Feature, 'type' | 'geometry'>): Feature {
   return {
     id: 'feature-1',
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

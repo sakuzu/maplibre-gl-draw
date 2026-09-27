@@ -56,7 +56,16 @@ function key(k: string): void {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   const canvas = { style: {} as { cursor?: string } };
   const map = {
     getZoom: () => 10,
@@ -93,7 +102,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
     expect(manager.redoVertex()).toBe(true);
     key('Enter');
 
-    expect(store.getAllFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
   });
 
   it('returns false with nothing to undo or redo, and a new vertex drops the redo', () => {
@@ -108,7 +117,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
     expect(manager.redoVertex()).toBe(false);
     key('Enter');
 
-    expect(store.getAllFeatures().map((f) => coordinatesOf(f))).toEqual([[A, C]]);
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, C]]);
   });
 
   it('is false in a mode without a drawing (select)', () => {
@@ -127,7 +136,7 @@ describe('undoVertex / redoVertex while drawing a polygon', () => {
     expect(manager.undoVertex()).toBe(true);
     key('Enter');
 
-    const ring = (coordinatesOf(store.getAllFeatures()[0]) as Coordinate[][])[0];
+    const ring = (coordinatesOf(store.listFeatures()[0]) as Coordinate[][])[0];
     expect(ring).toEqual([A, B, C, A]);
   });
 });

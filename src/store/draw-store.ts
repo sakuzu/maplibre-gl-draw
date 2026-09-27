@@ -75,17 +75,17 @@ export class DrawStore implements Store {
   getFeature(id: string): Feature | undefined {
     return this.#document.getFeature(id);
   }
-  getAllFeatures(): Feature[] {
-    return this.#document.getAllFeatures();
+  listFeatures(): Feature[] {
+    return this.#document.listFeatures();
   }
-  getOrderedFeatures(): Feature[] {
-    return this.#document.getOrderedFeatures();
+  listFeaturesInOrder(): Feature[] {
+    return this.#document.listFeaturesInOrder();
   }
   getLayer(id: string): Layer | undefined {
     return this.#document.getLayer(id);
   }
-  getAllLayers(): Layer[] {
-    return this.#document.getAllLayers();
+  listLayers(): Layer[] {
+    return this.#document.listLayers();
   }
   getLayerOrder(): readonly string[] {
     return this.#document.getLayerOrder();
@@ -93,14 +93,14 @@ export class DrawStore implements Store {
   getGroup(id: string): Group | undefined {
     return this.#document.getGroup(id);
   }
-  getAllGroups(): Group[] {
-    return this.#document.getAllGroups();
+  listGroups(): Group[] {
+    return this.#document.listGroups();
   }
   getFile(id: string): FileData | undefined {
     return this.#document.getFile(id);
   }
-  getAllFiles(): FileData[] {
-    return this.#document.getAllFiles();
+  listFiles(): FileData[] {
+    return this.#document.listFiles();
   }
   getMetadata(): Metadata {
     return this.#document.getMetadata();
@@ -209,8 +209,8 @@ export class DrawStore implements Store {
     this.#ui.setDragState(state);
   }
 
-  getSelectedVertices(): VertexSelection | null {
-    return this.#ui.getSelectedVertices();
+  getVertexSelection(): VertexSelection | null {
+    return this.#ui.getVertexSelection();
   }
   setSelectedVertices(selection: VertexSelection | null): void {
     this.#ui.setSelectedVertices(selection);
@@ -244,11 +244,11 @@ export class DrawStore implements Store {
     this.#ui.setInteractionLock(value);
   }
 
-  isLocallyHidden(id: string): boolean {
-    return this.#ui.isLocallyHidden(id);
+  isHidden(id: string): boolean {
+    return this.#ui.isHidden(id);
   }
-  getLocallyHidden(): ReadonlySet<string> {
-    return this.#ui.getLocallyHidden();
+  listHidden(): ReadonlySet<string> {
+    return this.#ui.listHidden();
   }
   setLocallyHidden(id: string, hidden: boolean): void {
     this.#bus.transact(() => {
@@ -326,7 +326,7 @@ export class DrawStore implements Store {
    * would name other vertices
    */
   #pruneVertices(changes: StateChanges): void {
-    const vertices = this.#ui.getSelectedVertices();
+    const vertices = this.#ui.getVertexSelection();
     if (!vertices) return;
     const featureId = vertices.featureId;
     if (!this.#document.getFeature(featureId)) {
@@ -367,7 +367,7 @@ function mayHide(changes: StateChanges): boolean {
  */
 function createShownLookup(
   document: DocumentStore,
-  ui: { isLocallyHidden(id: string): boolean },
+  ui: { isHidden(id: string): boolean },
 ): (type: SelectionType, id: string) => boolean {
   const layers = new Map<string, boolean>();
   const groups = new Map<string, boolean>();
@@ -376,7 +376,7 @@ function createShownLookup(
     let shown = layers.get(id);
     if (shown === undefined) {
       const layer = document.getLayer(id);
-      shown = layer?.visible === true && !ui.isLocallyHidden(id);
+      shown = layer?.visible === true && !ui.isHidden(id);
       layers.set(id, shown);
     }
     return shown;
@@ -389,7 +389,7 @@ function createShownLookup(
       const layerId = group ? groupLayerId(document, group) : undefined;
       shown =
         group?.visible === true &&
-        !ui.isLocallyHidden(id) &&
+        !ui.isHidden(id) &&
         (layerId === undefined || layerShown(layerId));
       groups.set(id, shown);
     }
@@ -400,7 +400,7 @@ function createShownLookup(
     if (type === 'layer') return layerShown(id);
     if (type === 'group') return groupShown(id);
     const feature = document.getFeature(id);
-    if (!feature?.visible || ui.isLocallyHidden(id)) return false;
+    if (!feature?.visible || ui.isHidden(id)) return false;
     if (feature.groupId && !groupShown(feature.groupId)) return false;
     return layerShown(feature.layerId);
   };
@@ -412,7 +412,7 @@ function groupLayerId(document: DocumentStore, group: Group): string | undefined
     const feature = document.getFeature(featureId);
     if (feature) return feature.layerId;
   }
-  return document.getAllLayers().find((layer) => layer.items.includes(group.id))?.id;
+  return document.listLayers().find((layer) => layer.items.includes(group.id))?.id;
 }
 
 /** Whether two coordinate values are equal, position by position */

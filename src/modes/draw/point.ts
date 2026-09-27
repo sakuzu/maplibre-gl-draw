@@ -58,6 +58,7 @@ export class DrawPointMode implements ModeHandler {
 
     // Create a new point feature
     const feature: Feature = {
+      groupId: undefined,
       id: generateFeatureId(),
       type: 'Point',
       geometry: { type: 'Point', coordinates: [event.lngLat.lng, event.lngLat.lat] },

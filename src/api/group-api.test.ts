@@ -19,13 +19,23 @@ let idSeq: number;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   for (const id of ['a', 'b']) {
     store.createFeature({
       id,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -51,7 +61,7 @@ describe('GroupApi.addGroup', () => {
   it('returns null and changes nothing while read-only', () => {
     store.setReadOnly(true);
     expect(api.addGroup(['a', 'b'], 'l1', 'refused')).toBeNull();
-    expect(store.getAllGroups()).toEqual([]);
+    expect(store.listGroups()).toEqual([]);
     expect(store.getLayer('l1')?.items).toEqual(['a', 'b']);
   });
 });

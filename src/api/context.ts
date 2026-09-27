@@ -451,6 +451,8 @@ export function createContext(map: MapLibreMap, options: Options = {}): Context 
       locked: false,
       opacity: 1.0,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     };
     store.createLayer(defaultLayer);
     activeLayerId = 'default-layer';
@@ -472,7 +474,7 @@ export function createContext(map: MapLibreMap, options: Options = {}): Context 
   const getActiveLayerId = (): string => {
     // If the active layer was deleted, make the first layer active
     if (!store.getLayer(activeLayerId)) {
-      const layers = store.getAllLayers();
+      const layers = store.listLayers();
       if (layers.length > 0) {
         activeLayerId = layers[0].id;
       }

@@ -40,6 +40,7 @@ const unproject = (p: { x: number; y: number }): { lng: number; lat: number } =>
 /** A square polygon that contains the center (5,5) */
 function polygon(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
     geometry: {
@@ -84,7 +85,16 @@ beforeEach(() => {
 });
 
 function createLayer(id: string): void {
-  store.createLayer({ id, name: id, visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
 }
 
 function createFeature(feature: Feature): void {
@@ -274,6 +284,7 @@ describe('the z order and the consumption of the companions (feature companion)'
    * fails) */
   function awayPolygon(id: string, layerId: string): Feature {
     return {
+      groupId: undefined,
       id,
       type: 'Polygon',
       geometry: {
@@ -394,6 +405,8 @@ describe('the z order and the consumption of the companions (feature companion)'
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     createFeature(awayPolygon('f1', 'l1'));
     const hitTest = vi.fn(() => ({ id: 'c1' }));

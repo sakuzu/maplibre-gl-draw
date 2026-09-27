@@ -25,7 +25,7 @@ export type WritableLayerCheckStore = LocalHiddenStore;
 /** The minimal interface that resolveWritableLayerId requires. */
 export interface WritableLayerStore extends WritableLayerCheckStore {
   getLayer(id: string): Layer | undefined;
-  getAllLayers(): Layer[];
+  listLayers(): Layer[];
 }
 
 /**
@@ -35,7 +35,7 @@ export function isWritableLayer(
   layer: Layer | undefined,
   store: WritableLayerCheckStore,
 ): layer is Layer {
-  return layer !== undefined && !layer.locked && layer.visible && !store.isLocallyHidden(layer.id);
+  return layer !== undefined && !layer.locked && layer.visible && !store.isHidden(layer.id);
 }
 
 /**
@@ -47,5 +47,5 @@ export function isWritableLayer(
  */
 export function resolveWritableLayerId(store: WritableLayerStore, preferredId: string): string {
   if (isWritableLayer(store.getLayer(preferredId), store)) return preferredId;
-  return store.getAllLayers().find((layer) => isWritableLayer(layer, store))?.id ?? '';
+  return store.listLayers().find((layer) => isWritableLayer(layer, store))?.id ?? '';
 }

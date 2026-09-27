@@ -29,6 +29,7 @@ function image(lng: number, lat: number, rotation: number): Feature {
     type: 'Image',
     geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {
       'maplibre-gl-draw:imageFileId': 'f',
       'maplibre-gl-draw:imageWidth': IMG_W,

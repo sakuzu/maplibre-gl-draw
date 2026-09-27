@@ -161,7 +161,7 @@ export function currentSelectionIds(store: Store): string[] {
  * Resolves the targets of an operation in z order (the head is the backmost, the tail is the
  * frontmost).
  *
- * The order follows getDisplayFeatures (= getOrderedFeatures with the locally hidden features
+ * The order follows getDisplayFeatures (= listFeaturesInOrder with the locally hidden features
  * removed). That is "the order between the layers -> the order within a layer -> the
  * featureIds within a group", which is the draw order of core itself. Hidden features (both
  * the shared visible and the local hidden) do not appear in this list, so they are

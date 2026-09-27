@@ -19,9 +19,9 @@ const DEFAULT_LAYER_ID = 'default-layer';
  * Exports the current data in the native format
  */
 export function exportNative(store: Store, options?: ExportOptions): Data {
-  let features = store.getAllFeatures();
-  const layers = store.getAllLayers();
-  const groups = store.getAllGroups();
+  let features = store.listFeatures();
+  const layers = store.listLayers();
+  const groups = store.listGroups();
 
   if (options?.featureIds && options.featureIds.length > 0) {
     const featureIdSet = new Set(options.featureIds);
@@ -41,7 +41,7 @@ export function exportNative(store: Store, options?: ExportOptions): Data {
     }
   }
 
-  const files = store.getAllFiles();
+  const files = store.listFiles();
   const filesRecord: Record<string, FileData> = {};
   for (const file of files) {
     if (usedFileIds.has(file.id)) {
@@ -94,17 +94,17 @@ export async function loadNative(data: Data, deps: { store: Store }): Promise<Lo
   // Import atomically (silent, so a subscriber that records changes leaves it out)
   store.transact(() => {
     // 1. Clear the existing data
-    const existingFeatures = store.getAllFeatures();
+    const existingFeatures = store.listFeatures();
     for (const feature of existingFeatures) {
       store.deleteFeature(feature.id);
     }
 
-    const existingGroups = store.getAllGroups();
+    const existingGroups = store.listGroups();
     for (const group of existingGroups) {
       store.deleteGroup(group.id);
     }
 
-    const existingLayers = store.getAllLayers();
+    const existingLayers = store.listLayers();
     for (const layer of existingLayers) {
       if (layer.id !== DEFAULT_LAYER_ID) {
         store.deleteLayer(layer.id);
@@ -113,7 +113,7 @@ export async function loadNative(data: Data, deps: { store: Store }): Promise<Lo
 
     // The files belong to the features that were just removed, and the data brings its own
     // (leaving them would also make a file id of the data collide)
-    for (const file of store.getAllFiles()) {
+    for (const file of store.listFiles()) {
       store.deleteFile(file.id);
     }
 

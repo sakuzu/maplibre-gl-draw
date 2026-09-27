@@ -43,7 +43,16 @@ let enabled: boolean;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new RBushSpatialIndex();
   datasets = createDatasetManager({
     getViewportBounds: () => WORLD,
@@ -72,6 +81,7 @@ function addStoreFeature(id: string, type: string, coordinates: FeatureCoordinat
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

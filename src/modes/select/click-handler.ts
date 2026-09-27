@@ -140,21 +140,19 @@ function handleVertexClick(
   const featureId = handleHit.featureId;
   if (!featureId) return false;
   const vertexRef = handleHit.vertexRef;
-  const currentVertexSelection = store.getSelectedVertices();
+  const currentVertexSelection = store.getVertexSelection();
 
   if (event.modifiers.shift && currentVertexSelection?.featureId === featureId) {
     // Shift+click: add / remove a vertex of the same feature
-    const refs = currentVertexSelection.vertexIndices;
+    const refs = currentVertexSelection.vertices;
     if (hasVertexRef(refs, vertexRef)) {
       const newRefs = refs.filter((r) => !isSameVertexRef(r, vertexRef));
-      store.setSelectedVertices(
-        newRefs.length === 0 ? null : { featureId, vertexIndices: newRefs },
-      );
+      store.setSelectedVertices(newRefs.length === 0 ? null : { featureId, vertices: newRefs });
     } else {
-      store.setSelectedVertices({ featureId, vertexIndices: [...refs, vertexRef] });
+      store.setSelectedVertices({ featureId, vertices: [...refs, vertexRef] });
     }
   } else {
-    store.setSelectedVertices({ featureId, vertexIndices: [vertexRef] });
+    store.setSelectedVertices({ featureId, vertices: [vertexRef] });
   }
   return true;
 }

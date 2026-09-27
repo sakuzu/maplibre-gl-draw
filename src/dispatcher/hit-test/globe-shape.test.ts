@@ -26,6 +26,7 @@ function feature(type: string, coordinates: FeatureCoordinates): Feature {
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

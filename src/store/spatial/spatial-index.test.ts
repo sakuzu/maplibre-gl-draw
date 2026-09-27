@@ -11,6 +11,7 @@ import { getBoundingBox, RBushSpatialIndex } from './spatial-index.js';
  */
 function createPoint(id: string, coord: Coordinate, layerId = 'layer1'): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
     geometry: { type: 'Point', coordinates: coord },
@@ -24,6 +25,7 @@ function createPoint(id: string, coord: Coordinate, layerId = 'layer1'): Feature
 
 function createLineString(id: string, coords: Coordinate[], layerId = 'layer1'): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'LineString',
     geometry: { type: 'LineString', coordinates: coords },
@@ -37,6 +39,7 @@ function createLineString(id: string, coords: Coordinate[], layerId = 'layer1'):
 
 function createPolygon(id: string, rings: Coordinate[][], layerId = 'layer1'): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
     geometry: { type: 'Polygon', coordinates: rings },
@@ -55,6 +58,7 @@ function createCircle(
   layerId = 'layer1',
 ): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Circle',
     geometry: { type: 'Point', coordinates: coord },
@@ -287,6 +291,7 @@ describe('RBushSpatialIndex', () => {
         type: 'Marker',
         geometry: { type: 'Point', coordinates: [10, 20] as Coordinate },
         layerId: 'layer1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
@@ -434,6 +439,7 @@ describe('getBoundingBox', () => {
         ] as Coordinate[],
       },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -460,6 +466,7 @@ describe('getBoundingBox', () => {
         ] as Coordinate[],
       },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -491,6 +498,7 @@ describe('getBoundingBox', () => {
         ] as Coordinate[][],
       },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -539,6 +547,7 @@ describe('getBoundingBox', () => {
         ] as Coordinate[][][],
       },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -562,6 +571,7 @@ describe('getBoundingBox', () => {
   it('a custom type without a calculator is measured by the extent of its coordinates', () => {
     const base = { layerId: 'layer1', properties: {}, style: {}, locked: false, visible: true };
     const single: Feature = {
+      groupId: undefined,
       ...base,
       id: 'u1',
       type: 'Unknown',
@@ -570,6 +580,7 @@ describe('getBoundingBox', () => {
     expect(getBoundingBox(single)).toEqual({ minX: 10, minY: 20, maxX: 10, maxY: 20 });
 
     const line: Feature = {
+      groupId: undefined,
       ...base,
       id: 'u2',
       type: 'Route',
@@ -676,6 +687,7 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
       type: 'MultiLineString',
       geometry: { type: 'MultiLineString', coordinates: proxy },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,

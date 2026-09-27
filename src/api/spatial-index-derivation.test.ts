@@ -57,7 +57,7 @@ describe('the spatial index derived from the Store', () => {
       ],
     });
 
-    expect(context.store.getAllFeatures()).toHaveLength(0);
+    expect(context.store.listFeatures()).toHaveLength(0);
     expect(context.spatialIndex.findNear([1, 1], 0.001)).toEqual([]);
   });
 

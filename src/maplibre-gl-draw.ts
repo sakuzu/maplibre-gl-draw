@@ -339,7 +339,7 @@ export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): M
   // 7. Initialize the PluginContext.
   // Helper function that looks up which layer an item belongs to
   const findLayerForItem = (itemId: string): string | undefined => {
-    for (const layer of store.getAllLayers()) {
+    for (const layer of store.listLayers()) {
       if (layer.items.includes(itemId)) {
         return layer.id;
       }
@@ -349,7 +349,7 @@ export function createMapLibreGLDraw(map: MapLibreMap, options: Options = {}): M
 
   // Helper function that looks up which group a feature belongs to
   const findGroupForFeature = (featureId: string): string | undefined => {
-    for (const group of store.getAllGroups()) {
+    for (const group of store.listGroups()) {
       if (group.featureIds.includes(featureId)) {
         return group.id;
       }

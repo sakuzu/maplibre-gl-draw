@@ -135,7 +135,7 @@ export class StoreRetainedCache {
     this.frame++;
     this.featuresByLayer = null;
     // Every watch is advanced on every frame (no short circuit), so each keeps its snapshot
-    const hiddenChanged = this.watch.locallyHiddenChanged(this.store.getLocallyHidden());
+    const hiddenChanged = this.watch.locallyHiddenChanged(this.store.listHidden());
     const companionsChanged = this.watch.companionsChanged(companions);
     const terrainChanged = this.watch.terrainChanged(this.terrain);
     if (hiddenChanged || companionsChanged || terrainChanged) this.invalidateAll();

@@ -96,6 +96,7 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
       for (const feature of features) {
         const id = (feature.id as string) ?? createId();
         const drawFeature: Feature = {
+          groupId: undefined,
           id,
           type: feature.geometry.type as Feature['type'],
           geometry: feature.geometry,
@@ -125,11 +126,11 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
 
     // === Read API ===
     getFeature: (id) => store.getFeature(id),
-    getAllFeatures: () => store.getAllFeatures(),
+    getAllFeatures: () => store.listFeatures(),
     getGroup: (id) => store.getGroup(id),
-    getAllGroups: () => store.getAllGroups(),
+    getAllGroups: () => store.listGroups(),
     getLayer: (id) => store.getLayer(id),
-    getAllLayers: () => store.getAllLayers(),
+    getAllLayers: () => store.listLayers(),
     getSelection: () => store.getSelection(),
     getSelectedIds: () => {
       const selection = store.getSelection();
@@ -319,6 +320,8 @@ export function createPluginContext(deps: PluginContextDependencies): PluginCont
         locked: layer.locked ?? false,
         opacity: layer.opacity ?? 1.0,
         items: layer.items ?? [],
+        styleRule: undefined,
+        metadata: undefined,
       };
       write(() => store.createLayer(newLayer), source);
     },

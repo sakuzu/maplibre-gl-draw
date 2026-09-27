@@ -403,6 +403,7 @@ export class TableReader {
       // The type of a column is a GeoJSON geometry type, so it is the kind of the geometry
       geometry: { type, coordinates: this.coordinatesOf(row) } as Geometry,
       layerId: '',
+      groupId: undefined,
       properties: this.propertiesOf(row),
       locked: false,
       visible: hasGeometry,

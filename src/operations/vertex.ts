@@ -33,7 +33,7 @@ export interface VertexState {
   featureId: string;
   /** The array of vertex references being operated on (part number + ring number +
    * vertex index) */
-  vertexIndices: VertexRef[];
+  vertices: VertexRef[];
   /** The mouse coordinate at the start */
   startLngLat: { lng: number; lat: number };
   /**
@@ -221,7 +221,7 @@ export function computeVertexMove(
   currentLngLat: { lng: number; lat: number },
   feature: Feature,
 ): FeatureCoordinates {
-  const { vertexIndices, startLngLat, initialCoordinates } = state;
+  const { vertices, startLngLat, initialCoordinates } = state;
 
   // Compute the amount of movement
   const dx = currentLngLat.lng - startLngLat.lng;
@@ -237,13 +237,13 @@ export function computeVertexMove(
   // invalid reference)
   if (feature.type === 'LineString') {
     const coords = (initialCoordinates as Coordinate[]).slice();
-    moveLineVertices(coords, refsOfPart(vertexIndices, 0), dx, dy);
+    moveLineVertices(coords, refsOfPart(vertices, 0), dx, dy);
     return coords;
   }
 
   if (feature.type === 'Polygon') {
     const initialRings = initialCoordinates as Coordinate[][];
-    const refs = refsOfPart(vertexIndices, 0);
+    const refs = refsOfPart(vertices, 0);
     const rings = copyRingsForRefs(initialRings, refs);
     movePolygonVertices(rings, initialRings, refs, dx, dy);
     return rings;
@@ -253,7 +253,7 @@ export function computeVertexMove(
     // Each coordinate is one part. In a reference, part = the part number, and
     // ring / index are 0
     const points = (initialCoordinates as Coordinate[]).slice();
-    for (const ref of vertexIndices) {
+    for (const ref of vertices) {
       if (ref.ring !== 0 || ref.index !== 0) continue;
       const part = getVertexPart(ref);
       if (part < 0 || part >= points.length) continue;
@@ -267,7 +267,7 @@ export function computeVertexMove(
     // original array
     const initialParts = initialCoordinates as Coordinate[][];
     const parts = initialParts.slice();
-    for (const [part, refs] of groupRefsByPart(vertexIndices)) {
+    for (const [part, refs] of groupRefsByPart(vertices)) {
       if (part < 0 || part >= parts.length) continue;
       const coords = initialParts[part].slice();
       moveLineVertices(coords, refs, dx, dy);
@@ -279,7 +279,7 @@ export function computeVertexMove(
   if (feature.type === 'MultiPolygon') {
     const initialParts = initialCoordinates as Coordinate[][][];
     const parts = initialParts.slice();
-    for (const [part, refs] of groupRefsByPart(vertexIndices)) {
+    for (const [part, refs] of groupRefsByPart(vertices)) {
       if (part < 0 || part >= parts.length) continue;
       const initialRings = initialParts[part];
       const rings = copyRingsForRefs(initialRings, refs);
@@ -517,26 +517,26 @@ export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinat
  */
 export function startVertexMove(
   feature: Feature,
-  vertexIndices: VertexRef[],
+  vertices: VertexRef[],
   startLngLat: { lng: number; lat: number },
 ): VertexState | null {
-  if (vertexIndices.length === 0) return null;
+  if (vertices.length === 0) return null;
 
   // Check the validity of the vertex references
   if (feature.type === 'Point') {
-    if (vertexIndices.length !== 1) return null;
-    const ref = vertexIndices[0];
+    if (vertices.length !== 1) return null;
+    const ref = vertices[0];
     if (getVertexPart(ref) !== 0 || ref.ring !== 0 || ref.index !== 0) return null;
   } else if (feature.type === 'LineString') {
     const coords = coordinatesOf(feature) as Coordinate[];
-    const isValid = vertexIndices.every(
+    const isValid = vertices.every(
       (r) => getVertexPart(r) === 0 && r.ring === 0 && r.index >= 0 && r.index < coords.length,
     );
     if (!isValid) return null;
   } else if (feature.type === 'Polygon') {
     const rings = coordinatesOf(feature) as Coordinate[][];
     if (rings.length === 0) return null;
-    const isValid = vertexIndices.every(
+    const isValid = vertices.every(
       (r) =>
         getVertexPart(r) === 0 &&
         r.ring >= 0 &&
@@ -548,7 +548,7 @@ export function startVertexMove(
   } else if (feature.type === 'MultiPoint') {
     const points = coordinatesOf(feature) as Coordinate[];
     if (points.length === 0) return null;
-    const isValid = vertexIndices.every((r) => {
+    const isValid = vertices.every((r) => {
       const part = getVertexPart(r);
       return part >= 0 && part < points.length && r.ring === 0 && r.index === 0;
     });
@@ -556,7 +556,7 @@ export function startVertexMove(
   } else if (feature.type === 'MultiLineString') {
     const parts = coordinatesOf(feature) as Coordinate[][];
     if (parts.length === 0) return null;
-    const isValid = vertexIndices.every((r) => {
+    const isValid = vertices.every((r) => {
       const part = getVertexPart(r);
       if (part < 0 || part >= parts.length) return false;
       return r.ring === 0 && r.index >= 0 && r.index < parts[part].length;
@@ -565,7 +565,7 @@ export function startVertexMove(
   } else if (feature.type === 'MultiPolygon') {
     const parts = coordinatesOf(feature) as Coordinate[][][];
     if (parts.length === 0) return null;
-    const isValid = vertexIndices.every((r) => {
+    const isValid = vertices.every((r) => {
       const part = getVertexPart(r);
       if (part < 0 || part >= parts.length) return false;
       const rings = parts[part];
@@ -579,7 +579,7 @@ export function startVertexMove(
 
   return {
     featureId: feature.id,
-    vertexIndices: vertexIndices.map((r) => ({ ...r })),
+    vertices: vertices.map((r) => ({ ...r })),
     startLngLat,
     // Coordinates follow the convention of immutable updates (an update is always a
     // replacement with a new array), and during a drag computeVertexMove also builds a

@@ -54,6 +54,7 @@ function square(id: string, minX: number, minY: number, size = 10): Feature {
       ],
     },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -159,7 +160,16 @@ function coordinatesOf(id: string): unknown {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new StoreSpatialIndex(store);
   indexUpdates = [];
   store.subscribe((changes) => {
@@ -318,6 +328,7 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
         ],
       },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -364,6 +375,7 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
         ],
       },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -408,6 +420,7 @@ describe('simultaneous movement of shared vertices: Multi geometries and rings',
         ],
       },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
@@ -446,6 +459,8 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       locked: true,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     addFeature({ ...square('f2', 10, 0), layerId: 'locked-layer' });
     const before = coordinatesOf('f2');
@@ -492,6 +507,8 @@ describe('simultaneous movement of shared vertices: excluding locked and hidden'
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     addFeature({ ...square('f2', 10, 0), layerId: 'hidden-layer' });
     const before = coordinatesOf('f2');
@@ -508,6 +525,7 @@ describe('simultaneous movement of shared vertices: geometries out of scope', ()
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [10, 0] },
       layerId: 'l1',
+      groupId: undefined,
       properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
@@ -660,7 +678,7 @@ describe('simultaneous movement of shared vertices: follower highlight (UI state
     expect(store.getFollowedVertices()).toEqual([
       {
         featureId: 'f2',
-        vertexIndices: [
+        vertices: [
           { ring: 0, index: 0 },
           { ring: 0, index: 4 },
         ],
@@ -712,7 +730,7 @@ describe('simultaneous movement of shared vertices: follower highlight (UI state
     // Even after emptying the array used for the highlight, it still works because the
     // VertexState used for following is a separate thing
     const followed = store.getFollowedVertices();
-    if (followed) followed[0].vertexIndices.length = 0;
+    if (followed) followed[0].vertices.length = 0;
 
     handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
     handler.endDrag(context);
@@ -863,6 +881,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
+      groupId: undefined,
       properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
@@ -895,6 +914,7 @@ describe('intermediate updates during a drag and the commit in endDrag', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: center },
       layerId: 'l1',
+      groupId: undefined,
       properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
@@ -1033,6 +1053,7 @@ describe('a feature that disappears during a drag', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
+      groupId: undefined,
       properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,
@@ -1474,6 +1495,7 @@ describe('an aborted drag (cancel, mode switch, external change)', () => {
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'l1',
+      groupId: undefined,
       properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
       locked: false,
       visible: true,

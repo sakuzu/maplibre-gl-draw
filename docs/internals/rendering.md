@@ -622,7 +622,7 @@ runs, which is what makes the two modes give the same picture.
 Draw order is the painter's algorithm: what is drawn later is on top. Our
 drawings never write depth, so the final stacking is exactly the order of
 the draw calls, and the order within a layer must match
-`store.getOrderedFeatures()` (see [Display order](#display-order)).
+`store.listFeaturesInOrder()` (see [Display order](#display-order)).
 
 Core features are accumulated and drawn together at `endFrame()`, whereas
 custom features registered with `registerFeatureHandler` are drawn at once
@@ -981,7 +981,7 @@ too much is still correct, rebuilding too little leaves a stale picture.
   Selection, mode and UI state changes discard nothing either
 - Groups have no reverse lookup to their layers, so they discard
   everything; both are rare
-- The locally hidden set (`store.getLocallyHidden()`) is updated in place,
+- The locally hidden set (`store.listHidden()`) is updated in place,
   so `RetainedInvalidationWatch` (`store-retained-invalidation.ts`)
   compares its size and elements with the previous frame
 - The companion registry has a generation number that changes on every
@@ -1974,32 +1974,31 @@ At every level the end of an array is the foreground:
 2. Within a layer: the end of `layer.order` is in front
 3. Within a group: the end of `group.featureIds` is in front
 
-`getOrderedFeatures()` walks the levels in that order, skipping hidden
-layers, groups and features:
+`listFeaturesInOrder()` walks the levels in that order:
 
 ```typescript
 for (const layerId of layerOrder) {
   const layer = layers.get(layerId);
-  if (!layer || !layer.visible) continue;
-  for (const itemId of layer.order) {
+  if (!layer) continue;
+  for (const itemId of layer.items) {
     const group = groups.get(itemId);
     if (group) {
-      if (!group.visible) continue;
       for (const featureId of group.featureIds) {
         const feature = features.get(featureId);
-        if (feature?.visible) result.push(feature);
+        if (feature) result.push(feature);
       }
     } else {
       const feature = features.get(itemId);
-      if (feature?.visible) result.push(feature);
+      if (feature) result.push(feature);
     }
   }
 }
 ```
 
 The drawing uses `getDisplayFeatures(store)` (`store/local-visibility.ts`),
-this order without locally hidden features. Hit testing walks the same
-order in reverse; see [Hit testing](./hit-testing.md).
+this order without the features that a visible flag hides (on the feature,
+its group or its layer) and without locally hidden features. Hit testing
+walks the same order in reverse; see [Hit testing](./hit-testing.md).
 
 ### The stacking sequence
 

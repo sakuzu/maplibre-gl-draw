@@ -86,7 +86,7 @@ function moveFeatureToLayer(
 function moveGroupToLayer(store: Store, group: Group, itemId: string, targetLayerId: string): void {
   // Find the layer the group belongs to
   let sourceLayerId: string | null = null;
-  for (const layer of store.getAllLayers()) {
+  for (const layer of store.listLayers()) {
     if (layer.items.includes(itemId)) {
       sourceLayerId = layer.id;
       break;
@@ -135,7 +135,7 @@ export function addFeatureToGroup(
 
   // Find the layer the group belongs to
   let targetLayerId: string | null = null;
-  for (const layer of store.getAllLayers()) {
+  for (const layer of store.listLayers()) {
     if (layer.items.includes(groupId)) {
       targetLayerId = layer.id;
       break;
@@ -195,7 +195,7 @@ export function removeFeatureFromGroup(store: Store, featureId: string): void {
 
   // Find the layer the group belongs to
   let layerId: string | null = null;
-  for (const layer of store.getAllLayers()) {
+  for (const layer of store.listLayers()) {
     if (layer.items.includes(group.id)) {
       layerId = layer.id;
       break;
@@ -332,7 +332,7 @@ function dissolveGroup(store: Store, groupId: string): void {
 
   // Identify the layer the group belongs to
   let targetLayerId: string | null = null;
-  for (const layer of store.getAllLayers()) {
+  for (const layer of store.listLayers()) {
     if (layer.items.includes(groupId)) {
       targetLayerId = layer.id;
       break;

@@ -196,7 +196,7 @@ export function resolveVertexCoordinates(
  *
  * Features under an effective lock (their own, their group's or their layer's) and
  * hidden features are excluded. The cascade of the shared visible flag is aligned
- * with the test in getOrderedFeatures, and local hiding with the one in
+ * with the test in listFeaturesInOrder, and local hiding with the one in
  * getDisplayFeatures.
  */
 function isFollowCandidate(feature: Feature, store: SharedVertexStore): boolean {

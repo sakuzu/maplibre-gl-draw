@@ -122,6 +122,8 @@ function setup(snapService?: SnapService): void {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   spatialIndex = new RBushSpatialIndex();
 
@@ -173,7 +175,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     input.click(C);
     input.key('Enter');
 
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('LineString');
     expect(coordinatesOf(features[0])).toEqual([A, B, C]);
@@ -190,7 +192,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     input.click(C);
     input.key('Enter');
 
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('Polygon');
     // A Polygon is an array of rings, and its first and last points are closed
@@ -210,7 +212,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     // against the first point holds just as in a real operation, and the next click commits
     input.click(A);
 
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('Polygon');
     expect((coordinatesOf(features[0]) as Coordinate[][])[0]).toHaveLength(4);
@@ -225,7 +227,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
     input.click(A);
     input.click(B);
 
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(features[0].type).toBe('Circle');
     expect(features[0].properties['maplibre-gl-draw:radiusMeters']).toBeGreaterThan(0);
@@ -236,7 +238,7 @@ describe('drawing with a sequence of clicks from draw.input', () => {
 
     input.click({ lng: B[0], lat: B[1] });
 
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(coordinatesOf(features[0])).toEqual(B);
   });
@@ -267,7 +269,7 @@ describe('draw.input.key', () => {
 
     input.key('Escape');
 
-    expect(store.getAllFeatures()).toHaveLength(0);
+    expect(store.listFeatures()).toHaveLength(0);
     expect(store.getTentative()).toBeNull();
   });
 
@@ -280,7 +282,7 @@ describe('draw.input.key', () => {
     input.key('Backspace');
     input.key('Enter');
 
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(coordinatesOf(features[0])).toEqual([A, B]);
   });
@@ -314,7 +316,7 @@ describe('draw.input and snapping', () => {
     input.click(A);
 
     expect(stub.calls.length).toBeGreaterThan(0);
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(coordinatesOf(features[0])).toEqual([snapped.lng, snapped.lat]);
   });
@@ -327,7 +329,7 @@ describe('draw.input and snapping', () => {
     input.click(A, { snap: false });
 
     expect(stub.calls).toHaveLength(0);
-    const features = store.getAllFeatures();
+    const features = store.listFeatures();
     expect(features).toHaveLength(1);
     expect(coordinatesOf(features[0])).toEqual(A);
   });

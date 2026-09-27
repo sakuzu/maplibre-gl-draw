@@ -20,6 +20,7 @@ function createFeature(overrides: Partial<Feature> & Pick<Feature, 'type' | 'geo
   return {
     id: 'test-feature',
     layerId: 'test-layer',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,

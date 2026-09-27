@@ -47,7 +47,7 @@ export function createGroupApi(deps: GroupApiDeps): GroupApi {
 
   return {
     getAllGroups(): Group[] {
-      return store.getAllGroups();
+      return store.listGroups();
     },
 
     getGroup(id: string): Group | undefined {
@@ -87,7 +87,7 @@ export function createGroupApi(deps: GroupApiDeps): GroupApi {
         // While locked (itself or its layer), reject any change other than locked/visible
         // (full protection)
         const findLayerOfGroup = (gid: string) =>
-          store.getAllLayers().find((l) => l.items.includes(gid));
+          store.listLayers().find((l) => l.items.includes(gid));
         if (isGroupLocked(group, findLayerOfGroup)) return false;
       }
       return store.updateGroup(id, updates);

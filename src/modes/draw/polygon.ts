@@ -230,6 +230,7 @@ export class DrawPolygonMode implements ModeHandler {
 
     // Create a new polygon feature
     const feature: Feature = {
+      groupId: undefined,
       id: featureId,
       type: 'Polygon',
       geometry: { type: 'Polygon', coordinates: [ring] },

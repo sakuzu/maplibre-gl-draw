@@ -43,6 +43,7 @@ const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
 function makeFeature(id: string, type: Feature['type'], layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type,
     geometry: geometryFromCoordinates(type, [0, 0]),
@@ -55,7 +56,16 @@ function makeFeature(id: string, type: Feature['type'], layerId: string): Featur
 }
 
 function makeLayer(id: string): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, items: [] } as Layer;
+  return {
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  } as Layer;
 }
 
 /**

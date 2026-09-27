@@ -35,6 +35,7 @@ import type { StoreRetainedCache, StoreRetainedDrawDeps } from './store-retained
 
 function makeFeature(id: string, type: Feature['type'], layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type,
     geometry: geometryFromCoordinates(
@@ -70,7 +71,16 @@ function makeGetLayer(layerIds: string[]): (id: string) => Layer | undefined {
   const layers = new Set(layerIds);
   return (id: string) =>
     layers.has(id)
-      ? ({ id, name: id, visible: true, locked: false, opacity: 1, items: [] } as Layer)
+      ? ({
+          id,
+          name: id,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          items: [],
+          styleRule: undefined,
+          metadata: undefined,
+        } as Layer)
       : undefined;
 }
 
@@ -694,6 +704,8 @@ describe('renderLayers and the opacity of the layers', () => {
               locked: false,
               opacity: OPACITY[id],
               items: [],
+              styleRule: undefined,
+              metadata: undefined,
             } as Layer)
           : undefined,
       getTentative: (): null => null,

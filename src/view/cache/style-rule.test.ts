@@ -30,6 +30,7 @@ function makeFeature(id: string, properties: Record<string, unknown>): Feature {
       ],
     },
     layerId: 'layer-1',
+    groupId: undefined,
     properties,
     locked: false,
     visible: true,

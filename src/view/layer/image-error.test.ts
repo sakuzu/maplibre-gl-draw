@@ -70,6 +70,7 @@ function imageFeature(id: string, fileId: string): Feature {
     type: 'Image',
     geometry: { type: 'Point', coordinates: [139.7, 35.7] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {
       'maplibre-gl-draw:imageFileId': fileId,
       'maplibre-gl-draw:imageWidth': 10,

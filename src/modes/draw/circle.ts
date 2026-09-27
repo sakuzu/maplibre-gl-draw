@@ -157,6 +157,7 @@ export class DrawCircleMode implements ModeHandler {
 
     // Create a new circle feature
     const feature: Feature = {
+      groupId: undefined,
       id: featureId,
       type: 'Circle',
       geometry: { type: 'Point', coordinates: this.center },

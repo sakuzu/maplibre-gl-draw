@@ -222,6 +222,7 @@ export class DrawFreehandMode implements ModeHandler {
 
     // Create a new freehand feature
     const feature: Feature = {
+      groupId: undefined,
       id: featureId,
       type: 'Freehand',
       geometry: { type: 'LineString', coordinates: [...this.currentCoordinates] },

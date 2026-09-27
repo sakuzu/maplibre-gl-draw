@@ -18,6 +18,7 @@ function createTestFeature(id: string): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -33,6 +34,8 @@ function createTestLayer(id: string): Layer {
     locked: false,
     opacity: 1.0,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   };
 }
 

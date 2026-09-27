@@ -19,6 +19,7 @@ import { boxRects, queryFeaturesInBox } from './box-selection.js';
 
 function point(id: string, layerId: string, coord: [number, number], visible = true): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
     geometry: { type: 'Point', coordinates: coord },
@@ -40,6 +41,8 @@ describe('queryFeaturesInBox filtering', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createLayer({
       id: 'lLocked',
@@ -48,6 +51,8 @@ describe('queryFeaturesInBox filtering', () => {
       locked: true,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createLayer({
       id: 'lHidden',
@@ -56,6 +61,8 @@ describe('queryFeaturesInBox filtering', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
 
     store.createFeature(point('f1', 'l1', [0, 0])); // selectable
@@ -87,6 +94,8 @@ describe('queryFeaturesInBox filtering', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
 
     store.createFeature(point('f1', 'l1', [0, 0])); // selectable
@@ -148,6 +157,8 @@ describe('boxRects across the antimeridian', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature(point('east', 'l1', [175, 5]));
     store.createFeature(point('west', 'l1', [-175, 5]));

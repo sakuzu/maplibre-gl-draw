@@ -22,7 +22,16 @@ let idSeq: number;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatial = new StoreSpatialIndex(store);
   idSeq = 0;
   api = createFeatureApi({
@@ -170,7 +179,7 @@ describe('FeatureApi.deleteFeature / deleteAllFeatures', () => {
       visible: false,
     });
     expect(api.deleteAllFeatures()).toBe(true);
-    expect(store.getAllFeatures()).toHaveLength(0);
+    expect(store.listFeatures()).toHaveLength(0);
     expect(spatial.findInBounds({ minX: -1, minY: -1, maxX: 2, maxY: 2 })).toEqual([]);
   });
 });

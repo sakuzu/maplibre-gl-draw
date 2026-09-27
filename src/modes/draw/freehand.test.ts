@@ -114,6 +114,8 @@ function setup(): void {
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   spatialIndex = new RBushSpatialIndex();
 
@@ -122,6 +124,7 @@ function setup(): void {
     type: 'LineString',
     geometry: { type: 'LineString', coordinates: BOUNDARY },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -205,7 +208,7 @@ function straightStroke(sampleCount: number): Coordinate[] {
 
 /** The drawn feature (excluding the boundary line) */
 function drawnFeature(): Feature {
-  const features = store.getAllFeatures().filter((f) => f.id !== 'boundary');
+  const features = store.listFeatures().filter((f) => f.id !== 'boundary');
   expect(features).toHaveLength(1);
   return features[0];
 }
@@ -284,6 +287,6 @@ describe('cancel of a freehand stroke (dragcancel)', () => {
     // The stroke does not hang: what follows the cancel draws nothing
     normalizer.emit(makeDragEvent('dragmove', points[4], start));
     normalizer.emit(makeDragEvent('dragend', points[5], start));
-    expect(store.getAllFeatures().map((f) => f.id)).toEqual(['boundary']);
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['boundary']);
   });
 });

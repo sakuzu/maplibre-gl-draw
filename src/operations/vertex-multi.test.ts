@@ -32,6 +32,7 @@ function makeFeature(type: FeatureType, coordinates: FeatureCoordinates): Featur
     type,
     geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -522,7 +523,7 @@ describe('only part 0 is valid for a single geometry', () => {
     ] as Coordinate[]);
     const state: VertexState = {
       featureId: feature.id,
-      vertexIndices: [{ part: 1, ring: 0, index: 0 }],
+      vertices: [{ part: 1, ring: 0, index: 0 }],
       startLngLat: START,
       initialCoordinates: coordinatesOf(feature),
     };
@@ -544,7 +545,7 @@ describe('only part 0 is valid for a single geometry', () => {
     ] as Coordinate[][]);
     const state: VertexState = {
       featureId: feature.id,
-      vertexIndices: [{ part: 1, ring: 0, index: 1 }],
+      vertices: [{ part: 1, ring: 0, index: 1 }],
       startLngLat: START,
       initialCoordinates: coordinatesOf(feature),
     };

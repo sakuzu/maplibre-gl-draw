@@ -55,6 +55,7 @@ let applied: GeometryAppliedPayload[];
 function addFeature(input: FeatureInput & { id: string }): Feature {
   const feature: Feature = {
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -86,7 +87,16 @@ function areaOf(feature: Feature): AreaCoordinates {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatial = new StoreSpatialIndex(store);
   eventEmitter = new EventEmitterImpl();
   idSeq = 0;
@@ -444,6 +454,8 @@ describe('narrowing down the targets', () => {
       locked: true,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     addSquare('a', [0, 0, 10, 10]);
     addSquare('b', [5, 0, 15, 10], { layerId: 'locked' });
@@ -511,6 +523,8 @@ describe('the inheritance and placement of the result', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     addSquare('bottom', [40, 40, 50, 50]);
     addSquare('a', [0, 0, 10, 10]);
@@ -534,6 +548,8 @@ describe('the inheritance and placement of the result', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     // The layer order is l1 then l2, so l2 is the one in front
     addSquare('a', [0, 0, 10, 10]);

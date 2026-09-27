@@ -21,6 +21,8 @@ function createTestLayer(overrides?: Partial<Layer>): Layer {
     locked: false,
     opacity: 1.0,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
     ...overrides,
   };
 }
@@ -31,6 +33,7 @@ function createTestFeature(id: string, overrides?: Partial<Feature>): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -954,10 +957,10 @@ describe('MemoryStore', () => {
   });
 
   // ============================================================
-  // getOrderedFeatures
+  // listFeaturesInOrder
   // ============================================================
 
-  describe('getOrderedFeatures', () => {
+  describe('listFeaturesInOrder', () => {
     beforeEach(() => {
       store.createLayer(createTestLayer({ id: 'layer-1' }));
       store.createLayer(createTestLayer({ id: 'layer-2' }));
@@ -968,40 +971,39 @@ describe('MemoryStore', () => {
       store.createFeature(createTestFeature('f2', { layerId: 'layer-1' }));
       store.createFeature(createTestFeature('f3', { layerId: 'layer-2' }));
 
-      const ordered = store.getOrderedFeatures();
+      const ordered = store.listFeaturesInOrder();
 
       expect(ordered.map((f) => f.id)).toEqual(['f1', 'f2', 'f3']);
     });
 
-    it('invisible features are not included', () => {
+    it('includes invisible features', () => {
       store.createFeature(createTestFeature('f1', { visible: true }));
       store.createFeature(createTestFeature('f2', { visible: false }));
 
-      const ordered = store.getOrderedFeatures();
+      const ordered = store.listFeaturesInOrder();
 
-      expect(ordered.map((f) => f.id)).toEqual(['f1']);
+      expect(ordered.map((f) => f.id)).toEqual(['f1', 'f2']);
     });
 
-    it('the features of an invisible layer are not included', () => {
+    it('includes the features of an invisible layer', () => {
       store.createFeature(createTestFeature('f1', { layerId: 'layer-1' }));
       store.createFeature(createTestFeature('f2', { layerId: 'layer-2' }));
       store.updateLayer('layer-2', { visible: false });
 
-      const ordered = store.getOrderedFeatures();
+      const ordered = store.listFeaturesInOrder();
 
-      expect(ordered.map((f) => f.id)).toEqual(['f1']);
+      expect(ordered.map((f) => f.id)).toEqual(['f1', 'f2']);
     });
 
-    it('the features of an invisible group are not included', () => {
+    it('includes the features of an invisible group', () => {
       store.createFeature(createTestFeature('f1'));
       store.createFeature(createTestFeature('f2'));
       store.createGroup(createTestGroup({ featureIds: ['f2'], visible: false }));
-      // Add the group to the order of the layer (so that the group visibility check works)
       store.updateLayer('layer-1', { items: ['f1', 'group-1'] });
 
-      const ordered = store.getOrderedFeatures();
+      const ordered = store.listFeaturesInOrder();
 
-      expect(ordered.map((f) => f.id)).toEqual(['f1']);
+      expect(ordered.map((f) => f.id)).toEqual(['f1', 'f2']);
     });
 
     it('the features in a group are inserted at the position of the group', () => {
@@ -1012,7 +1014,7 @@ describe('MemoryStore', () => {
       // The order of the layer becomes [f1, group-1], and the group contains [f2, f3]
       store.createGroup(createTestGroup({ featureIds: ['f2', 'f3'] }));
 
-      const ordered = store.getOrderedFeatures();
+      const ordered = store.listFeaturesInOrder();
 
       // f1 comes first, then f2 and f3 from inside the group
       expect(ordered.map((f) => f.id)).toEqual(['f1', 'f2', 'f3']);
@@ -1225,7 +1227,7 @@ describe('MemoryStore', () => {
         dataURL: 'data:image/png;base64,...',
       });
 
-      expect(store.getAllFiles()).toHaveLength(2);
+      expect(store.listFiles()).toHaveLength(2);
     });
   });
 
@@ -1442,7 +1444,7 @@ describe('MemoryStore', () => {
         'Layer with id "nolayer" not found',
       );
       expect(store.getFeature('f-1')).toBeUndefined();
-      expect(store.getAllFeatures()).toHaveLength(0);
+      expect(store.listFeatures()).toHaveLength(0);
     });
 
     it('createFeature throws for an empty layerId', () => {
@@ -1462,7 +1464,7 @@ describe('MemoryStore', () => {
     it('every created feature is reachable from the ordered features', () => {
       store.createFeature(createTestFeature('f-1'));
       store.createFeature(createTestFeature('f-2', { layerId: 'layer-2' }));
-      expect(store.getOrderedFeatures().map((f) => f.id)).toEqual(['f-1', 'f-2']);
+      expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-1', 'f-2']);
     });
 
     it('changing layerId moves a standalone feature between the layer orders', () => {
@@ -1473,7 +1475,7 @@ describe('MemoryStore', () => {
 
       expect(store.getLayer('layer-1')?.items).toEqual(['f-2']);
       expect(store.getLayer('layer-2')?.items).toEqual(['f-1']);
-      expect(store.getOrderedFeatures().map((f) => f.id)).toEqual(['f-2', 'f-1']);
+      expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-2', 'f-1']);
 
       // A later deletion removes it from the layer it is in, leaving no orphan ID behind
       store.deleteFeature('f-1');
@@ -1512,7 +1514,7 @@ describe('MemoryStore', () => {
 
       expect(store.getLayer('layer-1')?.items).toEqual(['group-1']);
       expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1', 'f-2']);
-      expect(store.getOrderedFeatures().map((f) => f.id)).toEqual(['f-1', 'f-2']);
+      expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-1', 'f-2']);
     });
 
     it('clearing groupId puts the feature back into the order of its layer', () => {
@@ -1525,7 +1527,7 @@ describe('MemoryStore', () => {
 
       expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1']);
       expect(store.getLayer('layer-1')?.items).toEqual(['group-1', 'f-2']);
-      expect(store.getOrderedFeatures().map((f) => f.id)).toEqual(['f-1', 'f-2']);
+      expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-1', 'f-2']);
     });
 
     it('a caller that lists the moved feature itself within a transaction wins', () => {
@@ -1551,7 +1553,7 @@ describe('MemoryStore', () => {
       store.createGroup(createTestGroup({ featureIds: ['f-1', 'f-2'] }));
 
       expect(store.getLayer('layer-1')?.items).toEqual(['a', 'group-1']);
-      expect(store.getOrderedFeatures().map((f) => f.id)).toEqual(['a', 'f-1', 'f-2']);
+      expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['a', 'f-1', 'f-2']);
     });
 
     it('deleting a group puts its members where the group was', () => {
@@ -1565,7 +1567,7 @@ describe('MemoryStore', () => {
       store.deleteGroup('group-1');
 
       expect(store.getLayer('layer-1')?.items).toEqual(['a', 'f-1', 'f-2', 'b']);
-      expect(store.getOrderedFeatures().map((f) => f.id)).toEqual(['a', 'f-1', 'f-2', 'b']);
+      expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['a', 'f-1', 'f-2', 'b']);
     });
   });
 });

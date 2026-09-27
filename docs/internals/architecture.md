@@ -801,10 +801,10 @@ is never part of the document and never changes it.
 `isLocallyHidden(feature, store)` looks at three levels: the feature, its
 group and its layer. A plain id filter would leave the features of a hidden
 layer on screen, so the judgement is always made over the three levels.
-`getDisplayFeatures(store)` is `getOrderedFeatures()` without the locally
-hidden ones. Since `getOrderedFeatures()` already applies the shared
-`visible` flag over the same three levels, the result is "visible in the
-document and not hidden here".
+`listShownFeatures(store)` is `listFeaturesInOrder()` without what the
+shared `visible` flag hides over the same three levels, and
+`getDisplayFeatures(store)` is that list without the locally hidden ones.
+The result is "visible in the document and not hidden here".
 
 Local hiding is applied in six places.
 
@@ -824,9 +824,10 @@ Local hiding is applied in six places.
 - Selection. `DrawStore` takes a hidden item out of the selection, as
   described under the Store.
 
-`getOrderedFeatures()` itself is not changed: export and the public
-`getVisibleFeatures()` keep using the document's view of visibility. Local
-hiding exists only in the separate derivation for display.
+`listFeaturesInOrder()` itself lists every feature, whatever the flags say.
+Export and the public list of visible features use `listShownFeatures`, the
+document's view of visibility. Local hiding exists only in the separate
+derivation for display.
 
 ### The writable layer
 

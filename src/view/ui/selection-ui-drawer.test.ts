@@ -37,6 +37,7 @@ function square(id: string, minX: number, minY: number, size = 10): Feature {
       ],
     },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -50,7 +51,16 @@ let deps: SelectionUIDrawerDeps;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   store.createFeature(square('f2', 10, 0));
 
   drawn = [];
@@ -78,7 +88,7 @@ describe('renderFollowedVertices', () => {
   const followed = [
     {
       featureId: 'f2',
-      vertexIndices: [
+      vertices: [
         { ring: 0, index: 0 },
         { ring: 0, index: 4 },
       ],
@@ -97,7 +107,7 @@ describe('renderFollowedVertices', () => {
 
   it('passes the following features and vertex references through as they are', () => {
     renderFollowedVertices(followed, store, ZOOM, PROJECTION_DATA, deps);
-    expect(drawn).toEqual([{ featureId: 'f2', refs: followed[0].vertexIndices }]);
+    expect(drawn).toEqual([{ featureId: 'f2', refs: followed[0].vertices }]);
   });
 
   it('does not draw deleted features', () => {

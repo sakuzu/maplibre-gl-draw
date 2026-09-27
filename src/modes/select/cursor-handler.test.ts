@@ -22,6 +22,7 @@ import { updateCursorForSelection } from './cursor-handler.js';
 
 function polygon(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
     geometry: {
@@ -75,7 +76,16 @@ const centerEvent = { point: { x: 50, y: -50 } } as unknown as MouseNormalizedEv
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   store.createFeature(polygon('f1', 'l1'));
   store.setSelection('feature', ['f1']);
   canvas = { style: { cursor: '' } };

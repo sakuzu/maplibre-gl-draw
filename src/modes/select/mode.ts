@@ -100,7 +100,7 @@ export class SelectMode implements ModeHandler {
     this.#dragHandler.reset(store);
 
     if (store.getBoxSelection()) store.setBoxSelection(null);
-    if (store.getSelectedVertices()) store.setSelectedVertices(null);
+    if (store.getVertexSelection()) store.setSelectedVertices(null);
     if (!map.dragPan.isEnabled()) map.dragPan.enable();
 
     // Clear the selection when switching modes (not notified as a change)

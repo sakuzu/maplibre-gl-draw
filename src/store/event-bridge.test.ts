@@ -20,6 +20,7 @@ function makeFeature(id: string): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [139.7, 35.6] },
     layerId: 'default-layer',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -44,6 +45,8 @@ describe('EventBridge', () => {
       locked: false,
       opacity: 1,
       items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
   });
 
@@ -159,6 +162,8 @@ describe('EventBridge', () => {
         locked: false,
         opacity: 1,
         items: [],
+        styleRule: undefined,
+        metadata: undefined,
       });
 
       expect(handler).not.toHaveBeenCalled();
@@ -191,6 +196,8 @@ describe('EventBridge', () => {
         locked: false,
         opacity: 1,
         items: [],
+        styleRule: undefined,
+        metadata: undefined,
       });
       store.createLayer({
         id: 'layer-3',
@@ -199,6 +206,8 @@ describe('EventBridge', () => {
         locked: false,
         opacity: 1,
         items: [],
+        styleRule: undefined,
+        metadata: undefined,
       });
       store.createFeature(makeFeature('f1'));
       store.createFeature(makeFeature('f2'));

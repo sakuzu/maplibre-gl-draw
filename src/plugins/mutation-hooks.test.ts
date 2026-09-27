@@ -18,6 +18,7 @@ function point(id: string): Feature {
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'l',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
@@ -27,7 +28,16 @@ function point(id: string): Feature {
 
 function setup(plugin: Plugin) {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, items: [] });
+  store.createLayer({
+    id: 'l',
+    name: 'l',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   const manager = createPluginManager(() => ({}) as never, { registerMode: vi.fn() } as never);
   manager.register(plugin);
   const stop = subscribeMutationHooks(store, manager);
@@ -101,6 +111,8 @@ describe('the mutation hooks', () => {
         locked: false,
         opacity: 1,
         items: [],
+        styleRule: undefined,
+        metadata: undefined,
       });
       store.createFeature({ ...point('a'), layerId: 'm' });
     }, 'import');

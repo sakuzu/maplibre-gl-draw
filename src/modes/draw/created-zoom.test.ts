@@ -55,6 +55,8 @@ function drawWith(
     locked: false,
     opacity: 1,
     items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   let idCounter = 0;
   const canvas = { style: { cursor: '' } };
@@ -78,7 +80,7 @@ function drawWith(
     scaleWithZoom,
   } as unknown as ModeContext);
   input(handler);
-  const [feature] = store.getAllFeatures();
+  const [feature] = store.listFeatures();
   expect(feature).toBeDefined();
   return feature.properties;
 }

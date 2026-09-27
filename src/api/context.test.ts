@@ -13,7 +13,17 @@ import type { Layer } from '../store/types.js';
 import { createContext } from './context.js';
 
 function layer(id: string, overrides: Partial<Layer> = {}): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, items: [], ...overrides };
+  return {
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+    ...overrides,
+  };
 }
 
 const map = {} as unknown as MapLibreMap;
