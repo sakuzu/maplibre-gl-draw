@@ -50,7 +50,6 @@ export type {
   DashSegment,
   DrapeQuadCorners,
   MercatorRect,
-  OffsetUniforms,
   ProjectionUniformLocations,
   QuadDrapeColor,
   QuadDrapeFill,

@@ -78,6 +78,7 @@ export type {
   Mode,
   Selection,
   SelectionType,
+  SnapPreference,
   SnapResult,
   TerrainDiagnostics,
   VertexRef,

@@ -241,7 +241,6 @@ const WEBGL = [
   'drawQuadSurfaceOnTerrain',
   'MercatorRect',
   'OFFSET_MODE_GLSL',
-  'OffsetUniforms',
   'PointHitTestStrategy',
   'ProjectionUniformLocations',
   'ProjectionUniformManager',

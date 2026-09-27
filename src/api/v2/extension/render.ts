@@ -161,12 +161,22 @@ export interface FeatureRenderer {
 export interface OverlayRenderer {
   /** The name it is registered under */
   readonly name: string;
+  /**
+   * The order among the overlays: a lower one is drawn first, below a higher one. Overlays of
+   * the same order are drawn in the order they were added; 0 when it is left out.
+   */
+  readonly order?: number;
   /** Called when the renderer is added to the map; create the programs and buffers here. */
   onAdd(map: MaplibreMap, gl: WebGL2RenderingContext): void;
   /** Draws above every layer. */
   draw(ctx: RenderContext): void;
   /** Draws just above one layer, for an overlay drawn between the layers. */
   drawForLayer?(layerId: string, ctx: RenderContext): void;
+  /**
+   * Draws the vertices of what the overlay shows, above the features of every layer and the
+   * selection, so that they stay visible over a layer further back.
+   */
+  drawVertices?(ctx: RenderContext): void;
   /** Whether some of its drawing has not finished yet. */
   hasPendingWork?(): boolean;
   /** Called when the renderer is removed; release what `onAdd` created. */

@@ -8,7 +8,8 @@
  * type a context holds is part of the public API and follows semver.
  */
 
-import type { Position } from 'geojson';
+import type { BBox, Position } from 'geojson';
+import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type { ExtensionsCollections } from '../extensions.js';
@@ -73,7 +74,7 @@ export interface ScreenContext {
 
 /**
  * What every context of an extension has: the public API, the Store, the events, the
- * terrain, the automatic names, the screen and a way to redraw.
+ * terrain, the automatic names, the screen and a way to redraw, and the shape being drawn.
  */
 export interface ExtensionContext {
   /** The whole public API; an extension reads and writes the document through it */
@@ -111,6 +112,24 @@ export interface ExtensionContext {
    *   is left out
    */
   invalidate(filter?: { type?: string; ids?: string[] }): void;
+  /** The shape being drawn by the current mode, for undoing and redoing its vertices */
+  readonly drawing: {
+    /**
+     * Removes the last vertex of the shape being drawn.
+     *
+     * @returns True when a vertex was removed; false when nothing is being drawn or the mode
+     *   has no vertex to remove
+     */
+    undoVertex(): boolean;
+    /**
+     * Puts back the vertex the last `undoVertex` removed.
+     *
+     * @returns True when a vertex was put back
+     */
+    redoVertex(): boolean;
+    /** Whether the current mode is drawing a shape that is not created yet */
+    isDrawing(): boolean;
+  };
 }
 
 /**
@@ -166,6 +185,13 @@ export interface ModeContext extends ExtensionContext {
   };
   /** The look of the selected features. */
   readonly selectionStyle: Required<SelectionStyleOptions>;
+  /**
+   * The rows of the datasets that a shape can trace along, within an extent. Empty when
+   * snapping to the datasets is off.
+   *
+   * @param bbox - The extent, as `[west, south, east, north]` in degrees
+   */
+  listTraceRows(bbox: BBox): DatasetRow[];
 }
 
 /** What a hit test of a custom feature type or a companion receives. */

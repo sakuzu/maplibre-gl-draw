@@ -57,11 +57,18 @@ export interface HandleProvider {
   /** The handles of a selected feature. */
   handles(feature: Feature, ctx: ScreenContext): Handle[];
   /**
-   * The change a drag of one of its handles makes.
+   * The handles that belong to no feature, shown whatever is selected; they are hit and
+   * dragged like the others, and their drag arrives with `feature` as `null`.
+   */
+  globalHandles?(ctx: ScreenContext): Handle[];
+  /**
+   * The change a drag of one of its handles makes. It is called for every move of the drag
+   * and once more when the drag ends; the patch of the end is the one that stays.
    *
+   * @param feature - The feature the handle is on; `null` for a handle of `globalHandles`
    * @returns The patch to apply to the feature, or `null` for no change
    */
-  onDrag(feature: Feature, handle: Handle, event: DrawPointerEvent): FeaturePatch | null;
+  onDrag(feature: Feature | null, handle: Handle, event: DrawPointerEvent): FeaturePatch | null;
 }
 
 /**
@@ -71,6 +78,11 @@ export interface HandleProvider {
 export interface CompanionProvider {
   /** The name it is registered under */
   readonly name: string;
+  /**
+   * Whether a feature has a companion. It is asked for every feature on every frame and
+   * every hit test, so it must answer at once.
+   */
+  has(feature: Feature): boolean;
   /** Draws the companion of a feature. */
   draw(feature: Feature, ctx: RenderContext): void;
   /**
@@ -79,4 +91,11 @@ export interface CompanionProvider {
    * @returns What was hit, or `null`
    */
   hitTest(feature: Feature, ctx: HitTestContext): Hit | null;
+  /**
+   * A companion was clicked. The click never changes the selection.
+   *
+   * @param hit - What `hitTest` returned
+   * @returns True when the provider handled the click
+   */
+  onClick?(feature: Feature, hit: Hit, event: DrawPointerEvent): boolean;
 }

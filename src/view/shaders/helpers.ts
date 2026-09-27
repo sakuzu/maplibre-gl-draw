@@ -8,6 +8,12 @@
  * Performs the WGS84 -> Mercator -> clip coordinate conversion on the GPU
  */
 
+// The shader prelude and the offset values are the types of the extension contract, so that the
+// renderers and the second layer of the API name the same types as the main entry
+import type { OffsetUniforms, ShaderData } from '../../api/v2/extension/render.js';
+
+export type { OffsetUniforms, ShaderData };
+
 /**
  * Converts WGS84 coordinates to Mercator coordinates (high precision
  * computation on the CPU side)
@@ -17,19 +23,6 @@ export function lngLatToMercator(lng: number, lat: number): [number, number] {
   const latRad = (lat * Math.PI) / 180;
   const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
   return [x, y];
-}
-
-/**
- * The shader prelude maplibre passes to the `prerender` / `render` of a custom layer, which
- * the renderers of this library take to compile their programs for the current projection.
- */
-export interface ShaderData {
-  /** The GLSL maplibre prepends to a vertex shader (its projection functions) */
-  vertexShaderPrelude: string;
-  /** The `#define` lines of the current projection */
-  define: string;
-  /** The name of the projection variant; a program is recompiled when it changes */
-  variantName: string;
 }
 
 /**
@@ -521,37 +514,6 @@ export function translateMatrixByLongitude(matrix: ArrayLike<number>, lngShift: 
   const dx = lngShift / 360;
   for (let i = 0; i < 4; i++) out[12 + i] = matrix[12 + i] + dx * matrix[i];
   return out;
-}
-
-/**
- * The uniform values for offset mode
- *
- * The uniforms for globe mode are obtained directly from ProjectionData, so
- * this interface contains only the values needed for the offset computation of
- * the Mercator projection.
- */
-export interface OffsetUniforms {
-  /** The center coordinates (rounded to Float32, for sending to the shader) */
-  centerLngLat: [number, number];
-  /** The center coordinates (64-bit precision, for the offset computation on the CPU side) */
-  centerLngLat64: [number, number];
-  /**
-   * The Mercator coordinates of the center (a value computed at 64-bit
-   * precision)
-   *
-   * Used to restore the Mercator relative coordinates of a vertex to absolute
-   * coordinates when looking up the terrain DEM atlas. So that everything can
-   * be handled relatively, the atlas origin is also handed over relative to
-   * this value (absolute Mercator coordinates do not have enough digits in
-   * Float32).
-   */
-  centerMercator: [number, number];
-  /** The view center in clip space, computed at 64-bit precision */
-  projectionCenter: [number, number, number, number];
-  /** The Mercator units per degree of longitude and latitude at the center */
-  unitsPerDegree: [number, number, number];
-  /** The second-order correction of `unitsPerDegree` for the change with latitude */
-  unitsPerDegree2: [number, number, number];
 }
 
 /**

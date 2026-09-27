@@ -81,6 +81,25 @@ export interface SnapResult {
 }
 
 /**
+ * How a mode wants the positions of its input snapped, as `ModeHandler.snapPreference` declares
+ * it. It is read before every input is snapped, so a mode whose preference changes
+ * while it draws declares it as a getter.
+ */
+export interface SnapPreference {
+  /**
+   * The feature to prefer when snapping candidates are at the same distance, such as the
+   * boundary a trace started along; none when it is left out or `null`
+   */
+  prefer?: { featureId: string; datasetId?: string } | null;
+  /**
+   * The inputs whose position is not snapped, by the name of their receiver; every input is
+   * snapped when it is left out. A stroke drawn by dragging leaves out `onDrag`, so that its
+   * inner points follow the pointer while its ends still snap.
+   */
+  unsnapped?: readonly ('onClick' | 'onPointerMove' | 'onDragStart' | 'onDrag' | 'onDragEnd')[];
+}
+
+/**
  * One division of the stacking order: the map layer that draws one run of the layer order
  * between two entries that come from outside the document.
  */

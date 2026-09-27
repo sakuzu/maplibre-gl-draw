@@ -12,7 +12,7 @@
 
 import type { Position } from 'geojson';
 import type { ScreenPoint } from '../events.js';
-import type { SnapResult } from '../state.js';
+import type { SnapPreference, SnapResult } from '../state.js';
 import type { ModeContext } from './context.js';
 
 /** The modifier keys held during an input. */
@@ -89,12 +89,35 @@ export interface InputHandlers {
  * optional; returning true from an input receiver consumes the event.
  */
 export interface ModeHandler extends Partial<InputHandlers> {
+  /**
+   * Whether the mode writes new features. Such a mode is entered only while a layer can be
+   * written, and never while the document is read-only; false when it is left out.
+   */
+  readonly writes?: boolean;
+  /** How the mode wants the positions of its input snapped; every input snaps when left out */
+  readonly snapPreference?: SnapPreference;
   /** Called when the mode is entered */
   onEnter?(): void;
   /** Called when the mode is left */
   onExit?(): void;
-  /** Called when the mode is interrupted, by Escape for example */
+  /**
+   * Called when the mode is interrupted: by an Escape that neither a plugin nor the mode
+   * consumed, or when the state is reset from outside the mode. The mode drops what it was
+   * drawing and stays the current mode.
+   */
   onCancel?(): void;
+  /**
+   * Removes the last vertex of the shape being drawn, as `ctx.drawing.undoVertex` asks.
+   *
+   * @returns True when a vertex was removed
+   */
+  onUndoVertex?(): boolean;
+  /**
+   * Puts back the vertex the last `onUndoVertex` removed, as `ctx.drawing.redoVertex` asks.
+   *
+   * @returns True when a vertex was put back
+   */
+  onRedoVertex?(): boolean;
 }
 
 /**

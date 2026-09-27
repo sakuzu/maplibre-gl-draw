@@ -35,6 +35,12 @@ export interface FeatureTypeDefinition {
   readonly type: string;
   /** The kind of GeoJSON geometry the features of this type have; one kind per type */
   readonly geometry: Geometry['type'];
+  /**
+   * How far beyond its geometry a feature of this type can be hit, in pixels, such as the
+   * half size of an icon drawn on a point. The candidates of a hit test are gathered this much
+   * farther out; 0 when it is left out.
+   */
+  readonly hitPaddingPx?: number;
   /** How the features of this type are drawn */
   readonly renderer: FeatureRenderer;
   /**
