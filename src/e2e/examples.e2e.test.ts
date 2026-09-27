@@ -21,7 +21,6 @@ import { crc32, deflateSync } from 'node:zlib';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { browserTimeout } from '../test-utils.js';
 import { click, type E2EWindow, launchBrowser, type PagePoint, pageOf, settle } from './harness.js';
 
@@ -190,7 +189,7 @@ async function openExample(name: string): Promise<{ page: Page; close: () => Pro
 }
 
 function featureCount(page: Page): Promise<number> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.getAllFeatures().length);
+  return page.evaluate(() => (window as unknown as E2EWindow).draw.features.count());
 }
 
 function output(page: Page): Promise<string> {
@@ -266,7 +265,7 @@ describe('the examples', () => {
     const ruleKind = () =>
       page.evaluate(() => {
         const { draw } = window as unknown as E2EWindow;
-        return draw.getAllLayers().find((layer) => layer.name === 'Blocks')?.styleRule?.kind;
+        return draw.layers.list().find((layer) => layer.name === 'Blocks')?.styleRule?.kind;
       });
     expect(await ruleKind()).toBe('categorical');
     expect(await output(page)).toContain('commercial');
@@ -287,7 +286,7 @@ describe('the examples', () => {
     await click(page, await pageOf(page, [139.764, 35.681]));
     await page.keyboard.up('Shift');
     expect(
-      await page.evaluate(() => (window as unknown as E2EWindow).draw.getSelectedIds().length),
+      await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.get().ids.length),
     ).toBe(2);
 
     await page.click('[data-op="union"]');
@@ -326,13 +325,13 @@ describe('the examples', () => {
     await page.click('#lock-layer');
     const locked = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
-      return draw.getAllLayers().find((layer) => layer.name === 'Parcels')?.locked;
+      return draw.layers.list().find((layer) => layer.name === 'Parcels')?.locked;
     });
     expect(locked).toBe(false);
     await close();
   });
 
-  it('plugin stamps a point in the mode of the plugin, and uninstalling removes the mode', {
+  it('plugin stamps a point in the mode of the plugin, and removing it removes the mode', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('plugin');
@@ -342,10 +341,10 @@ describe('the examples', () => {
     expect(await output(page)).toContain('seen 1');
 
     await page.click('#install');
-    const entered = await page.evaluate(() =>
-      (window as unknown as E2EWindow).draw.setMode('stamp'),
+    const registered = await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.extensions.modes.has('stamp'),
     );
-    expect(entered).toBe(false);
+    expect(registered).toBe(false);
     await close();
   });
 
@@ -356,16 +355,16 @@ describe('the examples', () => {
     await page.click('#add-route');
     const route = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
-      draw.deselect();
-      const all = draw.getAllFeatures();
+      draw.selection.clear();
+      const all = draw.features.list();
       return all[all.length - 1];
     });
     expect(route.type).toBe('Route');
-    const [a, b] = coordinatesOf(route) as number[][];
+    const [a, b] = (route.geometry as GeoJSON.LineString).coordinates;
     const pt = await pageOf(page, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
     await click(page, pt);
     expect(
-      await page.evaluate(() => (window as unknown as E2EWindow).draw.getSelectedIds()),
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
     ).toEqual([route.id]);
     await close();
   });
@@ -375,7 +374,7 @@ describe('the examples', () => {
   }, async () => {
     const { page, close } = await openExample('large-data');
     const cells = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.getDataset('grid')?.getFeatures().length,
+      () => (window as unknown as E2EWindow).draw.datasets.get('grid')?.listRows().length,
     );
     expect(cells).toBe(50_000);
     await click(page, at(10, 10));
@@ -389,16 +388,15 @@ describe('the examples', () => {
     const { page, close } = await openExample('table-worker');
     await page.evaluate(() => (window as unknown as { loaded: Promise<void> }).loaded);
     const total = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.getDataset('places')?.getThinningStats().total,
+      () => (window as unknown as E2EWindow).draw.datasets.get('places')?.getThinningStats().total,
     );
     expect(total).toBe(200_000);
     // Row 0, where it was drawn
     const lngLat = await page.evaluate(() => {
-      const dataset = (window as unknown as E2EWindow).draw.getDataset('places');
-      const [feature] =
-        dataset?.collectVisible({ minX: -180, minY: -85, maxX: 180, maxY: 85 }) ?? [];
+      const dataset = (window as unknown as E2EWindow).draw.datasets.get('places');
+      const [row] = dataset?.listVisibleRows([-180, -85, 180, 85]) ?? [];
       // In the page: the helpers of the library are not loaded here
-      return (feature.geometry as GeoJSON.Point).coordinates as [number, number];
+      return (row.geometry as GeoJSON.Point).coordinates as [number, number];
     });
     await page.evaluate(
       (center) => (window as unknown as E2EWindow).map.jumpTo({ center, zoom: 18 }),

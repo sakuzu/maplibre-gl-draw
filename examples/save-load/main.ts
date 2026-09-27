@@ -6,7 +6,7 @@
 // localStorage and restores it, offers both formats as downloads, and loads files dropped on
 // the map where they were dropped.
 
-import { createMapLibreGLDraw, type ExportFormat, type LoadResult } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type LoadResult } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -19,13 +19,17 @@ const map = new maplibregl.Map({
   center: [139.7515, 35.6875],
   zoom: 13.2,
 });
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 const output = document.getElementById('output') as HTMLPreElement;
 const STORAGE_KEY = 'maplibre-gl-draw:save-load';
 
 /** Shows what a load did, including the features it left out */
-function report(result: LoadResult): void {
+function report(result: LoadResult | null): void {
+  if (result === null) {
+    output.textContent = 'The drawing is read-only';
+    return;
+  }
   const lines = [`Loaded ${result.featureIds.length} features (${result.format})`];
   if (result.replaced) lines.push('The previous drawing was replaced');
   for (const { index, reason } of result.skipped ?? []) {
@@ -37,7 +41,7 @@ function report(result: LoadResult): void {
 // A GeoJSON FeatureCollection is added to what is already drawn
 document.getElementById('load-sample')?.addEventListener('click', async () => {
   const response = await fetch('../sample-gis.geojson');
-  report(await draw.load(await response.json()));
+  report(await draw.document.load(await response.json()));
 });
 
 // A File is detected by its content: GeoJSON, the native format or an image
@@ -46,7 +50,7 @@ document.getElementById('file')?.addEventListener('change', async (event) => {
   const file = input.files?.[0];
   if (!file) return;
   try {
-    report(await draw.load(file));
+    report(await draw.document.load(file));
   } catch (error) {
     output.textContent = `The file could not be loaded: ${String(error)}`;
   }
@@ -65,10 +69,10 @@ container.addEventListener('drop', async (event) => {
   for (const file of event.dataTransfer?.files ?? []) {
     try {
       report(
-        await draw.load(file, {
+        await draw.document.load(file, {
           coordinate: [lng, lat],
           zoom: map.getZoom(),
-          layerId: draw.getActiveLayer(),
+          layerId: draw.layers.getActive()?.id,
         }),
       );
     } catch (error) {
@@ -80,8 +84,8 @@ container.addEventListener('drop', async (event) => {
 // The native format keeps the layers, the groups and their order; loading it replaces the
 // current drawing
 document.getElementById('save')?.addEventListener('click', () => {
-  localStorage.setItem(STORAGE_KEY, draw.export('native').data);
-  output.textContent = `Saved ${draw.getAllFeatures().length} features`;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(draw.document.toJSON()));
+  output.textContent = `Saved ${draw.features.count()} features`;
 });
 
 document.getElementById('restore')?.addEventListener('click', async () => {
@@ -90,23 +94,32 @@ document.getElementById('restore')?.addEventListener('click', async () => {
     output.textContent = 'Nothing has been saved yet';
     return;
   }
-  report(await draw.load(JSON.parse(saved)));
+  report(await draw.document.load(JSON.parse(saved)));
 });
 
+/** A file name from the title of the drawing and the time */
+function fileName(extension: string): string {
+  const title = draw.metadata.get().title?.trim() || 'drawing';
+  const time = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  return `${title.replace(/[\\/:*?"<>|]/g, '_')}-${time}${extension}`;
+}
+
 /**
- * Offers an export as a download. `result.fileName` is the name the library suggests: the
- * title of the drawing and the time, with `.geojson` or `.maplibre-gl-draw.json`
- * (`draw.getSuggestedFileName()` gives the native one without exporting)
+ * Offers a document as a download: the native format keeps the layers, the groups and the
+ * files, GeoJSON keeps the features only
  */
-function download(format: ExportFormat): void {
-  const result = draw.export(format);
-  const url = URL.createObjectURL(new Blob([result.data], { type: result.mimeType }));
+function download(format: 'native' | 'geojson'): void {
+  const [data, extension, mimeType] =
+    format === 'native'
+      ? [draw.document.toJSON(), '.maplibre-gl-draw.json', 'application/json']
+      : [draw.document.toGeoJSON(), '.geojson', 'application/geo+json'];
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: mimeType }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = result.fileName;
+  link.download = fileName(extension);
   link.click();
   URL.revokeObjectURL(url);
-  output.textContent = `Downloaded ${result.fileName}`;
+  output.textContent = `Downloaded ${link.download}`;
 }
 
 document.getElementById('download-native')?.addEventListener('click', () => download('native'));

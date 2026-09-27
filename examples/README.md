@@ -12,7 +12,7 @@ at the top saying what it shows. The guides quote their code from here.
 | [snapping-and-geometry](snapping-and-geometry/) | Snapping, tracing, shared vertices, union, subtract, buffer, split | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [terrain](terrain/) | Drawing and selecting on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [read-only](read-only/) | Read-only, the interaction lock, locked layers, local hiding | [Read-only](../docs/guides/read-only.md) |
-| [plugin](plugin/) | A plugin with a hook, an api and a mode of its own | [Plugins](../docs/guides/plugins.md) |
+| [plugin](plugin/) | A plugin with an event, an api and a mode of its own | [Plugins](../docs/guides/plugins.md) |
 | [custom-feature-type](custom-feature-type/) | A feature type with its own renderer, hit test and box selection | [Custom types](../docs/guides/custom-types.md) |
 | [large-data](large-data/) | Datasets, static and fetched for the view | [Large data](../docs/guides/large-data.md) |
 | [table-worker](table-worker/) | A table of typed arrays read in a Worker and drawn from its columns | [Large data](../docs/guides/large-data.md) |

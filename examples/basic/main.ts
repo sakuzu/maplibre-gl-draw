@@ -5,7 +5,7 @@
 // The user draws polygons on a MapLibre map; the page follows the changes, saves the
 // drawing in the browser and restores it on the next visit.
 
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // 1. Install: set the worker URL of maplibre-gl once, before the first map is created
@@ -21,26 +21,27 @@ const map = new maplibregl.Map({
   zoom: 12,
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 // 3. Draw a polygon
 document.querySelector('#draw-polygon')?.addEventListener('click', () => {
   draw.setMode('draw_polygon');
 });
 
-draw.on('draw.feature.create', ({ feature }) => {
+draw.on('feature.created', ({ feature }) => {
   console.log('created', feature.id, feature.type);
 });
 
-draw.on('draw.mode.change', ({ mode }) => {
+draw.on('mode.changed', ({ mode }) => {
   document.querySelector('#draw-polygon')?.classList.toggle('active', mode === 'draw_polygon');
 });
 
-// 4. Subscribe to changes
-draw.on('draw.features.change', ({ created, updated, deleted, source }) => {
+// 4. Subscribe to changes: one event per transaction, whatever made it
+draw.on('document.changed', ({ features, source }) => {
+  if (!features) return;
   console.log(
-    `${created.length} created, ${updated.length} updated,`,
-    `${deleted.length} deleted (${source})`,
+    `${features.created?.length ?? 0} created, ${features.updated?.length ?? 0} updated,`,
+    `${features.deleted?.length ?? 0} deleted (${source})`,
   );
 });
 
@@ -48,15 +49,14 @@ draw.on('draw.features.change', ({ created, updated, deleted, source }) => {
 const STORAGE_KEY = 'maplibre-gl-draw:basic';
 
 document.querySelector('#save')?.addEventListener('click', () => {
-  const { data } = draw.export('geojson');
-  localStorage.setItem(STORAGE_KEY, data);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(draw.document.toGeoJSON()));
 });
 
 const saved = localStorage.getItem(STORAGE_KEY);
 if (saved !== null) {
-  const result = await draw.load(JSON.parse(saved));
-  console.log(`loaded ${result.featureIds.length} features`);
-  for (const { index, reason } of result.skipped ?? []) {
+  const result = await draw.document.load(JSON.parse(saved));
+  console.log(`loaded ${result?.featureIds.length ?? 0} features`);
+  for (const { index, reason } of result?.skipped ?? []) {
     console.warn(`feature ${index} was skipped: ${reason}`);
   }
 }

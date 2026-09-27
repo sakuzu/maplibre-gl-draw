@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { build } from 'vite';
-import type { Feature, MapLibreGLDraw, Mode } from '../index.js';
+import type { Draw, Feature, Mode } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -34,7 +34,7 @@ const ORIGIN = 'http://draw.e2e.test';
 /** The globals of the test page, for `page.evaluate` */
 export interface E2EWindow {
   map: import('maplibre-gl').Map;
-  draw: MapLibreGLDraw;
+  draw: Draw;
 }
 
 /** The size of the map on the page (CSS pixels) */
@@ -152,12 +152,12 @@ export async function openMapPage(browser: Browser, bundle: Bundle, camera: Came
       const w = window as unknown as {
         e2e: {
           maplibregl: typeof import('maplibre-gl');
-          createMapLibreGLDraw: typeof import('../index.js').createMapLibreGLDraw;
+          createDraw: typeof import('../index.js').createDraw;
         };
         map: unknown;
         draw: unknown;
       };
-      const { maplibregl, createMapLibreGLDraw } = w.e2e;
+      const { maplibregl, createDraw } = w.e2e;
       const map = new maplibregl.Map({
         container: 'map',
         style: { version: 8, sources: {}, layers: [] },
@@ -176,7 +176,7 @@ export async function openMapPage(browser: Browser, bundle: Bundle, camera: Came
         });
       });
       w.map = map;
-      w.draw = createMapLibreGLDraw(map);
+      w.draw = createDraw(map);
     },
     { cam: camera, loadTimeout: browserTimeout(15_000) },
   );
@@ -216,7 +216,7 @@ export async function lngLatOf(page: Page, point: PagePoint): Promise<[number, n
 
 /** Every feature of the draw instance */
 export async function features(page: Page): Promise<Feature[]> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.getAllFeatures());
+  return page.evaluate(() => (window as unknown as E2EWindow).draw.features.list());
 }
 
 /** The current mode of the draw instance */
@@ -226,7 +226,7 @@ export async function mode(page: Page): Promise<Mode> {
 
 /** The ids of the selected features */
 export async function selectedIds(page: Page): Promise<string[]> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.getSelectedIds());
+  return page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]);
 }
 
 /** A press, a move in steps and a release of the left mouse button */

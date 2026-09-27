@@ -5,7 +5,7 @@
 // The terrain is MapLibre's own (`map.setTerrain`); the library has no terrain setting and
 // follows it. Features lie on the ground, and drawing and selecting hit the ground too.
 
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -24,10 +24,10 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 // A line across the valley and an area on the slope, to see them follow the ground
-draw.addFeature({
+draw.features.create({
   type: 'LineString',
   geometry: {
     type: 'LineString',
@@ -38,7 +38,7 @@ draw.addFeature({
     ],
   },
 });
-draw.addFeature({
+draw.features.create({
   type: 'Polygon',
   geometry: {
     type: 'Polygon',
@@ -78,7 +78,7 @@ document.getElementById('draw-line')?.addEventListener('click', () => draw.setMo
 // The state the last frame was drawn with, for debugging
 const output = document.getElementById('output') as HTMLPreElement;
 document.getElementById('diagnostics')?.addEventListener('click', () => {
-  const { render, drape } = draw.getTerrainDiagnostics();
+  const { render, drape } = draw.debug.terrain();
   output.textContent = [
     `Terrain active: ${render.active}`,
     `Subdivision step: ${render.stepMeters} m`,

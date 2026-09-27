@@ -14,7 +14,7 @@
  */
 
 import * as maplibregl from 'maplibre-gl';
-import { createMapLibreGLDraw } from '../index.js';
+import { createDraw } from '../index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { prepareTable } from '../table/index.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
@@ -30,7 +30,7 @@ installTestDem(maplibregl);
 
 (window as unknown as { e2e: unknown }).e2e = {
   maplibregl,
-  createMapLibreGLDraw,
+  createDraw,
   prepareTable,
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {

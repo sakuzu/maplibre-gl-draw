@@ -7,7 +7,7 @@
 // copy. The page hands them to a dataset, which draws the rows from the arrays
 // without building an object per row. A click reports the row, read from the same columns.
 
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import type { DictionaryColumn, PreparedTable, Table } from '@sakuzu/maplibre-gl-draw/table';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -22,11 +22,13 @@ const map = new maplibregl.Map({
   center: CENTER,
   zoom: 11,
 });
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 const output = document.getElementById('output') as HTMLPreElement;
 
-const places = draw.addDataset({
+// Empty until the Worker hands over its table
+const places = draw.datasets.add({
   id: 'places',
+  rows: [],
   styleRule: {
     kind: 'categorical',
     property: 'kind',
@@ -64,11 +66,11 @@ function load(count: number): Promise<void> {
 }
 
 // A click reports the row; the page reads the values from its own columns
-places.on('click', ({ row }) => {
+places.on('clicked', ({ rowIndex }) => {
   if (!table?.columns) return;
   const kind = table.columns.kind as DictionaryColumn;
   const value = table.columns.value as Float64Array;
-  output.textContent = `row ${row}: ${kind.dictionary[kind.codes[row]]}, value ${value[row]}`;
+  output.textContent = `row ${rowIndex}: ${kind.dictionary[kind.codes[rowIndex]]}, value ${value[rowIndex]}`;
 });
 
 document.getElementById('load-200k')?.addEventListener('click', () => load(200_000));

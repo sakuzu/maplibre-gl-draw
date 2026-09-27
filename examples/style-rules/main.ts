@@ -2,15 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // style-rules: colors from the attributes of the features.
-// It changes the default look with `Options.style`, colors a layer with each of the four
+// It changes the default look with the `style` option, colors a layer with each of the four
 // kinds of style rule, and builds a legend with `deriveLegend` and its own `messages`.
 
-import {
-  createMapLibreGLDraw,
-  deriveLegend,
-  type Messages,
-  type StyleRule,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, deriveLegend, type Messages, type StyleRule } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -31,13 +26,17 @@ const map = new maplibregl.Map({
 });
 
 // The default look of the features without a rule: a dark blue outline and a light fill
-// (colors are RGBA from 0 to 1)
-const draw = createMapLibreGLDraw(map, {
+// (colors are CSS colors)
+const draw = createDraw(map, {
   messages,
   style: {
     polygon: {
-      stroke: { width: 1.5, color: [0.1, 0.2, 0.5, 1], opacity: 1, lineStyle: 'solid' },
-      fill: { color: [0.1, 0.2, 0.5, 0.15] },
+      strokeWidth: 1.5,
+      strokeColor: '#1a3380',
+      strokeOpacity: 1,
+      lineStyle: 'solid',
+      fillColor: '#1a3380',
+      fillOpacity: 0.15,
     },
   },
 });
@@ -69,20 +68,20 @@ const RULES: Record<string, StyleRule> = {
 };
 
 // A layer of its own for the sample: the rule belongs to the layer
-// (addLayer returns null only while read-only, which this page never turns on)
-const created = draw.addLayer('Blocks');
+// (layers.create returns null only while read-only, which this page never turns on)
+const created = draw.layers.create({ name: 'Blocks' });
 if (created === null) throw new Error('The drawing is read-only');
-const layerId: string = created;
-draw.setActiveLayer(layerId);
+const layerId = created.id;
+draw.layers.setActive(layerId);
 const response = await fetch('../sample-gis.geojson');
-await draw.load(await response.json());
+await draw.document.load(await response.json(), { layerId });
 
 const output = document.getElementById('output') as HTMLPreElement;
 
 /** Sets the rule of the layer (or removes it) and shows its legend */
 function applyRule(name: string): void {
   const rule = RULES[name];
-  draw.updateLayer(layerId, { styleRule: rule });
+  draw.layers.update(layerId, { styleRule: rule });
   output.replaceChildren();
   for (const entry of rule ? deriveLegend(rule, messages) : []) {
     const swatch = document.createElement('span');

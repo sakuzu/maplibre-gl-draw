@@ -5,7 +5,7 @@
 // Drawing snaps to vertices and edges and traces along the boundary it snapped to; shared
 // vertices can move together; selected features are merged, subtracted, buffered and split.
 
-import { type Coordinate, createMapLibreGLDraw, type Feature } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Feature, type Position } from '@sakuzu/maplibre-gl-draw';
 import { area as polygonArea } from '@sakuzu/maplibre-gl-draw/geometry';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -19,13 +19,13 @@ const map = new maplibregl.Map({
   center: [139.764, 35.682],
   zoom: 15,
 });
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   // Snap within 12 px; holding Alt suspends it
-  snap: { tolerancePx: 12, disableKey: 'alt' },
+  snapping: { tolerancePx: 12, disableKey: 'alt' },
 });
 
 /** A square of `size` degrees with its south-west corner at [lng, lat] */
-function square(lng: number, lat: number, size: number): Coordinate[][] {
+function square(lng: number, lat: number, size: number): Position[][] {
   return [
     [
       [lng, lat],
@@ -38,28 +38,21 @@ function square(lng: number, lat: number, size: number): Coordinate[][] {
 }
 
 // Two squares that share an edge, a third that overlaps them, and a line across the first
-draw.addFeature({
-  type: 'Polygon',
-  geometry: { type: 'Polygon', coordinates: square(139.758, 35.679, 0.004) },
-});
-draw.addFeature({
-  type: 'Polygon',
-  geometry: { type: 'Polygon', coordinates: square(139.762, 35.679, 0.004) },
-});
-draw.addFeature({
-  type: 'Polygon',
-  geometry: { type: 'Polygon', coordinates: square(139.765, 35.682, 0.003) },
-});
-draw.addFeature({
-  type: 'LineString',
-  geometry: {
+draw.features.createMany([
+  { type: 'Polygon', geometry: { type: 'Polygon', coordinates: square(139.758, 35.679, 0.004) } },
+  { type: 'Polygon', geometry: { type: 'Polygon', coordinates: square(139.762, 35.679, 0.004) } },
+  { type: 'Polygon', geometry: { type: 'Polygon', coordinates: square(139.765, 35.682, 0.003) } },
+  {
     type: 'LineString',
-    coordinates: [
-      [139.757, 35.6805],
-      [139.763, 35.6815],
-    ],
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.757, 35.6805],
+        [139.763, 35.6815],
+      ],
+    },
   },
-});
+]);
 
 const output = document.getElementById('output') as HTMLPreElement;
 
@@ -79,36 +72,65 @@ function toggle(id: string, get: () => boolean, set: (on: boolean) => void): voi
 }
 toggle(
   'snapping',
-  () => draw.snapping.isEnabled(),
-  (on) => draw.snapping.setEnabled(on),
+  () => draw.options.get().snapping?.enabled !== false,
+  (on) => draw.options.update({ snapping: { enabled: on } }),
 );
 toggle(
   'tracing',
-  () => draw.tracing.isEnabled(),
-  (on) => draw.tracing.setEnabled(on),
+  () => draw.options.get().tracing?.enabled !== false,
+  (on) => draw.options.update({ tracing: { enabled: on } }),
 );
 // Off by default: a vertex drag then moves the same vertex of the neighbors too
 toggle(
   'shared-vertices',
-  () => draw.topology.isSharedVertexDrag(),
-  (on) => draw.topology.setSharedVertexDrag(on),
+  () => draw.options.get().topology?.sharedVertexDrag === true,
+  (on) => draw.options.update({ topology: { sharedVertexDrag: on } }),
 );
+
+/** The IDs of the selected features, in the order they were selected */
+function selectedIds(): string[] {
+  const { type, ids } = draw.selection.get();
+  return type === 'feature' ? [...ids] : [];
+}
+
+/** Shows what an operation did: the features it made, or that it changed nothing */
+function report(operation: string, inputs: number, results: Feature[] | null): void {
+  output.textContent =
+    results === null || results.length === 0
+      ? `${operation}: empty, ${inputs} in, nothing changed`
+      : `${operation}: applied, ${inputs} in, ${results.length} out`;
+}
 
 // Each operation works on the selection (Shift + click selects more than one feature)
 const operations: Record<string, () => void> = {
-  union: () => draw.geometry.union(),
-  subtract: () => draw.geometry.subtract(),
-  buffer: () => draw.geometry.buffer({ distanceMeters: 100 }),
+  union: () => {
+    const ids = selectedIds();
+    const result = draw.features.union(ids);
+    report('union', ids.length, result && [result]);
+  },
+  // The first feature selected loses the area of the others
+  subtract: () => {
+    const [subject, ...others] = selectedIds();
+    if (subject === undefined) return;
+    const result = draw.features.difference(subject, others);
+    report('subtract', others.length + 1, result && [result]);
+  },
+  buffer: () => {
+    const ids = selectedIds();
+    report('buffer', ids.length, draw.features.buffer(ids, { distanceMeters: 100 }));
+  },
   // A polygon and a line crossing it are selected
-  split: () => draw.geometry.split(),
+  split: () => {
+    const selected = draw.selection.features();
+    const line = selected.find((feature) => feature.type === 'LineString');
+    const area = selected.find((feature) => feature.type === 'Polygon');
+    if (!line || !area) return;
+    report('split', 2, draw.features.split(area.id, line.id));
+  },
 };
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-op]')) {
   button.addEventListener('click', () => operations[button.dataset.op ?? '']?.());
 }
-
-draw.on('draw.geometry.applied', ({ operation, status, inputIds, resultIds }) => {
-  output.textContent = `${operation}: ${status}, ${inputIds.length} in, ${resultIds.length} out`;
-});
 
 /** The area of a polygon feature in square meters (0 for the other types) */
 function areaOf(feature: Feature): number {
@@ -116,8 +138,8 @@ function areaOf(feature: Feature): number {
   return polygonArea(feature.geometry as Parameters<typeof polygonArea>[0]);
 }
 
-draw.on('draw.selection.change', () => {
-  const selected = draw.getSelectedFeatures();
+draw.on('selection.changed', () => {
+  const selected = draw.selection.features();
   if (selected.length === 0) return;
   const area = selected.reduce((sum, feature) => sum + areaOf(feature), 0);
   output.textContent = `${selected.length} selected, ${Math.round(area).toLocaleString()} m²`;

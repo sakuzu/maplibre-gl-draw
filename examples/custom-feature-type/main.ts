@@ -2,18 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // custom-feature-type: a feature type the library does not have.
-// A "Route" is a line drawn dashed in a fixed color. One handler registers how it is drawn
-// (with the library's shared line renderer), hit, box-selected, framed and resized.
+// A "Route" is a line drawn dashed in a fixed color. One definition says how it is drawn
+// (with the library's shared line renderer), hit, box-selected, framed and reshaped.
 
 import {
-  type BoundingBox,
-  type BoxSelectionStrategy,
-  type Coordinate,
-  type CustomFeatureHandler,
-  type CustomFeatureRenderer,
-  createMapLibreGLDraw,
+  createDraw,
   type Feature,
-  type HitTestStrategy,
+  type FeatureRenderer,
+  type FeatureTypeDefinition,
+  type Position,
+  type ScreenPoint,
 } from '@sakuzu/maplibre-gl-draw';
 import type { LineString } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
@@ -24,90 +22,79 @@ import '../example.css';
 
 // Drawn in the feature's place in the layer order. The shared renderers are ready for the
 // frame (shader and projection), so the renderer creates no GL object of its own
-const routeRenderer: CustomFeatureRenderer = {
-  name: 'route',
+const routeRenderer: FeatureRenderer = {
   onAdd() {},
-  draw(feature, projectionData, zoom, context) {
-    context.sdfLineRenderer.draw(
-      feature.coordinates as Coordinate[],
-      { width: 3, color: [0.9, 0.3, 0.1, 1], opacity: context.opacity, lineStyle: 'dashed' },
-      { widthUnit: 'pixels', closed: false },
-      zoom,
-      projectionData,
-    );
+  draw(feature, ctx) {
+    ctx.line.draw(verticesOf(feature), {
+      width: 3,
+      color: '#e64d1a',
+      opacity: ctx.opacity,
+      lineStyle: 'dashed',
+    });
   },
   onRemove() {},
 };
 
-/** Distance to a segment, in degrees of longitude at the latitude of p */
-function segmentDistance(p: Coordinate, a: Coordinate, b: Coordinate): number {
-  const k = 1 / Math.cos((p[1] * Math.PI) / 180);
-  const ax = a[0] - p[0];
-  const ay = (a[1] - p[1]) * k;
+function verticesOf(feature: Feature): Position[] {
+  return (feature.geometry as LineString).coordinates;
+}
+
+/** Distance from a point to a segment, in pixels */
+function segmentDistance(p: ScreenPoint, a: ScreenPoint, b: ScreenPoint): number {
   const dx = b[0] - a[0];
-  const dy = (b[1] - a[1]) * k;
+  const dy = b[1] - a[1];
   const len = dx * dx + dy * dy;
-  const t = len === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len));
-  return Math.hypot(ax + t * dx, ay + t * dy);
+  const t =
+    len === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len));
+  return Math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1]);
 }
 
-function routeDistance(feature: Feature, p: Coordinate): number {
-  const c = (feature.geometry as LineString).coordinates as Coordinate[];
-  let best = Number.POSITIVE_INFINITY;
-  for (let i = 1; i < c.length; i++) {
-    best = Math.min(best, segmentDistance(p, c[i - 1], c[i]));
-  }
-  return best;
-}
-
-// A click within the click tolerance of the line hits it
-const routeHitTest: HitTestStrategy = {
-  geometryType: 'Route',
-  distance: routeDistance,
-  test: (feature, coordinate, toleranceLngLat) =>
-    routeDistance(feature, coordinate) <= toleranceLngLat,
-};
-
-// A selection box takes a route when one of its vertices is inside
-const routeBoxSelection: BoxSelectionStrategy = {
-  featureType: 'Route',
-  intersects: (feature, rect) =>
-    ((feature.geometry as LineString).coordinates as Coordinate[]).some(
-      ([x, y]) => x >= rect.minX && x <= rect.maxX && y >= rect.minY && y <= rect.maxY,
-    ),
-};
-
-/** The extent of the vertices */
-function extentOf(feature: Feature): BoundingBox {
-  const c = (feature.geometry as LineString).coordinates as Coordinate[];
-  const xs = c.map((p) => p[0]);
-  const ys = c.map((p) => p[1]);
-  return {
-    minX: Math.min(...xs),
-    minY: Math.min(...ys),
-    maxX: Math.max(...xs),
-    maxY: Math.max(...ys),
-  };
-}
-
-const routeHandler: CustomFeatureHandler = {
+const routeType: FeatureTypeDefinition = {
   type: 'Route',
+  geometry: 'LineString',
   renderer: routeRenderer,
-  hitTest: routeHitTest,
-  boxSelection: routeBoxSelection,
-  // The frame of the selection, with its resize handles
-  getSelectionBoundingBox(feature) {
-    const { minX, minY, maxX, maxY } = extentOf(feature);
+  // A click within the click tolerance of the line hits it
+  hitTest(feature, ctx) {
+    const points = verticesOf(feature).map((v) => ctx.screen.project(v));
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 1; i < points.length; i++) {
+      best = Math.min(best, segmentDistance(ctx.point, points[i - 1], points[i]));
+    }
+    return best <= ctx.tolerancePx
+      ? { kind: 'feature', id: feature.id, featureId: feature.id, distancePx: best }
+      : null;
+  },
+  // A selection box takes a route when one of its vertices is inside
+  boxSelect(feature, box, ctx) {
+    return verticesOf(feature).some((v) => {
+      const [x, y] = ctx.screen.project(v);
+      return x >= box.min[0] && x <= box.max[0] && y >= box.min[1] && y <= box.max[1];
+    });
+  },
+  // The frame of the selection
+  bounds(feature, ctx) {
+    const points = verticesOf(feature).map((v) => ctx.project(v));
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
     return {
-      topLeft: [minX, maxY],
-      topRight: [maxX, maxY],
-      bottomRight: [maxX, minY],
-      bottomLeft: [minX, minY],
-      center: [(minX + maxX) / 2, (minY + maxY) / 2],
+      min: [Math.min(...xs), Math.min(...ys)],
+      max: [Math.max(...xs), Math.max(...ys)],
     };
   },
-  // A resize handle scales the vertices, as for a built-in line
-  resizeStrategy: 'coordinates',
+  // A handle on each vertex, which moves that vertex
+  handles(feature) {
+    return verticesOf(feature).map((position, index) => ({
+      id: String(index),
+      position,
+      kind: 'vertex',
+      cursor: 'move',
+    }));
+  },
+  onHandleDrag(feature, handle, event) {
+    const coordinates = [...verticesOf(feature)];
+    coordinates[Number(handle.id)] = event.lngLat;
+    return { geometry: { type: 'LineString', coordinates } };
+  },
 };
 
 const map = new maplibregl.Map({
@@ -116,10 +103,10 @@ const map = new maplibregl.Map({
   center: [139.72, 35.685],
   zoom: 13,
 });
-const draw = createMapLibreGLDraw(map);
-const unregister = draw.registerFeatureHandler(routeHandler);
+const draw = createDraw(map);
+const unregister = draw.extensions.featureTypes.add(routeType);
 
-draw.addFeature({
+draw.features.create({
   type: 'Route',
   geometry: {
     type: 'LineString',
@@ -137,7 +124,7 @@ document.getElementById('add-route')?.addEventListener('click', () => {
   const bounds = map.getBounds();
   const w = (bounds.getEast() - bounds.getWest()) / 6;
   const h = (bounds.getNorth() - bounds.getSouth()) / 6;
-  const id = draw.addFeature({
+  const route = draw.features.create({
     type: 'Route',
     geometry: {
       type: 'LineString',
@@ -149,10 +136,10 @@ document.getElementById('add-route')?.addEventListener('click', () => {
     },
   });
   // null when the write was refused because the drawing is read-only
-  if (id !== null) draw.select(id);
+  if (route !== null) draw.selection.set('feature', [route.id]);
 });
 
-// Without its handler the type is neither drawn nor hit; the features stay in the data
+// Without its definition the type is neither drawn nor hit; the features stay in the data
 document.getElementById('unregister')?.addEventListener('click', (event) => {
   unregister();
   (event.target as HTMLButtonElement).disabled = true;
