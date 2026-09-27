@@ -1,19 +1,40 @@
 # Contributing Guide
 
 This repository provides `@sakuzu/maplibre-gl-draw` (core). It is licensed
-under AGPL-3.0-only, and SAKAIDA Atsushi holds the copyright alone.
-Commercial licenses for core are sold by Kasika, Inc.
+under AGPL-3.0-only, and SAKAIDA Atsushi holds the copyright. Commercial
+licenses for core are sold by Kasika, Inc.
 
 ## Contribution policy
 
-Holding the copyright of core alone is the condition for being able to issue
-commercial licenses, so pull requests from outside are not accepted at this
-time. Bug reports and feature requests are accepted as issues. Write the
-steps to reproduce, the expected behavior, the actual behavior, and the
-version of maplibre-gl.
+Bug reports and feature requests are accepted as issues. Write the steps to
+reproduce, the expected behavior, the actual behavior, and the version of
+maplibre-gl.
 
-If pull requests are accepted in the future, a contributor license agreement
-(CLA) that includes assignment of copyright will be a precondition.
+Pull requests are accepted under the contributor license agreement in
+[CLA.md](CLA.md). Because core is offered both under the AGPL and under
+commercial licenses, the copyright holder needs the right to license every
+part of it under terms other than the AGPL. The CLA gives that right: you
+keep the copyright in your contribution and grant a perpetual, royalty-free,
+sublicensable license to use it under any terms. It also asks you not to
+assert moral rights against the project and grants a patent license for
+your contribution.
+
+Accepting the CLA takes one step. When you open your first pull request,
+the CLA Assistant bot posts a comment; reply to the pull request with the
+sentence it asks for, and the bot records your acceptance in
+`sakuzu/cla-signatures`. You do this once; later pull requests need no
+further action. A pull request is not merged until every author of its
+commits has accepted.
+
+Open an issue before a large change, so that the design can be agreed on
+first. Code you did not write yourself must be identified in the pull
+request together with its license.
+
+Every pull request runs the gates below on GitHub Actions
+(`.github/workflows/ci.yml`): `typecheck`, `lint`, `test`, `build`,
+`check:package`, `docs:check` and `test:e2e`. Run them locally before you
+push; the end-to-end tests need `npx playwright-core install
+chromium-headless-shell` once.
 
 The rules below are the ones we keep inside this repository.
 

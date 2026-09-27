@@ -222,7 +222,9 @@ mapbox-gl-draw or terra-draw? See [migrating](docs/guides/migrating.md).
 
 ## Contributing
 
-Development is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+Development is described in [CONTRIBUTING.md](CONTRIBUTING.md). Pull
+requests are welcome under the contributor license agreement in
+[CLA.md](CLA.md); you keep the copyright in your contribution.
 
 ## License
 

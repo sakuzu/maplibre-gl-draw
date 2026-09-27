@@ -1,0 +1,57 @@
+# The gates of core, run on every pull request and on pushes to main.
+# They are the same commands as the local gates (see CONTRIBUTING.md).
+# The e2e job starts headless Chromium on software WebGL, so no GPU is needed.
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck, lint, test, package, docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # docs:check compares the changed sources with the base ref
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:package
+      - name: docs:check (e2e runs in its own job)
+        run: npm run docs:check -- --skip-e2e --base origin/${{ github.base_ref || 'main' }}
+
+  e2e:
+    name: e2e (headless Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: playwright-core version
+        id: pw
+        run: echo "version=$(node -p "require('playwright-core/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - run: npx playwright-core install --with-deps chromium-headless-shell
+      - run: npm run test:e2e

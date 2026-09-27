@@ -216,6 +216,8 @@ terra-draw から移る場合は [移行](docs/guides/migrating.ja.md) を参照
 ## 開発に参加する
 
 開発の手順は [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) にあります。
+プルリクエストは [CLA.md](CLA.md) の貢献者ライセンス契約のもとで歓迎
+します。貢献した部分の著作権はあなたに残ります。
 
 ## ライセンス
 
