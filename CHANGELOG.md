@@ -293,7 +293,7 @@ A plugin of 1.0 subscribed to the same names without `draw.`
 | `draw.dataset.add` | `dataset.added` | `{ dataset }` |
 | `draw.dataset.remove` | `dataset.removed` | |
 | `draw.dataset.reorder` | `dataset.reordered` | With `previous` |
-| `draw.map.click` | `map.clicked` | `{ lngLat, point }` |
+| `draw.map.click` | `map.clicked` | `{ lngLat, point, hit }` |
 | `draw.renderslots.change` | `layerStack.changed` | `{ entries }` |
 | `draw.load.error` | `error` | `{ error, source, featureId? }` |
 | (none) | `feature.moved` | Between layers and groups |

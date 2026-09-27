@@ -12,7 +12,7 @@ import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { EngineModeContext } from '../../modes/handler.js';
 import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
 import { MemoryStore } from '../../store/memory.js';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
 import type { Draw } from '../draw.js';
@@ -20,6 +20,7 @@ import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
 import type { Feature } from '../model.js';
+import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { createEventHub } from './events.js';
@@ -430,7 +431,9 @@ describe('the signals of the engine', () => {
       },
       { result: null },
     ]);
-    expect(payloadsOf(signals, 'map.clicked')).toEqual([{ lngLat: [3, 4], point: [5, 6] }]);
+    expect(payloadsOf(signals, 'map.clicked')).toEqual([
+      { lngLat: [3, 4], point: [5, 6], hit: null },
+    ]);
     expect(payloadsOf(signals, 'image.requested')).toEqual([
       { lngLat: [7, 8], zoom: 9, layerId: 'l' },
     ]);
@@ -443,6 +446,28 @@ describe('the signals of the engine', () => {
     expect(failure.error).toBeInstanceOf(DrawError);
     expect(failure.error.code).toBe('unsupported-format');
     expect(failure.error.details).toEqual({ cause });
+  });
+
+  it('map.clicked fires for every click of the select mode, with what it hit or null', () => {
+    const draw = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    const point = draw.features.create(pointInput(1, 1)) as Feature;
+    const input = createSyntheticInput(engine);
+    input.click([1, 1]);
+    input.click([-0.5, -0.5]);
+    const clicks = payloadsOf(signals, 'map.clicked');
+    expect(clicks).toHaveLength(2);
+    expect(clicks[0]).toMatchObject({
+      lngLat: [1, 1],
+      point: [500, 200],
+      hit: { kind: 'feature', id: point.id, featureId: point.id },
+    });
+    expect(clicks[1]).toEqual({ lngLat: [-0.5, -0.5], point: [350, 350], hit: null });
+
+    // Not in a drawing mode
+    draw.setMode('draw_point');
+    input.click([0.5, 0.5]);
+    expect(payloadsOf(signals, 'map.clicked')).toHaveLength(2);
   });
 
   it('drag.started and drag.ended come from the drags of the select mode', () => {

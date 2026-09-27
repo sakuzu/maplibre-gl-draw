@@ -103,7 +103,7 @@ change is made.
 | `drag.started` | `{ kind; featureIds }` |
 | `drag.ended` | `{ kind; featureIds; cancelled }` |
 | `snap.changed` | `{ result: SnapResult \| null }` |
-| `map.clicked` | `{ lngLat; point }` |
+| `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
 | `dataset.clicked` | `{ datasetId; rowIndex; row; lngLat; point }` |
 | `image.requested` | `{ lngLat; zoom; layerId }` |
 
@@ -310,8 +310,10 @@ Use it for a status line such as "snapped to a vertex".
 
 ### map.clicked
 
-A click in the select mode, whether it hit a feature, a row of a dataset or
-nothing. `lngLat` is the position of the pointer before snapping. It does
+Every click on the map in the select mode, whether it hit a feature, a row
+of a dataset or nothing. `lngLat` is the position of the pointer before
+snapping, and `hit` the frontmost thing under it (`kind` is `feature`,
+`dataset` or `companion`), or `null` when the click hit nothing. It does
 not change the selection, and it does not fire in the drawing modes nor for
 a click that an extension consumed. Use it when you need "a click anywhere
 on the map", such as placing a marker of your own.

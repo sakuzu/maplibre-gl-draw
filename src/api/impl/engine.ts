@@ -402,7 +402,9 @@ export function createEngine(
   // The events of the instance follow the Store and the signals of the engine
   const events = createEventHub();
   const stopStoreEvents = connectStoreEvents(events, store);
-  const stopEngineEvents = connectEngineEvents(events, eventEmitter);
+  const stopEngineEvents = connectEngineEvents(events, eventEmitter, {
+    hitAt: (point) => extensions.hitAt(point),
+  });
   teardown.add(() => {
     stopStoreEvents();
     stopEngineEvents();

@@ -503,8 +503,8 @@ drawn feature or a row of a dataset.
 - When a dataset takes the click, the selection of the document is
   cleared, as for a click on empty space
 - The instance event `dataset.clicked` reports the click on a row of
-  any dataset, with the `datasetId`, and `map.clicked` a click on empty
-  space
+  any dataset, with the `datasetId`, and `map.clicked` every click, with
+  what it hit in `hit` (`null` for empty space)
 
 ```ts
 draw.on('dataset.clicked', ({ datasetId, row }) => {

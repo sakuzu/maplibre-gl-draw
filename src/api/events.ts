@@ -11,6 +11,7 @@
 import type { Position } from 'geojson';
 import type { Dataset, DatasetRow } from './datasets.js';
 import type { DrawError } from './errors.js';
+import type { Hit } from './extension/provider.js';
 import type { UpdateSource } from './extension/store.js';
 import type { Feature, FileData, Group, Layer, LoadResult, Metadata, MoveTarget } from './model.js';
 import type {
@@ -142,8 +143,12 @@ export interface DrawEvents {
   'interactionLock.changed': { locked: boolean };
   /** The snapping target changed */
   'snap.changed': { result: SnapResult | null };
-  /** A place without a feature was clicked */
-  'map.clicked': { lngLat: Position; point: ScreenPoint };
+  /**
+   * A click on the map in the select mode, whether it hit something or not. `lngLat` is the
+   * position of the pointer before snapping, and `hit` the frontmost thing under it (a feature,
+   * a row of a dataset, a companion), or `null` when the click hit nothing
+   */
+  'map.clicked': { lngLat: Position; point: ScreenPoint; hit: Hit | null };
   /** A row of a dataset was clicked */
   'dataset.clicked': {
     datasetId: string;

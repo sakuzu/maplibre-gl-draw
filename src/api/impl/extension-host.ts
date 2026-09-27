@@ -26,6 +26,7 @@ import type { CustomLayerInterface } from '../../view/layer/index.js';
 import type { Draw } from '../draw.js';
 import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
+import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature } from '../model.js';
 import type { AdapterDeps } from './adapters.js';
@@ -42,6 +43,7 @@ import {
   createScreenContext,
   createSubscriptions,
   createTerrainAnchors,
+  toHit,
 } from './contexts.js';
 import type { Context } from './engine-context.js';
 import type { ExtensionRegistries, Installer } from './extensions.js';
@@ -96,6 +98,8 @@ export interface ExtensionHost {
   readonly input: ExtensionInputRoute;
   /** The interaction hooks of the plugins, which the select mode asks */
   readonly interactions: PluginInteractions;
+  /** The frontmost hit at a point on the screen, in the shape of the contract */
+  hitAt(point: { x: number; y: number }): Hit | null;
   /** Gives the host the draw instance the contexts hand out */
   attach(draw: Draw): void;
   /** Starts listening to the map (the pointer leaving it) */
@@ -422,6 +426,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     collections,
     input,
     interactions,
+    hitAt: (point) =>
+      toHit(modeServices.hitTestTopmost(point), (feature) =>
+        modeServices.distanceToFeaturePx(feature, point),
+      ),
     attach(draw) {
       attached = draw;
     },

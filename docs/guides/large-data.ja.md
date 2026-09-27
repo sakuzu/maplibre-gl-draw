@@ -497,8 +497,9 @@ places.on('hovered', ({ row }) => {
 - データセットがクリックを受けると、クリックが何も無い場所だった
   ときと同じく、文書の選択は解除されます
 - インスタンスのイベント `dataset.clicked` は、どのデータセットの
-  行へのクリックも `datasetId` を付けて知らせます。何も無い場所の
-  クリックは `map.clicked` です
+  行へのクリックも `datasetId` を付けて知らせます。`map.clicked` は
+  すべてのクリックを知らせ、当たったものを `hit` に持ちます (何も無い
+  場所なら `null`)
 
 ```ts
 draw.on('dataset.clicked', ({ datasetId, row }) => {

@@ -22,6 +22,7 @@ import type {
 } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { DocumentChange, DrawEventListener, DrawEvents } from '../events.js';
+import type { Hit } from '../extension/provider.js';
 import type { Feature, MoveTarget } from '../model.js';
 import type { SnapResult } from '../state.js';
 import { toDatasetRow } from './rows.js';
@@ -357,7 +358,14 @@ export function toDocumentChange(changes: StoreChange): DocumentChange | null {
  * @returns The function that stops
  * @internal
  */
-export function connectEngineEvents(hub: EventHub, emitter: EventEmitter): () => void {
+export function connectEngineEvents(
+  hub: EventHub,
+  emitter: EventEmitter,
+  engine: {
+    /** The frontmost hit at a point on the screen, for `map.clicked` */
+    hitAt(point: { x: number; y: number }): Hit | null;
+  } = { hitAt: () => null },
+): () => void {
   const stops: Array<() => void> = [];
   const listen = <K extends keyof EngineSignals>(
     event: K,
@@ -371,7 +379,11 @@ export function connectEngineEvents(hub: EventHub, emitter: EventEmitter): () =>
     hub.emit('snap.changed', { result: result.target ? toSnapResult(result) : null });
   });
   listen('map.click', ({ lngLat, point }) => {
-    hub.emit('map.clicked', { lngLat: [lngLat[0], lngLat[1]], point: [point.x, point.y] });
+    hub.emit('map.clicked', {
+      lngLat: [lngLat[0], lngLat[1]],
+      point: [point.x, point.y],
+      hit: engine.hitAt(point),
+    });
   });
   listen('dataset.click', (payload) => {
     if (payload.datasetId === null || payload.feature === null || payload.row === null) return;
