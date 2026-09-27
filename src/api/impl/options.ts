@@ -140,6 +140,15 @@ const POINT = record({
   strokeOpacity: opacity,
   iconId: string,
 });
+const MARK = record({
+  shape: oneOf('circle', 'square', 'triangle', 'star'),
+  size: nonNegative,
+  fillColor: color,
+  fillOpacity: opacity,
+  strokeColor: color,
+  strokeWidth: nonNegative,
+  strokeOpacity: opacity,
+});
 
 const SELECTION_STYLE_CHECKS = {
   boundingBox: record({ stroke: STROKE, margin: nonNegative }),
@@ -199,6 +208,8 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
     kinds: record({ vertex: bool, edge: bool, intersection: bool, guide: bool }),
     datasets: bool,
     guideStepDegrees: positive,
+    indicator: record({ vertex: MARK, edge: MARK, intersection: MARK, guide: MARK }),
+    guideLine: STROKE,
   }),
   tracing: record({ enabled: bool }),
   topology: record({ sharedVertexDrag: bool }),
@@ -610,6 +621,15 @@ export function createOptions(
       if (snapping.guideStepDegrees !== undefined) {
         snapService.setGuideStep(snapping.guideStepDegrees);
       }
+      const look = context.snapIndicator;
+      for (const [kind, mark] of Object.entries(snapping.indicator ?? {})) {
+        toPoint(look.styles[kind as keyof typeof look.styles], mark as Record_ | undefined);
+        redraw = true;
+      }
+      if (snapping.guideLine) {
+        toStroke(look.guideLine, snapping.guideLine as Record_);
+        redraw = true;
+      }
     }
     if (patch.tracing?.enabled !== undefined) context.trace.enabled = patch.tracing.enabled;
     if (patch.topology?.sharedVertexDrag !== undefined) {
@@ -661,6 +681,7 @@ export function createOptions(
         clickTolerance: context.options.clickTolerance,
         dragThreshold: context.options.dragThreshold,
         snapping: {
+          ...current.snapping,
           enabled: snap.enabled,
           tolerancePx: snap.tolerancePx,
           disableKey: snap.disableKey,
@@ -689,6 +710,13 @@ export function createOptions(
     applyCreation(): void {
       const scale = current.rendering?.renderScale;
       if (scale !== undefined) apply({ rendering: { renderScale: scale } });
+      // The look of the snapping indicator is not an option of the engine
+      const { indicator, guideLine } = current.snapping ?? {};
+      if (indicator || guideLine) {
+        apply({
+          snapping: { ...(indicator && { indicator }), ...(guideLine && { guideLine }) },
+        });
+      }
     },
   };
 }

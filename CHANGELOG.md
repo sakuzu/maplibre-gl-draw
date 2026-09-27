@@ -790,8 +790,9 @@ releases.
 | `MESSAGES_EN` | (removed) | Pass only your words |
 | `createGuideSnapProvider` | (removed) | Guides are built in |
 | `GuideSnapProviderDeps`, `GuideSnapProviderOptions` | (removed) | |
-| `DEFAULT_SNAP_GUIDE_LINE_STYLE` | (removed) | |
-| `DEFAULT_SNAP_INDICATOR_STYLES`, `SnapIndicatorStyles` | (removed) | |
+| `DEFAULT_SNAP_GUIDE_LINE_STYLE` | `snapping.guideLine` | An option |
+| `DEFAULT_SNAP_INDICATOR_STYLES` | `snapping.indicator` | An option |
+| `SnapIndicatorStyles` | `snapping.indicator` | |
 | `buildTraceGraph`, `findTracePath` | (removed) | Tracing is built in |
 | `TraceGraph`, `TraceGraphEdge` | (removed) | |
 | `TraceGraphEndpoint`, `TraceGraphNode` | (removed) | |

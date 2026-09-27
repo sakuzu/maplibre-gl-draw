@@ -229,6 +229,31 @@ describe('options.update', () => {
     expect(options.get().snapping?.tolerancePx).toBe(25);
   });
 
+  it('changes the look of the snapping indicator and the guide line, at creation too', () => {
+    engine.destroy();
+    setup({ snapping: { indicator: { edge: { size: 30 } } } });
+    const look = engine.context.snapIndicator;
+    expect(look.styles.edge.size).toBe(30);
+    expect(look.styles.edge.shape).toBe('square');
+
+    options.update({
+      snapping: {
+        indicator: { vertex: { strokeColor: 'red', shape: 'star' } },
+        guideLine: { width: 3, lineStyle: 'solid' },
+      },
+    });
+    expect(look.styles.vertex).toMatchObject({ strokeColor: toColor('red'), shape: 'star' });
+    expect(look.styles.vertex.size).toBe(14);
+    expect(look.styles.edge.size).toBe(30);
+    expect(look.guideLine).toMatchObject({ width: 3, lineStyle: 'solid', opacity: 1 });
+    expect(options.get().snapping?.guideLine).toEqual({ width: 3, lineStyle: 'solid' });
+
+    expectInvalid(() => options.update({ snapping: { indicator: { vertex: { size: -1 } } } }));
+    expectInvalid(() =>
+      options.update({ snapping: { guideLine: { color: 'nope' } } } as DrawOptions),
+    );
+  });
+
   it('changes the tracing, the shared vertices and the scale with the zoom', () => {
     options.update({ tracing: { enabled: false }, topology: { sharedVertexDrag: true } });
     options.update({ scaleWithZoom: false });

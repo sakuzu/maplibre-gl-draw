@@ -48,6 +48,8 @@ const merged = draw.features.union([parcelA, parcelB]);
 | `kinds` | すべて `true` | 種類ごとの有効と無効 |
 | `datasets` | `true` | データセットの行にも吸着する |
 | `guideStepDegrees` | `45` | 真北を基準にしたガイドの刻みの角度 |
+| `indicator` | `#00C7BE` の印 | 吸着した点の印 (種類ごと) |
+| `guideLine` | 1 px の破線 | 吸着したガイドに沿う線 |
 
 `disableKey` には `'alt'`、`'shift'`、`'ctrl'`、`'meta'`、
 `'none'` のどれかを指定します。キーを押している間は何にも
@@ -61,6 +63,12 @@ const merged = draw.features.union([parcelA, parcelB]);
 draw.options.update({ snapping: { enabled: false } });
 draw.options.update({ snapping: { kinds: { guide: false } } });
 draw.options.update({ snapping: { datasets: false, guideStepDegrees: 15 } });
+draw.options.update({
+  snapping: {
+    indicator: { vertex: { strokeColor: '#ff5722', size: 18 } },
+    guideLine: { color: '#ff5722', width: 2 },
+  },
+});
 draw.options.get().snapping; // 現在の設定
 ```
 

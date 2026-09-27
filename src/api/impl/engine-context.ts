@@ -41,6 +41,7 @@ import {
   createSnapTargetsRegistry,
   type SnapTargetsRegistry,
 } from '../../snapping/custom-targets.js';
+import { createSnapIndicatorLook, type SnapIndicatorLook } from '../../snapping/indicator.js';
 import { createSnapService } from '../../snapping/service.js';
 import type { ResolvedSnapOptions, SnapOptions, SnapService } from '../../snapping/types.js';
 import {
@@ -176,6 +177,8 @@ export interface Context {
   snapOptions: ResolvedSnapOptions;
   /** The snapping service (the InputRouter uses it to replace the coordinates) */
   snapService: SnapService;
+  /** The look of the snapping indicator, which the options change in place */
+  snapIndicator: SnapIndicatorLook;
   /** The automatic name generation utility */
   autoNameGenerator: AutoNameGenerator;
   /** The box selection strategy registry */
@@ -367,6 +370,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     pixelRatioSource: createPixelRatioSource(options.pixelRatio, () => map.getPixelRatio()),
     snapOptions,
     snapService,
+    snapIndicator: createSnapIndicatorLook(),
     autoNameGenerator,
     boxSelectionRegistry,
     selectionScope,

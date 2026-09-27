@@ -48,6 +48,8 @@ It is on by default:
 | `kinds` | all `true` | on or off per kind |
 | `datasets` | `true` | snap to the rows of datasets too |
 | `guideStepDegrees` | `45` | step angle of the north-based guides |
+| `indicator` | `#00C7BE` marks | the mark at the snapped point, per kind |
+| `guideLine` | 1 px, dashed | the line along a guide snapped to |
 
 `disableKey` is `'alt'`, `'shift'`, `'ctrl'`, `'meta'` or `'none'`. While
 the key is held nothing snaps, so a single point can be placed at its
@@ -61,6 +63,12 @@ The same settings change while the instance runs, through
 draw.options.update({ snapping: { enabled: false } });
 draw.options.update({ snapping: { kinds: { guide: false } } });
 draw.options.update({ snapping: { datasets: false, guideStepDegrees: 15 } });
+draw.options.update({
+  snapping: {
+    indicator: { vertex: { strokeColor: '#ff5722', size: 18 } },
+    guideLine: { color: '#ff5722', width: 2 },
+  },
+});
 draw.options.get().snapping; // the current settings
 ```
 

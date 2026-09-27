@@ -25,6 +25,98 @@ export interface SnappingOptions {
   datasets?: boolean;
   /** The angle between the guides from north, in degrees; 45 when it is left out */
   guideStepDegrees?: number;
+  /**
+   * The mark drawn at the snapped point, per kind of target; the keys given replace those of
+   * the default. By default every mark is `#00C7BE`: `vertex` an outlined circle of 14 px,
+   * `edge` an outlined square of 12 px, `intersection` a filled circle of 8 px and `guide` an
+   * outlined circle of 10 px. A kind of a snap provider's own takes the mark of `vertex`
+   */
+  indicator?: {
+    /** The mark of a vertex */
+    vertex?: {
+      /** The shape */
+      shape?: 'circle' | 'square' | 'triangle' | 'star';
+      /** The size in CSS pixels */
+      size?: number;
+      /** The fill color (a CSS color) */
+      fillColor?: string;
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity?: number;
+      /** The color of the outline (a CSS color) */
+      strokeColor?: string;
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth?: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity?: number;
+    };
+    /** The mark of a point on an edge */
+    edge?: {
+      /** The shape */
+      shape?: 'circle' | 'square' | 'triangle' | 'star';
+      /** The size in CSS pixels */
+      size?: number;
+      /** The fill color (a CSS color) */
+      fillColor?: string;
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity?: number;
+      /** The color of the outline (a CSS color) */
+      strokeColor?: string;
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth?: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity?: number;
+    };
+    /** The mark of an intersection of edges */
+    intersection?: {
+      /** The shape */
+      shape?: 'circle' | 'square' | 'triangle' | 'star';
+      /** The size in CSS pixels */
+      size?: number;
+      /** The fill color (a CSS color) */
+      fillColor?: string;
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity?: number;
+      /** The color of the outline (a CSS color) */
+      strokeColor?: string;
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth?: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity?: number;
+    };
+    /** The mark of a point on a guide */
+    guide?: {
+      /** The shape */
+      shape?: 'circle' | 'square' | 'triangle' | 'star';
+      /** The size in CSS pixels */
+      size?: number;
+      /** The fill color (a CSS color) */
+      fillColor?: string;
+      /** The opacity of the fill, from 0 to 1 */
+      fillOpacity?: number;
+      /** The color of the outline (a CSS color) */
+      strokeColor?: string;
+      /** The width of the outline in CSS pixels (0 for none) */
+      strokeWidth?: number;
+      /** The opacity of the outline, from 0 to 1 */
+      strokeOpacity?: number;
+    };
+  };
+  /**
+   * The line drawn along a guide while the pointer snaps to it; the keys given replace those
+   * of the default, a 1 px `#00C7BE` line dashed `[4, 4]`
+   */
+  guideLine?: {
+    /** The width in CSS pixels */
+    width?: number;
+    /** The color (a CSS color) */
+    color?: string;
+    /** The opacity, from 0 to 1 */
+    opacity?: number;
+    /** The dash pattern */
+    lineStyle?: LineStyle;
+    /** A dash pattern in CSS pixels, `[dash, gap]`, instead of that of `lineStyle` */
+    dashArray?: number[];
+  };
 }
 
 /** The options of tracing the boundary of an existing feature while drawing. */
