@@ -1,38 +1,53 @@
 {
   "description": "Which document covers which sources. `npm run docs:check` warns when a source changed since the base ref and the documents that cover it did not. The English document is the key; its Japanese version is checked against it. Keep the map in step when files move.",
-  "ignore": ["**/*.test.ts", "src/test-utils.ts"],
+  "ignore": [
+    "**/*.test.ts",
+    "src/test-utils.ts"
+  ],
   "docs": {
     "CHANGELOG.md": [
       "src/index.ts",
       "src/geometry/index.ts",
       "src/table/index.ts",
-      "src/api/api.ts",
-      "src/shared/types/**",
+      "src/webgl/index.ts",
+      "src/api/*.ts",
+      "src/api/extension/**",
       "package.json"
     ],
-    "README.md": ["src/index.ts"],
+    "README.md": [
+      "src/index.ts",
+      "src/geometry/index.ts",
+      "src/table/index.ts",
+      "src/webgl/index.ts"
+    ],
     "docs/getting-started.md": [
-      "src/maplibre-gl-draw.ts",
-      "src/api/event-api.ts",
-      "src/api/import-export/index.ts",
+      "src/api/draw.ts",
+      "src/api/events.ts",
+      "src/api/document.ts",
       "examples/basic/**"
     ],
     "docs/guides/drawing.md": [
       "src/modes/**",
       "src/operations/**",
-      "src/api/selection-api.ts",
-      "src/api/input-api.ts",
-      "src/api/feature-api.ts",
+      "src/api/state.ts",
+      "src/api/features.ts",
+      "src/api/selection.ts",
+      "src/api/impl/selection.ts",
       "src/view/ui/**"
     ],
     "docs/guides/layers.md": [
-      "src/api/layer-api.ts",
-      "src/api/group-api.ts",
+      "src/api/layers.ts",
+      "src/api/groups.ts",
+      "src/api/impl/layers.ts",
+      "src/api/impl/groups.ts",
       "src/store/writable-layer.ts",
       "src/view/layer/**"
     ],
     "docs/guides/save-load.md": [
-      "src/api/import-export/**",
+      "src/api/document.ts",
+      "src/api/impl/document.ts",
+      "src/api/impl/import-export/**",
+      "src/api/extension/store.ts",
       "src/store/store.ts",
       "src/store/types.ts",
       "src/store/memory.ts",
@@ -44,62 +59,102 @@
       "src/shared/types/style.ts",
       "src/shared/config/**",
       "src/messages.ts",
+      "src/api/options.ts",
       "examples/style-rules/**"
     ],
     "docs/guides/snapping-geometry.md": [
       "src/snapping/**",
       "src/geometry/**",
-      "src/api/geometry/**",
-      "src/api/geometry-operations.ts",
-      "src/api/snapping-api.ts",
-      "src/api/topology-api.ts",
-      "src/api/tracing-api.ts",
+      "src/api/impl/geometry/**",
       "examples/snapping-and-geometry/**"
     ],
-    "docs/guides/terrain.md": ["src/view/terrain/**", "examples/terrain/**"],
+    "docs/guides/terrain.md": [
+      "src/view/terrain/**",
+      "examples/terrain/**"
+    ],
     "docs/guides/read-only.md": [
       "src/store/lock.ts",
       "src/store/local-visibility.ts",
       "src/store/memory/ui-state.ts",
+      "src/api/hidden.ts",
       "examples/read-only/**"
     ],
     "docs/guides/plugins.md": [
-      "src/plugins/**",
-      "src/api/extension-api.ts",
+      "src/api/extensions.ts",
+      "src/api/extension/plugin.ts",
+      "src/api/extension/context.ts",
+      "src/api/extension/mode.ts",
+      "src/api/impl/extension-host.ts",
+      "src/api/impl/input.ts",
       "examples/plugin/**"
     ],
     "docs/guides/custom-types.md": [
       "src/extension/**",
-      "src/api/extension-api.ts",
+      "src/api/extension/feature-type.ts",
+      "src/api/extension/render.ts",
+      "src/api/extension/provider.ts",
+      "src/api/impl/adapters.ts",
+      "src/api/impl/render-context.ts",
+      "src/webgl/**",
       "examples/custom-feature-type/**"
     ],
     "docs/guides/large-data.md": [
       "src/dataset/**",
       "src/table/**",
-      "src/api/dataset-api.ts",
+      "src/api/datasets.ts",
+      "src/api/impl/datasets.ts",
       "examples/large-data/**",
       "examples/table-worker/**"
     ],
     "docs/guides/performance.md": [
       "src/shared/utils/pixel-ratio.ts",
-      "src/api/instance-api.ts",
+      "src/api/impl/drawing.ts",
       "src/view/cache/**"
     ],
-    "docs/guides/frameworks.md": ["src/maplibre-gl-draw.ts"],
-    "docs/guides/migrating.md": ["src/api/api.ts"],
-    "docs/reference/README.md": ["src/index.ts", "src/geometry/index.ts", "src/table/index.ts"],
-    "docs/reference/events.md": ["src/api/event-api.ts", "src/shared/types/events.ts"],
+    "docs/guides/frameworks.md": [
+      "src/api/draw.ts"
+    ],
+    "docs/guides/migrating.md": [
+      "src/api/draw.ts"
+    ],
+    "docs/reference/README.md": [
+      "src/index.ts",
+      "src/geometry/index.ts",
+      "src/table/index.ts",
+      "src/webgl/index.ts"
+    ],
+    "docs/reference/events.md": [
+      "src/api/events.ts",
+      "src/api/impl/events.ts"
+    ],
     "docs/reference/data-format.md": [
-      "src/api/import-export/native-format.ts",
-      "src/api/import-export/native-validation.ts",
-      "src/api/import-export/geojson-export.ts",
-      "src/api/import-export/geojson-import.ts",
+      "src/api/impl/import-export/native-format.ts",
+      "src/api/impl/import-export/native-validation.ts",
+      "src/api/impl/import-export/native-upgrade.ts",
+      "src/api/impl/import-export/geojson-export.ts",
+      "src/api/impl/import-export/geojson-import.ts",
+      "src/api/model.ts",
+      "src/shared/properties.ts",
       "src/shared/types/model.ts"
     ],
-    "docs/internals/rendering.md": ["src/view/renderers/**", "src/view/shaders/**", "src/view/coordinator.ts"],
-    "docs/internals/hit-testing.md": ["src/dispatcher/hit-test/**"],
-    "docs/internals/coordinate-precision.md": ["src/shared/math/**"],
-    "docs/internals/maplibre-coupling.md": ["src/view/terrain/**", "src/view/layer/custom-layer.ts"],
-    "docs/internals/test-design.md": ["src/e2e/**", "vitest.config.ts"]
+    "docs/internals/rendering.md": [
+      "src/view/renderers/**",
+      "src/view/shaders/**",
+      "src/view/coordinator.ts"
+    ],
+    "docs/internals/hit-testing.md": [
+      "src/dispatcher/hit-test/**"
+    ],
+    "docs/internals/coordinate-precision.md": [
+      "src/shared/math/**"
+    ],
+    "docs/internals/maplibre-coupling.md": [
+      "src/view/terrain/**",
+      "src/view/layer/custom-layer.ts"
+    ],
+    "docs/internals/test-design.md": [
+      "src/e2e/**",
+      "vitest.config.ts"
+    ]
   }
 }
