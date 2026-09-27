@@ -50,6 +50,7 @@ export function createDrawOnEngine(
     setActiveLayerId: context.setActiveLayerId,
     featureStyle: context.featureStyle,
     eventEmitter: context.eventEmitter,
+    spatialIndex: context.spatialIndex,
   };
   const features = createFeatures(deps);
   const groups = createGroups(deps);

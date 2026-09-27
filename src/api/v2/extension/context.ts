@@ -13,7 +13,7 @@ import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature, FeatureInput, FeatureType } from '../model.js';
+import type { Feature, FeatureInput, FeatureType, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { Mode, SnapResult } from '../state.js';
 import type { Hit } from './provider.js';
@@ -171,8 +171,18 @@ export interface ModeContext extends ExtensionContext {
   commitFeature(input: FeatureInput): Feature | null;
   /** Shows the shape being drawn before it is created. */
   readonly preview: {
-    /** Shows this shape as the one being drawn */
-    set(feature: FeatureInput): void;
+    /**
+     * Shows this shape as the one being drawn.
+     *
+     * @param options - `confirmedVertices` is how many vertices from the start are placed:
+     *   the line up to them is drawn solid and the rest, up to the pointer, dashed (every
+     *   vertex when it is left out); `highlightVertex` is the index of a vertex drawn
+     *   highlighted, such as the first vertex of an area the next click would close
+     */
+    set(
+      feature: FeatureInput,
+      options?: { confirmedVertices?: number; highlightVertex?: number },
+    ): void;
     /** Stops showing it */
     clear(): void;
   };
@@ -186,12 +196,22 @@ export interface ModeContext extends ExtensionContext {
   /** The look of the selected features. */
   readonly selectionStyle: Required<SelectionStyleOptions>;
   /**
+   * The layer a new feature goes into: the active layer when it can be written (it exists,
+   * is visible, is not locked and not hidden on this client), otherwise the first layer that
+   * can.
+   *
+   * @returns The layer, or `null` when no layer can be written
+   */
+  writableLayer(): Layer | null;
+  /**
    * The rows of the datasets that a shape can trace along, within an extent. Empty when
    * snapping to the datasets is off.
    *
    * @param bbox - The extent, as `[west, south, east, north]` in degrees
+   * @returns The rows, each with the ID of its dataset and its index there; the dataset finds
+   *   a row by the ID of a snapping target with `draw.datasets.get(datasetId).findRow(id)`
    */
-  listTraceRows(bbox: BBox): DatasetRow[];
+  listTraceRows(bbox: BBox): { datasetId: string; rowIndex: number; row: DatasetRow }[];
 }
 
 /** What a hit test of a custom feature type or a companion receives. */

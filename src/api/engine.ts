@@ -353,7 +353,13 @@ export function createEngine(
         clickTolerancePx: tolerancePx,
       }),
     listTraceRows: (bbox) =>
-      snapService.isDatasetsEnabled() ? displaySnap.queryFeatures(bbox) : [],
+      snapService.isDatasetsEnabled()
+        ? displaySnap.queryRows(bbox).map(({ datasetId, feature }) => ({
+            datasetId,
+            rowIndex: datasets.get(datasetId)?.findRow(feature.id) ?? -1,
+            feature,
+          }))
+        : [],
   });
   extensions.collections.modes.addMany([
     { name: 'draw_point', factory: drawPointMode },

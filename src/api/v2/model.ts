@@ -10,6 +10,7 @@
  */
 
 import type {
+  BBox,
   Feature as GeoJSONFeature,
   FeatureCollection as GeoJSONFeatureCollection,
   Geometry,
@@ -342,6 +343,11 @@ export interface FeatureFilter {
   visible?: boolean;
   /** Only the locked (true) or unlocked (false) features */
   locked?: boolean;
+  /**
+   * Only the features whose extent meets this extent, as `[west, south, east, north]` in
+   * degrees
+   */
+  bbox?: BBox;
 }
 
 /** What `layers.create` takes. */

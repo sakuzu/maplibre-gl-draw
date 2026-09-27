@@ -11,7 +11,7 @@ import type { EventEmitter } from '../../../shared/utils/event-emitter.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
 import { isFeatureLocked, isGroupLocked } from '../../../store/lock.js';
 import type { Store } from '../../../store/store.js';
-import type { Feature, Group, Layer, SelectionType } from '../../../store/types.js';
+import type { BoundingBox, Feature, Group, Layer, SelectionType } from '../../../store/types.js';
 import { DrawError } from '../errors.js';
 
 /**
@@ -35,6 +35,11 @@ export interface ResourceDeps {
   featureStyle: FeatureStyleConfig;
   /** The emitter of the events of the first version of the API, which the geometry steps use */
   eventEmitter: EventEmitter;
+  /**
+   * The spatial index of the features, for a filter by extent; the extent of each feature is
+   * measured when it is left out
+   */
+  spatialIndex?: { findInBounds(bounds: BoundingBox): string[] };
 }
 
 // ============================================================================

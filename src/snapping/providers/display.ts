@@ -88,6 +88,8 @@ export interface DisplaySnapProviders {
    * of edges (it is wired to ModeContext.getDatasetTraceFeatures).
    */
   queryFeatures(bbox: BoundingBox): Feature[];
+  /** The same features as `queryFeatures`, each with the ID of its dataset */
+  queryRows(bbox: BoundingBox): Array<{ datasetId: string; feature: Feature }>;
 }
 
 /**
@@ -390,6 +392,8 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
     queryFeatures(bbox: BoundingBox): Feature[] {
       return nearbyFeatures(bbox).map((entry) => entry.feature);
     },
+
+    queryRows: (bbox) => nearbyFeatures(bbox),
 
     getFeature(datasetId: string, featureId: string): Feature | null {
       const dataset = deps.datasets.get(datasetId);

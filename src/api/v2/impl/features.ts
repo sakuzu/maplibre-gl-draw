@@ -10,6 +10,7 @@ import type { AreaCoordinates, MultiPolygonCoordinates } from '../../../geometry
 import type { FeatureStyleConfig } from '../../../shared/config/feature-style.js';
 import type { Color } from '../../../shared/types/style.js';
 import type { GeometryOperationName } from '../../../shared/utils/event-emitter.js';
+import { getBoundingBox } from '../../../shared/utils/feature-bbox.js';
 import { listEveryFeatureInOrder } from '../../../store/ordering.js';
 import type { Store } from '../../../store/store.js';
 import type {
@@ -71,7 +72,7 @@ const INPUT_KEYS = [
   'locked',
 ] as const;
 const PATCH_KEYS = ['geometry', 'properties', 'style', 'visible', 'locked'] as const;
-const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'locked'] as const;
+const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'locked', 'bbox'] as const;
 
 /**
  * Creates `draw.features`
@@ -99,9 +100,44 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
   };
 
-  const list = (filter?: FeatureFilter): Feature[] => {
+  /**
+   * The checks of a filter: the entries compared as they are, and the IDs within the extent
+   * when the filter has one
+   */
+  const filterOf = (filter: FeatureFilter | undefined) => {
     const entries = filterEntries(filter, FILTER_KEYS);
-    return listEveryFeatureInOrder(store).filter((feature) => matches(feature, entries));
+    const bbox = entries.find(([key]) => key === 'bbox')?.[1];
+    if (bbox === undefined) return { entries, inside: null };
+    if (
+      !Array.isArray(bbox) ||
+      bbox.length !== 4 ||
+      bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value))
+    ) {
+      throw invalidInput('bbox must be [west, south, east, north] in degrees');
+    }
+    const [minX, minY, maxX, maxY] = bbox as number[];
+    const bounds = { minX, minY, maxX, maxY };
+    const inside = new Set(
+      deps.spatialIndex
+        ? deps.spatialIndex.findInBounds(bounds)
+        : store
+            .listFeatures()
+            .filter((feature) => {
+              const box = getBoundingBox(feature);
+              return box.minX <= maxX && box.maxX >= minX && box.minY <= maxY && box.maxY >= minY;
+            })
+            .map((feature) => feature.id),
+    );
+    return { entries: entries.filter(([key]) => key !== 'bbox'), inside };
+  };
+  const keep = (
+    feature: StoredFeature,
+    { entries, inside }: ReturnType<typeof filterOf>,
+  ): boolean => (inside === null || inside.has(feature.id)) && matches(feature, entries);
+
+  const list = (filter?: FeatureFilter): Feature[] => {
+    const checks = filterOf(filter);
+    return listEveryFeatureInOrder(store).filter((feature) => keep(feature, checks));
   };
 
   return {
@@ -112,9 +148,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
     list,
     count(filter) {
-      const entries = filterEntries(filter, FILTER_KEYS);
-      if (entries.length === 0) return store.listFeatures().length;
-      return store.listFeatures().filter((feature) => matches(feature, entries)).length;
+      const checks = filterOf(filter);
+      if (checks.entries.length === 0 && checks.inside === null) {
+        return store.listFeatures().length;
+      }
+      return store.listFeatures().filter((feature) => keep(feature, checks)).length;
     },
     has: (id) => store.getFeature(id) !== undefined,
 

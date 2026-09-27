@@ -79,7 +79,9 @@ export interface ExtensionHostDeps {
   /** A frontmost hit tester with another tolerance, in pixels */
   hitTestTopmostWith(tolerancePx: number): HitTestTopmost;
   /** The rows of the datasets to trace along (empty when snapping to them is off) */
-  listTraceRows(bbox: BoundingBox): StoredFeature[];
+  listTraceRows(
+    bbox: BoundingBox,
+  ): Array<{ datasetId: string; rowIndex: number; feature: StoredFeature }>;
 }
 
 /**

@@ -46,7 +46,7 @@ import type {
 } from '../extension/context.js';
 import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature, FeatureInput } from '../model.js';
+import type { Feature, FeatureInput, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { SnapResult } from '../state.js';
 import { mergeOptions } from './options.js';
@@ -392,7 +392,7 @@ export interface ModeServices extends ContextServices {
   /** Snaps a point on the screen as the current mode would, and reports the result */
   snapPoint(point: { x: number; y: number }): StoredSnapResult;
   /** The rows of the datasets to trace along within an extent */
-  listTraceRows(bbox: BBox): StoredFeature[];
+  listTraceRows(bbox: BBox): Array<{ datasetId: string; rowIndex: number; feature: StoredFeature }>;
   /** The writable layer, or an empty string when no layer can be written */
   getWritableLayerId(): string;
   /** Generates the ID of a new feature */
@@ -534,11 +534,18 @@ export function createModeContext(
       });
     },
     preview: {
-      set(feature) {
+      set(feature, options) {
         if (feature.id !== undefined) pendingId = feature.id;
         pendingId ??= services.generateId();
         const layerId = feature.layerId ?? services.getWritableLayerId();
-        store.setTentative(toTentative(feature, layerId, pendingId));
+        const state = toTentative(feature, layerId, pendingId);
+        if (options?.confirmedVertices !== undefined) {
+          state.confirmedCount = options.confirmedVertices;
+        }
+        if (options?.highlightVertex !== undefined) {
+          state.highlightedVertexIndex = options.highlightVertex;
+        }
+        store.setTentative(state);
       },
       clear: clearPreview,
     },
@@ -557,7 +564,19 @@ export function createModeContext(
         services.getDraw().options.get().selectionStyle,
       );
     },
-    listTraceRows: (bbox) => services.listTraceRows(bbox).map(toDatasetRow),
+    listTraceRows: (bbox) =>
+      services
+        .listTraceRows(bbox)
+        .filter((entry) => entry.rowIndex >= 0)
+        .map(({ datasetId, rowIndex, feature }) => ({
+          datasetId,
+          rowIndex,
+          row: toDatasetRow(feature),
+        })),
+    writableLayer() {
+      const id = services.getWritableLayerId();
+      return id === '' ? null : ((store.getLayer(id) as Layer | undefined) ?? null);
+    },
   };
 
   return {

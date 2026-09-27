@@ -534,3 +534,108 @@ describe('the built-in modes written to the contract', () => {
     expect(engine.modeManager.getMode()).toBe('select');
   });
 });
+
+describe('what a drawing mode reads and shows', () => {
+  let ctx: ModeContext;
+
+  beforeEach(() => {
+    draw.extensions.modes.add('probe', (context) => {
+      ctx = context;
+      return {};
+    });
+    draw.setMode('probe');
+  });
+
+  it('shows the placed vertices and a highlighted one in the preview', () => {
+    ctx.preview.set(
+      {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+            [2, 2],
+          ],
+        },
+      },
+      { confirmedVertices: 2, highlightVertex: 0 },
+    );
+    const tentative = draw.getStore() as unknown as {
+      getTentative(): { confirmedCount?: number; highlightedVertexIndex?: number } | null;
+    };
+    expect(tentative.getTentative()).toEqual(
+      expect.objectContaining({ confirmedCount: 2, highlightedVertexIndex: 0 }),
+    );
+    expect(ctx.drawing.isDrawing()).toBe(true);
+    ctx.preview.clear();
+    expect(ctx.drawing.isDrawing()).toBe(false);
+  });
+
+  it('gives the writable layer, or null when none can be written', () => {
+    const layer = draw.layers.list()[0];
+    expect(ctx.writableLayer()?.id).toBe(layer.id);
+    draw.layers.update(layer.id, { locked: true });
+    expect(ctx.writableLayer()).toBeNull();
+  });
+
+  it('gives the rows of the datasets to trace along, with their dataset and index', () => {
+    draw.datasets.add({
+      id: 'roads',
+      rows: [
+        {
+          type: 'Feature',
+          id: 'r1',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+          properties: {},
+        },
+        {
+          type: 'Feature',
+          id: 'r2',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [50, 50],
+              [51, 51],
+            ],
+          },
+          properties: {},
+        },
+      ],
+    });
+    const rows = ctx.listTraceRows([-0.5, -0.5, 0.5, 0.5]);
+    expect(rows).toEqual([
+      { datasetId: 'roads', rowIndex: 0, row: expect.objectContaining({ id: 'r1' }) },
+    ]);
+    expect(draw.datasets.get('roads')?.findRow('r1')).toBe(0);
+  });
+});
+
+describe('features.list and count by extent', () => {
+  it('keep the features whose extent meets the extent', () => {
+    draw.features.createMany([
+      { type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] }, id: 'in' },
+      { type: 'Point', geometry: { type: 'Point', coordinates: [9, 9] }, id: 'out' },
+      {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-5, 0],
+            [5, 0],
+          ],
+        },
+        id: 'across',
+      },
+    ]);
+    expect(draw.features.list({ bbox: [0, -1, 2, 2] }).map((f) => f.id)).toEqual(['in', 'across']);
+    expect(draw.features.count({ bbox: [0, -1, 2, 2], type: 'Point' })).toBe(1);
+    expect(errorOf(() => draw.features.list({ bbox: [0, 0] as never })).code).toBe('invalid-input');
+  });
+});
