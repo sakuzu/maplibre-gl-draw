@@ -338,8 +338,11 @@ const CLIENT_KEYS = ['selection', 'editing', 'mode'] as const satisfies Readonly
  * @internal
  */
 export function toDocumentChange(changes: StoreChange): DocumentChange | null {
-  if (!DOCUMENT_KEYS.some((key) => changes[key] !== undefined)) return null;
+  const reset = changes.reset === true;
+  if (!reset && !DOCUMENT_KEYS.some((key) => changes[key] !== undefined)) return null;
   const change: DocumentChange = {};
+  // A replacement of the whole document is a change of the document, even with no category
+  if (reset) change.reset = true;
   for (const key of [...DOCUMENT_KEYS, ...CLIENT_KEYS]) {
     if (changes[key] === undefined) continue;
     (change as Record<string, unknown>)[key] = changes[key];

@@ -145,6 +145,7 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.tentative) target.tentative = changes.tentative;
   if (changes.mode) target.mode = changes.mode;
   if (changes.uiStateChanged) target.uiStateChanged = true;
+  if (changes.reset === true) target.reset = true;
   if (changes.metadata) target.metadata = changes.metadata;
 
   // files

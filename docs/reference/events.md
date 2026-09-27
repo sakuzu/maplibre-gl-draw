@@ -172,6 +172,7 @@ present only when the transaction changed it.
 | `selection` | The new selection and the one before |
 | `editing` | The IDs of the features whose editing started and ended |
 | `mode` | The new mode and the one before |
+| `reset` | `true` when a Store replaced the whole document at once |
 
 A listener that rebuilds a view on any change (a feature list, a legend)
 listens to `document.changed`, so that a load of 1,000 features costs one

@@ -7,12 +7,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryStore } from '../../store/memory.js';
+import { MemoryContractStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
+import type { DocumentChange } from '../events.js';
 import type { ModeContext, PluginContext } from '../extension/context.js';
 import type { FeatureTypeDefinition } from '../extension/feature-type.js';
 import type { ModeFactory } from '../extension/mode.js';
@@ -617,8 +618,11 @@ describe('the providers and the cursor of a mode', () => {
 });
 
 describe('a Store that replaces its whole document', () => {
-  /** A Store of the library that can announce a replacement of its whole document */
-  class ReplacingStore extends MemoryStore {
+  /**
+   * A Store of an application, which the instance wraps, that can announce a replacement of
+   * its whole document
+   */
+  class ReplacingStore extends MemoryContractStore {
     readonly #listeners = new Set<(changes: StoreChange) => void>();
     override subscribe(listener: (changes: StoreChange) => void): () => void {
       const stop = super.subscribe(listener);
@@ -647,6 +651,27 @@ describe('a Store that replaces its whole document', () => {
     other.destroy();
     store.announce({ source: 'remote', reset: true });
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries reset to the listeners of document.changed', () => {
+    const store = new ReplacingStore();
+    const other = createDraw(createMapStub().map, { store: store as unknown as Store });
+    const changes: DocumentChange[] = [];
+    other.on('document.changed', (change) => changes.push(change));
+    const layer = other.layers.list()[0];
+    store.announce({
+      source: 'remote',
+      reset: true,
+      layers: { updated: [{ id: layer.id, layer, previous: layer }] },
+    });
+    store.announce({ source: 'remote', reset: true });
+    expect(changes).toHaveLength(2);
+    expect(changes.every((change) => change.reset === true && change.source === 'remote')).toBe(
+      true,
+    );
+    other.layers.update(layer.id, { name: 'renamed' });
+    expect(changes[2].reset).toBeUndefined();
+    other.destroy();
   });
 });
 

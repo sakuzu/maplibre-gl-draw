@@ -716,6 +716,11 @@ export interface StoreChange {
     created?: FileData[];
     deleted?: FileData[];
   };
+  /**
+   * True when the notification replaces the whole document at once (a Store that takes a
+   * document from elsewhere sets it); it survives the folding of a transaction
+   */
+  reset?: boolean;
 }
 
 /**
