@@ -6,3 +6,5 @@ dist/
 docs/reference/api/
 site-dist/
 scripts/terms.local.json
+docs/.vitepress/cache/
+docs/.vitepress/dist/
