@@ -52,6 +52,8 @@ import type { Context, Options } from './context.js';
 import { createContext } from './context.js';
 import type { ImportExportAPI } from './import-export/index.js';
 import { createImportExportAPI } from './import-export/index.js';
+import type { EventHub } from './v2/impl/events.js';
+import { connectEngineEvents, connectStoreEvents, createEventHub } from './v2/impl/events.js';
 
 /**
  * The releases of one draw instance, run in the reverse order of the acquisitions
@@ -108,6 +110,18 @@ export interface Engine {
   /** The datasets */
   readonly datasets: DatasetManager;
   /**
+   * The emitter of `DrawEvents`, the events of the instance that the application and the
+   * extensions subscribe to
+   */
+  readonly events: EventHub;
+  /** The switches of the input and the rendering that change while the instance runs */
+  readonly runtime: {
+    /** Changes how far the mouse moves before a press becomes a drag, in pixels */
+    setDragThreshold(px: number): void;
+    /** Turns the time slicing of the triangulation and of the drape on or off */
+    setTimeSlicing(enabled: boolean): void;
+  };
+  /**
    * The public object of the first version of the API, built on this engine. The plugins
    * reach the instance through it until they have a context of their own
    */
@@ -152,6 +166,9 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
   // 2. Create the EventBridge
   const eventBridge = new EventBridgeImpl(store, eventEmitter);
 
+  const triangulationScheduler = new TriangulationScheduler();
+  triangulationScheduler.setSlicing(renderingConfig.timeSlicing !== false);
+
   // 2.5 Create the manager of the datasets.
   // Culls with the same expanded viewport as the rendering loop, and calls the
   // provider on a change of the displayed range (moveend). It never touches the
@@ -181,11 +198,11 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     // Rendering that draws complete frames (printing, thumbnails) turns off time
     // slicing and triangulates on the spot: setting the threshold to infinity
     // puts every polygon on the synchronous path
-    triangulationScheduler:
-      renderingConfig.timeSlicing === false
-        ? new TriangulationScheduler({ vertexThreshold: Number.POSITIVE_INFINITY })
-        : new TriangulationScheduler(),
-    timeSlicing: renderingConfig.timeSlicing,
+    triangulationScheduler,
+    // Read when a dataset is added, so a change at runtime applies to the datasets added after
+    get timeSlicing() {
+      return renderingConfig.timeSlicing;
+    },
     // Announce the datasets that come and go and their reordering (draw.dataset.add,
     // draw.dataset.remove and draw.dataset.reorder)
     onDatasetAdd: (datasetId) => eventEmitter.emit('dataset.add', { datasetId }),
@@ -224,7 +241,10 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
       return { x: projected.x, y: projected.y };
     },
     getZoom: () => map.getZoom(),
-    clickTolerancePx: context.options.clickTolerance,
+    // Read at each hit, so a change of the option applies at once
+    get clickTolerancePx() {
+      return context.options.clickTolerance;
+    },
     companions: featureCompanions,
   });
 
@@ -322,7 +342,10 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     pluginManager,
     generateFeatureId: context.generateFeatureId,
     getCurrentLayerId: context.getWritableLayerId,
-    scaleWithZoom: context.options.scaleWithZoom,
+    // Read when a feature is committed, so a change of the option applies at once
+    get scaleWithZoom() {
+      return context.options.scaleWithZoom;
+    },
     setMode: (mode: Mode) => modeManager.setMode(mode),
     // The key that temporarily disables shared vertices is shared with the
     // disableKey of the snapping
@@ -419,6 +442,15 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
 
   // 7. Set up
   eventBridge.start();
+  // The events of the instance follow the Store and the signals of the engine
+  const events = createEventHub();
+  const stopStoreEvents = connectStoreEvents(events, store);
+  const stopEngineEvents = connectEngineEvents(events, eventEmitter);
+  teardown.add(() => {
+    stopStoreEvents();
+    stopEngineEvents();
+    events.clear();
+  });
   renderCoordinator.start();
 
   // Keep the render slots on the map. The slots are added as soon as the style
@@ -471,6 +503,14 @@ export function createEngine(map: MapLibreMap, options: Options = {}): Engine {
     pluginManager,
     importExport: importExportAPI,
     datasets,
+    events,
+    runtime: {
+      setDragThreshold: (px) => inputNormalizer.setDragThreshold(px),
+      setTimeSlicing(enabled) {
+        renderingConfig.timeSlicing = enabled;
+        triangulationScheduler.setSlicing(enabled);
+      },
+    },
     facade: drawApi,
     isDestroyed: () => teardown.done,
     destroy: () => teardown.run(),

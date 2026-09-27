@@ -29,7 +29,7 @@ import { normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { foldLegacyImageStyle } from './legacy-image-style.js';
 import { setOwnProperty } from './own-property.js';
-import { isHexColor, sanitizeFeatureStyle } from './style-validation.js';
+import { isCssColor, sanitizeFeatureStyle } from './style-validation.js';
 import type { ConvertedFeatureResult, GeoJSONImportOptions } from './types.js';
 
 /** A GeoJSON feature that the import left out, with the reason */
@@ -383,7 +383,7 @@ function simplestyleToFeatureStyle(
 
   const copyString = (key: string, target: 'strokeColor' | 'fillColor' | 'pointColor'): void => {
     const value = properties[key];
-    if (isHexColor(value)) {
+    if (isCssColor(value)) {
       style[target] = value as string;
       found = true;
     }

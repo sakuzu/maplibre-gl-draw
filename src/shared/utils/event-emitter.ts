@@ -194,6 +194,22 @@ export interface EventMap {
    * its image. The error is the one that was thrown.
    */
   'load.error': LoadErrorPayload;
+  /**
+   * A drag of the select mode started: the features it moves, and what was grabbed (the
+   * features themselves, a vertex or a midpoint, or a handle of the selection)
+   *
+   * A drag of an auxiliary handle is not announced (its provider writes the changes itself).
+   */
+  'drag.started': { kind: 'feature' | 'vertex' | 'handle'; featureIds: string[] };
+  /**
+   * The drag announced by `drag.started` ended, with the same IDs; `cancelled` is true when it
+   * was aborted instead of committed
+   */
+  'drag.ended': {
+    kind: 'feature' | 'vertex' | 'handle';
+    featureIds: string[];
+    cancelled: boolean;
+  };
 }
 
 /**

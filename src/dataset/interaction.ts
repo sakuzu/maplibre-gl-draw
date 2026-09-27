@@ -72,7 +72,11 @@ export function createDisplayInteractions(deps: DisplayInteractionsDeps): Displa
     return [event.lngLat.lng, event.lngLat.lat];
   }
 
-  function clearHover(lngLat: Coordinate): void {
+  function toPoint(event: MouseNormalizedEvent): { x: number; y: number } {
+    return { x: event.point.x, y: event.point.y };
+  }
+
+  function clearHover(lngLat: Coordinate, point: { x: number; y: number }): void {
     if (hoveredDatasetId === null) return;
 
     const previous = manager.getInternal(hoveredDatasetId);
@@ -81,7 +85,7 @@ export function createDisplayInteractions(deps: DisplayInteractionsDeps): Displa
     hoveredFeatureId = null;
 
     // Report with feature: null that it left the target
-    previous?.emit('hover', { datasetId, feature: null, row: null, lngLat });
+    previous?.emit('hover', { datasetId, feature: null, row: null, lngLat, point });
   }
 
   return {
@@ -105,31 +109,39 @@ export function createDisplayInteractions(deps: DisplayInteractionsDeps): Displa
           feature: top.feature,
           row,
           lngLat: coordinate,
+          point: toPoint(event),
         });
         notifyClick?.({
           datasetId: top.dataset.id,
           feature: top.feature,
           row,
           lngLat: coordinate,
+          point: toPoint(event),
         });
         return;
       }
       // Nothing was there, or a non-interactive dataset merely blocked it: it is reported as
       // a no-hit (the source of "click on empty space to deselect" on the host side)
-      notifyClick?.({ datasetId: null, feature: null, row: null, lngLat: coordinate });
+      notifyClick?.({
+        datasetId: null,
+        feature: null,
+        row: null,
+        lngLat: coordinate,
+        point: toPoint(event),
+      });
     },
 
     handleMouseMove(event: MouseNormalizedEvent): void {
       const coordinate = toCoordinate(event);
 
       if (!manager.hasAny()) {
-        clearHover(coordinate);
+        clearHover(coordinate, toPoint(event));
         return;
       }
 
       const top = hitTestTopmost(event);
       if (top?.kind !== 'dataset' || !top.feature) {
-        clearHover(coordinate);
+        clearHover(coordinate, toPoint(event));
         return;
       }
 
@@ -138,7 +150,7 @@ export function createDisplayInteractions(deps: DisplayInteractionsDeps): Displa
         return;
       }
 
-      clearHover(coordinate);
+      clearHover(coordinate, toPoint(event));
       hoveredDatasetId = top.dataset.id;
       hoveredFeatureId = top.feature.id;
       manager.getInternal(top.dataset.id)?.emit('hover', {
@@ -146,6 +158,7 @@ export function createDisplayInteractions(deps: DisplayInteractionsDeps): Displa
         feature: top.feature,
         row: top.row ?? null,
         lngLat: coordinate,
+        point: toPoint(event),
       });
     },
 

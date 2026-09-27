@@ -378,6 +378,14 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
       enabled = value;
     },
 
+    setTolerance(px: number): void {
+      options.tolerancePx = px;
+    },
+
+    setDisableKey(key): void {
+      options.disableKey = key;
+    },
+
     isEnabled(): boolean {
       return enabled;
     },

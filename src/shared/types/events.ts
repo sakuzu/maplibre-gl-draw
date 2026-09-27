@@ -47,6 +47,8 @@ export interface DatasetClickEventPayload {
   row: number | null;
   /** Map coordinate [lng, lat] */
   lngLat: Coordinate;
+  /** The point on the screen, in CSS pixels */
+  point?: { x: number; y: number };
 }
 
 /**

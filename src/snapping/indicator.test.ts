@@ -24,6 +24,8 @@ function fakeService(result: SnapResult | null): SnapService {
     resolve: () => ({ lngLat: { lng: 0, lat: 0 } }),
     register: () => () => {},
     setEnabled: () => {},
+    setTolerance: () => {},
+    setDisableKey: () => {},
     isEnabled: () => true,
     setKindEnabled: () => {},
     isKindEnabled: () => true,
