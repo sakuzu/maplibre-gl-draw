@@ -1,68 +1,96 @@
 # Saving and loading
 
-A drawing is kept in a store inside the instance. This guide covers
-exporting it as GeoJSON or in the library's own format, loading it back,
-what a load leaves out, images, keeping the drawing in a store of your own,
-and what a change notification carries.
+A drawing is a document: its features, layers, groups, embedded files and
+metadata. This guide covers writing the document out as GeoJSON or in the
+library's own format, loading it back, what a load leaves out, images,
+saving after each change, keeping the document in a store of your own,
+and what a change carries.
 
 ## Minimal code
 
 ```ts
-// Save: the whole drawing as a string
-const { data } = draw.export('native');
-localStorage.setItem('drawing', data);
+// Save: the whole document in the library's format
+localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
 
-// Restore: a native document replaces what is on the map
+// Restore: a document of the library replaces what is on the map
 const saved = localStorage.getItem('drawing');
-if (saved) await draw.load(JSON.parse(saved));
+if (saved) await draw.document.load(saved);
 ```
 
 ## Two formats
 
-| Format | `export(...)` gives | `load(...)` does |
+| Format | Written by | `load` by default |
 | --- | --- | --- |
-| `native` | layers, order, groups, features, files, metadata | replaces all |
-| `geojson` | one `FeatureCollection` of the features | adds features |
+| native | `document.toJSON()` | replaces the document |
+| GeoJSON | `document.toGeoJSON()` | adds the features |
 
-Use `native` to save and restore a drawing as it was, with its layers,
-groups, order, styles and images. Use `geojson` to exchange features with
-other tools. Both formats are specified in
+The native format holds the whole document: the layers and their order,
+the groups, the features, the files and the metadata. GeoJSON holds one
+`FeatureCollection` of the features.
+
+Use the native format to save and restore a drawing as it was, with its
+layers, groups, order, styles and images. Use GeoJSON to exchange features
+with other tools. Both formats are specified in
 [the data format reference](../reference/data-format.md).
 
-A feature in the store is the library's own record
-(`{ id, type, coordinates, layerId, properties, style, locked, visible }`),
-not a GeoJSON Feature. `export` and `load` convert at the boundary, and
-`draw.getAllFeatures()` returns the records themselves.
+A feature holds GeoJSON: `geometry` is a GeoJSON geometry and
+`properties` are the GeoJSON properties. The values the library keeps on
+a feature (its reference zoom, the radius of a circle, the size of an
+image) are keys of `properties` that start with `maplibre-gl-draw:`;
+every other key is an attribute of yours. Both formats write the
+`properties` as they are.
 
-## Exporting
+## Writing the document out
+
+`toJSON()` returns the document as an object (`DrawDocument`), and
+`toGeoJSON()` a GeoJSON `FeatureCollection`. Turn them into text with
+`JSON.stringify`, and name the file yourself:
 
 ```ts
-const result = draw.export('geojson');
-// result.data: the JSON text
-// result.mimeType: 'application/geo+json'
-// result.fileName: a name built from the metadata title
+const geojson = draw.document.toGeoJSON();
+const title = draw.metadata.get().title || 'drawing';
+const blob = new Blob([JSON.stringify(geojson)], {
+  type: 'application/geo+json',
+});
 
-// Only some features, or only some layers
-draw.export('geojson', { featureIds: ['a', 'b'] });
-draw.export('native', { layerIds: [layerId], fileName: 'site.json' });
+const link = document.createElement('a');
+link.href = URL.createObjectURL(blob);
+link.download = `${title}.geojson`;
+link.click();
+URL.revokeObjectURL(link.href);
 ```
 
-- `data` is a string; wrap it in a `Blob` to offer a download
+- The native document carries the version of its format, `3.0.0`
 - The GeoJSON follows RFC 7946: rings follow the right-hand rule,
-  positions are rounded to 7 decimal places, and the FeatureCollection carries a
-  `bbox`
-- Hidden features are exported too, with `visible: false` kept in their
-  properties, so a round trip keeps them hidden
-- `name` and `description` are plain properties; the rest of the library's
-  fields are properties with the `maplibre-gl-draw:` prefix
+  positions are rounded to 7 decimal places, and the `FeatureCollection`
+  carries a `bbox`
+- Hidden features are written too, with their `visible: false` kept in
+  their properties, so a round trip keeps them hidden
+- The fields of a feature that GeoJSON has no place for (its layer, group,
+  style, lock, and a type such as `Circle`) are written as properties with
+  the `maplibre-gl-draw:` prefix, so loading the file back restores them
 - An image is embedded as a data URL, so the file stands on its own
-- `draw.getSuggestedFileName()` gives the native file name without
-  exporting. Set the title with `draw.setMetadata({ title })`
+- Set the title and the description with `draw.metadata.update({ title })`
+
+A reader that wants only your attributes leaves out the keys of the
+library:
+
+```ts
+import { isDrawProperty } from '@sakuzu/maplibre-gl-draw';
+
+const rows = draw.document.toGeoJSON().features.map((f) =>
+  Object.fromEntries(
+    Object.entries(f.properties ?? {}).filter(([key]) => !isDrawProperty(key)),
+  ),
+);
+```
 
 ## Loading
 
-`draw.load(source, options?)` takes a `File` or a parsed object and returns
-a promise of a `LoadResult`.
+`draw.document.load(source, options?)` takes a `File` or a `Blob`, a JSON
+string, a document of the library, or GeoJSON (a `FeatureCollection`, a
+`Feature` or a geometry). It returns a promise of a `LoadResult`, or of
+`null` when the document is read-only.
 
 ```ts
 const input = document.querySelector<HTMLInputElement>('#file');
@@ -70,38 +98,51 @@ input?.addEventListener('change', async () => {
   const file = input.files?.[0];
   if (!file) return;
   try {
-    const result = await draw.load(file);
-    console.log(result.format, result.featureIds.length);
+    const result = await draw.document.load(file);
+    if (!result) return; // read-only
+    console.log(result.format, result.featureIds.length, result.replaced);
     for (const { index, reason } of result.skipped ?? []) {
       console.warn(`feature ${index} left out: ${reason}`);
     }
   } catch (error) {
-    console.error('not loaded', error); // the drawing is unchanged
+    console.error('not loaded', error); // the document is unchanged
   }
 });
 ```
 
-- A `File` ending in `.json` or `.geojson` (or with a JSON MIME type) is
-  parsed; an image file becomes an Image feature (below)
-- An object is detected as the native format or as a GeoJSON
-  `FeatureCollection`. Anything else throws
-- The data is validated before the store is changed, so a load that throws
+- The format is read from the content: a document of the library, GeoJSON
+  or an image file (below). Anything else rejects with a `DrawError` with
+  the code `unsupported-format`
+- `mode` chooses between replacing the document (`replace`, the default
+  for a document of the library) and adding to it (`merge`, the default
+  for GeoJSON). A document of the library can only replace; GeoJSON with
+  `replace` takes the place of the features and groups and keeps the
+  layers
+- The data is checked before the document changes, so a load that rejects
   leaves the drawing as it was
-- A native document is rejected as a whole when something in it is
-  malformed, refers to something missing, or has another major `version`
+- A document of the library is rejected as a whole, with the code
+  `invalid-input`, when something in it is malformed, refers to something
+  missing, or has a major version the library cannot read. A document of
+  an earlier major version is upgraded as it loads
 - A GeoJSON feature whose geometry cannot be used (missing, unsupported,
   a number that is not finite, a line with one position, a ring that is
   not closed and so on) is left out and listed in `skipped` with its index
   and reason; the rest are loaded
-- A style value of the wrong type or form (a color that is not `#rgb` or
-  `#rrggbb`, an opacity outside 0 to 1) is dropped, and the feature is kept
-- A GeoJSON feature whose ID is already taken gets a new ID, so an export
-  can be loaded back into the same drawing
-- GeoJSON features go into their `maplibre-gl-draw:layerId` layer when it
-  exists, otherwise into the active layer
+- A style value of the wrong type or form (a color that is not a CSS
+  color, an opacity outside 0 to 1) is dropped, and the feature is kept
+- A GeoJSON feature whose ID is already taken gets a new ID, so a file
+  written by `toGeoJSON()` can be loaded back into the same drawing
+- GeoJSON features go into the layer named by their
+  `maplibre-gl-draw:layerId` when it exists, otherwise into the layer of
+  `options.layerId`, otherwise into the active layer
 - Multi geometries are kept as Multi features; `flattenMulti: true` splits
   them into single features. A `GeometryCollection` is folded into at most
   one Multi feature per geometry type
+
+Each load that reads something emits `document.loaded` with the same
+result, and each feature it adds emits `feature.created`. To react once
+per load, listen to `document.changed` or `document.loaded`
+([Events](../reference/events.md)).
 
 ## Files dropped on the map
 
@@ -109,7 +150,7 @@ The library does not take files dropped on the map: which files are
 accepted, where they go and whether a native file may replace the drawing
 are decisions of the application. To load dropped files, listen to the
 drop on the map's container, turn the position into a coordinate with
-`map.unproject` and pass each file to `draw.load`:
+`map.unproject` and pass each file to `draw.document.load`:
 
 ```ts
 const container = map.getContainer();
@@ -127,10 +168,10 @@ container.addEventListener('drop', async (event) => {
   for (const file of event.dataTransfer?.files ?? []) {
     try {
       // The place is used by an image; a data file carries its own positions
-      await draw.load(file, {
+      await draw.document.load(file, {
         coordinate: [lng, lat],
         zoom: map.getZoom(),
-        layerId: draw.getActiveLayer(),
+        layerId: draw.layers.getActive()?.id,
       });
     } catch (error) {
       console.error(`${file.name} was not loaded`, error);
@@ -139,11 +180,11 @@ container.addEventListener('drop', async (event) => {
 });
 ```
 
-The application decides the rest in the handler. It can refuse drops
+The application decides the rest in the listener. It can refuse drops
 while `draw.isReadOnly()` or `draw.isInteractionLocked()` is true, ask
 before a native file replaces the drawing, or read a file itself and hand
 the features to a dataset instead
-([Large data](large-data.md)).
+([Showing large data](large-data.md)).
 
 ## Images
 
@@ -154,136 +195,163 @@ declare const imageFile: File;
 -->
 
 ```ts
-await draw.load(imageFile, {
+await draw.document.load(imageFile, {
   coordinate: [139.767, 35.681],
   zoom: map.getZoom(),
-  layerId: draw.getActiveLayer(),
+  layerId: draw.layers.getActive()?.id,
 });
 ```
 
 The image is converted to WebP, scaled down when a side exceeds 4096 px,
-stored once in the document's files and referenced by the new Image
-feature through `imageFileId`. Embedded images in a loaded document are
-accepted only as `data:image/(png|jpeg|webp|gif);base64,` data URLs that
-match their declared type. See [Drawing and editing](drawing.md#images)
-for the `draw_image` mode.
+stored once among the files of the document and referenced by the new
+`Image` feature through its property `maplibre-gl-draw:imageFileId`.
+Embedded images in a loaded file are accepted only as
+`data:image/(png|jpeg|webp|gif);base64,` data URLs that match their
+declared type. See [Drawing and editing](drawing.md) for the `draw_image`
+mode, which asks the application for a file with `image.requested`.
 
 ## Saving as you go
 
-`draw.features.change` fires once per change with everything that changed
-in it, so it is the place to save after each edit:
+`document.changed` arrives once per transaction with everything that
+changed in it, so it is the place to save after each edit. It also
+carries the changes of the selection and the mode, which the document
+does not keep; save only when the document changed:
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('draw.features.change', () => {
+draw.on('document.changed', (change) => {
+  const documentChanged =
+    change.features ??
+    change.layers ??
+    change.groups ??
+    change.layerReorder ??
+    change.groupReorder ??
+    change.metadata;
+  if (!documentChanged) return;
   clearTimeout(timer);
   timer = setTimeout(() => {
-    localStorage.setItem('drawing', draw.export('native').data);
+    localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
   }, 500);
 });
 ```
 
-A drag writes intermediate states while the pointer moves, and each of them
-is a change, so debounce the save as above. Changes to layers and groups
-have their own events (`draw.layer.update` and so on;
-see [Events](../reference/events.md)).
+A drag writes intermediate states while the pointer moves, and each of
+them is a change, so debounce the save as above, or wait for the update
+without `isIntermediate` that ends the drag.
+
+To make several writes of your own one change, wrap them in
+`draw.transact`. They then arrive as one `document.changed`, with the
+source you name:
+
+```ts
+draw.transact(
+  () => {
+    draw.features.update(featureId, { visible: false });
+    draw.layers.update(layerId, { opacity: 0.5 });
+  },
+  { source: 'toolbar' },
+);
+```
 
 ## A store of your own
 
-To keep the drawing in a database or a server, subscribing to the changes
-of the built-in store is often enough:
+To keep the drawing in a database or on a server, following the changes
+of the instance is often enough:
 
 <!-- docs-check:
-declare function sendToServer(changes: unknown): void;
+declare function sendToServer(change: unknown): void;
 -->
 
 ```ts
-draw.getStore().subscribe((changes) => {
-  // changes.features, changes.layers, changes.groups, changes.source ...
-  sendToServer(changes);
+draw.on('document.changed', (change) => {
+  // change.features, change.layers, change.groups, change.source ...
+  sendToServer(change);
 });
 ```
 
+`draw.getStore().subscribe(listener)` delivers the same `DocumentChange`,
+and reads the document without going through the collections.
+
 When the document itself has to live elsewhere, give the instance a store
-with `Options.store`:
+with the option `store`, at creation:
 
 <!-- docs-check:
-declare function createDocumentStore(): DocumentStore;
+declare function createServerStore(): Store;
 -->
 
 ```ts
-import {
-  createMapLibreGLDraw,
-  type DocumentStore,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Store } from '@sakuzu/maplibre-gl-draw';
 
-// Your implementation of the DocumentStore contract
-const store: DocumentStore = createDocumentStore();
-const draw = createMapLibreGLDraw(map, { store });
+// Your implementation of the Store contract
+const store: Store = createServerStore();
+const draw = createDraw(map, { store });
 ```
 
-The state is split along one line:
+The store holds the document: the features, the layers and their
+stacking order, the groups, the files and the metadata. The instance
+reads and writes the document through its methods, subscribes to it and
+groups writes with its `transact`. The state of this client (the
+selection, the mode, read-only, the interaction lock and the hidden
+items) stays in the instance around the store, which never sees
+read-only: the instance refuses those writes before they reach it.
 
-| Type | What it is |
-| --- | --- |
-| `DocumentStore` | the document: features, layers, groups, files, metadata |
-| `Store` | a document with the local state of core, behind one gate |
-| `StoreView` | reads, `subscribe` and `transact`, from `draw.getStore()` |
-| `MemoryStore` | the in-memory `Store`, the default |
+A store of your own keeps a few rules:
 
-A `DocumentStore` of your own holds only the document; core keeps the
-selection, the mode, read-only and the rest of the local state around it.
-Its contract (every feature listed in exactly one container, no change to
-an object after the notification that carries it, `transact` grouping one
-notification, and so on) is written on
-[`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md).
-A change that your store applies from outside the instance is drawn and
-notified like a local one, and is never stopped by read-only. Give its
-notification the source `'remote'`, so that core keeps the vertex
-selection consistent with it and subscribers can tell it from a local
-edit.
+- Every feature is listed in exactly one place: in the `featureIds` of its
+  group when it has a `groupId`, otherwise in the `items` of its layer
+- An object it has returned or notified is never changed afterwards; a
+  change stores a new object
+- A write whose argument cannot apply (an ID that does not exist, a layer
+  or group that names nothing, an ID taken twice) changes nothing
+- `transact` groups the changes of a function into one notification of
+  `subscribe`
+- A change it applies from outside the instance is notified like a local
+  one, with the source `'remote'`. The instance draws it, and a deleted
+  item leaves the selection
 
-Writes go through the instance (`addFeature`, `updateLayer` and so on);
-`draw.getStore()` has no write methods. To make several writes one change,
-wrap them in `draw.getStore().transact(() => { ... })`.
+The document it holds is the one `document.toJSON()` writes; its shape is
+in [the data format reference](../reference/data-format.md).
 
-## What a change notification carries
+## What a change carries
 
-Core keeps no history of changes. What a subscriber of
-`draw.getStore().subscribe` needs to follow the document, or to restore
-an earlier state of it, is in every notification:
+Core keeps no history of changes. What a listener needs to follow the
+document, or to put an earlier state of it back, is in every
+`DocumentChange`:
 
 - every update carries the `previous` object, and deletions carry the
   deleted object
-- one transaction is one notification, so a geometry operation, a group
-  or a multi-feature drag comes as one step
-- `source` tells where it came from: `'local'` for edits, `'batch'` for a
-  GeoJSON load, `'silent'` for a native load and selection resets, and
-  any value you pass to `transact`
+- one transaction is one change, so a geometry operation, a group or a
+  drag of several features comes as one step
+- `source` tells where it came from: `'local'` for edits and calls of the
+  API, `'batch'` for a GeoJSON load, `'silent'` for a load of a document
+  of the library, `'remote'` for a store of your own, and any value you
+  pass to `transact`
 - an update in the middle of a drag carries `isIntermediate: true`; the
-  update without it that follows commits the drag
+  update without it that follows ends the drag
 
-Layers, groups, and the group membership of a deleted feature come in the
-same notification as the features. A change you apply from a subscriber
-can carry a source of your own (any string passed to `transact`), so that
-the subscriber can leave it out by that source.
+Layers, groups, and the group of a deleted feature come in the same change
+as the features. A change you apply from a listener can carry a source of
+your own, so that the listener can leave it out by that source.
 
 ## Examples
 
-- [save-load](../../examples/save-load/) exports both formats,
+- [save-load](../../examples/save-load/) writes out both formats,
   loads a GeoJSON file and reports `skipped`, loads files dropped on the
   map, and keeps the drawing in `localStorage`
 
 ## Reference
 
+- [`DocumentResource`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
+  and [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
 - [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md),
   [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md) and
   [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)
-- [`ExportOptions`](../api/maplibre-gl-draw/interfaces/ExportOptions.md)
-  and [`ExportResult`](../api/maplibre-gl-draw/interfaces/ExportResult.md)
-- [`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md),
+- [`isDrawProperty`](../api/maplibre-gl-draw/functions/isDrawProperty.md)
+  and
+  [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
+- [`Store`](../api/maplibre-gl-draw/interfaces/Store.md),
   [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md) and
-  [`StateChanges`](../api/maplibre-gl-draw/interfaces/StateChanges.md)
+  [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
 - [Data format](../reference/data-format.md) and
   [Events](../reference/events.md)

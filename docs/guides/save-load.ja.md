@@ -1,70 +1,94 @@
 # 保存と読み込み
 
-描いたものは、インスタンスの中のストアに保たれています。この手引きでは、
-GeoJSON かライブラリー独自の形式での書き出し、読み込み、読み込みで除かれる
-もの、画像、自前のストアでの保持と、変更の通知に入っているものを
-説明します。
+描いたものは 1 つの文書です。文書は地物、レイヤー、グループ、埋め込んだ
+ファイル、メタデータでできています。この手引きでは、文書を GeoJSON か
+ライブラリー独自の形式で書き出すこと、読み込み、読み込みで除かれる
+もの、画像、変更のたびの保存、自前のストアでの保持、変更に入っている
+ものを説明します。
 
 ## 最小のコード
 
 ```ts
-// 保存: 描画全体を文字列で
-const { data } = draw.export('native');
-localStorage.setItem('drawing', data);
+// 保存: 文書全体をライブラリーの形式で
+localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
 
-// 復元: 独自形式の文書は地図の上のものを置き換える
+// 復元: ライブラリーの文書は地図の上のものを置き換える
 const saved = localStorage.getItem('drawing');
-if (saved) await draw.load(JSON.parse(saved));
+if (saved) await draw.document.load(saved);
 ```
 
 ## 2 つの形式
 
-| 形式 | `export(...)` で得られるもの | `load(...)` の動作 |
+| 形式 | 書き出すメソッド | `load` の既定の動作 |
 | --- | --- | --- |
-| `native` | レイヤー、順序、グループ、地物、ファイル、メタデータ | すべて置き換えます |
-| `geojson` | 地物の `FeatureCollection` 1 つ | 地物を追加します |
+| 独自の形式 | `document.toJSON()` | 文書を置き換えます |
+| GeoJSON | `document.toGeoJSON()` | 地物を追加します |
+
+独自の形式は文書の全体を持ちます。レイヤーとその順序、グループ、地物、
+ファイル、メタデータです。GeoJSON は地物の `FeatureCollection` を 1 つ
+持ちます。
 
 描いたものを、レイヤー、グループ、並び、スタイル、画像ごとそのまま保存
-して復元するには `native` を使います。ほかのツールと地物を
-やり取りするには `geojson` を使います。どちらの形式も
+して復元するには独自の形式を使います。ほかのツールと地物をやり取り
+するには GeoJSON を使います。どちらの形式も
 [データ形式のリファレンス](../reference/data-format.md) で定めています。
 
-ストアの中の地物は GeoJSON の Feature ではなく、ライブラリー独自の
-レコード
-(`{ id, type, coordinates, layerId, properties, style, locked, visible }`)
-です。`export` と `load` が境界で変換し、`draw.getAllFeatures()` は
-レコードそのものを返します。
+地物は GeoJSON を持っています。`geometry` は GeoJSON の形状で、
+`properties` は GeoJSON のプロパティーです。ライブラリーが地物に持たせる
+値 (基準のズーム、円の半径、画像の大きさ) は、`properties` の中の
+`maplibre-gl-draw:` で始まるキーに入っています。それ以外のキーは
+あなたの属性です。どちらの形式も `properties` をそのまま書き出します。
 
-## 書き出し
+## 文書の書き出し
+
+`toJSON()` は文書をオブジェクト (`DrawDocument`) で返し、
+`toGeoJSON()` は GeoJSON の `FeatureCollection` を返します。
+`JSON.stringify` でテキストにし、ファイル名はアプリケーションで
+付けてください。
 
 ```ts
-const result = draw.export('geojson');
-// result.data: JSON のテキスト
-// result.mimeType: 'application/geo+json'
-// result.fileName: メタデータの題名から作った名前
+const geojson = draw.document.toGeoJSON();
+const title = draw.metadata.get().title || 'drawing';
+const blob = new Blob([JSON.stringify(geojson)], {
+  type: 'application/geo+json',
+});
 
-// 一部のフィーチャーだけ、または一部のレイヤーだけ
-draw.export('geojson', { featureIds: ['a', 'b'] });
-draw.export('native', { layerIds: [layerId], fileName: 'site.json' });
+const link = document.createElement('a');
+link.href = URL.createObjectURL(blob);
+link.download = `${title}.geojson`;
+link.click();
+URL.revokeObjectURL(link.href);
 ```
 
-- `data` は文字列です。ダウンロードさせるには `Blob` に包んでください
+- 独自の形式の文書には、形式の版 `3.0.0` が入ります
 - GeoJSON は RFC 7946 に従います。リングは右手の法則に従い、位置は
-  小数 7 桁に丸め、FeatureCollection には `bbox` が付きます
+  小数 7 桁に丸め、`FeatureCollection` には `bbox` が付きます
 - 非表示の地物も、プロパティーに `visible: false` を残して
   書き出します。そのため、書き出して読み戻しても非表示のままです
-- `name` と `description` は普通のプロパティーです。ライブラリーの
-  それ以外の項目は、接頭辞 `maplibre-gl-draw:` を付けたプロパティーに
-  なります
+- GeoJSON に置き場所の無い地物の項目 (レイヤー、グループ、スタイル、
+  ロック、`Circle` のような型) は、接頭辞 `maplibre-gl-draw:` を付けた
+  プロパティーとして書き出します。そのファイルを読み戻すと元に戻ります
 - 画像はデータ URL として埋め込むので、ファイル単体で完結します
-- `draw.getSuggestedFileName()` を使うと、書き出さずに独自形式の
-  ファイル名が得られます。題名は `draw.setMetadata({ title })` で設定
-  します
+- 題名と説明は `draw.metadata.update({ title })` で設定します
+
+自分の属性だけが欲しい読み手は、ライブラリーのキーを除きます。
+
+```ts
+import { isDrawProperty } from '@sakuzu/maplibre-gl-draw';
+
+const rows = draw.document.toGeoJSON().features.map((f) =>
+  Object.fromEntries(
+    Object.entries(f.properties ?? {}).filter(([key]) => !isDrawProperty(key)),
+  ),
+);
+```
 
 ## 読み込み
 
-`draw.load(source, options?)` は `File` か解析済みのオブジェクトを受け
-取り、`LoadResult` の Promise を返します。
+`draw.document.load(source, options?)` は、`File` か `Blob`、JSON の
+文字列、ライブラリーの文書、GeoJSON (`FeatureCollection`、`Feature`、
+形状) を受け取ります。返すのは `LoadResult` の Promise で、文書が
+読み取り専用のときは `null` の Promise です。
 
 ```ts
 const input = document.querySelector<HTMLInputElement>('#file');
@@ -72,38 +96,50 @@ input?.addEventListener('change', async () => {
   const file = input.files?.[0];
   if (!file) return;
   try {
-    const result = await draw.load(file);
-    console.log(result.format, result.featureIds.length);
+    const result = await draw.document.load(file);
+    if (!result) return; // 読み取り専用
+    console.log(result.format, result.featureIds.length, result.replaced);
     for (const { index, reason } of result.skipped ?? []) {
       console.warn(`feature ${index} left out: ${reason}`);
     }
   } catch (error) {
-    console.error('not loaded', error); // 描画は変わらない
+    console.error('not loaded', error); // 文書は変わらない
   }
 });
 ```
 
-- 名前が `.json` か `.geojson` で終わる `File` (または MIME 型が JSON の
-  `File`) は解析します。画像ファイルは Image 地物になります
-  (後述)
-- オブジェクトは、独自の形式か GeoJSON の `FeatureCollection` かを判定
-  します。どちらでもなければ例外を投げます
-- データはストアを変える前に検証するので、例外を投げた読み込みでは、
-  描いたものはそのまま残ります
-- 独自の形式の文書は、どこかの形が不正なとき、存在しないものを参照して
-  いるとき、`version` の major が異なるときは、全体を受け付けません
+- 形式は中身から判断します。ライブラリーの文書、GeoJSON、画像ファイル
+  (後述) のどれでもなければ、コード `unsupported-format` の
+  `DrawError` で失敗します
+- `mode` で、文書を置き換える (`replace`。ライブラリーの文書の既定) か
+  追加する (`merge`。GeoJSON の既定) かを選びます。ライブラリーの文書は
+  置き換えしかできません。`replace` を指定した GeoJSON は、地物と
+  グループを置き換え、レイヤーは残します
+- データは文書を変える前に検証するので、失敗した読み込みでは、描いた
+  ものはそのまま残ります
+- ライブラリーの文書は、どこかの形が不正なとき、存在しないものを参照
+  しているとき、ライブラリーが読めない major の版のときは、全体を
+  受け付けず、コード `invalid-input` で失敗します。前の major の版の
+  文書は、読み込むときに新しい版に直します
 - 形状が使えない GeoJSON の地物 (形状が無い、対応していない、
   有限でない数を含む、位置が 1 つだけの線、閉じていないリングなど) は
   除かれ、その番号と理由が `skipped` に載ります。残りは読み込みます
-- 型や形の合わないスタイルの値 (`#rgb` や `#rrggbb` ではない色、0 から
-  1 の範囲外の不透明度) は捨て、地物は残します
+- 型や形の合わないスタイルの値 (CSS の色ではない色、0 から 1 の範囲外の
+  不透明度) は捨て、地物は残します
 - ID がすでに使われている GeoJSON の地物には新しい ID を振り
-  ます。そのため、書き出したものを同じ描画に読み戻せます
-- GeoJSON の地物は、`maplibre-gl-draw:layerId` のレイヤーが
-  あればそのレイヤーに、無ければアクティブなレイヤーに入ります
+  ます。そのため、`toGeoJSON()` で書き出したファイルを同じ描画に
+  読み戻せます
+- GeoJSON の地物は、`maplibre-gl-draw:layerId` のレイヤーがあれば
+  そのレイヤーに、無ければ `options.layerId` のレイヤーに、それも無ければ
+  アクティブなレイヤーに入ります
 - Multi の形状は Multi の地物のまま保ちます。`flattenMulti: true`
   を指定すると単一の地物に分けます。`GeometryCollection` は、
   形状の型ごとに多くても 1 つの Multi の地物にまとめます
+
+何かを読んだ読み込みは、同じ結果を載せて `document.loaded` を出し、
+追加した地物ごとに `feature.created` を出します。読み込み 1 回ごとに
+反応するには、`document.changed` か `document.loaded` を受けてください
+([イベント](../reference/events.md))。
 
 ## 地図にドロップされたファイル
 
@@ -112,12 +148,12 @@ input?.addEventListener('change', async () => {
 ものを置き換えてよいかは、アプリケーションが決めることだからです。
 ドロップされたファイルを読み込むには、地図の要素 (コンテナー) で
 ドロップを受け、位置を `map.unproject` で座標に直し、ファイルを 1 つずつ
-`draw.load` に渡します。
+`draw.document.load` に渡します。
 
 ```ts
 const container = map.getContainer();
 
-// これが無いと、ブラウザーはドロップせずにファイルを開きます
+// これが無いと、ブラウザーはドロップせずにファイルを開く
 container.addEventListener('dragover', (event) => event.preventDefault());
 
 container.addEventListener('drop', async (event) => {
@@ -129,11 +165,11 @@ container.addEventListener('drop', async (event) => {
   ]);
   for (const file of event.dataTransfer?.files ?? []) {
     try {
-      // 位置は画像が使います。データのファイルは自分の位置を持っています
-      await draw.load(file, {
+      // 位置は画像が使う。データのファイルは自分の位置を持っている
+      await draw.document.load(file, {
         coordinate: [lng, lat],
         zoom: map.getZoom(),
-        layerId: draw.getActiveLayer(),
+        layerId: draw.layers.getActive()?.id,
       });
     } catch (error) {
       console.error(`${file.name} を読み込めませんでした`, error);
@@ -142,11 +178,11 @@ container.addEventListener('drop', async (event) => {
 });
 ```
 
-ほかのことは、アプリケーションがこのハンドラーの中で決めます。
+ほかのことは、アプリケーションがこのリスナーの中で決めます。
 `draw.isReadOnly()` や `draw.isInteractionLocked()` が true の間は
 ドロップを断る、独自の形式のファイルで描いたものを置き換える前に
 確かめる、ファイルを自分で読んで地物をデータセットに渡す
-([大量のデータ](large-data.ja.md)) といったことができます。
+([大量のデータを表示する](large-data.ja.md)) といったことができます。
 
 ## 画像
 
@@ -157,120 +193,143 @@ declare const imageFile: File;
 -->
 
 ```ts
-await draw.load(imageFile, {
+await draw.document.load(imageFile, {
   coordinate: [139.767, 35.681],
   zoom: map.getZoom(),
-  layerId: draw.getActiveLayer(),
+  layerId: draw.layers.getActive()?.id,
 });
 ```
 
 画像は WebP に変換し、一辺が 4096 px を超えると縮小して、文書の
-ファイルとして 1 度だけ保存します。新しい Image 地物は
-`imageFileId` でそれを参照します。読み込む文書に埋め込まれた画像は、
-宣言した型と一致する `data:image/(png|jpeg|webp|gif);base64,` の
-データ URL だけを受け付けます。`draw_image` モードについては
-[描画と編集](drawing.ja.md#画像) を参照してください。
+ファイルとして 1 度だけ保存します。新しい `Image` の地物は、
+プロパティー `maplibre-gl-draw:imageFileId` でそれを参照します。
+読み込むファイルに埋め込まれた画像は、宣言した型と一致する
+`data:image/(png|jpeg|webp|gif);base64,` のデータ URL だけを受け付け
+ます。`draw_image` モードは `image.requested` でアプリケーションに
+ファイルを求めます。このモードについては [描画と編集](drawing.ja.md) を
+参照してください。
 
 ## 変更のたびに保存する
 
-`draw.features.change` は、変更 1 回ごとに、その中で変わったものを
-すべて載せて 1 度だけ発火します。編集のたびに保存するなら、このイベントを
-使います。
+`document.changed` は、トランザクション 1 つごとに、その中で変わった
+ものをすべて載せて 1 度だけ届きます。編集のたびに保存するなら、この
+イベントを使います。このイベントは、文書が持たない選択やモードの
+変更も運ぶので、文書が変わったときだけ保存してください。
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('draw.features.change', () => {
+draw.on('document.changed', (change) => {
+  const documentChanged =
+    change.features ??
+    change.layers ??
+    change.groups ??
+    change.layerReorder ??
+    change.groupReorder ??
+    change.metadata;
+  if (!documentChanged) return;
   clearTimeout(timer);
   timer = setTimeout(() => {
-    localStorage.setItem('drawing', draw.export('native').data);
+    localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
   }, 500);
 });
 ```
 
 ドラッグ中はポインターが動く間に途中の状態が書き込まれ、その一つひとつが
-変更になるので、上のように保存を間引いてください。レイヤーとグループの
-変更には別のイベントがあります (`draw.layer.update` など。
-[イベント](../reference/events.md) を参照)。
+変更になります。上のように保存を間引くか、ドラッグを終える
+`isIntermediate` の付かない更新を待ってください。
+
+自分の複数の書き込みを 1 つの変更にするには、`draw.transact` で包みます。
+それらは、名付けた出どころを持つ 1 つの `document.changed` として
+届きます。
+
+```ts
+draw.transact(
+  () => {
+    draw.features.update(featureId, { visible: false });
+    draw.layers.update(layerId, { opacity: 0.5 });
+  },
+  { source: 'toolbar' },
+);
+```
 
 ## 自前のストア
 
-描いたものをデータベースやサーバーに保つだけなら、組み込みのストアの
+描いたものをデータベースやサーバーに保つだけなら、インスタンスの
 変更を受け取れば足りることがほとんどです。
 
 <!-- docs-check:
-declare function sendToServer(changes: unknown): void;
+declare function sendToServer(change: unknown): void;
 -->
 
 ```ts
-draw.getStore().subscribe((changes) => {
-  // changes.features, changes.layers, changes.groups, changes.source ...
-  sendToServer(changes);
+draw.on('document.changed', (change) => {
+  // change.features, change.layers, change.groups, change.source ...
+  sendToServer(change);
 });
 ```
 
-文書そのものを別の場所に置く必要があるときは、`Options.store` で
-インスタンスにストアを渡します。
+`draw.getStore().subscribe(listener)` も同じ `DocumentChange` を届け
+ます。こちらはコレクションを通さずに文書を読むときにも使えます。
+
+文書そのものを別の場所に置く必要があるときは、作るときにオプション
+`store` でインスタンスにストアを渡します。
 
 <!-- docs-check:
-declare function createDocumentStore(): DocumentStore;
+declare function createServerStore(): Store;
 -->
 
 ```ts
-import {
-  createMapLibreGLDraw,
-  type DocumentStore,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Store } from '@sakuzu/maplibre-gl-draw';
 
-// DocumentStore の約束を満たす自前の実装
-const store: DocumentStore = createDocumentStore();
-const draw = createMapLibreGLDraw(map, { store });
+// Store の約束を満たす自前の実装
+const store: Store = createServerStore();
+const draw = createDraw(map, { store });
 ```
 
-状態は次のように分かれています。
+ストアが持つのは文書です。地物、レイヤーとその重なりの順、グループ、
+ファイル、メタデータを持ちます。インスタンスは、そのメソッドで文書を
+読み書きし、変更を購読し、書き込みを `transact` でまとめます。この端末の
+状態 (選択、モード、読み取り専用、操作ロック、隠している項目) は、
+インスタンスがストアの外側で持ちます。ストアは読み取り専用を知りません。
+インスタンスが、ストアに届く前に書き込みを断るからです。
 
-| 型 | 中身 |
-| --- | --- |
-| `DocumentStore` | 文書 (地物、レイヤー、グループ、ファイル、メタデータ) |
-| `Store` | 文書と core のローカルな状態を、1 つの関門の後ろにまとめたもの |
-| `StoreView` | 読み取り、`subscribe`、`transact`。`draw.getStore()` が返します |
-| `MemoryStore` | メモリー上の `Store` で、既定で使われます |
+自前のストアは、いくつかの約束を守ります。
 
-自前の `DocumentStore` が持つのは文書だけです。選択、モード、読み取り
-専用などのローカルな状態は、core がその外側で持ちます。守るべき約束
-(どの地物もちょうど 1 つの入れ物に並ぶこと、通知に載せた
-オブジェクトを後から変えないこと、`transact` は 1 つの通知にまとめる
-ことなど) は
-[`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md)
-に書いてあります。自前のストアがインスタンスの外から適用した変更も、ローカルの変更と
-同じように描画され、通知されます。読み取り専用でも止められません。その
-通知には更新元 `'remote'` を付けてください。core は頂点の選択をそれに
-合わせて保ち、購読者はローカルの編集と見分けられます。
+- どの地物も、ちょうど 1 つの場所に並びます。`groupId` を持つ地物は
+  グループの `featureIds` に、持たない地物はレイヤーの `items` に並び
+  ます
+- 返したり通知したりしたオブジェクトは、後から変えません。変更の
+  ときは新しいオブジェクトを保存します
+- 当てはまらない引数 (存在しない ID、何も指さないレイヤーやグループ、
+  重なった ID) の書き込みは、何も変えません
+- `transact` は、関数の中の変更を `subscribe` の 1 つの通知にまとめます
+- インスタンスの外から適用した変更も、ローカルの変更と同じように、
+  出どころ `'remote'` を付けて通知します。インスタンスはそれを描き、
+  削除された項目は選択から外れます
 
-書き込みはインスタンスを通して行います (`addFeature` や `updateLayer`
-など)。`draw.getStore()` には書き込みのメソッドがありません。複数の
-書き込みを 1 つの変更にするには、`draw.getStore().transact(() => { ... })`
-で包んでください。
+ストアが持つ文書は、`document.toJSON()` が書き出すものと同じです。形は
+[データ形式のリファレンス](../reference/data-format.md) にあります。
 
-## 変更の通知に入っているもの
+## 変更に入っているもの
 
-core は変更の履歴を持ちません。`draw.getStore().subscribe` の購読者が
-文書を追いかけたり、前の状態に戻したりするのに必要なものは、すべて
-通知に入っています。
+core は変更の履歴を持ちません。リスナーが文書を追いかけたり、前の状態に
+戻したりするのに必要なものは、すべての `DocumentChange` に入っています。
 
 - どの更新にも変更前の `previous` のオブジェクトが付き、削除には削除した
   オブジェクトが付きます
-- 1 つのトランザクションが 1 つの通知になるので、幾何演算、グループ化、
+- 1 つのトランザクションが 1 つの変更になるので、幾何演算、グループ化、
   複数の地物のドラッグは 1 つの手順として届きます
-- `source` は変更の出所を示します。編集なら `'local'`、GeoJSON の
-  読み込みなら `'batch'`、独自の形式の読み込みと選択のリセットなら
-  `'silent'` で、`transact` に渡した任意の値も入ります
+- `source` は変更の出どころを示します。編集と API の呼び出しなら
+  `'local'`、GeoJSON の読み込みなら `'batch'`、ライブラリーの文書の
+  読み込みなら `'silent'`、自前のストアなら `'remote'` で、`transact` に
+  渡した任意の値も入ります
 - ドラッグの途中の更新には `isIntermediate: true` が付きます。その後に
-  来る、これが付いていない更新でドラッグが確定します
+  来る、これが付いていない更新でドラッグが終わります
 
-レイヤー、グループ、削除した地物のグループへの所属も、地物と同じ通知で
-届きます。購読者が自分で適用する変更には、`transact` に渡す任意の文字列を
-出所として付けられるので、購読者はその出所で自分の変更を除けます。
+レイヤー、グループ、削除した地物のグループも、地物と同じ変更で
+届きます。リスナーが自分で適用する変更には、自分の出どころを付け
+られるので、リスナーはその出どころで自分の変更を除けます。
 
 ## 関連する例
 
@@ -281,13 +340,16 @@ core は変更の履歴を持ちません。`draw.getStore().subscribe` の購�
 
 ## リファレンス
 
+- [`DocumentResource`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
+  と [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
 - [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md)、
   [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md)、
   [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)
-- [`ExportOptions`](../api/maplibre-gl-draw/interfaces/ExportOptions.md)
-  と [`ExportResult`](../api/maplibre-gl-draw/interfaces/ExportResult.md)
-- [`DocumentStore`](../api/maplibre-gl-draw/interfaces/DocumentStore.md)、
+- [`isDrawProperty`](../api/maplibre-gl-draw/functions/isDrawProperty.md)
+  と
+  [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
+- [`Store`](../api/maplibre-gl-draw/interfaces/Store.md)、
   [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md)、
-  [`StateChanges`](../api/maplibre-gl-draw/interfaces/StateChanges.md)
+  [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
 - [データ形式](../reference/data-format.md) と
   [イベント](../reference/events.md)
