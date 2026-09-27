@@ -47,11 +47,10 @@ export type DatasetBaseStyle = Partial<Record<StyleRuleChannel, Feature['style']
 /**
  * A feature passed to a dataset.
  *
- * It accepts the same coordinate shapes as a feature of the Store (including Multi and holes).
- * It is not put into the Store, so the layer it belongs to, the lock and the visibility can be
- * omitted (when omitted they are treated as an empty string, false and true respectively).
- * `Feature` satisfies this type, so a feature taken out of the Store can be passed as it is.
- * Positions with a third element (an elevation from GeoJSON) are truncated to `[lng, lat]`.
+ * Its coordinates have the shapes of the coordinates of the geometry of a feature of the Store
+ * (including Multi and holes). It is not put into the Store, so the layer it belongs to, the
+ * lock and the visibility can be omitted (when omitted they are treated as an empty string,
+ * false and true respectively). Positions with a third element (an elevation from GeoJSON) are truncated to `[lng, lat]`.
  */
 export interface DatasetFeatureInput {
   /** The feature id, unique within the dataset */
