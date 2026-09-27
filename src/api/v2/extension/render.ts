@@ -47,7 +47,6 @@ export interface OffsetUniforms {
  * The shared renderer of lines. It only draws; the zoom, the projection and the terrain come
  * from the {@link RenderContext} it was taken from.
  */
-// TODO(api-2): confirm the methods and their parameters (a subset of the previous line renderer, with CSS colors)
 export interface LineRenderer {
   /**
    * Draws a line.
@@ -76,23 +75,20 @@ export interface LineRenderer {
  * The shared renderer of areas. It only draws; the zoom, the projection and the terrain come
  * from the {@link RenderContext} it was taken from.
  */
-// TODO(api-2): confirm the methods and their parameters (a subset of the previous fill renderer, with CSS colors)
 export interface FillRenderer {
   /**
    * Fills an area.
    *
    * @param rings - The outer ring first, then the holes
-   * @param color - The CSS color
-   * @param opacity - The opacity from 0 to 1; 1 when it is left out
+   * @param style - The CSS color and the opacity from 0 to 1
    */
-  drawPolygon(rings: readonly (readonly Position[])[], color: string, opacity?: number): void;
+  draw(rings: readonly (readonly Position[])[], style: { color: string; opacity: number }): void;
 }
 
 /**
  * The shared renderer of point markers. It only draws; the zoom, the projection and the
  * terrain come from the {@link RenderContext} it was taken from.
  */
-// TODO(api-2): confirm the methods and their parameters (a subset of the previous point renderer, with CSS colors)
 export interface PointRenderer {
   /**
    * Draws a point marker.
@@ -129,7 +125,6 @@ export interface RenderContext {
   /** The values for drawing relative to the center of the view */
   readonly offset: OffsetUniforms;
   /** The projection of the frame, as the map passes it to a custom layer */
-  // TODO(api-2): confirm the type of projection (the projection data of the map)
   readonly projection: ProjectionData;
   /** The zoom of the frame */
   readonly zoom: number;

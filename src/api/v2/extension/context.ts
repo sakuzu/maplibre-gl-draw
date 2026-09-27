@@ -8,11 +8,12 @@
  * type a context holds is part of the public API and follows semver.
  */
 
-import type { BBox, Position } from 'geojson';
+import type { Position } from 'geojson';
 import type { Draw } from '../draw.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature, FeatureInput, FeatureStyleResolved, FeatureType } from '../model.js';
+import type { Feature, FeatureInput, FeatureType } from '../model.js';
+import type { SelectionStyleOptions } from '../options.js';
 import type { Mode, SnapResult } from '../state.js';
 import type { Hit } from './provider.js';
 import type { StoreView } from './store.js';
@@ -48,7 +49,6 @@ export interface NameGenerator {
    *
    * @returns The name, or `undefined` for a feature when automatic names are off
    */
-  // TODO(api-2): confirm the return type (the design gives only next(type))
   next(type: FeatureType | 'Layer' | 'Group'): string | undefined;
 }
 
@@ -58,9 +58,13 @@ export interface ScreenContext {
   project(lngLat: Position): ScreenPoint;
   /** The position on the map of a point on the screen. */
   unproject(point: ScreenPoint): Position;
-  /** The extent of a feature on the screen, as `[minX, minY, maxX, maxY]` in pixels. */
-  // TODO(api-2): confirm that the GeoJSON BBox type fits an extent in screen pixels, and what a feature off the screen gives
-  bounds(feature: Feature): BBox;
+  /**
+   * The extent of a feature on the screen, in pixels; a feature off the screen still has
+   * one.
+   *
+   * @returns The corners of the extent, or `null` when the feature has nothing to draw
+   */
+  bounds(feature: Feature): { min: ScreenPoint; max: ScreenPoint } | null;
   /** The zoom of the map */
   readonly zoom: number;
   /** The pixel ratio the drawing uses */
@@ -147,7 +151,6 @@ export interface ModeContext extends ExtensionContext {
    */
   commitFeature(input: FeatureInput): Feature | null;
   /** Shows the shape being drawn before it is created. */
-  // TODO(api-2): confirm the shape of preview
   readonly preview: {
     /** Shows this shape as the one being drawn */
     set(feature: FeatureInput): void;
@@ -155,7 +158,6 @@ export interface ModeContext extends ExtensionContext {
     clear(): void;
   };
   /** The cursor of the map. */
-  // TODO(api-2): confirm the shape of cursor
   readonly cursor: {
     /** Sets the cursor, as a CSS cursor value */
     set(cursor: string): void;
@@ -163,8 +165,7 @@ export interface ModeContext extends ExtensionContext {
     reset(): void;
   };
   /** The look of the selected features. */
-  // TODO(api-2): confirm the type (the design says a resolved feature style for the selection)
-  readonly selectionStyle: FeatureStyleResolved;
+  readonly selectionStyle: Required<SelectionStyleOptions>;
 }
 
 /** What a hit test of a custom feature type or a companion receives. */

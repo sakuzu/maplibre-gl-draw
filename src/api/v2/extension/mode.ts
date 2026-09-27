@@ -57,7 +57,6 @@ export interface DrawKeyEvent {
  * The receivers of the input; `Plugin.input` and `ModeHandler` take any of them. Returning
  * true consumes the event, so that nothing after the receiver gets it.
  */
-// TODO(api-2): confirm the set (the design lists the receivers of ModeHandler; onPointerLeave carries over the mouse-leave receiver of plugins)
 export interface InputHandlers {
   /** A pointer was pressed */
   onPointerDown(event: DrawPointerEvent): boolean | void;

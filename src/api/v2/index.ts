@@ -110,7 +110,7 @@ export type {
 } from './datasets.js';
 
 // Store
-export type { StateChanges, Store, StoreView, UpdateSource } from './extension/index.js';
+export type { Store, StoreView, UpdateSource } from './extension/index.js';
 
 // Extensions
 export type {

@@ -5,9 +5,9 @@
  * Plugins: bundles of other extensions and state
  */
 
-import type { FeatureType } from '../model.js';
+import type { Feature } from '../model.js';
 import type { PluginContext } from './context.js';
-import type { InputHandlers } from './mode.js';
+import type { DrawPointerEvent, InputHandlers } from './mode.js';
 
 /**
  * A plugin: a bundle of modes, feature types, overlays, providers and state, added with
@@ -31,16 +31,15 @@ export interface Plugin<Api = unknown> {
    */
   readonly input?: Partial<InputHandlers>;
   /** Hooks into the select mode, and an exclusive interaction of the plugin */
-  // TODO(api-2): confirm the members and their signatures (carried over from the interaction hooks of the previous plugins)
   readonly interaction?: {
     /** Narrows the candidates of a selection to the IDs it returns */
-    filterSelection?(candidateIds: string[]): string[];
+    filterSelection?(candidateIds: readonly string[]): string[];
     /** A selected feature was clicked again; returning true means the plugin handled it */
-    onFeatureClick?(featureId: string): boolean;
+    onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A feature was double-clicked; returning true means the plugin handled it */
-    onFeatureDoubleClick?(featureId: string): boolean;
+    onFeatureDoubleClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A drawing mode created a feature */
-    onDrawCommit?(featureId: string, type: FeatureType): void;
+    onDrawCommit?(feature: Feature): void;
     /** Whether the plugin is in an exclusive interaction, during which the mode stays still */
     isBusy?(): boolean;
     /** Completes the exclusive interaction */

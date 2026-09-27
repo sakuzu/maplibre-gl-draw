@@ -37,7 +37,6 @@ export interface SnapCandidate {
   /** The kind of candidate; a provider may use a kind of its own */
   kind: 'vertex' | 'edge' | 'intersection' | 'guide' | (string & {});
   /** The priority among candidates at the same distance; higher wins */
-  // TODO(api-2): confirm the direction of priority (the design gives only the field)
   priority?: number;
   /** Where the candidate came from, for display */
   source?: string;

@@ -6,7 +6,8 @@
  * resized
  */
 
-import type { BBox, Geometry, Position } from 'geojson';
+import type { Geometry, Position } from 'geojson';
+import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { HitTestContext, ScreenContext, SnapContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
@@ -32,8 +33,7 @@ export interface Handle {
 export interface FeatureTypeDefinition {
   /** The name of the type; it is registered under this name */
   readonly type: string;
-  /** The kind of GeoJSON geometry the features of this type have */
-  // TODO(api-2): confirm whether a type may have more than one kind of geometry
+  /** The kind of GeoJSON geometry the features of this type have; one kind per type */
   readonly geometry: Geometry['type'];
   /** How the features of this type are drawn */
   readonly renderer: FeatureRenderer;
@@ -46,11 +46,19 @@ export interface FeatureTypeDefinition {
   /**
    * Whether a box selection takes a feature of this type.
    *
-   * @param box - The box on the screen, as `[minX, minY, maxX, maxY]` in pixels
+   * @param box - The corners of the box on the screen, in pixels
    */
-  boxSelect?(feature: Feature, box: BBox, ctx: HitTestContext): boolean;
-  /** The extent of the selection box of a feature, as `[minX, minY, maxX, maxY]` in pixels. */
-  bounds?(feature: Feature, ctx: ScreenContext): BBox;
+  boxSelect?(
+    feature: Feature,
+    box: { min: ScreenPoint; max: ScreenPoint },
+    ctx: HitTestContext,
+  ): boolean;
+  /**
+   * The extent of the selection box of a feature on the screen, in pixels.
+   *
+   * @returns The corners of the extent, or `null` when the feature has nothing to draw
+   */
+  bounds?(feature: Feature, ctx: ScreenContext): { min: ScreenPoint; max: ScreenPoint } | null;
   /** The handles that resize or reshape a selected feature. */
   handles?(feature: Feature, ctx: ScreenContext): Handle[];
   /**

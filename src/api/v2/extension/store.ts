@@ -8,11 +8,12 @@
  * option of `createDraw`, for example to keep the document somewhere shared.
  */
 
+import type { DocumentChange } from '../events.js';
 import type { Feature, FileData, Group, Layer, Metadata } from '../model.js';
 import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
 
 /**
- * Where a write came from, as it arrives in {@link StateChanges.source} and in the `source` of
+ * Where a write came from, as it arrives in {@link DocumentChange.source} and in the `source` of
  * the events.
  *
  * - `local`: an operation of the user or a call of the API (the default)
@@ -33,83 +34,30 @@ export type UpdateSource =
   | (string & Record<never, never>);
 
 /**
- * Everything one transaction changed, as the Store delivers it to its subscribers. Each
- * category is present only when the transaction changed it.
- */
-// TODO(api-2): confirm the shape (carried over; 8.11 says it has the shape of DocumentChange, and the categories of the drawing state in progress are left out)
-export interface StateChanges {
-  /** Where the writes came from */
-  source?: UpdateSource;
-  /** The features created, updated and deleted */
-  features?: {
-    created?: Feature[];
-    updated?: Array<{
-      id: string;
-      feature: Feature;
-      previous: Feature;
-      /** True while a drag or a drawing is in progress; a final update always follows */
-      isIntermediate?: boolean;
-    }>;
-    deleted?: Feature[];
-  };
-  /** The layers created, updated and deleted, and the change of their stacking order */
-  layers?: {
-    created?: Layer[];
-    updated?: Array<{ id: string; layer: Layer; previous: Layer }>;
-    deleted?: Layer[];
-    orderChanged?: { order: string[]; previous: string[] };
-  };
-  /** The groups created, updated and deleted */
-  groups?: {
-    created?: Group[];
-    updated?: Array<{ id: string; group: Group; previous: Group }>;
-    deleted?: Group[];
-  };
-  /** The new order of the items of a layer */
-  layerReorder?: { layerId: string; order: string[]; previous: string[] };
-  /** The new order of the features of a group */
-  groupReorder?: { groupId: string; featureIds: string[]; previous: string[] };
-  /** The new selection and the one before it */
-  selection?: {
-    type: SelectionType | null;
-    ids: string[];
-    previousType: SelectionType | null;
-    previousIds: string[];
-  };
-  /** The IDs of the features whose editing started and ended */
-  editing?: { started?: string[]; ended?: string[] };
-  /** The new mode and the one before it */
-  mode?: { mode: Mode; previous: Mode };
-  /** The new metadata and the one before it */
-  metadata?: { metadata: Metadata; previous: Metadata };
-}
-
-/**
  * The read side of the Store: the document, the state of this client, and the subscription
  * to their changes.
  */
-// TODO(api-2): confirm the members (carried over; the getters of the drawing state in progress, the box selection and the drag are left out because their types are internal)
 export interface StoreView {
   /** A feature by ID, or `undefined` */
   getFeature(id: string): Feature | undefined;
   /** Every feature, in no particular order */
-  getAllFeatures(): Feature[];
+  listFeatures(): Feature[];
   /** Every feature in stacking order, from the back */
-  getOrderedFeatures(): Feature[];
+  listFeaturesInOrder(): Feature[];
   /** A layer by ID, or `undefined` */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */
-  getAllLayers(): Layer[];
+  listLayers(): Layer[];
   /** The stacking order, from the back: the layers and the entries from outside the document */
   getLayerOrder(): readonly string[];
   /** A group by ID, or `undefined` */
   getGroup(id: string): Group | undefined;
   /** Every group */
-  getAllGroups(): Group[];
+  listGroups(): Group[];
   /** An embedded file by ID, or `undefined` */
   getFile(id: string): FileData | undefined;
   /** Every embedded file */
-  getAllFiles(): FileData[];
+  listFiles(): FileData[];
   /** The title and the description */
   getMetadata(): Metadata;
   /** The selection of this client */
@@ -117,7 +65,7 @@ export interface StoreView {
   /** The IDs of the features being edited */
   getEditingIds(): readonly string[];
   /** The selected vertices, or `null` */
-  getSelectedVertices(): VertexSelection | null;
+  getVertexSelection(): VertexSelection | null;
   /** The current mode */
   getMode(): Mode;
   /** Whether the document is read-only */
@@ -125,15 +73,15 @@ export interface StoreView {
   /** Whether the interaction lock is on */
   isInteractionLocked(): boolean;
   /** Whether this client hides the item */
-  isLocallyHidden(id: string): boolean;
+  isHidden(id: string): boolean;
   /** The IDs this client hides */
-  getLocallyHidden(): ReadonlySet<string>;
+  listHidden(): ReadonlySet<string>;
   /**
    * Subscribes to the changes; one notification arrives per outermost transaction.
    *
    * @returns The function that unsubscribes
    */
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  subscribe(listener: (changes: DocumentChange) => void): () => void;
   /**
    * Runs `fn` as one transaction, so that its writes arrive as one notification.
    *
@@ -146,7 +94,6 @@ export interface StoreView {
  * The Store with its writes: what the `store` option of `createDraw` takes. Each write returns
  * false when it is refused and changes nothing.
  */
-// TODO(api-2): confirm the members (carried over; the writes of the drawing state in progress, the box selection, the drag and the followed vertices are left out because their types are internal)
 export interface Store extends StoreView {
   /** Creates a feature. */
   createFeature(feature: Feature): boolean;

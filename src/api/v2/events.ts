@@ -11,40 +11,70 @@
 import type { Position } from 'geojson';
 import type { Dataset, DatasetRow } from './datasets.js';
 import type { DrawError } from './errors.js';
+import type { UpdateSource } from './extension/store.js';
 import type { Feature, Group, Layer, LoadResult, Metadata, MoveTarget } from './model.js';
-import type { LayerStackEntry, Mode, Selection, SnapResult, VertexSelection } from './state.js';
+import type {
+  LayerStackEntry,
+  Mode,
+  Selection,
+  SelectionType,
+  SnapResult,
+  VertexSelection,
+} from './state.js';
 
 /** A point on the screen, as `[x, y]` in CSS pixels. */
 export type ScreenPoint = [number, number];
 
 /**
- * Every change of the document made by one transaction.
+ * Everything one transaction changed, as `document.changed` and the subscribers of the Store
+ * receive it. It arrives once per transaction, and each category is present only when the
+ * transaction changed it.
  */
 export interface DocumentChange {
-  /** The features that were created, updated and deleted */
-  features: {
-    created: Feature[];
-    updated: { feature: Feature; previous: Feature }[];
-    deleted: Feature[];
-  };
-  /** The layers that were created, updated and deleted */
-  layers: {
-    created: Layer[];
-    updated: { layer: Layer; previous: Layer }[];
-    deleted: Layer[];
-  };
-  /** The groups that were created, updated and deleted */
-  groups: {
-    created: Group[];
-    updated: { group: Group; previous: Group }[];
-    deleted: Group[];
-  };
-  /** The metadata, when it changed */
-  metadata?: { metadata: Metadata; previous: Metadata };
   /** Where the writes came from */
-  source: string;
-  /** True while a drag is in progress */
-  intermediate: boolean;
+  source?: UpdateSource;
+  /** The features created, updated and deleted */
+  features?: {
+    created?: Feature[];
+    updated?: Array<{
+      id: string;
+      feature: Feature;
+      previous: Feature;
+      /** True while a drag or a drawing is in progress; a final update always follows */
+      isIntermediate?: boolean;
+    }>;
+    deleted?: Feature[];
+  };
+  /** The layers created, updated and deleted, and the change of their stacking order */
+  layers?: {
+    created?: Layer[];
+    updated?: Array<{ id: string; layer: Layer; previous: Layer }>;
+    deleted?: Layer[];
+    orderChanged?: { order: string[]; previous: string[] };
+  };
+  /** The groups created, updated and deleted */
+  groups?: {
+    created?: Group[];
+    updated?: Array<{ id: string; group: Group; previous: Group }>;
+    deleted?: Group[];
+  };
+  /** The new order of the items of a layer */
+  layerReorder?: { layerId: string; order: string[]; previous: string[] };
+  /** The new order of the features of a group */
+  groupReorder?: { groupId: string; featureIds: string[]; previous: string[] };
+  /** The new selection and the one before it */
+  selection?: {
+    type: SelectionType | null;
+    ids: string[];
+    previousType: SelectionType | null;
+    previousIds: string[];
+  };
+  /** The IDs of the features whose editing started and ended */
+  editing?: { started?: string[]; ended?: string[] };
+  /** The new mode and the one before it */
+  mode?: { mode: Mode; previous: Mode };
+  /** The new metadata and the one before it */
+  metadata?: { metadata: Metadata; previous: Metadata };
 }
 
 /**

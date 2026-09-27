@@ -43,4 +43,4 @@ export type {
   RenderContext,
   ShaderData,
 } from './render.js';
-export type { StateChanges, Store, StoreView, UpdateSource } from './store.js';
+export type { Store, StoreView, UpdateSource } from './store.js';
