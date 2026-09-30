@@ -197,6 +197,42 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(await isDrawing(page)).toBe(false);
   });
 
+  it('draws an area from code with draw.drawing, through the input of the plugins', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_polygon');
+    const seen = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const clicks: string[] = [];
+      const remove = draw.extensions.plugins.add({
+        name: 'e2e-drawing-probe',
+        onAdd() {},
+        input: {
+          onClick(event) {
+            clicks.push(event.original.type);
+          },
+        },
+      });
+      const placed = [
+        [139.699, 35.679],
+        [139.701, 35.679],
+        [139.701, 35.681],
+      ].map((position) => draw.drawing.addVertex(position));
+      const finished = draw.drawing.finish();
+      remove();
+      return { placed, finished, clicks };
+    });
+    await settle(page);
+    expect(seen).toEqual({
+      placed: [true, true, true],
+      finished: true,
+      clicks: ['click', 'click', 'click'],
+    });
+    const [area] = await features(page);
+    expect(area.type).toBe('Polygon');
+    expectNear(outerRing(area)[1], [139.701, 35.679], 1e-9);
+    expect(await mode(page)).toBe('select');
+  });
+
   it('draws a freehand stroke with a drag, and Escape during a stroke discards it', async () => {
     await clearAll(page);
     await setMode(page, 'draw_freehand');
