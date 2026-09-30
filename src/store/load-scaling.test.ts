@@ -175,7 +175,7 @@ async function minLoadMs(data: Data, reps: number): Promise<number> {
 }
 
 describe('load scaling (regression prevention)', () => {
-  it('keeps the load time under 8 times even when N is multiplied by 4 (not quadratic)', async () => {
+  it('keeps the load time under 11 times even when N is multiplied by 4 (not quadratic)', async () => {
     const small = generate(1000);
     const large = generate(4000);
 
@@ -187,9 +187,10 @@ describe('load scaling (regression prevention)', () => {
     const tLarge = await minLoadMs(large, 5);
 
     const ratio = tLarge / tSmall;
-    // About 4x if linear. About 16x if quadratic. If it exceeds 8x it is regarded as a
-    // quadratic regression and fails.
-    expect(ratio).toBeLessThan(8);
+    // About 4x if linear. About 16x if quadratic. The bound sits between the two with room
+    // for the noise of a shared CI runner (a 2-core runner measured 8.2x on a linear load):
+    // above 11x it is regarded as a quadratic regression and fails.
+    expect(ratio).toBeLessThan(11);
   });
 });
 
