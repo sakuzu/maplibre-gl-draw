@@ -30,8 +30,9 @@ import type {
 /**
  * The side of the square selection frame of a point, in CSS px: 12.
  *
- * The same value as DEFAULT_POINT_STYLE.size. Types with no registered extent become this
- * square (the same look as the former fixed value).
+ * The same value as DEFAULT_POINT_STYLE.size. Types with neither a registered extent nor a
+ * default extent of the registry become this square. A draw instance gives its registry the
+ * extent of the marker of a built-in point as the default.
  */
 export const DEFAULT_POINT_FRAME_SIZE = 12;
 
@@ -76,8 +77,8 @@ export interface SelectionExtensionRegistry {
    * Resolve the half width and half height of the selection box of a zero-area point
    *
    * Types with no registration, types that return null and values that are not finite
-   * degrade to the default square (the frame is not broken while the actual size on the
-   * extension side is not yet determined).
+   * degrade to the default extent of the registry, and then to the default square (the frame
+   * is not broken while the actual size on the extension side is not yet determined).
    */
   resolvePointFrameExtent(feature: Feature): PointFrameExtent;
 
@@ -116,9 +117,14 @@ function registerIn<T>(map: Map<string, T>, type: string, value: T): () => void 
  * Creates an empty {@link SelectionExtensionRegistry} with a tile size of 512 px, for testing a
  * custom feature handler in isolation.
  *
+ * @param defaultPointFrameExtent - The extent of the frame of a point whose type registers
+ *   none, or whose provider gives none; without it (or when it returns null) the frame is the
+ *   square of DEFAULT_POINT_FRAME_SIZE
  * @returns A new registry with no registration
  */
-export function createSelectionExtensionRegistry(): SelectionExtensionRegistry {
+export function createSelectionExtensionRegistry(
+  defaultPointFrameExtent?: PointFrameExtentProvider,
+): SelectionExtensionRegistry {
   const boundingBoxes = new Map<string, CustomBoundingBoxCalculator>();
   const additionalHandles = new Map<string, AdditionalResizeHandlesCalculator>();
   const customResizes = new Map<string, TypeResizeCalculator>();
@@ -126,6 +132,13 @@ export function createSelectionExtensionRegistry(): SelectionExtensionRegistry {
   const pointFrameExtents = new Map<string, PointFrameExtentProvider>();
   const pointFrameOutlines = new Map<string, PointFrameOutlineProvider>();
   let tileSize = DEFAULT_REGISTRY_TILE_SIZE;
+  /** The extent provider of a type, falling back to the default extent of the registry */
+  const extentProviderOf = (type: string): PointFrameExtentProvider | undefined => {
+    const own = pointFrameExtents.get(type);
+    if (!defaultPointFrameExtent) return own;
+    if (!own) return defaultPointFrameExtent;
+    return (feature) => validExtent(own(feature)) ?? defaultPointFrameExtent(feature);
+  };
 
   return {
     registerBoundingBox: (type, calculator) => registerIn(boundingBoxes, type, calculator),
@@ -144,13 +157,13 @@ export function createSelectionExtensionRegistry(): SelectionExtensionRegistry {
     registerPointFrameExtent: (type, provider) => registerIn(pointFrameExtents, type, provider),
     getPointFrameExtentProvider: (type) => pointFrameExtents.get(type),
     resolvePointFrameExtent(feature) {
-      return resolvePointFrameExtentWith(pointFrameExtents.get(feature.type), feature);
+      return resolvePointFrameExtentWith(extentProviderOf(feature.type), feature);
     },
 
     registerPointFrameOutline: (type, provider) => registerIn(pointFrameOutlines, type, provider),
     resolvePointFrameCorners(feature, center, margin) {
       return resolvePointFrameCornersWith(
-        pointFrameExtents.get(feature.type),
+        extentProviderOf(feature.type),
         pointFrameOutlines.get(feature.type),
         feature,
         center,
@@ -183,7 +196,16 @@ export function resolvePointFrameExtentWith(
   provider: PointFrameExtentProvider | undefined,
   feature: Feature,
 ): PointFrameExtent {
-  const extent = provider?.(feature);
+  const extent = validExtent(provider?.(feature));
+  if (!extent) {
+    const half = DEFAULT_POINT_FRAME_SIZE / 2;
+    return { halfWidth: half, halfHeight: half };
+  }
+  return extent;
+}
+
+/** The extent when it is one (finite and not negative), else null */
+function validExtent(extent: PointFrameExtent | null | undefined): PointFrameExtent | null {
   if (
     !extent ||
     !Number.isFinite(extent.halfWidth) ||
@@ -191,8 +213,7 @@ export function resolvePointFrameExtentWith(
     extent.halfWidth < 0 ||
     extent.halfHeight < 0
   ) {
-    const half = DEFAULT_POINT_FRAME_SIZE / 2;
-    return { halfWidth: half, halfHeight: half };
+    return null;
   }
   return extent;
 }

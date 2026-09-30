@@ -298,7 +298,15 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     guideStepDegrees: resolveGuideStepDegrees(options.snap?.guideStepDegrees),
   };
   // The registries of the extension points belong to this instance (nothing is module-level)
-  const selectionScope = createSelectionScope();
+  const selectionScope = createSelectionScope({
+    // The frame of a point spans its marker, as far as a click on it hits it (the reach of the
+    // built-in type, or of an override of it for the points it keeps): a plain point has a
+    // 16 px frame before the margin, and a larger marker a larger one
+    defaultPointFrameExtent: (feature) => {
+      const reach = hitTestService.getStrategy?.(feature.type)?.reachPx?.(feature) ?? 0;
+      return reach > 0 ? { halfWidth: reach, halfHeight: reach } : null;
+    },
+  });
   const snapTargets = createSnapTargetsRegistry();
   // The messages table belongs to this instance as well
   const messages = resolveMessages(options.messages);

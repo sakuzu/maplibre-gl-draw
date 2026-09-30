@@ -20,6 +20,7 @@ import {
   createSelectionExtensionRegistry,
   type SelectionExtensionRegistry,
 } from './selection-ui/extension-registry.js';
+import type { PointFrameExtentProvider } from './selection-ui/types.js';
 
 /**
  * The registries the selection UI and the handle hit testing of one draw instance share:
@@ -45,10 +46,14 @@ export interface SelectionScope {
 /**
  * Creates the selection scope of one draw instance
  *
+ * @param options.defaultPointFrameExtent - The extent of the frame of a point whose type
+ *   registers none (see createSelectionExtensionRegistry)
  * @internal
  */
-export function createSelectionScope(): SelectionScope {
-  const extensions = createSelectionExtensionRegistry();
+export function createSelectionScope(
+  options: { defaultPointFrameExtent?: PointFrameExtentProvider } = {},
+): SelectionScope {
+  const extensions = createSelectionExtensionRegistry(options.defaultPointFrameExtent);
   const auxiliaryHandles = createAuxiliaryHandleRegistry();
   const thinning = new HandleThinningCache();
   return {

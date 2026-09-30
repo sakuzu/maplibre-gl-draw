@@ -333,6 +333,28 @@ describe('document.loadMany', () => {
     expect(store.getLayerOrder()).toEqual(['l1', firstLayer?.id, secondLayer?.id]);
   });
 
+  it('lets an item name with layerId the layer an earlier item creates', async () => {
+    const notifications: Array<string | undefined> = [];
+    store.subscribe((change) => notifications.push(change.source));
+    const results = await doc.loadMany([
+      { source: point('p', [3, 4]), options: { layer: { id: 'L', name: 'new' } } },
+      { source: point('q', [5, 6]), options: { layerId: 'L', group: { name: 'folder' } } },
+    ]);
+    expect(notifications).toEqual(['load']);
+    const group = store.getGroup(results?.[1]?.groupId ?? '');
+    expect(group).toMatchObject({ name: 'folder', layerId: 'L', featureIds: ['q'] });
+    expect(store.getFeature('q')).toMatchObject({ layerId: 'L', groupId: group?.id });
+    expect(store.getLayer('L')?.items).toEqual(['p', group?.id]);
+    // A layer no item creates is still not found, and nothing is written
+    await expect(
+      doc.loadMany([
+        { source: point('r', [1, 1]), options: { layerId: 'M' } },
+        { source: point('s', [1, 1]), options: { layer: { id: 'M' } } },
+      ]),
+    ).rejects.toMatchObject({ code: 'not-found' });
+    expect(store.getLayer('M')).toBeUndefined();
+  });
+
   it('refuses layer with layerId, and layer or group with a document of the library', async () => {
     const saved = doc.toJSON();
     const refused = [

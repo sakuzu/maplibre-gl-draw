@@ -193,6 +193,23 @@ const results = await draw.document.loadMany(
 for (const result of results ?? []) console.log(result.layerId, result.groupId);
 ```
 
+項目の `layerId` には、前の項目が `layer` で作るレイヤーも指定できます。
+1 回の取り込みの複数のファイルで新しいレイヤーを 1 つ共有し、ある
+ファイルの地物をそのレイヤーのグループにまとめることも、同じ
+トランザクションのままできます。
+
+```ts
+declare const files: File[];
+
+await draw.document.loadMany([
+  { source: files[0], options: { layer: { id: 'survey', name: 'Survey' } } },
+  {
+    source: files[1],
+    options: { layerId: 'survey', group: { name: 'second file' } },
+  },
+]);
+```
+
 ## 地図にドロップされたファイル
 
 ライブラリーは、地図にドロップされたファイルを受け取りません。どの

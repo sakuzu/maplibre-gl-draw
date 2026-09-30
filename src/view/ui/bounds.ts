@@ -128,7 +128,8 @@ export function computeCombinedGeoBoundingBox(
 /**
  * Compute the bounding box with a margin of a single-coordinate feature in geographic coordinates
  *
- * The extent of the frame of a point (registrable per type; 12px square when unregistered)
+ * The extent of the frame of a point (registrable per type; the marker of a built-in point, or
+ * a 12px square when unregistered)
  * plus the margin is computed in screen coordinates and converted into geographic ones.
  * The coordinate received is the center of the bbox (since features other than Point can
  * also be zero-area, e.g. a MultiPoint with a single point; coordinates must not be

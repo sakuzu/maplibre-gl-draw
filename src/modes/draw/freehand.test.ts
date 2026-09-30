@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Integration tests for the snapping of freehand
+ * Integration tests for the snapping of freehand, and for what a press that draws nothing
+ * leaves to the map
  *
  * Through the real InputRouter, the real SnapService and the freehand mode, this checks that
  * the inside of a stroke (dragmove) is not bent by snapping, and that the start point
- * (dragstart) and the end point (dragend) are snapped as before.
+ * (dragstart) and the end point (dragend) are snapped as before. A press released without a
+ * drag gives the pan back, and a double click in a drawing mode never zooms the map.
  *
  * The assembly follows the same style as trace-mode.test.ts: instead of synthetic input, drag
  * events are fed from the normalizer (because the synthetic input of the tests has no drags).
@@ -293,5 +295,58 @@ describe('cancel of a freehand stroke (dragcancel)', () => {
     normalizer.emit(makeDragEvent('dragmove', points[4], start));
     normalizer.emit(makeDragEvent('dragend', points[5], start));
     expect(store.listFeatures().map((f) => f.id)).toEqual(['boundary']);
+  });
+});
+
+describe('a press of freehand that draws nothing', () => {
+  /** A mouse event of the normalizer at a position, with an event of the browser to prevent */
+  function mouse(type: 'mousedown' | 'mouseup' | 'click' | 'dblclick', coord: Coordinate) {
+    const original = { defaultPrevented: false, preventDefault() {}, stopPropagation() {} };
+    original.preventDefault = () => {
+      original.defaultPrevented = true;
+    };
+    const event = {
+      ...makeDragEvent('dragstart', coord, coord),
+      type,
+      originalEvent: original,
+    } as unknown as NormalizedEvent;
+    return { event, original };
+  }
+
+  it('gives dragPan back when the press is released without a drag', () => {
+    modeManager.setMode('draw_freehand');
+    const [at] = straightStroke(1);
+    normalizer.emit(mouse('mousedown', at).event);
+    expect(map.dragPan.isEnabled()).toBe(false);
+    normalizer.emit(mouse('mouseup', at).event);
+    normalizer.emit(mouse('click', at).event);
+    expect(map.dragPan.isEnabled()).toBe(true);
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['boundary']);
+  });
+
+  it('keeps the map from zooming on a double click', () => {
+    modeManager.setMode('draw_freehand');
+    const [at] = straightStroke(1);
+    const { event, original } = mouse('dblclick', at);
+    normalizer.emit(event);
+    expect(original.defaultPrevented).toBe(true);
+    expect(map.dragPan.isEnabled()).toBe(true);
+  });
+
+  it('keeps the map from zooming in any drawing mode, even one that does not take the click', () => {
+    harness.register('draw_custom', () => ({ writes: true }));
+    harness.register('look', () => ({}));
+    const [at] = straightStroke(1);
+
+    modeManager.setMode('draw_custom');
+    const drawing = mouse('dblclick', at);
+    normalizer.emit(drawing.event);
+    expect(drawing.original.defaultPrevented).toBe(true);
+
+    // A mode that draws nothing leaves the double click to the map
+    modeManager.setMode('look');
+    const looking = mouse('dblclick', at);
+    normalizer.emit(looking.event);
+    expect(looking.original.defaultPrevented).toBe(false);
   });
 });

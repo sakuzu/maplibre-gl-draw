@@ -425,10 +425,17 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
         } finally {
           trackClick?.(null);
         }
-      case 'dblclick':
-        return engineOr(toExtensions(handler, event, event, null), handler.onDoubleClick, () =>
-          handler.onDoubleClick?.(event),
+      case 'dblclick': {
+        const taken = engineOr(
+          toExtensions(handler, event, event, null),
+          handler.onDoubleClick,
+          () => handler.onDoubleClick?.(event),
         );
+        // A double click never zooms the map while a drawing mode is active, whether or not
+        // anything took it: its clicks were meant for the drawing
+        if (handler.writesFeatures === true) event.originalEvent.preventDefault();
+        return taken;
+      }
       case 'mousedown':
         return engineOr(toExtensions(handler, event, event, null), handler.onMouseDown, () =>
           handleMouseDown(handler, event),

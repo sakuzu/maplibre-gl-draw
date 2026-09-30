@@ -69,6 +69,11 @@ export interface MouseNormalizedEvent {
    * which synthetic input chooses whether to go through snapping.
    */
   snap?: boolean;
+  /**
+   * Whether the event was made from code (`draw.drawing`) at an exact position, not by the
+   * pointer; the modes apply no click tolerance to it (`DrawPointerEvent.programmatic`)
+   */
+  programmatic?: boolean;
 }
 
 /**

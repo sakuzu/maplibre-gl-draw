@@ -193,6 +193,22 @@ const results = await draw.document.loadMany(
 for (const result of results ?? []) console.log(result.layerId, result.groupId);
 ```
 
+An item may name with `layerId` the layer an earlier item creates with
+`layer`, so the files of one import can share a new layer, and a file
+can put its features in a group of that layer, in the same transaction:
+
+```ts
+declare const files: File[];
+
+await draw.document.loadMany([
+  { source: files[0], options: { layer: { id: 'survey', name: 'Survey' } } },
+  {
+    source: files[1],
+    options: { layerId: 'survey', group: { name: 'second file' } },
+  },
+]);
+```
+
 ## Files dropped on the map
 
 The library does not take files dropped on the map: which files are

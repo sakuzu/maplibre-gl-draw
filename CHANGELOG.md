@@ -116,6 +116,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   the rim of the marker went to what was behind it, a companion drawn
   from the point among others. A feature therefore always wins over its
   own companion at the same point.
+- A double click never zooms the map while a drawing mode (a mode with
+  `writes: true`) is the current mode, whether or not the mode takes
+  it; the freehand mode takes it, and a press it releases without a
+  drag leaves the pan of the map on.
 
 ### Added in 2.0.0
 
@@ -142,7 +146,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `LoadOptions.layer` and `LoadOptions.group`, which create a layer for
   the features and a group of them in the transaction of the load, for
   `load` and for each item of `loadMany`, and `LoadResult.layerId` and
-  `LoadResult.groupId`, their IDs.
+  `LoadResult.groupId`, their IDs. An item of `loadMany` may name with
+  `layerId` the layer an earlier item creates.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
 - `layers.getOrder()`, the stacking order as `layers.reorder` takes it:
@@ -166,7 +171,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   drawing from code: `addVertex`, `moveTo` and `finish` act as a click,
   a pointer move and Enter would, without snapping and through the
   `input` receivers of the plugins, and `cancel`, `undoVertex`,
-  `redoVertex`, `isActive` and `isDrawing` go with them.
+  `redoVertex`, `isActive` and `isDrawing` go with them. Their positions
+  are exact: the events carry `DrawPointerEvent.programmatic`, and the
+  click tolerance of the pointer does not apply to them.
 - The contexts of the extensions: `terrain`, `names`, `screen` and
   `invalidate` and `drawing` (the same object as `draw.drawing`) for
   every kind, and

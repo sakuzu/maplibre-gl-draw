@@ -301,6 +301,29 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(await mode(page)).toBe('select');
   });
 
+  it('leaves the pan on after a freehand click, and a double click does not zoom the map', async () => {
+    await clearAll(page);
+    const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
+    await setMode(page, 'draw_freehand');
+    await click(page, at(0, 0));
+    expect(
+      await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
+    ).toBe(true);
+
+    await page.mouse.dblclick(at(40, 20).x, at(40, 20).y);
+    // Long enough for the zoom animation of a double click to have moved the map
+    await page.waitForTimeout(400);
+    await settle(page);
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
+    expect(
+      await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
+    ).toBe(true);
+    expect(await features(page)).toHaveLength(0);
+
+    await press(page, 'Escape');
+    expect(await mode(page)).toBe('select');
+  });
+
   it('selects a polygon with a click and moves it with a drag', async () => {
     await clearAll(page);
     await setMode(page, 'draw_polygon');
@@ -330,6 +353,21 @@ describe('drawing with the real pointer on a flat map', () => {
     const ring = outerRing(after);
     expectNear(ring[2], await lngLatOf(page, at(90, 70)));
     expectNear(ring[1], await lngLatOf(page, at(40, -40)));
+  });
+
+  it('moves a selected point with a drag anywhere in its frame: the marker and the margin', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_point');
+    await click(page, at(0, 0));
+    const [before] = await features(page);
+    await click(page, at(0, 0));
+    expect(await selectedIds(page)).toEqual([before.id]);
+
+    // The frame spans the marker (a radius of 6 px and an outline of 2 px) and the margin of
+    // 10 px: 18 px from the point, beyond the 16 px of a 12 px box with the margin
+    await drag(page, at(17, 0), at(67, 20));
+    const [after] = await features(page);
+    expectNear(coordinatesOf(after) as number[], await lngLatOf(page, at(50, 20)));
   });
 
   it('does not move a feature when the press stays within the drag threshold', async () => {

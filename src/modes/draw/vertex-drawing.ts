@@ -74,10 +74,17 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
 
   const closable = (): boolean => vertices.length >= shape.minVertices && nearClosing;
 
-  /** Whether a point on the screen is on a placed vertex */
-  const onVertex = (point: readonly [number, number], index: number): boolean => {
-    const [x, y] = ctx.screen.project(vertices[index]);
-    return Math.hypot(point[0] - x, point[1] - y) <= VERTEX_CLICK_TOLERANCE;
+  /**
+   * Whether the input is on a placed vertex: within the click tolerance for the pointer, and at
+   * exactly its position for the input made from code, which is not a click of a hand
+   */
+  const onVertex = (event: DrawPointerEvent, index: number): boolean => {
+    const vertex = vertices[index];
+    if (event.programmatic) {
+      return event.snapped.lngLat[0] === vertex[0] && event.snapped.lngLat[1] === vertex[1];
+    }
+    const [x, y] = ctx.screen.project(vertex);
+    return Math.hypot(event.point[0] - x, event.point[1] - y) <= VERTEX_CLICK_TOLERANCE;
   };
 
   const show = (withPointer: boolean): void => {
@@ -165,16 +172,16 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
 
     onClick(event) {
       // Read from the click itself: no pointer move has to come between two clicks
-      nearClosing = vertices.length > 0 && onVertex(event.point, shape.closingVertex(vertices));
+      nearClosing = vertices.length > 0 && onVertex(event, shape.closingVertex(vertices));
       if (closable()) finish();
       // The second click of a double click lands on the vertex the first one placed
-      else if (vertices.length === 0 || !onVertex(event.point, vertices.length - 1)) place(event);
+      else if (vertices.length === 0 || !onVertex(event, vertices.length - 1)) place(event);
       return true;
     },
 
     onPointerMove(event) {
       pointer = [event.snapped.lngLat[0], event.snapped.lngLat[1]];
-      nearClosing = vertices.length > 0 && onVertex(event.point, shape.closingVertex(vertices));
+      nearClosing = vertices.length > 0 && onVertex(event, shape.closingVertex(vertices));
       tracePreview = computeTracePath(source, traceAnchor, readTraceAnchor(source, event));
       ctx.cursor.set(closable() ? 'pointer' : 'crosshair');
       if (vertices.length > 0) show(true);

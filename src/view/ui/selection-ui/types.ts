@@ -39,7 +39,8 @@ export interface PointFrameExtent {
 /**
  * Returns the size of the selection frame of a point-like feature.
  *
- * Returning null gives the default dimensions (the square of DEFAULT_POINT_FRAME_SIZE).
+ * Returning null gives the default dimensions: the extent of the marker for a point the
+ * built-in type draws, else the square of DEFAULT_POINT_FRAME_SIZE.
  */
 export type PointFrameExtentProvider = (feature: Feature) => PointFrameExtent | null;
 
