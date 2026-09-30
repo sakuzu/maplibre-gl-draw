@@ -18,6 +18,7 @@ import type {
   DatasetOptions as EngineDatasetOptions,
   DatasetRow as EngineDatasetRow,
 } from '../../dataset/types.js';
+import type { BBox } from '../../geometry/types.js';
 import type { EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import type {
@@ -45,6 +46,21 @@ import {
   requireId,
   requireIds,
 } from './shared.js';
+
+/**
+ * The range a query of the rows takes: a `BBox` of four or six finite numbers (it is required,
+ * so a call without one is an invalid input rather than a TypeError from deep inside)
+ */
+function requireBBox(bbox: unknown): BBox {
+  if (
+    !Array.isArray(bbox) ||
+    (bbox.length !== 4 && bbox.length !== 6) ||
+    bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value))
+  ) {
+    throw invalidInput('bbox must be [west, south, east, north] in degrees');
+  }
+  return bbox as unknown as BBox;
+}
 
 const ORDERS: readonly string[] = ['below-store', 'above-store', 'layer-order'];
 
@@ -311,8 +327,9 @@ export function wrapDataset(dataset: EngineDataset): Dataset {
     },
     getBaseStyle: () => dataset.getBaseStyle(),
     listRows: () => dataset.getFeatures().map(toDatasetRow),
-    listVisibleRows: (bbox) => dataset.collectVisible(toBoundingBox(bbox)).map(toDatasetRow),
-    listDrawnRows: (bbox) => dataset.collectDrawnRows(toBoundingBox(bbox)),
+    listVisibleRows: (bbox) =>
+      dataset.collectVisible(toBoundingBox(requireBBox(bbox))).map(toDatasetRow),
+    listDrawnRows: (bbox) => dataset.collectDrawnRows(toBoundingBox(requireBBox(bbox))),
     getRow(index) {
       const feature = dataset.getRow(index);
       return feature ? toDatasetRow(feature) : undefined;

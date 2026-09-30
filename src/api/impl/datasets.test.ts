@@ -234,6 +234,14 @@ describe('a dataset', () => {
     expect(typeof dataset.getDrawnRowsRevision()).toBe('number');
   });
 
+  it('refuses a query of the rows without a range as an invalid input', () => {
+    const dataset = datasets.add({ id: 'd', rows: ROWS });
+    for (const bbox of [undefined, [0, 0, 1], [0, 0, 1, Number.NaN], 'world']) {
+      expect(() => dataset.listDrawnRows(bbox as never)).toThrow(DrawError);
+      expect(() => dataset.listVisibleRows(bbox as never)).toThrow(DrawError);
+    }
+  });
+
   it('replaces its rows and its table, and tells it with changed and the reason rows', () => {
     const dataset = datasets.add({ id: 'd', rows: ROWS });
     const changes: DatasetEvents['changed'][] = [];
