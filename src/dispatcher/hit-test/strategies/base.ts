@@ -110,6 +110,19 @@ export interface HitTestStrategy {
    * @returns The distance (same unit) if within the tolerance, null if outside
    */
   testDistance?(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null;
+
+  /**
+   * How far beyond its geometry the feature is drawn, in CSS pixels (the radius of the marker
+   * of a point)
+   *
+   * The service adds it to the tolerance it hands to `test` for this feature, and widens the
+   * candidate search by it, so that a click on what is drawn hits the feature. Without it,
+   * the feature is hit within the tolerance of its geometry alone.
+   *
+   * @param feature The feature to test
+   * @returns The reach in CSS pixels (0 or more)
+   */
+  reachPx?(feature: Feature): number;
 }
 
 /**

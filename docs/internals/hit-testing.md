@@ -112,6 +112,12 @@ here as well.
 - A companion decides a hit by its appearance in screen pixels, so the
   test needs `project` and the zoom. Without them the companion test is
   not performed
+- The feature itself is tested first, on what it draws: a point on its
+  marker (see "The marker of a point" below), a line or an area as its
+  strategy tests it, with the click tolerance. So a feature always wins
+  over its own companion, even when the companion is drawn from the
+  position of the feature and hit with a padding of its own (a leader
+  line)
 - When no provider is registered at all, the detour never happens. This is
   an O(1) check at the entry of the traversal, so the cost and the path of
   the plain traversal do not change
@@ -198,7 +204,8 @@ The degrees per pixel are `toleranceLngLat / clickTolerance`, so no extra
 `toleranceLngLat`.
 
 Only the candidate set grows. The tolerance handed to the second stage is
-still `toleranceLngLat`, and whether something is a hit is still decided by
+still `toleranceLngLat` (widened only by the reach of a strategy, see "The
+marker of a point"), and whether something is a hit is still decided by
 the strategy. A few more candidates are cheap, so the search is done once
 with the maximum rather than per type.
 
@@ -225,6 +232,27 @@ and returns the first feature that was hit. So on the Store alone:
 - A polygon in front blocks points, lines and polygons behind it
 - The inside of a hole is not a hit, so the click falls through to the
   feature behind
+
+### The marker of a point
+
+A built-in point is drawn as a marker: the radius of `pointRadius` (half
+the `size` of the point style by default) plus its outline when the
+outline is drawn. The position alone would be hit only within the
+tolerance, so a click on the rim of a marker larger than the tolerance
+would miss the point and fall through to what is behind it, a companion
+drawn from the point for instance.
+
+So the built-in `Point` and `MultiPoint` strategies carry a reach
+(`HitTestStrategy.reachPx`): the draw instance passes
+`pointMarkerReachPx`, which reads the size and the outline as the
+renderer does. In `hitTestAll()` the tolerance of such a feature is its
+reach plus the click tolerance, the candidate search is widened by the
+largest reach among the features, and the screen space test of the
+symbols (under terrain) adds it as well. `hitTestFeature()`, the path of
+the datasets, is unchanged: a dataset measures its own markers. A
+definition that takes some points (`appliesTo`) keeps the reach for the
+points it leaves to the built-in type, and its own `hitTest` decides for
+the others.
 
 ### The shape tested on the globe
 

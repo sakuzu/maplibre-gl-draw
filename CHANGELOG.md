@@ -110,6 +110,12 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   type, points included, so a long and thin selection keeps it on its
   long sides too; 1.0 pushed the corners out along the diagonals. The
   resize and rotate handles sit on the corners of that frame.
+- A built-in point is hit anywhere on its marker (the radius of
+  `pointRadius` and its outline) with the click tolerance around it;
+  1.0 hit it only within the tolerance of its position, so a click on
+  the rim of the marker went to what was behind it, a companion drawn
+  from the point among others. A feature therefore always wins over its
+  own companion at the same point.
 
 ### Added in 2.0.0
 

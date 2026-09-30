@@ -105,7 +105,8 @@ export interface FeatureCompanionProvider {
   ): void;
   /**
    * Called in the z scan of click resolution, after the feature itself misses and before
-   * the next feature.
+   * the next feature. The feature itself is hit on what it draws (the marker of a point
+   * included) with the click tolerance, so it always wins over its own companion.
    *
    * If it returns a hit, core consumes that click (it does not change the selection state,
    * nor does it clear the selection as an empty click would) and calls

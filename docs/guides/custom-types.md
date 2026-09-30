@@ -559,10 +559,21 @@ draw.extensions.companionProviders.add(halo);
   hit test, so it must answer at once, from the feature or from an
   index you keep
 - `draw` is called just before the feature itself
-- `hitTest` is asked when the pointer missed the feature itself, before
-  the feature behind it. A hit calls `onClick`: when it returns true the
-  click is consumed and the selection stays as it is; otherwise the
-  select mode takes the click as one on the feature
+- `hitTest` is asked at the step of its feature: when the pointer missed
+  the feature itself, before the feature behind it. At one point on the
+  screen a click therefore goes, in this order:
+  - to the handles of the selection, which are grabbed even under a
+    companion
+  - then, from the front of the stacking order, to each feature and then
+    to its companions. A feature, hit on its marker, its line or its area
+    with the click tolerance, wins over its own companion, and a companion
+    wins over the features behind its feature
+  - to the rows of a dataset only where no feature and no companion in
+    front of them is hit. A dataset stacked in front of a feature comes
+    before both
+- A hit calls `onClick`: when it returns true the click is consumed and
+  the selection stays as it is; otherwise the select mode takes the click
+  as one on the feature
 
 ## Your own shaders
 

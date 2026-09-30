@@ -228,6 +228,73 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   });
 });
 
+describe('the marker of a point (pointMarkerReachPx)', () => {
+  /** A service whose points are drawn with a marker reaching `reach` px from the position */
+  function withMarker(reach: (feature: Feature) => number): HitTestServiceImpl {
+    return new HitTestServiceImpl(store, spatialIndex, {
+      clickTolerance: 5,
+      pointMarkerReachPx: reach,
+    });
+  }
+
+  it('hits a point anywhere on its marker, with the tolerance around it', () => {
+    const marked = withMarker(() => 8);
+    const ordered = load([point('pt', [5, 5])]);
+    const findNear = vi.spyOn(spatialIndex, 'findNear');
+
+    // 12px from the position: on the marker (8px) with the tolerance (5px), and beyond the
+    // tolerance alone
+    expect(marked.hitTest({ x: 62, y: -50 }, unproject, ordered)?.feature.id).toBe('pt');
+    expect(service.hitTest({ x: 62, y: -50 }, unproject, ordered)).toBeNull();
+    // 14px: beyond both
+    expect(marked.hitTest({ x: 64, y: -50 }, unproject, ordered)).toBeNull();
+    // The candidates are searched as far: 0.5 degrees + 8px x 0.1 degrees/px
+    expect(findNear.mock.calls[0][1]).toBeCloseTo(1.3, 10);
+  });
+
+  it('follows the marker of each feature, and reaches every part of a MultiPoint', () => {
+    const marked = withMarker((feature) => (feature.id === 'big' ? 30 : 8));
+    const multi: Feature = {
+      ...point('multi', [0, 0]),
+      type: 'MultiPoint',
+      geometry: {
+        type: 'MultiPoint',
+        coordinates: [
+          [-20, 0],
+          [20, 0],
+        ],
+      },
+    };
+    const ordered = load([point('big', [5, 5]), multi]);
+
+    expect(marked.hitTest({ x: 80, y: -50 }, unproject, ordered)?.feature.id).toBe('big');
+    expect(marked.hitTest({ x: 212, y: 0 }, unproject, ordered)?.feature.id).toBe('multi');
+  });
+
+  it('leaves the test of one feature (the path of the datasets) and a replaced strategy as they were', () => {
+    const marked = withMarker(() => 8);
+    const ordered = load([point('pt', [5, 5])]);
+
+    // 1 degree = 10px from the position, with the tolerance of 5px in degrees
+    expect(marked.hitTestFeature(ordered[0], [6, 5], 0.5)).toBe(false);
+
+    marked.registerStrategy(new PointHitTestStrategy());
+    expect(marked.hitTest({ x: 62, y: -50 }, unproject, ordered)).toBeNull();
+  });
+
+  it('widens the screen space test of the symbols by the marker as well', () => {
+    const marked = new HitTestServiceImpl(store, spatialIndex, {
+      clickTolerance: 5,
+      pointMarkerReachPx: () => 8,
+      anchorScreen: { project: () => ({ x: 100, y: 0 }) },
+    });
+    const ordered = load([point('pt', [10, 0])]);
+
+    expect(marked.hitTestAll({ x: 112, y: 0 }, unproject, ordered)).toHaveLength(1);
+    expect(marked.hitTestAll({ x: 114, y: 0 }, unproject, ordered)).toHaveLength(0);
+  });
+});
+
 describe('the single scan of hitTestAll', () => {
   /** A strategy that counts the calls to the test and the distance computation */
   function createSpyStrategy(geometryType: FeatureType, withTestDistance: boolean) {

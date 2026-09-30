@@ -387,6 +387,63 @@ describe('drawing with the real pointer on a flat map', () => {
   });
 });
 
+describe('a point with a companion under the real pointer', () => {
+  it('selects the point with a click on its marker, and gives a click on the companion to it', async () => {
+    await clearAll(page);
+    const position = await lngLatOf(page, CENTER);
+    const id = await page.evaluate((coordinates) => {
+      const { draw } = window as unknown as E2EWindow;
+      const w = window as unknown as { e2eLeadClicks: string[] };
+      w.e2eLeadClicks = [];
+      const feature = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates },
+      });
+      if (!feature) throw new Error('no feature');
+      // Hit within 60 px of the point, as the padding of a leader line starting there
+      draw.extensions.companionProviders.add({
+        name: 'e2e-lead',
+        has: (f) => f.id === feature.id,
+        draw() {},
+        hitTest(f, ctx) {
+          const [x, y] = ctx.screen.project((f.geometry as { coordinates: number[] }).coordinates);
+          const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
+          return distancePx <= 60
+            ? { kind: 'companion', id: 'lead', featureId: f.id, distancePx }
+            : null;
+        },
+        onClick(f) {
+          w.e2eLeadClicks.push(f.id);
+          return true;
+        },
+      });
+      return feature.id;
+    }, position);
+    const leadClicks = () =>
+      page.evaluate(() => (window as unknown as { e2eLeadClicks: string[] }).e2eLeadClicks);
+
+    try {
+      // The center and the outline of the marker (6 px and a 2 px outline by default), beyond
+      // the tolerance of the position
+      for (const p of [at(0, 0), at(7, 0), at(0, -7)]) {
+        await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+        await click(page, p);
+        expect(await selectedIds(page)).toEqual([id]);
+      }
+      expect(await leadClicks()).toEqual([]);
+
+      // Away from the marker the companion takes the click, and the selection stays
+      await click(page, at(40, 0));
+      expect(await leadClicks()).toEqual([id]);
+      expect(await selectedIds(page)).toEqual([id]);
+    } finally {
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.extensions.companionProviders.remove('e2e-lead'),
+      );
+    }
+  });
+});
+
 describe('the stacking order on a real map', () => {
   it('places external entries and layer-order datasets with reorder, and the runs follow', async () => {
     const result = await page.evaluate(() => {
