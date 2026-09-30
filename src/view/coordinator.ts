@@ -50,16 +50,16 @@ export interface RenderCoordinatorDeps {
 function shouldRepaint(changes: StoreChange): boolean {
   // A repaint is required if any of the following changed
   return !!(
-    (
-      changes.features || // creation, update or deletion of features
-      changes.layers || // layer changes
-      changes.groups || // group changes (reordering, show/hide)
-      changes.layerReorder || // reordering of items within a layer
-      changes.groupReorder || // reordering of features within a group
-      changes.selection || // selection state changes
-      changes.tentative || // changes to the transient state while drawing
-      changes.uiStateChanged
-    ) // changes to the UI state (dragState, boxSelection)
+    changes.features || // creation, update or deletion of features
+    changes.layers || // layer changes
+    changes.groups || // group changes (reordering, show/hide)
+    changes.layerReorder || // reordering of items within a layer
+    changes.groupReorder || // reordering of features within a group
+    changes.selection || // selection state changes
+    changes.tentative || // changes to the transient state while drawing
+    changes.uiStateChanged || // changes to the UI state (dragState, boxSelection)
+    // the whole document replaced
+    changes.reset
   );
 }
 
