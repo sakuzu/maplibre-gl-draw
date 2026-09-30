@@ -343,9 +343,10 @@ describe('the outline of a custom feature type', () => {
       { x: 500, y: 220 },
       { x: 480, y: 200 },
     ]);
-    // The margin pushes the corners out from the middle
+    // The margin moves every edge of the diamond out, so its top goes up by 4 * sqrt(2)
     const [top] = extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 4);
-    expect(top).toEqual({ x: 500, y: 176 });
+    expect(top.x).toBeCloseTo(500);
+    expect(top.y).toBeCloseTo(180 - 4 * Math.SQRT2);
 
     engine.extensions.collections.featureTypes.remove('turned-pin');
     expect(extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 0)).toEqual([

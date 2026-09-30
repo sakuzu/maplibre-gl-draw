@@ -105,6 +105,11 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   loaded with `silent`, nor an image with `local`.
 - The GeoJSON export writes the `properties` of a feature as they are
   stored, with their prefix.
+- The margin of the selection frame (`selectionStyle.boundingBox.margin`)
+  stands outside every edge of the outline of the selection, for every
+  type, points included, so a long and thin selection keeps it on its
+  long sides too; 1.0 pushed the corners out along the diagonals. The
+  resize and rotate handles sit on the corners of that frame.
 
 ### Added in 2.0.0
 
@@ -147,7 +152,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
   being drawn, and `selectionStyle.boxSelection` for the selection box.
 - `ScreenContext.outline`, the four corners of the selection frame of
-  any feature on the screen, turned as the shape is.
+  any feature on the screen, turned as the shape is, without the margin
+  the frame is drawn with.
 - `draw.drawing`, which drives the shape the current drawing mode is
   drawing from code: `addVertex`, `moveTo` and `finish` act as a click,
   a pointer move and Enter would, without snapping and through the
@@ -159,7 +165,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and
   `listTraceRows` for a mode.
 - `FeatureTypeDefinition.outline`, the four corners of the selection
-  frame of a type whose shape turns, and `FeatureTypeDefinition.bbox`,
+  frame of a type whose shape turns (the engine adds
+  `selectionStyle.boundingBox.margin` on every side when it draws the
+  frame), and `FeatureTypeDefinition.bbox`,
   the extent on the map the spatial index takes for a type that draws
   beyond its geometry.
 - `onDragStart` and `onDragEnd` of `HandleProvider`, and

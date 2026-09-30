@@ -168,7 +168,48 @@ export function createCoordinateTransform(map: MapLibreMap): CoordinateTransform
 }
 
 /**
+ * Moves every edge of a four-cornered outline outward by a margin
+ *
+ * The corners are in the order top left, top right, bottom right, bottom left of the shape as
+ * it stands unturned, in a space whose y axis points down (the screen). Each corner moves by
+ * the margin along both edges that meet at it, so the frame keeps the margin on every side and
+ * its corners stay on the diagonals of the outline turned as it is. An edge of no length (the
+ * outline of a straight horizontal or vertical line) takes the direction square to the other
+ * one, and an outline of no size is widened as an unturned square.
+ *
+ * @param corners The four corners
+ * @param margin The margin, in the unit of the corners
+ * @returns The four corners moved outward, in the same order
+ */
+export function expandQuad(
+  corners: readonly { x: number; y: number }[],
+  margin: number,
+): { x: number; y: number }[] {
+  const [tl, tr, br, bl] = corners;
+  const unit = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    return length > 0 ? { x: dx / length, y: dy / length } : null;
+  };
+  let u = unit(tl, tr) ?? unit(bl, br);
+  let v = unit(tl, bl) ?? unit(tr, br);
+  // With y pointing down, the bottom direction is the right direction turned clockwise
+  if (!u && v) u = { x: v.y, y: -v.x };
+  if (u && !v) v = { x: -u.y, y: u.x };
+  const right = u ?? { x: 1, y: 0 };
+  const down = v ?? { x: 0, y: 1 };
+  const at = (corner: { x: number; y: number }, alongRight: number, alongDown: number) => ({
+    x: corner.x + (right.x * alongRight + down.x * alongDown) * margin,
+    y: corner.y + (right.y * alongRight + down.y * alongDown) * margin,
+  });
+  return [at(tl, -1, -1), at(tr, 1, -1), at(br, 1, 1), at(bl, -1, 1)];
+}
+
+/**
  * Applies a margin in pixels to a bounding box
+ *
+ * Every edge moves outward by the margin ({@link expandQuad}).
  *
  * When zoom is passed, the expansion is done on the map plane. When it is not passed, the
  * expansion round-trips through screen coordinates. It must not round-trip when there is
@@ -212,24 +253,8 @@ export function applyMarginToBoundingBox(
     transform.project(clampCoordinate(coords.bottomLeft)),
   ];
 
-  // Compute the center of the OBB
-  const centerX = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
-  const centerY = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
-
-  // Expand each vertex outward from the center
-  const expandedCorners = corners.map((corner) => {
-    const dx = corner.x - centerX;
-    const dy = corner.y - centerY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist === 0) return corner;
-
-    // Extend by the margin while keeping the direction of the vector
-    const scale = (dist + margin) / dist;
-    return {
-      x: centerX + dx * scale,
-      y: centerY + dy * scale,
-    };
-  });
+  // Move every edge outward by the margin
+  const expandedCorners = expandQuad(corners, margin);
 
   // Convert into geographic coordinates
   const topLeftResult = transform.unproject(expandedCorners[0]);
@@ -281,16 +306,15 @@ function marginOnMapPlane(
     };
   }
 
-  // The vertical and horizontal scales differ, so convert into pixel-equivalent amounts
-  // first and then widen
-  const expanded = corners.map(([lng, lat]): Coordinate => {
-    const dx = (lng - centerLng) / degPerPxLng;
-    const dy = (lat - centerLat) / degPerPxLat;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist === 0) return [lng, lat];
-    const scale = (dist + margin) / dist;
-    return [centerLng + dx * scale * degPerPxLng, centerLat + dy * scale * degPerPxLat];
-  });
+  // The vertical and horizontal scales differ, so convert into pixels (y down, as on the
+  // screen) first and then widen
+  const expanded = expandQuad(
+    corners.map(([lng, lat]) => ({
+      x: (lng - centerLng) / degPerPxLng,
+      y: -(lat - centerLat) / degPerPxLat,
+    })),
+    margin,
+  ).map(({ x, y }): Coordinate => [centerLng + x * degPerPxLng, centerLat - y * degPerPxLat]);
 
   return {
     topLeft: expanded[0],
