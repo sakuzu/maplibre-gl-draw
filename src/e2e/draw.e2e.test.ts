@@ -425,6 +425,53 @@ describe('drawing with the real pointer on a flat map', () => {
   });
 });
 
+describe('a thin line and the stroke of a polygon under the real pointer', () => {
+  afterAll(async () => {
+    await page.evaluate(
+      (camera) => (window as unknown as E2EWindow).map.jumpTo(camera),
+      FLAT as { center: [number, number]; zoom: number },
+    );
+    await settle(page);
+  });
+
+  it('selects a line drawn far under one pixel wide, and a polygon by its stroke and its fill', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_line');
+    for (const p of [at(-200, -40), at(-40, -120), at(-40, -120)]) await click(page, p);
+    await setMode(page, 'draw_polygon');
+    for (const p of [at(40, 40), at(200, 40), at(200, 200), at(40, 200), at(40, 40)]) {
+      await click(page, p);
+    }
+    const [line, polygon] = await features(page);
+    expect([line.type, polygon.type]).toEqual(['LineString', 'Polygon']);
+    const [start, end] = coordinatesOf(line) as number[][];
+    const ring = outerRing(polygon);
+
+    // Created at zoom 14 with a width of 2 px: at zoom 11 it is drawn a quarter of a pixel wide
+    for (const zoom of [14, 12, 11]) {
+      await page.evaluate((z) => (window as unknown as E2EWindow).map.setZoom(z), zoom);
+      await settle(page);
+      const a = await pageOf(page, start);
+      const b = await pageOf(page, end);
+      const corner = await pageOf(page, ring[0]);
+      const opposite = await pageOf(page, ring[2]);
+      const clicks: Array<[PagePoint, string]> = [
+        // On the path of the line, and 4 px beside it
+        [{ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, line.id],
+        [{ x: a.x + (b.x - a.x) * 0.25, y: a.y + (b.y - a.y) * 0.25 + 4 }, line.id],
+        // On the top edge of the polygon, 3 px outside it, and inside its fill
+        [{ x: (corner.x + opposite.x) / 2, y: corner.y - 3 }, polygon.id],
+        [{ x: (corner.x + opposite.x) / 2, y: (corner.y + opposite.y) / 2 }, polygon.id],
+      ];
+      for (const [p, id] of clicks) {
+        await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+        await click(page, p);
+        expect({ zoom, p, ids: await selectedIds(page) }).toEqual({ zoom, p, ids: [id] });
+      }
+    }
+  });
+});
+
 describe('a point with a companion under the real pointer', () => {
   it('selects the point with a click on its marker, and gives a click on the companion to it', async () => {
     await clearAll(page);
