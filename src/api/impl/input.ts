@@ -52,6 +52,7 @@ export function toPointerEvent(
     // The engine keeps the event of the browser it received: a pointer or mouse event, or a
     // touch event for a finger
     original: event.originalEvent as PointerEvent,
+    ...('programmatic' in event && event.programmatic === true && { programmatic: true }),
   };
 }
 

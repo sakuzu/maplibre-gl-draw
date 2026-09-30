@@ -175,8 +175,9 @@ export function createDrawingResource(
       originalEvent: makePointerOriginal(type, point, map.getContainer?.()),
       modifiers: { ...NO_MODIFIERS },
       pointerType: 'mouse',
-      // The position is used as it is
+      // The position is used as it is: it is not snapped, and no click tolerance applies
       snap: false,
+      programmatic: true,
     };
     return inputRouter.dispatch(event);
   };

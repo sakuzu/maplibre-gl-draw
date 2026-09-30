@@ -6,10 +6,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
+import { createDrawOnEngine } from './create-draw.js';
+import { createEngine } from './engine.js';
 
 let draw: Draw;
 
@@ -155,6 +157,110 @@ describe('drawing', () => {
     // The plugin consumed the click: the mode placed no second vertex
     draw.drawing.finish();
     expect(draw.features.list({ type: 'LineString' })).toHaveLength(0);
+  });
+
+  it('places the exact positions, with no click tolerance, and finishes wherever they are', () => {
+    // One degree is 100 px on the stub: the vertices are 3 px apart on the screen
+    draw = createDraw(createMapStub().map);
+    draw.setMode('draw_line');
+    draw.drawing.addVertex([0, 0]);
+    draw.drawing.moveTo([0.03, 0]);
+    expect(draw.drawing.addVertex([0.03, 0])).toBe(true);
+    // The second vertex was placed, not taken as a click on the last one that finishes
+    expect(draw.drawing.isDrawing()).toBe(true);
+    expect(draw.drawing.finish()).toBe(true);
+    expect(draw.features.list({ type: 'LineString' })[0].geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [0.03, 0],
+      ],
+    });
+
+    // A vertex of an area 3 px from the first one does not close it
+    draw.setMode('draw_polygon');
+    for (const position of [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ]) {
+      draw.drawing.addVertex(position);
+    }
+    draw.drawing.moveTo([0.02, 0.02]);
+    draw.drawing.addVertex([0.02, 0.02]);
+    expect(draw.drawing.isDrawing()).toBe(true);
+    expect(draw.drawing.finish()).toBe(true);
+    const [area] = draw.features.list({ type: 'Polygon' });
+    expect(area.geometry).toEqual({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0.02, 0.02],
+          [0, 0],
+        ],
+      ],
+    });
+  });
+
+  it('keeps the click tolerance for the pointer: a click 3 px from the last vertex places none', () => {
+    const engine = createEngine(createMapStub().map);
+    draw = createDrawOnEngine(engine);
+    const input = createSyntheticInput(engine);
+    draw.setMode('draw_polygon');
+    for (const position of [
+      [0, 0],
+      [1, 0],
+      [1.03, 0],
+      [1, 1],
+    ] as Array<[number, number]>) {
+      input.move(position, { snap: false });
+      input.click(position, { snap: false });
+    }
+    // A click 3 px from the first vertex closes the area
+    input.move([0.02, 0.02], { snap: false });
+    input.click([0.02, 0.02], { snap: false });
+    expect(draw.drawing.isDrawing()).toBe(false);
+    expect(draw.features.list({ type: 'Polygon' })[0].geometry).toEqual({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    });
+  });
+
+  it('ignores a vertex at exactly the last position, and closes an area on its first one', () => {
+    draw = createDraw(createMapStub().map);
+    draw.setMode('draw_polygon');
+    for (const position of [
+      [0, 0],
+      [1, 0],
+      [1, 0],
+      [1, 1],
+    ]) {
+      draw.drawing.addVertex(position);
+    }
+    expect(draw.drawing.isDrawing()).toBe(true);
+    draw.drawing.addVertex([0, 0]);
+    expect(draw.drawing.isDrawing()).toBe(false);
+    expect(draw.features.list({ type: 'Polygon' })[0].geometry).toEqual({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    });
   });
 
   it('refuses a position that is not two finite numbers', () => {

@@ -415,13 +415,19 @@ draw.drawing.finish(); // as Enter; the mode goes back to select
   events a click, a move and Enter make, at the point of the screen the
   position projects to. They go through the `input` receivers of the
   plugins before the mode, as the map's own input does. The position is
-  used as it is: nothing snaps it
+  used as it is: nothing snaps it, and the events carry
+  `programmatic: true`
+- The position is exact, so the click tolerance of the pointer (10 px)
+  does not apply: a vertex a few pixels from the last one is placed, and
+  one near the first vertex of an area does not close it. Only a
+  position exactly equal to the closing vertex finishes the shape
 - `addVertex` returns `false` when no drawing mode is active or nothing
   took the click. What it does is up to the mode: in `draw_point` it
   creates the point, and on the closing vertex of a line or an area it
   finishes the shape
-- `finish` returns `false` when no shape is in progress or the mode did
-  not complete it (too few vertices)
+- `finish` completes the shape as soon as it has enough vertices,
+  wherever the last one is, and returns `false` when no shape is in
+  progress or the mode did not complete it (too few vertices)
 - `cancel`, `undoVertex` and `redoVertex` drop the shape in progress,
   remove its last vertex and put it back
 - `isActive` tells whether a drawing mode is drawing or ready to place its

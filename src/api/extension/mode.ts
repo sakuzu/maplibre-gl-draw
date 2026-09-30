@@ -41,6 +41,13 @@ export interface DrawPointerEvent {
   pointerType: 'mouse' | 'touch' | 'pen';
   /** The event of the browser */
   original: PointerEvent;
+  /**
+   * True when the input was made from code by `draw.drawing` (`addVertex`, `moveTo`), not by
+   * the pointer. Its position is exact: a mode applies no click tolerance to it, so a vertex
+   * placed a few pixels from another is kept, and only one at exactly the same position is
+   * the same vertex. Left out for the input of the pointer.
+   */
+  programmatic?: boolean;
 }
 
 /** A key input, as a mode and a plugin receive it. */

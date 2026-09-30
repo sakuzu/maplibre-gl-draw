@@ -167,7 +167,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   drawing from code: `addVertex`, `moveTo` and `finish` act as a click,
   a pointer move and Enter would, without snapping and through the
   `input` receivers of the plugins, and `cancel`, `undoVertex`,
-  `redoVertex`, `isActive` and `isDrawing` go with them.
+  `redoVertex`, `isActive` and `isDrawing` go with them. Their positions
+  are exact: the events carry `DrawPointerEvent.programmatic`, and the
+  click tolerance of the pointer does not apply to them.
 - The contexts of the extensions: `terrain`, `names`, `screen` and
   `invalidate` and `drawing` (the same object as `draw.drawing`) for
   every kind, and
