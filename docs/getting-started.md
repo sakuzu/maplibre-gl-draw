@@ -118,11 +118,13 @@ In `draw_polygon` mode the user draws like this.
 | --- | --- |
 | Click | Adds a vertex |
 | Click the first vertex (with 3 or more vertices) | Finishes the polygon |
+| Double click (with 3 or more vertices) | Finishes the polygon |
 | Enter | Finishes the polygon |
 | Backspace or Delete | Removes the last vertex |
 | Escape | Discards the vertices; a second Escape returns to `select` |
 
-A double click adds two vertices; it does not zoom the map while drawing.
+A double click on a new position adds that vertex before it finishes; it
+does not zoom the map while drawing.
 When the polygon is finished, the mode returns to `select` and the new
 polygon is selected, so the user can move it or drag its vertices right
 away.

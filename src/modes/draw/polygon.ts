@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The polygon drawing mode: clicks add vertices, and a click on the first vertex or Enter
- * creates the polygon. A click snapped to a boundary after one snapped to the same boundary
- * network takes in the vertices between them (tracing).
+ * The polygon drawing mode: clicks add vertices, and a click on the first vertex, a double
+ * click or Enter creates the polygon. A click snapped to a boundary after one snapped to the
+ * same boundary network takes in the vertices between them (tracing).
  *
  * It is written to the extension contract, through the `ModeContext` alone.
  */

@@ -70,16 +70,17 @@ leaves the mode for `select` only when nothing is being drawn.
 | `draw_circle` | click, move | second click | discard | - |
 | `draw_freehand` | drag | release | discard | - |
 
-- A line needs two vertices and a polygon three before Enter or a click on
-  the last (line) or first (polygon) vertex finishes it. The cursor turns
-  into a pointer over that vertex
+- A line needs two vertices and a polygon three before Enter, a double
+  click or a click on the last (line) or first (polygon) vertex finishes
+  it. The cursor turns into a pointer over that vertex
 - Backspace and Delete remove the last placed vertex of a line or polygon
 - A circle takes its radius from the distance between the center and the
   pointer, and a second click finishes it once the radius is at least 1 m
 - Switching to another mode while a line, polygon or circle is in progress
   discards it
-- A double click while drawing counts as two clicks and does not zoom the
-  map
+- A double click on a new position adds that vertex once and then
+  finishes the shape; a double click never zooms the map while drawing. A
+  click on the last placed vertex adds no second vertex there
 - A drawing mode clears the selection when it starts
 
 The shape being drawn is shown with the `previewStyle` option, which takes
