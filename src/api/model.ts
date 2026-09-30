@@ -317,7 +317,10 @@ export interface FeatureInput {
  * What `features.update` takes: only the keys given change.
  *
  * `properties` and `style` are merged key by key, and a key given as `undefined` is removed.
- * The ID, the type and the layer cannot change here; `features.move` moves a feature.
+ * The ID and the layer cannot change here; `features.move` moves a feature.
+ *
+ * A patch has no `type`: the type of a feature cannot change. To turn a feature into another
+ * type, or to undo such a change, delete it and create it again.
  */
 export interface FeaturePatch {
   /** The new GeoJSON geometry */

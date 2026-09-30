@@ -247,6 +247,8 @@ describe('update', () => {
   it('throws not-found and invalid-input, changing nothing', () => {
     expect(codeOf(() => features.update('x', { visible: false }))).toBe('not-found');
     expect(codeOf(() => features.update('a', { layerId: 'l2' } as never))).toBe('invalid-input');
+    // The type of a feature cannot change
+    expect(codeOf(() => features.update('a', { type: 'Circle' } as never))).toBe('invalid-input');
     expect(codeOf(() => features.update('a', { geometry: square(0, 0, 1, 1) }))).toBe(
       'invalid-input',
     );

@@ -376,7 +376,7 @@ instance runs are `RuntimeOptions`, changed with `draw.options.update`.
 | `Feature.style?` | `Feature.style` | Always present, `{}` at least |
 | `FeatureInput.coordinates` | `FeatureInput.geometry` | |
 | (none) | `FeatureInput.groupId` | |
-| `Partial<Feature>` | `FeaturePatch` | For `features.update` |
+| `Partial<Feature>` | `FeaturePatch` | Without `id`, `type`, `layerId` |
 | `Partial<Layer>` | `LayerPatch` | For `layers.update` |
 | `Partial<Group>` | `GroupPatch` | For `groups.update` |
 | `properties.createdZoom` | `maplibre-gl-draw:createdZoom` | |
