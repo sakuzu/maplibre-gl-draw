@@ -11,7 +11,7 @@
  */
 
 import { MESSAGES_EN, resolveMessages } from '../../messages.js';
-import { isColor, toColor } from '../../shared/color.js';
+import { formatColor, isColor, toColor } from '../../shared/color.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';
@@ -22,7 +22,7 @@ import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../extension/store.js';
-import type { FeatureStyle } from '../model.js';
+import type { FeatureStyle, FeatureStyleResolved } from '../model.js';
 import type {
   DrawOptions,
   OptionsResource,
@@ -448,6 +448,108 @@ export function toFeatureStyleConfig(options: RuntimeOptions): FeatureStyleConfi
   return config;
 }
 
+/** A color as it is given and the opacity it is drawn with */
+interface Paint {
+  color: string;
+  opacity: number;
+}
+
+/** A color of the defaults as a CSS color, its alpha left to the opacity */
+function defaultCss(color: Color): string {
+  return formatColor([color[0], color[1], color[2], 1]);
+}
+
+/**
+ * A paint with the color and the opacity of a style put over it, as {@link applyFill} and
+ * {@link applyStroke} fold them into the configuration: a color keeps the string it was given,
+ * and takes the opacity given, or `fallback` of the paint before; an opacity on its own sets
+ * the alpha the color is drawn with
+ */
+function layerPaint(
+  paint: Paint,
+  color: string | undefined,
+  opacity: number | undefined,
+  fallback: (before: Paint) => number,
+): Paint {
+  if (color !== undefined) return { color, opacity: opacity ?? fallback(paint) };
+  if (opacity === undefined) return paint;
+  const alpha = alphaOf(paint.color);
+  if (alpha === 1) return { color: paint.color, opacity };
+  // The color before has an alpha of its own, which the opacity replaces
+  const rgb = toColor(paint.color);
+  return alpha > 0
+    ? { color: paint.color, opacity: opacity / alpha }
+    : { color: defaultCss(rgb), opacity };
+}
+
+/** The opacity a fill keeps when a style gives only its color: the alpha it was drawn with */
+const drawnAlpha = (paint: Paint): number => alphaOf(paint.color) * paint.opacity;
+
+/** The opacity a stroke takes when a style gives only its color */
+const opaque = (): number => 1;
+
+/** The types whose outline takes the stroke of an area */
+const AREA_TYPES: ReadonlySet<string> = new Set(['Polygon', 'MultiPolygon', 'Circle']);
+
+/**
+ * The look the options give a feature of a type before its layer rule and its own style, in
+ * the shape of the style of a feature
+ *
+ * The colors are the strings the options give, as they were given; a color the options leave
+ * out is the default as `#rrggbb`. The opacities are what the colors are drawn with, so that
+ * the look drawn is the same as the configuration of {@link toFeatureStyleConfig}.
+ *
+ * @param style - The `style` option
+ * @param type - The type of the feature
+ * @internal
+ */
+export function toAppliedDefaults(
+  style: RuntimeOptions['style'],
+  type: string,
+): FeatureStyleResolved {
+  const defaults = DEFAULT_FEATURE_STYLE_CONFIG;
+  const point = style?.point ?? {};
+  // A circle takes the look of the circles over the look of the polygons, as it is drawn
+  const layers: FeatureStyle[] = AREA_TYPES.has(type)
+    ? [style?.polygon ?? {}, ...(type === 'Circle' && style?.circle ? [style.circle] : [])]
+    : [style?.line ?? {}];
+  const defaultStroke = AREA_TYPES.has(type) ? defaults.polygon.stroke : defaults.lineString.stroke;
+  const fillDefault = defaults.polygon.fill.color;
+
+  let fill: Paint = { color: defaultCss(fillDefault), opacity: fillDefault[3] };
+  let stroke: Paint = {
+    color: defaultCss(defaultStroke.color),
+    opacity: defaultStroke.color[3] * defaultStroke.opacity,
+  };
+  let strokeWidth = defaultStroke.width;
+  let lineStyle = defaultStroke.lineStyle;
+  for (const layer of layers) {
+    if (AREA_TYPES.has(type)) {
+      fill = layerPaint(fill, layer.fillColor, layer.fillOpacity, drawnAlpha);
+    }
+    stroke = layerPaint(stroke, layer.strokeColor, layer.strokeOpacity, opaque);
+    strokeWidth = layer.strokeWidth ?? strokeWidth;
+    lineStyle = layer.lineStyle ?? lineStyle;
+  }
+
+  const marker = defaults.point.point;
+  return {
+    fillColor: fill.color,
+    fillOpacity: fill.opacity,
+    strokeColor: stroke.color,
+    strokeWidth,
+    strokeOpacity: stroke.opacity,
+    lineStyle,
+    pointColor: point.pointColor ?? defaultCss(marker.fillColor),
+    pointRadius: point.pointRadius ?? marker.size / 2,
+    pointShape: point.pointShape ?? (marker.shape === 'icon' ? 'circle' : marker.shape),
+    pointOpacity: point.pointOpacity ?? 1,
+    pointStrokeColor: point.pointStrokeColor ?? defaultCss(marker.strokeColor),
+    pointStrokeWidth: point.pointStrokeWidth ?? marker.strokeWidth,
+    imageOpacity: style?.image?.imageOpacity ?? defaults.image?.opacity ?? 1,
+  };
+}
+
 /** A stroke of the selection from its options */
 function toStroke(stroke: StrokeStyle, given: Record_ | undefined): void {
   if (!given) return;
@@ -599,6 +701,8 @@ function assignInPlace(target: Record_, source: Record_): void {
 export interface OptionsState extends OptionsResource {
   /** Applies the options given at creation that the engine does not take (the render scale) */
   applyCreation(): void;
+  /** The `style` option as it was given, not copied */
+  getStyle(): RuntimeOptions['style'];
 }
 
 /**
@@ -754,6 +858,10 @@ export function createOptions(
       checkPatch(patch);
       current = mergeOptions(current, patch);
       apply(patch);
+    },
+
+    getStyle(): RuntimeOptions['style'] {
+      return current.style;
     },
 
     applyCreation(): void {

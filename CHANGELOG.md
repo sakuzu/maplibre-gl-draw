@@ -117,8 +117,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `features.move`, `features.moveMany`, `groups.move` and
   `groups.moveMany`, which take a `MoveTarget`; `selection.add`,
   `selection.remove` and `selection.move`; `hidden.clear`;
-  `features.getAppliedStyle`; `features.isEditable`, which answers for
-  read-only and the locks of a feature, its group and its layer.
+  `features.getAppliedStyle`, which gives the colors of the options and
+  of the feature as they were given; `features.isEditable`, which
+  answers for read-only and the locks of a feature, its group and its
+  layer.
 - The events `feature.moved`, `document.loaded`,
   `vertexSelection.changed`, `drag.started`, `drag.ended` and
   `preview.changed`, which carries the shape being drawn and the

@@ -25,7 +25,6 @@ import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
 import type { KeyNormalizedEvent, ModifierKeys, MouseNormalizedEvent } from './dispatcher/types.js';
 import type { ModeManager } from './modes/manager.js';
-import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
 import type { Feature } from './shared/types/model.js';
@@ -212,7 +211,7 @@ export function createResourceDeps(store: Store): ResourceDeps & { emitter: Even
     setActiveLayerId: (id) => {
       if (store.getLayer(id)) active = id;
     },
-    featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
+    getStyleOptions: () => undefined,
     emitter,
   };
 }

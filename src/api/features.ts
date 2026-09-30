@@ -133,6 +133,10 @@ export interface FeaturesCollection {
    * The look a feature is drawn with: the default, the layer rule and the style of the
    * feature put on top of each other.
    *
+   * The colors of the `style` option and of the style of the feature are the strings they
+   * were given, alpha included; the color of a layer rule is `#rrggbb`, as
+   * {@link evaluateStyleRule} gives it, and a default is `#rrggbb`.
+   *
    * @returns The look, or `undefined` when there is no feature with this ID
    */
   getAppliedStyle(id: string): FeatureStyleResolved | undefined;

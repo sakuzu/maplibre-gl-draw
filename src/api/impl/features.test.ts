@@ -15,7 +15,6 @@ import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureInput } from '../model.js';
 import { createFeatures } from './features.js';
-import { toFeatureStyleConfig } from './options.js';
 
 let store: MemoryStore;
 let features: FeaturesCollection;
@@ -520,8 +519,9 @@ describe('getAppliedStyle', () => {
     const deps = createResourceDeps(store);
     const withStyle = createFeatures({
       ...deps,
-      featureStyle: toFeatureStyleConfig({
-        style: { circle: { fillColor: 'blue', strokeWidth: 4 }, image: { imageOpacity: 0.5 } },
+      getStyleOptions: () => ({
+        circle: { fillColor: 'blue', strokeWidth: 4 },
+        image: { imageOpacity: 0.5 },
       }),
     });
     const base = {
@@ -546,7 +546,7 @@ describe('getAppliedStyle', () => {
     });
     features.create(area('p', [0, 0, 1, 1]));
     expect(withStyle.getAppliedStyle('c')).toMatchObject({
-      fillColor: '#0000ff',
+      fillColor: 'blue',
       strokeWidth: 4,
     });
     expect(withStyle.getAppliedStyle('p')).toMatchObject({
