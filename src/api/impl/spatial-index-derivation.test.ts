@@ -36,7 +36,7 @@ function depsOf(context: Context): ResourceDeps {
     autoNameGenerator: context.autoNameGenerator,
     getActiveLayerId: context.getActiveLayerId,
     setActiveLayerId: context.setActiveLayerId,
-    featureStyle: context.featureStyle,
+    getStyleOptions: () => undefined,
     spatialIndex: context.spatialIndex,
   };
 }

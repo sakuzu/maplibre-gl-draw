@@ -6,12 +6,12 @@
  * arguments and the lookups of the document
  */
 
-import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { isFeatureLocked, isGroupLocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Group, Layer, SelectionType } from '../../store/types.js';
 import { DrawError } from '../errors.js';
+import type { RuntimeOptions } from '../options.js';
 
 /**
  * The dependencies of the resources. A bare Store and plain functions are enough, so that a
@@ -30,8 +30,8 @@ export interface ResourceDeps {
   getActiveLayerId: () => string;
   /** Changes the active layer */
   setActiveLayerId: (id: string) => void;
-  /** The defaults of the look of the features */
-  featureStyle: FeatureStyleConfig;
+  /** The `style` option as it was given: the defaults of the look of the features */
+  getStyleOptions: () => RuntimeOptions['style'];
   /**
    * The spatial index of the features, for a filter by extent; the extent of each feature is
    * measured when it is left out

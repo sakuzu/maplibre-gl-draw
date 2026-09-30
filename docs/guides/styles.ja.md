@@ -224,6 +224,9 @@ const look = draw.features.getAppliedStyle(featureId);
 if (look) console.log(look.fillColor, look.strokeWidth, look.lineStyle);
 ```
 
+`style` オプションと地物のスタイルの色は、渡した文字列のまま、アルファも
+含めて返ります。規則の色は `#rrggbb` で返ります。
+
 評価の処理は純関数としても公開しているので、表の行を地図と同じ色で塗る
 など、ほかの用途にも使えます。
 

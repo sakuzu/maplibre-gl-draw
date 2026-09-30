@@ -222,6 +222,10 @@ const look = draw.features.getAppliedStyle(featureId);
 if (look) console.log(look.fillColor, look.strokeWidth, look.lineStyle);
 ```
 
+The colors of the `style` option and of the style of the feature come
+back as the strings they were given, alpha included; the color of a rule
+comes back as `#rrggbb`.
+
 The evaluation is also exposed as pure functions for other uses, such as
 coloring a table row the same way as the map:
 

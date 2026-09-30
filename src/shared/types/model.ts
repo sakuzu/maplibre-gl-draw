@@ -133,7 +133,7 @@ export interface VertexSelection {
  * Every key is optional. A color key left unset takes the color of the layer's style rule
  * ({@link StyleRule}) when the layer has one, and any other key left unset takes the default
  * of the `style` option ({@link FeatureStyleConfig}). The precedence is "the feature's own key
- * > the layer's style rule > the default". Colors are `#rgb` or `#rrggbb`.
+ * > the layer's style rule > the default". Colors are CSS colors.
  *
  * Each feature type reads its own keys:
  *

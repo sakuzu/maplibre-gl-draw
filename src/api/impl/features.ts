@@ -7,8 +7,6 @@
 
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
-import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
-import type { Color } from '../../shared/types/style.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -28,6 +26,7 @@ import type {
   FeatureStyleResolved,
   MoveTarget,
 } from '../model.js';
+import type { RuntimeOptions } from '../options.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
 import { runSplit } from './geometry/split.js';
@@ -42,6 +41,7 @@ import type { GeometryDeps } from './geometry/types.js';
 import { describeGeometryProblem } from './import-export/geometry-validation.js';
 import { setOwnProperty } from './import-export/own-property.js';
 import { describeStyleProblem } from './import-export/style-validation.js';
+import { toAppliedDefaults } from './options.js';
 import { moveFeatures, resolveMoveTarget } from './placement.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -252,7 +252,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     getAppliedStyle(id) {
       const feature = store.getFeature(id);
       if (!feature) return undefined;
-      return appliedStyle(store, feature, deps.featureStyle);
+      return appliedStyle(store, feature, deps.getStyleOptions());
     },
 
     union(ids) {
@@ -498,49 +498,19 @@ function withoutUndefined(value: object): Record<string, unknown> {
 // The applied style
 // ============================================================================
 
-/** The types whose outline takes the stroke of an area */
-const AREA_TYPES: ReadonlySet<string> = new Set(['Polygon', 'MultiPolygon', 'Circle']);
-
 /**
- * The look a feature is drawn with: the defaults, the color of the layer rule and the style of
- * the feature, in that order
+ * The look a feature is drawn with: the defaults of the options, the color of the layer rule
+ * and the style of the feature, in that order. The colors of the options and of the feature
+ * are the strings given, never rounded
  */
 function appliedStyle(
   store: Store,
   feature: StoredFeature,
-  config: FeatureStyleConfig,
+  style: RuntimeOptions['style'],
 ): FeatureStyleResolved {
-  const point = config.point.point;
-  // A circle takes the look of the circles when the options give one, as it is drawn
-  const area = feature.type === 'Circle' ? (config.circle ?? config.polygon) : config.polygon;
-  const stroke = AREA_TYPES.has(feature.type) ? area.stroke : config.lineString.stroke;
-  const fill = area.fill.color;
-  const defaults: FeatureStyleResolved = {
-    fillColor: toHex(fill),
-    fillOpacity: fill[3],
-    strokeColor: toHex(stroke.color),
-    strokeWidth: stroke.width,
-    strokeOpacity: stroke.color[3] * stroke.opacity,
-    lineStyle: stroke.lineStyle,
-    pointColor: toHex(point.fillColor),
-    pointRadius: point.size / 2,
-    pointShape: point.shape === 'icon' ? 'circle' : point.shape,
-    pointOpacity: 1,
-    pointStrokeColor: toHex(point.strokeColor),
-    pointStrokeWidth: point.strokeWidth,
-    imageOpacity: config.image?.opacity ?? 1,
-  };
+  const defaults = toAppliedDefaults(style, feature.type);
   const layer = store.getLayer(feature.layerId);
   const own =
     resolveFeatureStyle(feature, layer?.styleRule, getStyleRuleChannel(feature.type)) ?? {};
   return { ...defaults, ...withoutUndefined(own) } as FeatureStyleResolved;
-}
-
-/** A color of the renderer as `#rrggbb` */
-function toHex(color: Color): string {
-  const channel = (value: number): string =>
-    Math.round(Math.min(1, Math.max(0, value)) * 255)
-      .toString(16)
-      .padStart(2, '0');
-  return `#${channel(color[0])}${channel(color[1])}${channel(color[2])}`;
 }

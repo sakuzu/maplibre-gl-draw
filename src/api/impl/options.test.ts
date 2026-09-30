@@ -16,7 +16,13 @@ import type { DrawOptions } from '../options.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import type { OptionsState } from './options.js';
-import { createOptions, mergeOptions, toEngineOptions } from './options.js';
+import {
+  createOptions,
+  mergeOptions,
+  toAppliedDefaults,
+  toEngineOptions,
+  toFeatureStyleConfig,
+} from './options.js';
 
 let engine: Engine;
 let options: OptionsState;
@@ -369,6 +375,39 @@ describe('options.update', () => {
   });
 });
 
+describe('toAppliedDefaults', () => {
+  it('draws the colors as given with the same alpha as the configuration', () => {
+    const style = {
+      point: { pointColor: 'rgba(0, 0, 255, 0.4)', pointOpacity: 0.5 },
+      line: { strokeColor: 'rgba(255, 0, 0, 0.5)', strokeOpacity: 0.5 },
+      polygon: { fillColor: 'rgba(0, 255, 0, 0.5)', strokeColor: '#ff000080' },
+      circle: { fillOpacity: 0.3, strokeOpacity: 0.5 },
+    };
+    const config = toFeatureStyleConfig({ style });
+    const line = toAppliedDefaults(style, 'LineString');
+    expect(line.strokeColor).toBe('rgba(255, 0, 0, 0.5)');
+    expect(toColor(line.strokeColor, line.strokeOpacity)).toEqual(config.lineString.stroke.color);
+    const polygon = toAppliedDefaults(style, 'Polygon');
+    expect(polygon).toMatchObject({ fillColor: 'rgba(0, 255, 0, 0.5)', strokeColor: '#ff000080' });
+    expect(toColor(polygon.fillColor, polygon.fillOpacity)).toEqual(config.polygon.fill.color);
+    expect(toColor(polygon.strokeColor, polygon.strokeOpacity)).toEqual(
+      config.polygon.stroke.color,
+    );
+    const circle = toAppliedDefaults(style, 'Circle');
+    expect(toColor(circle.fillColor, circle.fillOpacity)[3]).toBeCloseTo(
+      config.circle?.fill.color[3] ?? 0,
+    );
+    expect(toColor(circle.strokeColor, circle.strokeOpacity)[3]).toBeCloseTo(
+      config.circle?.stroke.color[3] ?? 0,
+    );
+    const point = toAppliedDefaults(style, 'Point');
+    expect(point).toMatchObject({ pointColor: 'rgba(0, 0, 255, 0.4)', pointOpacity: 0.5 });
+    expect(toColor(point.pointColor, point.pointOpacity)[3]).toBeCloseTo(
+      config.point.point.fillOpacity,
+    );
+  });
+});
+
 describe('draw.options of createDraw', () => {
   let draw: Draw;
 
@@ -379,5 +418,68 @@ describe('draw.options of createDraw', () => {
     expect(draw.options.get().snapping?.enabled).toBe(false);
     draw.options.update({ snapping: { enabled: true } });
     expect(draw.options.get().snapping?.enabled).toBe(true);
+  });
+
+  it('gives the colors of the style option in getAppliedStyle as they were given', () => {
+    const translucent = 'rgba(255, 255, 255, 0.5)';
+    draw = createDraw(createMapStub().map);
+    const point = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    });
+    const area = draw.features.create({
+      type: 'Polygon',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    if (!point || !area) throw new Error('not created');
+    expect(draw.features.getAppliedStyle(point.id)?.pointStrokeColor).toBe('#ffffff');
+
+    draw.options.update({
+      style: {
+        point: { pointStrokeColor: translucent },
+        polygon: { fillColor: 'hsl(240 100% 50% / 0.5)', strokeColor: 'rebeccapurple' },
+      },
+    });
+    expect(draw.features.getAppliedStyle(point.id)).toMatchObject({
+      pointStrokeColor: translucent,
+      pointOpacity: 1,
+    });
+    // The alpha of the color stays in the color; the opacity is the default of the fill
+    expect(draw.features.getAppliedStyle(area.id)).toMatchObject({
+      fillColor: 'hsl(240 100% 50% / 0.5)',
+      fillOpacity: 0.25,
+      strokeColor: 'rebeccapurple',
+      strokeOpacity: 1,
+      pointStrokeColor: translucent,
+    });
+    // The renderers read the colors with their alpha
+    const applied = draw.features.getAppliedStyle(area.id);
+    expect(toColor(applied?.pointStrokeColor ?? '')).toEqual([1, 1, 1, 0.5]);
+    expect(toColor(applied?.fillColor ?? '')).toEqual([0, 0, 1, 0.5]);
+  });
+
+  it('gives the colors of the style of a feature in getAppliedStyle as they were given', () => {
+    const translucent = 'rgba(255, 255, 255, 0.5)';
+    draw = createDraw(createMapStub().map);
+    const point = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      style: { pointStrokeColor: translucent, pointColor: 'rgba(0, 128, 0, 0.25)' },
+    });
+    if (!point) throw new Error('not created');
+    expect(draw.features.getAppliedStyle(point.id)).toMatchObject({
+      pointStrokeColor: translucent,
+      pointColor: 'rgba(0, 128, 0, 0.25)',
+    });
   });
 });
