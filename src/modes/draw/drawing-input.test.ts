@@ -3,7 +3,7 @@
 
 /**
  * Tests for the input of the click-driven drawing modes: undoing and redoing vertices while
- * drawing, and the double click that must not zoom the map
+ * drawing, and the double click that finishes the shape and must not zoom the map
  *
  * The real ModeManager and drawing modes are used; the clicks and keys are delivered to the
  * current mode through the input route the InputRouter uses. The map projects linearly (1 degree = 100 px), so
@@ -52,6 +52,24 @@ function click([lng, lat]: Coordinate): void {
   };
   deliver({ ...event, type: 'mousemove' });
   deliver(event);
+}
+
+/**
+ * A double click as the browser delivers it: a move to the position, two clicks there with no
+ * move between them, then the dblclick
+ */
+function doubleClick([lng, lat]: Coordinate): void {
+  const event: MouseNormalizedEvent = {
+    type: 'click',
+    point: { x: lng * 100, y: -lat * 100 },
+    lngLat: { lng, lat },
+    originalEvent: { preventDefault() {} } as MouseEvent,
+    modifiers: { ...NO_MODIFIERS },
+  };
+  deliver({ ...event, type: 'mousemove' });
+  deliver(event);
+  deliver(event);
+  deliver({ ...event, type: 'dblclick' });
 }
 
 function key(k: string): void {
@@ -159,5 +177,82 @@ describe('a double click while drawing', () => {
       expect(consumed).toBe(true);
       manager.setMode('select');
     }
+  });
+});
+
+describe('a double click finishes the shape', () => {
+  const rings = (): Coordinate[][] =>
+    store.listFeatures().map((f) => (coordinatesOf(f) as Coordinate[][])[0]);
+
+  it('finishes a polygon on its last vertex without a second vertex there', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    click(B);
+    click(C);
+    doubleClick(C);
+
+    expect(rings()).toEqual([[A, B, C, A]]);
+    expect(manager.getMode()).toBe('select');
+    expect(store.getTentative()).toBeNull();
+  });
+
+  it('adds the new position of a polygon once, then finishes it', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    click(B);
+    click(C);
+    doubleClick(D);
+
+    expect(rings()).toEqual([[A, B, C, D, A]]);
+    expect(manager.getMode()).toBe('select');
+  });
+
+  it('finishes a polygon whose third vertex the double click places', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    click(B);
+    doubleClick(C);
+
+    expect(rings()).toEqual([[A, B, C, A]]);
+  });
+
+  it('keeps drawing a polygon of fewer than three vertices', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    doubleClick(B);
+
+    expect(store.listFeatures()).toEqual([]);
+    expect(manager.getMode()).toBe('draw_polygon');
+    key('Enter');
+    expect(store.listFeatures()).toEqual([]);
+    click(C);
+    key('Enter');
+    expect(rings()).toEqual([[A, B, C, A]]);
+  });
+
+  it('finishes a line the same way, on its last vertex or on a new position', () => {
+    manager.setMode('draw_line');
+    click(A);
+    click(B);
+    doubleClick(B);
+    manager.setMode('draw_line');
+    click(A);
+    click(B);
+    doubleClick(C);
+
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([
+      [A, B],
+      [A, B, C],
+    ]);
+    expect(manager.getMode()).toBe('select');
+  });
+
+  it('takes the second click of a line into no second vertex before one is placed', () => {
+    manager.setMode('draw_line');
+    doubleClick(A);
+    click(B);
+    key('Enter');
+
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
   });
 });

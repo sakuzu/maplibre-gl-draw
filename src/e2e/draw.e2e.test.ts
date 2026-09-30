@@ -179,6 +179,37 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(await mode(page)).toBe('select');
   });
 
+  it('finishes a polygon with a double click, on its last vertex or on a new position', async () => {
+    await clearAll(page);
+    const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
+    await setMode(page, 'draw_polygon');
+    await click(page, at(-80, -60));
+    await click(page, at(80, -60));
+    await click(page, at(80, 60));
+    await page.mouse.dblclick(at(80, 60).x, at(80, 60).y);
+    await settle(page);
+    expect(await mode(page)).toBe('select');
+    expect(await isDrawing(page)).toBe(false);
+    const [triangle] = await features(page);
+    expect(triangle.type).toBe('Polygon');
+    expect(outerRing(triangle)).toHaveLength(4);
+    expectNear(outerRing(triangle)[2], await lngLatOf(page, at(80, 60)));
+
+    await clearAll(page);
+    await setMode(page, 'draw_polygon');
+    await click(page, at(-80, -60));
+    await click(page, at(80, -60));
+    await click(page, at(80, 60));
+    await page.mouse.dblclick(at(-80, 60).x, at(-80, 60).y);
+    await settle(page);
+    expect(await mode(page)).toBe('select');
+    const [square] = await features(page);
+    expect(outerRing(square)).toHaveLength(5);
+    expectNear(outerRing(square)[3], await lngLatOf(page, at(-80, 60)));
+    // The double clicks did not zoom the map
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
+  });
+
   it('draws a circle from its center and radius, and Escape discards one', async () => {
     await clearAll(page);
     await setMode(page, 'draw_circle');

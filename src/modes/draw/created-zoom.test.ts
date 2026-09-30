@@ -56,7 +56,12 @@ function drawWithContract(
     metadata: undefined,
   });
   const canvas = { style: { cursor: '' } };
-  const map = { getCanvas: () => canvas, getZoom: () => ZOOM } as unknown as MapLibreMap;
+  const map = {
+    getCanvas: () => canvas,
+    getZoom: () => ZOOM,
+    // As the points of the pointer events below
+    project: ([lng, lat]: [number, number]) => ({ x: lng * 1000, y: lat * 1000 }),
+  } as unknown as MapLibreMap;
   const modeManager = new ModeManagerImpl(store);
   const harness = createModeHarness({ store, map, modeManager, scaleWithZoom });
   const handler = factory(harness.modeContext());

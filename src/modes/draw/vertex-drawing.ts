@@ -5,10 +5,12 @@
  * Drawing a shape vertex by vertex: what the line and the polygon drawing modes share
  *
  * A click places a vertex, and a click snapped to a boundary after one snapped to the same
- * network takes in the vertices between them (tracing). A click on the closing vertex or Enter
- * creates the shape, Backspace removes the last vertex, Escape drops the drawing (and leaves
- * the mode when nothing is drawn), and the vertices can be undone and redone. It is written to
- * the extension contract, through the `ModeContext` alone.
+ * network takes in the vertices between them (tracing). A click on the closing vertex, a
+ * double click or Enter creates the shape, Backspace removes the last vertex, Escape drops the
+ * drawing (and leaves the mode when nothing is drawn), and the vertices can be undone and
+ * redone. A click on the last placed vertex places no second vertex there, so the two clicks of
+ * a double click place its position once. It is written to the extension contract, through
+ * the `ModeContext` alone.
  */
 
 import type { ModeContext } from '../../api/extension/context.js';
@@ -71,6 +73,12 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
   let tracePreview: Coordinate[] | null = null;
 
   const closable = (): boolean => vertices.length >= shape.minVertices && nearClosing;
+
+  /** Whether a point on the screen is on a placed vertex */
+  const onVertex = (point: readonly [number, number], index: number): boolean => {
+    const [x, y] = ctx.screen.project(vertices[index]);
+    return Math.hypot(point[0] - x, point[1] - y) <= VERTEX_CLICK_TOLERANCE;
+  };
 
   const show = (withPointer: boolean): void => {
     if (vertices.length === 0) {
@@ -148,23 +156,25 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
     // What was being drawn is dropped when the state is reset from outside
     onCancel: reset,
 
-    // A double click while drawing is two clicks of the drawing; it never zooms the map
-    onDoubleClick: () => true,
+    // A double click comes after its two clicks, which placed its position once (or finished
+    // the shape on the closing vertex); it finishes the shape and never zooms the map
+    onDoubleClick() {
+      finish();
+      return true;
+    },
 
     onClick(event) {
+      // Read from the click itself: no pointer move has to come between two clicks
+      nearClosing = vertices.length > 0 && onVertex(event.point, shape.closingVertex(vertices));
       if (closable()) finish();
-      else place(event);
+      // The second click of a double click lands on the vertex the first one placed
+      else if (vertices.length === 0 || !onVertex(event.point, vertices.length - 1)) place(event);
       return true;
     },
 
     onPointerMove(event) {
       pointer = [event.snapped.lngLat[0], event.snapped.lngLat[1]];
-      if (vertices.length > 0) {
-        const [x, y] = ctx.screen.project(vertices[shape.closingVertex(vertices)]);
-        nearClosing = Math.hypot(event.point[0] - x, event.point[1] - y) <= VERTEX_CLICK_TOLERANCE;
-      } else {
-        nearClosing = false;
-      }
+      nearClosing = vertices.length > 0 && onVertex(event.point, shape.closingVertex(vertices));
       tracePreview = computeTracePath(source, traceAnchor, readTraceAnchor(source, event));
       ctx.cursor.set(closable() ? 'pointer' : 'crosshair');
       if (vertices.length > 0) show(true);

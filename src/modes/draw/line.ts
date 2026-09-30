@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The line drawing mode: clicks add vertices, and a click on the last vertex or Enter creates
- * the line. A click snapped to a boundary after one snapped to the same boundary network takes
- * in the vertices between them (tracing).
+ * The line drawing mode: clicks add vertices, and a click on the last vertex, a double click or
+ * Enter creates the line. A click snapped to a boundary after one snapped to the same boundary
+ * network takes in the vertices between them (tracing).
  *
  * It is written to the extension contract, through the `ModeContext` alone.
  */
