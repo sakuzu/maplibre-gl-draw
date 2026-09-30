@@ -112,6 +112,8 @@ parcels.on('clicked', ({ row }) => {
 
 手元のデータの形に合わせて選びます。渡せるのは 3 つのうち 1 つだけ
 で、2 つ渡すとコード `invalid-input` の `DrawError` になります。
+どれも渡さなければ、データセットは空で始まります。すぐに置くことが
+でき、行は後から `setRows` か `setTable` で渡します。
 
 | 手元のデータ | オプション | 置き換え方 |
 | --- | --- | --- |
@@ -427,7 +429,8 @@ declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
 -->
 
 ```ts
-draw.datasets.add({ id: 'parcels', rows: [], order: 'layer-order' });
+// 行は後から setRows か setTable で渡すまで空
+draw.datasets.add({ id: 'parcels', order: 'layer-order' });
 draw.layers.reorder([roads.id, 'parcels', notes.id]); // 2 つのレイヤーの間
 ```
 

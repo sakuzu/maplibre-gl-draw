@@ -81,7 +81,7 @@ describe('the collection', () => {
   it('throws already-exists for a taken ID and invalid-input for wrong options', () => {
     datasets.add({ id: 'a', rows: [] });
     expect(codeOf(() => datasets.add({ id: 'a', rows: [] }))).toBe('already-exists');
-    expect(codeOf(() => datasets.add({ id: 'b' } as never))).toBe('invalid-input');
+    expect(codeOf(() => datasets.add({ id: 'b', table: 5 } as never))).toBe('invalid-input');
     expect(
       codeOf(() => datasets.add({ id: 'b', rows: [], provider: async () => [] } as never)),
     ).toBe('invalid-input');
@@ -95,6 +95,16 @@ describe('the collection', () => {
     expect(codeOf(() => datasets.add({ id: 'b', rows: [], colour: 'red' } as never))).toBe(
       'invalid-input',
     );
+  });
+
+  it('adds an empty dataset, which reorder places at once and setRows fills later', () => {
+    const parcels = datasets.add({ id: 'parcels', order: 'layer-order' });
+    expect(parcels.listRows()).toEqual([]);
+    const [layer] = draw.layers.list();
+    expect(draw.layers.reorder(['parcels', layer.id])).toBe(true);
+    expect(draw.layers.getOrder()).toEqual(['parcels', layer.id]);
+    parcels.setRows(ROWS);
+    expect(parcels.listRows()).toHaveLength(ROWS.length);
   });
 
   it('adds several datasets, all of them or none', () => {
@@ -111,9 +121,9 @@ describe('the collection', () => {
         ]),
       ),
     ).toBe('already-exists');
-    expect(codeOf(() => datasets.addMany([{ id: 'd', rows: [] }, { id: 'e' } as never]))).toBe(
-      'invalid-input',
-    );
+    expect(
+      codeOf(() => datasets.addMany([{ id: 'd', rows: [] }, { id: 'e', rows: 'x' } as never])),
+    ).toBe('invalid-input');
     expect(datasets.list().map((d) => d.id)).toEqual(['a', 'b']);
   });
 

@@ -110,7 +110,9 @@ The polygon is drawn behind the drawn features, colored by its
 ## Three ways to give the rows
 
 Choose by the form your data is in. Give only one of the three; giving
-two throws a `DrawError` with the code `invalid-input`.
+two throws a `DrawError` with the code `invalid-input`. With none of them
+the dataset starts empty: it can be placed at once, and its rows come
+later with `setRows` or `setTable`.
 
 | Your data | Option | Replace it with |
 | --- | --- | --- |
@@ -432,7 +434,8 @@ declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
 -->
 
 ```ts
-draw.datasets.add({ id: 'parcels', rows: [], order: 'layer-order' });
+// Empty until its rows are given with setRows or setTable
+draw.datasets.add({ id: 'parcels', order: 'layer-order' });
 draw.layers.reorder([roads.id, 'parcels', notes.id]); // between the two layers
 ```
 

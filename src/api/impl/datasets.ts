@@ -123,8 +123,8 @@ function checkOptions(options: unknown): asserts options is DatasetOptions {
   const sources = (['rows', 'table', 'provider'] as const).filter(
     (key) => options[key] !== undefined,
   );
-  if (sources.length !== 1) {
-    throw invalidInput('A dataset takes exactly one of rows, table and provider');
+  if (sources.length > 1) {
+    throw invalidInput('A dataset takes at most one of rows, table and provider');
   }
   if (options.rows !== undefined) checkRows(options.rows);
   if (options.table !== undefined) checkTable(options.table);

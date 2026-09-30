@@ -89,8 +89,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `@sakuzu/maplibre-gl-draw/columnar` is `@sakuzu/maplibre-gl-draw/table`,
   and its types are named after the table, not the dataset.
 - A dataset takes its rows as GeoJSON features in `rows`, or a table in
-  `table`. Its members use the word row, and it has its own events,
-  `clicked`, `hovered` and `changed`.
+  `table`, or starts empty with neither and is filled later with
+  `setRows` or `setTable`; `layers.reorder` places a `layer-order`
+  dataset as soon as it is added. Its members use the word row, and it
+  has its own events, `clicked`, `hovered` and `changed`.
 - The native format is 3.0.0. A file of 2.x is upgraded on load.
 - Every load, of any format, is one transaction with the source `load`
   once the source is read: a document of the library is no longer
