@@ -17,7 +17,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">InputHandlers</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#onclick-1">onClick</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondoubleclick-1">onDoubleClick</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondrag-1">onDrag</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragcancel-1">onDragCancel</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragend-1">onDragEnd</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#ondragstart-1">onDragStart</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onkeydown-1">onKeyDown</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawKeyEvent.html" class="tsd-signature-type tsd-kind-interface">DrawKeyEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onkeyup-1">onKeyUp</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawKeyEvent.html" class="tsd-signature-type tsd-kind-interface">DrawKeyEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onpointerdown-1">onPointerDown</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onpointerleave-1">onPointerLeave</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onpointermove-1">onPointerMove</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onpointerup-1">onPointerUp</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L67">src/api/extension/mode.ts:67</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L67">src/api/extension/mode.ts:67</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -55,7 +55,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L77">src/api/extension/mode.ts:77</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L77">src/api/extension/mode.ts:77</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ondoubleclick"><span>on<wbr/>Double<wbr/>Click</span><a href="#ondoubleclick" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -70,7 +70,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L79">src/api/extension/mode.ts:79</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L79">src/api/extension/mode.ts:79</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ondrag"><span>on<wbr/>Drag</span><a href="#ondrag" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -85,7 +85,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L83">src/api/extension/mode.ts:83</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L83">src/api/extension/mode.ts:83</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ondragcancel"><span>on<wbr/>Drag<wbr/>Cancel</span><a href="#ondragcancel" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -100,7 +100,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L87">src/api/extension/mode.ts:87</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L87">src/api/extension/mode.ts:87</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ondragend"><span>on<wbr/>Drag<wbr/>End</span><a href="#ondragend" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -115,7 +115,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L85">src/api/extension/mode.ts:85</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L85">src/api/extension/mode.ts:85</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="ondragstart"><span>on<wbr/>Drag<wbr/>Start</span><a href="#ondragstart" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -130,7 +130,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L81">src/api/extension/mode.ts:81</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L81">src/api/extension/mode.ts:81</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onkeydown"><span>on<wbr/>Key<wbr/>Down</span><a href="#onkeydown" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -145,7 +145,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawKeyEvent.html" class="tsd-signature-type tsd-kind-interface">DrawKeyEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L89">src/api/extension/mode.ts:89</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L89">src/api/extension/mode.ts:89</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onkeyup"><span>on<wbr/>Key<wbr/>Up</span><a href="#onkeyup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -160,7 +160,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawKeyEvent.html" class="tsd-signature-type tsd-kind-interface">DrawKeyEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L91">src/api/extension/mode.ts:91</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L91">src/api/extension/mode.ts:91</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onpointerdown"><span>on<wbr/>Pointer<wbr/>Down</span><a href="#onpointerdown" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -175,7 +175,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L69">src/api/extension/mode.ts:69</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L69">src/api/extension/mode.ts:69</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onpointerleave"><span>on<wbr/>Pointer<wbr/>Leave</span><a href="#onpointerleave" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -186,7 +186,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L75">src/api/extension/mode.ts:75</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L75">src/api/extension/mode.ts:75</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onpointermove"><span>on<wbr/>Pointer<wbr/>Move</span><a href="#onpointermove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -201,7 +201,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L71">src/api/extension/mode.ts:71</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L71">src/api/extension/mode.ts:71</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onpointerup"><span>on<wbr/>Pointer<wbr/>Up</span><a href="#onpointerup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -216,7 +216,7 @@ true consumes the event, so that nothing after the receiver gets it.</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/mode.ts#L73">src/api/extension/mode.ts:73</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/mode.ts#L73">src/api/extension/mode.ts:73</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -16,7 +16,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">LoadOptions</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#coordinate">coordinate</a><span class="tsd-signature-symbol">?:</span> <a href="../types/maplibre-gl-draw.Position.html" class="tsd-signature-type tsd-kind-type-alias">Position</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#flattenmulti">flattenMulti</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#group">group</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Omit</span><span class="tsd-signature-symbol">&lt;</span><a href="maplibre-gl-draw.GroupInput.html" class="tsd-signature-type tsd-kind-interface">GroupInput</a><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">&quot;featureIds&quot;</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#layer">layer</a><span class="tsd-signature-symbol">?:</span> <a href="maplibre-gl-draw.LayerInput.html" class="tsd-signature-type tsd-kind-interface">LayerInput</a><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#layerid">layerId</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#mode">mode</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;replace&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;merge&quot;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#zoom">zoom</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L478">src/api/model.ts:478</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L478">src/api/model.ts:478</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -41,14 +41,14 @@
 <div class="tsd-comment tsd-typography"><p>Where to place an image</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L506">src/api/model.ts:506</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L506">src/api/model.ts:506</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="flattenmulti"><code class="tsd-tag">Optional</code><span>flatten<wbr/>Multi</span><a href="#flattenmulti" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">flattenMulti</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">boolean</span></div>
 <div class="tsd-comment tsd-typography"><p>Whether the Multi geometries of GeoJSON are split into one feature per part</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L510">src/api/model.ts:510</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L510">src/api/model.ts:510</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="group"><code class="tsd-tag">Optional</code><span>group</span><a href="#group" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">group</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Omit</span><span class="tsd-signature-symbol">&lt;</span><a href="maplibre-gl-draw.GroupInput.html" class="tsd-signature-type tsd-kind-interface">GroupInput</a><span class="tsd-signature-symbol">,</span> <span class="tsd-signature-type">&quot;featureIds&quot;</span><span class="tsd-signature-symbol">&gt;</span></div>
@@ -59,7 +59,7 @@ GeoJSON feature names is not kept. <code>LoadResult.groupId</code> gives its ID;
 when nothing is read. It cannot be given with a document of the library.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L504">src/api/model.ts:504</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L504">src/api/model.ts:504</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="layer"><code class="tsd-tag">Optional</code><span>layer</span><a href="#layer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">layer</span><span class="tsd-signature-symbol">?:</span> <a href="maplibre-gl-draw.LayerInput.html" class="tsd-signature-type tsd-kind-interface">LayerInput</a></div>
@@ -69,7 +69,7 @@ be given together with <code>layerId</code> (<code>invalid-input</code>), nor wi
 which brings its own layers.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L496">src/api/model.ts:496</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L496">src/api/model.ts:496</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="layerid"><code class="tsd-tag">Optional</code><span>layer<wbr/>Id</span><a href="#layerid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">layerId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span></div>
@@ -78,7 +78,7 @@ which brings its own layers.</p>
 In <code>document.loadMany</code> it may also be a layer an earlier item creates with <code>layer</code>.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L489">src/api/model.ts:489</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L489">src/api/model.ts:489</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="mode"><code class="tsd-tag">Optional</code><span>mode</span><a href="#mode" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">mode</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">&quot;replace&quot;</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">&quot;merge&quot;</span></div>
@@ -86,14 +86,14 @@ In <code>document.loadMany</code> it may also be a layer an earlier item creates
 the library and <code>merge</code> for GeoJSON when it is left out</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L483">src/api/model.ts:483</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L483">src/api/model.ts:483</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="zoom"><code class="tsd-tag">Optional</code><span>zoom</span><a href="#zoom" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">zoom</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>The zoom an image is placed at</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/model.ts#L508">src/api/model.ts:508</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/model.ts#L508">src/api/model.ts:508</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

@@ -24,7 +24,7 @@ them, ignores or consumes these as well.</p>
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">DrawingResource</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#addvertex-1">addVertex</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">position</span><span class="tsd-signature-symbol">:</span> <a href="../types/maplibre-gl-draw.Position.html" class="tsd-signature-type tsd-kind-type-alias">Position</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#cancel-1">cancel</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#finish-1">finish</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isactive-1">isActive</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#isdrawing-1">isDrawing</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#moveto-1">moveTo</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">position</span><span class="tsd-signature-symbol">:</span> <a href="../types/maplibre-gl-draw.Position.html" class="tsd-signature-type tsd-kind-type-alias">Position</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#redovertex-1">redoVertex</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#undovertex-1">undoVertex</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L24">src/api/drawing.ts:24</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L24">src/api/drawing.ts:24</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -74,7 +74,7 @@ active or nothing took it</p>
 numbers</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L51">src/api/drawing.ts:51</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L51">src/api/drawing.ts:51</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="cancel"><span>cancel</span><a href="#cancel" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -88,7 +88,7 @@ no shape is in progress it does nothing; unlike an Escape, it does not leave the
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><p>True when a shape was in progress and was cancelled</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L78">src/api/drawing.ts:78</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L78">src/api/drawing.ts:78</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="finish"><span>finish</span><a href="#finish" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -103,7 +103,7 @@ them (2 for a line, 3 for an area), wherever the last one is.</p>
 did not complete it (too few vertices)</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L70">src/api/drawing.ts:70</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L70">src/api/drawing.ts:70</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="isactive"><span>is<wbr/>Active</span><a href="#isactive" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -115,7 +115,7 @@ first vertex (the current mode writes features).</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L29">src/api/drawing.ts:29</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L29">src/api/drawing.ts:29</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="isdrawing"><span>is<wbr/>Drawing</span><a href="#isdrawing" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -127,7 +127,7 @@ while a drawing mode waits for its first vertex.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L34">src/api/drawing.ts:34</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L34">src/api/drawing.ts:34</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="moveto"><span>move<wbr/>To</span><a href="#moveto" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -151,7 +151,7 @@ nothing when no drawing mode is active.</p>
 numbers</p>
 </div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L61">src/api/drawing.ts:61</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L61">src/api/drawing.ts:61</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="redovertex"><span>redo<wbr/>Vertex</span><a href="#redovertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -163,7 +163,7 @@ numbers</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><p>True when a vertex was put back</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L91">src/api/drawing.ts:91</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L91">src/api/drawing.ts:91</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="undovertex"><span>undo<wbr/>Vertex</span><a href="#undovertex" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -176,7 +176,7 @@ numbers</p>
 no vertex to remove</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/drawing.ts#L85">src/api/drawing.ts:85</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/drawing.ts#L85">src/api/drawing.ts:85</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

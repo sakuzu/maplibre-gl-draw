@@ -16,7 +16,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">OverlayRenderer</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#name">name</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#order">order</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#draw-1">draw</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.RenderContext.html" class="tsd-signature-type tsd-kind-interface">RenderContext</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#drawforlayer-1">drawForLayer</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">layerId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.RenderContext.html" class="tsd-signature-type tsd-kind-interface">RenderContext</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#drawvertices-1">drawVertices</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">ctx</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.RenderContext.html" class="tsd-signature-type tsd-kind-interface">RenderContext</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#haspendingwork-1">hasPendingWork</a><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onadd-1">onAdd</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">map</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Map$1</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">gl</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">WebGL2RenderingContext</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#onremove-1">onRemove</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">map</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Map$1</span><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">gl</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">WebGL2RenderingContext</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L164">src/api/extension/render.ts:164</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L164">src/api/extension/render.ts:164</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -45,7 +45,7 @@
 <div class="tsd-comment tsd-typography"><p>The name it is registered under</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L166">src/api/extension/render.ts:166</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L166">src/api/extension/render.ts:166</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="order"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>order</span><a href="#order" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">order</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span></div>
@@ -53,7 +53,7 @@
 the same order are drawn in the order they were added; 0 when it is left out.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L171">src/api/extension/render.ts:171</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L171">src/api/extension/render.ts:171</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -71,7 +71,7 @@ the same order are drawn in the order they were added; 0 when it is left out.</p
 <li><span><span class="tsd-kind-parameter">ctx</span>: <a href="maplibre-gl-draw.RenderContext.html" class="tsd-signature-type tsd-kind-interface">RenderContext</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L175">src/api/extension/render.ts:175</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L175">src/api/extension/render.ts:175</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="drawforlayer"><code class="tsd-tag">Optional</code><span>draw<wbr/>For<wbr/>Layer</span><a href="#drawforlayer" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -87,7 +87,7 @@ the same order are drawn in the order they were added; 0 when it is left out.</p
 <li><span><span class="tsd-kind-parameter">ctx</span>: <a href="maplibre-gl-draw.RenderContext.html" class="tsd-signature-type tsd-kind-interface">RenderContext</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L177">src/api/extension/render.ts:177</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L177">src/api/extension/render.ts:177</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="drawvertices"><code class="tsd-tag">Optional</code><span>draw<wbr/>Vertices</span><a href="#drawvertices" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -103,7 +103,7 @@ selection, so that they stay visible over a layer further back.</p>
 <li><span><span class="tsd-kind-parameter">ctx</span>: <a href="maplibre-gl-draw.RenderContext.html" class="tsd-signature-type tsd-kind-interface">RenderContext</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L182">src/api/extension/render.ts:182</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L182">src/api/extension/render.ts:182</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="haspendingwork"><code class="tsd-tag">Optional</code><span>has<wbr/>Pending<wbr/>Work</span><a href="#haspendingwork" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -114,7 +114,7 @@ selection, so that they stay visible over a layer further back.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L184">src/api/extension/render.ts:184</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L184">src/api/extension/render.ts:184</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onadd"><span>on<wbr/>Add</span><a href="#onadd" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -130,7 +130,7 @@ selection, so that they stay visible over a layer further back.</p>
 <li><span><span class="tsd-kind-parameter">gl</span>: <span class="tsd-signature-type">WebGL2RenderingContext</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L173">src/api/extension/render.ts:173</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L173">src/api/extension/render.ts:173</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onremove"><span>on<wbr/>Remove</span><a href="#onremove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -146,7 +146,7 @@ selection, so that they stay visible over a layer further back.</p>
 <li><span><span class="tsd-kind-parameter">gl</span>: <span class="tsd-signature-type">WebGL2RenderingContext</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/render.ts#L186">src/api/extension/render.ts:186</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/render.ts#L186">src/api/extension/render.ts:186</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

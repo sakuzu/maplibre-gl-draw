@@ -17,7 +17,7 @@
 </div></section>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">TessellationStep</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-property" href="#coarsen">coarsen</a><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#grid">grid</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#maxpoints">maxPoints</a><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#region">region</a><span class="tsd-signature-symbol">?:</span> <a href="webgl.MercatorRect.html" class="tsd-signature-type tsd-kind-interface">MercatorRect</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-property" href="#tiling">tiling</a><span class="tsd-signature-symbol">?:</span> <a href="webgl.TessellationTiling.html" class="tsd-signature-type tsd-kind-interface">TessellationTiling</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/view/terrain/tessellation.ts#L58">src/view/terrain/tessellation.ts:58</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/view/terrain/tessellation.ts#L58">src/view/terrain/tessellation.ts:58</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -46,7 +46,7 @@ dives slightly under a ridge, and that can be covered with a depth bias proporti
 the step. Keep the factor small (TERRAIN_MAX_TILED_COARSEN).</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/view/terrain/tessellation.ts#L109">src/view/terrain/tessellation.ts:109</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/view/terrain/tessellation.ts#L109">src/view/terrain/tessellation.ts:109</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="grid"><code class="tsd-tag">Readonly</code><span>grid</span><a href="#grid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">grid</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
@@ -55,14 +55,14 @@ the step. Keep the factor small (TERRAIN_MAX_TILED_COARSEN).</p>
 coarsened by a power of two. Even when coarsened it still sits on a subset of the nodes.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/view/terrain/tessellation.ts#L65">src/view/terrain/tessellation.ts:65</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/view/terrain/tessellation.ts#L65">src/view/terrain/tessellation.ts:65</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="maxpoints"><code class="tsd-tag">Readonly</code><span>max<wbr/>Points</span><a href="#maxpoints" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">maxPoints</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">number</span></div>
 <div class="tsd-comment tsd-typography"><p>Upper limit on the number of vertices that may be generated</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/view/terrain/tessellation.ts#L67">src/view/terrain/tessellation.ts:67</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/view/terrain/tessellation.ts#L67">src/view/terrain/tessellation.ts:67</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="region"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>region</span><a href="#region" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">region</span><span class="tsd-signature-symbol">?:</span> <a href="webgl.MercatorRect.html" class="tsd-signature-type tsd-kind-interface">MercatorRect</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
@@ -83,7 +83,7 @@ wide the view is and no longer depends on the number of records, so what is on s
 can always be split at the finest step.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/view/terrain/tessellation.ts#L88">src/view/terrain/tessellation.ts:88</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/view/terrain/tessellation.ts#L88">src/view/terrain/tessellation.ts:88</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="tiling"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>tiling</span><a href="#tiling" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">tiling</span><span class="tsd-signature-symbol">?:</span> <a href="webgl.TessellationTiling.html" class="tsd-signature-type tsd-kind-interface">TessellationTiling</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></div>
@@ -95,7 +95,7 @@ inside the cells. If it is not matched, too fine a step sinks along the valley b
 and too coarse a step dives under the ridges, and both are cut away by depth.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/view/terrain/tessellation.ts#L98">src/view/terrain/tessellation.ts:98</a></li></ul></aside></section></section></details></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/view/terrain/tessellation.ts#L98">src/view/terrain/tessellation.ts:98</a></li></ul></aside></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

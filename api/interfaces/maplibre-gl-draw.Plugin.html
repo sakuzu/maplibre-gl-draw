@@ -24,7 +24,7 @@ the plugin is removed. Plugins talk to each other through their <code>api</code>
 <div class="tsd-comment tsd-typography"><p>The API the plugin offers to others</p>
 </div></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L19">src/api/extension/plugin.ts:19</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L19">src/api/extension/plugin.ts:19</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -51,7 +51,7 @@ the plugin is removed. Plugins talk to each other through their <code>api</code>
 <div class="tsd-comment tsd-typography"><p>The API others get with <code>draw.extensions.plugins.getApi(name)</code></p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L27">src/api/extension/plugin.ts:27</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L27">src/api/extension/plugin.ts:27</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="input"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>input</span><a href="#input" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">input</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">Partial</span><span class="tsd-signature-symbol">&lt;</span><a href="maplibre-gl-draw.InputHandlers.html" class="tsd-signature-type tsd-kind-interface">InputHandlers</a><span class="tsd-signature-symbol">&gt;</span></div>
@@ -59,7 +59,7 @@ the plugin is removed. Plugins talk to each other through their <code>api</code>
 event, so that the mode does not get it.</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L32">src/api/extension/plugin.ts:32</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L32">src/api/extension/plugin.ts:32</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="interaction"><code class="tsd-tag">Optional</code> <code class="tsd-tag">Readonly</code><span>interaction</span><a href="#interaction" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">interaction</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-symbol">{</span><br/>    <span class="tsd-kind-call-signature">cancel</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">container</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">HTMLElement</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">filterSelection</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">candidateIds</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">finish</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">isBusy</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">onDrawCommit</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">onFeatureClick</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/>    <span class="tsd-kind-call-signature">onFeatureDoubleClick</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feature</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a><span class="tsd-signature-symbol">,</span> <span class="tsd-kind-parameter">event</span><span class="tsd-signature-symbol">:</span> <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div>
@@ -78,7 +78,7 @@ event, so that the mode does not get it.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L52">src/api/extension/plugin.ts:52</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L52">src/api/extension/plugin.ts:52</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">container</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -89,7 +89,7 @@ event, so that the mode does not get it.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">HTMLElement</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L54">src/api/extension/plugin.ts:54</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L54">src/api/extension/plugin.ts:54</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">filterSelection</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -104,7 +104,7 @@ event, so that the mode does not get it.</p>
 <li><span><span class="tsd-kind-parameter">candidateIds</span>: <span class="tsd-signature-keyword">readonly</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L36">src/api/extension/plugin.ts:36</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L36">src/api/extension/plugin.ts:36</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">finish</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -115,7 +115,7 @@ event, so that the mode does not get it.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L50">src/api/extension/plugin.ts:50</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L50">src/api/extension/plugin.ts:50</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">isBusy</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -126,7 +126,7 @@ event, so that the mode does not get it.</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L48">src/api/extension/plugin.ts:48</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L48">src/api/extension/plugin.ts:48</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">onDrawCommit</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -143,7 +143,7 @@ of the image mode</p>
 <li><span><span class="tsd-kind-parameter">feature</span>: <a href="maplibre-gl-draw.Feature.html" class="tsd-signature-type tsd-kind-interface">Feature</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L46">src/api/extension/plugin.ts:46</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L46">src/api/extension/plugin.ts:46</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">onFeatureClick</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -159,7 +159,7 @@ of the image mode</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L38">src/api/extension/plugin.ts:38</a></li></ul></aside></div></li></ul></li>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L38">src/api/extension/plugin.ts:38</a></li></ul></aside></div></li></ul></li>
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-method">onFeatureDoubleClick</span><span class="tsd-signature-symbol">?:</span> function</h5>
 <ul class="tsd-signatures">
@@ -175,16 +175,16 @@ of the image mode</p>
 <li><span><span class="tsd-kind-parameter">event</span>: <a href="maplibre-gl-draw.DrawPointerEvent.html" class="tsd-signature-type tsd-kind-interface">DrawPointerEvent</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L40">src/api/extension/plugin.ts:40</a></li></ul></aside></div></li></ul></li></ul></div><aside class="tsd-sources">
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L40">src/api/extension/plugin.ts:40</a></li></ul></aside></div></li></ul></li></ul></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L34">src/api/extension/plugin.ts:34</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L34">src/api/extension/plugin.ts:34</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><code class="tsd-tag">Readonly</code><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">name</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 <div class="tsd-comment tsd-typography"><p>The name it is registered under</p>
 </div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L21">src/api/extension/plugin.ts:21</a></li></ul></aside></section></section></details>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L21">src/api/extension/plugin.ts:21</a></li></ul></aside></section></section></details>
 <details class="tsd-panel-group tsd-member-group tsd-accordion" open><summary class="tsd-accordion-summary" data-key="section-Methods"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
 <h2 class="tsd-anchor-link" id="methods-1">Methods<a href="#methods-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2></summary>
 <section>
@@ -202,7 +202,7 @@ of the image mode</p>
 <li><span><span class="tsd-kind-parameter">ctx</span>: <a href="maplibre-gl-draw.PluginContext.html" class="tsd-signature-type tsd-kind-interface">PluginContext</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L23">src/api/extension/plugin.ts:23</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L23">src/api/extension/plugin.ts:23</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="onremove"><code class="tsd-tag">Optional</code><span>on<wbr/>Remove</span><a href="#onremove" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -213,7 +213,7 @@ of the image mode</p>
 </div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/api/extension/plugin.ts#L25">src/api/extension/plugin.ts:25</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/4f2a599ca29945cc142117c49e82d9d65de38548/src/api/extension/plugin.ts#L25">src/api/extension/plugin.ts:25</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
