@@ -126,6 +126,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   frame of a type whose shape turns, and `FeatureTypeDefinition.bbox`,
   the extent on the map the spatial index takes for a type that draws
   beyond its geometry.
+- `extensions.featureTypes.override`, which puts a definition in the
+  place of a built-in type of the same name until the function it
+  returns puts the built-in type back.
 - In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
   `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
 - In `/table`: `tableFromFeatures`, `createTableBuilder` and

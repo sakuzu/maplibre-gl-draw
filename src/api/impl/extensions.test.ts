@@ -198,6 +198,138 @@ describe('extensions.featureTypes', () => {
   });
 });
 
+describe('extensions.featureTypes.override', () => {
+  const square = {
+    type: 'Polygon' as const,
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+          [0, 0],
+        ],
+      ],
+    },
+  };
+
+  /** A draw instance on an engine, with the renderers the engine registers */
+  function setUp() {
+    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    const instance = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    const removed: string[] = [];
+    const registered: string[] = [];
+    const register = engine.customLayer.registerFeatureRenderer.bind(engine.customLayer);
+    vi.spyOn(engine.customLayer, 'registerFeatureRenderer').mockImplementation((type, r) => {
+      registered.push(type);
+      const unregister = register(type, r);
+      return () => {
+        removed.push(type);
+        unregister();
+      };
+    });
+    const feature = instance.features.create(square);
+    if (!feature) throw new Error('not created');
+    const selected = () => engine.context.store.getSelection().ids;
+    return { engine, instance, registered, removed, selected, input: createSyntheticInput(engine) };
+  }
+
+  it('draws and hit tests a built-in type by the definition, and puts the type back', () => {
+    const { instance, registered, removed, selected, input } = setUp();
+    const hitTest = vi.fn(() => null);
+    const restore = instance.extensions.featureTypes.override({
+      type: 'Polygon',
+      geometry: 'Polygon',
+      renderer,
+      hitTest,
+    });
+    expect(registered).toEqual(['Polygon']);
+    expect(instance.extensions.featureTypes.has('Polygon')).toBe(true);
+    expect(instance.extensions.featureTypes.list()).toEqual(['Polygon']);
+    input.click([0.5, 0.5]);
+    expect(hitTest).toHaveBeenCalled();
+    expect(selected()).toEqual([]);
+
+    restore();
+    expect(removed).toEqual(['Polygon']);
+    expect(instance.extensions.featureTypes.has('Polygon')).toBe(false);
+    input.click([0.5, 0.5]);
+    expect(selected()).toHaveLength(1);
+    // add keeps refusing the name
+    expect(errorOf(() => instance.extensions.featureTypes.add(featureType('Polygon'))).code).toBe(
+      'already-exists',
+    );
+    instance.destroy();
+  });
+
+  it('keeps the built-in hit test for a definition without one, and is removed by name', () => {
+    const { instance, removed, selected, input } = setUp();
+    instance.extensions.featureTypes.override({ type: 'Polygon', geometry: 'Polygon', renderer });
+    input.click([0.5, 0.5]);
+    expect(selected()).toHaveLength(1);
+    expect(instance.extensions.featureTypes.remove('Polygon')).toBe(true);
+    expect(removed).toEqual(['Polygon']);
+    instance.destroy();
+  });
+
+  it('is put back when the plugin that overrode the type is removed', () => {
+    const { instance, removed } = setUp();
+    instance.extensions.plugins.add(
+      plugin('overrider', {
+        onAdd(ctx: PluginContext) {
+          ctx.extensions.featureTypes.override({ type: 'Circle', geometry: 'Point', renderer });
+        },
+      }),
+    );
+    expect(instance.extensions.featureTypes.get('Circle')?.geometry).toBe('Point');
+    instance.extensions.plugins.remove('overrider');
+    expect(removed).toEqual(['Circle']);
+    expect(instance.extensions.featureTypes.has('Circle')).toBe(false);
+    instance.destroy();
+  });
+
+  it('keeps the frame of a point for Point only, and a frame with area for an image', () => {
+    const { engine, instance } = setUp();
+    const bounds = () => ({ min: [0, 0] as [number, number], max: [10, 10] as [number, number] });
+    const { extensions } = engine.context.selectionScope;
+    instance.extensions.featureTypes.override({
+      type: 'Point',
+      geometry: 'Point',
+      renderer,
+      bounds,
+    });
+    instance.extensions.featureTypes.override({
+      type: 'Image',
+      geometry: 'Point',
+      renderer,
+      bounds,
+    });
+    expect(extensions.getPointFrameExtentProvider('Point')).toBeDefined();
+    expect(extensions.getBoundingBoxCalculator('Point')).toBeUndefined();
+    expect(extensions.getBoundingBoxCalculator('Image')).toBeDefined();
+    expect(extensions.getPointFrameExtentProvider('Image')).toBeUndefined();
+    instance.destroy();
+  });
+
+  it('refuses a type that is not built in, another geometry, and a second override', () => {
+    const types = draw.extensions.featureTypes;
+    expect(errorOf(() => types.override(featureType('pin'))).code).toBe('invalid-input');
+    expect(errorOf(() => types.override(featureType('MultiPoint'))).code).toBe('invalid-input');
+    expect(
+      errorOf(() => types.override({ type: 'Circle', geometry: 'Polygon', renderer })).code,
+    ).toBe('invalid-input');
+    expect(errorOf(() => types.override({ type: 'Image', geometry: 'Point' } as never)).code).toBe(
+      'invalid-input',
+    );
+    types.override(featureType('Image'));
+    expect(errorOf(() => types.override(featureType('Image'))).code).toBe('already-exists');
+    expect(types.has('Image')).toBe(true);
+  });
+});
+
 describe('extensions.plugins', () => {
   it('gives the API of a plugin', () => {
     draw.extensions.plugins.add(plugin('p', { api: { answer: 42 } }));

@@ -117,19 +117,22 @@ export interface ModesCollection {
   removeMany(names: readonly string[]): boolean;
 }
 
-/** The custom feature types, by type name. */
+/**
+ * The custom feature types, by type name, and the definitions that override a built-in type.
+ */
 export interface FeatureTypesCollection {
   /**
-   * Gets the definition of a feature type by name.
+   * Gets the definition of a feature type by name: a type that was added, or the definition
+   * that overrides a built-in type.
    *
-   * @returns The definition, or `undefined` when there is no type with this name
+   * @returns The definition, or `undefined` when there is none with this name
    */
   get(name: string): FeatureTypeDefinition | undefined;
-  /** Lists the names of the feature types. */
+  /** Lists the names of the feature types that were added or overridden. */
   list(): string[];
-  /** Counts the feature types. */
+  /** Counts the feature types that were added or overridden. */
   count(): number;
-  /** Whether a feature type with this name was added. */
+  /** Whether a feature type with this name was added or overridden. */
   has(name: string): boolean;
   /**
    * Adds a custom feature type.
@@ -149,7 +152,28 @@ export interface FeatureTypesCollection {
    */
   addMany(definitions: readonly FeatureTypeDefinition[]): () => void;
   /**
-   * Removes a custom feature type.
+   * Overrides a built-in feature type (`Point`, `LineString`, `Polygon`, `Circle`,
+   * `Freehand` or `Image`) with a definition of the same `type` and the same kind of
+   * `geometry` as the built-in one (`Point` for a circle and an image, `LineString` for a
+   * freehand line). The features of the type are drawn by its renderer from then on. Its
+   * `hitTest`, `boxSelect`, `bounds`, `outline`, `bbox` and `snapCandidates` replace those of
+   * the built-in type when it has them, and the built-in ones stay for the members it leaves
+   * out. Its `handles` are shown with those of the built-in type.
+   *
+   * The built-in type comes back with the function it returns, with `remove(type)`, and, for
+   * a plugin that overrode it through its context, when the plugin is removed. `add` keeps
+   * refusing the names of the built-in types.
+   *
+   * @returns The function that puts the built-in type back
+   * @throws `DrawError` with the code `invalid-input` when the type is not one of the
+   *   built-in types above, its `geometry` is not the one of the built-in type, or the value
+   *   does not have the shape of the contract, and `already-exists` when the type is already
+   *   overridden
+   */
+  override(definition: FeatureTypeDefinition): () => void;
+  /**
+   * Removes a custom feature type, or the definition that overrides a built-in type (the
+   * built-in type comes back).
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is no type with this name

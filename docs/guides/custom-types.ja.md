@@ -73,7 +73,8 @@ GeoJSON の図形であるふつうの地物です。ほかの地物と同じよ
   ([データ形式](../reference/data-format.md))
 - 組み込みの型の名前は使われているので、
   `draw.extensions.featureTypes.add` はそれらに `already-exists` を
-  投げます
+  投げます。組み込みの型の描き方を変えるには、その型を差し替えます
+  ([組み込みの型の差し替え](#組み込みの型の差し替え))
 
 モードが `commitFeature` でこの型の地物を作ると、自動の名前が付きます。
 その語は型の名前です。ホストが `autoName.typeNames` の同じ鍵で語を
@@ -294,6 +295,39 @@ const reshapeRoute: FeatureTypeDefinition = {
 
 `snapCandidates` は、その型の地物の近くでポインターが吸着する位置を
 返します。図形の頂点と辺の代わりになります。
+
+## 組み込みの型の差し替え
+
+`draw.extensions.featureTypes.override(definition)` は、同じ名前の
+組み込みの型の代わりに定義を置きます。差し替えられる型は `Point`、
+`LineString`、`Polygon`、`Circle`、`Freehand`、`Image` です。定義は、
+組み込みの型が持つ `geometry` を持ちます。円と画像は `Point`、
+手書きの線は `LineString` です。その型の地物は、以後その描画器で
+描かれます。定義の `hitTest`、`boxSelect`、`bounds`、`outline`、
+`bbox`、`snapCandidates` は、あれば組み込みの型のものに代わります。
+定義が省いたメンバーは、組み込みの型のものが残ります。`handles` は、
+組み込みの型のハンドルと一緒に出ます。
+
+<!-- docs-check:
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
+declare const pointRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+const restore = draw.extensions.featureTypes.override({
+  type: 'Point',
+  geometry: 'Point',
+  renderer: pointRenderer,
+});
+
+// 組み込みの点に戻ります
+restore();
+```
+
+返る関数、`remove('Point')`、差し替えたプラグインの取り外しの
+どれでも、組み込みの型が戻ります。`add` は組み込みの型の名前を
+これまでどおり拒みます。差し替えている型は、戻すまで重ねて差し替え
+られません。
 
 ## 地形
 

@@ -77,7 +77,9 @@ other feature.
   whatever the kind of the geometry
   ([data format](../reference/data-format.md))
 - The names of the built-in types are taken:
-  `draw.extensions.featureTypes.add` throws `already-exists` for them
+  `draw.extensions.featureTypes.add` throws `already-exists` for them.
+  To change how a built-in type is drawn, override it
+  ([overriding a built-in type](#overriding-a-built-in-type))
 
 A mode that creates a feature of the type with `commitFeature` gives it
 an automatic name. Its word is the name of the type unless the host
@@ -307,6 +309,41 @@ feature is locked.
 `snapCandidates` returns the positions a pointer snaps to near a
 feature of the type, in place of the vertices and edges of its
 geometry.
+
+## Overriding a built-in type
+
+`draw.extensions.featureTypes.override(definition)` puts a definition
+in the place of a built-in type of the same name: `Point`,
+`LineString`, `Polygon`, `Circle`, `Freehand` or `Image`. The
+definition has the `geometry` the built-in type holds (`Point` for a
+circle and an image, `LineString` for a freehand line). The features
+of the type are then drawn by its renderer. Its `hitTest`, `boxSelect`,
+`bounds`, `outline`, `bbox` and `snapCandidates` replace those of the
+built-in type when it has them; for the members it leaves out, the
+built-in type keeps its own. Its `handles` are shown with the handles
+of the built-in type:
+
+<!-- docs-check:
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
+declare const pointRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+const restore = draw.extensions.featureTypes.override({
+  type: 'Point',
+  geometry: 'Point',
+  renderer: pointRenderer,
+});
+
+// The built-in points come back
+restore();
+```
+
+The returned function, `remove('Point')` and the removal of a plugin
+that overrode the type through its context all put the built-in type
+back. `add` keeps refusing the names of the built-in types, and a type
+that is already overridden cannot be overridden again until it is put
+back.
 
 ## Terrain
 

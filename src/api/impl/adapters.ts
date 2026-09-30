@@ -91,7 +91,7 @@ export interface AdapterDeps extends RenderAdapterDeps {
   readonly spatialIndex: {
     setCustomBoundingBoxCalculator(
       type: string,
-      calculator: (feature: StoredFeature) => BoundingBox,
+      calculator: (feature: StoredFeature, tileSize: number) => BoundingBox,
     ): () => void;
   };
   /** Registers a provider of snapping candidates with the snapping of the instance */
@@ -252,12 +252,16 @@ function toEngineHandle(handle: Handle): AuxiliaryHandle {
 /**
  * Installs a custom feature type into the engine
  *
+ * @param overriding - The definition overrides the built-in type of its name: the built-in
+ *   hit test and box selection stay when it has none of its own, and only the built-in
+ *   `Point` keeps the frame of a point
  * @returns The function that uninstalls it
  * @internal
  */
 export function installFeatureType(
   definition: FeatureTypeDefinition,
   deps: AdapterDeps,
+  overriding = false,
 ): () => void {
   const { type } = definition;
   const cancels: Array<() => void> = [];
@@ -275,8 +279,10 @@ export function installFeatureType(
         adaptFeatureRenderer(type, definition.renderer, deps),
       ),
     );
-    add(deps.hitTestService.registerStrategy?.(hitTestStrategyOf(definition, deps)));
-    const box = boxSelectionOf(definition, deps);
+    if (!overriding || definition.hitTest) {
+      add(deps.hitTestService.registerStrategy?.(hitTestStrategyOf(definition, deps)));
+    }
+    const box = !overriding || definition.boxSelect ? boxSelectionOf(definition, deps) : null;
     if (box) add(deps.boxSelectionRegistry.register(box));
 
     const bounds = definition.bounds?.bind(definition);
@@ -288,7 +294,9 @@ export function installFeatureType(
         ? corners
         : null;
     };
-    if (definition.geometry === 'Point') {
+    // A circle and an image have a frame with area; a point and a custom point type do not
+    const pointFrame = overriding ? type === 'Point' : definition.geometry === 'Point';
+    if (pointFrame) {
       if (bounds) {
         // A point keeps its point frame; the extent gives its size
         add(
@@ -376,7 +384,7 @@ export function installFeatureType(
     if (bbox) {
       // The spatial index measures the features of the type by the extent it gives
       add(
-        deps.spatialIndex.setCustomBoundingBoxCalculator(type, (feature) => {
+        deps.spatialIndex.setCustomBoundingBoxCalculator(type, (feature, tileSize) => {
           const extent = bbox(feature as Feature);
           if (
             Array.isArray(extent) &&
@@ -387,7 +395,7 @@ export function installFeatureType(
           ) {
             return { minX: extent[0], minY: extent[1], maxX: extent[2], maxY: extent[3] };
           }
-          return getBoundingBox(feature);
+          return getBoundingBox(feature, tileSize);
         }),
       );
     }

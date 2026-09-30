@@ -49,7 +49,7 @@ import {
 } from './contexts.js';
 import type { Context } from './engine-context.js';
 import type { ExtensionRegistries, Installer } from './extensions.js';
-import { createExtensionsCollections, createRegistry } from './extensions.js';
+import { createExtensionsCollections, createRegistry, OVERRIDABLE_TYPES } from './extensions.js';
 import { preparePatch } from './features.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { createOverlayStack, terrainAnchorsOf } from './render-context.js';
@@ -201,7 +201,8 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
         kind: 'feature type',
         validate: (_, definition) => validateExtension('feature type', definition),
         isTakenElsewhere: (name) => BUILT_IN_TYPES.has(name),
-        install: (_, definition) => installFeatureType(definition, adapterDeps),
+        install: (name, definition) =>
+          installFeatureType(definition, adapterDeps, OVERRIDABLE_TYPES.has(name)),
       }),
     ),
     overlays: createRegistry(

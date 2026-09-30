@@ -10,6 +10,7 @@
  * names, the order and the errors.
  */
 
+import type { Geometry } from 'geojson';
 import { DrawError } from '../errors.js';
 import type { FeatureTypeDefinition } from '../extension/feature-type.js';
 import type { ModeFactory } from '../extension/mode.js';
@@ -63,8 +64,14 @@ export interface Registry<T> {
   values(): T[];
   count(): number;
   has(name: string): boolean;
-  /** Installs the values, all of them or none; returns the function that removes them */
-  add(entries: readonly (readonly [string, T])[]): () => void;
+  /**
+   * Installs the values, all of them or none; returns the function that removes them. With
+   * `overriding`, a name the engine holds can be taken (the value overrides it).
+   */
+  add(
+    entries: readonly (readonly [string, T])[],
+    options?: { readonly overriding?: boolean },
+  ): () => void;
   /** Removes the named values, all of them or none; throws not-found for a missing name */
   remove(names: readonly string[]): boolean;
   /** Whether the value is the one installed under the name */
@@ -102,13 +109,14 @@ export function createRegistry<T>(installer: Installer<T>): Registry<T> {
     has: (name) => entries.has(name),
     holds: (name, value) => entries.get(name)?.value === value,
 
-    add(list) {
+    add(list, options) {
       if (!Array.isArray(list)) throw invalidInput(`The ${installer.kind}s must be an array`);
       const seen = new Set<string>();
       for (const [rawName, value] of list) {
         const name = requireName(rawName);
         installer.validate(name, value);
-        if (seen.has(name) || entries.has(name) || installer.isTakenElsewhere?.(name)) {
+        const takenElsewhere = !options?.overriding && installer.isTakenElsewhere?.(name);
+        if (seen.has(name) || entries.has(name) || takenElsewhere) {
           throw new DrawError(
             'already-exists',
             `There is already a ${installer.kind} named ${JSON.stringify(name)}`,
@@ -295,6 +303,33 @@ export function createExtensionsCollections(
   };
 }
 
+/**
+ * The built-in feature types a definition can override, with the kind of geometry their
+ * features hold
+ *
+ * @internal
+ */
+export const OVERRIDABLE_TYPES: ReadonlyMap<string, Geometry['type']> = new Map<
+  string,
+  Geometry['type']
+>([
+  ['Point', 'Point'],
+  ['LineString', 'LineString'],
+  ['Polygon', 'Polygon'],
+  ['Circle', 'Point'],
+  ['Freehand', 'LineString'],
+  ['Image', 'Point'],
+]);
+
+/** The type of a feature type definition, as a checked string */
+function typeOf(definition: FeatureTypeDefinition): string {
+  const type = (definition as { type?: unknown } | null)?.type;
+  if (typeof type !== 'string' || type === '') {
+    throw invalidInput('A feature type must have a non-empty type');
+  }
+  return type;
+}
+
 /** The feature types, named by their `type` */
 function namedCollectionByType(
   registry: Registry<FeatureTypeDefinition>,
@@ -303,18 +338,36 @@ function namedCollectionByType(
   const addAll = (definitions: readonly FeatureTypeDefinition[]): (() => void) => {
     if (!Array.isArray(definitions)) throw invalidInput('The feature types must be an array');
     const remove = registry.add(
-      definitions.map((definition) => {
-        const type = (definition as { type?: unknown } | null)?.type;
-        if (typeof type !== 'string' || type === '') {
-          throw invalidInput('A feature type must have a non-empty type');
-        }
-        return [type, definition] as const;
-      }),
+      definitions.map((definition) => [typeOf(definition), definition] as const),
     );
     record?.(remove);
     return remove;
   };
   return {
+    override(definition) {
+      const type = typeOf(definition);
+      const geometry = OVERRIDABLE_TYPES.get(type);
+      if (geometry === undefined) {
+        throw invalidInput(
+          `${JSON.stringify(type)} is not a built-in type that can be overridden`,
+          {
+            type,
+          },
+        );
+      }
+      if (definition.geometry !== geometry) {
+        throw invalidInput(
+          `A definition that overrides ${type} must have the geometry ${geometry}`,
+          {
+            type,
+            geometry: definition.geometry,
+          },
+        );
+      }
+      const remove = registry.add([[type, definition]], { overriding: true });
+      record?.(remove);
+      return remove;
+    },
     get: (name) => registry.get(name),
     list: () => registry.names(),
     count: () => registry.count(),
