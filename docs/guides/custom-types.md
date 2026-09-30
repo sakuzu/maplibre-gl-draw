@@ -261,7 +261,10 @@ the shape as it stands unturned. The frame is drawn along them in place
 of the box of `bounds`, and for a geometry other than `Point` the
 resize and rotate handles sit on its corners and edges. A `Point` type
 keeps a frame without those handles. When `outline` returns anything
-but four corners, the frame comes from `bounds`.
+but four corners, the frame comes from `bounds`. `ctx.screen.outline`
+reads the corners of the frame of any feature, of the built-in types
+too, so that something drawn around a feature can follow its frame; a
+type does not call it for its own features from `outline` or `bounds`.
 
 `handles` returns the handles of a selected feature, each with an ID,
 a position and a cursor. A drag of one calls `onHandleDrag` for every

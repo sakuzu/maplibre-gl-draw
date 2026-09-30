@@ -20,10 +20,12 @@ import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
+import type { Draw } from '../draw.js';
+import type { ScreenContext } from '../extension/context.js';
 import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js';
 import type { Hit } from '../extension/provider.js';
 import type { RenderContext } from '../extension/render.js';
-import type { Feature } from '../model.js';
+import type { Feature, FeatureInput } from '../model.js';
 import type { AdapterDeps } from './adapters.js';
 import { adaptCompanionProvider } from './adapters.js';
 import { createTerrainAnchors } from './contexts.js';
@@ -671,5 +673,148 @@ describe('a companion provider', () => {
     } as MouseNormalizedEvent;
     provider.onCompanionClick('f', hit as never, click);
     expect(onClick).toHaveBeenCalledWith(feature, own, expect.objectContaining({ lngLat: [1, 1] }));
+  });
+});
+
+describe('the outline of any feature on the screen', () => {
+  /** A draw instance on an engine, with the screen of its extensions */
+  function withScreen() {
+    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    const draw = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    let screen: ScreenContext | null = null;
+    draw.extensions.plugins.add({
+      name: 'reader',
+      onAdd(ctx) {
+        screen = ctx.screen;
+      },
+    });
+    return { engine, draw, screen: screen as unknown as ScreenContext };
+  }
+  const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+  /** Creates a feature that must be created */
+  const create = (draw: Draw, input: FeatureInput): Feature => {
+    const feature = draw.features.create(input);
+    if (!feature) throw new Error('not created');
+    return feature;
+  };
+
+  it('gives the corners of the extent of a line or an area, and the frame of a point', () => {
+    const { engine, draw, screen } = withScreen();
+    const area = create(draw, {
+      type: 'Polygon',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
+        ],
+      },
+    });
+    // (0, 0) is (400, 300) on the screen of the stub, where 1 degree is 100 px
+    expect(screen.outline(area)).toEqual([
+      [400, 200],
+      [500, 200],
+      [500, 300],
+      [400, 300],
+    ]);
+    const point = create(draw, {
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+    });
+    expect(screen.outline(point)).toEqual([
+      [494, 194],
+      [506, 194],
+      [506, 206],
+      [494, 206],
+    ]);
+    engine.destroy();
+  });
+
+  it('gives the turned corners of an image', () => {
+    const { engine, draw, screen } = withScreen();
+    const image = (rotation: number) =>
+      create(draw, {
+        type: 'Image',
+        geometry: { type: 'Point', coordinates: [1, 1] },
+        properties: {
+          'maplibre-gl-draw:imageWidth': 200,
+          'maplibre-gl-draw:imageHeight': 100,
+          'maplibre-gl-draw:rotation': rotation,
+        },
+      });
+    const [topLeft, topRight, bottomRight] = screen.outline(image(0));
+    expect(topLeft[1]).toBeCloseTo(topRight[1]);
+    expect(topRight[0]).toBeCloseTo(bottomRight[0]);
+    expect(topRight[0] - topLeft[0]).toBeGreaterThan(bottomRight[1] - topRight[1]);
+    const turned = screen.outline(image(90));
+    expect(turned).toHaveLength(4);
+    // Turned a quarter, the top edge stands upright
+    expect(turned[0][0]).toBeCloseTo(turned[1][0]);
+    expect(turned[1][1]).toBeCloseTo(turned[2][1]);
+    engine.destroy();
+  });
+
+  it('gives the outline of a custom type, or the corners of its bounds', () => {
+    const { engine, draw, screen } = withScreen();
+    draw.extensions.featureTypes.add({
+      type: 'diamond',
+      geometry: 'Polygon',
+      renderer,
+      outline: (feature, ctx) => {
+        const [x, y] = ctx.project((feature.geometry as GeoJSON.Polygon).coordinates[0][0]);
+        return [
+          [x, y - 20],
+          [x + 20, y],
+          [x, y + 20],
+          [x - 20, y],
+        ];
+      },
+    });
+    draw.extensions.featureTypes.add({
+      type: 'badge',
+      geometry: 'Point',
+      renderer,
+      bounds: (feature, ctx) => {
+        const [x, y] = ctx.project((feature.geometry as GeoJSON.Point).coordinates);
+        return { min: [x - 10, y - 5], max: [x + 10, y + 5] };
+      },
+    });
+    const ring = [
+      [1, 1],
+      [2, 1],
+      [2, 2],
+      [1, 1],
+    ];
+    const diamond = create(draw, {
+      type: 'diamond',
+      geometry: { type: 'Polygon', coordinates: [ring] },
+    });
+    const corners = screen.outline(diamond);
+    const expected = [
+      [500, 180],
+      [520, 200],
+      [500, 220],
+      [480, 200],
+    ];
+    corners.forEach((corner, i) => {
+      expect(corner[0]).toBeCloseTo(expected[i][0]);
+      expect(corner[1]).toBeCloseTo(expected[i][1]);
+    });
+    const badge = create(draw, {
+      type: 'badge',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+    });
+    expect(screen.outline(badge)).toEqual([
+      [490, 195],
+      [510, 195],
+      [510, 205],
+      [490, 205],
+    ]);
+    engine.destroy();
   });
 });

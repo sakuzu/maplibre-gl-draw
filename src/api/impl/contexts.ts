@@ -34,7 +34,7 @@ import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import { anchorGhostOpacity } from '../../view/terrain/occlusion.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
-import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
+import { computeBoundingBox, hasZeroArea } from '../../view/ui/selection-ui/index.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type {
@@ -249,6 +249,20 @@ export function createScreenContext(
         min: [Math.min(...corners.map((c) => c[0])), Math.min(...corners.map((c) => c[1]))],
         max: [Math.max(...corners.map((c) => c[0])), Math.max(...corners.map((c) => c[1]))],
       };
+    },
+    outline(feature) {
+      const extensions = services.selectionExtensions;
+      const box = computeBoundingBox(feature as StoredFeature, extensions);
+      if (!box) return [];
+      if (hasZeroArea(box)) {
+        // A feature with no area has the frame of a point: its outline, or its extent, in
+        // pixels around its position
+        const [x, y] = project(box.center);
+        return extensions
+          .resolvePointFrameCorners(feature as StoredFeature, { x, y }, 0)
+          .map((corner): ScreenPoint => [corner.x, corner.y]);
+      }
+      return [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft].map(project);
     },
     get zoom() {
       return map.getZoom();

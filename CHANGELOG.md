@@ -119,6 +119,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   of `LoadOptions` (`replace` or `merge`).
 - `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
   being drawn, and `selectionStyle.boxSelection` for the selection box.
+- `ScreenContext.outline`, the four corners of the selection frame of
+  any feature on the screen, turned as the shape is.
 - The contexts of the extensions: `terrain`, `names`, `screen` and
   `invalidate` and `drawing` (with `cancel`) for every kind, and
   `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and

@@ -66,6 +66,21 @@ export interface ScreenContext {
    * @returns The corners of the extent, or `null` when the feature has nothing to draw
    */
   bounds(feature: Feature): { min: ScreenPoint; max: ScreenPoint } | null;
+  /**
+   * The outline of the selection frame of a feature on the screen, in pixels, without the
+   * margin the frame is drawn with (`selectionStyle.boundingBox.margin`): its four corners in
+   * the order top left, top right, bottom right, bottom left of the shape as it stands
+   * unturned. It answers for every type: an image and any other turned shape give the turned
+   * corners, a line or an area the corners of its extent, a point the frame around it, and a
+   * custom type the corners of its `outline`, or of its `bounds` when it has none. A feature
+   * off the screen still has one.
+   *
+   * A custom type must not call it for its own features from its `outline` or `bounds`, which
+   * it calls.
+   *
+   * @returns The four corners, or an empty array when the feature has nothing to draw
+   */
+  outline(feature: Feature): ScreenPoint[];
   /** The zoom of the map */
   readonly zoom: number;
   /** The pixel ratio the drawing uses */
