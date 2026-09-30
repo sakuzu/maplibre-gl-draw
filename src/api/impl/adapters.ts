@@ -354,6 +354,8 @@ export function installFeatureType(
     const handles = definition.handles?.bind(definition);
     if (handles) {
       const onHandleDrag = definition.onHandleDrag?.bind(definition);
+      const onHandleDragStart = definition.onHandleDragStart?.bind(definition);
+      const onHandleDragEnd = definition.onHandleDragEnd?.bind(definition);
       add(
         deps.auxiliaryHandles.register(
           adaptHandleProvider(
@@ -362,6 +364,13 @@ export function installFeatureType(
               handles: (feature, screen) => (feature.type === type ? handles(feature, screen) : []),
               onDrag: (feature, handle, event) =>
                 feature && onHandleDrag ? onHandleDrag(feature, handle, event) : null,
+              ...(onHandleDragStart && {
+                onDragStart: (feature, handle, event) =>
+                  feature !== null && onHandleDragStart(feature, handle, event) !== false,
+              }),
+              ...(onHandleDragEnd && {
+                onDragEnd: (feature, handle, event) => onHandleDragEnd(feature, handle, event),
+              }),
             },
             deps,
           ),
@@ -472,8 +481,9 @@ export function adaptSnapProvider(
 /**
  * A provider of handles of the contract as a provider of auxiliary handles of the engine
  *
- * The drag of a handle calls `onDrag` for every move, and applies its patch as an
- * intermediate update; the patch of the end of the drag is applied as the final one.
+ * The drag of a handle asks `onDragStart` first, which can refuse it, then calls `onDrag` for
+ * every move and applies its patch as an intermediate update; the patch of the end of the drag
+ * is applied as the final one, and `onDragEnd` follows it.
  *
  * @internal
  */
@@ -503,9 +513,18 @@ export function adaptHandleProvider(
     ...(provider.globalHandles && {
       getGlobalHandles: () => provider.globalHandles?.(deps.screen).map(toEngineHandle) ?? [],
     }),
-    onHandleDragStart(hit) {
+    onHandleDragStart(hit, event) {
       const handle = handlesOf(hit.featureId, hit.global).find((h) => h.id === hit.handleId);
       if (!handle) return false;
+      if (provider.onDragStart) {
+        const feature = hit.featureId ? deps.store.getFeature(hit.featureId) : undefined;
+        const accepted = provider.onDragStart(
+          (feature as Feature | undefined) ?? null,
+          handle,
+          toPointerEvent(event),
+        );
+        if (accepted === false) return false;
+      }
       active = { featureId: hit.featureId, handle };
       return true;
     },
@@ -513,8 +532,20 @@ export function adaptHandleProvider(
       drag(event, false);
     },
     onHandleDragEnd(event) {
-      drag(event, true);
-      active = null;
+      const ended = active;
+      try {
+        drag(event, true);
+      } finally {
+        active = null;
+        if (ended && provider.onDragEnd) {
+          const feature = ended.featureId ? deps.store.getFeature(ended.featureId) : undefined;
+          provider.onDragEnd(
+            (feature as Feature | undefined) ?? null,
+            ended.handle,
+            toPointerEvent(event),
+          );
+        }
+      }
     },
   };
 }

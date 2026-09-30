@@ -584,7 +584,10 @@ geometry の種類 `geometry`、描き方 `renderer` と、任意の
 `candidateReachPx` は `hitPaddingPx` になり、`resizeStrategy` は
 無くなりました。大きさの変え方は `handles` と `onHandleDrag` で
 書きます。`HandleProvider` は、地物に付かないハンドルを
-`globalHandles` (`getGlobalHandles` の代わり) で出します。
+`globalHandles` (`getGlobalHandles` の代わり) で出します。ドラッグの
+始まりと終わりは `onDragStart` と `onDragEnd` で受けます
+(`onHandleDragStart` と `onHandleDragEnd` の代わり)。定義にも同じ
+ための `onHandleDragStart` と `onHandleDragEnd` があります。
 `CompanionProvider` は `has` をそのまま持ち、クリックを `onClick`
 (`onCompanionClick` の代わり) で受けます。
 

@@ -293,6 +293,15 @@ const reshapeRoute: FeatureTypeDefinition = {
 隠れます。描画が読み取り専用のとき、操作ロックの間、地物がロックされて
 いる間は、表示もドラッグもしません。
 
+`onHandleDragStart(feature, handle, event)` は、ハンドルのドラッグが
+始まる前に問われます。`false` を返すとドラッグを拒み、ポインターは
+ハンドルが無いときと同じ動きをします。
+`onHandleDragEnd(feature, handle, event)` は、始まったドラッグの最後の
+`onHandleDrag` の後に 1 回呼ばれます。地物はそのときの姿で届き、無く
+なっていれば `null` です。ドラッグが途中で断たれたときも呼ばれます。
+始まりに測った値のように、ドラッグの始めから終わりまで持つものに
+使います。
+
 `snapCandidates` は、その型の地物の近くでポインターが吸着する位置を
 返します。図形の頂点と辺の代わりになります。
 
@@ -446,8 +455,10 @@ draw.extensions.snapProviders.add(grid);
 定義の `onHandleDrag` と同じです。`globalHandles(screen)` は、どの
 地物にも属さず、何を選んでいても出るハンドルを返します。そのドラッグ
 では `feature` が `null` で届き、変わるものは提供者が自分で書き込み
-ます。定義と同じく、ハンドルはライブラリーが頂点のハンドルと同じ
-見た目で描きます。
+ます。`onDragStart` と `onDragEnd` は、定義の `onHandleDragStart` と
+`onHandleDragEnd` と同じように、ドラッグの前後で呼ばれます。
+`onDragStart` は `false` を返してドラッグを拒めます。定義と同じく、
+ハンドルはライブラリーが頂点のハンドルと同じ見た目で描きます。
 
 ### 付き物
 

@@ -430,6 +430,133 @@ describe('the extent of a custom feature type', () => {
   });
 });
 
+describe('the start and the end of a handle drag', () => {
+  const handle: Handle = { id: 'h', position: [1, 1], kind: 'grip' };
+  const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+
+  function setUp() {
+    const engine = engineWithDraw();
+    const { store } = engine.context;
+    store.createFeature({
+      id: 'f',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      layerId: store.listLayers()[0].id,
+      groupId: undefined,
+      properties: {},
+      style: {},
+      locked: false,
+      visible: true,
+    });
+    return engine;
+  }
+  const hit = (providerId: string, featureId = 'f') => ({ providerId, handleId: 'h', featureId });
+
+  it('asks onDragStart, which can refuse, and calls onDragEnd once after the last onDrag', () => {
+    const engine = setUp();
+    const calls: string[] = [];
+    let accept = false;
+    engine.extensions.collections.handleProviders.add({
+      name: 'grips',
+      handles: () => [handle],
+      onDrag: (feature, _handle, event) => {
+        calls.push(`drag ${feature?.id} ${event.lngLat[0]}`);
+        return { properties: { at: event.lngLat[0] } };
+      },
+      onDragStart: (feature, grabbed, event) => {
+        calls.push(`start ${feature?.id} ${grabbed.id} ${event.lngLat[0]}`);
+        return accept;
+      },
+      onDragEnd: (feature, grabbed, event) => {
+        calls.push(`end ${feature?.properties.at} ${grabbed.id} ${event.lngLat[0]}`);
+      },
+    });
+    const provider = engine.context.selectionScope.auxiliaryHandles.get('grips');
+    if (!provider) throw new Error('not installed');
+
+    expect(provider.onHandleDragStart(hit('grips'), drag('dragstart', 1, 1))).toBe(false);
+    expect(calls).toEqual(['start f h 1']);
+
+    calls.length = 0;
+    accept = true;
+    expect(provider.onHandleDragStart(hit('grips'), drag('dragstart', 1, 1))).toBe(true);
+    provider.onHandleDragMove(drag('dragmove', 2, 1));
+    provider.onHandleDragEnd(drag('dragend', 3, 1));
+    // A second end, with no drag going on, is not announced
+    provider.onHandleDragEnd(drag('dragend', 4, 1));
+    expect(calls).toEqual(['start f h 1', 'drag f 2', 'drag f 3', 'end 3 h 3']);
+    engine.destroy();
+  });
+
+  it('gives a handle of globalHandles a null feature', () => {
+    const engine = setUp();
+    const onDragStart = vi.fn(() => true);
+    const onDragEnd = vi.fn();
+    engine.extensions.collections.handleProviders.add({
+      name: 'free',
+      handles: () => [],
+      globalHandles: () => [handle],
+      onDrag: () => null,
+      onDragStart,
+      onDragEnd,
+    });
+    const provider = engine.context.selectionScope.auxiliaryHandles.get('free');
+    if (!provider) throw new Error('not installed');
+    const global = { ...hit('free', ''), global: true };
+    expect(provider.onHandleDragStart(global, drag('dragstart', 1, 1))).toBe(true);
+    provider.onHandleDragEnd(drag('dragend', 2, 1));
+    expect(onDragStart).toHaveBeenCalledWith(null, handle, expect.anything());
+    expect(onDragEnd).toHaveBeenCalledWith(null, handle, expect.anything());
+    engine.destroy();
+  });
+
+  it('calls onHandleDragStart and onHandleDragEnd of a custom type', () => {
+    const engine = engineWithDraw();
+    let accept = true;
+    const onHandleDragStart = vi.fn(() => accept);
+    const onHandleDragEnd = vi.fn();
+    engine.extensions.collections.featureTypes.add({
+      type: 'grip',
+      geometry: 'Point',
+      renderer,
+      handles: () => [handle],
+      onHandleDrag: () => ({ properties: { moved: true } }),
+      onHandleDragStart,
+      onHandleDragEnd,
+    });
+    const { store, selectionScope } = engine.context;
+    store.createFeature({
+      id: 'g',
+      type: 'grip',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      layerId: store.listLayers()[0].id,
+      groupId: undefined,
+      properties: {},
+      style: {},
+      locked: false,
+      visible: true,
+    });
+    const provider = selectionScope.auxiliaryHandles.list()[0];
+    const grabbed = { providerId: provider.id, handleId: 'h', featureId: 'g' };
+    expect(provider.onHandleDragStart(grabbed, drag('dragstart', 1, 1))).toBe(true);
+    provider.onHandleDragEnd(drag('dragend', 2, 1));
+    expect(onHandleDragStart).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'g' }),
+      handle,
+      expect.objectContaining({ lngLat: [1, 1] }),
+    );
+    expect(onHandleDragEnd).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'g', properties: { moved: true } }),
+      handle,
+      expect.objectContaining({ lngLat: [2, 1] }),
+    );
+    accept = false;
+    expect(provider.onHandleDragStart(grabbed, drag('dragstart', 1, 1))).toBe(false);
+    expect(onHandleDragEnd).toHaveBeenCalledTimes(1);
+    engine.destroy();
+  });
+});
+
 describe('the providers of snapping candidates', () => {
   it('snaps to the candidate of the highest priority at the same distance', () => {
     const engine = engineWithDraw();

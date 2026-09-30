@@ -126,6 +126,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   frame of a type whose shape turns, and `FeatureTypeDefinition.bbox`,
   the extent on the map the spatial index takes for a type that draws
   beyond its geometry.
+- `onDragStart` and `onDragEnd` of `HandleProvider`, and
+  `onHandleDragStart` and `onHandleDragEnd` of `FeatureTypeDefinition`,
+  around a drag of a handle; `false` from the start refuses the drag.
 - `DatasetRow.style`, the look of a row, which the rows read back
   carry.
 - `extensions.featureTypes.override`, which puts a definition in the
@@ -583,9 +586,9 @@ The providers:
 | `AuxiliaryHandleProvider` | `HandleProvider` | |
 | `id` | `name` | |
 | `getHandles` | `handles(feature, ctx)` | |
-| `onHandleDragStart` | `onDrag` | Returns a `FeaturePatch` |
-| `onHandleDragMove` | `onDrag` | |
-| `onHandleDragEnd` | `onDrag` | |
+| `onHandleDragStart` | `onDragStart` | `false` refuses the drag |
+| `onHandleDragMove` | `onDrag` | Returns a `FeaturePatch` |
+| `onHandleDragEnd` | `onDragEnd` | After the last `onDrag` |
 | `getGlobalHandles` | `globalHandles(ctx)` | |
 | `FeatureCompanionProvider` | `CompanionProvider` | |
 | `id` | `name` | |

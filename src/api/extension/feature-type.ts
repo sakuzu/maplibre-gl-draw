@@ -99,6 +99,19 @@ export interface FeatureTypeDefinition {
    * @returns The patch to apply to the feature, or `null` for no change
    */
   onHandleDrag?(feature: Feature, handle: Handle, event: DrawPointerEvent): FeaturePatch | null;
+  /**
+   * A drag of one of its handles is about to start, before the first `onHandleDrag`.
+   *
+   * @returns False to refuse the drag; no `onHandleDrag` nor `onHandleDragEnd` follows then
+   */
+  onHandleDragStart?(feature: Feature, handle: Handle, event: DrawPointerEvent): boolean;
+  /**
+   * A drag of one of its handles ended, after the last `onHandleDrag` and its patch. It is
+   * called once for every drag that started, also when the drag is cut short.
+   *
+   * @param feature - The feature as it is now, or `null` when it is gone
+   */
+  onHandleDragEnd?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): void;
   /** The snapping candidates a feature of this type offers. */
   snapCandidates?(feature: Feature, ctx: SnapContext): SnapCandidate[];
 }

@@ -570,7 +570,10 @@ is not yours. `onHandleDrag` and `HandleProvider.onDrag` return a
 `FeaturePatch`. `candidateReachPx` is `hitPaddingPx`, and
 `resizeStrategy` is gone: write a resize with `handles` and
 `onHandleDrag`. A `HandleProvider` gives handles that belong to no
-feature with `globalHandles` (`getGlobalHandles`), and a
+feature with `globalHandles` (`getGlobalHandles`), and is told of the
+start and the end of a drag with `onDragStart` and `onDragEnd`
+(`onHandleDragStart` and `onHandleDragEnd`); a definition has
+`onHandleDragStart` and `onHandleDragEnd` for the same. A
 `CompanionProvider` keeps `has` and takes clicks with `onClick`
 (`onCompanionClick`).
 

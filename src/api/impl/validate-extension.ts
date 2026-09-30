@@ -81,6 +81,8 @@ const SHAPES: Readonly<
       'bbox',
       'handles',
       'onHandleDrag',
+      'onHandleDragStart',
+      'onHandleDragEnd',
       'snapCandidates',
     ],
   },
@@ -89,7 +91,10 @@ const SHAPES: Readonly<
     optional: ['drawForLayer', 'drawVertices', 'hasPendingWork'],
   },
   'snap provider': { required: ['candidates'], optional: [] },
-  'handle provider': { required: ['handles', 'onDrag'], optional: ['globalHandles'] },
+  'handle provider': {
+    required: ['handles', 'onDrag'],
+    optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
+  },
   'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
 };
 

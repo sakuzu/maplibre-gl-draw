@@ -72,6 +72,22 @@ export interface HandleProvider {
    * @returns The patch to apply to the feature, or `null` for no change
    */
   onDrag(feature: Feature | null, handle: Handle, event: DrawPointerEvent): FeaturePatch | null;
+  /**
+   * A drag of one of its handles is about to start, before the first `onDrag`.
+   *
+   * @param feature - The feature the handle is on; `null` for a handle of `globalHandles`
+   * @returns False to refuse the drag: the pointer then does what it would do without the
+   *   handle, and no `onDrag` nor `onDragEnd` follows
+   */
+  onDragStart?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): boolean;
+  /**
+   * A drag of one of its handles ended, after the last `onDrag` and its patch. It is called
+   * once for every drag that started, also when the drag is cut short.
+   *
+   * @param feature - The feature the handle is on as it is now; `null` for a handle of
+   *   `globalHandles`, or when the feature is gone
+   */
+  onDragEnd?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): void;
 }
 
 /**

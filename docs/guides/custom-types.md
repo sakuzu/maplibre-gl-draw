@@ -306,6 +306,15 @@ while another handle is dragged, and nothing is shown or dragged while
 the drawing is read-only, under the interaction lock, or while the
 feature is locked.
 
+`onHandleDragStart(feature, handle, event)` is asked before a drag of
+a handle starts; it returns `false` to refuse the drag, and the pointer
+then does what it would do without the handle.
+`onHandleDragEnd(feature, handle, event)` is called once after the
+last `onHandleDrag` of a drag that started, with the feature as it is
+then (or `null` when it is gone), also when the drag is cut short. Use
+them for what a drag holds from its start to its end, such as a value
+measured when it starts.
+
 `snapCandidates` returns the positions a pointer snaps to near a
 feature of the type, in place of the vertices and edges of its
 geometry.
@@ -468,8 +477,10 @@ event)` returns the patch a drag makes, as `onHandleDrag` of a
 definition does. `globalHandles(screen)` returns handles that belong to
 no feature and are shown whatever is selected; their drag arrives with
 `feature` as `null`, and the provider writes what the drag changes
-itself. As with a definition, the library draws the handles with the
-look of its vertex handles.
+itself. `onDragStart` and `onDragEnd` surround a drag as
+`onHandleDragStart` and `onHandleDragEnd` of a definition do, and
+`onDragStart` refuses it by returning `false`. As with a definition,
+the library draws the handles with the look of its vertex handles.
 
 ### Companions
 
