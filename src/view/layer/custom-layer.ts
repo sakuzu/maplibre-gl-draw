@@ -332,6 +332,14 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Changes made while the layer was off the map were not seen
     displayList.invalidate();
     engine.unsubscribeStore = store.subscribe((changes) => {
+      // A replacement of the whole document drops every cache of the features, whatever the
+      // notification lists (the new document can reuse an ID with another shape)
+      if (changes.reset === true) {
+        renderScope.earcut.clear();
+        renderScope.styleRules.clear();
+        terrainContext.fillCache.clear();
+        engine.storeRetainedCache?.invalidateAll();
+      }
       engine.storeRetainedCache?.applyChanges(changes);
       displayList.applyChanges(changes);
       // The binning of the analytic drape is rebuilt only on a change of the geometry, the style,

@@ -83,7 +83,8 @@ export class DisplayListCache {
       changes.groups !== undefined ||
       changes.layerReorder !== undefined ||
       changes.groupReorder !== undefined ||
-      changes.uiStateChanged === true
+      changes.uiStateChanged === true ||
+      changes.reset === true
     ) {
       this.invalidate();
     }

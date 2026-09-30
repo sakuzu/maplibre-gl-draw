@@ -13,6 +13,10 @@
  *     stopped by it.
  *   - The notifications of the contract are forwarded into the ChangeBus of this Store, so a
  *     listener gets one StoreChange per transaction with every kind of change.
+ *   - What the contract returns and notifies is read in the shape of the public types: an
+ *     optional field it gives as `null` (`Feature.groupId`, `Layer.metadata`,
+ *     `Layer.styleRule`) is read as `undefined`. The normalized object is kept per object of
+ *     the contract, so the same object of the contract always reads as the same object here.
  *   - Deletions reach the state of this client: the id of a deleted feature, group or layer
  *     leaves the selection, the features being edited and the locally hidden set, whatever
  *     deleted it, through the writes of the contract.
@@ -64,6 +68,8 @@ export class DrawStore implements Store {
   readonly #contract: StoreContract;
   readonly #bus = new ChangeBus();
   readonly #drawing = new MemoryDrawingState(this.#bus);
+  /** The normalized copy of each object of the contract that gave `null` for an optional field */
+  readonly #normalized = new WeakMap<object, object>();
 
   constructor(contract: StoreContract) {
     this.#contract = contract;
@@ -75,19 +81,22 @@ export class DrawStore implements Store {
   // ============================================================================
 
   getFeature(id: string): Feature | undefined {
-    return this.#contract.getFeature(id);
+    const feature = this.#contract.getFeature(id);
+    return feature && this.#feature(feature);
   }
   listFeatures(): Feature[] {
-    return this.#contract.listFeatures();
+    return this.#features(this.#contract.listFeatures());
   }
   listFeaturesInOrder(): Feature[] {
-    return this.#contract.listFeaturesInOrder();
+    return this.#features(this.#contract.listFeaturesInOrder());
   }
   getLayer(id: string): Layer | undefined {
-    return this.#contract.getLayer(id);
+    const layer = this.#contract.getLayer(id);
+    return layer && this.#layer(layer);
   }
   listLayers(): Layer[] {
-    return this.#contract.listLayers();
+    const layers = this.#contract.listLayers();
+    return layers.some(hasNullLayerField) ? layers.map((layer) => this.#layer(layer)) : layers;
   }
   getLayerOrder(): readonly string[] {
     return this.#contract.getLayerOrder();
@@ -309,13 +318,82 @@ export class DrawStore implements Store {
    */
   #receive(changes: StoreChange): void {
     this.#bus.transact(() => {
-      this.#bus.merge(withoutSource(changes));
+      this.#bus.merge(this.#normalizeChanges(withoutSource(changes)));
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
       if (mayHide(changes)) this.#pruneInvisible();
       this.#pruneVertices(changes);
     }, changes.source ?? 'local');
+  }
+
+  // ============================================================================
+  // Reading the contract in the shape of the public types
+  // ============================================================================
+
+  /** The feature with `groupId: null` read as `undefined` (the same object when it has none) */
+  #feature(feature: Feature): Feature {
+    if (!hasNullFeatureField(feature)) return feature;
+    const known = this.#normalized.get(feature) as Feature | undefined;
+    if (known) return known;
+    const normalized: Feature = { ...feature, groupId: undefined };
+    this.#normalized.set(feature, normalized);
+    return normalized;
+  }
+
+  #features(features: Feature[]): Feature[] {
+    return features.some(hasNullFeatureField)
+      ? features.map((feature) => this.#feature(feature))
+      : features;
+  }
+
+  /** The layer with `metadata` and `styleRule` of `null` read as `undefined` */
+  #layer(layer: Layer): Layer {
+    if (!hasNullLayerField(layer)) return layer;
+    const known = this.#normalized.get(layer) as Layer | undefined;
+    if (known) return known;
+    const normalized: Layer = {
+      ...layer,
+      metadata: layer.metadata ?? undefined,
+      styleRule: layer.styleRule ?? undefined,
+    };
+    this.#normalized.set(layer, normalized);
+    return normalized;
+  }
+
+  /** A notification of the contract with its features and layers read like the getters */
+  #normalizeChanges(changes: StoreChange): StoreChange {
+    const { features, layers } = changes;
+    const normalized: StoreChange = { ...changes };
+    if (features) {
+      normalized.features = {
+        ...features,
+        ...(features.created && { created: features.created.map((f) => this.#feature(f)) }),
+        ...(features.updated && {
+          updated: features.updated.map((entry) => ({
+            ...entry,
+            feature: this.#feature(entry.feature),
+            previous: this.#feature(entry.previous),
+          })),
+        }),
+        ...(features.deleted && { deleted: features.deleted.map((f) => this.#feature(f)) }),
+      };
+    }
+    if (layers) {
+      normalized.layers = {
+        ...layers,
+        ...(layers.created && { created: layers.created.map((l) => this.#layer(l)) }),
+        ...(layers.updated && {
+          updated: layers.updated.map((entry) => ({
+            ...entry,
+            layer: this.#layer(entry.layer),
+            previous: this.#layer(entry.previous),
+          })),
+        }),
+        ...(layers.deleted && { deleted: layers.deleted.map((l) => this.#layer(l)) }),
+      };
+    }
+    return normalized;
   }
 
   /** Removes an id that no longer names anything from the state of this client */
@@ -456,6 +534,16 @@ function sameCoordinates(a: unknown, b: unknown): boolean {
     if (!sameCoordinates(a[i], b[i])) return false;
   }
   return true;
+}
+
+/** Whether a feature of the contract gives `null` for an optional field */
+function hasNullFeatureField(feature: Feature): boolean {
+  return (feature.groupId as unknown) === null;
+}
+
+/** Whether a layer of the contract gives `null` for an optional field */
+function hasNullLayerField(layer: Layer): boolean {
+  return (layer.metadata as unknown) === null || (layer.styleRule as unknown) === null;
 }
 
 /** A notification of the contract without its source (the transaction here carries it) */

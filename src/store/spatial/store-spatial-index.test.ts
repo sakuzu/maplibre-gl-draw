@@ -74,6 +74,12 @@ function stubStore() {
         features: { updated: [{ id: feature.id, feature, previous, isIntermediate }] },
       });
     },
+    /** Replaces the whole document; the notification says only that it was replaced */
+    remoteReplace(next: Feature[]) {
+      features.clear();
+      for (const feature of next) features.set(feature.id, feature);
+      emit({ source: 'remote', reset: true });
+    },
     remoteDelete(id: string) {
       const previous = features.get(id) as Feature;
       features.delete(id);
@@ -175,6 +181,19 @@ describe('StoreSpatialIndex', () => {
 
     remote.remoteDelete('r');
     expect(index.findNear([3, 3], 0)).toEqual([]);
+  });
+
+  it('rebuilds itself from the Store when the whole document is replaced', () => {
+    const remote = stubStore();
+    remote.remoteCreate(point('old', 1, 1));
+    const index = new StoreSpatialIndex(remote.store);
+    expect(index.findNear([1, 1], 0)).toEqual(['old']);
+
+    remote.remoteReplace([point('a', 2, 2), point('b', 3, 3)]);
+
+    expect(index.findNear([1, 1], 0)).toEqual([]);
+    expect(index.findNear([2, 2], 0)).toEqual(['a']);
+    expect(index.findNear([3, 3], 0)).toEqual(['b']);
   });
 
   it('measures a registered custom type with its calculator, also for existing features', () => {

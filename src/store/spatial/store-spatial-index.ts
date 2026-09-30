@@ -12,6 +12,8 @@
  * - every write path (the public API, the drawing modes, the drag, import, plugins, a mode
  *   of an extension, a change applied from elsewhere to a replaced Store) reaches it in the same way
  * - a write the Store refuses (read-only) notifies nothing, so it leaves no trace here
+ * - the features a Store holds when the index is created are loaded then, and a notification
+ *   with `reset` (the whole document replaced from elsewhere) rebuilds the index from the Store
  * - an update of the properties (the radius of a Circle, the scale and rotation of an Image)
  *   re-indexes the feature like an update of the coordinates
  * - the intermediate updates of a drag are Store updates too (isIntermediate), so the shape
@@ -114,6 +116,12 @@ export class StoreSpatialIndex implements SpatialIndex {
   }
 
   #apply(changes: StoreChange): void {
+    // A replacement of the whole document is read again from the Store, whatever the
+    // notification lists: the index then holds exactly what the new document holds
+    if (changes.reset === true) {
+      this.#rebuild();
+      return;
+    }
     const features = changes.features;
     if (!features) return;
 
