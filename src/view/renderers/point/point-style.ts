@@ -74,9 +74,7 @@ export function resolvePointStyle(
     fillColor: style.pointColor ? toColor(style.pointColor, 1) : defaults.fillColor,
     size: style.pointRadius ? style.pointRadius * 2 : defaults.size,
     fillOpacity: defaults.fillOpacity * opacity,
-    strokeColor: style.pointStrokeColor
-      ? toColor(style.pointStrokeColor, 1)
-      : defaults.strokeColor,
+    strokeColor: style.pointStrokeColor ? toColor(style.pointStrokeColor, 1) : defaults.strokeColor,
     strokeWidth: featurePointStrokeWidth(style) ?? defaults.strokeWidth,
     strokeOpacity: defaults.strokeOpacity * opacity,
   };

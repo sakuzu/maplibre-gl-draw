@@ -311,8 +311,7 @@ export function installFeatureType(
 
   // An override can take only some features of the type; the others keep the built-in type
   const appliesTo = overriding ? definition.appliesTo?.bind(definition) : undefined;
-  const applies = (feature: StoredFeature): boolean =>
-    !appliesTo || appliesTo(feature as Feature) !== false;
+  const applies = (feature: StoredFeature): boolean => appliesTo?.(feature as Feature) !== false;
 
   try {
     const renderer = adaptFeatureRenderer(type, definition.renderer, deps);
