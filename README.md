@@ -239,6 +239,8 @@ Import from the main entry unless you need one of the others.
 [docs/README.md](docs/README.md) lists every document in reading order:
 getting started, the guides, the reference and the internals. Moving from
 1.0, mapbox-gl-draw or terra-draw? See [migrating](docs/guides/migrating.md).
+The page of the main entry in the [API reference][api] opens with a list
+of the resources of the instance and the methods each one has.
 
 ## Contributing
 

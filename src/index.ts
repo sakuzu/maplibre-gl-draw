@@ -27,6 +27,20 @@
  * });
  * ```
  *
+ * Where to find things: every resource of {@link Draw} is a field with its own methods.
+ *
+ * - `draw.features` (create, update, delete, move, union, split): {@link FeaturesCollection}
+ * - `draw.layers` (create, update, reorder, setActive): {@link LayersCollection}
+ * - `draw.groups` (create, update, move): {@link GroupsCollection}
+ * - `draw.datasets` (add, remove, move): {@link DatasetsCollection}
+ * - `draw.selection` (set, add, clear, delete, group): {@link SelectionResource}
+ * - `draw.vertexSelection` (set, clear, delete): {@link VertexSelectionResource}
+ * - `draw.metadata` and `draw.options` (get, update): {@link MetadataResource}, {@link OptionsResource}
+ * - `draw.document` (load, toJSON, toGeoJSON): {@link DocumentResource}
+ * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
+ * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
+ * - events with `draw.on`: {@link DrawEvents}; errors: {@link DrawError}
+ *
  * Read next: [getting started](https://sakuzu.github.io/maplibre-gl-draw/getting-started),
  * then the guides for [drawing](https://sakuzu.github.io/maplibre-gl-draw/guides/drawing) and
  * [saving and loading](https://sakuzu.github.io/maplibre-gl-draw/guides/save-load). The

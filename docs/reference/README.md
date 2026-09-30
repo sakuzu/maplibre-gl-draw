@@ -5,7 +5,9 @@ generated from the TSDoc comments of the sources; two documents are
 written by hand because they describe data and behavior rather than one
 declaration.
 
-- The generated API reference, in `api/` after you build it (see below)
+- The generated API reference, in `api/` after you build it (see below);
+  the page of the main entry opens with a list of the resources of `Draw`
+  and the methods each one has
 - [data-format.md](data-format.md) — the native format and GeoJSON: the
   coordinates and properties of each feature type, versions and
   validation

@@ -231,7 +231,8 @@ document.querySelector('#save')?.addEventListener('click', () => {
 [docs/README.ja.md](docs/README.ja.md) に、はじめかた、手引き、
 リファレンス、内部の文書を読む順に並べています。1.0、mapbox-gl-draw、
 terra-draw から移る場合は [移行](docs/guides/migrating.ja.md) を参照して
-ください。
+ください。[API リファレンス][api] のメインのエントリーのページは、
+インスタンスの資源とそれぞれのメソッドの一覧から始まります。
 
 ## 開発に参加する
 
