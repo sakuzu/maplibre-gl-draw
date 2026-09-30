@@ -74,6 +74,7 @@ const SHAPES: Readonly<
   'feature type': {
     required: [],
     optional: [
+      'appliesTo',
       'hitTest',
       'boxSelect',
       'bounds',

@@ -341,6 +341,28 @@ restore();
 これまでどおり拒みます。差し替えている型は、戻すまで重ねて差し替え
 られません。
 
+`appliesTo(feature)` は、アイコンを持つ点のように、差し替えを型の
+一部の地物に絞ります。これが false を返す地物は、組み込みの型を
+そのまま使います。ほかの組み込みの地物とまとめて描かれ、組み込みの
+当たり判定、範囲選択、枠、ハンドル、吸着の候補、広がりが残ります。
+残りの地物は定義で描かれ、当たりが決まります。地物が変わるたびに
+問い直すので、答えは地物だけから決めてください。`add` はこれを
+無視します。独自の型は、その型の地物をすべて受け持ちます。
+
+<!-- docs-check:
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
+declare const iconRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+draw.extensions.featureTypes.override({
+  type: 'Point',
+  geometry: 'Point',
+  renderer: iconRenderer,
+  appliesTo: (feature) => typeof feature.properties.icon === 'string',
+});
+```
+
 ## 地形
 
 地形があるとき、共有の描画器は描くものを自分で地面に載せます。自分の

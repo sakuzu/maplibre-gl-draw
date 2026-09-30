@@ -357,6 +357,29 @@ back. `add` keeps refusing the names of the built-in types, and a type
 that is already overridden cannot be overridden again until it is put
 back.
 
+`appliesTo(feature)` narrows an override to some features of the type,
+such as the points that carry an icon. A feature for which it returns
+false keeps the built-in type entirely: it is drawn in batches with the
+other built-in features, and keeps the built-in hit test, box
+selection, frame, handles, snapping candidates and extent. The others
+are drawn and hit by the definition. It is asked again whenever a
+feature changes, so its answer follows from the feature alone. `add`
+ignores it: a custom type takes every feature of its type.
+
+<!-- docs-check:
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
+declare const iconRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+draw.extensions.featureTypes.override({
+  type: 'Point',
+  geometry: 'Point',
+  renderer: iconRenderer,
+  appliesTo: (feature) => typeof feature.properties.icon === 'string',
+});
+```
+
 ## Terrain
 
 With terrain on, the shared renderers lay what they draw on the ground

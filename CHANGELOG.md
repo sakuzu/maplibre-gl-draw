@@ -136,7 +136,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   carry.
 - `extensions.featureTypes.override`, which puts a definition in the
   place of a built-in type of the same name until the function it
-  returns puts the built-in type back.
+  returns puts the built-in type back, and
+  `FeatureTypeDefinition.appliesTo`, which narrows an override to some
+  features of the type and leaves the others to the built-in type.
 - In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
   `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
 - In `/table`: `tableFromFeatures`, `createTableBuilder` and

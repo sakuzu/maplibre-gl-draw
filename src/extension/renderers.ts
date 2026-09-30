@@ -113,6 +113,12 @@ export interface FeatureTypeRenderer {
    * Releases the WebGL resources
    */
   onRemove(): void;
+
+  /**
+   * Whether it draws this feature of its type; the built-in drawing of the type draws the
+   * features it refuses. Every feature of the type when it is left out.
+   */
+  appliesTo?(feature: Feature): boolean;
 }
 
 /**

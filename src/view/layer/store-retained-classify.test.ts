@@ -19,7 +19,7 @@ import { FeatureDrawer } from '../renderers/drawer.js';
 import type { ImageRenderer } from '../renderers/image.js';
 import type { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../renderers/point/point-shape.js';
-import { classifyFeature, featureOrigin } from './store-retained-classify.js';
+import { classifyFeature, customRendererOf, featureOrigin } from './store-retained-classify.js';
 
 function makeFeature(type: Feature['type'], coordinates: FeatureCoordinates): Feature {
   return {
@@ -105,5 +105,24 @@ describe('classifyFeature with the style resolution of the renderer', () => {
     expect(
       classifyFeature(pointWith({ pointShape: 'square' }), drawer, customTypes, companions),
     ).toBe('point-square');
+  });
+});
+
+describe('classifyFeature with a renderer that takes only some features of its type', () => {
+  it('draws the features it takes at once and leaves the others on the batches', () => {
+    const drawer = { getPointStyle: () => ({ shape: 'circle' }) } as never;
+    const overriding = {
+      appliesTo: (feature: Feature) => feature.properties.kind === 'special',
+    };
+    const customTypes = new Map<string, unknown>([['Point', overriding]]);
+    const companions = createFeatureCompanionRegistry();
+    const plain = makeFeature('Point', [0, 0]);
+    const special = { ...plain, properties: { kind: 'special' } } as Feature;
+
+    expect(classifyFeature(plain, drawer, customTypes, companions)).toBe('point-circle');
+    expect(classifyFeature(special, drawer, customTypes, companions)).toBe('immediate');
+    expect(customRendererOf(customTypes, plain)).toBeUndefined();
+    expect(customRendererOf(customTypes, special)).toBe(overriding);
+    expect(customRendererOf(new Map([['Point', {}]]), plain)).toEqual({});
   });
 });

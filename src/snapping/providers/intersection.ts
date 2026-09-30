@@ -68,7 +68,7 @@ function collectNearbySegments(
   for (const feature of queryFeatures(deps, bbox, ctx)) {
     // The candidates of a custom type are returned by the vertex provider
     // (getSnapTargets)
-    if (deps.snapTargets?.get(feature.type)) continue;
+    if (deps.snapTargets?.forFeature(feature)) continue;
     if (!hasSnapEdges(feature.type)) continue;
 
     const segments: Array<{ start: Coordinate; end: Coordinate }> = [];

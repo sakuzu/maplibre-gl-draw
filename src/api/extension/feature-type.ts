@@ -44,6 +44,19 @@ export interface FeatureTypeDefinition {
   /** How the features of this type are drawn */
   readonly renderer: FeatureRenderer;
   /**
+   * Which features of the type the definition takes, for a definition that overrides a
+   * built-in type (`extensions.featureTypes.override`). A feature for which it returns false
+   * keeps the built-in type: its built-in drawing (drawn in batches with the other features),
+   * hit test, box selection, selection frame, handles, snapping candidates and extent. The
+   * others are drawn, hit and framed by this definition. Every feature of the type is taken
+   * when it is left out.
+   *
+   * It is asked again whenever a feature changes, so its answer must follow from the feature
+   * (its properties, its geometry, its style) and nothing outside it. It is ignored in a
+   * definition given to `add`: a custom type takes every feature of its type.
+   */
+  appliesTo?(feature: Feature): boolean;
+  /**
    * The extent of a feature on the map, `[west, south, east, north]` in degrees, for a type
    * that draws beyond its geometry by a distance on the ground. The spatial index takes it:
    * it gathers the candidates of a hit test and of a box selection, answers

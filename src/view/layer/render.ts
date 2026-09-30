@@ -21,6 +21,7 @@ import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
+import { customRendererOf } from './store-retained-classify.js';
 
 /**
  * Draw features and overlays layer by layer
@@ -198,7 +199,7 @@ export function renderLayers(
           restoreBlendState,
         );
 
-        const customRenderer = customRenderers.get(feature.type);
+        const customRenderer = customRendererOf(customRenderers, feature);
         if (customRenderer) {
           // To keep the draw order (painter's algorithm), the core batch that has accumulated is
           // flushed first and only then the custom feature is drawn immediately.

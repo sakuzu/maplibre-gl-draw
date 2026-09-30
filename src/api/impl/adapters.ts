@@ -188,6 +188,43 @@ function hitTestStrategyOf(definition: FeatureTypeDefinition, deps: AdapterDeps)
   };
 }
 
+/**
+ * A strategy of an override that takes only some features of its type: the others are tested
+ * by the built-in strategy of the type
+ */
+function narrowStrategy(
+  own: HitTestStrategy,
+  builtIn: HitTestStrategy | undefined,
+  applies: (feature: StoredFeature) => boolean,
+): HitTestStrategy {
+  /** Tests and measures in one pass with a strategy, as the service does */
+  const testDistanceWith = (
+    strategy: HitTestStrategy | undefined,
+    feature: StoredFeature,
+    coordinate: Coordinate,
+    tolerance: number,
+  ): number | null => {
+    if (!strategy) return null;
+    if (strategy.testDistance) return strategy.testDistance(feature, coordinate, tolerance);
+    return strategy.test(feature, coordinate, tolerance)
+      ? strategy.distance(feature, coordinate)
+      : null;
+  };
+  return {
+    geometryType: own.geometryType,
+    test: (feature, coordinate, tolerance) =>
+      applies(feature)
+        ? own.test(feature, coordinate, tolerance)
+        : (builtIn?.test(feature, coordinate, tolerance) ?? false),
+    distance: (feature, coordinate) =>
+      applies(feature)
+        ? own.distance(feature, coordinate)
+        : (builtIn?.distance(feature, coordinate) ?? Number.POSITIVE_INFINITY),
+    testDistance: (feature, coordinate, tolerance) =>
+      testDistanceWith(applies(feature) ? own : builtIn, feature, coordinate, tolerance),
+  };
+}
+
 /** The box selection of a custom type, in the terms of the engine */
 function boxSelectionOf(
   definition: FeatureTypeDefinition,
@@ -272,23 +309,51 @@ export function installFeatureType(
     for (let i = cancels.length - 1; i >= 0; i--) cancels[i]();
   };
 
+  // An override can take only some features of the type; the others keep the built-in type
+  const appliesTo = overriding ? definition.appliesTo?.bind(definition) : undefined;
+  const applies = (feature: StoredFeature): boolean =>
+    !appliesTo || appliesTo(feature as Feature) !== false;
+
   try {
+    const renderer = adaptFeatureRenderer(type, definition.renderer, deps);
     add(
       deps.customLayer.registerFeatureRenderer(
         type,
-        adaptFeatureRenderer(type, definition.renderer, deps),
+        appliesTo ? { ...renderer, appliesTo: applies } : renderer,
       ),
     );
     if (!overriding || definition.hitTest) {
-      add(deps.hitTestService.registerStrategy?.(hitTestStrategyOf(definition, deps)));
+      const own = hitTestStrategyOf(definition, deps);
+      const builtIn = appliesTo ? deps.hitTestService.getStrategy?.(type) : undefined;
+      add(
+        deps.hitTestService.registerStrategy?.(
+          appliesTo ? narrowStrategy(own, builtIn, applies) : own,
+        ),
+      );
     }
     const box = !overriding || definition.boxSelect ? boxSelectionOf(definition, deps) : null;
-    if (box) add(deps.boxSelectionRegistry.register(box));
+    if (box) {
+      const builtIn = appliesTo ? deps.boxSelectionRegistry.get(type) : undefined;
+      add(
+        deps.boxSelectionRegistry.register(
+          appliesTo
+            ? {
+                featureType: box.featureType,
+                intersects: (feature, rect) =>
+                  applies(feature)
+                    ? box.intersects(feature, rect)
+                    : (builtIn?.intersects(feature, rect) ?? false),
+              }
+            : box,
+        ),
+      );
+    }
 
     const bounds = definition.bounds?.bind(definition);
     const outline = definition.outline?.bind(definition);
     /** The four corners of the outline of a feature, or null when it gives none */
     const cornersOf = (feature: StoredFeature): ScreenPoint[] | null => {
+      if (!applies(feature)) return null;
       const corners = outline?.(feature as Feature, deps.screen);
       return Array.isArray(corners) && corners.length === 4 && corners.every(isScreenPoint)
         ? corners
@@ -301,6 +366,7 @@ export function installFeatureType(
         // A point keeps its point frame; the extent gives its size
         add(
           deps.selectionExtensions.registerPointFrameExtent(type, (feature) => {
+            if (!applies(feature)) return null;
             const box = bounds(feature as Feature, deps.screen);
             if (!box) return null;
             const center = deps.screen.project((feature.geometry as GeoJSON.Point).coordinates);
@@ -327,6 +393,7 @@ export function installFeatureType(
       };
       add(
         deps.selectionExtensions.registerBoundingBox(type, (feature) => {
+          if (!applies(feature)) return computeBoundingBox(feature) ?? degenerateBox(at(0, 0));
           const corners = cornersOf(feature);
           if (corners) {
             // The frame and its handles follow the outline, turned as the shape is
@@ -361,7 +428,10 @@ export function installFeatureType(
           adaptHandleProvider(
             {
               name: `\u0000type:${type}`,
-              handles: (feature, screen) => (feature.type === type ? handles(feature, screen) : []),
+              handles: (feature, screen) =>
+                feature.type === type && applies(feature as unknown as StoredFeature)
+                  ? handles(feature, screen)
+                  : [],
               onDrag: (feature, handle, event) =>
                 feature && onHandleDrag ? onHandleDrag(feature, handle, event) : null,
               ...(onHandleDragStart && {
@@ -381,10 +451,13 @@ export function installFeatureType(
     const snapCandidates = definition.snapCandidates?.bind(definition);
     if (snapCandidates) {
       add(
-        deps.snapTargets.register(type, (feature, ctx) =>
-          snapCandidates(feature as Feature, toSnapContext(ctx, deps.screen)).map((candidate) =>
-            toEngineCandidate(candidate, feature.id),
-          ),
+        deps.snapTargets.register(
+          type,
+          (feature, ctx) =>
+            snapCandidates(feature as Feature, toSnapContext(ctx, deps.screen)).map((candidate) =>
+              toEngineCandidate(candidate, feature.id),
+            ),
+          appliesTo && applies,
         ),
       );
     }
@@ -394,6 +467,7 @@ export function installFeatureType(
       // The spatial index measures the features of the type by the extent it gives
       add(
         deps.spatialIndex.setCustomBoundingBoxCalculator(type, (feature, tileSize) => {
+          if (!applies(feature)) return getBoundingBox(feature, tileSize);
           const extent = bbox(feature as Feature);
           if (
             Array.isArray(extent) &&

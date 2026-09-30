@@ -132,6 +132,11 @@ export interface HitTestService {
   registerStrategy?(strategy: HitTestStrategy): () => void;
 
   /**
+   * The strategy registered for a type, or `undefined`
+   */
+  getStrategy?(type: string): HitTestStrategy | undefined;
+
+  /**
    * Registers, per feature type, the extra reach (in CSS pixels) for narrowing down the
    * candidates
    *
@@ -238,6 +243,13 @@ export class HitTestServiceImpl implements HitTestService {
    */
   registerStrategy(strategy: HitTestStrategy): () => void {
     return this.registry.register(strategy);
+  }
+
+  /**
+   * The strategy registered for a type
+   */
+  getStrategy(type: string): HitTestStrategy | undefined {
+    return this.registry.get(type);
   }
 
   /**

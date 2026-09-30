@@ -135,7 +135,8 @@ export interface FeatureTypesCollection {
   /** Whether a feature type with this name was added or overridden. */
   has(name: string): boolean;
   /**
-   * Adds a custom feature type.
+   * Adds a custom feature type. The type takes every feature of its type: its `appliesTo`, if
+   * it has one, is ignored.
    *
    * @returns The function that removes it again
    * @throws `DrawError` with the code `already-exists` when the type name is taken
@@ -158,7 +159,9 @@ export interface FeatureTypesCollection {
    * freehand line). The features of the type are drawn by its renderer from then on. Its
    * `hitTest`, `boxSelect`, `bounds`, `outline`, `bbox` and `snapCandidates` replace those of
    * the built-in type when it has them, and the built-in ones stay for the members it leaves
-   * out. Its `handles` are shown with those of the built-in type.
+   * out. Its `handles` are shown with those of the built-in type. With `appliesTo`, it takes
+   * only the features for which that returns true, and the others keep the built-in type
+   * entirely.
    *
    * The built-in type comes back with the function it returns, with `remove(type)`, and, for
    * a plugin that overrode it through its context, when the plugin is removed. `add` keeps

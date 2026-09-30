@@ -19,6 +19,7 @@ import {
   type FeatureCompanionRegistry,
 } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
+import { customRendererOf } from './store-retained-classify.js';
 
 /**
  * Draw target used when falling back to immediate mode (the same shape as BatchManager)
@@ -105,7 +106,7 @@ export function drawFeaturesImmediate(
       deps.restoreBlendState,
     );
 
-    const customRenderer = customRenderers.get(feature.type);
+    const customRenderer = customRendererOf(customRenderers, feature);
     if (customRenderer) {
       // To keep the draw order (painter's algorithm), the core batch that has accumulated is
       // flushed first and only then the custom feature is drawn immediately.

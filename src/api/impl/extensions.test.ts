@@ -7,9 +7,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
+import { customRendererOf } from '../../view/layer/store-retained-classify.js';
+import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -311,6 +314,106 @@ describe('extensions.featureTypes.override', () => {
     expect(extensions.getBoundingBoxCalculator('Point')).toBeUndefined();
     expect(extensions.getBoundingBoxCalculator('Image')).toBeDefined();
     expect(extensions.getPointFrameExtentProvider('Image')).toBeUndefined();
+    instance.destroy();
+  });
+
+  it('takes only the features appliesTo accepts, and leaves the others to the built-in type', () => {
+    const { engine, instance, selected, input } = setUp();
+    let captured: FeatureTypeRenderer | null = null;
+    const register = engine.customLayer.registerFeatureRenderer;
+    vi.mocked(register).mockImplementation((_type, r) => {
+      captured = r;
+      return () => {};
+    });
+    const hitTest = vi.fn(() => null);
+    const snapCandidates = vi.fn(() => []);
+    const handles = vi.fn(() => []);
+    instance.extensions.featureTypes.override({
+      type: 'Polygon',
+      geometry: 'Polygon',
+      renderer,
+      appliesTo: (feature) => feature.properties.kind === 'special',
+      hitTest,
+      bounds: () => ({ min: [0, 0], max: [10, 10] }),
+      bbox: () => [-50, -50, 50, 50],
+      handles,
+      snapCandidates,
+    });
+    const plain = engine.context.store.listFeatures()[0];
+    const special = instance.features.create({
+      ...square,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [2, 2],
+            [3, 2],
+            [3, 3],
+            [2, 3],
+            [2, 2],
+          ],
+        ],
+      },
+      properties: { kind: 'special' },
+    });
+    if (!special) throw new Error('not created');
+    const stored = engine.context.store.getFeature(special.id);
+    if (!stored) throw new Error('not stored');
+
+    // Drawing: the plain feature stays on the batches of the built-in type
+    const engineRenderer = captured as unknown as FeatureTypeRenderer;
+    expect(engineRenderer.appliesTo?.(plain)).toBe(false);
+    expect(engineRenderer.appliesTo?.(stored)).toBe(true);
+    const customTypes = new Map([['Polygon', engineRenderer]]);
+    expect(customRendererOf(customTypes, plain)).toBeUndefined();
+    expect(customRendererOf(customTypes, stored)).toBe(engineRenderer);
+
+    // Hit testing: the plain feature is hit by the built-in test, the other by the definition
+    input.click([0.5, 0.5]);
+    expect(selected()).toEqual([plain.id]);
+    expect(hitTest).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: plain.id }),
+      expect.anything(),
+    );
+    input.click([2.5, 2.5]);
+    expect(hitTest).toHaveBeenCalledWith(
+      expect.objectContaining({ id: special.id }),
+      expect.anything(),
+    );
+    expect(selected()).toEqual([]);
+
+    // The selection frame: the built-in extent, and the one of bounds
+    const { extensions } = engine.context.selectionScope;
+    expect(computeBoundingBox(plain, extensions)?.topLeft).toEqual([0, 1]);
+    expect(computeBoundingBox(stored, extensions)?.topLeft).not.toEqual([2, 3]);
+
+    // The extent on the map, the snapping candidates and the handles
+    expect(instance.features.list({ bbox: [40, 40, 41, 41] }).map((f) => f.id)).toEqual([
+      special.id,
+    ]);
+    expect(engine.context.snapTargets.forFeature(plain)).toBeUndefined();
+    expect(engine.context.snapTargets.forFeature(stored)).toBeDefined();
+    const provider = engine.context.selectionScope.auxiliaryHandles.list()[0];
+    provider.getHandles(plain, {} as never);
+    expect(handles).not.toHaveBeenCalled();
+    provider.getHandles(stored, {} as never);
+    expect(handles).toHaveBeenCalledTimes(1);
+    instance.destroy();
+  });
+
+  it('ignores appliesTo in a type that is added', () => {
+    const { instance, input } = setUp();
+    const hitTest = vi.fn(() => null);
+    instance.extensions.featureTypes.add({
+      type: 'pin',
+      geometry: 'Point',
+      renderer,
+      appliesTo: () => false,
+      hitTest,
+    });
+    instance.features.create({ type: 'pin', geometry: { type: 'Point', coordinates: [5, 5] } });
+    input.click([5, 5]);
+    expect(hitTest).toHaveBeenCalled();
     instance.destroy();
   });
 
