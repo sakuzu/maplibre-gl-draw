@@ -6,6 +6,8 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-30
+
 2.0.0 redesigns the public API around resources and their collections.
 Every name of 1.0 changes, and no deprecated alias is kept, so code
 written for 1.0 has to be migrated: the
@@ -18,7 +20,89 @@ minor release). The native file format is 3.0.0, and files of 2.x are
 upgraded when they are loaded. The GeoJSON export writes the values of
 the library in `properties` under the `maplibre-gl-draw:` prefix.
 
-### Changed in 2.0.0
+### Added
+
+- `draw.once` and `draw.transact(fn, { source, ignoreLocks })`; with
+  `ignoreLocks` the writes of `fn` change locked features, groups and
+  layers (read-only still refuses them).
+- `getMany`, `count`, `has`, `createMany`, `updateMany` and
+  `deleteMany` on every collection that records, and filters for
+  `list` and `count`.
+- `features.move`, `features.moveMany`, `groups.move` and
+  `groups.moveMany`, which take a `MoveTarget`; `selection.add`,
+  `selection.remove` and `selection.move`; `hidden.clear`;
+  `features.getAppliedStyle`, which gives the colors of the options and
+  of the feature as they were given; `features.isEditable`, which
+  answers for read-only and the locks of a feature, its group and its
+  layer.
+- The events `feature.moved`, `document.loaded`,
+  `vertexSelection.changed`, `drag.started`, `drag.ended` and
+  `preview.changed`, which carries the shape being drawn and the
+  `confirmedVertices` and `highlightVertex` it was shown with.
+- `document.loadMany`, which reads several sources and writes all of
+  them in one transaction: one `document.changed` for an import of
+  several files.
+- `LoadOptions.layer` and `LoadOptions.group`, which create a layer for
+  the features and a group of them in the transaction of the load, for
+  `load` and for each item of `loadMany`, and `LoadResult.layerId` and
+  `LoadResult.groupId`, their IDs. An item of `loadMany` may name with
+  `layerId` the layer an earlier item creates.
+- `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
+  `MODES`.
+- `layers.getOrder()`, the stacking order as `layers.reorder` takes it:
+  the layers, the `layer-order` datasets and the external entries.
+- `FeatureFilter.shown`, which keeps the features whose own `visible`,
+  their group's and their layer's are all true; `visible` stays the
+  feature's own flag.
+- `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,
+  `GroupPatch`, the filters, `MoveTarget`, `LoadSource`, and the `mode`
+  of `LoadOptions` (`replace` or `merge`).
+- `FeatureStyle.pointStrokeColor` and `pointStrokeWidth`, the outline of
+  a point marker (white and 2 pixels by default). `strokeColor` and
+  `strokeWidth` are the lines and the outlines of areas, also in the
+  options `style.point` and `previewStyle`.
+- `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
+  being drawn, and `selectionStyle.boxSelection` for the selection box.
+- `ScreenContext.outline`, the four corners of the selection frame of
+  any feature on the screen, turned as the shape is, without the margin
+  the frame is drawn with.
+- `draw.drawing`, which drives the shape the current drawing mode is
+  drawing from code: `addVertex`, `moveTo` and `finish` act as a click,
+  a pointer move and Enter would, without snapping and through the
+  `input` receivers of the plugins, and `cancel`, `undoVertex`,
+  `redoVertex`, `isActive` and `isDrawing` go with them. Their positions
+  are exact: the events carry `DrawPointerEvent.programmatic`, and the
+  click tolerance of the pointer does not apply to them.
+- The contexts of the extensions: `terrain`, `names`, `screen` and
+  `invalidate` and `drawing` (the same object as `draw.drawing`) for
+  every kind, and
+  `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and
+  `listTraceRows` for a mode.
+- `FeatureTypeDefinition.outline`, the four corners of the selection
+  frame of a type whose shape turns (the engine adds
+  `selectionStyle.boundingBox.margin` on every side when it draws the
+  frame), and `FeatureTypeDefinition.bbox`,
+  the extent on the map the spatial index takes for a type that draws
+  beyond its geometry.
+- `onDragStart` and `onDragEnd` of `HandleProvider`, and
+  `onHandleDragStart` and `onHandleDragEnd` of `FeatureTypeDefinition`,
+  around a drag of a handle; `false` from the start refuses the drag.
+- `DatasetRow.style`, the look of a row, which the rows read back
+  carry.
+- `extensions.featureTypes.override`, which puts a definition in the
+  place of a built-in type of the same name until the function it
+  returns puts the built-in type back, and
+  `FeatureTypeDefinition.appliesTo`, which narrows an override to some
+  features of the type and leaves the others to the built-in type.
+- In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
+  `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
+- In `/table`: `tableFromFeatures`, `createTableBuilder` and
+  `TableBuilder`, which build a table from GeoJSON, and
+  `PreparedTable.length` and `PreparedTable.bounds`, the number of rows
+  and the extent of a prepared table (`null` when no row has a
+  geometry).
+
+### Changed
 
 - `createMapLibreGLDraw(map, options)` is `createDraw(map, options)`,
   and the instance `MapLibreGLDraw` is `Draw`.
@@ -121,89 +205,7 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   it; the freehand mode takes it, and a press it releases without a
   drag leaves the pan of the map on.
 
-### Added in 2.0.0
-
-- `draw.once` and `draw.transact(fn, { source, ignoreLocks })`; with
-  `ignoreLocks` the writes of `fn` change locked features, groups and
-  layers (read-only still refuses them).
-- `getMany`, `count`, `has`, `createMany`, `updateMany` and
-  `deleteMany` on every collection that records, and filters for
-  `list` and `count`.
-- `features.move`, `features.moveMany`, `groups.move` and
-  `groups.moveMany`, which take a `MoveTarget`; `selection.add`,
-  `selection.remove` and `selection.move`; `hidden.clear`;
-  `features.getAppliedStyle`, which gives the colors of the options and
-  of the feature as they were given; `features.isEditable`, which
-  answers for read-only and the locks of a feature, its group and its
-  layer.
-- The events `feature.moved`, `document.loaded`,
-  `vertexSelection.changed`, `drag.started`, `drag.ended` and
-  `preview.changed`, which carries the shape being drawn and the
-  `confirmedVertices` and `highlightVertex` it was shown with.
-- `document.loadMany`, which reads several sources and writes all of
-  them in one transaction: one `document.changed` for an import of
-  several files.
-- `LoadOptions.layer` and `LoadOptions.group`, which create a layer for
-  the features and a group of them in the transaction of the load, for
-  `load` and for each item of `loadMany`, and `LoadResult.layerId` and
-  `LoadResult.groupId`, their IDs. An item of `loadMany` may name with
-  `layerId` the layer an earlier item creates.
-- `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
-  `MODES`.
-- `layers.getOrder()`, the stacking order as `layers.reorder` takes it:
-  the layers, the `layer-order` datasets and the external entries.
-- `FeatureFilter.shown`, which keeps the features whose own `visible`,
-  their group's and their layer's are all true; `visible` stays the
-  feature's own flag.
-- `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,
-  `GroupPatch`, the filters, `MoveTarget`, `LoadSource`, and the `mode`
-  of `LoadOptions` (`replace` or `merge`).
-- `FeatureStyle.pointStrokeColor` and `pointStrokeWidth`, the outline of
-  a point marker (white and 2 pixels by default). `strokeColor` and
-  `strokeWidth` are the lines and the outlines of areas, also in the
-  options `style.point` and `previewStyle`.
-- `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
-  being drawn, and `selectionStyle.boxSelection` for the selection box.
-- `ScreenContext.outline`, the four corners of the selection frame of
-  any feature on the screen, turned as the shape is, without the margin
-  the frame is drawn with.
-- `draw.drawing`, which drives the shape the current drawing mode is
-  drawing from code: `addVertex`, `moveTo` and `finish` act as a click,
-  a pointer move and Enter would, without snapping and through the
-  `input` receivers of the plugins, and `cancel`, `undoVertex`,
-  `redoVertex`, `isActive` and `isDrawing` go with them. Their positions
-  are exact: the events carry `DrawPointerEvent.programmatic`, and the
-  click tolerance of the pointer does not apply to them.
-- The contexts of the extensions: `terrain`, `names`, `screen` and
-  `invalidate` and `drawing` (the same object as `draw.drawing`) for
-  every kind, and
-  `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and
-  `listTraceRows` for a mode.
-- `FeatureTypeDefinition.outline`, the four corners of the selection
-  frame of a type whose shape turns (the engine adds
-  `selectionStyle.boundingBox.margin` on every side when it draws the
-  frame), and `FeatureTypeDefinition.bbox`,
-  the extent on the map the spatial index takes for a type that draws
-  beyond its geometry.
-- `onDragStart` and `onDragEnd` of `HandleProvider`, and
-  `onHandleDragStart` and `onHandleDragEnd` of `FeatureTypeDefinition`,
-  around a drag of a handle; `false` from the start refuses the drag.
-- `DatasetRow.style`, the look of a row, which the rows read back
-  carry.
-- `extensions.featureTypes.override`, which puts a definition in the
-  place of a built-in type of the same name until the function it
-  returns puts the built-in type back, and
-  `FeatureTypeDefinition.appliesTo`, which narrows an override to some
-  features of the type and leaves the others to the built-in type.
-- In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
-  `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
-- In `/table`: `tableFromFeatures`, `createTableBuilder` and
-  `TableBuilder`, which build a table from GeoJSON, and
-  `PreparedTable.length` and `PreparedTable.bounds`, the number of rows
-  and the extent of a prepared table (`null` when no row has a
-  geometry).
-
-### Removed in 2.0.0
+### Removed
 
 - Every name of 1.0 that changed, with no deprecated alias. The export
   `generateCirclePolygon` of the main entry, deprecated in 1.0, is
@@ -1022,7 +1024,7 @@ The members of a dataset:
 First public release, under AGPL-3.0-only. A commercial license is
 available from Kasika, Inc.
 
-### Added
+### Added in 1.0.0
 
 - Drawing points, lines, polygons, circles and freehand lines with the
   mouse, touch, a pen or the keyboard, and placing images on the map.
@@ -1050,5 +1052,6 @@ available from Kasika, Inc.
 - A read-only mode and an interaction lock.
 - Plugins, custom modes and custom feature types.
 
-[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/sakuzu/maplibre-gl-draw/releases/tag/v1.0.0
