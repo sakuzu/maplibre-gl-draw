@@ -43,6 +43,22 @@ export interface PointFrameExtent {
  */
 export type PointFrameExtentProvider = (feature: Feature) => PointFrameExtent | null;
 
+/** A point on the screen in CSS px, from the top left of the map */
+export interface FramePoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Returns the outline of the selection frame of a point-like feature: its four corners on the
+ * screen in CSS px, in the order top left, top right, bottom right, bottom left of the shape.
+ *
+ * The frame of a rotated shape is drawn along it. The point stays zero-area: no resize or
+ * rotate handle appears. Returning null (or anything but four finite corners) gives the frame
+ * of {@link PointFrameExtentProvider}.
+ */
+export type PointFrameOutlineProvider = (feature: Feature) => readonly FramePoint[] | null;
+
 /**
  * A resize handle a custom feature type adds to the built-in ones (the same shape as
  * {@link HandleInfo}).

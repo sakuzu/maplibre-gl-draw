@@ -236,6 +236,7 @@ The other members of a definition are optional:
 | Member | Without it |
 | --- | --- |
 | `bounds` | The frame follows the extent of the geometry |
+| `outline` | The frame is the box of `bounds` |
 | `handles` | The type has no handles of its own |
 | `onHandleDrag` | A drag of its handles changes nothing |
 | `snapCandidates` | The vertices and edges of the geometry |
@@ -243,6 +244,15 @@ The other members of a definition are optional:
 `bounds` returns the frame on the screen, `{ min, max }` in pixels, or
 `null` when the feature has nothing to draw. For a type with a `Point`
 geometry, it sizes the frame around the point.
+
+`outline` is for a type whose shape turns, such as a box drawn at an
+angle. It returns the four corners of the frame on the screen, in
+pixels, in the order top left, top right, bottom right, bottom left of
+the shape as it stands unturned. The frame is drawn along them in place
+of the box of `bounds`, and for a geometry other than `Point` the
+resize and rotate handles sit on its corners and edges. A `Point` type
+keeps a frame without those handles. When `outline` returns anything
+but four corners, the frame comes from `bounds`.
 
 `handles` returns the handles of a selected feature, each with an ID,
 a position and a cursor. A drag of one calls `onHandleDrag` for every

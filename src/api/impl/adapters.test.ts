@@ -249,6 +249,126 @@ describe('a custom feature type', () => {
   });
 });
 
+describe('the outline of a custom feature type', () => {
+  const baseFeature = {
+    layerId: 'l',
+    groupId: undefined,
+    properties: {},
+    style: {},
+    locked: false,
+    visible: true,
+  };
+  /** A diamond around the screen point of a coordinate, 20 px from its middle */
+  const diamond = (feature: Feature, ctx: { project(p: GeoJSON.Position): [number, number] }) => {
+    const geometry = feature.geometry as GeoJSON.Point | GeoJSON.Polygon;
+    const anchor = geometry.type === 'Point' ? geometry.coordinates : geometry.coordinates[0][0];
+    const [x, y] = ctx.project(anchor);
+    return [
+      [x, y - 20],
+      [x + 20, y],
+      [x, y + 20],
+      [x - 20, y],
+    ] as Array<[number, number]>;
+  };
+  const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+
+  it('gives the frame and its handles of a type that is not a point, before bounds', () => {
+    const engine = engineWithDraw();
+    let turned = true;
+    engine.extensions.collections.featureTypes.add({
+      type: 'turned',
+      geometry: 'Polygon',
+      renderer,
+      bounds: () => ({ min: [0, 0], max: [10, 10] }),
+      outline: (feature, ctx) => (turned ? diamond(feature, ctx) : []),
+    });
+    const calculator = engine.context.selectionScope.extensions.getBoundingBoxCalculator('turned');
+    const feature = {
+      ...baseFeature,
+      id: 't',
+      type: 'turned',
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [
+          [
+            [1, 1],
+            [2, 1],
+            [2, 2],
+            [1, 1],
+          ],
+        ],
+      },
+    };
+    // (1, 1) is (500, 200) on the screen of the stub, where 1 degree is 100 px
+    expect(calculator?.(feature, 512)).toEqual({
+      topLeft: [1, 1.2],
+      topRight: [1.2, 1],
+      bottomRight: [1, 0.8],
+      bottomLeft: [0.8, 1],
+      center: [1, 1],
+    });
+    // Anything but four corners gives the box of bounds
+    turned = false;
+    expect(calculator?.(feature, 512)).toEqual({
+      topLeft: [-4, 3],
+      topRight: [-3.9, 3],
+      bottomRight: [-3.9, 2.9],
+      bottomLeft: [-4, 2.9],
+      center: [-3.95, 2.95],
+    });
+    engine.destroy();
+  });
+
+  it('gives the frame of a point type, which keeps no area and no resize handles', () => {
+    const engine = engineWithDraw();
+    engine.extensions.collections.featureTypes.add({
+      type: 'turned-pin',
+      geometry: 'Point',
+      renderer,
+      outline: (feature, ctx) => diamond(feature, ctx),
+    });
+    const { extensions } = engine.context.selectionScope;
+    const feature = {
+      ...baseFeature,
+      id: 'p',
+      type: 'turned-pin',
+      geometry: { type: 'Point' as const, coordinates: [1, 1] },
+    };
+    expect(extensions.getBoundingBoxCalculator('turned-pin')).toBeUndefined();
+    expect(extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 0)).toEqual([
+      { x: 500, y: 180 },
+      { x: 520, y: 200 },
+      { x: 500, y: 220 },
+      { x: 480, y: 200 },
+    ]);
+    // The margin pushes the corners out from the middle
+    const [top] = extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 4);
+    expect(top).toEqual({ x: 500, y: 176 });
+
+    engine.extensions.collections.featureTypes.remove('turned-pin');
+    expect(extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 0)).toEqual([
+      { x: 494, y: 194 },
+      { x: 506, y: 194 },
+      { x: 506, y: 206 },
+      { x: 494, y: 206 },
+    ]);
+    engine.destroy();
+  });
+
+  it('refuses an outline that is not a function', () => {
+    const engine = engineWithDraw();
+    expect(() =>
+      engine.extensions.collections.featureTypes.add({
+        type: 'wrong',
+        geometry: 'Point',
+        renderer,
+        outline: [] as never,
+      }),
+    ).toThrow(/outline/);
+    engine.destroy();
+  });
+});
+
 describe('the providers of snapping candidates', () => {
   it('snaps to the candidate of the highest priority at the same distance', () => {
     const engine = engineWithDraw();

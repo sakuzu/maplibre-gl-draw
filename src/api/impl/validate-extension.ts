@@ -73,7 +73,15 @@ const SHAPES: Readonly<
   plugin: { required: ['onAdd'], optional: ['onRemove'] },
   'feature type': {
     required: [],
-    optional: ['hitTest', 'boxSelect', 'bounds', 'handles', 'onHandleDrag', 'snapCandidates'],
+    optional: [
+      'hitTest',
+      'boxSelect',
+      'bounds',
+      'outline',
+      'handles',
+      'onHandleDrag',
+      'snapCandidates',
+    ],
   },
   overlay: {
     required: ['onAdd', 'draw', 'onRemove'],

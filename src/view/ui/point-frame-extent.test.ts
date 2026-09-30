@@ -145,3 +145,39 @@ describe('the set of handles of a point does not change with the extent', () => 
     expect(hit(0, -32, feature)).toBeNull();
   });
 });
+
+describe('the outline of the selection box of a point', () => {
+  /** A diamond 40 px from its middle, the screen point (100, -100) of [1, 1] */
+  scope.extensions.registerPointFrameOutline('Turned', () => [
+    { x: 100, y: -140 },
+    { x: 140, y: -100 },
+    { x: 100, y: -60 },
+    { x: 60, y: -100 },
+  ]);
+  const turned = (): Feature =>
+    makeFeature({ type: 'Turned', geometry: { type: 'Point', coordinates: [1, 1] } });
+
+  it('draws the frame along the outline, expanded by the margin', () => {
+    const bbox = computeFeatureGeoBoundingBox(
+      turned(),
+      transform,
+      DEFAULT_SELECTION_CONFIG,
+      scope.extensions,
+    );
+    if (!bbox) throw new Error('bbox cannot be computed');
+    const top = transform.project(bbox.topLeft);
+    const right = transform.project(bbox.topRight);
+    expect(top.x).toBeCloseTo(100);
+    expect(top.y).toBeCloseTo(-100 - (40 + MARGIN));
+    expect(right.x).toBeCloseTo(100 + 40 + MARGIN);
+    expect(right.y).toBeCloseTo(-100);
+  });
+
+  it('grabs the inside of the outline as a move, and no resize or rotate', () => {
+    const feature = turned();
+    expect(hit(100, -100, feature)?.type).toBe('move');
+    expect(hit(100, -140, feature)?.type).toBe('move');
+    // The corner of the square around the diamond is outside it
+    expect(hit(135, -135, feature)).toBeNull();
+  });
+});

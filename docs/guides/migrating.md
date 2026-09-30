@@ -562,7 +562,8 @@ draw.extensions.modes.add('draw_marker', drawMarker);
 
 A custom feature type is a `FeatureTypeDefinition`: its `type`, the
 `geometry` kind it holds, its `renderer`, and optional `hitTest`,
-`boxSelect`, `bounds`, `handles`, `onHandleDrag` and `snapCandidates`.
+`boxSelect`, `bounds`, `outline`, `handles`, `onHandleDrag` and
+`snapCandidates`.
 Handles and snapping candidates of your own type belong there; a
 `HandleProvider` or a `SnapProvider` is for adding them to a type that
 is not yours. `onHandleDrag` and `HandleProvider.onDrag` return a

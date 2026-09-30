@@ -122,6 +122,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   `invalidate` and `drawing` (with `cancel`) for every kind, and
   `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and
   `listTraceRows` for a mode.
+- `FeatureTypeDefinition.outline`, the four corners of the selection
+  frame of a type whose shape turns.
 - In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
   `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
 - In `/table`: `tableFromFeatures`, `createTableBuilder` and
@@ -559,7 +561,7 @@ The custom feature type, `CustomFeatureHandler` in 1.0 and
 | `hitTest` (a strategy) | `hitTest(feature, ctx)` | |
 | `boxSelection` | `boxSelect(feature, box, ctx)` | |
 | `getBoundingBox` | `bounds(feature, ctx)` | |
-| `getSelectionBoundingBox` | `bounds(feature, ctx)` | |
+| `getSelectionBoundingBox` | `bounds` or `outline(feature, ctx)` | |
 | `getPointFrameExtent` | `bounds(feature, ctx)` | |
 | `getAdditionalResizeHandles` | `handles(feature, ctx)` | |
 | `computeCustomResize` | `onHandleDrag` | Returns a `FeaturePatch` |

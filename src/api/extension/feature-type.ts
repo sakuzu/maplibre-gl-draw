@@ -66,6 +66,16 @@ export interface FeatureTypeDefinition {
    */
   bounds?(feature: Feature, ctx: ScreenContext): { min: ScreenPoint; max: ScreenPoint } | null;
   /**
+   * The outline of the selection frame of a feature on the screen, in pixels, for a type whose
+   * shape turns: its four corners in the order top left, top right, bottom right, bottom left
+   * of the shape as it stands unturned. The engine draws the selection frame along it when it
+   * is given, and from `bounds` otherwise. For a type of any geometry but `Point`, the resize
+   * and rotate handles sit on it too; a `Point` type keeps a frame with no such handles.
+   *
+   * @returns The four corners; anything else (or an empty array) gives the frame of `bounds`
+   */
+  outline?(feature: Feature, ctx: ScreenContext): ScreenPoint[];
+  /**
    * The handles that resize or reshape a selected feature. The engine draws them with the
    * look of the vertex handles, hit tests them at the same size, and gives their drags to
    * `onHandleDrag`.

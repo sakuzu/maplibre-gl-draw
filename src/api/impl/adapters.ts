@@ -50,6 +50,8 @@ import type {
   AuxiliaryHandleRegistry,
 } from '../../view/ui/auxiliary-handles.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
+import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
+import type { BoundingBoxCoords } from '../../view/ui/selection-ui/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { HitTestContext, ScreenContext, SnapContext } from '../extension/context.js';
 import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js';
@@ -215,6 +217,21 @@ function boxSelectionOf(
   };
 }
 
+/** Whether a value is a point on the screen with finite coordinates */
+function isScreenPoint(value: unknown): value is ScreenPoint {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
+}
+
+/** A selection box with no area at one coordinate */
+function degenerateBox(c: Coordinate): BoundingBoxCoords {
+  return { topLeft: c, topRight: c, bottomRight: c, bottomLeft: c, center: c };
+}
+
 /** A handle of the contract as a handle of the engine */
 function toEngineHandle(handle: Handle): AuxiliaryHandle {
   return {
@@ -255,8 +272,16 @@ export function installFeatureType(
     if (box) add(deps.boxSelectionRegistry.register(box));
 
     const bounds = definition.bounds?.bind(definition);
-    if (bounds) {
-      if (definition.geometry === 'Point') {
+    const outline = definition.outline?.bind(definition);
+    /** The four corners of the outline of a feature, or null when it gives none */
+    const cornersOf = (feature: StoredFeature): ScreenPoint[] | null => {
+      const corners = outline?.(feature as Feature, deps.screen);
+      return Array.isArray(corners) && corners.length === 4 && corners.every(isScreenPoint)
+        ? corners
+        : null;
+    };
+    if (definition.geometry === 'Point') {
+      if (bounds) {
         // A point keeps its point frame; the extent gives its size
         add(
           deps.selectionExtensions.registerPointFrameExtent(type, (feature) => {
@@ -269,28 +294,45 @@ export function installFeatureType(
             };
           }),
         );
-      } else {
+      }
+      if (outline) {
+        // The frame of a point follows the outline, and the point keeps no resize handles
         add(
-          deps.selectionExtensions.registerBoundingBox(type, (feature) => {
-            const box = bounds(feature as Feature, deps.screen);
-            const at = (x: number, y: number): Coordinate => {
-              const p = deps.screen.unproject([x, y]);
-              return [p[0], p[1]];
-            };
-            if (!box) {
-              const c = at(0, 0);
-              return { topLeft: c, topRight: c, bottomRight: c, bottomLeft: c, center: c };
-            }
-            return {
-              topLeft: at(box.min[0], box.min[1]),
-              topRight: at(box.max[0], box.min[1]),
-              bottomRight: at(box.max[0], box.max[1]),
-              bottomLeft: at(box.min[0], box.max[1]),
-              center: at((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2),
-            };
-          }),
+          deps.selectionExtensions.registerPointFrameOutline(
+            type,
+            (feature) => cornersOf(feature)?.map(([x, y]) => ({ x, y })) ?? null,
+          ),
         );
       }
+    } else if (bounds || outline) {
+      const at = (x: number, y: number): Coordinate => {
+        const p = deps.screen.unproject([x, y]);
+        return [p[0], p[1]];
+      };
+      add(
+        deps.selectionExtensions.registerBoundingBox(type, (feature) => {
+          const corners = cornersOf(feature);
+          if (corners) {
+            // The frame and its handles follow the outline, turned as the shape is
+            const [topLeft, topRight, bottomRight, bottomLeft] = corners.map(([x, y]) => at(x, y));
+            const middle = at(
+              corners.reduce((sum, corner) => sum + corner[0], 0) / 4,
+              corners.reduce((sum, corner) => sum + corner[1], 0) / 4,
+            );
+            return { topLeft, topRight, bottomRight, bottomLeft, center: middle };
+          }
+          if (!bounds) return computeBoundingBox(feature) ?? degenerateBox(at(0, 0));
+          const box = bounds(feature as Feature, deps.screen);
+          if (!box) return degenerateBox(at(0, 0));
+          return {
+            topLeft: at(box.min[0], box.min[1]),
+            topRight: at(box.max[0], box.min[1]),
+            bottomRight: at(box.max[0], box.max[1]),
+            bottomLeft: at(box.min[0], box.max[1]),
+            center: at((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2),
+          };
+        }),
+      );
     }
 
     const handles = definition.handles?.bind(definition);
