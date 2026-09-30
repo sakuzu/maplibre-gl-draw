@@ -350,8 +350,18 @@ export interface FeatureFilter {
   groupId?: string;
   /** Only the features of this type */
   type?: FeatureType;
-  /** Only the visible (true) or hidden (false) features */
+  /**
+   * Only the features whose own `visible` is true (true) or false (false). A feature can be
+   * visible itself and still not be drawn, when its group or its layer is hidden: `shown`
+   * answers for that.
+   */
   visible?: boolean;
+  /**
+   * Only the features that are shown (true): their own `visible`, the one of their group and
+   * the one of their layer are all true; or only the ones that are not (false). What this
+   * client hides with `draw.hidden` is not consulted.
+   */
+  shown?: boolean;
   /** Only the locked (true) or unlocked (false) features */
   locked?: boolean;
   /**

@@ -72,7 +72,7 @@ const INPUT_KEYS = [
   'locked',
 ] as const;
 const PATCH_KEYS = ['geometry', 'properties', 'style', 'visible', 'locked'] as const;
-const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'locked', 'bbox'] as const;
+const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'shown', 'locked', 'bbox'] as const;
 
 /**
  * Creates `draw.features`
@@ -104,9 +104,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
    * when the filter has one
    */
   const filterOf = (filter: FeatureFilter | undefined) => {
-    const entries = filterEntries(filter, FILTER_KEYS);
+    const all = filterEntries(filter, FILTER_KEYS);
+    const shown = all.find(([key]) => key === 'shown')?.[1];
+    if (shown !== undefined && typeof shown !== 'boolean') {
+      throw invalidInput('shown must be a boolean');
+    }
+    const entries = all.filter(([key]) => key !== 'shown');
     const bbox = entries.find(([key]) => key === 'bbox')?.[1];
-    if (bbox === undefined) return { entries, inside: null };
+    if (bbox === undefined) return { entries, inside: null, shown };
     if (
       !Array.isArray(bbox) ||
       bbox.length !== 4 ||
@@ -127,12 +132,20 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
             })
             .map((feature) => feature.id),
     );
-    return { entries: entries.filter(([key]) => key !== 'bbox'), inside };
+    return { entries: entries.filter(([key]) => key !== 'bbox'), inside, shown };
   };
+  /** Whether the feature, its group and its layer are all visible in the document */
+  const isShown = (feature: StoredFeature): boolean =>
+    feature.visible &&
+    (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false) &&
+    store.getLayer(feature.layerId)?.visible !== false;
   const keep = (
     feature: StoredFeature,
-    { entries, inside }: ReturnType<typeof filterOf>,
-  ): boolean => (inside === null || inside.has(feature.id)) && matches(feature, entries);
+    { entries, inside, shown }: ReturnType<typeof filterOf>,
+  ): boolean =>
+    (inside === null || inside.has(feature.id)) &&
+    (shown === undefined || isShown(feature) === shown) &&
+    matches(feature, entries);
 
   const list = (filter?: FeatureFilter): Feature[] => {
     const checks = filterOf(filter);
@@ -148,7 +161,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     list,
     count(filter) {
       const checks = filterOf(filter);
-      if (checks.entries.length === 0 && checks.inside === null) {
+      if (checks.entries.length === 0 && checks.inside === null && checks.shown === undefined) {
         return store.listFeatures().length;
       }
       return store.listFeatures().filter((feature) => keep(feature, checks)).length;

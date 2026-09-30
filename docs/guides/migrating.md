@@ -143,9 +143,13 @@ The lists take a filter in place of separate methods:
 
 ```ts
 const all = draw.features.list();
-const visible = draw.features.list({ visible: true });
+const visible = draw.features.list({ shown: true });
 const inLayer = draw.features.count({ layerId });
 ```
+
+`getVisibleFeatures()` becomes `list({ shown: true })`: the feature, its
+group and its layer are all visible. `{ visible: true }` reads the
+feature's own flag only.
 
 `deleteAllFeatures()` becomes `deleteMany` with every ID:
 

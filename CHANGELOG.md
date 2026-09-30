@@ -120,6 +120,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   several files.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
+- `FeatureFilter.shown`, which keeps the features whose own `visible`,
+  their group's and their layer's are all true; `visible` stays the
+  feature's own flag.
 - `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,
   `GroupPatch`, the filters, `MoveTarget`, `LoadSource`, and the `mode`
   of `LoadOptions` (`replace` or `merge`).
@@ -214,7 +217,7 @@ out on both sides.
 | `addFeature` | `features.create` | Returns the `Feature` |
 | `getFeature` | `features.get` | |
 | `getAllFeatures` | `features.list()` | |
-| `getVisibleFeatures` | `features.list({ visible: true })` | |
+| `getVisibleFeatures` | `features.list({ shown: true })` | |
 | `updateFeature` | `features.update` | A patch; returns the `Feature` |
 | `deleteFeature` | `features.delete` | |
 | `deleteAllFeatures` | `features.deleteMany(ids)` | Pass every ID |

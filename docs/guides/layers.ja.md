@@ -215,6 +215,15 @@ function isLocked(id: string): boolean {
 隠れた地物は、描画、当たり判定、吸着、幾何演算の対象にならず、選ぶことも
 できません。
 
+地物の `visible` は、その地物自身の印です。地物自身は表示でも、その
+グループかレイヤーが隠れていれば描かれません。絞り込みの `shown` は、
+この 3 つをまとめて答えます (この端末だけの非表示は見ません)。
+
+```ts
+const own = draw.features.list({ visible: true }); // 地物自身の印
+const shown = draw.features.list({ shown: true }); // グループとレイヤーも
+```
+
 ## 不透明度
 
 `opacity` (0 から 1) はレイヤー全体を薄くします。塗り、線、点、画像、

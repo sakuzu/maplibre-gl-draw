@@ -213,6 +213,15 @@ this client only, use `draw.hidden.add(id)` ([Read-only](read-only.md)).
 Hidden features are not drawn, hit-tested, snapped to or used by the
 geometry operations, and they cannot be selected.
 
+A feature's `visible` is its own flag: a feature can be visible itself and
+still not be drawn because its group or its layer is hidden. The filter
+`shown` answers for the three together (local hiding is not consulted):
+
+```ts
+const own = draw.features.list({ visible: true }); // their own flag
+const shown = draw.features.list({ shown: true }); // group and layer too
+```
+
 ## Opacity
 
 `opacity` (0 to 1) fades a whole layer. It is multiplied into the opacity

@@ -146,9 +146,13 @@ ID、型、レイヤーは変えられません。地物を動かすのは `feat
 
 ```ts
 const all = draw.features.list();
-const visible = draw.features.list({ visible: true });
+const visible = draw.features.list({ shown: true });
 const inLayer = draw.features.count({ layerId });
 ```
+
+`getVisibleFeatures()` は `list({ shown: true })` になります。地物、
+そのグループ、そのレイヤーがすべて表示のものです。`{ visible: true }` は
+地物自身の印だけを見ます。
 
 `deleteAllFeatures()` は、すべての ID を渡す `deleteMany` になり
 ます。

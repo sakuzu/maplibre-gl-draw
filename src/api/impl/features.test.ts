@@ -111,6 +111,27 @@ describe('reading', () => {
   it('throws invalid-input for a filter with an unknown key', () => {
     expect(codeOf(() => features.list({ name: 'x' } as never))).toBe('invalid-input');
   });
+
+  it('keeps the features shown by themselves, their group and their layer with shown', () => {
+    layer('l3', { visible: false });
+    features.createMany([point('d', { layerId: 'l3' }), point('e'), point('f')]);
+    store.createGroup({
+      id: 'g',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['e'],
+      visible: false,
+      locked: false,
+    });
+    // f is hidden on this client only, which shown does not consult
+    store.setLocallyHidden('f', true);
+    expect(features.list({ shown: true }).map((f) => f.id)).toEqual(['a', 'c', 'f']);
+    expect(features.list({ shown: false }).map((f) => f.id)).toEqual(['e', 'b', 'd']);
+    // visible stays the feature's own flag
+    expect(features.list({ visible: true, shown: false }).map((f) => f.id)).toEqual(['e', 'd']);
+    expect(features.count({ shown: true })).toBe(3);
+    expect(codeOf(() => features.list({ shown: 'yes' } as never))).toBe('invalid-input');
+  });
 });
 
 describe('create', () => {
