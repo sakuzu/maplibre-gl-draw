@@ -35,7 +35,6 @@ import type { TerrainContext } from '../../view/terrain/context.js';
 import { anchorGhostOpacity } from '../../view/terrain/occlusion.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
-import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type {
@@ -51,6 +50,7 @@ import type { Feature, FeatureInput, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { SnapResult } from '../state.js';
 import { mergeOptions } from './options.js';
+import { toDatasetRow } from './rows.js';
 
 // ============================================================================
 // Conversions
@@ -135,20 +135,6 @@ export function toSelectionStyle(
     },
   };
   return mergeOptions(resolved, (given ?? {}) as object) as Required<SelectionStyleOptions>;
-}
-
-/**
- * A row of a dataset in the shape of the contract: a GeoJSON Feature
- *
- * @internal
- */
-export function toDatasetRow(feature: StoredFeature): DatasetRow {
-  return {
-    type: 'Feature',
-    id: feature.id,
-    geometry: feature.geometry,
-    properties: { ...feature.properties },
-  };
 }
 
 /**

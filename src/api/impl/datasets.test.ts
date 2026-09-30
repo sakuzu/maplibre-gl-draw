@@ -189,6 +189,22 @@ describe('a dataset', () => {
     expect(dataset.getRowPoint(1)).toBeNull();
   });
 
+  it('gives back the style of a row, which wins over the base style', () => {
+    const styled: DatasetRow = {
+      ...point('s', 0.3, 0.3),
+      style: { pointColor: '#ff0000', pointRadius: 20 },
+    };
+    const dataset = datasets.add({
+      id: 'd',
+      rows: [ROWS[0], styled],
+      baseStyle: { point: { pointColor: 'teal' } },
+    });
+    expect(dataset.getRow(1)?.style).toMatchObject({ pointColor: '#ff0000', pointRadius: 20 });
+    expect(dataset.listRows()[1].style).toMatchObject({ pointColor: '#ff0000' });
+    // A row without a look of its own is read back with the base style
+    expect(dataset.getRow(0)?.style).toMatchObject({ pointColor: 'teal' });
+  });
+
   it('lists the rows of a range, with and without their drawn look', () => {
     const dataset = datasets.add({
       id: 'd',
@@ -198,7 +214,7 @@ describe('a dataset', () => {
     const bbox: BBox = [0.15, 0.15, 1, 1];
     const visible = dataset.listVisibleRows(bbox);
     expect(visible.map((row) => row.id)).toEqual(['b', 'l']);
-    expect((visible[0] as DatasetRow & { style?: object }).style).toMatchObject({
+    expect(visible[0].style).toMatchObject({
       pointColor: 'teal',
     });
     expect(dataset.listVisibleRows([0.15, 0.15, 0, 1, 1, 0]).map((row) => row.id)).toEqual([

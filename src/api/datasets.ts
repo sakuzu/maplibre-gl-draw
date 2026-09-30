@@ -13,8 +13,15 @@ import type { FeatureStyle, FeatureType, StyleRule } from './model.js';
 /**
  * A row of a dataset, given and read as a GeoJSON feature. Its geometry may be `null`, as
  * GeoJSON allows; such a row is kept in the table and is not drawn.
+ *
+ * Besides the members of GeoJSON, a row may carry `style`, its own look, which wins over the
+ * color of the style rule and the base style of the dataset. A row read back carries the look
+ * it was given merged over the base style, when that has a key.
  */
-export type DatasetRow = GeoJSONFeature<Geometry | null>;
+export type DatasetRow = GeoJSONFeature<Geometry | null> & {
+  /** The look of the row; it wins over the style rule and the base style of the dataset */
+  style?: FeatureStyle;
+};
 
 /**
  * Where a dataset is stacked: below the layers of the document, above them, or inside the

@@ -372,6 +372,10 @@ parcels.setBaseStyle({
 3. `baseStyle`
 4. 既定値
 
+`style` は `DatasetRow` のメンバーで、`FeatureStyle` です。`getRow`、
+`listRows`、`listVisibleRows` で読み戻した行は、行ごとの `style` を
+`baseStyle` に重ねたものを持ちます。
+
 `setStyleRule(undefined)` と `setBaseStyle(undefined)` で外せます。
 
 `zoomScale` は、大きさと不透明度に、ズームで変わる係数を掛けます。

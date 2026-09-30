@@ -126,6 +126,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   frame of a type whose shape turns, and `FeatureTypeDefinition.bbox`,
   the extent on the map the spatial index takes for a type that draws
   beyond its geometry.
+- `DatasetRow.style`, the look of a row, which the rows read back
+  carry.
 - `extensions.featureTypes.override`, which puts a definition in the
   place of a built-in type of the same name until the function it
   returns puts the built-in type back.

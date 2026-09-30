@@ -375,6 +375,10 @@ When several of them set the same thing, the first one below wins.
 3. `baseStyle`
 4. The defaults
 
+`style` is a member of `DatasetRow`, a `FeatureStyle`. A row read back
+with `getRow`, `listRows` or `listVisibleRows` carries its own `style`
+merged over `baseStyle`.
+
 `setStyleRule(undefined)` and `setBaseStyle(undefined)` remove them.
 
 `zoomScale` multiplies the size and the opacity by factors that depend on

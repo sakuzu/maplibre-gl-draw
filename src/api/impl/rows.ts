@@ -17,7 +17,7 @@ import type { DatasetRow } from '../datasets.js';
  * @internal
  */
 export function toDatasetRow(feature: StoredFeature): DatasetRow {
-  const row: DatasetRow & { style?: StoredFeature['style'] } = {
+  const row: DatasetRow = {
     type: 'Feature',
     id: feature.id,
     geometry: hasGeometry(feature) ? feature.geometry : null,
