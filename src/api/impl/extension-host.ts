@@ -154,6 +154,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     featureCompanions,
     snapTargets: context.snapTargets,
     customLayer,
+    spatialIndex: context.spatialIndex,
     anchors: (state) => terrainAnchorsOf(state, createTerrainAnchors),
     registerSnapProvider: (provider) => context.snapService.register(provider),
     applyPatch(featureId, patch, final) {

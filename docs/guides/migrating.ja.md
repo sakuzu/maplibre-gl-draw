@@ -576,8 +576,8 @@ draw.extensions.modes.add('draw_marker', drawMarker);
 
 独自の地物の型は `FeatureTypeDefinition` です。`type`、持つ
 geometry の種類 `geometry`、描き方 `renderer` と、任意の
-`hitTest`、`boxSelect`、`bounds`、`outline`、`handles`、`onHandleDrag`、
-`snapCandidates` を持ちます。自分の型のハンドルやスナップの候補は
+`hitTest`、`boxSelect`、`bounds`、`outline`、`bbox`、`handles`、
+`onHandleDrag`、`snapCandidates` を持ちます。自分の型のハンドルやスナップの候補は
 ここに書きます。`HandleProvider` や `SnapProvider` は、自分のもので
 ない型に足すときに使います。`onHandleDrag` と
 `HandleProvider.onDrag` は `FeaturePatch` を返します。

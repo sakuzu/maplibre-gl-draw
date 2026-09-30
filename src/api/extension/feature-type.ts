@@ -6,7 +6,7 @@
  * resized
  */
 
-import type { Geometry, Position } from 'geojson';
+import type { BBox, Geometry, Position } from 'geojson';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { HitTestContext, ScreenContext, SnapContext } from './context.js';
@@ -43,6 +43,18 @@ export interface FeatureTypeDefinition {
   readonly hitPaddingPx?: number;
   /** How the features of this type are drawn */
   readonly renderer: FeatureRenderer;
+  /**
+   * The extent of a feature on the map, `[west, south, east, north]` in degrees, for a type
+   * that draws beyond its geometry by a distance on the ground. The spatial index takes it:
+   * it gathers the candidates of a hit test and of a box selection, answers
+   * `features.list({ bbox })`, and decides which features are near enough to the view to be
+   * drawn. The extent of the geometry is used when it is left out, and when it returns an
+   * extent that is not four finite numbers from the west and south to the east and north.
+   *
+   * It is measured when a feature changes; call `invalidate({ type })` when it depends on
+   * something outside the document. A reach in pixels belongs in `hitPaddingPx`.
+   */
+  bbox?(feature: Feature): BBox;
   /**
    * Hit tests a feature of this type; the geometry is hit tested when it is left out.
    *

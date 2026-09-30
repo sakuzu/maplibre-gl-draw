@@ -78,6 +78,7 @@ const SHAPES: Readonly<
       'boxSelect',
       'bounds',
       'outline',
+      'bbox',
       'handles',
       'onHandleDrag',
       'snapCandidates',

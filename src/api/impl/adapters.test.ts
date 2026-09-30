@@ -369,6 +369,67 @@ describe('the outline of a custom feature type', () => {
   });
 });
 
+describe('the extent of a custom feature type', () => {
+  it('measures its features in the spatial index by bbox, and by the geometry without it', () => {
+    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    const draw = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    let reach = 2;
+    const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+    const remove = draw.extensions.featureTypes.add({
+      type: 'wide',
+      geometry: 'Point',
+      renderer,
+      // A disc of `reach` degrees drawn around the point
+      bbox(feature) {
+        const [x, y] = (feature.geometry as GeoJSON.Point).coordinates;
+        return [x - reach, y - reach, x + reach, y + reach];
+      },
+    });
+    const feature = draw.features.create({
+      type: 'wide',
+      geometry: { type: 'Point', coordinates: [10, 10] },
+    });
+    if (!feature) throw new Error('not created');
+    const near = [11, 11, 11.5, 11.5] as [number, number, number, number];
+    expect(draw.features.list({ bbox: near }).map((f) => f.id)).toEqual([feature.id]);
+    expect(engine.context.spatialIndex.findNear([11.5, 10], 0)).toEqual([feature.id]);
+
+    // A change outside the document is measured again with invalidate
+    reach = 1;
+    expect(draw.features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(1);
+    engine.context.spatialIndex.invalidateType('wide');
+    expect(draw.features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(0);
+    expect(draw.features.list({ bbox: near })).toHaveLength(1);
+
+    // An extent that is not four finite numbers gives the one of the geometry
+    reach = Number.NaN;
+    engine.context.spatialIndex.invalidateType('wide');
+    expect(draw.features.list({ bbox: near })).toHaveLength(0);
+    expect(draw.features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
+
+    reach = 2;
+    engine.context.spatialIndex.invalidateType('wide');
+    expect(draw.features.list({ bbox: near })).toHaveLength(1);
+    remove();
+    expect(draw.features.list({ bbox: near })).toHaveLength(0);
+    draw.destroy();
+  });
+
+  it('refuses a bbox that is not a function', () => {
+    const engine = engineWithDraw();
+    expect(() =>
+      engine.extensions.collections.featureTypes.add({
+        type: 'wrong',
+        geometry: 'Point',
+        renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() },
+        bbox: [0, 0, 1, 1] as never,
+      }),
+    ).toThrow(/bbox/);
+    engine.destroy();
+  });
+});
+
 describe('the providers of snapping candidates', () => {
   it('snaps to the candidate of the highest priority at the same distance', () => {
     const engine = engineWithDraw();

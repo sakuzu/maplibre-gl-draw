@@ -222,6 +222,13 @@ const hitRoute: FeatureTypeDefinition = {
   its geometry, such as a marker drawn around a point, sets
   `hitPaddingPx` to that distance, so that its features are not left
   out before `hitTest` sees them
+- A type that draws beyond its geometry by a distance on the ground,
+  such as a disc of a given radius around a point, returns that extent
+  from `bbox(feature)` as `[west, south, east, north]` in degrees. The
+  spatial index takes it in place of the extent of the geometry, for
+  the candidates of a hit test and of a box selection, for
+  `features.list({ bbox })`, and to decide which features are near
+  enough to the view to be drawn
 - The extent follows the document: it is measured again whenever a
   feature changes. When it depends on something outside the document,
   call `ctx.invalidate({ type: 'Route' })` from a plugin when that

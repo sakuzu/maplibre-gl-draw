@@ -37,8 +37,9 @@ import type {
   SnapProviderContext,
   SnapTargetKind,
 } from '../../snapping/types.js';
+import { getBoundingBox } from '../../store/spatial/index.js';
 import type { Store } from '../../store/store.js';
-import type { Coordinate, Feature as StoredFeature } from '../../store/types.js';
+import type { BoundingBox, Coordinate, Feature as StoredFeature } from '../../store/types.js';
 import type {
   FeatureCompanionProvider,
   FeatureCompanionRegistry,
@@ -86,6 +87,13 @@ export interface AdapterDeps extends RenderAdapterDeps {
   readonly featureCompanions: FeatureCompanionRegistry;
   readonly snapTargets: SnapTargetsRegistry;
   readonly customLayer: CustomLayerInterface;
+  /** The spatial index of the instance, which takes the extent of a custom type */
+  readonly spatialIndex: {
+    setCustomBoundingBoxCalculator(
+      type: string,
+      calculator: (feature: StoredFeature) => BoundingBox,
+    ): () => void;
+  };
   /** Registers a provider of snapping candidates with the snapping of the instance */
   registerSnapProvider(provider: EngineSnapProvider): () => void;
   /** Applies a patch of a handle drag to a feature; `final` is false while the drag goes on */
@@ -361,6 +369,26 @@ export function installFeatureType(
             toEngineCandidate(candidate, feature.id),
           ),
         ),
+      );
+    }
+
+    const bbox = definition.bbox?.bind(definition);
+    if (bbox) {
+      // The spatial index measures the features of the type by the extent it gives
+      add(
+        deps.spatialIndex.setCustomBoundingBoxCalculator(type, (feature) => {
+          const extent = bbox(feature as Feature);
+          if (
+            Array.isArray(extent) &&
+            extent.length === 4 &&
+            extent.every((value) => Number.isFinite(value)) &&
+            extent[0] <= extent[2] &&
+            extent[1] <= extent[3]
+          ) {
+            return { minX: extent[0], minY: extent[1], maxX: extent[2], maxY: extent[3] };
+          }
+          return getBoundingBox(feature);
+        }),
       );
     }
 
