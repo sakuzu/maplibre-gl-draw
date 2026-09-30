@@ -154,6 +154,19 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(await mode(page)).toBe('select');
   });
 
+  it('finishes a line with a double click on a new position', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_line');
+    await click(page, at(-100, 0));
+    await click(page, at(0, -60));
+    await page.mouse.dblclick(at(100, 0).x, at(100, 0).y);
+    await settle(page);
+    expect(await mode(page)).toBe('select');
+    const [line] = await features(page);
+    expect(coordinatesOf(line)).toHaveLength(3);
+    expectNear((coordinatesOf(line) as number[][])[2], await lngLatOf(page, at(100, 0)));
+  });
+
   it('draws a polygon closed on its first vertex, and Escape discards one', async () => {
     await clearAll(page);
     await setMode(page, 'draw_polygon');

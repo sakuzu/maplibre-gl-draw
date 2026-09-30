@@ -247,6 +247,15 @@ describe('a double click finishes the shape', () => {
     expect(manager.getMode()).toBe('select');
   });
 
+  it('finishes a line whose second vertex the double click places', () => {
+    manager.setMode('draw_line');
+    click(A);
+    doubleClick(B);
+
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
+    expect(manager.getMode()).toBe('select');
+  });
+
   it('takes the second click of a line into no second vertex before one is placed', () => {
     manager.setMode('draw_line');
     doubleClick(A);
