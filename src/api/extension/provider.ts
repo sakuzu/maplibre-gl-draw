@@ -107,6 +107,13 @@ export interface CompanionProvider {
   /**
    * Hit tests the companion of a feature.
    *
+   * It is asked at the step of the feature in the stacking order: when the point missed the
+   * feature itself, and before the feature behind it. At one point, the handles of the
+   * selection come first; then, from the front, each feature and then its companions, so a
+   * feature (its marker, its line or its area, with the click tolerance) wins over its own
+   * companion and a companion wins over the features behind its feature; the rows of a
+   * dataset come only after the features and the companions in front of them.
+   *
    * @returns What was hit, or `null`
    */
   hitTest(feature: Feature, ctx: HitTestContext): Hit | null;

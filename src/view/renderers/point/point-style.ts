@@ -79,3 +79,26 @@ export function resolvePointStyle(
     strokeOpacity: defaults.strokeOpacity * opacity,
   };
 }
+
+/**
+ * How far the marker of a point reaches from its position, in CSS pixels: the radius the
+ * marker is drawn with plus its outline when the outline is drawn
+ *
+ * It reads the keys `resolvePointStyle` reads for the size and the outline, without building
+ * the merged style, so the hit test can ask it of every point on every move of the pointer.
+ *
+ * @param style The style of the feature (undefined when it has none)
+ * @param defaults The point style of the `style` option of the instance
+ *
+ * @internal
+ */
+export function pointMarkerReachPx(style: FeatureStyle | undefined, defaults: PointStyle): number {
+  const radius = style?.pointRadius ? style.pointRadius : defaults.size / 2;
+  const strokeOpacity = defaults.strokeOpacity * (style ? featurePointOpacity(style) : 1);
+  const stroke =
+    strokeOpacity > 0
+      ? ((style ? featurePointStrokeWidth(style) : undefined) ?? defaults.strokeWidth)
+      : 0;
+  const reach = radius + stroke;
+  return Number.isFinite(reach) && reach > 0 ? reach : 0;
+}

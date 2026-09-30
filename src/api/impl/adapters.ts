@@ -222,6 +222,9 @@ function narrowStrategy(
         : (builtIn?.distance(feature, coordinate) ?? Number.POSITIVE_INFINITY),
     testDistance: (feature, coordinate, tolerance) =>
       testDistanceWith(applies(feature) ? own : builtIn, feature, coordinate, tolerance),
+    // The features the built-in type keeps reach as far as it draws them (a point marker)
+    reachPx: (feature) =>
+      (applies(feature) ? own.reachPx?.(feature) : builtIn?.reachPx?.(feature)) ?? 0,
   };
 }
 

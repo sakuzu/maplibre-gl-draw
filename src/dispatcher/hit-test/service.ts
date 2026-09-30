@@ -170,6 +170,13 @@ export interface HitTestServiceImplOptions extends Partial<HitTestOptions> {
    * is tested
    */
   drawnShape?: DrawnShapeResolver;
+  /**
+   * How far the marker of a built-in point reaches from its position, in CSS pixels. When
+   * given, the built-in `Point` and `MultiPoint` strategies hit a point within that reach plus
+   * the tolerance, so a click anywhere on its marker hits it; when omitted a point is hit
+   * within the tolerance of its position alone
+   */
+  pointMarkerReachPx?: (feature: Feature) => number;
 }
 
 /**
@@ -205,14 +212,15 @@ export class HitTestServiceImpl implements HitTestService {
 
     // Register the default strategies
     this.registry = new HitTestStrategyRegistry();
-    this.registry.register(new PointHitTestStrategy());
+    const markerReach = options.pointMarkerReachPx;
+    this.registry.register(withReach(new PointHitTestStrategy(), markerReach));
     this.registry.register(new LineHitTestStrategy());
     this.registry.register(new PolygonHitTestStrategy());
     this.registry.register(new CircleHitTestStrategy());
 
     // The Multi geometries (a hit if any part is hit / the distance is the minimum over the
     // parts)
-    this.registry.register(new MultiPointHitTestStrategy());
+    this.registry.register(withReach(new MultiPointHitTestStrategy(), markerReach));
     this.registry.register(new MultiLineStringHitTestStrategy());
     this.registry.register(new MultiPolygonHitTestStrategy());
 
@@ -292,17 +300,36 @@ export class HitTestServiceImpl implements HitTestService {
    */
   private expandSearchRadius(
     toleranceLngLat: number,
-    tolerancePx: number,
-    screenPoint: ScreenPoint,
-    unproject: UnprojectFunction,
+    degPerPx: () => number,
+    orderedFeatures: Feature[],
   ): number {
-    const reachPx = this.maxCandidateReachPx();
+    const reachPx = this.maxCandidateReachPx() + this.maxFeatureReachPx(orderedFeatures);
     if (reachPx <= 0) return toleranceLngLat;
+    return toleranceLngLat + reachPx * degPerPx();
+  }
 
-    const degPerPx =
-      tolerancePx > 0 ? toleranceLngLat / tolerancePx : toleranceDegrees(unproject, screenPoint, 1);
-
-    return toleranceLngLat + reachPx * degPerPx;
+  /**
+   * The largest reach beyond its geometry among the features whose strategy has one
+   * (`HitTestStrategy.reachPx`, the markers of the points), in CSS pixels
+   *
+   * The reach depends on the style of each feature, so it is measured at query time like the
+   * rest of the appearance (the bounding boxes of the index stay those of the geometry).
+   */
+  private maxFeatureReachPx(orderedFeatures: Feature[]): number {
+    let max = 0;
+    let lastType: string | undefined;
+    let reachOf: ((feature: Feature) => number) | undefined;
+    for (const feature of orderedFeatures) {
+      if (feature.type !== lastType) {
+        lastType = feature.type;
+        const strategy = this.registry.get(feature.type);
+        reachOf = strategy?.reachPx?.bind(strategy);
+      }
+      if (!reachOf) continue;
+      const reach = reachOf(feature);
+      if (reach > max) max = reach;
+    }
+    return max;
   }
 
   /**
@@ -351,14 +378,17 @@ export class HitTestServiceImpl implements HitTestService {
     // The search radius is widened by the registered extra reach
     // (registerCandidateReach). Unlike the approach of baking the appearance into the bbox
     // of the index, this does not depend on the state or the zoom. The tolerance passed to
-    // the second stage is toleranceLngLat as before (only the candidate set widens; the
-    // semantics of a hit are decided by the strategy).
-    const searchRadius = this.expandSearchRadius(
-      toleranceLngLat,
-      tolerance,
-      screenPoint,
-      unproject,
-    );
+    // the second stage is toleranceLngLat as before, widened only by the reach of a strategy
+    // (the marker of a point); the registered reach widens only the candidate set.
+    // The degrees per CSS pixel at the click, measured once and only when needed (from the
+    // tolerance already converted, or from one pixel when the tolerance is 0)
+    let degPerPxMemo: number | undefined;
+    const degPerPx = (): number => {
+      degPerPxMemo ??=
+        tolerance > 0 ? toleranceLngLat / tolerance : toleranceDegrees(unproject, screenPoint, 1);
+      return degPerPxMemo;
+    };
+    const searchRadius = this.expandSearchRadius(toleranceLngLat, degPerPx, orderedFeatures);
     // The click on each copy of the world it can reach (the stored copy alone away from the
     // antimeridian; local-frame.ts)
     const copies = clickCopies(coordinate, searchRadius);
@@ -383,12 +413,11 @@ export class HitTestServiceImpl implements HitTestService {
     // Symbols (points) are tested in screen space. This works only while the terrain is
     // enabled; when it is disabled null is returned and the conventional path is used as
     // before.
-    const degPerPx = tolerance > 0 ? toleranceLngLat / tolerance : 0;
     const screen = this.hitTestAnchorsInScreenSpace(
       screenPoint,
       orderedFeatures,
       tolerance,
-      degPerPx,
+      tolerance > 0 ? toleranceLngLat / tolerance : 0,
       selectable,
     );
 
@@ -406,6 +435,10 @@ export class HitTestServiceImpl implements HitTestService {
       // nearest hit counts. It is tested in the shape it is drawn with (the result keeps the
       // stored feature)
       const shape = this.drawnShape(feature);
+      // What is drawn beyond the geometry (the marker of a point) is hit as well
+      const reachPx = strategy.reachPx?.(feature) ?? 0;
+      const featureTolerance =
+        reachPx > 0 ? toleranceLngLat + reachPx * degPerPx() : toleranceLngLat;
       let best: number | null = null;
       for (let i = 0; i < copies.length; i++) {
         if (!candidatesByCopy[i].has(feature.id)) continue;
@@ -414,8 +447,8 @@ export class HitTestServiceImpl implements HitTestService {
         // A strategy that has testDistance finishes the test and the distance computation in
         // a single scan
         if (strategy.testDistance) {
-          distance = strategy.testDistance(shape, copy, toleranceLngLat);
-        } else if (strategy.test(shape, copy, toleranceLngLat)) {
+          distance = strategy.testDistance(shape, copy, featureTolerance);
+        } else if (strategy.test(shape, copy, featureTolerance)) {
           distance = strategy.distance(shape, copy);
         }
         if (distance !== null && (best === null || distance < best)) best = distance;
@@ -462,7 +495,10 @@ export class HitTestServiceImpl implements HitTestService {
       if (!SCREEN_SPACE_TYPES.has(feature.type)) continue;
       if (!selectable(feature)) continue;
 
-      const reachPx = tolerancePx + this.candidateReachPx(feature.type);
+      const reachPx =
+        tolerancePx +
+        this.candidateReachPx(feature.type) +
+        (this.registry.get(feature.type)?.reachPx?.(feature) ?? 0);
       const parts =
         feature.type === 'MultiPoint'
           ? (coordinatesOf(feature) as Coordinate[])
@@ -504,4 +540,26 @@ export class HitTestServiceImpl implements HitTestService {
     if (!strategy) return false;
     return strategy.test(this.drawnShape(feature), coordinate, toleranceLngLat);
   }
+}
+
+/**
+ * A built-in strategy that reaches as far as the feature is drawn (`HitTestStrategy.reachPx`)
+ *
+ * Without a reach the strategy is returned as it is.
+ */
+function withReach(
+  strategy: HitTestStrategy,
+  reachPx: ((feature: Feature) => number) | undefined,
+): HitTestStrategy {
+  if (!reachPx) return strategy;
+  return {
+    geometryType: strategy.geometryType,
+    test: (feature, coordinate, tolerance) => strategy.test(feature, coordinate, tolerance),
+    distance: (feature, coordinate) => strategy.distance(feature, coordinate),
+    ...(strategy.testDistance && {
+      testDistance: (feature: Feature, coordinate: Coordinate, tolerance: number) =>
+        strategy.testDistance?.(feature, coordinate, tolerance) ?? null,
+    }),
+    reachPx,
+  };
 }

@@ -53,8 +53,9 @@ import { toStore } from '../../store/draw-store.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store, StoreContract } from '../../store/store.js';
-import type { Layer, Mode } from '../../store/types.js';
+import type { FeatureStyle, Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
+import { pointMarkerReachPx } from '../../view/renderers/point/point-style.js';
 import { createSelectionScope, type SelectionScope } from '../../view/ui/selection-scope.js';
 
 /**
@@ -267,6 +268,10 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     },
     // On the globe the edges are tested along the path they are drawn along
     drawnShape: createGlobeShapeResolver(map),
+    // A click on the marker of a point hits the point (the look of a point is read at each
+    // hit, so a change of the style option applies at once)
+    pointMarkerReachPx: (feature) =>
+      pointMarkerReachPx(feature.style as FeatureStyle | undefined, featureStyle.point.point),
   });
 
   // Create the BoxSelectionStrategyRegistry and register the core strategies
