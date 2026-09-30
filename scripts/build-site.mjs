@@ -7,7 +7,8 @@
  * - `/` — the playground, opening the showcase (the README image) by default; `?plain`
  *   opens it without the showcase
  * - `/examples/` — the list of examples and the ten examples
- * - `/api/` — the generated API reference (typedoc, the same as `npm run docs:api`)
+ * - `/api/` — the generated API reference (typedoc, the same as `npm run docs:api`), with
+ *   redirects from the page URLs of 1.0 (scripts/site-redirects.mjs)
  *
  * Every page uses relative paths (vite's `base: './'`), so the site works under any
  * subpath, such as https://<owner>.github.io/maplibre-gl-draw/. The bench is not part of
@@ -21,6 +22,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { writeRedirects } from './site-redirects.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE_DIR = join(root, 'site-dist');
@@ -51,6 +53,10 @@ execFileSync(typedoc, ['--out', join(SITE_DIR, 'api'), '--logLevel', 'Warn'], {
   stdio: 'inherit',
 });
 console.log(`Built the API reference into ${join(SITE_DIR, 'api')}`);
+
+// The 1.0 URLs of the reference redirect to the current pages (scripts/site-redirects.mjs)
+const redirects = writeRedirects(join(SITE_DIR, 'api'));
+console.log(`Wrote ${redirects} redirects for the 1.0 pages of the API reference`);
 
 for (const page of ['index.html', 'examples/index.html', 'api/index.html']) {
   if (!existsSync(join(SITE_DIR, page))) throw new Error(`site-dist/${page} is missing`);

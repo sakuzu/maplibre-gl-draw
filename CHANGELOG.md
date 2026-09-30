@@ -6,6 +6,11 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- The site keeps the 1.0 API page URLs working through redirects to
+  the current pages.
+
 ## [2.0.0] - 2026-09-30
 
 2.0.0 redesigns the public API around resources and their collections.

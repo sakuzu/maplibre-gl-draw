@@ -167,6 +167,11 @@ published files to the tagged commit.
    npm run deploy:pages
    ```
 
+   The build also writes a redirect for every page URL of the 1.0 API
+   reference (`scripts/site-redirects-1.0.json`) that the current
+   reference no longer has, to the same symbol under its current module
+   and name or else to the module page (`scripts/site-redirects.mjs`).
+
 When the workflow fails before the publish step, nothing was published:
 fix the cause on `main`, move the tag to the fixed commit
 (`git tag -d vX.Y.Z`, `git push origin :refs/tags/vX.Y.Z`, then step 5
