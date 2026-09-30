@@ -6,8 +6,8 @@
  * language of rows, the events of a dataset and the events of the instance about datasets
  */
 
-import type { BBox } from 'geojson';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../../geometry/index.js';
 import { tableFromFeatures } from '../../table/index.js';
 import { createMapStub } from '../../test-utils.js';
 import type { DatasetEvents, DatasetRow, DatasetsCollection } from '../datasets.js';
@@ -227,10 +227,9 @@ describe('a dataset', () => {
     expect(visible[0].style).toMatchObject({
       pointColor: 'teal',
     });
-    expect(dataset.listVisibleRows([0.15, 0.15, 0, 1, 1, 0]).map((row) => row.id)).toEqual([
-      'b',
-      'l',
-    ]);
+    // A caller without types may still pass the extent with the heights
+    const withHeights = [0.15, 0.15, 0, 1, 1, 0] as unknown as BBox;
+    expect(dataset.listVisibleRows(withHeights).map((row) => row.id)).toEqual(['b', 'l']);
     expect(dataset.listDrawnRows(bbox)).toBeInstanceOf(Int32Array);
     expect(typeof dataset.getDrawnRowsRevision()).toBe('number');
   });

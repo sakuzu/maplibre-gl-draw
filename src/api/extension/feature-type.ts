@@ -6,7 +6,8 @@
  * resized
  */
 
-import type { BBox, Geometry, Position } from 'geojson';
+import type { Geometry, Position } from 'geojson';
+import type { BBox } from '../../geometry/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { HitTestContext, ScreenContext, SnapContext } from './context.js';

@@ -9,9 +9,10 @@
  * `[lng, lat]` positions, CSS colors) and the internal ones.
  */
 
-import type { BBox, Position } from 'geojson';
+import type { Position } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
+import type { BBox } from '../../geometry/types.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { formatColor } from '../../shared/color.js';
 import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';

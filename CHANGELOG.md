@@ -93,6 +93,12 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   `setRows` or `setTable`; `layers.reorder` places a `layer-order`
   dataset as soon as it is added. Its members use the word row, and it
   has its own events, `clicked`, `hovered` and `changed`.
+- An extent is the four-number `BBox` of `/geometry`,
+  `[west, south, east, north]`, everywhere the main entry takes or
+  gives one: `FeatureFilter.bbox`, the argument of `DatasetProvider`,
+  the `Dataset` methods, `ModeContext.listTraceRows` and
+  `FeatureTypeDefinition.bbox`. GeoJSON's `BBox`, which may carry
+  heights in six numbers, is not used.
 - The native format is 3.0.0. A file of 2.x is upgraded on load.
 - Every load, of any format, is one transaction with the source `load`
   once the source is read: a document of the library is no longer

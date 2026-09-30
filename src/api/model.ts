@@ -10,12 +10,12 @@
  */
 
 import type {
-  BBox,
   Feature as GeoJSONFeature,
   FeatureCollection as GeoJSONFeatureCollection,
   Geometry,
   Position,
 } from 'geojson';
+import type { BBox } from '../geometry/types.js';
 import type { Messages } from '../messages.js';
 import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
 import type { LineStyle } from '../shared/types/style.js';

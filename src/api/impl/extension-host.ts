@@ -13,11 +13,11 @@
  * drawing), through the adapters of `adapters.ts`, `input.ts` and `render-context.ts`.
  */
 
-import type { BBox } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { HitTestTopmost } from '../../dispatcher/hit-test/topmost.js';
 import type { ExtensionInputRoute } from '../../dispatcher/input-router.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
+import type { BBox } from '../../geometry/types.js';
 import type { PluginInteractions } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
 import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';

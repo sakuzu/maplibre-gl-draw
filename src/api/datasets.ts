@@ -5,7 +5,8 @@
  * `draw.datasets`: large data that is drawn but not edited, and is not part of the document
  */
 
-import type { BBox, Feature as GeoJSONFeature, Geometry, Position } from 'geojson';
+import type { Feature as GeoJSONFeature, Geometry, Position } from 'geojson';
+import type { BBox } from '../geometry/types.js';
 import type { PreparedTable, Table } from '../table/index.js';
 import type { ScreenPoint } from './events.js';
 import type { FeatureStyle, FeatureType, StyleRule } from './model.js';

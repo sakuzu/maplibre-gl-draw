@@ -8,7 +8,8 @@
  * type a context holds is part of the public API and follows semver.
  */
 
-import type { BBox, Position } from 'geojson';
+import type { Position } from 'geojson';
+import type { BBox } from '../../geometry/types.js';
 import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import type { DrawingResource } from '../drawing.js';

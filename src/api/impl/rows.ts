@@ -6,7 +6,7 @@
  * API gives them: GeoJSON features, `BBox` arrays and `Position` arrays
  */
 
-import type { BBox } from 'geojson';
+import type { BBox } from '../../geometry/types.js';
 import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
 import type { DatasetRow } from '../datasets.js';
 
@@ -40,7 +40,7 @@ function hasGeometry(feature: StoredFeature): boolean {
  *
  * @internal
  */
-export function toBoundingBox(bbox: BBox): BoundingBox {
+export function toBoundingBox(bbox: BBox | readonly number[]): BoundingBox {
   if (bbox.length === 6) {
     return { minX: bbox[0], minY: bbox[1], maxX: bbox[3], maxY: bbox[4] };
   }
