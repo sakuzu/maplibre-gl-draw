@@ -423,3 +423,100 @@ describe('drawing on a pitched and rotated map', () => {
     expectNear(outerRing(edited)[1], await lngLatOf(page, at(120, -90)));
   });
 });
+
+describe('a replaced Store that held its features before the instance', () => {
+  afterAll(async () => {
+    // The other tests use an instance over the built-in Store
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow & {
+        e2e: { createDraw: typeof import('../index.js').createDraw };
+      };
+      w.draw.destroy();
+      w.draw = w.e2e.createDraw(w.map);
+    });
+    await settle(page);
+  });
+
+  it('selects them with a click and with a Shift box', async () => {
+    const ids = await page.evaluate(
+      ({ point, line, polygon }) => {
+        type Contract = import('../index.js').Store;
+        const w = window as unknown as E2EWindow & {
+          e2e: {
+            createDraw: typeof import('../index.js').createDraw;
+            internals: { MemoryContractStore: new () => Contract };
+          };
+        };
+        const store = new w.e2e.internals.MemoryContractStore();
+        const base = {
+          properties: {},
+          layerId: 'held',
+          groupId: undefined,
+          visible: true,
+          locked: false,
+          style: {},
+        };
+        store.transact(() => {
+          store.createLayer({
+            id: 'held',
+            name: 'Held',
+            visible: true,
+            locked: false,
+            opacity: 1,
+            items: [],
+            styleRule: undefined,
+            metadata: undefined,
+          });
+          store.createFeature({
+            ...base,
+            id: 'p',
+            type: 'Point',
+            geometry: { type: 'Point', coordinates: point },
+          });
+          store.createFeature({
+            ...base,
+            id: 'l',
+            type: 'LineString',
+            geometry: { type: 'LineString', coordinates: line },
+          });
+          store.createFeature({
+            ...base,
+            id: 'g',
+            type: 'Polygon',
+            geometry: { type: 'Polygon', coordinates: [polygon] },
+          });
+        }, 'remote');
+        w.draw.destroy();
+        w.draw = w.e2e.createDraw(w.map, { store, initDefaultLayer: false });
+        return w.draw.features.list().map((feature) => feature.id);
+      },
+      {
+        point: await lngLatOf(page, at(-120, -80)),
+        line: [await lngLatOf(page, at(-40, -100)), await lngLatOf(page, at(40, -100))],
+        polygon: [
+          await lngLatOf(page, at(60, 40)),
+          await lngLatOf(page, at(160, 40)),
+          await lngLatOf(page, at(160, 120)),
+          await lngLatOf(page, at(60, 120)),
+          await lngLatOf(page, at(60, 40)),
+        ],
+      },
+    );
+    await settle(page);
+    expect(ids.sort()).toEqual(['g', 'l', 'p']);
+
+    await click(page, at(-120, -80));
+    expect(await selectedIds(page)).toEqual(['p']);
+    await click(page, at(0, -100));
+    expect(await selectedIds(page)).toEqual(['l']);
+    await click(page, at(110, 80));
+    expect(await selectedIds(page)).toEqual(['g']);
+
+    await click(page, at(-200, 150));
+    expect(await selectedIds(page)).toEqual([]);
+    await page.keyboard.down('Shift');
+    await drag(page, at(-180, -160), at(200, 160));
+    await page.keyboard.up('Shift');
+    expect((await selectedIds(page)).sort()).toEqual(['g', 'l', 'p']);
+  });
+});

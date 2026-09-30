@@ -9,13 +9,14 @@
  * map of the page, so the engine and the page share one maplibre.
  *
  * Besides the public entry point, the page carries the table subpath, the test terrain
- * (`dem-fixture.ts`) and the few internals the terrain tests read the GPU side of the engine
- * through.
+ * (`dem-fixture.ts`), the few internals the terrain tests read the GPU side of the engine
+ * through, and the in-memory Store the tests of a replaced Store fill before the instance.
  */
 
 import * as maplibregl from 'maplibre-gl';
 import { createDraw } from '../index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
+import { MemoryContractStore } from '../store/memory.js';
 import { prepareTable } from '../table/index.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
@@ -35,6 +36,7 @@ installTestDem(maplibregl);
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {
     DemAtlas,
+    MemoryContractStore,
     getAnchorProjector,
     getMapTerrain,
     getRenderableTerrainTiles,
