@@ -17,6 +17,8 @@ import {
   invalidInput,
   isRecord,
   isTaken,
+  layerLocked,
+  locksIgnored,
   matches,
   notFound,
   onlyKeys,
@@ -127,7 +129,7 @@ export function createLayers(
       const layer = require(id);
       const updates = prepareLayerPatch(patch);
       if (store.isReadOnly()) return null;
-      if (layer.locked && !onlyLockOrVisibility(patch)) return null;
+      if (layerLocked(store, layer) && !onlyLockOrVisibility(patch)) return null;
       store.updateLayer(layer.id, updates);
       return store.getLayer(layer.id) ?? null;
     },
@@ -143,7 +145,11 @@ export function createLayers(
         return { layer, patch: entry.patch, updates: prepareLayerPatch(entry.patch) };
       });
       if (store.isReadOnly()) return null;
-      if (prepared.some(({ layer, patch }) => layer.locked && !onlyLockOrVisibility(patch))) {
+      if (
+        prepared.some(
+          ({ layer, patch }) => layerLocked(store, layer) && !onlyLockOrVisibility(patch),
+        )
+      ) {
         return null;
       }
       store.transact(() => {
@@ -206,6 +212,7 @@ export function createLayers(
 
 /** Whether a deletion of the layer is refused: it, or a feature or group in it, is locked */
 function holdsLock(store: Store, layer: StoredLayer): boolean {
+  if (locksIgnored(store)) return false;
   if (layer.locked) return true;
   for (const itemId of layer.items) {
     if (store.getGroup(itemId)?.locked) return true;

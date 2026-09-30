@@ -15,6 +15,7 @@ import {
   groupLocked,
   invalidInput,
   isRecord,
+  layerLocked,
   notFound,
   optionalIndex,
   requireId,
@@ -53,7 +54,7 @@ export function resolveMoveTarget(store: Store, to: MoveTarget): ResolvedTarget 
     const layerId = requireId(to.layerId, 'layerId');
     const layer = store.getLayer(layerId);
     if (!layer) throw notFound('layer', layerId);
-    return { kind: 'layer', layer, index, locked: layer.locked };
+    return { kind: 'layer', layer, index, locked: layerLocked(store, layer) };
   }
   if (to.groupId === null) return { kind: 'ungroup', index, locked: false };
   const groupId = requireId(to.groupId, 'groupId');

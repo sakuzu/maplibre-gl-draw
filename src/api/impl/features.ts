@@ -10,6 +10,7 @@ import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/ty
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { Color } from '../../shared/types/style.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
+import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Store } from '../../store/store.js';
 import type {
@@ -232,7 +233,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 
     isEditable(id) {
       const feature = require(id);
-      return !store.isReadOnly() && !featureLocked(store, feature);
+      return !store.isReadOnly() && !isFeatureLocked(feature, store);
     },
 
     getAppliedStyle(id) {

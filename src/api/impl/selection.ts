@@ -11,6 +11,7 @@ import {
   deleteSelectedVertices,
 } from '../../operations/selection-operations.js';
 import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordinates.js';
+import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
 import type { FeaturesCollection } from '../features.js';
@@ -20,7 +21,6 @@ import type { SelectionResource, VertexSelectionResource } from '../selection.js
 import type { SelectionType } from '../state.js';
 import type { ResourceDeps } from './shared.js';
 import {
-  featureLocked,
   getItem,
   invalidInput,
   isRecord,
@@ -161,7 +161,7 @@ export function createVertexSelection(deps: Pick<ResourceDeps, 'store'>): Vertex
         }
         return { ...vertex };
       });
-      if (featureLocked(store, feature)) return false;
+      if (isFeatureLocked(feature, store)) return false;
       store.setSelectedVertices(refs.length > 0 ? { featureId: id, vertices: refs } : null);
       return true;
     },

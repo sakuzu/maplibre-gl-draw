@@ -161,6 +161,24 @@ ctx.draw.transact(
 後に反応するプラグインは、対象がもう無いかもしれないので、先に `has`
 で確かめます。
 
+取り消しのように、自分の記録から変化を当て直すプラグインは、変化の後に
+ロックされた地物にも書き込む必要があります。そのときは `transact` に
+`ignoreLocks: true` を渡します。その中の書き込みは、地物、グループ、
+レイヤーのロックを無視します。読み取り専用は無視しません。また、
+利用者がロックされた地物を動かせないことは変わりません。
+
+<!-- docs-check:
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
+declare const id: string;
+-->
+
+```ts
+ctx.draw.transact(
+  () => ctx.draw.features.update(id, { properties: { name: 'Before' } }),
+  { source: 'my-plugin', ignoreLocks: true },
+);
+```
+
 ### イベント
 
 プラグインは、`draw.on` と同じ名前のイベントで変化に反応します

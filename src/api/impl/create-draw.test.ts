@@ -127,6 +127,103 @@ describe('transact', () => {
     expect(notifications[0].layers?.created).toHaveLength(1);
     expect(notifications[0].metadata?.metadata.title).toBe('Map');
   });
+
+  it('lets the writes change locked features, groups and layers with ignoreLocks', () => {
+    const layer = draw.layers.getActive() as NonNullable<ReturnType<typeof draw.layers.getActive>>;
+    const other = draw.layers.create({ name: 'Other' });
+    const point = (x: number) => ({
+      type: 'Point' as const,
+      geometry: { type: 'Point' as const, coordinates: [x, 0] },
+    });
+    const locked = draw.features.create({ ...point(0), locked: true });
+    const inGroup = draw.features.create(point(1));
+    const inLayer = draw.features.create(point(2));
+    const gone = draw.features.create({ ...point(3), locked: true });
+    if (!locked || !inGroup || !inLayer || !gone || !other) throw new Error('not created');
+    const group = draw.groups.create({ featureIds: [inGroup.id], locked: true });
+    if (!group) throw new Error('not created');
+    draw.layers.update(other.id, { locked: true });
+    draw.features.move(inLayer.id, { layerId: other.id });
+
+    // Without the option the locks refuse the writes
+    expect(draw.features.update(locked.id, { properties: { a: 1 } })).toBeNull();
+    expect(draw.transact(() => draw.features.delete(gone.id))).toBe(false);
+
+    const notifications: DocumentChange[] = [];
+    draw.getStore().subscribe((changes) => notifications.push(changes));
+    draw.transact(
+      () => {
+        expect(draw.features.update(locked.id, { properties: { a: 1 } })).not.toBeNull();
+        expect(draw.groups.update(group.id, { name: 'Renamed' })).not.toBeNull();
+        expect(draw.features.update(inGroup.id, { properties: { b: 2 } })).not.toBeNull();
+        expect(draw.layers.update(other.id, { name: 'Renamed' })).not.toBeNull();
+        expect(draw.features.update(inLayer.id, { properties: { c: 3 } })).not.toBeNull();
+        expect(draw.features.delete(gone.id)).toBe(true);
+        // A nested call keeps ignoring them
+        draw.transact(() => {
+          expect(draw.features.move(locked.id, { layerId: other.id })).toBe(true);
+        });
+        // Reads still tell the lock
+        expect(draw.features.isEditable(locked.id)).toBe(false);
+      },
+      { source: 'history', ignoreLocks: true },
+    );
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].source).toBe('history');
+    expect(draw.features.get(locked.id)?.layerId).toBe(other.id);
+    expect(draw.features.get(locked.id)?.locked).toBe(true);
+
+    // After the call the locks refuse the writes again
+    expect(draw.features.update(locked.id, { properties: { a: 2 } })).toBeNull();
+    expect(draw.layers.delete(other.id)).toBe(false);
+    expect(draw.transact(() => draw.layers.delete(other.id), { ignoreLocks: true })).toBe(true);
+    expect(draw.layers.get(layer.id)).toBeDefined();
+  });
+
+  it('keeps refusing the writes under read-only with ignoreLocks', () => {
+    const feature = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      locked: true,
+    });
+    if (!feature) throw new Error('not created');
+    draw.setReadOnly(true);
+    draw.transact(
+      () => {
+        expect(draw.features.update(feature.id, { properties: { a: 1 } })).toBeNull();
+        expect(draw.features.delete(feature.id)).toBe(false);
+      },
+      { ignoreLocks: true },
+    );
+    expect(draw.features.get(feature.id)).toBeDefined();
+  });
+
+  it('ends ignoring the locks when fn throws', () => {
+    const feature = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      locked: true,
+    });
+    if (!feature) throw new Error('not created');
+    expect(() =>
+      draw.transact(
+        () => {
+          throw new Error('stop');
+        },
+        { ignoreLocks: true },
+      ),
+    ).toThrow('stop');
+    expect(draw.features.delete(feature.id)).toBe(false);
+  });
+
+  it('throws invalid-input for options that are not an object', () => {
+    try {
+      draw.transact(() => 1, 'remote' as never);
+      expect.unreachable();
+    } catch (error) {
+      expect((error as DrawError).code).toBe('invalid-input');
+    }
+  });
 });
 
 describe('destroy', () => {

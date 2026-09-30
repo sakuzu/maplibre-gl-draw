@@ -161,14 +161,49 @@ export function layerOfGroup(store: Store, group: Group): Layer | undefined {
   return store.getLayer(group.layerId);
 }
 
-/** Whether the feature is locked: itself, its group or its layer */
-export function featureLocked(store: Store, feature: Feature): boolean {
-  return isFeatureLocked(feature, store);
+/** How deep each Store is in `transact` calls with `ignoreLocks` */
+const lockBypassDepth = new WeakMap<Store, number>();
+
+/**
+ * Runs `fn` with the locks of the features, groups and layers of the Store ignored by the
+ * writes of the resources; read-only is still enforced. Nested calls keep ignoring them until
+ * the outermost one ends.
+ */
+export function withLocksIgnored<T>(store: Store, fn: () => T): T {
+  lockBypassDepth.set(store, (lockBypassDepth.get(store) ?? 0) + 1);
+  try {
+    return fn();
+  } finally {
+    const depth = (lockBypassDepth.get(store) ?? 1) - 1;
+    if (depth === 0) lockBypassDepth.delete(store);
+    else lockBypassDepth.set(store, depth);
+  }
 }
 
-/** Whether the group is locked: itself or its layer */
+/** Whether the writes to the Store ignore the locks now (see {@link withLocksIgnored}) */
+export function locksIgnored(store: Store): boolean {
+  return lockBypassDepth.has(store);
+}
+
+/**
+ * Whether a lock refuses a write to the feature: it, its group or its layer is locked, and
+ * the write does not ignore the locks
+ */
+export function featureLocked(store: Store, feature: Feature): boolean {
+  return !locksIgnored(store) && isFeatureLocked(feature, store);
+}
+
+/**
+ * Whether a lock refuses a write to the group: it or its layer is locked, and the write does
+ * not ignore the locks
+ */
 export function groupLocked(store: Store, group: Group): boolean {
-  return isGroupLocked(group, () => layerOfGroup(store, group));
+  return !locksIgnored(store) && isGroupLocked(group, () => layerOfGroup(store, group));
+}
+
+/** Whether a lock refuses a write to the layer: it is locked, and the write does not ignore it */
+export function layerLocked(store: Store, layer: Layer): boolean {
+  return !locksIgnored(store) && layer.locked;
 }
 
 /**

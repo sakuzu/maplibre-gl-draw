@@ -23,7 +23,7 @@ import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
-import { invalidInput, notFound } from './shared.js';
+import { invalidInput, notFound, requireRecord, withLocksIgnored } from './shared.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
 const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load']);
@@ -102,7 +102,11 @@ export function createDrawOnEngine(
       if (value === true && modeManager.getMode() !== 'select') modeManager.setMode('select');
     },
 
-    transact: (fn, transactOptions) => store.transact(fn, transactOptions?.source),
+    transact(fn, transactOptions) {
+      if (transactOptions !== undefined) requireRecord(transactOptions, 'The options');
+      const run = () => store.transact(fn, transactOptions?.source);
+      return transactOptions?.ignoreLocks === true ? withLocksIgnored(store, run) : run();
+    },
     on: (event, listener) => events.on(event, listener),
     off: (event, listener) => events.off(event, listener),
     once: (event, listener) => events.once(event, listener),

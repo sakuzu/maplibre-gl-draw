@@ -163,6 +163,24 @@ the drawing is read-only or locked returns `null` or `false`. Either
 way nothing changes. A plugin that reacts to a change after it
 happened checks with `has` first, because the target may be gone.
 
+A plugin that applies changes again from a record of its own, such as
+an undo, has to write to features that were locked after the change.
+Give `ignoreLocks: true` to `transact`: its writes then ignore the locks
+of the features, groups and layers. Read-only still refuses them, and
+the user still cannot move a locked feature.
+
+<!-- docs-check:
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
+declare const id: string;
+-->
+
+```ts
+ctx.draw.transact(
+  () => ctx.draw.features.update(id, { properties: { name: 'Before' } }),
+  { source: 'my-plugin', ignoreLocks: true },
+);
+```
+
 ### Events
 
 A plugin reacts to changes through the events, with the same names as

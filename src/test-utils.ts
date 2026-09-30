@@ -19,6 +19,7 @@ import { bridgeMode, createInputRoute } from './api/impl/input.js';
 import { createLayers } from './api/impl/layers.js';
 import { createSelection } from './api/impl/selection.js';
 import type { ResourceDeps } from './api/impl/shared.js';
+import { withLocksIgnored } from './api/impl/shared.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
@@ -254,8 +255,10 @@ export function createModeHarness(options: {
     getStore: () => store,
     getMode: () => modeManager.getMode(),
     setMode: (mode: string) => modeManager.setMode(mode),
-    transact: <T>(fn: () => T, options?: { source?: string }) =>
-      store.transact(fn, options?.source),
+    transact: <T>(fn: () => T, options?: { source?: string; ignoreLocks?: boolean }) => {
+      const run = () => store.transact(fn, options?.source);
+      return options?.ignoreLocks === true ? withLocksIgnored(store, run) : run();
+    },
     options: {
       get: () => ({
         tracing: { enabled: options.tracing !== false },

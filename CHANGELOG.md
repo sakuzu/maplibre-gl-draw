@@ -97,7 +97,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 
 ### Added in 2.0.0
 
-- `draw.once` and `draw.transact(fn, { source })`.
+- `draw.once` and `draw.transact(fn, { source, ignoreLocks })`; with
+  `ignoreLocks` the writes of `fn` change locked features, groups and
+  layers (read-only still refuses them).
 - `getMany`, `count`, `has`, `createMany`, `updateMany` and
   `deleteMany` on every collection that records, and filters for
   `list` and `count`.

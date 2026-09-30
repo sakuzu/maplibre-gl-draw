@@ -142,6 +142,7 @@ const MAIN = [
   'TerrainDiagnostics',
   'TopologyOptions',
   'TracingOptions',
+  'TransactOptions',
   'UpdateSource',
   'VertexRef',
   'VertexSelection',

@@ -9,7 +9,7 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
 import type { DrawEvents } from './events.js';
-import type { StoreView } from './extension/store.js';
+import type { StoreView, UpdateSource } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
 import type { FeaturesCollection } from './features.js';
 import type { GroupsCollection } from './groups.js';
@@ -20,6 +20,17 @@ import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
+
+/** The options of {@link Draw.transact} */
+export interface TransactOptions {
+  /** Where the writes come from; `'local'` when left out */
+  source?: UpdateSource;
+  /**
+   * Whether the writes ignore the locks of the features, groups and layers; read-only still
+   * refuses them. False when left out.
+   */
+  ignoreLocks?: boolean;
+}
 
 /**
  * A draw instance on a map: the collections and resources of the document and of this
@@ -86,12 +97,17 @@ export interface Draw {
   /**
    * Runs `fn` as one transaction: its writes arrive as one `document.changed`.
    *
-   * In nested calls the source of the outermost call wins.
+   * In nested calls the source of the outermost call wins. With `ignoreLocks`, the writes of
+   * `fn` through the resources of this instance ignore the locks of the features, groups and
+   * layers, as a change applied again from a record needs; read-only still refuses them, and
+   * what the user does with the pointer and the keys still respects the locks. A nested call
+   * inside such a call ignores them as well.
    *
-   * @param options - `source` names where the writes come from
+   * @param options - `source` names where the writes come from; `ignoreLocks` lets them
+   *   change locked features, groups and layers
    * @returns What `fn` returns
    */
-  transact<T>(fn: () => T, options?: { source?: string }): T;
+  transact<T>(fn: () => T, options?: TransactOptions): T;
   /**
    * Subscribes to an event.
    *
