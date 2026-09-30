@@ -5,7 +5,9 @@
  * Tests for a Store of the application that holds features before the instance is created,
  * replaces its document from elsewhere (`reset: true`) or receives features written from
  * outside the instance: every feature it holds is hit by a click and by a box selection, as a
- * feature drawn through the instance is
+ * feature drawn through the instance is. The Store gives the optional fields as `null`, as a
+ * Store that keeps its document in a shared structure does; the instance reads them as
+ * `undefined`.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,17 +22,19 @@ import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 
-const LAYER: Layer = {
+/** A layer whose optional fields are `null` */
+const LAYER = {
   id: 'remote-layer',
   name: 'Remote',
   visible: true,
   locked: false,
   opacity: 1,
   items: [],
-  styleRule: undefined,
-  metadata: undefined,
-};
+  styleRule: null,
+  metadata: null,
+} as unknown as Layer;
 
+/** A feature whose optional field (`groupId`) is `null` */
 function feature(id: string, geometry: Feature['geometry']): Feature {
   return {
     id,
@@ -38,9 +42,11 @@ function feature(id: string, geometry: Feature['geometry']): Feature {
     geometry,
     properties: {},
     layerId: LAYER.id,
+    groupId: null,
+    style: {},
     visible: true,
     locked: false,
-  } as Feature;
+  } as unknown as Feature;
 }
 
 const POINT = feature('p1', { type: 'Point', coordinates: [0.5, 0.5] });
@@ -197,6 +203,28 @@ function expectEveryFeatureSelectable(target: { engine: Engine; draw: Draw }): v
 }
 
 describe('a Store of the application with features the instance did not write', () => {
+  it('reads the optional fields it gives as null as undefined', () => {
+    const contract = new MemoryContractStore();
+    populate(contract);
+    const target = create(contract);
+    const read = target.draw.features.get(POINT.id);
+    expect(read).toBeDefined();
+    expect(read?.groupId).toBeUndefined();
+    expect(target.draw.features.list().every((f) => f.groupId === undefined)).toBe(true);
+    const layer = target.draw.layers.get(LAYER.id);
+    expect(layer?.metadata).toBeUndefined();
+    expect(layer?.styleRule).toBeUndefined();
+    // The same object of the Store reads as the same object
+    expect(target.engine.context.store.getFeature(POINT.id)).toBe(
+      target.engine.context.store.getFeature(POINT.id),
+    );
+
+    const created: unknown[] = [];
+    target.draw.on('feature.created', ({ feature }) => created.push(feature.groupId));
+    contract.transact(() => contract.createFeature(feature('p2', POINT.geometry)), 'remote');
+    expect(created).toEqual([undefined]);
+  });
+
   it('hits the features it held before the instance was created', () => {
     const contract = new MemoryContractStore();
     populate(contract);

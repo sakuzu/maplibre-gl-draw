@@ -62,6 +62,9 @@ export type UpdateSource =
  * - A change applied from outside the instance is notified like a local one, with the source
  *   `'remote'`. The instance follows it: a deleted item leaves the selection, the editing and
  *   the hidden items through the writes of {@link Store}.
+ * - An optional field (`Feature.groupId`, `Layer.metadata`, `Layer.styleRule`) may be given as
+ *   `null`: null is accepted and read as `undefined`, so the instance and its API always hand
+ *   out `undefined` for it.
  * - The state of this client (the selection, the editing, the selected vertices, the mode,
  *   read-only, the interaction lock and the hidden items) is not part of the document: it is
  *   not saved, and a change from outside the instance does not carry it.

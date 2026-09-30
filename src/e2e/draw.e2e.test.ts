@@ -424,7 +424,7 @@ describe('drawing on a pitched and rotated map', () => {
   });
 });
 
-describe('a replaced Store that held its features before the instance', () => {
+describe('a replaced Store that held its features before the instance, with null fields', () => {
   afterAll(async () => {
     // The other tests use an instance over the built-in Store
     await page.evaluate(() => {
@@ -451,7 +451,7 @@ describe('a replaced Store that held its features before the instance', () => {
         const base = {
           properties: {},
           layerId: 'held',
-          groupId: undefined,
+          groupId: null as unknown as undefined,
           visible: true,
           locked: false,
           style: {},
@@ -464,8 +464,9 @@ describe('a replaced Store that held its features before the instance', () => {
             locked: false,
             opacity: 1,
             items: [],
-            styleRule: undefined,
-            metadata: undefined,
+            // A Store may give the optional fields as null
+            styleRule: null as unknown as undefined,
+            metadata: null as unknown as undefined,
           });
           store.createFeature({
             ...base,
@@ -488,7 +489,11 @@ describe('a replaced Store that held its features before the instance', () => {
         }, 'remote');
         w.draw.destroy();
         w.draw = w.e2e.createDraw(w.map, { store, initDefaultLayer: false });
-        return w.draw.features.list().map((feature) => feature.id);
+        // The instance reads the null of the Store as undefined
+        return w.draw.features
+          .list()
+          .filter((feature) => feature.groupId === undefined)
+          .map((feature) => feature.id);
       },
       {
         point: await lngLatOf(page, at(-120, -80)),
