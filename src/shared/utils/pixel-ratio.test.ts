@@ -91,18 +91,18 @@ describe('createPixelRatioSource', () => {
   it('the default factor is 1, and it reads window when there is no injection', () => {
     vi.stubGlobal('window', { devicePixelRatio: 2 });
     const source = createPixelRatioSource();
-    expect(source.getRenderScale()).toBe(1);
+    expect(source.getScaleFactor()).toBe(1);
     expect(source.resolve()).toBe(2);
   });
 
   it('returns the value multiplied by the factor (both with and without an injection)', () => {
     vi.stubGlobal('window', { devicePixelRatio: 2 });
     const injected = createPixelRatioSource(3.125);
-    expect(injected.setRenderScale(0.5)).toBe(true);
+    expect(injected.setScaleFactor(0.5)).toBe(true);
     expect(injected.resolve()).toBe(3.125 * 0.5);
 
     const fromWindow = createPixelRatioSource();
-    fromWindow.setRenderScale(0.25);
+    fromWindow.setScaleFactor(0.25);
     expect(fromWindow.resolve()).toBe(0.5);
   });
 
@@ -119,26 +119,26 @@ describe('createPixelRatioSource', () => {
 
   it('returns true only when the factor changed', () => {
     const source = createPixelRatioSource(2);
-    expect(source.setRenderScale(0.5)).toBe(true);
-    expect(source.setRenderScale(0.5)).toBe(false);
-    expect(source.setRenderScale(1)).toBe(true);
+    expect(source.setScaleFactor(0.5)).toBe(true);
+    expect(source.setScaleFactor(0.5)).toBe(false);
+    expect(source.setScaleFactor(1)).toBe(true);
   });
 
   it('ignores a factor at most 0 or not a number', () => {
     const source = createPixelRatioSource(2);
-    source.setRenderScale(0.5);
-    expect(source.setRenderScale(0)).toBe(false);
-    expect(source.setRenderScale(-1)).toBe(false);
-    expect(source.setRenderScale(Number.NaN)).toBe(false);
-    expect(source.setRenderScale(Number.POSITIVE_INFINITY)).toBe(false);
-    expect(source.getRenderScale()).toBe(0.5);
+    source.setScaleFactor(0.5);
+    expect(source.setScaleFactor(0)).toBe(false);
+    expect(source.setScaleFactor(-1)).toBe(false);
+    expect(source.setScaleFactor(Number.NaN)).toBe(false);
+    expect(source.setScaleFactor(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(source.getScaleFactor()).toBe(0.5);
   });
 
   it('a provider can be resolved as the injected value as is', () => {
     vi.stubGlobal('window', { devicePixelRatio: 2 });
     const source = createPixelRatioSource(3.125);
     expect(resolvePixelRatio(source)).toBe(3.125);
-    source.setRenderScale(0.5);
+    source.setScaleFactor(0.5);
     expect(resolvePixelRatio(source)).toBe(3.125 * 0.5);
   });
 });
@@ -149,7 +149,7 @@ describe('resolveContentPixelRatio (for dimensions that scale with the zoom)', (
     const source = createPixelRatioSource(3.125);
     expect(resolveContentPixelRatio(source)).toBe(3.125);
 
-    source.setRenderScale(0.2);
+    source.setScaleFactor(0.2);
     // Dimensions fixed in screen pixels shrink
     expect(resolvePixelRatio(source)).toBeCloseTo(0.625, 10);
     // Dimensions that scale with the zoom do not shrink (they have already shrunk through
@@ -165,7 +165,7 @@ describe('resolveContentPixelRatio (for dimensions that scale with the zoom)', (
 
   it('the factor is not applied on the enlarging side either', () => {
     const source = createPixelRatioSource(2);
-    source.setRenderScale(1.27);
+    source.setScaleFactor(1.27);
     expect(resolvePixelRatio(source)).toBeCloseTo(2.54, 10);
     expect(resolveContentPixelRatio(source)).toBeCloseTo(2, 10);
   });

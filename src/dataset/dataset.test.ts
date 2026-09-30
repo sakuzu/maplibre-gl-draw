@@ -13,7 +13,9 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Feature, StyleRule } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import { createBatchManager } from '../view/renderers/batch-manager.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
@@ -27,7 +29,7 @@ import type {
 } from '../view/renderers/polygon/sdf-polygon.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
-import type { DatasetBaseStyle, DatasetFeatureInput, DatasetOptions } from './types.js';
+import type { DatasetBaseStyle, DatasetOptions, DatasetRow } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
 /**
@@ -133,12 +135,12 @@ function createRealBatch(): {
   return { batch, polygons };
 }
 
-function point(id: string, coord: [number, number], extra?: Partial<Feature>): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: coord, ...extra };
+function point(id: string, coord: [number, number], extra?: Partial<Feature>): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: coord, ...extra });
 }
 
-function polygon(id: string, offset: number, extra?: Partial<Feature>): DatasetFeatureInput {
-  return {
+function polygon(id: string, offset: number, extra?: Partial<Feature>): DatasetRow {
+  return toRow({
     id,
     type: 'Polygon',
     coordinates: [
@@ -150,7 +152,7 @@ function polygon(id: string, offset: number, extra?: Partial<Feature>): DatasetF
       ],
     ],
     ...extra,
-  };
+  });
 }
 
 /** Draws and returns the features pushed in the first frame */
@@ -168,7 +170,7 @@ function add(manager: DatasetManager, options: DatasetOptions): ReturnType<Datas
 describe('adding, removing and replacing a Dataset', () => {
   it('the features of an added dataset go onto the batch', () => {
     const { manager } = createManager();
-    add(manager, { id: 'c1', features: [point('a', [0, 0]), point('b', [1, 1])] });
+    add(manager, { id: 'c1', rows: [point('a', [0, 0]), point('b', [1, 1])] });
 
     const frames = drawOnce(manager);
 
@@ -178,7 +180,7 @@ describe('adding, removing and replacing a Dataset', () => {
 
   it('a removed dataset is not drawn', () => {
     const { manager } = createManager();
-    add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     expect(manager.remove('c1')).toBe(true);
     expect(manager.get('c1')).toBeUndefined();
@@ -187,7 +189,7 @@ describe('adding, removing and replacing a Dataset', () => {
 
   it('dataset.remove() takes it off the manager too', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     dataset.remove();
 
@@ -202,23 +204,23 @@ describe('adding, removing and replacing a Dataset', () => {
 
   it('adding the same id throws', () => {
     const { manager } = createManager();
-    add(manager, { id: 'c1', features: [] });
+    add(manager, { id: 'c1', rows: [] });
 
-    expect(() => add(manager, { id: 'c1', features: [] })).toThrow();
+    expect(() => add(manager, { id: 'c1', rows: [] })).toThrow();
   });
 
   it('giving features and provider together throws', () => {
     const { manager } = createManager();
 
-    expect(() => add(manager, { id: 'c1', features: [], provider: async () => [] })).toThrow();
+    expect(() => add(manager, { id: 'c1', rows: [], provider: async () => [] })).toThrow();
   });
 
-  it('setFeatures replaces the contents and a repaint is requested', () => {
+  it('setRows replaces the contents and a repaint is requested', () => {
     const { manager, repaints } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     const before = repaints();
-    dataset.setFeatures([point('b', [1, 1]), point('c', [2, 2])]);
+    dataset.setRows([point('b', [1, 1]), point('c', [2, 2])]);
 
     expect(repaints()).toBeGreaterThan(before);
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['b', 'c']);
@@ -226,7 +228,7 @@ describe('adding, removing and replacing a Dataset', () => {
 
   it('getFeatures returns them with the optional fields filled in', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     const [feature] = dataset.getFeatures();
     expect(feature.visible).toBe(true);
@@ -239,7 +241,7 @@ describe('adding, removing and replacing a Dataset', () => {
     const { manager } = createManager();
     add(manager, {
       id: 'c1',
-      features: [polygon('hidden', 0, { visible: false }), polygon('shown', 1)],
+      rows: [polygon('hidden', 0, { visible: false }), polygon('shown', 1)],
     });
 
     const { batch, polygons } = createRealBatch();
@@ -254,7 +256,7 @@ describe('the viewport culling of a Dataset', () => {
     const { manager } = createManager({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
     add(manager, {
       id: 'c1',
-      features: [point('in', [0, 0]), point('out', [50, 50]), point('edge', [1, 1])],
+      rows: [point('in', [0, 0]), point('out', [50, 50]), point('edge', [1, 1])],
     });
 
     const drawn = drawOnce(manager)[0];
@@ -264,7 +266,7 @@ describe('the viewport culling of a Dataset', () => {
 
   it('moving the viewport changes what goes on', () => {
     const { manager, setBounds } = createManager({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
-    add(manager, { id: 'c1', features: [point('a', [0, 0]), point('b', [50, 50])] });
+    add(manager, { id: 'c1', rows: [point('a', [0, 0]), point('b', [50, 50])] });
 
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['a']);
 
@@ -274,14 +276,14 @@ describe('the viewport culling of a Dataset', () => {
 
   it('no frame is opened when nothing is visible', () => {
     const { manager } = createManager({ minX: 100, minY: 10, maxX: 101, maxY: 11 });
-    add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     expect(drawOnce(manager)).toEqual([]);
   });
 
   it('a polygon is judged by the intersection of the bboxes', () => {
     const { manager } = createManager({ minX: 0.5, minY: 0.1, maxX: 0.6, maxY: 0.2 });
-    add(manager, { id: 'c1', features: [polygon('p0', 0), polygon('p9', 9)] });
+    add(manager, { id: 'c1', rows: [polygon('p0', 0), polygon('p9', 9)] });
 
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['p0']);
   });
@@ -291,7 +293,7 @@ describe('the viewport culling of a Dataset', () => {
     const { manager } = createManager({ minX: 100, minY: 100, maxX: 101, maxY: 101 });
     const dataset = add(manager, {
       id: 'c1',
-      features: [point('c', [2, 2]), point('a', [0, 0]), point('far', [50, 50])],
+      rows: [point('c', [2, 2]), point('a', [0, 0]), point('far', [50, 50])],
     });
 
     const visible = dataset.collectVisible({ minX: -1, minY: -1, maxX: 3, maxY: 3 });
@@ -309,7 +311,7 @@ describe('the viewport culling of a Dataset', () => {
         map: { a: '#ff0000' },
         other: '#0000ff',
       },
-      features: [polygon('pa', 0, { properties: { kind: 'a' } })],
+      rows: [polygon('pa', 0, { properties: { kind: 'a' } })],
     });
 
     const visible = dataset.collectVisible(WORLD);
@@ -322,7 +324,7 @@ describe('the viewport culling of a Dataset', () => {
     const ids = ['e', 'd', 'c', 'b', 'a'];
     add(manager, {
       id: 'c1',
-      features: ids.map((id, i) => point(id, [i, i])),
+      rows: ids.map((id, i) => point(id, [i, i])),
     });
 
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(ids);
@@ -342,7 +344,7 @@ describe('the style rules of a Dataset', () => {
     add(manager, {
       id: 'c1',
       styleRule: rule,
-      features: [
+      rows: [
         polygon('pa', 0, { properties: { kind: 'a' } }),
         polygon('pb', 1, { properties: { kind: 'b' } }),
         polygon('pn', 2, { properties: {} }),
@@ -358,7 +360,7 @@ describe('the style rules of a Dataset', () => {
     add(manager, {
       id: 'c1',
       styleRule: rule,
-      features: [
+      rows: [
         polygon('own', 0, { properties: { kind: 'a' }, style: { fillColor: '#123456' } }),
         polygon('ruled', 1, { properties: { kind: 'a' } }),
       ],
@@ -374,7 +376,7 @@ describe('the style rules of a Dataset', () => {
     add(manager, {
       id: 'c1',
       styleRule: rule,
-      features: [polygon('p', 0, { properties: { kind: 'a' }, style: { strokeWidth: 5 } })],
+      rows: [polygon('p', 0, { properties: { kind: 'a' }, style: { strokeWidth: 5 } })],
     });
 
     const [feature] = drawOnce(manager)[0];
@@ -388,16 +390,16 @@ describe('the style rules of a Dataset', () => {
     add(manager, {
       id: 'c1',
       styleRule: single,
-      features: [
+      rows: [
         point('pt', [0, 0]),
-        {
+        toRow({
           id: 'ln',
           type: 'LineString',
           coordinates: [
             [0, 0],
             [1, 1],
           ],
-        },
+        }),
         polygon('pg', 0),
       ],
     });
@@ -413,7 +415,7 @@ describe('the style rules of a Dataset', () => {
     const dataset = add(manager, {
       id: 'c1',
       styleRule: rule,
-      features: [polygon('p', 0, { properties: { kind: 'a' } })],
+      rows: [polygon('p', 0, { properties: { kind: 'a' } })],
     });
 
     expect(drawOnce(manager)[0][0].style?.fillColor).toBe('#ff0000');
@@ -427,7 +429,7 @@ describe('the style rules of a Dataset', () => {
     expect(drawOnce(manager)[0][0].style?.fillColor).toBe('#111111');
 
     dataset.setStyleRule(undefined);
-    expect(drawOnce(manager)[0][0].style).toBeUndefined();
+    expect(drawOnce(manager)[0][0].style).toEqual({});
   });
 
   it('graduated and continuous are evaluated too', () => {
@@ -441,7 +443,7 @@ describe('the style rules of a Dataset', () => {
         colors: ['#000000', '#111111', '#222222'],
         other: '#999999',
       },
-      features: [
+      rows: [
         polygon('low', 0, { properties: { pop: 5 } }),
         polygon('mid', 1, { properties: { pop: 15 } }),
         polygon('high', 2, { properties: { pop: 25 } }),
@@ -462,12 +464,12 @@ describe('the style rules of a Dataset', () => {
     add(manager, {
       id: 'c1',
       styleRule: { kind: 'single', color: '#ff0000' },
-      features: [polygon('same-id', 0)],
+      rows: [polygon('same-id', 0)],
     });
     add(manager, {
       id: 'c2',
       styleRule: { kind: 'single', color: '#00ff00' },
-      features: [polygon('same-id', 1)],
+      rows: [polygon('same-id', 1)],
     });
 
     const frames = drawOnce(manager);
@@ -495,16 +497,16 @@ describe('the base style of a Dataset', () => {
     add(manager, {
       id: 'c1',
       baseStyle: base,
-      features: [
+      rows: [
         point('pt', [0, 0]),
-        {
+        toRow({
           id: 'ln',
           type: 'LineString',
           coordinates: [
             [0, 0],
             [1, 1],
           ],
-        },
+        }),
         polygon('pg', 0),
       ],
     });
@@ -521,7 +523,7 @@ describe('the base style of a Dataset', () => {
       id: 'c1',
       baseStyle: base,
       styleRule: rule,
-      features: [polygon('p', 0, { properties: { kind: 'a' } })],
+      rows: [polygon('p', 0, { properties: { kind: 'a' } })],
     });
 
     const [feature] = drawOnce(manager)[0];
@@ -536,7 +538,7 @@ describe('the base style of a Dataset', () => {
       id: 'c1',
       baseStyle: base,
       styleRule: rule,
-      features: [polygon('own', 0, { properties: { kind: 'a' }, style: { fillColor: '#123456' } })],
+      rows: [polygon('own', 0, { properties: { kind: 'a' }, style: { fillColor: '#123456' } })],
     });
 
     const [feature] = drawOnce(manager)[0];
@@ -547,7 +549,7 @@ describe('the base style of a Dataset', () => {
 
   it('setBaseStyle swaps the appearance (the cache is invalidated)', () => {
     const { manager, repaints } = createManager();
-    const dataset = add(manager, { id: 'c1', baseStyle: base, features: [polygon('p', 0)] });
+    const dataset = add(manager, { id: 'c1', baseStyle: base, rows: [polygon('p', 0)] });
 
     expect(drawOnce(manager)[0][0].style?.fillOpacity).toBe(0.25);
 
@@ -558,7 +560,7 @@ describe('the base style of a Dataset', () => {
     expect(drawOnce(manager)[0][0].style).toEqual({ fillColor: '#00ff00', fillOpacity: 1 });
 
     dataset.setBaseStyle(undefined);
-    expect(drawOnce(manager)[0][0].style).toBeUndefined();
+    expect(drawOnce(manager)[0][0].style).toEqual({});
   });
 
   it('hitTest returns the effective style even with only a base style', () => {
@@ -567,7 +569,7 @@ describe('the base style of a Dataset', () => {
       id: 'c1',
       interactive: true,
       baseStyle: base,
-      features: [point('a', [0, 0])],
+      rows: [point('a', [0, 0])],
     });
 
     const hit = manager.hitTestSide('below-store', [0, 0], 0.1, () => true);
@@ -589,7 +591,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
    * rounded here.
    */
   function pointTest(feature: Feature, coordinate: [number, number], tolerance: number): boolean {
-    const [x, y] = feature.coordinates as [number, number];
+    const [x, y] = coordinatesOf(feature) as [number, number];
     return Math.hypot(x - coordinate[0], y - coordinate[1]) <= tolerance;
   }
 
@@ -605,7 +607,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
 
   it('anywhere inside the drawn marker is grabbable, even beyond the click tolerance', () => {
     const { manager } = createManager();
-    add(manager, { id: 'c1', interactive: true, features: [point('a', [0, 0])] });
+    add(manager, { id: 'c1', interactive: true, rows: [point('a', [0, 0])] });
 
     // The default marker is radius 6 + outline 2 = 8px. The click tolerance is about 2px
     const at = (px: number): string | null =>
@@ -623,7 +625,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
       id: 'c1',
       interactive: true,
       baseStyle: { point: { pointRadius: 8 } },
-      features: [point('a', [0, 0])],
+      rows: [point('a', [0, 0])],
     });
 
     const at = (px: number): string | null =>
@@ -644,7 +646,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
     add(manager, {
       id: 'c1',
       interactive: true,
-      features: [point('big', [0, 0], { style: { pointRadius: 20 } })],
+      rows: [point('big', [0, 0], { style: { pointRadius: 20 } })],
     });
 
     const hit = manager.hitTestSide('below-store', [18 * PX, 0], 2 * PX, pointTest);
@@ -657,7 +659,7 @@ describe('the hit radius of the hit testing of a Dataset', () => {
     add(manager, {
       id: 'c1',
       interactive: true,
-      features: [polygon('p', 0), point('a', [0, 0])],
+      rows: [polygon('p', 0), point('a', [0, 0])],
     });
 
     const tolerances: number[] = [];
@@ -672,12 +674,12 @@ describe('the hit radius of the hit testing of a Dataset', () => {
 describe('the change event of a Dataset', () => {
   it('it fires with a reason on a change of the contents and of the style', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     const reasons: string[] = [];
     dataset.on('change', (payload) => reasons.push(payload.reason));
 
-    dataset.setFeatures([point('b', [1, 1])]);
+    dataset.setRows([point('b', [1, 1])]);
     dataset.setStyleRule({ kind: 'single', color: '#ff0000' });
     dataset.setBaseStyle({ point: { pointRadius: 4 } });
 
@@ -686,7 +688,7 @@ describe('the change event of a Dataset', () => {
 
   it('setVisible fires only when the value actually changed', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     const reasons: string[] = [];
     dataset.on('change', (payload) => reasons.push(payload.reason));
@@ -700,7 +702,7 @@ describe('the change event of a Dataset', () => {
 
   it('nothing fires once the subscription is cancelled', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     const handler = vi.fn();
     const unsubscribe = dataset.on('change', handler);
@@ -731,9 +733,9 @@ describe('a Dataset and the real batches (Multi and holes)', () => {
 
     add(manager, {
       id: 'c1',
-      features: [
-        { id: 'donut', type: 'Polygon', coordinates: [outer, hole] },
-        {
+      rows: [
+        toRow({ id: 'donut', type: 'Polygon', coordinates: [outer, hole] }),
+        toRow({
           id: 'multi',
           type: 'MultiPolygon',
           coordinates: [
@@ -747,7 +749,7 @@ describe('a Dataset and the real batches (Multi and holes)', () => {
               ],
             ],
           ],
-        },
+        }),
       ],
     });
 
@@ -768,7 +770,7 @@ describe('a Dataset and the real batches (Multi and holes)', () => {
     add(manager, {
       id: 'c1',
       styleRule: { kind: 'single', color: '#ff0000' },
-      features: [polygon('p', 0)],
+      rows: [polygon('p', 0)],
     });
 
     const { batch, polygons } = createRealBatch();
@@ -783,14 +785,14 @@ describe('a Dataset and the real batches (Multi and holes)', () => {
 describe('the visibility control of a Dataset', () => {
   it('it is shown by default', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     expect(dataset.visible).toBe(true);
   });
 
   it('setVisible(false) drops it from what is drawn and true brings it back', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['a']);
 
@@ -807,8 +809,8 @@ describe('the visibility control of a Dataset', () => {
 
   it('only the hidden dataset drops out and the others are drawn', () => {
     const { manager } = createManager();
-    const hidden = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
-    add(manager, { id: 'c2', features: [point('b', [1, 1])] });
+    const hidden = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
+    add(manager, { id: 'c2', rows: [point('b', [1, 1])] });
 
     hidden.setVisible(false);
     const frames = drawOnce(manager);
@@ -819,7 +821,7 @@ describe('the visibility control of a Dataset', () => {
 
   it('setVisible requests a repaint (no request for the same value)', () => {
     const { manager, repaints } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     const before = repaints();
     dataset.setVisible(false);
@@ -829,12 +831,12 @@ describe('the visibility control of a Dataset', () => {
     expect(repaints()).toBe(before + 1);
   });
 
-  it('setFeatures works while it is hidden and the new contents appear when shown', () => {
+  it('setRows works while it is hidden and the new contents appear when shown', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     dataset.setVisible(false);
-    dataset.setFeatures([point('b', [1, 1])]);
+    dataset.setRows([point('b', [1, 1])]);
 
     expect(drawOnce(manager)).toEqual([]);
 
@@ -846,8 +848,8 @@ describe('the visibility control of a Dataset', () => {
 
 describe('the selection highlight of a Dataset', () => {
   /** A line feature */
-  function line(id: string, offset: number, extra?: Partial<Feature>): DatasetFeatureInput {
-    return {
+  function line(id: string, offset: number, extra?: Partial<Feature>): DatasetRow {
+    return toRow({
       id,
       type: 'LineString',
       coordinates: [
@@ -855,12 +857,12 @@ describe('the selection highlight of a Dataset', () => {
         [offset + 1, 1],
       ],
       ...extra,
-    };
+    });
   }
 
   it('nothing is selected by default', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     expect(dataset.getSelectedIds()).toEqual([]);
     // No frame of the overpaint is opened
@@ -871,7 +873,7 @@ describe('the selection highlight of a Dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [polygon('a', 0), polygon('b', 1), polygon('c', 2)],
+      rows: [polygon('a', 0), polygon('b', 1), polygon('c', 2)],
     });
 
     dataset.setSelectedIds(['c', 'a']);
@@ -888,7 +890,7 @@ describe('the selection highlight of a Dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [polygon('a', 0, { style: { fillColor: '#123456' } })],
+      rows: [polygon('a', 0, { style: { fillColor: '#123456' } })],
     });
 
     dataset.setSelectedIds(['a']);
@@ -902,7 +904,7 @@ describe('the selection highlight of a Dataset', () => {
 
   it('a polygon gets a translucent fill and a frame in the key color', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     dataset.setSelectedIds(['a']);
     const [highlighted] = drawOnce(manager)[1];
@@ -917,7 +919,7 @@ describe('the selection highlight of a Dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [line('a', 0), line('b', 1, { style: { strokeWidth: 6 } })],
+      rows: [line('a', 0), line('b', 1, { style: { strokeWidth: 6 } })],
     });
 
     dataset.setSelectedIds(['a', 'b']);
@@ -933,7 +935,7 @@ describe('the selection highlight of a Dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [point('a', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
+      rows: [point('a', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
     });
 
     dataset.setSelectedIds(['a']);
@@ -951,7 +953,7 @@ describe('the selection highlight of a Dataset', () => {
     const dataset = add(manager, {
       id: 'c1',
       baseStyle: { fill: { fillColor: '#00ff00', lineStyle: 'dashed' } },
-      features: [polygon('a', 0)],
+      rows: [polygon('a', 0)],
     });
 
     dataset.setSelectedIds(['a']);
@@ -963,22 +965,22 @@ describe('the selection highlight of a Dataset', () => {
 
   it('an id that is not held is ignored', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('a', [0, 0])] });
+    const dataset = add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     dataset.setSelectedIds(['a', 'missing']);
 
     expect(dataset.getSelectedIds()).toEqual(['a']);
   });
 
-  it('an id that disappeared through setFeatures drops out of the selection', () => {
+  it('an id that disappeared through setRows drops out of the selection', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [point('a', [0, 0]), point('b', [1, 1])],
+      rows: [point('a', [0, 0]), point('b', [1, 1])],
     });
 
     dataset.setSelectedIds(['a', 'b']);
-    dataset.setFeatures([point('b', [1, 1]), point('c', [2, 2])]);
+    dataset.setRows([point('b', [1, 1]), point('c', [2, 2])]);
 
     expect(dataset.getSelectedIds()).toEqual(['b']);
     expect(drawOnce(manager)[1].map((f) => f.id)).toEqual(['b', 'b']);
@@ -986,7 +988,7 @@ describe('the selection highlight of a Dataset', () => {
 
   it('emptying the selection removes the overpaint', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     dataset.setSelectedIds(['a']);
     expect(drawOnce(manager)).toHaveLength(2);
@@ -1000,7 +1002,7 @@ describe('the selection highlight of a Dataset', () => {
     const { manager, setBounds } = createManager({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
     const dataset = add(manager, {
       id: 'c1',
-      features: [point('near', [0, 0]), point('far', [50, 50])],
+      rows: [point('near', [0, 0]), point('far', [50, 50])],
     });
 
     dataset.setSelectedIds(['far']);
@@ -1012,7 +1014,7 @@ describe('the selection highlight of a Dataset', () => {
 
   it('there is no overpaint while it is hidden', () => {
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
     dataset.setSelectedIds(['a']);
 
     dataset.setVisible(false);
@@ -1024,7 +1026,7 @@ describe('the selection highlight of a Dataset', () => {
     const { manager, repaints } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [point('a', [0, 0]), point('b', [1, 1])],
+      rows: [point('a', [0, 0]), point('b', [1, 1])],
     });
 
     const reasons: string[] = [];
@@ -1046,19 +1048,26 @@ describe('the selection highlight of a Dataset', () => {
   });
 });
 
-describe('the coordinate normalization of normalizeDisplayFeature', () => {
+describe('the normalization of a row (normalizeDisplayFeature)', () => {
   it('a 3-element position is truncated to 2 elements', () => {
-    const f = normalizeDisplayFeature({
-      id: 'p1',
-      type: 'MultiLineString',
-      coordinates: [
-        [
-          [139.7, 35.6, 9.41],
-          [139.8, 35.7, 10.2],
-        ],
-      ] as unknown as Feature['coordinates'],
-    });
-    expect(f.coordinates).toEqual([
+    const f = normalizeDisplayFeature(
+      {
+        type: 'Feature',
+        id: 'p1',
+        geometry: {
+          type: 'MultiLineString',
+          coordinates: [
+            [
+              [139.7, 35.6, 9.41],
+              [139.8, 35.7, 10.2],
+            ],
+          ],
+        },
+        properties: null,
+      },
+      0,
+    );
+    expect(coordinatesOf(f)).toEqual([
       [
         [139.7, 35.6],
         [139.8, 35.7],
@@ -1071,7 +1080,51 @@ describe('the coordinate normalization of normalizeDisplayFeature', () => {
       [0, 0],
       [1, 1],
     ] as [number, number][];
-    const f = normalizeDisplayFeature({ id: 'p2', type: 'LineString', coordinates: coords });
-    expect(f.coordinates).toBe(coords);
+    const f = normalizeDisplayFeature(
+      {
+        type: 'Feature',
+        id: 'p2',
+        geometry: { type: 'LineString', coordinates: coords },
+        properties: {},
+      },
+      0,
+    );
+    expect(coordinatesOf(f)).toBe(coords);
+  });
+
+  it('the id is a string, and the row number when the row has none', () => {
+    const geometry = { type: 'Point' as const, coordinates: [1, 2] };
+    expect(
+      normalizeDisplayFeature({ type: 'Feature', id: 7, geometry, properties: {} }, 0).id,
+    ).toBe('7');
+    expect(normalizeDisplayFeature({ type: 'Feature', geometry, properties: {} }, 3).id).toBe('3');
+  });
+
+  it('a row without a geometry is a hidden point with NaN coordinates', () => {
+    const empty = normalizeDisplayFeature({ type: 'Feature', geometry: null, properties: null }, 0);
+    expect(empty).toMatchObject({ type: 'Point', visible: false, properties: {} });
+    expect(coordinatesOf(empty)).toEqual([Number.NaN, Number.NaN]);
+    const collection = normalizeDisplayFeature(
+      {
+        type: 'Feature',
+        geometry: { type: 'GeometryCollection', geometries: [] },
+        properties: {},
+      },
+      0,
+    );
+    expect(collection.visible).toBe(false);
+  });
+
+  it('a row keeps its individual style', () => {
+    const f = normalizeDisplayFeature(
+      {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [0, 0] },
+        properties: {},
+        style: { pointColor: '#ff0000' },
+      },
+      0,
+    );
+    expect(f.style).toEqual({ pointColor: '#ff0000' });
   });
 });

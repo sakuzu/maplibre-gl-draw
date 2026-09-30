@@ -137,6 +137,11 @@ export interface InputNormalizer {
   on(handler: (event: NormalizedEvent) => void): void;
   /** Unregisters an event handler */
   off(handler: (event: NormalizedEvent) => void): void;
+  /**
+   * Changes how far the mouse moves before a press becomes a drag, in pixels (a finger and a
+   * pen keep their larger thresholds); it applies from the next press
+   */
+  setDragThreshold(px: number): void;
 }
 
 /**
@@ -194,7 +199,7 @@ export function createInputNormalizer(
   const canvas = map.getCanvas();
   const listeners = new Set<(event: NormalizedEvent) => void>();
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const profiles = createProfiles(opts);
+  let profiles = createProfiles(opts);
 
   // State management
   let press: Press | null = null;
@@ -733,5 +738,10 @@ export function createInputNormalizer(
     listeners.delete(handler);
   }
 
-  return { attach, detach, on, off };
+  const setDragThreshold = (px: number): void => {
+    opts.dragThreshold = px;
+    profiles = createProfiles(opts);
+  };
+
+  return { attach, detach, on, off, setDragThreshold };
 }

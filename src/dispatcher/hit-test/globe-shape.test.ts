@@ -12,21 +12,25 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { mercatorLerp } from '../../shared/math/globe-subdivision.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import { createGlobeShapeResolver, globeHitTestGrid, shapeOnGlobe } from './globe-shape.js';
 import { HitTestServiceImpl } from './service.js';
 
-function feature(type: string, coordinates: Feature['coordinates']): Feature {
+function feature(type: string, coordinates: FeatureCoordinates): Feature {
   return {
     id: type,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -47,7 +51,7 @@ describe('shapeOnGlobe', () => {
   it('cuts lines, rings and the parts of the Multi types', () => {
     const grid = 1 / 512;
     const line = shapeOnGlobe(feature('LineString', SLANTED), grid);
-    expect((line.coordinates as Coordinate[]).length).toBeGreaterThan(100);
+    expect((coordinatesOf(line) as Coordinate[]).length).toBeGreaterThan(100);
 
     const ring: Coordinate[] = [
       [-40, 20],
@@ -57,13 +61,15 @@ describe('shapeOnGlobe', () => {
       [-40, 20],
     ];
     const polygon = shapeOnGlobe(feature('Polygon', [ring]), grid);
-    expect((polygon.coordinates as Coordinate[][])[0].length).toBeGreaterThan(100);
+    expect((coordinatesOf(polygon) as Coordinate[][])[0].length).toBeGreaterThan(100);
 
     const multi = shapeOnGlobe(feature('MultiPolygon', [[ring], [ring]]), grid);
-    for (const part of multi.coordinates as Coordinate[][][]) {
+    for (const part of coordinatesOf(multi) as Coordinate[][][]) {
       expect(part[0].length).toBeGreaterThan(100);
     }
-    expect(shapeOnGlobe(feature('Freehand', SLANTED), grid).coordinates).toEqual(line.coordinates);
+    expect(coordinatesOf(shapeOnGlobe(feature('Freehand', SLANTED), grid))).toEqual(
+      coordinatesOf(line),
+    );
   });
 
   it('keeps the other types and a flat map as they are', () => {

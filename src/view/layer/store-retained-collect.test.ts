@@ -6,7 +6,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { INTERNAL_PROPERTIES } from '../../shared/config/constants.js';
+import { drawPropertyKey } from '../../shared/properties.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Feature } from '../../store/types.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import { collectLineItems, collectPoints, collectPolygons } from './store-retained-collect.js';
@@ -14,17 +16,18 @@ import { collectLineItems, collectPoints, collectPolygons } from './store-retain
 function makeFeature(
   id: string,
   type: Feature['type'],
-  coordinates: unknown,
+  coordinates: FeatureCoordinates,
   properties: Record<string, unknown> = {},
 ): Feature {
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
     properties,
     locked: false,
     visible: true,
+    style: {},
   } as Feature;
 }
 
@@ -45,7 +48,7 @@ function makeStyles(fillAlpha = 0.5, strokeOpacity = 1): RetainedStyleResolver {
   } as unknown as RetainedStyleResolver;
 }
 
-const ZOOMED = { [INTERNAL_PROPERTIES.CREATED_ZOOM]: 12 };
+const ZOOMED = { [drawPropertyKey('createdZoom')]: 12 };
 
 describe('collectLineItems', () => {
   it('marks a feature without createdZoom as fixed width with a negative width', () => {
@@ -123,7 +126,7 @@ describe('collectPolygons', () => {
     const polygons = collectPolygons(
       [
         makeFeature('m', 'MultiPolygon', [[ring], [ring]]),
-        makeFeature('c', 'Circle', [0, 0], { radiusMeters: 1000 }),
+        makeFeature('c', 'Circle', [0, 0], { 'maplibre-gl-draw:radiusMeters': 1000 }),
         makeFeature('z', 'Circle', [0, 0]),
       ],
       makeStyles(),

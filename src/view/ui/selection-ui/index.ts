@@ -19,6 +19,7 @@ export type { SelectionExtensionRegistry } from './extension-registry.js';
 export {
   createSelectionExtensionRegistry,
   DEFAULT_POINT_FRAME_SIZE,
+  resolvePointFrameCornersWith,
   resolvePointFrameExtentWith,
 } from './extension-registry.js';
 export { SelectionUIRenderer } from './renderer.js';
@@ -27,8 +28,10 @@ export type {
   AdditionalResizeHandlesCalculator,
   BoundingBoxCoords,
   CustomBoundingBoxCalculator,
-  CustomResizeCalculator,
+  FramePoint,
   PointFrameExtent,
   PointFrameExtentProvider,
+  PointFrameOutlineProvider,
   ResizeStrategy,
+  TypeResizeCalculator,
 } from './types.js';

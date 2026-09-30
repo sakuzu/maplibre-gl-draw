@@ -22,7 +22,15 @@ import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
-import { click, type E2EWindow, launchBrowser, type PagePoint, pageOf, settle } from './harness.js';
+import {
+  click,
+  drag,
+  type E2EWindow,
+  launchBrowser,
+  type PagePoint,
+  pageOf,
+  settle,
+} from './harness.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES = join(here, '../../examples');
@@ -189,11 +197,48 @@ async function openExample(name: string): Promise<{ page: Page; close: () => Pro
 }
 
 function featureCount(page: Page): Promise<number> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.getAllFeatures().length);
+  return page.evaluate(() => (window as unknown as E2EWindow).draw.features.count());
 }
 
 function output(page: Page): Promise<string> {
   return page.evaluate(() => document.getElementById('output')?.textContent ?? '');
+}
+
+/**
+ * The colors of the canvas within 2 CSS px of where a coordinate is drawn, read in the render
+ * event of the next frame (the drawing buffer is cleared after it is shown)
+ */
+function colorsAround(page: Page, lngLat: number[]): Promise<Array<[number, number, number]>> {
+  return page.evaluate(
+    (coord) =>
+      new Promise<Array<[number, number, number]>>((resolve) => {
+        const { map } = window as unknown as E2EWindow;
+        map.once('render', () => {
+          const canvas = map.getCanvas();
+          const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
+          const ratio = gl.drawingBufferWidth / canvas.clientWidth;
+          const p = map.project(coord as [number, number]);
+          const r = Math.round(2 * ratio);
+          const x = Math.round(p.x * ratio) - r;
+          const y = gl.drawingBufferHeight - 1 - Math.round(p.y * ratio) - r;
+          const size = 2 * r + 1;
+          const pixels = new Uint8Array(size * size * 4);
+          gl.readPixels(x, y, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          const colors: Array<[number, number, number]> = [];
+          for (let i = 0; i < pixels.length; i += 4) {
+            colors.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+          }
+          resolve(colors);
+        });
+        map.triggerRepaint();
+      }),
+    lngLat,
+  );
+}
+
+/** Whether a color is the white of the fill of a handle */
+function isWhite([r, g, b]: [number, number, number]): boolean {
+  return r >= 250 && g >= 250 && b >= 250;
 }
 
 /** Clicks the vertices of a closed ring, the last click on the first vertex */
@@ -214,7 +259,7 @@ describe('the examples', () => {
       'plugin',
       'custom-feature-type',
       'large-data',
-      'columnar-worker',
+      'table-worker',
     ]) {
       expect(index).toContain(`./${name}/`);
       expect(site.has(`${name}/index.html`)).toBe(true);
@@ -265,7 +310,7 @@ describe('the examples', () => {
     const ruleKind = () =>
       page.evaluate(() => {
         const { draw } = window as unknown as E2EWindow;
-        return draw.getAllLayers().find((layer) => layer.name === 'Blocks')?.styleRule?.kind;
+        return draw.layers.list().find((layer) => layer.name === 'Blocks')?.styleRule?.kind;
       });
     expect(await ruleKind()).toBe('categorical');
     expect(await output(page)).toContain('commercial');
@@ -286,7 +331,7 @@ describe('the examples', () => {
     await click(page, await pageOf(page, [139.764, 35.681]));
     await page.keyboard.up('Shift');
     expect(
-      await page.evaluate(() => (window as unknown as E2EWindow).draw.getSelectedIds().length),
+      await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.get().ids.length),
     ).toBe(2);
 
     await page.click('[data-op="union"]');
@@ -325,13 +370,13 @@ describe('the examples', () => {
     await page.click('#lock-layer');
     const locked = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
-      return draw.getAllLayers().find((layer) => layer.name === 'Parcels')?.locked;
+      return draw.layers.list().find((layer) => layer.name === 'Parcels')?.locked;
     });
     expect(locked).toBe(false);
     await close();
   });
 
-  it('plugin stamps a point in the mode of the plugin, and uninstalling removes the mode', {
+  it('plugin stamps a point in the mode of the plugin, and removing it removes the mode', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('plugin');
@@ -341,10 +386,10 @@ describe('the examples', () => {
     expect(await output(page)).toContain('seen 1');
 
     await page.click('#install');
-    const entered = await page.evaluate(() =>
-      (window as unknown as E2EWindow).draw.setMode('stamp'),
+    const registered = await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.extensions.modes.has('stamp'),
     );
-    expect(entered).toBe(false);
+    expect(registered).toBe(false);
     await close();
   });
 
@@ -355,17 +400,54 @@ describe('the examples', () => {
     await page.click('#add-route');
     const route = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
-      draw.deselect();
-      const all = draw.getAllFeatures();
+      draw.selection.clear();
+      const all = draw.features.list();
       return all[all.length - 1];
     });
     expect(route.type).toBe('Route');
-    const [a, b] = route.coordinates as number[][];
+    const [a, b] = (route.geometry as GeoJSON.LineString).coordinates;
     const pt = await pageOf(page, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
     await click(page, pt);
     expect(
-      await page.evaluate(() => (window as unknown as E2EWindow).draw.getSelectedIds()),
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
     ).toEqual([route.id]);
+    await close();
+  });
+
+  it('custom-feature-type shows the handles of its definition and drags one', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-type');
+    await page.click('#add-route');
+    const route = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      const all = draw.features.list();
+      return all[all.length - 1];
+    });
+    const [first] = (route.geometry as GeoJSON.LineString).coordinates;
+    // Not selected: no handle, so nothing white where the first vertex is
+    expect((await colorsAround(page, first)).some(isWhite)).toBe(false);
+
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      route.id,
+    );
+    await settle(page);
+    // Selected: the handle is drawn there with the look of a vertex handle
+    expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
+
+    // The handle takes the drag, and the definition moves the vertex
+    const from = await pageOf(page, first);
+    await drag(page, from, { x: from.x - 40, y: from.y + 30 });
+    const moved = await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.features.get(id)?.geometry,
+      route.id,
+    );
+    const [movedFirst, movedSecond] = (moved as GeoJSON.LineString).coordinates;
+    expect(movedFirst[0]).toBeLessThan(first[0]);
+    expect(movedFirst[1]).toBeLessThan(first[1]);
+    expect(movedSecond).toEqual((route.geometry as GeoJSON.LineString).coordinates[1]);
     await close();
   });
 
@@ -374,7 +456,7 @@ describe('the examples', () => {
   }, async () => {
     const { page, close } = await openExample('large-data');
     const cells = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.getDataset('grid')?.getFeatures().length,
+      () => (window as unknown as E2EWindow).draw.datasets.get('grid')?.listRows().length,
     );
     expect(cells).toBe(50_000);
     await click(page, at(10, 10));
@@ -382,21 +464,21 @@ describe('the examples', () => {
     await close();
   });
 
-  it('columnar-worker shows the 200,000 rows of the Worker and reports the one clicked', {
+  it('table-worker shows the 200,000 rows of the Worker and reports the one clicked', {
     timeout: TIMEOUT,
   }, async () => {
-    const { page, close } = await openExample('columnar-worker');
+    const { page, close } = await openExample('table-worker');
     await page.evaluate(() => (window as unknown as { loaded: Promise<void> }).loaded);
     const total = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.getDataset('places')?.getThinningStats().total,
+      () => (window as unknown as E2EWindow).draw.datasets.get('places')?.getThinningStats().total,
     );
     expect(total).toBe(200_000);
     // Row 0, where it was drawn
     const lngLat = await page.evaluate(() => {
-      const dataset = (window as unknown as E2EWindow).draw.getDataset('places');
-      const [feature] =
-        dataset?.collectVisible({ minX: -180, minY: -85, maxX: 180, maxY: 85 }) ?? [];
-      return feature.coordinates as [number, number];
+      const dataset = (window as unknown as E2EWindow).draw.datasets.get('places');
+      const [row] = dataset?.listVisibleRows([-180, -85, 180, 85]) ?? [];
+      // In the page: the helpers of the library are not loaded here
+      return (row.geometry as GeoJSON.Point).coordinates as [number, number];
     });
     await page.evaluate(
       (center) => (window as unknown as E2EWindow).map.jumpTo({ center, zoom: 18 }),

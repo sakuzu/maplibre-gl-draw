@@ -31,19 +31,19 @@
 - [guides/terrain.ja.md](guides/terrain.ja.md) — 地図に地形があるときに
   変わること
 - [guides/read-only.ja.md](guides/read-only.ja.md) — 読み取り専用モード、
-  操作ロック、クライアントごとの表示
-- [guides/large-data.ja.md](guides/large-data.ja.md) — 大量データのための
-  データセット
-- [guides/plugins.ja.md](guides/plugins.ja.md) — プラグインと独自の
-  モードの書き方
-- [guides/custom-types.ja.md](guides/custom-types.ja.md) — 独自の描画と
-  当たり判定を持つ地物の型の追加
+  操作ロック、この端末だけの非表示
+- [guides/large-data.ja.md](guides/large-data.ja.md) — データセット。
+  文書の横に描いて編集しないデータを、行、表、サーバーから載せます
+- [guides/plugins.ja.md](guides/plugins.ja.md) — 拡張。プラグインと
+  独自のモードの書き方
+- [guides/custom-types.ja.md](guides/custom-types.ja.md) — 独自の描き方と
+  当たり判定を持つ地物の型の追加、重ね描き、提供者
 - [guides/frameworks.ja.md](guides/frameworks.ja.md) — React、Svelte、
   Vue での使い方と、サーバーサイドレンダリングでの使い方
 - [guides/performance.ja.md](guides/performance.ja.md) — 扱える規模の
   目安と、自分の場合の測り方
-- [guides/migrating.ja.md](guides/migrating.ja.md) — mapbox-gl-draw や
-  terra-draw からの移行
+- [guides/migrating.ja.md](guides/migrating.ja.md) — 1.0 から 2.0 への
+  移行と、mapbox-gl-draw や terra-draw からの移行
 
 ## リファレンス (英語)
 
@@ -51,8 +51,8 @@
   すべての公開記号の生成したリファレンス。
   [デモ](https://sakuzu.github.io/maplibre-gl-draw/) と同じ場所で
   公開しています
-- [reference/README.md](reference/README.md) — 公開 API の 2 つの層、
-  版の保証、生成する API リファレンスの作り方
+- [reference/README.md](reference/README.md) — 4 つの入口、公開 API の
+  2 つの層、版の保証、生成する API リファレンスの作り方
 - [reference/data-format.md](reference/data-format.md) — 地物の型ごとの、
   独自の形式と GeoJSON の形式
 - [reference/events.md](reference/events.md) — すべてのイベントと

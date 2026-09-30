@@ -11,7 +11,7 @@
  * goes on, so resolving it anywhere else would split the z-order of the paths.
  */
 
-import { hexToColor } from '../../../shared/utils/color.js';
+import { toColor } from '../../../shared/color.js';
 import type { FeatureStyle } from '../../../store/types.js';
 import type { PointShape, PointStyle } from './point-shape.js';
 
@@ -30,11 +30,31 @@ function featurePointShape(style: FeatureStyle): PointShape | undefined {
 }
 
 /**
+ * The opacity of the marker a feature names, from 0 to 1 (1 when it names none or a value
+ * outside the range)
+ */
+function featurePointOpacity(style: FeatureStyle): number {
+  const opacity = style.pointOpacity;
+  return typeof opacity === 'number' && opacity >= 0 && opacity <= 1 ? opacity : 1;
+}
+
+/**
+ * The width of the outline of the marker a feature names, or undefined when it names none or
+ * a value that is not a finite number of 0 or more
+ */
+function featurePointStrokeWidth(style: FeatureStyle): number | undefined {
+  const width = style.pointStrokeWidth;
+  return typeof width === 'number' && Number.isFinite(width) && width >= 0 ? width : undefined;
+}
+
+/**
  * Merges the style of a point feature (already carrying the rule color) into the default
  *
  * The keys of the feature win key by key: `pointColor` becomes the fill, `pointRadius` the
- * size (a diameter), `pointShape` the shape. A key left unset (or a shape that is not one of
- * the four a feature may name) keeps the default.
+ * size (a diameter), `pointShape` the shape, `pointStrokeColor` and `pointStrokeWidth` the
+ * outline. `pointOpacity` is multiplied into the opacity of the fill and of the outline of the
+ * marker. A key left unset (or a shape that is not one of the four a feature may name, an
+ * opacity outside 0 to 1, or a negative width) keeps the default.
  *
  * @param style The style of the feature (undefined when it has none)
  * @param defaults The point style of the `style` option of the instance
@@ -46,11 +66,39 @@ export function resolvePointStyle(
   defaults: PointStyle,
 ): PointStyle {
   if (!style) return defaults;
+  const opacity = featurePointOpacity(style);
 
   return {
     ...defaults,
     shape: featurePointShape(style) ?? defaults.shape,
-    fillColor: style.pointColor ? hexToColor(style.pointColor, 1) : defaults.fillColor,
+    fillColor: style.pointColor ? toColor(style.pointColor, 1) : defaults.fillColor,
     size: style.pointRadius ? style.pointRadius * 2 : defaults.size,
+    fillOpacity: defaults.fillOpacity * opacity,
+    strokeColor: style.pointStrokeColor ? toColor(style.pointStrokeColor, 1) : defaults.strokeColor,
+    strokeWidth: featurePointStrokeWidth(style) ?? defaults.strokeWidth,
+    strokeOpacity: defaults.strokeOpacity * opacity,
   };
+}
+
+/**
+ * How far the marker of a point reaches from its position, in CSS pixels: the radius the
+ * marker is drawn with plus its outline when the outline is drawn
+ *
+ * It reads the keys `resolvePointStyle` reads for the size and the outline, without building
+ * the merged style, so the hit test can ask it of every point on every move of the pointer.
+ *
+ * @param style The style of the feature (undefined when it has none)
+ * @param defaults The point style of the `style` option of the instance
+ *
+ * @internal
+ */
+export function pointMarkerReachPx(style: FeatureStyle | undefined, defaults: PointStyle): number {
+  const radius = style?.pointRadius ? style.pointRadius : defaults.size / 2;
+  const strokeOpacity = defaults.strokeOpacity * (style ? featurePointOpacity(style) : 1);
+  const stroke =
+    strokeOpacity > 0
+      ? ((style ? featurePointStrokeWidth(style) : undefined) ?? defaults.strokeWidth)
+      : 0;
+  const reach = radius + stroke;
+  return Number.isFinite(reach) && reach > 0 ? reach : 0;
 }

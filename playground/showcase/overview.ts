@@ -13,7 +13,12 @@
  * `style.pointShape`, so nothing needs to be registered on the draw instance.
  */
 
-import { type DatasetFeatureInput, deriveLegend, type StyleRule } from '@sakuzu/maplibre-gl-draw';
+import {
+  type DatasetRow,
+  type DrawDocument,
+  deriveLegend,
+  type StyleRule,
+} from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import { nextFrame, type ShowcaseContext, type ShowcaseScene } from './scene';
@@ -58,7 +63,7 @@ export const overviewScene: ShowcaseScene = {
   camera: { center: [139.766, 35.6822], zoom: 15 },
   load: loadDocument,
   async finish({ draw, map, layerPanel }) {
-    draw.select(SELECTED_FEATURE);
+    draw.selection.set('feature', [SELECTED_FEATURE]);
 
     for (const id of [...COLLAPSE, ...EXPAND]) {
       await nextFrame();
@@ -78,14 +83,16 @@ export const overviewScene: ShowcaseScene = {
  */
 export async function loadDocument({ draw, underlays }: ShowcaseContext): Promise<void> {
   const { default: document } = await import('./showcase.json');
-  await draw.load(document);
-  draw.setActiveLayer(ACTIVE_LAYER);
+  // A JSON module is typed from its values, looser than the document it holds
+  await draw.document.load(document as unknown as DrawDocument);
+  draw.layers.setActive(ACTIVE_LAYER);
 
   underlays.add({
     id: GRID.id,
     name: GRID.name,
     features: createGrid(),
     styleRule: GRID_RULE,
+    baseStyle: { fill: { fillOpacity: 0.8, strokeWidth: 0, strokeOpacity: 0 } },
   });
 }
 
@@ -94,7 +101,7 @@ export async function loadDocument({ draw, underlays }: ShowcaseContext): Promis
  */
 function addLegend(draw: ShowcaseContext['draw'], map: maplibregl.Map): void {
   const sections: string[] = [];
-  const landUse = draw.getAllLayers().find((layer) => layer.styleRule);
+  const landUse = draw.layers.list().find((layer) => layer.styleRule);
   if (landUse?.styleRule) {
     sections.push(legendSection(landUse.name, landUse.styleRule));
   }
@@ -126,13 +133,13 @@ function escapeHtml(text: string): string {
 /**
  * Hexagonal cells over a round patch, with a smooth made-up density from 0 to 100
  */
-function createGrid(): DatasetFeatureInput[] {
+function createGrid(): DatasetRow[] {
   const [lng0, lat0] = GRID.center;
   const k = Math.cos((lat0 * Math.PI) / 180);
   const r = GRID.cell;
   const dx = Math.sqrt(3) * r;
   const dy = 1.5 * r;
-  const features: DatasetFeatureInput[] = [];
+  const features: DatasetRow[] = [];
   const n = Math.ceil(GRID.radius / dy) + 1;
 
   for (let row = -n; row <= n; row++) {
@@ -159,11 +166,10 @@ function createGrid(): DatasetFeatureInput[] {
         ring.push([lng0 + x + r * 0.94 * Math.cos(a), lat0 + (y + r * 0.94 * Math.sin(a)) * k]);
       }
       features.push({
+        type: 'Feature',
         id: `cell-${row}-${col}`,
-        type: 'Polygon',
-        coordinates: [ring],
+        geometry: { type: 'Polygon', coordinates: [ring] },
         properties: { density: Math.round(Math.min(100, Math.max(0, density))) },
-        style: { fillOpacity: 0.8, strokeWidth: 0, strokeOpacity: 0 },
       });
     }
   }

@@ -41,12 +41,14 @@ export interface DatasetClickEventPayload {
   /** The feature that was hit. null when there was no hit */
   feature: Feature | null;
   /**
-   * The row of the feature in its dataset (its index in the features given to the
-   * dataset, or its row in a columnar table). null when there was no hit
+   * The row of the feature in its dataset (its index in the rows given to the
+   * dataset, or its row in a table). null when there was no hit
    */
   row: number | null;
   /** Map coordinate [lng, lat] */
   lngLat: Coordinate;
+  /** The point on the screen, in CSS pixels */
+  point?: { x: number; y: number };
 }
 
 /**
@@ -88,8 +90,11 @@ export interface SnapTargetSegment {
  * by the rendering of the guide line.
  */
 export interface SnapTarget {
-  /** The kind of the target */
-  kind: SnapTargetKind;
+  /**
+   * The kind of the target: one of the engine, or the kind of its own a provider of the
+   * extension contract gave its candidate (ranked as a vertex)
+   */
+  kind: SnapTargetKind | (string & Record<never, never>);
   /** The feature ID of the target (only for candidates originating from the Store) */
   featureId?: string;
   /**
@@ -124,10 +129,10 @@ export interface SnapResult {
  *
  * When the `isExternalEntry` option marks entries of the layer order as external, the draw
  * instance draws each run between them in a maplibre custom layer of its own, so the host can
- * place its own maplibre layers between the frames. `getRenderSlots()` lists the frames, and
- * the `draw.renderslots.change` event announces a change of them.
+ * place its own maplibre layers between the frames. `draw.getLayerStack()` lists the frames,
+ * and the `layerStack.changed` event announces a change of them.
  */
-export interface RenderSlot {
+export interface StackSlot {
   /** The maplibre layer ID of the custom layer that draws this run */
   readonly layerId: string;
   /** The index in the layer order where the run starts (inclusive) */

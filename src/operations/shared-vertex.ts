@@ -20,6 +20,7 @@
  * candidates.
  */
 
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { hasVertexRef } from '../shared/utils/vertex-ref.js';
 import { isLocallyHidden, type LocalHiddenStore } from '../store/local-visibility.js';
 import { type FeatureLockStore, isFeatureLocked } from '../store/lock.js';
@@ -80,7 +81,8 @@ export interface SharedVertexMoves {
  * point would lose track of "which of the first and the last one matched".
  */
 function forEachVertex(feature: Feature, visit: (coord: Coordinate, ref: VertexRef) => void): void {
-  const { type, coordinates } = feature;
+  const { type } = feature;
+  const coordinates = coordinatesOf(feature);
 
   if (type === 'Point') {
     visit(coordinates as Coordinate, { ring: 0, index: 0 });
@@ -194,7 +196,7 @@ export function resolveVertexCoordinates(
  *
  * Features under an effective lock (their own, their group's or their layer's) and
  * hidden features are excluded. The cascade of the shared visible flag is aligned
- * with the test in getOrderedFeatures, and local hiding with the one in
+ * with the test in listFeaturesInOrder, and local hiding with the one in
  * getDisplayFeatures.
  */
 function isFollowCandidate(feature: Feature, store: SharedVertexStore): boolean {

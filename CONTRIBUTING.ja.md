@@ -80,9 +80,9 @@ maplibre-gl-draw (core, 本リポジトリ)
 
 拡張は core の export を import しますが、その逆は禁止です。
 
-使ってよい名前の例は `Plugin`、`PluginContext`、`Hooks`、`Mode`、
-`CustomFeatureHandler`、`addOverlayRenderer` (拡張の仕組みとして一般化
-されているもの) です。
+使ってよい名前の例は `Plugin`、`PluginContext`、`Mode`、
+`FeatureTypeDefinition`、`draw.extensions.overlays` (拡張の仕組みとして
+一般化されているもの) です。
 
 特定の拡張に固有の概念を表す名前は使えません。
 
@@ -124,46 +124,45 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
 
 ### 公開する範囲
 
-`src/index.ts` では公開する記号を 1 つずつ名前で並べ、`export *` は
-使いません。名前は 2 つの層に分かれ、ファイルでもこの順に 2 つの節に
-分けて並べます。
+`src/index.ts`、`src/geometry/index.ts`、`src/table/index.ts`、
+`src/webgl/index.ts` では公開する記号を 1 つずつ名前で並べ、`export *`
+は使いません。名前は 2 つの層に分かれます。層 1 は main の入口 (同じ
+規則に従う `/geometry` と `/table` を含みます) で、層 2 は入口
+`@sakuzu/maplibre-gl-draw/webgl` です。
 
-- 層 1 は公開 API です。ファクトリー `createMapLibreGLDraw`、
-  インスタンス `MapLibreGLDraw` とその `Options`、データモデル
-  (`Feature`、`Layer`、`Group`、`StyleRule`、`LoadResult` など)、
-  イベントの payload、拡張点 (`Plugin`、`PluginContext`、`ModeHandler`、
-  `ModeContext`、`NormalizedEvent` の一群、`CustomFeatureHandler`、
-  overlay renderer、snapping provider、hit test と box selection の
-  strategy、補助ハンドルと companion の契約)、純関数 (style rule、
-  プロパティーのアクセサー、トレース) を含みます。semver に従います。
-- 層 2 は拡張を作る人向けの部品です。プラグイン、独自の地物の型、独自の
-  モードが、core と同じやり方で描画や当たり判定をするために再利用できる
-  部品を含みます。WebGL の補助 (`createProgram`、`QuadShader`、
-  `ProjectionUniformManager`、blend と深度の補助)、地形に固定する関数、
-  OBB と投影の計算、選択の補助、`ModeContext` と
-  `CustomRendererDrawContext` が渡す core のサービスの型が該当します。
-  保証は層 1 より弱く、minor の版で変わることがあります。一覧は
-  `docs/reference/README.md` の節 "The two layers of the public API" に
-  あります。
+- 層 1 は公開 API です。`createDraw` と、コレクションと資源の型を
+  持つインスタンス `Draw`、`DrawOptions` と `RuntimeOptions`、入力と
+  差分と絞り込みを含む文書のモデル (`Feature`、`Layer`、`Group`、
+  `StyleRule`、`DrawDocument` など)、状態、`DrawEvents`、`DrawError`、
+  データセット、Store の契約、拡張の窓口 (`Plugin`、各種の窓口、
+  `ModeHandler`、`FeatureTypeDefinition`、描画器、提供者)、スタイルの
+  規則の関数を含みます。契約は `src/api/` と `src/api/extension/` で
+  宣言します。semver に従います。
+- 層 2 は独自のシェーダーを書く人向けの部品です (`src/webgl/index.ts`)。
+  core のシェーダーと地形の描き方に結び付いた部品を含みます。GLSL の
+  断片と投影の uniform、`createProgram`、`QuadShader`、合成と看板の補助、
+  共有の線の描画器の入力の型、破線と地形の分割の規則、
+  `PointHitTestStrategy` が該当します。それに結び付かない純粋な計算
+  (向きのある矩形、px と度の換算、色のコントラスト) は公開せず、拡張の側で
+  持ちます。保証は層 1 より弱く、minor の版で変わることがあります。層 1
+  の宣言は層 2 の型を参照しません。
 
 新しい記号をどこに置くかは次のように決めます。
 
 - ホストのアプリケーションがライブラリーを使うのに必要な記号と、拡張が
   拡張点につなぐのに必要な記号は層 1 に置きます。
-- 拡張が自分の描画や当たり判定の中で core と同じことを再現するための
-  記号は層 2 に置きます。一般的な拡張点で足りるなら、新しい部品より
-  そちらを選びます。
+- 独自のシェーダーが core のシェーダーと同じことを再現するための記号は
+  層 2 に置きます。一般的な拡張点で足りるなら、新しい部品よりそちらを
+  選びます。
 - 公開の宣言が参照する型 (引数、戻り値、フィールド) も export します。
-  置く層は、その型を必要とする宣言の層に合わせます。ただし `ModeContext`
-  と `CustomRendererDrawContext` から届く core のサービスの型は層 2 に
-  置きます。
+  置く層は、その型を必要とする宣言の層に合わせます。
 - それ以外は内部の記号で、並べません。
 
-記号を公開するときは、そのドメインの barrel (`src/<domain>/index.ts`。
-公開する記号だけを並べます) に足し、`src/index.ts` の該当する節に名前を
-書き、`src/index.test.ts` のその層の一覧に足し、`CHANGELOG.md` に記録
-します (層 2 なら `docs/reference/README.md` にも記録します)。テストが
-一覧を固定しているので、公開する範囲が意図せず変わることはありません。
+記号を公開するときは、その層の契約を置く場所 (main の入口なら
+`src/api/`) で宣言し、入口のファイルの該当する節に名前を書き、
+`src/index.test.ts` のその入口の一覧に足し、`CHANGELOG.md` に記録
+します。テストが一覧を固定して
+いるので、公開する範囲が意図せず変わることはありません。
 
 内部の記号のうち、生成される宣言に出てしまうもの (モジュールから export
 した宣言や、公開のクラスとインターフェースのメンバーのうち契約に含まれ

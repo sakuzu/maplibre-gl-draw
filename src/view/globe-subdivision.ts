@@ -28,7 +28,7 @@ import {
 } from '../shared/math/globe-subdivision.js';
 import type { Coordinate } from '../store/types.js';
 import type { GlobeGrids, TerrainContext } from './terrain/context.js';
-import { getTerrainTessellationStep, tessellatePolygonFill } from './terrain/polygon.js';
+import { terrainStepOf, tessellatePolygonFill } from './terrain/polygon.js';
 import { mercatorX, mercatorY, type TessellationStep } from './terrain/tessellation.js';
 
 /**
@@ -97,7 +97,7 @@ export function getSurfaceTessellationStep(
   context: TerrainContext,
   kind: GlobeSubdivisionKind,
 ): TessellationStep | null {
-  return getTerrainTessellationStep(context) ?? getGlobeTessellationStep(context, kind);
+  return terrainStepOf(context) ?? getGlobeTessellationStep(context, kind);
 }
 
 /**
@@ -115,7 +115,7 @@ export function tessellateSurfaceFill(
   indices: number[],
   step: TessellationStep,
 ): { flatCoords: number[]; indices: number[]; step: TessellationStep } {
-  if (!getTerrainTessellationStep(context) && withinOneCell(flatCoords, step.grid)) {
+  if (!terrainStepOf(context) && withinOneCell(flatCoords, step.grid)) {
     return { flatCoords, indices, step };
   }
   return tessellatePolygonFill(context, featureId, partIndex, flatCoords, indices, step);

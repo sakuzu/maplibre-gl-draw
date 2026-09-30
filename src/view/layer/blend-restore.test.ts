@@ -20,12 +20,14 @@ import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { createDatasetManager } from '../../dataset/manager.js';
 import type {
-  CustomFeatureHandler,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  FeatureTypeHandler,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
@@ -41,18 +43,29 @@ const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
 
 function makeFeature(id: string, type: Feature['type'], layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type,
-    coordinates: [0, 0],
+    geometry: geometryFromCoordinates(type, [0, 0]),
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function makeLayer(id: string): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, order: [] } as Layer;
+  return {
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  } as Layer;
 }
 
 /**
@@ -103,21 +116,21 @@ function run(options: {
 
   // The renderer of a custom type (as an external renderer may do) rewrites
   // the blend state
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
   customRenderers.set('Marker', {
     draw: (feature: { id: string }): void => {
       paintLog.push(`${feature.id}@${blend}`);
       blend = 'foreign';
     },
-  } as unknown as CustomFeatureHandler['renderer']);
+  } as unknown as FeatureTypeHandler['renderer']);
 
-  const layerAwareRenderers: LayerAwareOverlayRenderer[] = options.layerAware
+  const layerAwareRenderers: LayeredOverlayRenderer[] = options.layerAware
     ? [
         {
           drawForLayer: (): void => {
             blend = 'foreign';
           },
-        } as unknown as LayerAwareOverlayRenderer,
+        } as unknown as LayeredOverlayRenderer,
       ]
     : [];
 
@@ -132,7 +145,7 @@ function run(options: {
   manager?.add({
     id: 'data',
     order: 'above-store',
-    features: [{ id: 'data-1', type: 'Point', coordinates: [0, 0] }],
+    rows: [toRow({ id: 'data-1', type: 'Point', coordinates: [0, 0] })],
   });
 
   renderLayers(
@@ -143,7 +156,7 @@ function run(options: {
     {} as unknown as ProjectionData,
     14,
     customRenderers,
-    {} as unknown as CustomRendererDrawContext,
+    {} as unknown as FrameDrawContext,
     createFeatureCompanionRegistry(),
     layerAwareRenderers,
     manager,

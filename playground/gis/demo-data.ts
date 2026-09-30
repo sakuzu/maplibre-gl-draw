@@ -9,16 +9,14 @@
  * not grow the editing data structures at all.
  */
 
-import type { DatasetFeatureInput, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import type { DatasetBaseStyle, DatasetRow, StyleRule } from '@sakuzu/maplibre-gl-draw';
 
 import { DEMO_GRID, STYLE_RULE_OTHER_COLOR } from '../constants';
 
 /** Style shared by every grid polygon (the color is decided by the styleRule) */
-const GRID_STYLE = Object.freeze({
-  fillOpacity: 0.7,
-  strokeOpacity: 0,
-  strokeWidth: 0,
-});
+export const DEMO_GRID_BASE_STYLE: DatasetBaseStyle = {
+  fill: { fillOpacity: 0.7, strokeOpacity: 0, strokeWidth: 0 },
+};
 
 /** Graduated rule for the grid polygons */
 export const DEMO_GRID_STYLE_RULE: StyleRule = {
@@ -45,12 +43,12 @@ function cellValue(dx: number, dy: number): number {
  * @param centerLng Longitude of the center
  * @param centerLat Latitude of the center
  */
-export function createGridFeatures(centerLng: number, centerLat: number): DatasetFeatureInput[] {
+export function createGridFeatures(centerLng: number, centerLat: number): DatasetRow[] {
   const { cols, rows, cellLng, cellLat } = DEMO_GRID;
   const originLng = centerLng - (cols * cellLng) / 2;
   const originLat = centerLat - (rows * cellLat) / 2;
 
-  const features: DatasetFeatureInput[] = [];
+  const features: DatasetRow[] = [];
   for (let row = 0; row < rows; row++) {
     const y0 = originLat + row * cellLat;
     const y1 = y0 + cellLat;
@@ -62,24 +60,26 @@ export function createGridFeatures(centerLng: number, centerLat: number): Datase
       const dx = (col - cols / 2) / (cols / 2);
 
       features.push({
+        type: 'Feature',
         id: `demo-grid-${row}-${col}`,
-        type: 'Polygon',
-        coordinates: [
-          [
-            [x0, y0],
-            [x1, y0],
-            [x1, y1],
-            [x0, y1],
-            [x0, y0],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [x0, y0],
+              [x1, y0],
+              [x1, y1],
+              [x0, y1],
+              [x0, y0],
+            ],
           ],
-        ],
+        },
         properties: {
           name: `Cell ${row}-${col}`,
           row,
           col,
           value: cellValue(dx, dy),
         },
-        style: GRID_STYLE,
       });
     }
   }

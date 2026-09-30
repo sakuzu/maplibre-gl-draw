@@ -50,7 +50,7 @@ export interface PixelRatioProvider {
   /** The current rendering pixel ratio (the injected value or window x renderScale) */
   resolve: () => number;
   /** The factor of the current rendering pixel ratio (default 1) */
-  getRenderScale: () => number;
+  getScaleFactor: () => number;
 }
 
 /**
@@ -118,7 +118,7 @@ export function resolvePixelRatio(pixelRatio?: PixelRatioInput): number {
  */
 export function resolveContentPixelRatio(pixelRatio?: PixelRatioInput): number {
   if (!isProvider(pixelRatio)) return resolvePixelRatio(pixelRatio);
-  const scale = pixelRatio.getRenderScale();
+  const scale = pixelRatio.getScaleFactor();
   const resolved = resolvePixelRatio(pixelRatio);
   if (!usable(scale)) return resolved;
   return resolved / scale;
@@ -129,9 +129,15 @@ export function resolveContentPixelRatio(pixelRatio?: PixelRatioInput): number {
  *
  * The read side (`PixelRatioProvider`) plus a socket for rewriting the factor.
  * Handing the source itself out to each renderer as the `PixelRatioInput` makes a change from
- * `setRenderScale` propagate from the next frame to every place that reads it directly.
+ * `setScaleFactor` propagate from the next frame to every place that reads it directly.
  */
 export interface PixelRatioSource extends PixelRatioProvider {
+  /**
+   * Replaces the pixel ratio given at creation; `undefined` goes back to the ratio of the map
+   *
+   * @returns Whether the value changed
+   */
+  setPixelRatio: (pixelRatio: number | undefined) => boolean;
   /**
    * Sets the factor of the rendering pixel ratio
    *
@@ -139,7 +145,7 @@ export interface PixelRatioSource extends PixelRatioProvider {
    * when the value changed, so the caller can trigger a redraw or a rebuild of the batches
    * only at that point.
    */
-  setRenderScale: (scale: number) => boolean;
+  setScaleFactor: (scale: number) => boolean;
 }
 
 /**
@@ -155,11 +161,19 @@ export function createPixelRatioSource(
   fallback?: () => number,
 ): PixelRatioSource {
   let renderScale = 1;
-  const input: PixelRatioInput | undefined = usable(pixelRatio) ? pixelRatio : fallback;
+  let given = usable(pixelRatio) ? pixelRatio : undefined;
+  let input: PixelRatioInput | undefined = given ?? fallback;
   return {
+    setPixelRatio: (value: number | undefined) => {
+      const next = usable(value) ? value : undefined;
+      if (next === given) return false;
+      given = next;
+      input = given ?? fallback;
+      return true;
+    },
     resolve: () => resolvePixelRatio(input) * renderScale,
-    getRenderScale: () => renderScale,
-    setRenderScale: (scale: number) => {
+    getScaleFactor: () => renderScale,
+    setScaleFactor: (scale: number) => {
       if (!Number.isFinite(scale) || scale <= 0) return false;
       if (scale === renderScale) return false;
       renderScale = scale;

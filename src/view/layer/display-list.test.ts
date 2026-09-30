@@ -7,11 +7,18 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DisplayStore } from '../../store/local-visibility.js';
-import type { Feature, StateChanges } from '../../store/types.js';
+import type { Feature, StoreChange } from '../../store/types.js';
 import { DisplayListCache } from './display-list.js';
 
 function feature(id: string): Feature {
-  return { id, type: 'Point', coordinates: [0, 0], layerId: 'l', visible: true } as Feature;
+  return {
+    id,
+    type: 'Point',
+    geometry: { type: 'Point', coordinates: [0, 0] },
+    layerId: 'l',
+    visible: true,
+    style: {},
+  } as Feature;
 }
 
 function createStore(count: number) {
@@ -19,11 +26,25 @@ function createStore(count: number) {
   const hidden = new Set<string>();
   let reads = 0;
   const store: DisplayStore = {
-    getOrderedFeatures: () => {
+    listFeaturesInOrder: () => {
       reads++;
       return [...features];
     },
-    isLocallyHidden: (id) => hidden.has(id),
+    isHidden: (id) => hidden.has(id),
+    getLayer: (id) =>
+      id === 'l'
+        ? {
+            id,
+            name: id,
+            visible: true,
+            locked: false,
+            opacity: 1,
+            items: [],
+            styleRule: undefined,
+            metadata: undefined,
+          }
+        : undefined,
+    getGroup: () => undefined,
   };
   return { store, features, hidden, reads: () => reads };
 }
@@ -53,7 +74,7 @@ describe('DisplayListCache', () => {
     const cache = new DisplayListCache(s.store);
     cache.inOrder(new Set(['f1']));
     cache.inOrder(new Set(['f2']));
-    cache.applyChanges({ selection: {} } as unknown as StateChanges);
+    cache.applyChanges({ selection: {} } as unknown as StoreChange);
     cache.inOrder(new Set(['f3']));
     expect(s.reads()).toBe(1);
 
@@ -63,7 +84,7 @@ describe('DisplayListCache', () => {
     expect(s.reads()).toBe(2);
 
     s.features.reverse();
-    cache.applyChanges({ layerReorder: {} } as unknown as StateChanges);
+    cache.applyChanges({ layerReorder: {} } as unknown as StoreChange);
     expect(cache.inOrder(new Set(['f0', 'f9'])).map((f) => f.id)).toEqual(['f9', 'f0']);
   });
 });

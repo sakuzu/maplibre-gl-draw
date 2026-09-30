@@ -34,6 +34,7 @@
  */
 
 import type { Coordinate, Feature } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { DatasetBaseStyle } from './types.js';
 
@@ -75,16 +76,6 @@ const MAX_MERCATOR_LAT = 85.0511287798066;
  * polygons and MultiPoint are always drawn. The overlap is tested with the size actually drawn
  * (the radius + the outline + `marginPx`), and the winners are picked greedily from the front
  * of the draw order for each integer zoom band, so panning does not swap them.
- *
- * @example
- * ```ts
- * const places = draw.addDataset({
- *   id: 'places',
- *   features,
- *   collisionThinning: { enabled: true, fullDisplayZoom: 17, marginPx: 2 },
- * });
- * const { total, visible } = places.getThinningStats(); // "showing 1,200 of 50,000"
- * ```
  */
 export interface DatasetCollisionThinning {
   /** Whether the thinning is enabled (false by default = everything is drawn as before) */
@@ -620,7 +611,7 @@ export function selectCollisionWinners(input: CollisionThinningInput): Set<strin
   const rows: ThinningRows = {
     length: features.length,
     thinningRole: (row) => featureThinningRole(features[row]),
-    pointOf: (row) => features[row].coordinates as [number, number],
+    pointOf: (row) => coordinatesOf(features[row]) as [number, number],
     styleRadiusOf: (row) => features[row].style?.pointRadius,
     idOf: (row) => features[row].id,
   };
@@ -640,7 +631,7 @@ export function selectCollisionWinners(input: CollisionThinningInput): Set<strin
 export function featureThinningRole(feature: Feature): ThinningRole {
   if (!feature.visible) return 'skip';
   if (feature.type !== 'Point') return 'winner';
-  const coord = feature.coordinates as unknown;
+  const coord = coordinatesOf(feature) as unknown;
   if (!Array.isArray(coord) || typeof coord[0] !== 'number' || typeof coord[1] !== 'number') {
     return 'winner';
   }

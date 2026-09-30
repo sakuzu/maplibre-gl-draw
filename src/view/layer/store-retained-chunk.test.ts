@@ -6,19 +6,22 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Feature } from '../../store/types.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { buildChunkBatch, createChunkEntry, disposeChunkBatches } from './store-retained-chunk.js';
 
-function makeFeature(id: string, type: Feature['type'], coordinates: unknown): Feature {
+function makeFeature(id: string, type: Feature['type'], coordinates: FeatureCoordinates): Feature {
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   } as Feature;
 }
 

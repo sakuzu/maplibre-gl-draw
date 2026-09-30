@@ -2,28 +2,33 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Integration tests for the snapping of freehand
+ * Integration tests for the snapping of freehand, and for what a press that draws nothing
+ * leaves to the map
  *
- * Through the real InputRouter, the real SnapService and DrawFreehandMode, this checks that
+ * Through the real InputRouter, the real SnapService and the freehand mode, this checks that
  * the inside of a stroke (dragmove) is not bent by snapping, and that the start point
- * (dragstart) and the end point (dragend) are snapped as before.
+ * (dragstart) and the end point (dragend) are snapped as before. A press released without a
+ * drag gives the pan back, and a double click in a drawing mode never zooms the map.
  *
  * The assembly follows the same style as trace-mode.test.ts: instead of synthetic input, drag
- * events are fed from the normalizer (because draw.input does not synthesize drags).
+ * events are fed from the normalizer (because the synthetic input of the tests has no drags).
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { bridgeMode } from '../../api/impl/input.js';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import type { DragNormalizedEvent, NormalizedEvent } from '../../dispatcher/types.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { createSnapService } from '../../snapping/service.js';
 import type { SnapService } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, Mode } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
+import { createModeHarness } from '../../test-utils.js';
+import type { EngineModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
-import { DrawFreehandMode } from './freehand.js';
+import { drawFreehandMode } from './freehand.js';
 
 const ZOOM = 14;
 /** The degrees corresponding to one pixel at zoom 14 (= 360 / (512 * 2^14)) */
@@ -103,6 +108,7 @@ let modeManager: ModeManagerImpl;
 let normalizer: FakeNormalizer;
 let snapService: SnapService;
 let map: MapLibreMap;
+let harness: ReturnType<typeof createModeHarness>;
 
 function setup(): void {
   store = new MemoryStore();
@@ -112,18 +118,22 @@ function setup(): void {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
   spatialIndex = new RBushSpatialIndex();
 
   const boundary: Feature = {
     id: 'boundary',
     type: 'LineString',
-    coordinates: BOUNDARY,
+    geometry: { type: 'LineString', coordinates: BOUNDARY },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(boundary);
   spatialIndex.insert(boundary);
@@ -131,7 +141,8 @@ function setup(): void {
   map = createFakeMap();
   modeManager = new ModeManagerImpl(store);
   modeManager.registerMode('select', () => ({ modeName: 'select' }));
-  modeManager.registerMode('draw_freehand', () => new DrawFreehandMode());
+  harness = createModeHarness({ store, map, modeManager, getWritableLayerId: () => 'l1' });
+  harness.register('draw_freehand', drawFreehandMode);
 
   snapService = createSnapService({ store, spatialIndex });
 
@@ -145,7 +156,7 @@ function setup(): void {
     getCurrentLayerId: () => 'l1',
     setMode: (mode: Mode) => modeManager.setMode(mode),
     getSnapResult: () => snapService.getResult(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
 
   modeManager.setContext(context);
   modeManager.start();
@@ -157,6 +168,7 @@ function setup(): void {
     context,
     map,
     snapService,
+    extensionInput: harness.route,
   });
   inputRouter.start();
 }
@@ -203,7 +215,7 @@ function straightStroke(sampleCount: number): Coordinate[] {
 
 /** The drawn feature (excluding the boundary line) */
 function drawnFeature(): Feature {
-  const features = store.getAllFeatures().filter((f) => f.id !== 'boundary');
+  const features = store.listFeatures().filter((f) => f.id !== 'boundary');
   expect(features).toHaveLength(1);
   return features[0];
 }
@@ -222,7 +234,7 @@ describe('snapping of freehand', () => {
     // The intermediate points (excluding the first and the last) keep the input coordinates.
     // If they were snapped, they would fall onto the boundary line (ORIGIN.lat) and become a
     // bent polyline
-    const coordinates = drawnFeature().coordinates as Coordinate[];
+    const coordinates = coordinatesOf(drawnFeature()) as Coordinate[];
     const middle = coordinates.slice(1, -1);
     expect(middle).toEqual(path.slice(1, -1));
     for (const coord of middle) {
@@ -236,7 +248,7 @@ describe('snapping of freehand', () => {
     const path = straightStroke(6);
     stroke(path);
 
-    const coordinates = drawnFeature().coordinates as Coordinate[];
+    const coordinates = coordinatesOf(drawnFeature()) as Coordinate[];
     const first = coordinates[0];
     const last = coordinates[coordinates.length - 1];
 
@@ -248,13 +260,13 @@ describe('snapping of freehand', () => {
   });
 
   it('the declaration of the mode refuses only the drag move', () => {
-    const mode = new DrawFreehandMode();
+    const mode = bridgeMode('draw_freehand', drawFreehandMode(harness.modeContext()), () => {});
 
-    expect(mode.isSnapEnabledFor('dragmove')).toBe(false);
-    expect(mode.isSnapEnabledFor('dragstart')).toBe(true);
-    expect(mode.isSnapEnabledFor('dragend')).toBe(true);
-    expect(mode.isSnapEnabledFor('click')).toBe(true);
-    expect(mode.isSnapEnabledFor('mousemove')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('dragmove')).toBe(false);
+    expect(mode.isSnapEnabledFor?.('dragstart')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('dragend')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('click')).toBe(true);
+    expect(mode.isSnapEnabledFor?.('mousemove')).toBe(true);
   });
 });
 
@@ -282,6 +294,59 @@ describe('cancel of a freehand stroke (dragcancel)', () => {
     // The stroke does not hang: what follows the cancel draws nothing
     normalizer.emit(makeDragEvent('dragmove', points[4], start));
     normalizer.emit(makeDragEvent('dragend', points[5], start));
-    expect(store.getAllFeatures().map((f) => f.id)).toEqual(['boundary']);
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['boundary']);
+  });
+});
+
+describe('a press of freehand that draws nothing', () => {
+  /** A mouse event of the normalizer at a position, with an event of the browser to prevent */
+  function mouse(type: 'mousedown' | 'mouseup' | 'click' | 'dblclick', coord: Coordinate) {
+    const original = { defaultPrevented: false, preventDefault() {}, stopPropagation() {} };
+    original.preventDefault = () => {
+      original.defaultPrevented = true;
+    };
+    const event = {
+      ...makeDragEvent('dragstart', coord, coord),
+      type,
+      originalEvent: original,
+    } as unknown as NormalizedEvent;
+    return { event, original };
+  }
+
+  it('gives dragPan back when the press is released without a drag', () => {
+    modeManager.setMode('draw_freehand');
+    const [at] = straightStroke(1);
+    normalizer.emit(mouse('mousedown', at).event);
+    expect(map.dragPan.isEnabled()).toBe(false);
+    normalizer.emit(mouse('mouseup', at).event);
+    normalizer.emit(mouse('click', at).event);
+    expect(map.dragPan.isEnabled()).toBe(true);
+    expect(store.listFeatures().map((f) => f.id)).toEqual(['boundary']);
+  });
+
+  it('keeps the map from zooming on a double click', () => {
+    modeManager.setMode('draw_freehand');
+    const [at] = straightStroke(1);
+    const { event, original } = mouse('dblclick', at);
+    normalizer.emit(event);
+    expect(original.defaultPrevented).toBe(true);
+    expect(map.dragPan.isEnabled()).toBe(true);
+  });
+
+  it('keeps the map from zooming in any drawing mode, even one that does not take the click', () => {
+    harness.register('draw_custom', () => ({ writes: true }));
+    harness.register('look', () => ({}));
+    const [at] = straightStroke(1);
+
+    modeManager.setMode('draw_custom');
+    const drawing = mouse('dblclick', at);
+    normalizer.emit(drawing.event);
+    expect(drawing.original.defaultPrevented).toBe(true);
+
+    // A mode that draws nothing leaves the double click to the map
+    modeManager.setMode('look');
+    const looking = mouse('dblclick', at);
+    normalizer.emit(looking.event);
+    expect(looking.original.defaultPrevented).toBe(false);
   });
 });

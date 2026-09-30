@@ -12,7 +12,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ModeContext, ModeHandler } from '../modes/handler.js';
+import type { EngineModeContext, EngineModeHandler } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
 import { MemoryStore } from '../store/memory.js';
 import type { TentativeState } from '../store/types.js';
@@ -40,7 +40,7 @@ class FakeNormalizer {
 }
 
 /** A mode that records the longitudes it receives */
-class RecordingMode implements ModeHandler {
+class RecordingMode implements EngineModeHandler {
   modeName = 'select';
   clicks: number[] = [];
   moves: number[] = [];
@@ -100,7 +100,7 @@ function startRouter() {
   const router = createInputRouter({
     normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
     modeManager: { getHandler: () => mode } as unknown as ModeManager,
-    context: { store, map } as unknown as ModeContext,
+    context: { store, map } as unknown as EngineModeContext,
     map,
     notifyMapClick: (payload) => mapClicks.push(payload),
   });

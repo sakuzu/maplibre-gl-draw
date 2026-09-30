@@ -9,9 +9,10 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import { toColor } from '../../shared/color.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import { generateCirclePolygon } from '../../shared/math/index.js';
-import { hexToColor } from '../../shared/utils/color.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureStyle, Layer } from '../../store/types.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
@@ -94,16 +95,16 @@ export class FeatureDrawer {
   drawFeature(feature: Feature, projectionData: ProjectionData, zoom: number, layer?: Layer): void {
     const opacity = layerDrawFactors(layer).opacity;
     if (feature.type === 'Point') {
-      const coord = feature.coordinates as Coordinate;
+      const coord = coordinatesOf(feature) as Coordinate;
       const pointStyle = pointWithOpacity(this.getPointStyle(feature, layer), opacity);
       this.drawPointShape(coord, pointStyle, zoom, feature.id);
     } else if (feature.type === 'LineString') {
-      const coords = feature.coordinates as Coordinate[];
+      const coords = coordinatesOf(feature) as Coordinate[];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const strokeStyle = strokeWithOpacity(this.getLineStringStrokeStyle(feature, layer), opacity);
       this.drawLineStringStroke(coords, strokeStyle, projectionData, zoom, createdZoom, feature.id);
     } else if (feature.type === 'Polygon') {
-      const rings = feature.coordinates as Coordinate[][];
+      const rings = coordinatesOf(feature) as Coordinate[][];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const { fillColor, strokeStyle } = polygonWithOpacity(
         this.getPolygonStyles(feature, layer),
@@ -120,14 +121,14 @@ export class FeatureDrawer {
       );
     } else if (feature.type === 'MultiPoint') {
       // Draw a point for each part (the style is shared across the feature)
-      const parts = feature.coordinates as Coordinate[];
+      const parts = coordinatesOf(feature) as Coordinate[];
       const pointStyle = pointWithOpacity(this.getPointStyle(feature, layer), opacity);
       for (const coord of parts) {
         this.drawPointShape(coord, pointStyle, zoom, feature.id);
       }
     } else if (feature.type === 'MultiLineString') {
       // Draw a line for each part
-      const parts = feature.coordinates as Coordinate[][];
+      const parts = coordinatesOf(feature) as Coordinate[][];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const strokeStyle = strokeWithOpacity(this.getLineStringStrokeStyle(feature, layer), opacity);
       for (let i = 0; i < parts.length; i++) {
@@ -142,7 +143,7 @@ export class FeatureDrawer {
       }
     } else if (feature.type === 'MultiPolygon') {
       // Draw a hole-aware polygon for each part
-      const parts = feature.coordinates as Coordinate[][][];
+      const parts = coordinatesOf(feature) as Coordinate[][][];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const { fillColor, strokeStyle } = polygonWithOpacity(
         this.getPolygonStyles(feature, layer),
@@ -160,18 +161,21 @@ export class FeatureDrawer {
         );
       }
     } else if (feature.type === 'Image') {
+      // An image without an opacity of its own takes the one of the instance
+      const imageOpacity =
+        feature.style.imageOpacity === undefined ? (this.featureStyle.image?.opacity ?? 1) : 1;
       this.imageRenderer.draw(
         feature,
         projectionData,
         zoom,
         () => this.map.triggerRepaint(),
-        opacity,
+        opacity * imageOpacity,
       );
     } else if (feature.type === 'Circle') {
       this.drawCircle(feature, projectionData, zoom, layer, opacity);
     } else if (feature.type === 'Freehand') {
       // Freehand uses the same rendering logic as LineString
-      const coords = feature.coordinates as Coordinate[];
+      const coords = coordinatesOf(feature) as Coordinate[];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
       const strokeStyle = strokeWithOpacity(this.getLineStringStrokeStyle(feature, layer), opacity);
       this.drawLineStringStroke(coords, strokeStyle, projectionData, zoom, createdZoom, feature.id);
@@ -230,7 +234,7 @@ export class FeatureDrawer {
     // Apply strokeOpacity when it is specified, even if strokeColor is not set
     // strokeOpacity is set directly rather than multiplied into the default alpha value
     const color: Color = style.strokeColor
-      ? hexToColor(style.strokeColor, style.strokeOpacity ?? 1)
+      ? toColor(style.strokeColor, style.strokeOpacity ?? 1)
       : style.strokeOpacity !== undefined
         ? [defaultStyle.color[0], defaultStyle.color[1], defaultStyle.color[2], style.strokeOpacity]
         : defaultStyle.color;
@@ -261,8 +265,12 @@ export class FeatureDrawer {
     fillColor: Color;
     strokeStyle: SDFStrokeStyle;
   } {
-    const defaultFillColor = this.featureStyle.polygon.fill.color;
-    const defaultStrokeStyle = this.featureStyle.polygon.stroke;
+    const look =
+      feature?.type === 'Circle' && this.featureStyle.circle
+        ? this.featureStyle.circle
+        : this.featureStyle.polygon;
+    const defaultFillColor = look.fill.color;
+    const defaultStrokeStyle = look.stroke;
     const style = this.resolveStyle(feature, layer, 'fill');
 
     if (!style) {
@@ -275,7 +283,7 @@ export class FeatureDrawer {
     // So that a feature with only fillColor specified does not become opaque (alpha 1),
     // it follows the alpha component of the default color rather than a hardcoded 1.
     const fillColor: Color = style.fillColor
-      ? hexToColor(style.fillColor, style.fillOpacity ?? defaultFillColor[3])
+      ? toColor(style.fillColor, style.fillOpacity ?? defaultFillColor[3])
       : style.fillOpacity !== undefined
         ? [defaultFillColor[0], defaultFillColor[1], defaultFillColor[2], style.fillOpacity]
         : defaultFillColor;
@@ -283,7 +291,7 @@ export class FeatureDrawer {
     // Apply strokeOpacity when it is specified, even if strokeColor is not set
     // strokeOpacity is set directly rather than multiplied into the default alpha value
     const strokeColor: Color = style.strokeColor
-      ? hexToColor(style.strokeColor, style.strokeOpacity ?? 1)
+      ? toColor(style.strokeColor, style.strokeOpacity ?? 1)
       : style.strokeOpacity !== undefined
         ? [
             defaultStrokeStyle.color[0],
@@ -388,7 +396,7 @@ export class FeatureDrawer {
     layer?: Layer,
     opacity = 1,
   ): void {
-    const center = feature.coordinates as Coordinate;
+    const center = coordinatesOf(feature) as Coordinate;
     const radiusMeters = getCircleRadius(feature);
 
     if (!radiusMeters || radiusMeters <= 0) return;

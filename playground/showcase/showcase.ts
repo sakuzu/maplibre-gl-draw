@@ -10,7 +10,7 @@
  * picture once `<html data-showcase="ready">` is set.
  */
 
-import type { MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import type { UnderlayRegistry } from '../gis/underlay';
@@ -61,7 +61,7 @@ export function prepareShowcase(scene: ShowcaseScene): void {
  */
 export async function loadShowcase(
   scene: ShowcaseScene,
-  draw: MapLibreGLDraw,
+  draw: Draw,
   map: maplibregl.Map,
   underlays: UnderlayRegistry,
 ): Promise<void> {
@@ -74,7 +74,7 @@ export async function loadShowcase(
  */
 export async function finishShowcase(
   scene: ShowcaseScene,
-  draw: MapLibreGLDraw,
+  draw: Draw,
   map: maplibregl.Map,
   underlays: UnderlayRegistry,
   layerPanel: HTMLElement,

@@ -5,7 +5,8 @@
  * GIS Panel
  *
  * The contents of the GIS tab of the right panel. It gathers the features that do not depend
- * on the feature selection: snapping, topology, synthetic input and large-volume display.
+ * on the feature selection: snapping, topology, entering points by coordinates and
+ * large-volume display.
  *
  * Large-volume display only stacks the demo data as an underlay; managing it afterwards
  * (toggling visibility, removing it) belongs to the Underlays section of the Layers panel.
@@ -15,11 +16,11 @@
  * listeners survive along with the node.
  */
 
-import type { MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import { DEMO_DATASET_ID, DEMO_DATASET_NAME, DEMO_GRID, SNAP_TOLERANCE_PX } from '../constants';
-import { createGridFeatures, DEMO_GRID_STYLE_RULE } from './demo-data';
+import { createGridFeatures, DEMO_GRID_BASE_STYLE, DEMO_GRID_STYLE_RULE } from './demo-data';
 import type { Toast } from './toast';
 import type { UnderlayRegistry } from './underlay';
 
@@ -48,18 +49,13 @@ const GRID_COUNT = DEMO_GRID.cols * DEMO_GRID.rows;
  * Panel of the GIS tab
  */
 export class GisPanel {
-  private draw: MapLibreGLDraw;
+  private draw: Draw;
   private map: maplibregl.Map;
   private toast: Toast;
   private underlays: UnderlayRegistry;
   private element: HTMLElement;
 
-  constructor(
-    draw: MapLibreGLDraw,
-    map: maplibregl.Map,
-    toast: Toast,
-    underlays: UnderlayRegistry,
-  ) {
+  constructor(draw: Draw, map: maplibregl.Map, toast: Toast, underlays: UnderlayRegistry) {
     this.draw = draw;
     this.map = map;
     this.toast = toast;
@@ -167,13 +163,13 @@ export class GisPanel {
   private attachEventListeners(): void {
     this.query<HTMLInputElement>('#gis-snap-enabled').addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
-      this.draw.snapping.setEnabled(enabled);
+      this.draw.options.update({ snapping: { enabled } });
       this.syncSnapSection();
     });
 
     this.query<HTMLInputElement>('#gis-shared-vertex').addEventListener('change', (e) => {
       const enabled = (e.target as HTMLInputElement).checked;
-      this.draw.topology.setSharedVertexDrag(enabled);
+      this.draw.options.update({ topology: { sharedVertexDrag: enabled } });
       this.toast.show(
         enabled
           ? 'Enabled moving shared vertices together'
@@ -182,22 +178,22 @@ export class GisPanel {
     });
 
     this.query<HTMLButtonElement>('#gis-input-add').addEventListener('click', () => {
-      this.emitSyntheticClick();
+      this.clickAtCoordinates();
     });
 
     this.query<HTMLButtonElement>('#gis-input-commit').addEventListener('click', () => {
-      this.draw.input.key('Enter');
+      this.pressKey('Enter');
     });
 
     this.query<HTMLButtonElement>('#gis-input-cancel').addEventListener('click', () => {
-      this.draw.input.key('Escape');
+      this.pressKey('Escape');
     });
 
     for (const id of ['#gis-input-lng', '#gis-input-lat']) {
       this.query<HTMLInputElement>(id).addEventListener('keydown', (e) => {
         if ((e as KeyboardEvent).key !== 'Enter') return;
         e.preventDefault();
-        this.draw.input.key('Enter');
+        this.pressKey('Enter');
       });
     }
 
@@ -210,35 +206,60 @@ export class GisPanel {
    * Subscribes to the draw events.
    */
   private subscribeEvents(): void {
-    this.draw.on('draw.snap.change', (result) => {
+    this.draw.on('snap.changed', ({ result }) => {
       const status = this.query<HTMLElement>('#gis-snap-status');
-      const kind = result.target?.kind;
+      const kind = result?.target?.kind;
       status.textContent = kind ? `Snapping to ${SNAP_TARGET_LABELS[kind] ?? kind}` : '—';
     });
 
-    this.draw.on('draw.mode.change', () => {
+    this.draw.on('mode.changed', () => {
       this.syncInputSection();
     });
   }
 
   /**
-   * Puts down one point with synthetic input.
+   * Puts down one point at the coordinates of the fields.
+   *
+   * The library takes its input from the map, so the page clicks the map where the
+   * coordinates are: a move and a click on the canvas at the projected position, as a mouse
+   * would make them. Snapping applies as it does to a real click.
    */
-  private emitSyntheticClick(): void {
+  private clickAtCoordinates(): void {
     const lng = Number.parseFloat(this.query<HTMLInputElement>('#gis-input-lng').value);
     const lat = Number.parseFloat(this.query<HTMLInputElement>('#gis-input-lat').value);
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
       this.toast.show('Enter numbers for the longitude and the latitude', 'warn');
       return;
     }
-    this.draw.input.click([lng, lat]);
+    const canvas = this.map.getCanvas();
+    const rect = canvas.getBoundingClientRect();
+    const { x, y } = this.map.project([lng, lat]);
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + x,
+      clientY: rect.top + y,
+      button: 0,
+    };
+    canvas.dispatchEvent(new MouseEvent('mousemove', init));
+    canvas.dispatchEvent(new MouseEvent('click', init));
+  }
+
+  /**
+   * Presses a key on the map, as the keyboard would while the map has the focus.
+   */
+  private pressKey(key: string): void {
+    this.map
+      .getCanvas()
+      .dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true }));
   }
 
   /**
    * Syncs the display of the snapping section.
    */
   private syncSnapSection(): void {
-    this.query<HTMLInputElement>('#gis-snap-enabled').checked = this.draw.snapping.isEnabled();
+    this.query<HTMLInputElement>('#gis-snap-enabled').checked =
+      this.draw.options.get().snapping?.enabled !== false;
   }
 
   /**
@@ -246,11 +267,11 @@ export class GisPanel {
    */
   private syncTopologySection(): void {
     this.query<HTMLInputElement>('#gis-shared-vertex').checked =
-      this.draw.topology.isSharedVertexDrag();
+      this.draw.options.get().topology?.sharedVertexDrag === true;
   }
 
   /**
-   * Syncs the enabled state of the synthetic input section.
+   * Syncs the enabled state of the section that enters points by coordinates.
    */
   private syncInputSection(): void {
     const mode = this.draw.getMode();
@@ -300,6 +321,7 @@ export class GisPanel {
       name: DEMO_DATASET_NAME,
       features: createGridFeatures(center.lng, center.lat),
       styleRule: DEMO_GRID_STYLE_RULE,
+      baseStyle: DEMO_GRID_BASE_STYLE,
     });
 
     const elapsed = Math.round(performance.now() - started);

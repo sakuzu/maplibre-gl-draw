@@ -5,10 +5,10 @@
  * Extension point for the auxiliary handles
  *
  * A general-purpose hook for showing and grabbing handles on the selected feature that are
- * "neither a vertex nor a resize handle". All core holds is the hit testing and the drag
- * delegation; drawing the handles is the responsibility of the registering side (the plugin
- * of an extension implementation). core knows nothing at all about the meaning of a handle
- * (it only carries the position and the identifier).
+ * "neither a vertex nor a resize handle". Core draws them with the look of the vertex handles
+ * (the selection UI), hit tests them at the same size and delegates their drags. core knows
+ * nothing at all about the meaning of a handle (it only carries the position and the
+ * identifier).
  *
  * There are two ways to emit handles: those bound to the selected feature (getHandles) and
  * those that can always be emitted regardless of the selection (getGlobalHandles). The
@@ -80,31 +80,8 @@ export interface AuxiliaryHandleHit {
  * A source of handles on the selected feature that are neither vertices nor resize handles,
  * and the receiver of their drags.
  *
- * Register one with `draw.registerAuxiliaryHandleProvider(provider)`. The library hit tests
- * the handles and delegates their drags; drawing them is the provider's job (with an overlay
- * renderer, for example).
- *
- * @example
- * ```ts
- * import type { AuxiliaryHandleProvider } from '@sakuzu/maplibre-gl-draw';
- *
- * // A handle 20 px above the first vertex of the selected line, which logs its drag
- * const labelHandle: AuxiliaryHandleProvider = {
- *   id: 'label-handle',
- *   getHandles(feature, ctx) {
- *     if (feature.type !== 'LineString') return [];
- *     const first = (feature.coordinates as [number, number][])[0];
- *     const p = ctx.project(first);
- *     const { lng, lat } = ctx.unproject({ x: p.x, y: p.y - 20 });
- *     return [{ id: 'label', position: [lng, lat], cursor: 'move' }];
- *   },
- *   onHandleDragStart: () => true,
- *   onHandleDragMove: (event) => console.log(event.lngLat),
- *   onHandleDragEnd: () => {},
- * };
- *
- * const unregister = draw.registerAuxiliaryHandleProvider(labelHandle);
- * ```
+ * A `HandleProvider` of `draw.extensions.handleProviders` is installed as one. The engine draws
+ * the handles with the look of the vertex handles, hit tests them and delegates their drags.
  */
 export interface AuxiliaryHandleProvider {
   /** Identifier unique within the registry (re-registering with the same id overwrites) */

@@ -18,10 +18,11 @@ import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from
 import { LngLatBounds } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HitTestStrategy } from '../../dispatcher/hit-test/strategies/base.js';
-import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
@@ -40,6 +41,7 @@ vi.mock('../ui/selection-ui-drawer.js', () => ({
     });
   },
   renderFollowedVertices: () => {},
+  renderGlobalAuxiliaryHandles: () => {},
 }));
 
 /** Counts of the GL objects created and deleted, and the loss flag */
@@ -191,11 +193,13 @@ function probe(id: string, lng: number): Feature {
   return {
     id,
     type: 'Probe',
-    coordinates: [lng, 0],
+    geometry: geometryFromCoordinates('Probe', [lng, 0]),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -203,7 +207,16 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
   const { gl } = createGlStub();
   const map = createMapStub(center, halfWidth);
   const store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   for (const [id, lng] of Object.entries(lngs)) store.createFeature(probe(id, lng));
 
   const draws: ProbeDraw[] = [];
@@ -216,7 +229,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
         feature: { id: string },
         projectionData: ProjectionData,
         _zoom: number,
-        context: CustomRendererDrawContext,
+        context: FrameDrawContext,
       ) => {
         draws.push({
           id: feature.id,
@@ -226,11 +239,11 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
       },
     },
     hitTest: { featureType: 'Probe' } as unknown as HitTestStrategy,
-  } as unknown as CustomFeatureHandler;
+  } as unknown as FeatureTypeHandler;
 
   const spatialIndex = new StoreSpatialIndex(store);
   spatialIndex.setCustomBoundingBoxCalculator('Probe', (feature) => {
-    const [lng, lat] = feature.coordinates as [number, number];
+    const [lng, lat] = coordinatesOf(feature) as [number, number];
     return { minX: lng, minY: lat, maxX: lng, maxY: lat };
   });
   const layer = createCustomLayer({

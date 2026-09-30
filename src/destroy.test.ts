@@ -4,128 +4,22 @@
 /**
  * Tests for draw.destroy() on a whole draw instance
  *
- * destroy releases everything createMapLibreGLDraw acquired (the layers and the listeners on
+ * destroy releases everything createDraw acquired (the layers and the listeners on
  * the map, the listeners on the canvas, the timers, the registrations of the extension points,
  * the plugins) and gives back what it changed on the map (boxZoom, the focusability of the
- * canvas). A second destroy, and any call after it, is ignored rather than thrown.
+ * canvas). A second destroy is ignored, and any other call after it throws
+ * DrawError('invalid-state').
  *
  * The map is a stub that records what is added to it, so a leak shows up as a count that does
  * not go back to where it started. The events of the datasets, which need a
  * whole instance too, are tested on the same stub.
  */
 
-import type { Map as MapLibreMap } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Plugin } from './index.js';
-import { createMapLibreGLDraw } from './maplibre-gl-draw.js';
-
-type Listener = (...args: unknown[]) => void;
-
-interface StubLayer {
-  id: string;
-  onRemove?: (map: unknown, gl: unknown) => void;
-}
-
-/** A stub of the maplibre Map that records its listeners and layers */
-function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
-  const mapListeners = new Map<string, Set<Listener>>();
-  const canvasListeners = new Map<string, Set<Listener>>();
-  const layers = new Map<string, StubLayer>();
-  let boxZoomEnabled = options.boxZoomEnabled ?? true;
-
-  const canvas = {
-    tabIndex: -1,
-    style: { outline: '' } as Record<string, string>,
-    addEventListener: (type: string, fn: Listener) => {
-      if (!canvasListeners.has(type)) canvasListeners.set(type, new Set());
-      canvasListeners.get(type)?.add(fn);
-    },
-    removeEventListener: (type: string, fn: Listener) => {
-      canvasListeners.get(type)?.delete(fn);
-    },
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
-    focus: () => {},
-    clientWidth: 800,
-    clientHeight: 600,
-    width: 800,
-    height: 600,
-  };
-
-  const map = {
-    style: { _loaded: true },
-    on: (type: string, fn: Listener) => {
-      if (!mapListeners.has(type)) mapListeners.set(type, new Set());
-      mapListeners.get(type)?.add(fn);
-      return map;
-    },
-    off: (type: string, fn: Listener) => {
-      mapListeners.get(type)?.delete(fn);
-      return map;
-    },
-    once: () => map,
-    getCanvas: () => canvas,
-    getCanvasContainer: () => canvas,
-    getContainer: () => canvas,
-    getLayer: (id: string) => layers.get(id),
-    addLayer: (layer: StubLayer) => {
-      layers.set(layer.id, layer);
-      return map;
-    },
-    removeLayer: (id: string) => {
-      const layer = layers.get(id);
-      layers.delete(id);
-      layer?.onRemove?.(map, null);
-      return map;
-    },
-    getStyle: () => ({ layers: [...layers.values()].map((l) => ({ id: l.id })) }),
-    triggerRepaint: vi.fn(),
-    getZoom: () => 10,
-    getPitch: () => 0,
-    getBearing: () => 0,
-    getCenter: () => ({ lng: 0, lat: 0 }),
-    getBounds: () => ({
-      getWest: () => -1,
-      getEast: () => 1,
-      getSouth: () => -1,
-      getNorth: () => 1,
-      getSouthWest: () => ({ lng: -1, lat: -1 }),
-      getNorthEast: () => ({ lng: 1, lat: 1 }),
-    }),
-    project: (lngLat: { lng: number; lat: number } | [number, number]) => {
-      const [lng, lat] = Array.isArray(lngLat) ? lngLat : [lngLat.lng, lngLat.lat];
-      return { x: lng * 100 + 400, y: 300 - lat * 100 };
-    },
-    unproject: (p: [number, number] | { x: number; y: number }) => {
-      const [x, y] = Array.isArray(p) ? p : [p.x, p.y];
-      return { lng: (x - 400) / 100, lat: (300 - y) / 100 };
-    },
-    getTerrain: () => null,
-    boxZoom: {
-      isEnabled: () => boxZoomEnabled,
-      enable: () => {
-        boxZoomEnabled = true;
-      },
-      disable: () => {
-        boxZoomEnabled = false;
-      },
-    },
-    dragPan: { isEnabled: () => true, enable: () => {}, disable: () => {} },
-    doubleClickZoom: { isEnabled: () => true, enable: () => {}, disable: () => {} },
-  };
-
-  const count = (listeners: Map<string, Set<Listener>>) =>
-    [...listeners.values()].reduce((sum, set) => sum + set.size, 0);
-
-  return {
-    map: map as unknown as MapLibreMap,
-    canvas,
-    layers,
-    mapListenerCount: () => count(mapListeners),
-    canvasListenerCount: () => count(canvasListeners),
-    isBoxZoomEnabled: () => boxZoomEnabled,
-  };
-}
+import { createDraw } from './api/draw.js';
+import type { Plugin } from './api/extension/plugin.js';
+import { createMapStub } from './test-utils.js';
 
 describe('draw.destroy()', () => {
   beforeEach(() => {
@@ -138,7 +32,7 @@ describe('draw.destroy()', () => {
 
   it('removes every layer and listener it added to the map and the canvas', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
+    const draw = createDraw(stub.map);
 
     expect(stub.layers.size).toBeGreaterThan(0);
     expect(stub.mapListenerCount()).toBeGreaterThan(0);
@@ -153,8 +47,8 @@ describe('draw.destroy()', () => {
 
   it('leaves no timer running', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
-    draw.addFeature({ type: 'Point', coordinates: [0, 0] } as never);
+    const draw = createDraw(stub.map);
+    draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
     draw.destroy();
 
     expect(vi.getTimerCount()).toBe(0);
@@ -162,14 +56,14 @@ describe('draw.destroy()', () => {
 
   it('gives boxZoom back in the state it found it', () => {
     const enabled = createMapStub({ boxZoomEnabled: true });
-    const first = createMapLibreGLDraw(enabled.map);
+    const first = createDraw(enabled.map);
     expect(enabled.isBoxZoomEnabled()).toBe(false);
     first.destroy();
     expect(enabled.isBoxZoomEnabled()).toBe(true);
 
     // The host (or another draw instance) had turned it off: destroy must not turn it on
     const disabled = createMapStub({ boxZoomEnabled: false });
-    const second = createMapLibreGLDraw(disabled.map);
+    const second = createDraw(disabled.map);
     second.destroy();
     expect(disabled.isBoxZoomEnabled()).toBe(false);
   });
@@ -178,7 +72,7 @@ describe('draw.destroy()', () => {
     const stub = createMapStub();
     stub.canvas.tabIndex = -1;
     stub.canvas.style.outline = '1px solid red';
-    const draw = createMapLibreGLDraw(stub.map);
+    const draw = createDraw(stub.map);
     expect(stub.canvas.tabIndex).toBe(0);
 
     draw.destroy();
@@ -189,46 +83,48 @@ describe('draw.destroy()', () => {
 
   it('uninstalls the plugins', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
-    const plugin: Plugin = { name: 'probe', onInstall: vi.fn(), onUninstall: vi.fn() };
-    draw.addPlugin(plugin);
+    const draw = createDraw(stub.map);
+    const plugin: Plugin = { name: 'probe', onAdd: vi.fn(), onRemove: vi.fn() };
+    draw.extensions.plugins.add(plugin);
 
     draw.destroy();
 
-    expect(plugin.onUninstall).toHaveBeenCalledTimes(1);
+    expect(plugin.onRemove).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a second destroy', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
-    const plugin: Plugin = { name: 'probe', onUninstall: vi.fn() };
-    draw.addPlugin(plugin);
+    const draw = createDraw(stub.map);
+    const plugin: Plugin = { name: 'probe', onAdd: () => {}, onRemove: vi.fn() };
+    draw.extensions.plugins.add(plugin);
 
     draw.destroy();
     expect(() => draw.destroy()).not.toThrow();
-    expect(plugin.onUninstall).toHaveBeenCalledTimes(1);
+    expect(plugin.onRemove).toHaveBeenCalledTimes(1);
     expect(stub.isBoxZoomEnabled()).toBe(true);
   });
 
-  it('ignores the calls made after destroy instead of throwing, and adds nothing to the map', () => {
+  it('throws invalid-state for the calls made after destroy, and adds nothing to the map', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
+    const draw = createDraw(stub.map);
     const lateInstall = vi.fn();
     draw.destroy();
 
-    expect(() => {
-      draw.setMode('draw_line');
-      draw.setMode('select');
-      draw.addFeature({ type: 'Point', coordinates: [1, 1] } as never);
-      draw.getAllFeatures();
-      draw.setReadOnly(true);
-      draw.setReadOnly(false);
-      draw.setInteractionLock(true);
-      draw.setRenderScale(2);
-      draw.on('draw.feature.create', () => {});
-      draw.addPlugin({ name: 'late', onInstall: lateInstall });
-      draw.snapping.register({ name: 'late', candidates: () => [] });
-    }).not.toThrow();
+    const calls: Array<() => unknown> = [
+      () => draw.setMode('select'),
+      () =>
+        draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } }),
+      () => draw.features.list(),
+      () => draw.setReadOnly(true),
+      () => draw.setInteractionLocked(true),
+      () => draw.options.update({ rendering: { renderScale: 2 } }),
+      () => draw.on('feature.created', () => {}),
+      () => draw.extensions.plugins.add({ name: 'late', onAdd: lateInstall }),
+      () => draw.extensions.snapProviders.add({ name: 'late', candidates: () => [] }),
+    ];
+    for (const call of calls) {
+      expect(call).toThrow(expect.objectContaining({ name: 'DrawError', code: 'invalid-state' }));
+    }
 
     expect(lateInstall).not.toHaveBeenCalled();
 
@@ -236,6 +132,87 @@ describe('draw.destroy()', () => {
     expect(stub.mapListenerCount()).toBe(0);
     expect(stub.canvasListenerCount()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('the instance after destroy', () => {
+  /** Every method of an object and of the plain objects in it, by path */
+  function methodsOf(target: object, prefix = ''): Array<[string, () => unknown]> {
+    const found: Array<[string, () => unknown]> = [];
+    for (const [key, value] of Object.entries(target)) {
+      const path = `${prefix}${key}`;
+      if (typeof value === 'function') found.push([path, value as () => unknown]);
+      else if (typeof value === 'object' && value !== null) {
+        found.push(...methodsOf(value, `${path}.`));
+      }
+    }
+    return found;
+  }
+
+  it('throws invalid-state from every method of the instance and its collections', async () => {
+    const plugin: Plugin = { name: 'p', onAdd: vi.fn(), onRemove: vi.fn() };
+    const draw = createDraw(createMapStub().map);
+    draw.extensions.plugins.add(plugin);
+    draw.destroy();
+    expect(plugin.onRemove).toHaveBeenCalledTimes(1);
+
+    const methods = methodsOf(draw).filter(([path]) => path !== 'destroy');
+    const namespaces = new Set(methods.map(([path]) => path.split('.').slice(0, -1).join('.')));
+    // Every resource and collection is walked
+    for (const namespace of [
+      '',
+      'features',
+      'layers',
+      'groups',
+      'datasets',
+      'hidden',
+      'selection',
+      'vertexSelection',
+      'metadata',
+      'options',
+      'document',
+      'debug',
+      'extensions.plugins',
+      'extensions.modes',
+      'extensions.featureTypes',
+      'extensions.overlays',
+      'extensions.snapProviders',
+      'extensions.handleProviders',
+      'extensions.companionProviders',
+    ]) {
+      expect(namespaces).toContain(namespace);
+    }
+
+    for (const [path, method] of methods) {
+      let failure: unknown = null;
+      try {
+        const result = method();
+        if (result instanceof Promise) await result;
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure, path).toMatchObject({ name: 'DrawError', code: 'invalid-state' });
+    }
+    // destroy itself stays callable and does nothing
+    expect(() => draw.destroy()).not.toThrow();
+    expect(plugin.onRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a plugin read the instance while destroy removes it', () => {
+    const draw = createDraw(createMapStub().map);
+    let seen: number | null = null;
+    let reader: { draw: typeof draw } | null = null;
+    draw.extensions.plugins.add({
+      name: 'reader',
+      onAdd: (ctx) => {
+        reader = ctx;
+      },
+      onRemove: () => {
+        seen = reader?.draw.features.count() ?? null;
+      },
+    });
+    draw.destroy();
+    expect(seen).toBe(0);
   });
 });
 
@@ -248,29 +225,29 @@ describe('the dataset events of the instance', () => {
     vi.useRealTimers();
   });
 
-  it('emits draw.dataset.add and draw.dataset.remove, and the same events reach a plugin', () => {
+  it('emits dataset.added and dataset.removed, and the same events reach a plugin', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
+    const draw = createDraw(stub.map);
     const log: string[] = [];
-    draw.on('draw.dataset.add', ({ datasetId }) => {
-      log.push(`add ${datasetId} ${draw.getDataset(datasetId) ? 'got' : 'none'}`);
+    draw.on('dataset.added', ({ dataset }) => {
+      log.push(`add ${dataset.id} ${draw.datasets.get(dataset.id) ? 'got' : 'none'}`);
     });
-    draw.on('draw.dataset.remove', ({ datasetId }) => {
-      log.push(`remove ${datasetId} ${draw.getDataset(datasetId) ? 'got' : 'none'}`);
+    draw.on('dataset.removed', ({ datasetId }) => {
+      log.push(`remove ${datasetId} ${draw.datasets.get(datasetId) ? 'got' : 'none'}`);
     });
     const pluginLog: string[] = [];
-    draw.addPlugin({
+    draw.extensions.plugins.add({
       name: 'follower',
-      onInstall: (ctx) => {
-        ctx.on('dataset.add', ({ datasetId }) => pluginLog.push(`add ${datasetId}`));
-        ctx.on('dataset.remove', ({ datasetId }) => pluginLog.push(`remove ${datasetId}`));
+      onAdd: (ctx) => {
+        ctx.on('dataset.added', ({ dataset }) => pluginLog.push(`add ${dataset.id}`));
+        ctx.on('dataset.removed', ({ datasetId }) => pluginLog.push(`remove ${datasetId}`));
       },
     });
 
-    const parcels = draw.addDataset({ id: 'parcels', features: [] });
-    draw.addDataset({ id: 'roads', features: [] });
-    draw.removeDataset('roads');
-    parcels.remove();
+    draw.datasets.add({ id: 'parcels', rows: [] });
+    draw.datasets.add({ id: 'roads', rows: [] });
+    draw.datasets.remove('roads');
+    draw.datasets.remove('parcels');
 
     expect(log).toEqual([
       'add parcels got',
@@ -281,34 +258,34 @@ describe('the dataset events of the instance', () => {
     expect(pluginLog).toEqual(['add parcels', 'add roads', 'remove roads', 'remove parcels']);
   });
 
-  it('emits draw.dataset.reorder when a move changes the order, to the host and to a plugin', () => {
+  it('emits dataset.reordered when a move changes the order, to the host and to a plugin', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
-    draw.addDataset({ id: 'parcels', features: [] });
-    draw.addDataset({ id: 'roads', features: [] });
-    const orders: string[][] = [];
-    draw.on('draw.dataset.reorder', ({ order }) => orders.push(order));
-    const pluginOrders: string[][] = [];
-    draw.addPlugin({
+    const draw = createDraw(stub.map);
+    draw.datasets.add({ id: 'parcels', rows: [] });
+    draw.datasets.add({ id: 'roads', rows: [] });
+    const orders: (readonly string[])[] = [];
+    draw.on('dataset.reordered', ({ order }) => orders.push(order));
+    const pluginOrders: (readonly string[])[] = [];
+    draw.extensions.plugins.add({
       name: 'follower',
-      onInstall: (ctx) => {
-        ctx.on('dataset.reorder', ({ order }) => pluginOrders.push(order));
+      onAdd: (ctx) => {
+        ctx.on('dataset.reordered', ({ order }) => pluginOrders.push(order));
       },
     });
 
-    draw.moveDataset('roads', { index: 0 });
-    draw.moveDataset('roads', { index: 0 });
+    draw.datasets.move('roads', { index: 0 });
+    draw.datasets.move('roads', { index: 0 });
 
     expect(orders).toEqual([['roads', 'parcels']]);
     expect(pluginOrders).toEqual([['roads', 'parcels']]);
   });
 
-  it('does not emit draw.dataset.remove when the instance is destroyed', () => {
+  it('does not emit dataset.removed when the instance is destroyed', () => {
     const stub = createMapStub();
-    const draw = createMapLibreGLDraw(stub.map);
-    draw.addDataset({ id: 'parcels', features: [] });
+    const draw = createDraw(stub.map);
+    draw.datasets.add({ id: 'parcels', rows: [] });
     const removed = vi.fn();
-    draw.on('draw.dataset.remove', removed);
+    draw.on('dataset.removed', removed);
 
     draw.destroy();
 

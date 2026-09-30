@@ -10,14 +10,8 @@
 
 import { circleBoundingBox } from '../../geometry/circle.js';
 import { pixelsToDegreesLat, pixelsToDegreesLng, rotateCoordinateOnSphere } from '../math/index.js';
-import type {
-  BoundingBox,
-  Coordinate,
-  Feature,
-  FeatureCoordinates,
-  ImageStyle,
-} from '../types/model.js';
-import { forEachCoordinateDeep } from './coordinates.js';
+import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../types/model.js';
+import { coordinatesOf, forEachCoordinateDeep } from './coordinates.js';
 import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.js';
 
 /**
@@ -26,17 +20,17 @@ import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.
  * For an Image, the size at createdZoom is converted into geographic coordinates
  */
 function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
-  const { type, coordinates } = feature;
+  const { type } = feature;
+  const coordinates = coordinatesOf(feature);
 
   // For an Image
   if (type === 'Image') {
     const coord = coordinates as Coordinate;
     const [lng, lat] = coord;
     const props = getImageProperties(feature);
-    const style = feature.style as ImageStyle | undefined;
 
-    const imageWidth = style?.width || props.imageWidth || 100;
-    const imageHeight = style?.height || props.imageHeight || 100;
+    const imageWidth = props.imageWidth || 100;
+    const imageHeight = props.imageHeight || 100;
     const scale = props.scale ?? 1;
     // createdZoom defaults to 14 when missing. getImageProperties().createdZoom returns 0 when
     // missing, so ?? does not work; therefore getCreatedZoom(number|undefined) is used.
@@ -106,7 +100,8 @@ const coordinateBoundingBoxCache = new WeakMap<object, BoundingBox>();
  * cache hit it does not traverse and only returns a copy of the value.
  */
 function computeCoordinateBoundingBox(feature: Feature): BoundingBox {
-  const { type, coordinates } = feature;
+  const { type } = feature;
+  const coordinates = coordinatesOf(feature);
 
   if (type === 'Point') {
     const [lng, lat] = coordinates as Coordinate;

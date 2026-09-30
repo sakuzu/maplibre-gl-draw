@@ -11,13 +11,13 @@
  *      (LineString / Polygon / the Multi types) -> vertex selection
  *   3. Unified z traversal (hitTestTopmost) -> if it is a Store feature, the selection is
  *      updated / shift+click toggles / re-clicking an already selected feature is delegated to
- *      pluginManager.handleFeatureClick.
+ *      plugins.handleFeatureClick.
  *      If a dataset is in the foreground, Store features are not grabbed and it
  *      is treated as clearing the selection.
  *      If a feature companion is in the foreground, the click is consumed and passed to the
  *      provider (the selection is left unchanged)
  *
- * Double click: selects the feature and notifies pluginManager.handleFeatureDoubleClick
+ * Double click: selects the feature and notifies plugins.handleFeatureDoubleClick
  */
 
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
@@ -30,14 +30,14 @@ import type { Selection } from '../../store/types.js';
 import { notifyFeatureCompanionClick } from '../../view/feature-companion.js';
 import { hitTestHandles } from '../../view/ui/handle-test.js';
 import { getSelectedFeatures } from '../../view/ui/helper.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 
 /**
  * The main logic of onClick
  */
 export function handleSelectClick(
   event: MouseNormalizedEvent,
-  context: ModeContext,
+  context: EngineModeContext,
   config: SelectionUIConfig,
 ): void {
   if (handlePluginInteractionClick(event, context)) {
@@ -62,8 +62,11 @@ export function handleSelectClick(
  * A double click on a feature is consumed (its default action is prevented, so MapLibre does
  * not zoom); a double click on the empty map is left to MapLibre.
  */
-export function handleSelectDoubleClick(event: MouseNormalizedEvent, context: ModeContext): void {
-  if (context.pluginManager?.isPluginInteracting()) return;
+export function handleSelectDoubleClick(
+  event: MouseNormalizedEvent,
+  context: EngineModeContext,
+): void {
+  if (context.plugins?.isPluginInteracting()) return;
 
   const { store } = context;
   const orderedFeatures = getDisplayFeatures(store);
@@ -73,13 +76,11 @@ export function handleSelectDoubleClick(event: MouseNormalizedEvent, context: Mo
   if (top?.kind !== 'store') return;
   event.originalEvent.preventDefault();
 
-  const filtered = context.pluginManager?.filterSelectionCandidates([top.feature.id]) ?? [
-    top.feature.id,
-  ];
+  const filtered = context.plugins?.filterSelectionCandidates([top.feature.id]) ?? [top.feature.id];
   if (filtered.length > 0) {
     store.setSelection('feature', filtered);
   }
-  context.pluginManager?.handleFeatureDoubleClick(top.feature.id);
+  context.plugins?.handleFeatureDoubleClick(top.feature.id, event);
 }
 
 /**
@@ -87,8 +88,11 @@ export function handleSelectDoubleClick(event: MouseNormalizedEvent, context: Mo
  *
  * @returns true when the click was consumed (= the caller skips the rest of the handling)
  */
-function handlePluginInteractionClick(event: MouseNormalizedEvent, context: ModeContext): boolean {
-  const pm = context.pluginManager;
+function handlePluginInteractionClick(
+  event: MouseNormalizedEvent,
+  context: EngineModeContext,
+): boolean {
+  const pm = context.plugins;
   if (!pm?.isPluginInteracting()) return false;
 
   const container = pm.getPluginInteractionContainer();
@@ -109,8 +113,8 @@ function handlePluginInteractionClick(event: MouseNormalizedEvent, context: Mode
  */
 function handleVertexClick(
   event: MouseNormalizedEvent,
-  selectedIds: string[],
-  context: ModeContext,
+  selectedIds: readonly string[],
+  context: EngineModeContext,
   config: SelectionUIConfig,
 ): boolean {
   if (selectedIds.length !== 1) return false;
@@ -140,21 +144,19 @@ function handleVertexClick(
   const featureId = handleHit.featureId;
   if (!featureId) return false;
   const vertexRef = handleHit.vertexRef;
-  const currentVertexSelection = store.getSelectedVertices();
+  const currentVertexSelection = store.getVertexSelection();
 
   if (event.modifiers.shift && currentVertexSelection?.featureId === featureId) {
     // Shift+click: add / remove a vertex of the same feature
-    const refs = currentVertexSelection.vertexIndices;
+    const refs = currentVertexSelection.vertices;
     if (hasVertexRef(refs, vertexRef)) {
       const newRefs = refs.filter((r) => !isSameVertexRef(r, vertexRef));
-      store.setSelectedVertices(
-        newRefs.length === 0 ? null : { featureId, vertexIndices: newRefs },
-      );
+      store.setSelectedVertices(newRefs.length === 0 ? null : { featureId, vertices: newRefs });
     } else {
-      store.setSelectedVertices({ featureId, vertexIndices: [...refs, vertexRef] });
+      store.setSelectedVertices({ featureId, vertices: [...refs, vertexRef] });
     }
   } else {
-    store.setSelectedVertices({ featureId, vertexIndices: [vertexRef] });
+    store.setSelectedVertices({ featureId, vertices: [vertexRef] });
   }
   return true;
 }
@@ -165,20 +167,22 @@ function handleVertexClick(
 function handleFeatureClick(
   event: MouseNormalizedEvent,
   selection: Selection,
-  selectedIds: string[],
-  context: ModeContext,
+  selectedIds: readonly string[],
+  context: EngineModeContext,
 ): void {
   const { store } = context;
   const orderedFeatures = getDisplayFeatures(store);
 
-  const top = context.hitTestTopmost(event.point, { orderedFeatures });
+  let top = context.hitTestTopmost(event.point, { orderedFeatures });
 
-  // A feature companion is in the foreground: the provider receives the click and core changes
-  // the selection in no way at all (not even clearing it as an empty click would). Core does not
-  // know what the companion is, so its job ends at consuming the click and reporting it.
+  // A feature companion is in the foreground: the provider receives the click. When it consumes
+  // it, core changes the selection in no way at all (not even clearing it as an empty click
+  // would); when it leaves it, the click is one on the feature that owns the companion
   if (top?.kind === 'companion') {
-    notifyFeatureCompanionClick(context.featureCompanions, top.companion);
-    return;
+    if (notifyFeatureCompanionClick(context.featureCompanions, top.companion, event)) return;
+    const owner = store.getFeature(top.companion.featureId);
+    if (!owner) return;
+    top = { kind: 'store', feature: owner };
   }
 
   // When there is nothing, and when a dataset is in the foreground, Store
@@ -194,7 +198,7 @@ function handleFeatureClick(
 
   // Re-clicking an already selected feature -> delegate to the plugins
   if (!event.modifiers.shift && selectedIds.length === 1 && selectedIds.includes(feature.id)) {
-    if (context.pluginManager?.handleFeatureClick(feature.id)) {
+    if (context.plugins?.handleFeatureClick(feature.id, event)) {
       return;
     }
   }
@@ -204,7 +208,7 @@ function handleFeatureClick(
     ? toggleSelection(selection, feature.id)
     : [feature.id];
 
-  const filtered = context.pluginManager?.filterSelectionCandidates(candidateIds) ?? candidateIds;
+  const filtered = context.plugins?.filterSelectionCandidates(candidateIds) ?? candidateIds;
   if (filtered.length === 0) {
     store.setSelection(null, []);
   } else {

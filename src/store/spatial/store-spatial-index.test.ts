@@ -8,24 +8,35 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../memory.js';
 import type { Store } from '../store.js';
-import type { Feature, StateChanges } from '../types.js';
+import type { Feature, StoreChange } from '../types.js';
 import { StoreSpatialIndex } from './store-spatial-index.js';
 
 function point(id: string, lng: number, lat: number): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [lng, lat],
+    geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function memoryStore(): MemoryStore {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l', name: 'l', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l',
+    name: 'l',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   return store;
 }
 
@@ -35,14 +46,14 @@ function memoryStore(): MemoryStore {
  */
 function stubStore() {
   const features = new Map<string, Feature>();
-  const listeners = new Set<(changes: StateChanges) => void>();
-  const emit = (changes: StateChanges) => {
+  const listeners = new Set<(changes: StoreChange) => void>();
+  const emit = (changes: StoreChange) => {
     for (const listener of listeners) listener(changes);
   };
   const store = {
     getFeature: (id: string) => features.get(id),
-    getAllFeatures: () => [...features.values()],
-    subscribe: (listener: (changes: StateChanges) => void) => {
+    listFeatures: () => [...features.values()],
+    subscribe: (listener: (changes: StoreChange) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -62,6 +73,12 @@ function stubStore() {
         source: 'remote',
         features: { updated: [{ id: feature.id, feature, previous, isIntermediate }] },
       });
+    },
+    /** Replaces the whole document; the notification says only that it was replaced */
+    remoteReplace(next: Feature[]) {
+      features.clear();
+      for (const feature of next) features.set(feature.id, feature);
+      emit({ source: 'remote', reset: true });
     },
     remoteDelete(id: string) {
       const previous = features.get(id) as Feature;
@@ -86,7 +103,7 @@ describe('StoreSpatialIndex', () => {
     store.createFeature(point('a', 1, 1));
     expect(index.findNear([1, 1], 0)).toEqual(['a']);
 
-    store.updateFeature('a', { coordinates: [2, 2] });
+    store.updateFeature('a', { geometry: { type: 'Point', coordinates: [2, 2] } });
     expect(index.findNear([1, 1], 0)).toEqual([]);
     expect(index.findNear([2, 2], 0)).toEqual(['a']);
 
@@ -99,7 +116,11 @@ describe('StoreSpatialIndex', () => {
     const index = new StoreSpatialIndex(store);
     store.createFeature(point('a', 1, 1));
 
-    store.updateFeature('a', { coordinates: [3, 3] }, { isIntermediate: true });
+    store.updateFeature(
+      'a',
+      { geometry: { type: 'Point', coordinates: [3, 3] } },
+      { isIntermediate: true },
+    );
 
     expect(index.findNear([3, 3], 0)).toEqual(['a']);
   });
@@ -109,7 +130,7 @@ describe('StoreSpatialIndex', () => {
     const index = new StoreSpatialIndex(store);
     store.transact(() => {
       store.createFeature(point('a', 1, 1));
-      store.updateFeature('a', { coordinates: [4, 4] });
+      store.updateFeature('a', { geometry: { type: 'Point', coordinates: [4, 4] } });
       store.createFeature(point('b', 5, 5));
       store.deleteFeature('b');
     });
@@ -120,7 +141,16 @@ describe('StoreSpatialIndex', () => {
   it('drops the features of a deleted layer', () => {
     const store = memoryStore();
     const index = new StoreSpatialIndex(store);
-    store.createLayer({ id: 'm', name: 'm', visible: true, locked: false, opacity: 1, order: [] });
+    store.createLayer({
+      id: 'm',
+      name: 'm',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
     store.createFeature({ ...point('a', 1, 1), layerId: 'm' });
 
     store.deleteLayer('m');
@@ -151,6 +181,19 @@ describe('StoreSpatialIndex', () => {
 
     remote.remoteDelete('r');
     expect(index.findNear([3, 3], 0)).toEqual([]);
+  });
+
+  it('rebuilds itself from the Store when the whole document is replaced', () => {
+    const remote = stubStore();
+    remote.remoteCreate(point('old', 1, 1));
+    const index = new StoreSpatialIndex(remote.store);
+    expect(index.findNear([1, 1], 0)).toEqual(['old']);
+
+    remote.remoteReplace([point('a', 2, 2), point('b', 3, 3)]);
+
+    expect(index.findNear([1, 1], 0)).toEqual([]);
+    expect(index.findNear([2, 2], 0)).toEqual(['a']);
+    expect(index.findNear([3, 3], 0)).toEqual(['b']);
   });
 
   it('measures a registered custom type with its calculator, also for existing features', () => {

@@ -4,7 +4,7 @@
 /**
  * Tests for the trace support of the drawing modes
  *
- * These verify readTraceAnchor, which reads an endpoint from a snapping result, and
+ * These verify readTraceAnchor, which reads an endpoint from the snapping result of an input, and
  * computeTracePath, which derives the path between endpoints. The path is the shortest path of
  * the graph of the nearby edges, so it holds across different features and different origins
  * (the Store and data) as long as they are connected by a shared vertex. The verification of
@@ -13,14 +13,14 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
-import type { SnapResult, SnapTarget } from '../../snapping/types.js';
+import type { DrawPointerEvent } from '../../api/extension/mode.js';
+import type { SnapResult } from '../../api/state.js';
 import { MemoryStore } from '../../store/memory.js';
-import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { BoundingBox, Coordinate, Feature, VertexRef } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
-import type { TraceAnchor } from './trace-support.js';
-import { computeTracePath, readTraceAnchor } from './trace-support.js';
+import type { Coordinate, Feature } from '../../store/types.js';
+import { createModeHarness, pointerInput } from '../../test-utils.js';
+import { ModeManagerImpl } from '../manager.js';
+import type { TraceAnchor, TraceSource } from './trace-support.js';
+import { computeTracePath, readTraceAnchor, traceSourceOf } from './trace-support.js';
 
 const ZOOM = 14;
 
@@ -46,36 +46,48 @@ const FAR: Coordinate[] = [
 ];
 
 let store: MemoryStore;
-let spatialIndex: RBushSpatialIndex;
 let datasets: Map<string, Feature[]>;
-let snapResult: SnapResult | null;
 let traceEnabled: boolean;
 let displayTraceEnabled: boolean;
-let context: ModeContext;
+/**
+ * The trace source of a mode over the Store, with the rows of the datasets given here (a mode
+ * context without an engine has no datasets)
+ */
+let context: TraceSource;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
-  spatialIndex = new RBushSpatialIndex();
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   datasets = new Map();
-  snapResult = null;
   traceEnabled = true;
   displayTraceEnabled = true;
+  snapResult = null;
 
+  const map = { getZoom: () => ZOOM } as unknown as MapLibreMap;
+  const harness = createModeHarness({ store, map, modeManager: new ModeManagerImpl(store) });
+  const base = traceSourceOf(harness.modeContext());
+  const row = (anchor: TraceAnchor) =>
+    datasets.get(anchor.datasetId ?? '')?.find((feature) => feature.id === anchor.featureId);
   context = {
-    map: { getZoom: () => ZOOM } as unknown as MapLibreMap,
-    store,
-    spatialIndex,
-    get trace() {
-      return { enabled: traceEnabled };
-    },
-    getSnapResult: () => snapResult,
-    getDatasetFeature: (datasetId: string, featureId: string) =>
-      datasets.get(datasetId)?.find((feature) => feature.id === featureId) ?? null,
-    // Empty when snapping to data is disabled (the same as the production wiring)
-    getDatasetTraceFeatures: (_bbox: BoundingBox) =>
-      displayTraceEnabled ? [...datasets.values()].flat() : [],
-  } as unknown as ModeContext;
+    isEnabled: () => traceEnabled && base.isEnabled(),
+    tolerancePx: base.tolerancePx,
+    zoom: () => ZOOM,
+    geometryOf: (anchor) =>
+      anchor.datasetId === undefined ? base.geometryOf(anchor) : (row(anchor)?.geometry ?? null),
+    features: (bbox) => [
+      ...base.features(bbox),
+      ...(displayTraceEnabled ? [...datasets.values()].flat() : []),
+    ],
+  };
 });
 
 /** Adds a polyline to the Store */
@@ -83,16 +95,17 @@ function addStoreLine(id: string, coordinates: Coordinate[], visible = true): vo
   const feature: Feature = {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible,
+    style: {},
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer('l1', { order: [...layer.order, id] });
-  spatialIndex.insert(feature);
+  if (layer) store.updateLayer('l1', { items: [...layer.items, id] });
 }
 
 /** Adds a polyline to a dataset */
@@ -100,11 +113,13 @@ function addDisplayLine(datasetId: string, id: string, coordinates: Coordinate[]
   const feature: Feature = {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     layerId: '',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   const features = datasets.get(datasetId) ?? [];
   features.push(feature);
@@ -126,20 +141,25 @@ function vertexAnchor(
   return anchor;
 }
 
-/** An endpoint snapped to the middle of an edge */
+/** An endpoint snapped to the middle of an edge of LINE */
 function segmentAnchor(featureId: string, index: number, coordinate: Coordinate): TraceAnchor {
-  const startRef: VertexRef = { ring: 0, index };
-  const endRef: VertexRef = { ring: 0, index: index + 1 };
-  return { featureId, endpoint: { coordinate, segment: { startRef, endRef } } };
+  return {
+    featureId,
+    endpoint: { coordinate, segment: { start: LINE[index], end: LINE[index + 1] } },
+  };
 }
 
-/** A mouse event that has a snapping result */
-function mouseEvent(coordinate: Coordinate): MouseNormalizedEvent {
-  return { lngLat: { lng: coordinate[0], lat: coordinate[1] } } as MouseNormalizedEvent;
+/** The snapping result the next input carries */
+let snapResult: SnapResult | null = null;
+
+/** An input at a position, with the snapping result */
+function mouseEvent(coordinate: Coordinate): DrawPointerEvent {
+  const event = pointerInput(coordinate[0], coordinate[1]);
+  return { ...event, snapped: snapResult ?? event.snapped };
 }
 
-function makeSnapResult(coordinate: Coordinate, target: SnapTarget): SnapResult {
-  return { lngLat: { lng: coordinate[0], lat: coordinate[1] }, target };
+function makeSnapResult(coordinate: Coordinate, target: SnapResult['target']): SnapResult {
+  return { lngLat: [coordinate[0], coordinate[1]], target };
 }
 
 describe('readTraceAnchor', () => {
@@ -174,21 +194,13 @@ describe('readTraceAnchor', () => {
       kind: 'edge',
       featureId: 'f1',
       datasetId: 'data',
-      segment: {
-        start: LINE[0],
-        end: LINE[1],
-        startRef: { ring: 0, index: 0 },
-        endRef: { ring: 0, index: 1 },
-      },
+      segment: { start: LINE[0], end: LINE[1] },
     });
 
     const anchor = readTraceAnchor(context, mouseEvent(middle));
 
     expect(anchor?.datasetId).toBe('data');
-    expect(anchor?.endpoint.segment).toEqual({
-      startRef: { ring: 0, index: 0 },
-      endRef: { ring: 0, index: 1 },
-    });
+    expect(anchor?.endpoint.segment).toEqual({ start: LINE[0], end: LINE[1] });
   });
 
   it('does not read when tracing is disabled', () => {

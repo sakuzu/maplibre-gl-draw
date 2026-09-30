@@ -11,10 +11,12 @@ import { computeResize, startResize } from '../../../operations/resize.js';
 import type { RotateState } from '../../../operations/rotate.js';
 import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
 import type { HandleType } from '../../../shared/config/constants.js';
+import { drawProperties } from '../../../shared/properties.js';
+import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import type { Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
-import type { ModeContext } from '../../handler.js';
+import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragScope, DragStore } from './operation.js';
 import { dragStartLngLat, selectedFeaturesOf } from './operation.js';
@@ -42,13 +44,15 @@ export class ResizeDrag implements DragOperation {
       const result = resizeResults.get(feature.id);
 
       if (result) {
-        const updates: Partial<Feature> = { coordinates: result.coordinates };
+        const updates: Partial<Feature> = {
+          geometry: geometryFromCoordinates(feature.type, result.coordinates),
+        };
 
         // Update the scale property when there is one (Text, Image, etc.)
         if (result.scale !== undefined) {
           updates.properties = {
             ...feature.properties,
-            scale: result.scale,
+            ...drawProperties({ scale: result.scale }),
           };
         }
 
@@ -56,7 +60,7 @@ export class ResizeDrag implements DragOperation {
         if (result.radiusMeters !== undefined && feature.type === 'Circle') {
           updates.properties = {
             ...feature.properties,
-            radiusMeters: result.radiusMeters,
+            ...drawProperties({ radiusMeters: result.radiusMeters }),
           };
         }
 
@@ -83,7 +87,7 @@ export function startResizeDrag(
   handle: HandleType,
   bbox: BoundingBoxCoords,
   features: Feature[],
-  map: ModeContext['map'],
+  map: EngineModeContext['map'],
   scope: DragScope,
 ): ResizeDrag {
   // A box thinner than 1 pixel on screen is not stretched along that axis (converted into
@@ -117,13 +121,15 @@ export class RotateDrag implements DragOperation {
     for (const [id, result] of rotateResults) {
       const feature = store.getFeature(id);
       if (feature) {
-        const updates: Partial<Feature> = { coordinates: result.coordinates };
+        const updates: Partial<Feature> = {
+          geometry: geometryFromCoordinates(feature.type, result.coordinates),
+        };
 
         // Update the rotation property when there is one (Text, Image, Note, etc.)
         if (result.rotation !== undefined) {
           updates.properties = {
             ...feature.properties,
-            rotation: result.rotation,
+            ...drawProperties({ rotation: result.rotation }),
           };
         }
 

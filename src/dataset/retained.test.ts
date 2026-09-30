@@ -41,6 +41,7 @@ import type { DisplayBatchTarget } from './dataset.js';
 /** The terrain state of the draw instance the probes draw into */
 const terrain = new TerrainContext();
 
+import { displayFeature, toRow } from '../test-utils.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import {
   collectFeatureArray,
@@ -48,8 +49,7 @@ import {
   PackedLinesBuilder,
   unpackLines,
 } from './retained.js';
-import type { DatasetFeatureInput, DatasetOptions } from './types.js';
-import { normalizeDisplayFeature } from './types.js';
+import type { DatasetOptions, DatasetRow } from './types.js';
 
 /**
  * A stub that has only the GL that StrokeRenderer / FillShaderManager call when FeatureDrawer is
@@ -248,8 +248,8 @@ function drawFrame(manager: DatasetManager, probe: RetainedProbe): void {
 }
 
 /** A small square polygon */
-function polygon(id: string, lng: number, lat = 0, extra?: Partial<Feature>): DatasetFeatureInput {
-  return {
+function polygon(id: string, lng: number, lat = 0, extra?: Partial<Feature>): DatasetRow {
+  return toRow({
     id,
     type: 'Polygon',
     coordinates: [
@@ -262,15 +262,15 @@ function polygon(id: string, lng: number, lat = 0, extra?: Partial<Feature>): Da
       ],
     ],
     ...extra,
-  };
+  });
 }
 
-function point(id: string, lng: number, lat = 0): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: [lng, lat] };
+function point(id: string, lng: number, lat = 0): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: [lng, lat] });
 }
 
-function line(id: string, lng: number, extra?: Partial<Feature>): DatasetFeatureInput {
-  return {
+function line(id: string, lng: number, extra?: Partial<Feature>): DatasetRow {
+  return toRow({
     id,
     type: 'LineString',
     coordinates: [
@@ -278,12 +278,12 @@ function line(id: string, lng: number, extra?: Partial<Feature>): DatasetFeature
       [lng + 1, 1],
     ],
     ...extra,
-  };
+  });
 }
 
 /** Polygons in a grid (enough of them to cause a chunk split) */
-function createGrid(count: number, columns = 40): DatasetFeatureInput[] {
-  const features: DatasetFeatureInput[] = new Array(count);
+function createGrid(count: number, columns = 40): DatasetRow[] {
+  const features: DatasetRow[] = new Array(count);
   for (let i = 0; i < count; i++) {
     features[i] = polygon(`f${i}`, (i % columns) * 1, Math.floor(i / columns) * 1);
   }
@@ -294,7 +294,7 @@ describe('the build and drawing of retained mode', () => {
   it('the build happens once and a frame only draws', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0), polygon('b', 1)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0), polygon('b', 1)] });
 
     drawFrame(manager, probe);
     const buildsAfterFirst = probe.built.length;
@@ -311,7 +311,7 @@ describe('the build and drawing of retained mode', () => {
   it('the batches are split per kind and drawn in the order polygon → line → point', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [point('pt', 0), line('ln', 0), polygon('pg', 0)] });
+    add(manager, { id: 'c1', rows: [point('pt', 0), line('ln', 0), polygon('pg', 0)] });
 
     drawFrame(manager, probe);
 
@@ -326,7 +326,7 @@ describe('the build and drawing of retained mode', () => {
     const probe = createRetainedProbe();
     add(manager, {
       id: 'c1',
-      features: [polygon('hidden', 0, 0, { visible: false }), polygon('shown', 1)],
+      rows: [polygon('hidden', 0, 0, { visible: false }), polygon('shown', 1)],
     });
 
     drawFrame(manager, probe);
@@ -339,7 +339,7 @@ describe('the build and drawing of retained mode', () => {
     const rule: StyleRule = { kind: 'single', color: '#ff0000' };
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', styleRule: rule, features: [polygon('p', 0)] });
+    add(manager, { id: 'c1', styleRule: rule, rows: [polygon('p', 0)] });
 
     drawFrame(manager, probe);
 
@@ -354,7 +354,7 @@ describe('the build and drawing of retained mode', () => {
     const probe = createRetainedProbe();
     add(manager, {
       id: 'c1',
-      features: [line('dashed', 0, { style: { lineStyle: 'dashed' } }), line('solid', 5)],
+      rows: [line('dashed', 0, { style: { lineStyle: 'dashed' } }), line('solid', 5)],
     });
 
     drawFrame(manager, probe);
@@ -370,8 +370,8 @@ describe('the build and drawing of retained mode', () => {
     const probe = createRetainedProbe();
     add(manager, {
       id: 'c1',
-      features: [
-        {
+      rows: [
+        toRow({
           id: 'multi',
           type: 'MultiPolygon',
           coordinates: [
@@ -392,7 +392,7 @@ describe('the build and drawing of retained mode', () => {
               ],
             ],
           ],
-        },
+        }),
       ],
     });
 
@@ -408,7 +408,7 @@ describe('the chunk culling of retained mode', () => {
     const features = createGrid(1600);
     const { manager } = createManager({ minX: -0.1, minY: -0.1, maxX: 1, maxY: 1 });
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features });
+    add(manager, { id: 'c1', rows: features });
 
     drawFrame(manager, probe);
 
@@ -424,7 +424,7 @@ describe('the chunk culling of retained mode', () => {
     const features = createGrid(1600);
     const { manager, setBounds } = createManager({ minX: -0.1, minY: -0.1, maxX: 1, maxY: 1 });
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features });
+    add(manager, { id: 'c1', rows: features });
 
     drawFrame(manager, probe);
     const first = probe.drawn.map((b) => b.ids[0]);
@@ -441,7 +441,7 @@ describe('the chunk culling of retained mode', () => {
   it('nothing is drawn when everything is outside the viewport', () => {
     const { manager } = createManager({ minX: 170, minY: 70, maxX: 179, maxY: 80 });
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: createGrid(1600) });
+    add(manager, { id: 'c1', rows: createGrid(1600) });
 
     drawFrame(manager, probe);
 
@@ -452,7 +452,7 @@ describe('the chunk culling of retained mode', () => {
   it('the origin of a chunk is the center of the bbox of the chunk', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0, 0), polygon('b', 1.5, 1.5)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0, 0), polygon('b', 1.5, 1.5)] });
 
     drawFrame(manager, probe);
 
@@ -462,16 +462,16 @@ describe('the chunk culling of retained mode', () => {
 });
 
 describe('the invalidation and release of retained mode', () => {
-  it('setFeatures releases the retained batches and rebuilds them', () => {
+  it('setRows releases the retained batches and rebuilds them', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
     expect(probe.disposed).toHaveLength(0);
 
-    dataset.setFeatures([polygon('b', 0), polygon('c', 1)]);
+    dataset.setRows([polygon('b', 0), polygon('c', 1)]);
     expect(probe.disposed).toHaveLength(1);
 
     probe.resetDrawn();
@@ -484,7 +484,7 @@ describe('the invalidation and release of retained mode', () => {
   it('setStyleRule releases the retained batches and rebuilds them', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     dataset.setStyleRule({ kind: 'single', color: '#00ff00' });
@@ -532,7 +532,7 @@ describe('the invalidation and release of retained mode', () => {
   it('remove() releases the GPU resources of every chunk (builds and releases match)', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: createGrid(1600) });
+    const dataset = add(manager, { id: 'c1', rows: createGrid(1600) });
 
     drawFrame(manager, probe);
     expect(probe.built.length).toBeGreaterThan(1);
@@ -546,8 +546,8 @@ describe('the invalidation and release of retained mode', () => {
   it('the builds and releases match with manager.destroy() too', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: createGrid(1600) });
-    add(manager, { id: 'c2', features: [point('p', 0)] });
+    add(manager, { id: 'c1', rows: createGrid(1600) });
+    add(manager, { id: 'c2', rows: [point('p', 0)] });
 
     drawFrame(manager, probe);
     manager.destroy();
@@ -558,7 +558,7 @@ describe('the invalidation and release of retained mode', () => {
   it('disposeRetained() releases only the GPU resources and rebuilds on the next draw', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     manager.disposeRetained();
@@ -575,7 +575,7 @@ describe('the invalidation and release of retained mode', () => {
   it('a change of devicePixelRatio rebuilds them', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
@@ -596,7 +596,7 @@ describe('the invalidation and release of retained mode', () => {
     const source = createPixelRatioSource(3.125);
     const { manager } = createManager(WORLD, source.resolve);
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
@@ -605,7 +605,7 @@ describe('the invalidation and release of retained mode', () => {
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
 
-    source.setRenderScale(0.5);
+    source.setScaleFactor(0.5);
     drawFrame(manager, probe);
     expect(probe.disposed).toHaveLength(1);
     expect(probe.built).toHaveLength(2);
@@ -614,7 +614,7 @@ describe('the invalidation and release of retained mode', () => {
   it('nothing is rebuilt on a devicePixelRatio change when the ratio is injected', () => {
     const { manager } = createManager(WORLD, 3.125);
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
@@ -633,7 +633,7 @@ describe('the invalidation and release of retained mode', () => {
   it('repeated drawing does not add builds from a missed release', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     for (let i = 0; i < 5; i++) {
       drawFrame(manager, probe);
@@ -649,7 +649,7 @@ describe('retained batches and the visibility control', () => {
   it('hiding it releases no retained batch and runs no drawing', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
@@ -667,7 +667,7 @@ describe('retained batches and the visibility control', () => {
   it('showing it again does not rebuild the retained batches', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     dataset.setVisible(false);
@@ -684,7 +684,7 @@ describe('retained batches and the visibility control', () => {
   it('removing it while hidden releases the retained batches', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     dataset.setVisible(false);
@@ -698,8 +698,8 @@ describe('retained batches and the reordering', () => {
   it('moving it within the same side does not rebuild the retained batches', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0)] });
-    add(manager, { id: 'c2', features: [polygon('b', 1)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0)] });
+    add(manager, { id: 'c2', rows: [polygon('b', 1)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(2);
@@ -717,7 +717,7 @@ describe('retained batches and the reordering', () => {
   it('changing the side does not rebuild the retained batches', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
@@ -738,7 +738,7 @@ describe('retained batches and the reordering', () => {
   it('moving it while hidden does not rebuild it when it is shown again', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     dataset.setVisible(false);
@@ -758,12 +758,12 @@ describe('retained batches and the reordering', () => {
 
 describe('the zoom-dependent drawing factors (zoomScale)', () => {
   /** A dataset with one polygon, one line and one point (it makes 3 batches) */
-  const trio = (): DatasetFeatureInput[] => [polygon('pg', 0), line('ln', 0), point('pt', 0)];
+  const trio = (): DatasetRow[] => [polygon('pg', 0), line('ln', 0), point('pt', 0)];
 
   it('without one, a scale of 1 and an opacity of 1 are passed (the look as before)', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: trio() });
+    add(manager, { id: 'c1', rows: trio() });
 
     drawFrame(manager, probe);
 
@@ -779,7 +779,7 @@ describe('the zoom-dependent drawing factors (zoomScale)', () => {
     const probe = createRetainedProbe();
     add(manager, {
       id: 'c1',
-      features: trio(),
+      rows: trio(),
       zoomScale: (zoom) => {
         seenZooms.push(zoom);
         return { scale: 0.5, opacity: 0.4 };
@@ -798,7 +798,7 @@ describe('the zoom-dependent drawing factors (zoomScale)', () => {
   it('setZoomScale does not rebuild the retained batches and takes effect next frame', () => {
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    const dataset = add(manager, { id: 'c1', features: [polygon('a', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('a', 0)] });
 
     drawFrame(manager, probe);
     expect(probe.built).toHaveLength(1);
@@ -824,7 +824,7 @@ describe('the zoom-dependent drawing factors (zoomScale)', () => {
     const probe = createRetainedProbe();
     add(manager, {
       id: 'c1',
-      features: trio(),
+      rows: trio(),
       zoomScale: () => ({ scale: 1, opacity: 0 }),
     });
 
@@ -839,12 +839,12 @@ describe('the zoom-dependent drawing factors (zoomScale)', () => {
     const probe = createRetainedProbe();
     add(manager, {
       id: 'c1',
-      features: [polygon('a', 0)],
+      rows: [polygon('a', 0)],
       zoomScale: () => ({ scale: Number.NaN, opacity: 5 }),
     });
     add(manager, {
       id: 'c2',
-      features: [polygon('b', 0)],
+      rows: [polygon('b', 0)],
       zoomScale: () => ({ scale: -2, opacity: Number.POSITIVE_INFINITY }),
     });
 
@@ -904,7 +904,7 @@ describe('following the changes of the DEM coverage', () => {
 
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('pg', 0), line('ln', 0), point('pt', 0)] });
+    add(manager, { id: 'c1', rows: [polygon('pg', 0), line('ln', 0), point('pt', 0)] });
 
     drawFrame(manager, probe);
     const builtFirst = probe.built.map((b) => b.kind);
@@ -929,7 +929,7 @@ describe('following the changes of the DEM coverage', () => {
 
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [polygon('a', 0), polygon('b', 1)] });
+    add(manager, { id: 'c1', rows: [polygon('a', 0), polygon('b', 1)] });
 
     drawFrame(manager, probe);
     probe.built.length = 0;
@@ -951,7 +951,7 @@ describe('following the changes of the DEM coverage', () => {
 
     const { manager } = createManager();
     const probe = createRetainedProbe();
-    add(manager, { id: 'c1', features: [point('pt', 10, 20), polygon('pg', 0)] });
+    add(manager, { id: 'c1', rows: [point('pt', 10, 20), polygon('pg', 0)] });
 
     drawFrame(manager, probe);
     const firstPoint = probe.built.find((b) => b.kind === 'point');
@@ -975,7 +975,7 @@ describe('the time-sliced build of the retained batches', () => {
     const ring: Array<[number, number]> = [];
     for (let i = 0; i < n; i++) ring.push([139.5 + i * 1e-6, 35.6 + (i % 2) * 1e-6]);
     ring.push(ring[0]);
-    return normalizeDisplayFeature({ id, type: 'Polygon', coordinates: [ring] });
+    return displayFeature({ id, type: 'Polygon', coordinates: [ring] });
   };
 
   it('it yields to the next frame once the budget is exceeded (one bundle at a time)', () => {
@@ -1027,7 +1027,7 @@ describe('the time-sliced build of the retained batches', () => {
   // The build of a frame that hands the polygons and lines to the analytic drape
   describe('handing the polygons and lines to the analytic drape', () => {
     const lineOf = (id: string): Feature =>
-      normalizeDisplayFeature({
+      displayFeature({
         id,
         type: 'LineString',
         coordinates: [
@@ -1036,7 +1036,7 @@ describe('the time-sliced build of the retained batches', () => {
         ],
       });
     const pointOf = (id: string): Feature =>
-      normalizeDisplayFeature({ id, type: 'Point', coordinates: [139.5, 35.6] });
+      displayFeature({ id, type: 'Point', coordinates: [139.5, 35.6] });
 
     it('a frame that handed them over does not push the solid polygons and lines', () => {
       const probe = createRetainedProbe();
@@ -1087,7 +1087,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [polygon('poly', 0), line('line', 10)],
+      rows: [polygon('poly', 0), line('line', 10)],
     });
     dataset.setSelectedIds(['poly', 'line']);
 
@@ -1101,7 +1101,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [polygon('poly', 0), line('line', 10)],
+      rows: [polygon('poly', 0), line('line', 10)],
     });
     dataset.setSelectedIds(['poly', 'line']);
     manager.setDrapedDatasets(new Set(['c1']));
@@ -1118,7 +1118,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [polygon('poly', 0), line('line', 10)],
+      rows: [polygon('poly', 0), line('line', 10)],
     });
     dataset.setSelectedIds(['poly', 'line']);
     // The hand-over decision waits until things settle, so for a few frames right after the
@@ -1138,7 +1138,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
   it('in a frame where the drape is not painting, immediate mode overpaints', () => {
     const probe = createRetainedProbe();
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [polygon('poly', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('poly', 0)] });
     dataset.setSelectedIds(['poly']);
     manager.setDrapedDatasets(null);
     setDrapePaintedDatasets(terrain, new Set(['other']));
@@ -1154,7 +1154,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
   it('even when handed over, a point is overpainted by immediate mode (not on the drape)', () => {
     const probe = createRetainedProbe();
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [point('pt', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [point('pt', 0)] });
     dataset.setSelectedIds(['pt']);
     manager.setDrapedDatasets(new Set(['c1']));
 
@@ -1172,7 +1172,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [
+      rows: [
         polygon('poly', 0, 0, { style: { lineStyle: 'dashed' } }),
         line('line', 10, { style: { lineStyle: 'dashed' } }),
       ],
@@ -1188,7 +1188,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
   it('releasing the hand-over brings the overpaint back to immediate mode', () => {
     const probe = createRetainedProbe();
     const { manager } = createManager();
-    const dataset = add(manager, { id: 'c1', features: [polygon('poly', 0)] });
+    const dataset = add(manager, { id: 'c1', rows: [polygon('poly', 0)] });
     dataset.setSelectedIds(['poly']);
 
     manager.setDrapedDatasets(new Set(['c1']));
@@ -1209,7 +1209,7 @@ describe('the origin of a chunk seen at high zoom', () => {
     // One chunk from Osaka to Tokyo (its center is about 2 degrees from either)
     add(manager, {
       id: 'c1',
-      features: [polygon('osaka', 135.5, 34.69), polygon('tokyo', 139.7, 35.68)],
+      rows: [polygon('osaka', 135.5, 34.69), polygon('tokyo', 139.7, 35.68)],
     });
     drawFrame(manager, probe);
     expect(probe.built[0].origin).toEqual([137.85, 35.435]);

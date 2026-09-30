@@ -14,8 +14,10 @@
  * Putting separate constants in the two places would make the color or the width change when
  * crossing a band. This single file owns the values.
  *
- * This file imports nothing, so that it depends on neither path.
+ * This file imports only the color parser, so that it depends on neither path.
  */
+
+import { toColor } from '../color.js';
 
 /** Base color of the selection highlight (#FF2D55, the same as the selection UI) */
 export const SELECTION_HIGHLIGHT_COLOR = '#FF2D55';
@@ -34,8 +36,6 @@ export const SELECTION_HIGHLIGHT_RING_EXTRA = 3;
  *
  * Used to pass it to a shader uniform (the color is a constant, so it is parsed only once).
  */
-export const SELECTION_HIGHLIGHT_RGB: readonly [number, number, number] = [
-  Number.parseInt(SELECTION_HIGHLIGHT_COLOR.slice(1, 3), 16) / 255,
-  Number.parseInt(SELECTION_HIGHLIGHT_COLOR.slice(3, 5), 16) / 255,
-  Number.parseInt(SELECTION_HIGHLIGHT_COLOR.slice(5, 7), 16) / 255,
-];
+export const SELECTION_HIGHLIGHT_RGB: readonly [number, number, number] = toColor(
+  SELECTION_HIGHLIGHT_COLOR,
+).slice(0, 3) as [number, number, number];

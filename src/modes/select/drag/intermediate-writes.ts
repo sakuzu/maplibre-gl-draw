@@ -120,7 +120,7 @@ export class IntermediateWrites {
    *
    * The last value of every feature that was touched (including features that followed along
    * through a shared vertex) is rewritten as a committed update (no options), gathered into a
-   * single store.transact. Because it is notified as one StateChanges, a subscriber that records
+   * single store.transact. Because it is notified as one StoreChange, a subscriber that records
    * changes can treat this batch as a single step with its existing mechanism.
    *
    * The committed value is simply the last diff that was recorded. That way it does not depend

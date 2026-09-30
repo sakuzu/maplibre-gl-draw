@@ -12,7 +12,7 @@
  * writes such a word inline.
  */
 
-import type { Feature, FeatureType, Group, Layer, StateChanges } from '../types/model.js';
+import type { Feature, FeatureType, Group, Layer, StoreChange } from '../types/model.js';
 
 /**
  * What the generator reads from the Store: the current contents and the change notifications.
@@ -20,10 +20,10 @@ import type { Feature, FeatureType, Group, Layer, StateChanges } from '../types/
  * spells the same shape out, because AutoNameGenerator is public and this name is not.
  */
 interface NameSource {
-  getAllFeatures(): Feature[];
-  getAllLayers(): Layer[];
-  getAllGroups(): Group[];
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  listFeatures(): Feature[];
+  listLayers(): Layer[];
+  listGroups(): Group[];
+  subscribe(listener: (changes: StoreChange) => void): () => void;
 }
 
 /**
@@ -34,8 +34,8 @@ export type AutoNameType = FeatureType | 'Layer' | 'Group';
 /**
  * How new features, layers and groups are named automatically ("Point 1", "Layer 2")
  *
- * Give it through the `autoName` option of `createMapLibreGLDraw` (`true`, the default, turns
- * it on with these defaults, and `false` turns it off). Each type counts on its own, and a
+ * The engine reads it from the `autoName` option of `createDraw` (left out, it is on with
+ * these defaults, and `false` turns it off). Each type counts on its own, and a
  * number is never reused: after "Point 1" and "Point 2" are created and "Point 2" is deleted,
  * the next point is "Point 3". Existing names of the form "<word> <number>" move the count on
  * as well, however they arrived (a load, an import).
@@ -50,18 +50,6 @@ export type AutoNameType = FeatureType | 'Layer' | 'Group';
  * A layer or a group always has a name. When one is created without a name while `enabled`
  * is false, it gets the word of its type alone, without a number ("Layer", or the
  * `typeNames.Layer` of the host); features get no name then.
- *
- * @example
- * ```ts
- * const draw = createMapLibreGLDraw(map, {
- *   autoName: {
- *     enabled: true,
- *     typeNames: { Point: 'Pin', Layer: 'Sheet' },
- *     formatter: (typeName, n) => `${typeName} #${n}`,
- *   },
- * });
- * // The first point is named "Pin #1"
- * ```
  */
 export interface AutoNameConfig {
   /**
@@ -164,7 +152,7 @@ export function normalizeAutoNameConfig(
  */
 export class AutoNameGenerator {
   private readonly store: NameSource;
-  private readonly config: AutoNameConfig;
+  private config: AutoNameConfig;
   /** Counter that remembers the largest number already generated per type */
   private readonly counters: Map<string, number> = new Map();
   /** Counter keys whose full scan is done (Layer/Group go into the same Set) */
@@ -174,10 +162,10 @@ export class AutoNameGenerator {
 
   constructor(
     store: {
-      getAllFeatures(): Feature[];
-      getAllLayers(): Layer[];
-      getAllGroups(): Group[];
-      subscribe(listener: (changes: StateChanges) => void): () => void;
+      listFeatures(): Feature[];
+      listLayers(): Layer[];
+      listGroups(): Group[];
+      subscribe(listener: (changes: StoreChange) => void): () => void;
     },
     config: AutoNameConfig | boolean = true,
   ) {
@@ -197,6 +185,23 @@ export class AutoNameGenerator {
    */
   isEnabled(): boolean {
     return this.config.enabled;
+  }
+
+  /**
+   * Replaces the configuration: whether names are generated, the words of the types and the
+   * format. The numbers already used are not used again; the names already in the document
+   * are read again in the new words.
+   */
+  configure(config: AutoNameConfig | boolean): void {
+    this.config = normalizeAutoNameConfig(config);
+    this.scannedTypes.clear();
+    if (this.config.enabled && !this.unsubscribe) {
+      this.unsubscribe = this.store.subscribe((changes) => {
+        this.observeChanges(changes);
+      });
+    } else if (!this.config.enabled) {
+      this.dispose();
+    }
   }
 
   /**
@@ -282,7 +287,7 @@ export class AutoNameGenerator {
    * everything on every generation.
    * Deletions are ignored (because a number used once is not reused).
    */
-  private observeChanges(changes: StateChanges): void {
+  private observeChanges(changes: StoreChange): void {
     for (const feature of changes.features?.created ?? []) {
       this.observeFeatureName(feature);
     }
@@ -342,7 +347,7 @@ export class AutoNameGenerator {
    * Gets the largest number from the existing Features
    */
   private getMaxNumberFromFeatures(featureType: FeatureType, typeName: string): number {
-    const features = this.store.getAllFeatures();
+    const features = this.store.listFeatures();
     let maxNumber = 0;
 
     for (const feature of features) {
@@ -393,7 +398,7 @@ export class AutoNameGenerator {
   private findNextLayerNumber(typeName: string): number {
     this.scanOnce(LAYER_COUNTER_KEY, () => {
       let maxNumber = 0;
-      for (const layer of this.store.getAllLayers()) {
+      for (const layer of this.store.listLayers()) {
         const number = extractNumberFromName(layer.name, typeName);
         if (number !== null && number > maxNumber) {
           maxNumber = number;
@@ -434,7 +439,7 @@ export class AutoNameGenerator {
   private findNextGroupNumber(typeName: string): number {
     this.scanOnce(GROUP_COUNTER_KEY, () => {
       let maxNumber = 0;
-      for (const group of this.store.getAllGroups()) {
+      for (const group of this.store.listGroups()) {
         const number = extractNumberFromName(group.name, typeName);
         if (number !== null && number > maxNumber) {
           maxNumber = number;

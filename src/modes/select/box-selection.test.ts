@@ -14,18 +14,20 @@ import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { boxRects, queryFeaturesInBox } from './box-selection.js';
 
 function point(id: string, layerId: string, coord: [number, number], visible = true): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId,
     properties: {},
     locked: false,
     visible,
+    style: {},
   };
 }
 
@@ -38,7 +40,9 @@ describe('queryFeaturesInBox filtering', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createLayer({
       id: 'lLocked',
@@ -46,7 +50,9 @@ describe('queryFeaturesInBox filtering', () => {
       visible: true,
       locked: true,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createLayer({
       id: 'lHidden',
@@ -54,7 +60,9 @@ describe('queryFeaturesInBox filtering', () => {
       visible: false,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
 
     store.createFeature(point('f1', 'l1', [0, 0])); // selectable
@@ -69,7 +77,7 @@ describe('queryFeaturesInBox filtering', () => {
         get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
       },
       selectionScope: createSelectionScope(),
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
 
     const boxSelection = { startPoint: [-10, -10], endPoint: [10, 10] } as unknown as BoxSelection;
     const result = queryFeaturesInBox(boxSelection, context);
@@ -85,13 +93,22 @@ describe('queryFeaturesInBox filtering', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
 
     store.createFeature(point('f1', 'l1', [0, 0])); // selectable
     store.createFeature({ ...point('f2', 'l1', [1, 1]), locked: true }); // locked feature
     store.createFeature(point('f3', 'l1', [2, 2])); // belongs to a locked group
-    store.createGroup({ id: 'g1', name: 'g', featureIds: ['f3'], locked: true, visible: true });
+    store.createGroup({
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['f3'],
+      locked: true,
+      visible: true,
+    });
 
     const context = {
       store,
@@ -100,7 +117,7 @@ describe('queryFeaturesInBox filtering', () => {
         get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
       },
       selectionScope: createSelectionScope(),
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
 
     const boxSelection = { startPoint: [-10, -10], endPoint: [10, 10] } as unknown as BoxSelection;
     const result = queryFeaturesInBox(boxSelection, context);
@@ -139,7 +156,9 @@ describe('boxRects across the antimeridian', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature(point('east', 'l1', [175, 5]));
     store.createFeature(point('west', 'l1', [-175, 5]));
@@ -151,7 +170,7 @@ describe('boxRects across the antimeridian', () => {
         get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
       },
       selectionScope: createSelectionScope(),
-    } as unknown as ModeContext;
+    } as unknown as EngineModeContext;
 
     const boxSelection = { startPoint: [170, 0], endPoint: [190, 10] } as unknown as BoxSelection;
 

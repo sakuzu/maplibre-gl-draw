@@ -60,7 +60,7 @@ export default {
     // A block that declares the same name shadows it.
     globals: `
 declare const map: import('maplibre-gl').Map;
-declare const draw: import('@sakuzu/maplibre-gl-draw').MapLibreGLDraw;
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
 declare const feature: import('@sakuzu/maplibre-gl-draw').Feature;
 declare const featureId: string;
 declare const layerId: string;
@@ -85,8 +85,8 @@ declare module 'svelte' {
       datasets: `
 declare const parcels: import('@sakuzu/maplibre-gl-draw').Dataset;
 declare const places: import('@sakuzu/maplibre-gl-draw').Dataset;
-declare const features: import('@sakuzu/maplibre-gl-draw').DatasetFeatureInput[];
-declare const nextFeatures: import('@sakuzu/maplibre-gl-draw').DatasetFeatureInput[];
+declare const rows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
+declare const nextRows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
 `,
     },
   },

@@ -15,6 +15,8 @@ import {
   type FeatureStyleConfig,
   mergeFeatureStyleConfig,
 } from '../../shared/config/feature-style.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureStyle, Layer, StyleRule } from '../../store/types.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
 import { FeatureDrawer } from './drawer.js';
@@ -64,17 +66,21 @@ function polygonWith(style: FeatureStyle): Feature {
   return {
     id: 'polygon-1',
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   };
@@ -179,15 +185,17 @@ describe('FeatureDrawer#drawFeature iteration over the parts of the Multi kinds'
     return { drawer, lineCalls, pointCalls };
   }
 
-  function createFeature(type: string, coordinates: Feature['coordinates']): Feature {
+  function createFeature(type: string, coordinates: FeatureCoordinates): Feature {
     return {
       id: 'multi-1',
       type,
-      coordinates,
+      geometry: geometryFromCoordinates(type, coordinates),
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 
@@ -269,12 +277,13 @@ describe('FeatureDrawer evaluation of style rules', () => {
 
   function makeLayer(styleRule?: StyleRule): Layer {
     return {
+      metadata: undefined,
       id: 'layer-1',
       name: 'Layer 1',
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
       styleRule,
     };
   }
@@ -288,10 +297,11 @@ describe('FeatureDrawer evaluation of style rules', () => {
     return {
       id,
       type,
-      coordinates: type === 'Point' ? [0, 0] : [[0, 0]],
+      geometry: geometryFromCoordinates(type, type === 'Point' ? [0, 0] : [[0, 0]]),
       layerId: 'layer-1',
+      groupId: undefined,
       properties,
-      style,
+      style: style ?? {},
       locked: false,
       visible: true,
     };
@@ -433,7 +443,12 @@ describe('FeatureDrawer#drawFeature and the opacity of the layer', () => {
       featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
       styleRules,
     });
-    const image = { ...polygonWith({}), id: 'image-1', type: 'Image', coordinates: [0, 0] };
+    const image = {
+      ...polygonWith({}),
+      id: 'image-1',
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    };
     const layer = { id: 'layer-1', opacity: 0.25 } as Layer;
 
     drawer.drawFeature(image as Feature, {} as never, 14, layer);
@@ -449,10 +464,11 @@ describe('FeatureDrawer#getPointStyle and the shape of a point', () => {
     return {
       id: 'point-1',
       type: 'Point',
-      coordinates: [0, 0],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
-      style,
+      style: style ?? {},
       locked: false,
       visible: true,
     };

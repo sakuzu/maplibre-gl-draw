@@ -26,15 +26,18 @@ function polygon(id: string, layerId: string, x = 0): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [x, 0],
-        [x + 1, 0],
-        [x + 1, 1],
-        [x, 1],
-        [x, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [x, 0],
+          [x + 1, 0],
+          [x + 1, 1],
+          [x, 1],
+          [x, 0],
+        ],
       ],
-    ],
+    },
     properties: {},
     layerId,
     visible: true,
@@ -46,7 +49,7 @@ function point(id: string, layerId: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     properties: {},
     layerId,
     visible: true,
@@ -80,10 +83,12 @@ function fakeStore(
   opacity: Record<string, number> = {},
 ) {
   return {
-    getOrderedFeatures: () => features,
-    isLocallyHidden: () => false,
+    listFeaturesInOrder: () => features,
+    isHidden: () => false,
     getLayerOrder: () => layerOrder,
-    getLayer: (id: string) => (layerIds.has(id) ? { id, opacity: opacity[id] ?? 1 } : undefined),
+    getLayer: (id: string) =>
+      layerIds.has(id) ? { id, visible: true, opacity: opacity[id] ?? 1 } : undefined,
+    getGroup: () => undefined,
   } as unknown as Parameters<typeof collectDrapeElements>[0];
 }
 
@@ -196,11 +201,14 @@ describe('the types put on the drape', () => {
     return {
       id,
       type: 'Freehand',
-      coordinates: [
-        [0, 0],
-        [1, 1],
-        [2, 0],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 1],
+          [2, 0],
+        ],
+      },
       properties: {},
       layerId,
       visible: true,
@@ -227,12 +235,7 @@ describe('the breaks in the stacking order (images)', () => {
     return {
       id,
       type: 'Image',
-      coordinates: [
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 1],
-      ],
+      geometry: { type: 'Point', coordinates: [0, 0] },
       properties: {},
       layerId,
       visible: true,
@@ -265,7 +268,7 @@ describe('the line width convention', () => {
   function withCreatedZoom(feature: Feature, createdZoom: number): Feature {
     return {
       ...feature,
-      properties: { ...feature.properties, createdZoom },
+      properties: { ...feature.properties, 'maplibre-gl-draw:createdZoom': createdZoom },
     } as Feature;
   }
 

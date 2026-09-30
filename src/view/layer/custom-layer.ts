@@ -41,7 +41,7 @@ import type {
   Map as MapLibreMap,
 } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
-import type { CustomFeatureHandler, CustomOverlayRenderer } from '../../extension/index.js';
+import type { EngineOverlayRenderer, FeatureTypeHandler } from '../../extension/index.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
@@ -72,7 +72,7 @@ import { buildFrameState, type FrameState, StyleZoom } from './frame-state.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers, type Renderers } from './renderers.js';
 import { SlotManager } from './slot-manager.js';
-import { type RenderSlot, renderSlotLayerId } from './slots.js';
+import { type StackSlot, slotLayerId } from './slots.js';
 import { StoreRetainedCache } from './store-retained.js';
 import { isOpacityOnlyLayersChange } from './store-retained-invalidation.js';
 import { TerrainResolver } from './terrain-resolver.js';
@@ -90,7 +90,7 @@ export interface CustomLayerDeps {
   selectionConfig: SelectionUIConfig;
   renderingConfig: RenderingConfig;
   /** Custom feature handlers (for the extension implementations) */
-  customFeatureHandlers?: CustomFeatureHandler[];
+  customFeatureHandlers?: FeatureTypeHandler[];
   /**
    * Datasets (read-only layers that show large amounts of data)
    *
@@ -134,7 +134,7 @@ export interface CustomLayerDeps {
    * On receiving it, the host places the native layers that correspond to the separators back
    * between the slots.
    */
-  onSlotsChange?: (slots: RenderSlot[]) => void;
+  onSlotsChange?: (slots: StackSlot[]) => void;
   /**
    * Where the failure to load the image of an Image feature is reported (once per image that
    * fails; the draw instance turns it into the load.error event)
@@ -152,20 +152,20 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   /**
    * Adds an overlay renderer
    *
-   * @returns the function that removes it again (removeOverlayRenderer)
+   * @returns the function that removes it again (removeOverlay)
    */
-  addOverlayRenderer(renderer: CustomOverlayRenderer): () => void;
+  addOverlay(renderer: EngineOverlayRenderer): () => void;
   /** Removes an overlay renderer; it gets its onRemove when the GPU side exists */
-  removeOverlayRenderer(renderer: CustomOverlayRenderer): void;
+  removeOverlay(renderer: EngineOverlayRenderer): void;
   /**
    * Registers the renderer of a custom feature type
    *
    * @returns the function that cancels the registration (it does not remove a later
    *   registration of the same type)
    */
-  registerFeatureRenderer(type: string, renderer: CustomFeatureHandler['renderer']): () => void;
+  registerFeatureRenderer(type: string, renderer: FeatureTypeHandler['renderer']): () => void;
   /** The list of slots (the first = the backmost). Just itself when there is no separator */
-  getRenderSlots(): RenderSlot[];
+  getStackSlots(): StackSlot[];
   /**
    * The list of CustomLayers that should be added to maplibre (first = backmost; the first is
    * this one)
@@ -178,11 +178,19 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    * The terrain state of this draw instance (the anchor projection of the plugins reads it)
    */
   getTerrainContext(): TerrainContext;
+  /** The WebGL context of the map while the drawing is on it, or null */
+  getGL(): WebGL2RenderingContext | null;
   /**
    * Whether work remains that later frames finish without the host doing anything (see
-   * `MapLibreGLDraw.hasPendingWork`)
+   * `draw.hasPendingWork()`)
    */
   hasPendingWork(): boolean;
+  /**
+   * Draws again from the configuration: the GPU side is built again from the styles and the
+   * switches of the rendering, the caches are dropped and the slots follow the separators.
+   * Called after the options of the instance changed at runtime
+   */
+  refresh(): void;
 }
 
 /**
@@ -249,7 +257,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   const featureCompanions = deps.featureCompanions;
 
   // Map of the custom feature handlers
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
   if (customFeatureHandlers) {
     for (const handler of customFeatureHandlers) {
       customRenderers.set(handler.type, handler.renderer);
@@ -269,7 +277,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   };
   /** The ordered list of the features to display (the immediate path; follows the Store) */
   const displayList = new DisplayListCache(store);
-  const dynamicOverlayRenderers: CustomOverlayRenderer[] = [];
+  const dynamicOverlayRenderers: EngineOverlayRenderer[] = [];
 
   /**
    * Terrain state of this draw instance
@@ -289,7 +297,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     store,
     terrain: terrainContext,
     datasets,
-    timeSlicing: renderingConfig.timeSlicing,
+    // Read at each build, so a change of the rendering switches applies to the next one
+    get timeSlicing() {
+      return renderingConfig.timeSlicing;
+    },
   });
   const styleZoom = new StyleZoom();
   const slots = new SlotManager({
@@ -321,6 +332,14 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Changes made while the layer was off the map were not seen
     displayList.invalidate();
     engine.unsubscribeStore = store.subscribe((changes) => {
+      // A replacement of the whole document drops every cache of the features, whatever the
+      // notification lists (the new document can reuse an ID with another shape)
+      if (changes.reset === true) {
+        renderScope.earcut.clear();
+        renderScope.styleRules.clear();
+        terrainContext.fillCache.clear();
+        engine.storeRetainedCache?.invalidateAll();
+      }
       engine.storeRetainedCache?.applyChanges(changes);
       displayList.applyChanges(changes);
       // The binning of the analytic drape is rebuilt only on a change of the geometry, the style,
@@ -573,7 +592,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     );
 
     // Follow the changes of the rendering pixel ratio (moving to another display, or
-    // draw.setRenderScale()). The widths of the already baked retained batches no longer match
+    // draw.setScaleFactor()). The widths of the already baked retained batches no longer match
     // when the ratio changes, so they are discarded.
     const dpr = resolvePixelRatio(pixelRatio);
     if (engine.builtPixelRatio !== dpr) {
@@ -645,7 +664,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   /** Creates the CustomLayer of the slot at `index` (the first one is customLayer itself) */
   function makeSlotLayer(index: number): BaseCustomLayerInterface {
     return {
-      id: renderSlotLayerId(index),
+      id: slotLayerId(index),
       type: 'custom',
       renderingMode: '3d',
       onAdd(mapInstance: MapLibreMap, glContext: WebGL2RenderingContext): void {
@@ -661,7 +680,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   }
 
   /** Whether a feature renderer is still registered for some type */
-  function isRegisteredRenderer(renderer: CustomFeatureHandler['renderer']): boolean {
+  function isRegisteredRenderer(renderer: FeatureTypeHandler['renderer']): boolean {
     for (const registered of customRenderers.values()) {
       if (registered === renderer) return true;
     }
@@ -669,7 +688,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   }
 
   const customLayer: CustomLayerInterface = {
-    id: renderSlotLayerId(0),
+    id: slotLayerId(0),
     type: 'custom',
     renderingMode: '3d',
 
@@ -700,7 +719,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engineRemove();
     },
 
-    addOverlayRenderer(renderer: CustomOverlayRenderer): () => void {
+    addOverlay(renderer: EngineOverlayRenderer): () => void {
       dynamicOverlayRenderers.push(renderer);
       // An element involved in the rendering was added, so the prepared retained batches are
       // rebuilt
@@ -709,10 +728,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       if (engine.renderers && engine.gl && engine.mapInstance) {
         renderer.onAdd(engine.gl, engine.mapInstance);
       }
-      return () => customLayer.removeOverlayRenderer(renderer);
+      return () => customLayer.removeOverlay(renderer);
     },
 
-    removeOverlayRenderer(renderer: CustomOverlayRenderer): void {
+    removeOverlay(renderer: EngineOverlayRenderer): void {
       const index = dynamicOverlayRenderers.indexOf(renderer);
       if (index === -1) return;
       dynamicOverlayRenderers.splice(index, 1);
@@ -722,7 +741,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.mapInstance?.triggerRepaint();
     },
 
-    registerFeatureRenderer(type: string, renderer: CustomFeatureHandler['renderer']): () => void {
+    registerFeatureRenderer(type: string, renderer: FeatureTypeHandler['renderer']): () => void {
       const replaced = customRenderers.get(type);
       customRenderers.set(type, renderer);
       // Adding a custom type changes the classification of the features (whether they can be
@@ -743,8 +762,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       };
     },
 
-    getRenderSlots(): RenderSlot[] {
-      return slots.getRenderSlots();
+    getStackSlots(): StackSlot[] {
+      return slots.getStackSlots();
     },
 
     getSlotLayers(): BaseCustomLayerInterface[] {
@@ -754,6 +773,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       return terrainContext;
     },
 
+    getGL(): WebGL2RenderingContext | null {
+      return engine.renderers ? engine.gl : null;
+    },
+
     hasPendingWork(): boolean {
       if (drape.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
@@ -761,6 +784,21 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         if (renderer.hasPendingWork?.()) return true;
       }
       return false;
+    },
+
+    refresh(): void {
+      renderScope.earcut.clear();
+      renderScope.styleRules.clear();
+      displayList.invalidate();
+      drape.invalidate();
+      if (!engine.mapInstance) return;
+      // The renderers and the retained batches read the configuration when they are built
+      if (engine.renderers) {
+        releaseGpuResources();
+        buildGpuResources();
+      }
+      slots.sync();
+      engine.mapInstance.triggerRepaint();
     },
   };
 

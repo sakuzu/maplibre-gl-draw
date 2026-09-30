@@ -18,6 +18,8 @@ import {
   densifyOnMercatorPlane,
   globeSubdivisionGrid,
 } from '../../shared/math/globe-subdivision.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 
@@ -56,23 +58,23 @@ export function shapeOnGlobe(feature: Feature, grid: number): Feature {
   if (!(grid > 0)) return feature;
   const cut = (path: Coordinate[]): Coordinate[] => densifyOnMercatorPlane(path, grid, MAX_POINTS);
 
-  let coordinates: Feature['coordinates'];
+  let coordinates: FeatureCoordinates;
   switch (feature.type) {
     case 'LineString':
     case 'Freehand':
-      coordinates = cut(feature.coordinates as Coordinate[]);
+      coordinates = cut(coordinatesOf(feature) as Coordinate[]);
       break;
     case 'Polygon':
     case 'MultiLineString':
-      coordinates = (feature.coordinates as Coordinate[][]).map(cut);
+      coordinates = (coordinatesOf(feature) as Coordinate[][]).map(cut);
       break;
     case 'MultiPolygon':
-      coordinates = (feature.coordinates as Coordinate[][][]).map((rings) => rings.map(cut));
+      coordinates = (coordinatesOf(feature) as Coordinate[][][]).map((rings) => rings.map(cut));
       break;
     default:
       return feature;
   }
-  return { ...feature, coordinates };
+  return { ...feature, geometry: geometryFromCoordinates(feature.type, coordinates) };
 }
 
 /**

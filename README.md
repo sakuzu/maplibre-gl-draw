@@ -97,12 +97,15 @@ large file opens. It is styled by the same style rules as drawn
 features, and a click reads its properties
 ([large data](docs/guides/large-data.md)).
 
-### Export and load
+### Save and load
 
-Export in the native format to keep layers, groups, styles and images,
-and load it to get the same state back. Export as GeoJSON to exchange
-features with other tools. The store that holds the features can be
-replaced, and every change is reported as an event
+Write the document in the native format to keep layers, groups, styles
+and images, and load it to get the same state back. Write it as GeoJSON
+to exchange features with other tools: a feature holds a GeoJSON
+geometry and GeoJSON properties, so the file has the shape of the
+features you read in code.
+Every change arrives as one event per transaction, with where it came
+from, and the store that holds the document can be replaced
 ([save and load](docs/guides/save-load.md)).
 
 ### Read-only
@@ -112,8 +115,10 @@ drawing ([read-only](docs/guides/read-only.md)).
 
 ### Extending
 
-Extend it with plugins, custom modes and custom feature types
-([plugins](docs/guides/plugins.md),
+Add plugins, modes of your own, feature types with their own drawing,
+overlays, and providers of snapping candidates and handles. Every kind
+is added the same way and removed with the function that adding
+returns ([plugins](docs/guides/plugins.md),
 [custom types](docs/guides/custom-types.md)).
 
 ## Demos
@@ -138,13 +143,13 @@ Try them in the browser, with nothing to install.
 - [Read-only][ex-read-only]
   - The read-only mode, the interaction lock and locked layers
 - [Plugin][ex-plugin]
-  - A plugin with a hook and a mode of its own
+  - A plugin with an event, an API and a mode of its own
 - [Custom feature type][ex-custom-feature-type]
-  - A kind of feature with its own renderer and hit test
+  - A kind of feature with its own drawing, hit test and box selection
 - [Datasets][ex-large-data]
   - 50,000 cells colored by a property, and points fetched for the part
     of the map in view
-- [A million points][ex-columnar-worker]
+- [A million points][ex-table-worker]
   - A million points read in a Worker
 
 ## Installation
@@ -163,7 +168,7 @@ npm 7 and later install it along.
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
 // maplibre-gl v6 needs its worker URL once per page (Vite shown here)
 maplibregl.setWorkerUrl(workerUrl);
@@ -175,7 +180,7 @@ const map = new maplibregl.Map({
   zoom: 12,
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 // Your own button starts drawing. Click to add vertices; click the first
 // vertex or press Enter to finish
@@ -183,19 +188,34 @@ document.querySelector('#polygon')?.addEventListener('click', () => {
   draw.setMode('draw_polygon');
 });
 
-draw.on('draw.feature.create', ({ feature }) => {
-  console.log(feature.id, feature.type, feature.coordinates);
+draw.on('feature.created', ({ feature }) => {
+  console.log(feature.id, feature.type, feature.geometry);
 });
 
-// Every feature as a GeoJSON FeatureCollection (a string)
+// Every feature as a GeoJSON FeatureCollection
 document.querySelector('#save')?.addEventListener('click', () => {
-  const { data } = draw.export('geojson');
-  console.log(data);
+  console.log(JSON.stringify(draw.document.toGeoJSON()));
 });
 ```
 
 The complete page is [examples/basic/](examples/basic/), and
 [getting started](docs/getting-started.md) walks through it step by step.
+
+## Entry points
+
+Import from the main entry unless you need one of the others.
+
+- `@sakuzu/maplibre-gl-draw`: the draw instance (`createDraw`), its
+  features, layers, groups and datasets, the events, the options and the
+  extension contract
+- `@sakuzu/maplibre-gl-draw/geometry`: geometry that needs no map:
+  measure lengths and areas, build circles and buffers, combine and split
+  polygons. It also runs in Node and in Workers
+- `@sakuzu/maplibre-gl-draw/table`: read a large table in a Worker and
+  pass it to a dataset
+- `@sakuzu/maplibre-gl-draw/webgl`: the building blocks for writing your
+  own shaders. It may change in a minor release; the other three follow
+  semantic versioning
 
 ## Compatibility
 
@@ -217,8 +237,8 @@ The complete page is [examples/basic/](examples/basic/), and
 ## Documentation
 
 [docs/README.md](docs/README.md) lists every document in reading order:
-getting started, the guides, the reference and the internals. Coming from
-mapbox-gl-draw or terra-draw? See [migrating](docs/guides/migrating.md).
+getting started, the guides, the reference and the internals. Moving from
+1.0, mapbox-gl-draw or terra-draw? See [migrating](docs/guides/migrating.md).
 
 ## Contributing
 
@@ -252,4 +272,4 @@ The notices of the third-party code this package contains are in
 [ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
 [ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
 [ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
-[ex-columnar-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-worker/
+[ex-table-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/table-worker/

@@ -7,12 +7,13 @@
  * - read-only: the methods that write to the shared data become no-ops, while local
  *   states get through
  * - local visibility: the 3-step cascade, the exclusion in getDisplayFeatures,
- *   getOrderedFeatures staying unchanged, clearing the selection of what was hidden, and
+ *   listFeaturesInOrder staying unchanged, clearing the selection of what was hidden, and
  *   the cleanup that follows a deletion
  */
 
 import { describe, expect, it } from 'vitest';
-import { getDisplayFeatures, isLocallyHidden } from './local-visibility.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
+import { getDisplayFeatures, isLocallyHidden, listShownFeatures } from './local-visibility.js';
 import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
@@ -20,12 +21,13 @@ function makeFeature(id: string, layerId: string, groupId?: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId,
     groupId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -37,7 +39,9 @@ function makeStore(): MemoryStore {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   };
   store.createLayer(layer);
   return store;
@@ -48,8 +52,8 @@ describe('read-only', () => {
     const store = makeStore();
     store.createFeature(makeFeature('f1', 'l1'));
     store.setReadOnly(true);
-    store.updateFeature('f1', { coordinates: [10, 10] });
-    expect(store.getFeature('f1')?.coordinates).toEqual([0, 0]);
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [10, 10] } });
+    expect(coordinatesOf(store.getFeature('f1'))).toEqual([0, 0]);
   });
 
   it('makes createFeature / deleteFeature / setMetadata no-ops while read-only', () => {
@@ -73,7 +77,7 @@ describe('read-only', () => {
     store.setMode('draw_point');
     expect(store.getMode()).toBe('draw_point');
     store.setLocallyHidden('f1', true);
-    expect(store.isLocallyHidden('f1')).toBe(true);
+    expect(store.isHidden('f1')).toBe(true);
   });
 
   it('lets writes through once read-only is turned off', () => {
@@ -81,8 +85,8 @@ describe('read-only', () => {
     store.createFeature(makeFeature('f1', 'l1'));
     store.setReadOnly(true);
     store.setReadOnly(false);
-    store.updateFeature('f1', { coordinates: [5, 5] });
-    expect(store.getFeature('f1')?.coordinates).toEqual([5, 5]);
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [5, 5] } });
+    expect(coordinatesOf(store.getFeature('f1'))).toEqual([5, 5]);
   });
 });
 
@@ -102,10 +106,10 @@ describe('the interaction lock', () => {
     store.setInteractionLock(true);
     // Writes are not gated by the interaction lock (that is the job of readOnly).
     store.createFeature(makeFeature('f2', 'l1'));
-    store.updateFeature('f1', { coordinates: [10, 10] });
+    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [10, 10] } });
     store.setMetadata({ description: 'x' });
     expect(store.getFeature('f2')).toBeDefined();
-    expect(store.getFeature('f1')?.coordinates).toEqual([10, 10]);
+    expect(coordinatesOf(store.getFeature('f1'))).toEqual([10, 10]);
     expect(store.getMetadata().description).toBe('x');
   });
 
@@ -137,20 +141,27 @@ describe('local visibility', () => {
 
   it('removes the features under a group from the display list when the group is hidden', () => {
     const store = makeStore();
-    const group: Group = { id: 'g1', name: 'g', featureIds: [], locked: false, visible: true };
+    const group: Group = {
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    };
     store.createGroup(group);
     store.createFeature(makeFeature('f1', 'l1', 'g1'));
     store.createFeature(makeFeature('f2', 'l1'));
     // Arrange the group g1 and the feature f2 in the layer order.
-    store.updateLayer('l1', { order: ['g1', 'f2'] });
+    store.updateLayer('l1', { items: ['g1', 'f2'] });
 
     store.setLocallyHidden('g1', true);
     const displayed = getDisplayFeatures(store).map((f) => f.id);
     expect(displayed).toEqual(['f2']);
-    // getOrderedFeatures (the shared source of truth) does not change
+    // listFeaturesInOrder (the shared source of truth) does not change
     expect(
       store
-        .getOrderedFeatures()
+        .listFeaturesInOrder()
         .map((f) => f.id)
         .sort(),
     ).toEqual(['f1', 'f2']);
@@ -170,6 +181,49 @@ describe('local visibility', () => {
     store.createFeature(makeFeature('f1', 'l1'));
     store.setLocallyHidden('f1', true);
     store.deleteFeature('f1');
-    expect(store.isLocallyHidden('f1')).toBe(false);
+    expect(store.isHidden('f1')).toBe(false);
+  });
+});
+
+describe('listShownFeatures', () => {
+  it('leaves out a feature whose own visible flag is off', () => {
+    const store = makeStore();
+    store.createFeature(makeFeature('f1', 'l1'));
+    store.createFeature({ ...makeFeature('f2', 'l1'), visible: false });
+    expect(listShownFeatures(store).map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('leaves out the features of a layer whose visible flag is off', () => {
+    const store = makeStore();
+    store.createLayer({
+      id: 'l2',
+      name: 'l2',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
+    store.createFeature(makeFeature('f1', 'l1'));
+    store.createFeature(makeFeature('f2', 'l2'));
+    store.updateLayer('l2', { visible: false });
+    expect(listShownFeatures(store).map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('leaves out the features of a group whose visible flag is off', () => {
+    const store = makeStore();
+    store.createFeature(makeFeature('f1', 'l1'));
+    store.createFeature(makeFeature('f2', 'l1'));
+    store.createGroup({
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['f2'],
+      locked: false,
+      visible: false,
+    });
+    expect(listShownFeatures(store).map((f) => f.id)).toEqual(['f1']);
+    expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f1', 'f2']);
   });
 });

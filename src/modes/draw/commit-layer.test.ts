@@ -11,20 +11,22 @@
  * returns to select without an exception.
  */
 
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Layer, Mode } from '../../store/types.js';
 import { resolveWritableLayerId } from '../../store/writable-layer.js';
-import type { ModeContext } from '../handler.js';
+import { createModeHarness } from '../../test-utils.js';
+import type { EngineModeContext } from '../handler.js';
 import { ModeManagerImpl } from '../manager.js';
-import { DrawCircleMode } from './circle.js';
-import { DrawFreehandMode } from './freehand.js';
+import { drawCircleMode } from './circle.js';
+import { drawFreehandMode } from './freehand.js';
 import { DrawImageMode } from './image.js';
-import { DrawLineMode } from './line.js';
-import { DrawPointMode } from './point.js';
-import { DrawPolygonMode } from './polygon.js';
+import { drawLineMode } from './line.js';
+import { drawPointMode } from './point.js';
+import { drawPolygonMode } from './polygon.js';
 
 const DRAWING_MODES: Mode[] = [
   'draw_point',
@@ -36,7 +38,17 @@ const DRAWING_MODES: Mode[] = [
 ];
 
 function layer(id: string, overrides: Partial<Layer> = {}): Layer {
-  return { id, name: id, visible: true, locked: false, opacity: 1, order: [], ...overrides };
+  return {
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+    ...overrides,
+  };
 }
 
 function click(lng: number, lat: number): MouseNormalizedEvent {
@@ -53,6 +65,10 @@ let store: MemoryStore;
 let manager: ModeManagerImpl;
 let activeLayerId: string;
 let imageRequests: unknown[];
+/** Clicks in the current mode, through the input route of the modes of the contract */
+let clickAt: (lng: number, lat: number) => void;
+/** Presses a key in the current mode, through the same route */
+let pressKey: (key: string) => void;
 
 beforeEach(() => {
   store = new MemoryStore();
@@ -62,14 +78,6 @@ beforeEach(() => {
   manager = new ModeManagerImpl(store, {
     canEnter: (handler) => !handler.writesFeatures || getWritableLayerId() !== '',
   });
-  manager.registerMode('select', () => ({ modeName: 'select' }));
-  manager.registerMode('draw_point', () => new DrawPointMode());
-  manager.registerMode('draw_line', () => new DrawLineMode());
-  manager.registerMode('draw_polygon', () => new DrawPolygonMode());
-  manager.registerMode('draw_circle', () => new DrawCircleMode());
-  manager.registerMode('draw_freehand', () => new DrawFreehandMode());
-  manager.registerMode('draw_image', () => new DrawImageMode());
-
   let idCounter = 0;
   const canvas = { style: { cursor: '' } };
   const map = {
@@ -77,7 +85,35 @@ beforeEach(() => {
     getZoom: () => 10,
     getCenter: () => ({ lng: 0, lat: 0 }),
     project: (c: [number, number]) => ({ x: c[0] * 1000, y: c[1] * 1000 }),
-    dragPan: { enable: () => {}, disable: () => {} },
+    dragPan: { isEnabled: () => true, enable: () => {}, disable: () => {} },
+  };
+  const harness = createModeHarness({
+    store,
+    map: map as unknown as MapLibreMap,
+    modeManager: manager,
+    getWritableLayerId,
+  });
+  manager.registerMode('select', () => ({ modeName: 'select' }));
+  harness.register('draw_point', drawPointMode);
+  harness.register('draw_line', drawLineMode);
+  harness.register('draw_polygon', drawPolygonMode);
+  harness.register('draw_circle', drawCircleMode);
+  harness.register('draw_freehand', drawFreehandMode);
+  manager.registerMode('draw_image', () => new DrawImageMode());
+  clickAt = (lng, lat) => {
+    const handler = manager.getHandler();
+    if (handler) harness.route.toMode(handler, click(lng, lat), click(lng, lat), null);
+  };
+  pressKey = (key) => {
+    const handler = manager.getHandler();
+    const event = {
+      type: 'keydown',
+      key,
+      code: key,
+      modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      originalEvent: {} as KeyboardEvent,
+    } as const;
+    if (handler) harness.route.toMode(handler, event, event, null);
   };
   manager.setContext({
     map,
@@ -88,7 +124,7 @@ beforeEach(() => {
     generateFeatureId: () => `f${++idCounter}`,
     getCurrentLayerId: getWritableLayerId,
     setMode: (mode: Mode) => manager.setMode(mode),
-  } as unknown as ModeContext);
+  } as unknown as EngineModeContext);
   manager.start();
 });
 
@@ -156,8 +192,8 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('b'));
     store.createLayer(layer('a'));
     manager.setMode('draw_point');
-    manager.getHandler()?.onClick?.(click(1, 1));
-    const [feature] = store.getAllFeatures();
+    clickAt(1, 1);
+    const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('a');
   });
 
@@ -166,8 +202,8 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('b', { visible: false }));
     store.createLayer(layer('c'));
     manager.setMode('draw_point');
-    manager.getHandler()?.onClick?.(click(1, 1));
-    const [feature] = store.getAllFeatures();
+    clickAt(1, 1);
+    const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('c');
     // The active layer itself is not changed
     expect(activeLayerId).toBe('a');
@@ -188,26 +224,21 @@ describe('losing the layer while drawing', () => {
     manager.setMode('draw_point');
     store.deleteLayer('a');
 
-    expect(() => manager.getHandler()?.onClick?.(click(1, 1))).not.toThrow();
+    expect(() => clickAt(1, 1)).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
   });
 
   it('discards a line and returns to select when the layer was locked', () => {
     store.createLayer(layer('a'));
     manager.setMode('draw_line');
-    const handler = manager.getHandler();
-    handler?.onClick?.(click(1, 1));
-    handler?.onClick?.(click(2, 2));
+    clickAt(1, 1);
+    clickAt(2, 2);
     store.updateLayer('a', { locked: true });
 
-    expect(() =>
-      handler?.onKeyDown?.({ key: 'Enter' } as Parameters<
-        NonNullable<typeof handler.onKeyDown>
-      >[0]),
-    ).not.toThrow();
+    expect(() => pressKey('Enter')).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
     expect(store.getTentative()).toBeNull();
   });
 
@@ -216,40 +247,34 @@ describe('losing the layer while drawing', () => {
     manager.setMode('draw_point');
     store.setLocallyHidden('a', true);
 
-    expect(() => manager.getHandler()?.onClick?.(click(1, 1))).not.toThrow();
+    expect(() => clickAt(1, 1)).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
   });
 
   it('discards a polygon and returns to select when the layer was hidden', () => {
     store.createLayer(layer('a'));
     manager.setMode('draw_polygon');
-    const handler = manager.getHandler();
-    handler?.onClick?.(click(1, 1));
-    handler?.onClick?.(click(2, 1));
-    handler?.onClick?.(click(2, 2));
+    clickAt(1, 1);
+    clickAt(2, 1);
+    clickAt(2, 2);
     store.updateLayer('a', { visible: false });
 
-    expect(() =>
-      handler?.onKeyDown?.({ key: 'Enter' } as Parameters<
-        NonNullable<typeof handler.onKeyDown>
-      >[0]),
-    ).not.toThrow();
+    expect(() => pressKey('Enter')).not.toThrow();
     expect(store.getMode()).toBe('select');
-    expect(store.getAllFeatures()).toEqual([]);
+    expect(store.listFeatures()).toEqual([]);
   });
 
   it('commits into another writable layer when one remains', () => {
     store.createLayer(layer('a'));
     store.createLayer(layer('b'));
     manager.setMode('draw_line');
-    const handler = manager.getHandler();
-    handler?.onClick?.(click(1, 1));
-    handler?.onClick?.(click(2, 2));
+    clickAt(1, 1);
+    clickAt(2, 2);
     store.deleteLayer('a');
 
-    handler?.onKeyDown?.({ key: 'Enter' } as Parameters<NonNullable<typeof handler.onKeyDown>>[0]);
-    const [feature] = store.getAllFeatures();
+    pressKey('Enter');
+    const [feature] = store.listFeatures();
     expect(feature.layerId).toBe('b');
   });
 });

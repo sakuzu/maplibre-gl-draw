@@ -25,14 +25,14 @@ features:
   - title: 地形と地球儀
     details: 傾けた地図でも、3D の地形の上でも、地球儀でも同じように描けます。日付変更線もまたげます。
     link: /ja/guides/terrain
-  - title: 大量のデータ
-    details: データセットで、数万の区画や 100 万の点を速く表示できます。地物からも、GeoParquet や Arrow の列からも直接渡せます。
+  - title: データセット
+    details: 数万の区画や 100 万の点を、描いたものの横に速く表示できます。GeoJSON の地物からも、GeoParquet や Arrow の列からも直接渡せます。
     link: /ja/guides/large-data
   - title: どこでも使える幾何演算
     details: 結合、差、交差、分割、バッファー、長さ、面積は、Node や Worker でも動く普通の関数です。
     link: /ja/guides/snapping-geometry
   - title: 拡張できる
-    details: プラグイン、独自のモード、独自の地物の型を、ライブラリー自身が使う拡張の口の上に作れます。
+    details: プラグイン、モード、地物の型、重ね描き、提供者を、どれも同じ方法で足せます。組み込みの描画モードも同じ窓口で書かれています。
     link: /ja/guides/plugins
 ---
 

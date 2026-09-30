@@ -7,7 +7,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { CustomRendererDrawContext } from '../../extension/index.js';
+import type { FrameDrawContext } from '../../extension/index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -18,7 +18,7 @@ function makeFeature(id: string, type: string, visible = true): Feature {
   return {
     id,
     type,
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'layer-1',
     properties: {},
     locked: false,
@@ -30,8 +30,8 @@ function setup(features: Feature[], hidden: string[] = []) {
   const log: string[] = [];
   const store = {
     getFeature: (id: string) => features.find((f) => f.id === id),
-    isLocallyHidden: (id: string) => hidden.includes(id),
-    getLocallyHidden: () => new Set(hidden),
+    isHidden: (id: string) => hidden.includes(id),
+    listHidden: () => new Set(hidden),
   } as unknown as Store;
   let restored = 0;
   const deps: StoreRetainedDrawDeps = {
@@ -47,7 +47,7 @@ function setup(features: Feature[], hidden: string[] = []) {
     customRenderers: new Map([
       ['Custom', { draw: (feature: { id: string }) => log.push(`custom:${feature.id}`) }],
     ]) as unknown as StoreRetainedDrawDeps['customRenderers'],
-    customRendererContext: {} as CustomRendererDrawContext,
+    customRendererContext: {} as FrameDrawContext,
     companions: createFeatureCompanionRegistry(),
     restoreBlendState: () => {
       restored++;

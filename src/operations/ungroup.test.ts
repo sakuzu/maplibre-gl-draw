@@ -2,29 +2,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Behavior tests for ungroupSelection / ungroupGroup (following Felt)
+ * Behavior tests for ungroupSelection
  *
  * - a group selected -> the group is broken up (the children are expanded in place)
  * - a member feature selected -> only that feature leaves (the group is kept, and is
  *   deleted automatically when it becomes empty)
- * - ungroupGroup(id) -> the given group is broken up
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { MemoryStore } from '../store/memory.js';
 import type { Feature } from '../store/types.js';
-import { groupSelection, ungroupGroup, ungroupSelection } from './layer-operations.js';
+import { groupSelection, ungroupSelection } from './layer-operations.js';
 
 function feature(id: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -37,7 +38,16 @@ const generateId = () => `grp-${++idSeq}`;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   idSeq = 0;
   store.createFeature(feature('f1'));
   store.createFeature(feature('f2'));
@@ -64,7 +74,7 @@ describe('ungroupSelection', () => {
     expect(store.getFeature('f1')?.groupId).toBeUndefined();
     expect(store.getFeature('f2')?.groupId).toBeUndefined();
     // f1 and f2 are expanded at the position the group had (the front, where f1,f2 were)
-    expect(store.getLayer('l1')?.order).toEqual(['f1', 'f2', 'f3']);
+    expect(store.getLayer('l1')?.items).toEqual(['f1', 'f2', 'f3']);
   });
 
   it('lets only that feature leave and keeps the group for a member feature selection', () => {
@@ -78,7 +88,7 @@ describe('ungroupSelection', () => {
     expect(store.getFeature('f2')?.groupId).toBe(gid);
     // The departed f1 loses its groupId and is placed right after the group
     expect(store.getFeature('f1')?.groupId).toBeUndefined();
-    expect(store.getLayer('l1')?.order).toEqual([gid, 'f1', 'f3']);
+    expect(store.getLayer('l1')?.items).toEqual([gid, 'f1', 'f3']);
   });
 
   it('keeps the group even when a member selection leaves only one member', () => {
@@ -103,12 +113,12 @@ describe('ungroupSelection', () => {
 
   it('does nothing for a selection of a feature that belongs to no group', () => {
     makeGroup();
-    const before = store.getLayer('l1')?.order;
+    const before = store.getLayer('l1')?.items;
     store.setSelection('feature', ['f3']); // f3 belongs to no group
 
     ungroupSelection(store);
 
-    expect(store.getLayer('l1')?.order).toEqual(before);
+    expect(store.getLayer('l1')?.items).toEqual(before);
     expect(store.getFeature('f3')?.groupId).toBeUndefined();
   });
 
@@ -118,20 +128,5 @@ describe('ungroupSelection', () => {
     ungroupSelection(store);
 
     expect(store.getGroup(gid)).toBeDefined();
-  });
-});
-
-describe('ungroupGroup', () => {
-  it('breaks up the given group (independently of the selection)', () => {
-    const gid = makeGroup();
-    // Even with a different selection (none), the given grp can be broken up
-    store.setSelection(null, []);
-
-    ungroupGroup(store, gid);
-
-    expect(store.getGroup(gid)).toBeUndefined();
-    expect(store.getFeature('f1')?.groupId).toBeUndefined();
-    expect(store.getFeature('f2')?.groupId).toBeUndefined();
-    expect(store.getLayer('l1')?.order).toEqual(['f1', 'f2', 'f3']);
   });
 });

@@ -27,13 +27,14 @@ function mercatorDegrees(lat: number): number {
  * Creates a feature for the tests with the minimum set of fields
  */
 function createFeature(
-  overrides: Partial<Feature> & { id: string; type: string; coordinates: Feature['coordinates'] },
+  overrides: Partial<Feature> & { id: string; type: string; geometry: Feature['geometry'] },
 ): Feature {
   return {
     layerId: 'layer-1',
     properties: {},
     locked: false,
     visible: true,
+    style: {},
     ...overrides,
   } as Feature;
 }
@@ -60,10 +61,13 @@ describe('startRotation', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [
-        [1, 0],
-        [2, 0],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [1, 0],
+          [2, 0],
+        ] as Coordinate[],
+      },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -88,13 +92,13 @@ describe('startRotation', () => {
     const imageFeature = createFeature({
       id: 'img1',
       type: 'Image',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
-        rotation: 45,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
+        'maplibre-gl-draw:rotation': 45,
       },
     });
 
@@ -111,12 +115,12 @@ describe('startRotation', () => {
     const imageFeature = createFeature({
       id: 'img1',
       type: 'Image',
-      coordinates: [0, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
       },
     });
 
@@ -135,7 +139,7 @@ describe('startRotation', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: coords,
+      geometry: { type: 'LineString', coordinates: coords },
     });
 
     const state = startRotation({ lng: 1, lat: 0 }, bbox, [feature]);
@@ -157,10 +161,13 @@ describe('computeRotation', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [
-        [1, 0],
-        [2, 0],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [1, 0],
+          [2, 0],
+        ] as Coordinate[],
+      },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -194,13 +201,13 @@ describe('computeRotation', () => {
     const imageFeature = createFeature({
       id: 'img1',
       type: 'Image',
-      coordinates: [5, 5] as Coordinate,
+      geometry: { type: 'Point', coordinates: [5, 5] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
-        rotation: 10,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
+        'maplibre-gl-draw:rotation': 10,
       },
     });
 
@@ -228,23 +235,26 @@ describe('computeRotation', () => {
     const imageFeature = createFeature({
       id: 'img1',
       type: 'Image',
-      coordinates: [1, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
       properties: {
-        imageFileId: 'file1',
-        imageWidth: 100,
-        imageHeight: 100,
-        createdZoom: 10,
-        rotation: 0,
+        'maplibre-gl-draw:imageFileId': 'file1',
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 100,
+        'maplibre-gl-draw:createdZoom': 10,
+        'maplibre-gl-draw:rotation': 0,
       },
     });
 
     const lineFeature = createFeature({
       id: 'line1',
       type: 'LineString',
-      coordinates: [
-        [2, 0],
-        [3, 0],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [2, 0],
+          [3, 0],
+        ] as Coordinate[],
+      },
     });
 
     const state = startRotation(startLngLat, bbox, [imageFeature, lineFeature]);
@@ -278,10 +288,13 @@ describe('computeRotation', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [
-        [1, 2],
-        [3, 4],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [1, 2],
+          [3, 4],
+        ] as Coordinate[],
+      },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -307,13 +320,16 @@ describe('computeRotation', () => {
     const feature = createFeature({
       id: 'poly1',
       type: 'Polygon',
-      coordinates: [
-        [
-          [1, 0],
-          [0, 1],
-          [-1, 0],
-        ],
-      ] as Coordinate[][],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [1, 0],
+            [0, 1],
+            [-1, 0],
+          ],
+        ] as Coordinate[][],
+      },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -347,7 +363,7 @@ describe('computeRotation', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [[1, 45]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[1, 45]] as Coordinate[] },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -371,7 +387,11 @@ describe('computeRotation', () => {
       [15, 63],
       [5, 63],
     ] as Coordinate[];
-    const feature = createFeature({ id: 'sq', type: 'LineString', coordinates: square });
+    const feature = createFeature({
+      id: 'sq',
+      type: 'LineString',
+      geometry: { type: 'LineString', coordinates: square },
+    });
 
     /** The side lengths and diagonals as the map shows them (in Mercator) */
     const shape = (coords: Coordinate[]) => {
@@ -408,10 +428,13 @@ describe('computeRotation', () => {
     const feature = createFeature({
       id: 'p',
       type: 'LineString',
-      coordinates: [
-        [1, 90],
-        [2, -90],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [1, 90],
+          [2, -90],
+        ] as Coordinate[],
+      },
     });
     const state = startRotation({ lng: 1, lat: 90 }, bbox, [feature]);
     const result = computeRotation(state, { lng: -1, lat: 90 }, [feature]);
@@ -429,7 +452,7 @@ describe('computeRotation', () => {
     const feature1 = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [[1, 0]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
     });
 
     const state = startRotation(startLngLat, bbox, [feature1]);
@@ -438,7 +461,7 @@ describe('computeRotation', () => {
     const feature2 = createFeature({
       id: 'f2',
       type: 'LineString',
-      coordinates: [[2, 0]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[2, 0]] as Coordinate[] },
     });
 
     const result = computeRotation(state, { lng: 0, lat: 1 }, [feature1, feature2]);
@@ -457,7 +480,7 @@ describe('getRotationDelta', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [[1, 0]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -476,7 +499,7 @@ describe('getRotationDelta', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [[1, 0]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -496,7 +519,7 @@ describe('getRotationDelta', () => {
     const feature = createFeature({
       id: 'f1',
       type: 'LineString',
-      coordinates: [[1, 0]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -519,7 +542,7 @@ describe('custom types registered with the scale strategy', () => {
     const customFeature = createFeature({
       id: 'cw1',
       type: 'CustomWidget',
-      coordinates: [1, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
       properties: {},
     });
 
@@ -543,7 +566,7 @@ describe('custom types registered with the scale strategy', () => {
     const feature = createFeature({
       id: 'cw2',
       type: 'CustomWidget',
-      coordinates: [1, 0] as Coordinate,
+      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
       properties: {},
     });
     const state = startRotation({ lng: 1, lat: 0 }, createBBox([0, 0]), [feature], other);
@@ -559,8 +582,8 @@ describe('custom types registered with the scale strategy', () => {
     const feature = createFeature({
       id: 'unregistered1',
       type: 'UnregisteredType',
-      coordinates: [1, 0] as Coordinate,
-      properties: { rotation: 15 },
+      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
+      properties: { 'maplibre-gl-draw:rotation': 15 },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);
@@ -576,7 +599,7 @@ describe('custom types registered with the scale strategy', () => {
     const feature = createFeature({
       id: 'plain1',
       type: 'SomeOtherType',
-      coordinates: [[1, 0]] as Coordinate[],
+      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
       properties: {},
     });
 
@@ -597,20 +620,23 @@ describe('computeRotation on the Multi variants (preservation of the part struct
     const feature = createFeature({
       id: 'mpoly',
       type: 'MultiPolygon',
-      coordinates: [
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [1, 0],
-            [2, 0],
+            [
+              [1, 0],
+              [2, 0],
+            ],
           ],
-        ],
-        [
           [
-            [0, 1],
-            [0, 2],
+            [
+              [0, 1],
+              [0, 2],
+            ],
           ],
-        ],
-      ] as Coordinate[][][],
+        ] as Coordinate[][][],
+      },
     });
 
     const state = startRotation(startLngLat, bbox, [feature]);

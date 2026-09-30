@@ -11,8 +11,8 @@ import type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 
 // BoundingBoxCoords is a basic type (operations/ reads it too), defined in shared/.
-// CustomResizeCalculator is an extension contract, defined in extension/.
-export type { CustomResizeCalculator } from '../../../extension/index.js';
+// TypeResizeCalculator is an extension contract, defined in extension/.
+export type { TypeResizeCalculator } from '../../../extension/index.js';
 export type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
 
 /**
@@ -39,9 +39,26 @@ export interface PointFrameExtent {
 /**
  * Returns the size of the selection frame of a point-like feature.
  *
- * Returning null gives the default dimensions (the square of DEFAULT_POINT_FRAME_SIZE).
+ * Returning null gives the default dimensions: the extent of the marker for a point the
+ * built-in type draws, else the square of DEFAULT_POINT_FRAME_SIZE.
  */
 export type PointFrameExtentProvider = (feature: Feature) => PointFrameExtent | null;
+
+/** A point on the screen in CSS px, from the top left of the map */
+export interface FramePoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Returns the outline of the selection frame of a point-like feature: its four corners on the
+ * screen in CSS px, in the order top left, top right, bottom right, bottom left of the shape.
+ *
+ * The frame of a rotated shape is drawn along it. The point stays zero-area: no resize or
+ * rotate handle appears. Returning null (or anything but four finite corners) gives the frame
+ * of {@link PointFrameExtentProvider}.
+ */
+export type PointFrameOutlineProvider = (feature: Feature) => readonly FramePoint[] | null;
 
 /**
  * A resize handle a custom feature type adds to the built-in ones (the same shape as

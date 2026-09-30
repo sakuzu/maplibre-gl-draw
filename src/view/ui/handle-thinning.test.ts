@@ -21,6 +21,8 @@ import {
   THINNING_REFRESH_DEBOUNCE_MS,
 } from '../../shared/config/selection.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
 import { hitTestHandles } from './handle-test.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
@@ -38,15 +40,17 @@ const project = (coord: Coordinate) => ({ x: coord[0], y: coord[1] });
 
 const NO_VIEWPORT: ThinningViewport = { bounds: null };
 
-function makeFeature(type: string, coordinates: Feature['coordinates'], id = 'f1'): Feature {
+function makeFeature(type: string, coordinates: FeatureCoordinates, id = 'f1'): Feature {
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -582,7 +586,13 @@ describe('consistency with hit testing', () => {
   };
   const geoLine = (count: number, stepX: number, id?: string): Feature => {
     const line = makeLine(count, stepX, id);
-    return { ...line, coordinates: (line.coordinates as Coordinate[]).map(toGeo) };
+    return {
+      ...line,
+      geometry: {
+        type: 'LineString',
+        coordinates: (coordinatesOf(line) as Coordinate[]).map(toGeo),
+      },
+    };
   };
 
   const feature = geoLine(250, 8);

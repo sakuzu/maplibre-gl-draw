@@ -12,7 +12,7 @@
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import type { CustomFeatureHandler } from '../../extension/index.js';
+import type { FeatureTypeHandler } from '../../extension/index.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -25,7 +25,11 @@ import {
   setTerrainSurfacesFlattened,
 } from '../terrain/state.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
-import { renderFollowedVertices, renderSelectionUI } from '../ui/selection-ui-drawer.js';
+import {
+  renderFollowedVertices,
+  renderGlobalAuxiliaryHandles,
+  renderSelectionUI,
+} from '../ui/selection-ui-drawer.js';
 import type { DrapePlanner } from './drape-planner.js';
 import type { CopyPass, FrameState } from './frame-state.js';
 import {
@@ -54,7 +58,7 @@ export interface FrameRenderDeps {
   store: Store;
   terrainContext: TerrainContext;
   drape: DrapePlanner;
-  customRenderers: Map<string, CustomFeatureHandler['renderer']>;
+  customRenderers: Map<string, FeatureTypeHandler['renderer']>;
   featureCompanions: FeatureCompanionRegistry;
   datasets?: RenderedDatasets;
   storeRetainedCache: StoreRetainedCache | null;
@@ -268,6 +272,8 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   };
   const tentative = store.getTentative();
   const boxSelection = store.getBoxSelection();
+  const globalHandlesShown =
+    store.getMode() === 'select' && !store.isReadOnly() && !store.isInteractionLocked();
 
   // Once per copy of the world in view (the selection UI of a feature on the other side of the
   // antimeridian is drawn on the copy the feature is drawn on)
@@ -279,9 +285,18 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
       copy.projectionData,
       selectionUIDeps,
       store.getDragState(),
-      store.getSelectedVertices(),
+      store.getVertexSelection(),
       selectionLocked,
     );
+    // The handles of the extensions that belong to no feature, while they can be grabbed
+    if (globalHandlesShown) {
+      renderGlobalAuxiliaryHandles(
+        f.zoom,
+        copy.projectionData,
+        selectionUIDeps,
+        store.getDragState(),
+      );
+    }
 
     // The vertices that follow along when a shared vertex is moved (raised only during a
     // drag). The features that follow are not selected, so they are drawn separately from the

@@ -9,14 +9,15 @@
  * events), and there is no editing API here.
  */
 
+import type { Feature as GeoJSONFeature, Geometry as GeoJSONGeometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import type { BoundingBox, Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
+import type { PreparedTable, Table } from '../table/types.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import type { StyleRuleChannel } from '../view/style-rule.js';
 import type { TerrainContext } from '../view/terrain/context.js';
-import type { DatasetColumnarInput, DatasetColumnarPrepared } from './columnar/types.js';
 import type {
   DatasetCollisionThinning,
   DatasetThinningStats,
@@ -37,34 +38,22 @@ import type { TriangulationScheduler } from './triangulation.js';
 export type DatasetBaseStyle = Partial<Record<StyleRuleChannel, Feature['style']>>;
 
 /**
- * A feature passed to a dataset.
+ * A row passed to a dataset: a GeoJSON feature.
  *
- * It accepts the same coordinate shapes as a feature of the Store (including Multi and holes).
- * It is not put into the Store, so the layer it belongs to, the lock and the visibility can be
- * omitted (when omitted they are treated as an empty string, false and true respectively).
- * `Feature` satisfies this type, so a feature taken out of the Store can be passed as it is.
- * Positions with a third element (an elevation from GeoJSON) are truncated to `[lng, lat]`.
+ * The geometry is a GeoJSON geometry of any type but `GeometryCollection`. A null geometry (or a
+ * `GeometryCollection`) gives a row without a geometry: it keeps its place and its id but is
+ * neither drawn nor hit. Positions with a third element (an elevation) are truncated to
+ * `[lng, lat]`. The id is turned into a string with `String()` (the row number as a string when
+ * omitted) and should be unique within the dataset. The properties are what the style rule
+ * reads.
+ *
+ * Besides the members of GeoJSON, a row may carry `style`, its individual style, which wins
+ * over the rule color and the base style.
  */
-export interface DatasetFeatureInput {
-  /** The feature id, unique within the dataset */
-  id: string;
-  /** The geometry type, the same values as a feature of the Store */
-  type: Feature['type'];
-  /** The coordinates in `[lng, lat]` degrees, shaped as for `type` (holes and Multi included) */
-  coordinates: Feature['coordinates'];
-  /** The attributes the style rule reads (`{}` when omitted) */
-  properties?: Record<string, unknown>;
-  /** The individual style; it wins over the rule color and the base style */
+export type DatasetRow = GeoJSONFeature<GeoJSONGeometry | null> & {
+  /** The individual style of the row; it wins over the rule color and the base style */
   style?: Feature['style'];
-  /** The layer id (`''` when omitted). Kept on the feature; the dataset does not use it */
-  layerId?: string;
-  /** The group id. Kept on the feature; the dataset does not use it */
-  groupId?: string;
-  /** The lock flag (`false` when omitted). Kept on the feature; nothing is edited here */
-  locked?: boolean;
-  /** `false` hides this feature (`true` when omitted) */
-  visible?: boolean;
-}
+};
 
 /**
  * Where a dataset is drawn relative to the layers of the Store.
@@ -81,7 +70,7 @@ export interface DatasetFeatureInput {
 export type DatasetOrder = 'below-store' | 'above-store' | 'layer-order';
 
 /**
- * The destination of {@link MapLibreGLDraw.moveDataset}: a side and a position
+ * The destination of a move of a dataset (`draw.datasets.move`): a side and a position
  * within it.
  *
  * order is the side (in front of or behind the Store) and index is the position within that
@@ -103,29 +92,16 @@ export interface DatasetPlacement {
 }
 
 /**
- * Fetches the features of a dataset for the displayed range.
+ * Fetches the rows of a dataset for the displayed range.
  *
  * It is called, debounced by 200 ms, when the displayed range changes. `bbox` is the range in
  * degrees rounded out to the boundaries of the tiles at the integer zoom, and `zoom` is the
  * zoom at the time of the call. A result is cached per rounded range, so a small pan or zoom
  * causes no call; {@link Dataset.invalidateProviderCache} discards the cache. Only
  * the result of the last request is applied, and a rejected promise is logged with
- * `console.error` and leaves the features shown as they are.
- *
- * @example
- * ```ts
- * const provider: DatasetFeatureProvider = async (bbox, zoom) => {
- *   const url = `/api/parcels?bbox=${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY}&z=${zoom}`;
- *   const response = await fetch(url);
- *   return response.json(); // DatasetFeatureInput[]
- * };
- * draw.addDataset({ id: 'parcels', provider });
- * ```
+ * `console.error` and leaves the rows shown as they are.
  */
-export type DatasetFeatureProvider = (
-  bbox: BoundingBox,
-  zoom: number,
-) => Promise<DatasetFeatureInput[]>;
+export type DatasetFeatureProvider = (bbox: BoundingBox, zoom: number) => Promise<DatasetRow[]>;
 
 /**
  * Returns the size and opacity factors of a dataset for a zoom.
@@ -149,39 +125,35 @@ export type DatasetFeatureProvider = (
 export type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
 
 /**
- * The options of {@link MapLibreGLDraw.addDataset}.
+ * The options of a dataset the engine adds (`draw.datasets.add` checks and translates them).
  *
- * Only `id` is required. Give at most one of `features` (static), `columnar` (static, as
- * columns of typed arrays) and `provider` (fetched for the displayed range).
+ * Only `id` is required. Give at most one of `rows` (static GeoJSON features), `table`
+ * (static, as columns of typed arrays) and `provider` (fetched for the displayed range).
  */
 export interface DatasetOptions {
   /**
    * The dataset id. It must be unique among the datasets of the draw
-   * instance; a duplicate makes `addDataset` throw. With `order: 'layer-order'` it is
+   * instance; a duplicate makes the addition throw. With `order: 'layer-order'` it is
    * also the id placed in the layer order of the Store
    */
   id: string;
   /**
-   * The static features, drawn in array order (the last in front). Cannot be given together
-   * with `columnar` or `provider` (it throws). Replace them later with
-   * {@link Dataset.setFeatures}
+   * The static rows as GeoJSON features, drawn in array order (the last in front). Cannot be
+   * given together with `table` or `provider` (it throws). Replace them later with
+   * {@link Dataset.setRows}
    */
-  features?: DatasetFeatureInput[];
+  rows?: readonly DatasetRow[];
   /**
-   * The static rows as columns of typed arrays, drawn in row order (the last in front); the
-   * fast way in for a large table, read in a Worker if need be. Cannot be given together with
-   * `features` or `provider` (it throws). Replace them later with
-   * {@link Dataset.setColumnar}
+   * The static rows as a table (from `@sakuzu/maplibre-gl-draw/table`), drawn in row order (the
+   * last in front); the fast way in for a large table, read in a Worker if need be. A table
+   * prepared with `prepareTable` is taken as it is, and the dataset computes none of the
+   * preparation on the main thread. Cannot be given together with `rows` or `provider` (it
+   * throws). Replace it later with {@link Dataset.setTable}
    */
-  columnar?: DatasetColumnarInput;
+  table?: Table | PreparedTable;
   /**
-   * What `prepareDatasetColumnar` computed for `columnar` (in a Worker, say). The dataset then
-   * computes none of it on the main thread. Only with `columnar` (it throws otherwise)
-   */
-  prepared?: DatasetColumnarPrepared;
-  /**
-   * Fetches the features for the displayed range. Cannot be given together with `features` or
-   * `columnar` (it throws)
+   * Fetches the rows for the displayed range. Cannot be given together with `rows` or `table`
+   * (it throws)
    */
   provider?: DatasetFeatureProvider;
   /**
@@ -236,13 +208,15 @@ export interface DatasetClickPayload {
   /** The feature that was hit, as normalized by the dataset */
   feature: Feature;
   /**
-   * The row of the feature: its index in the features given to the dataset (or in the result
-   * of the provider), or its row in the columnar table. A host that keeps its own columns reads
+   * The row of the feature: its index in the rows given to the dataset (or in the result of
+   * the provider), or its row in the table. A host that keeps its own columns reads
    * the values of the row from them
    */
   row: number;
   /** The clicked position `[lng, lat]` in degrees */
   lngLat: Coordinate;
+  /** The clicked point on the screen, in CSS pixels */
+  point?: { x: number; y: number };
 }
 
 /**
@@ -260,6 +234,8 @@ export interface DatasetHoverPayload {
   row: number | null;
   /** The pointer position `[lng, lat]` in degrees */
   lngLat: Coordinate;
+  /** The pointer position on the screen, in CSS pixels */
+  point?: { x: number; y: number };
 }
 
 /**
@@ -269,8 +245,8 @@ export interface DatasetHoverPayload {
  * changed. It exists so that a host that builds another representation from the contents of a
  * dataset, such as label rendering, gets a trigger to rebuild it.
  *
- * - features: the features were replaced (setFeatures, setColumnar, or a provider result
- *   applied). The rows are new, and so are the drawn rows
+ * - features: the rows were replaced (setRows, setTable, or a provider result applied). The
+ *   rows are new, and so are the drawn rows
  * - style: the style rule or the base style changed (the drawn rows may have changed with it)
  * - visibility: it was actually switched between shown and hidden
  * - selection: the selected features actually changed
@@ -303,40 +279,10 @@ export interface DatasetEventMap {
  *
  * It is meant for overlaying tens of thousands of read-only records, such as parcels or a
  * table of places. The features never enter the Store, so none of the following applies to
- * them: editing, undo / redo, the `draw.feature.*` events, the selection UI, and
- * `getAllFeatures()` / `export()`. A caller who wants to edit one copies it into the Store with
- * `addFeature`; the library does not relate the two. Create one with
- * {@link MapLibreGLDraw.addDataset}.
- *
- * @example
- * ```ts
- * const parcels = draw.addDataset({
- *   id: 'parcels',
- *   features: [
- *     {
- *       id: 'p1',
- *       type: 'Polygon',
- *       coordinates: [[[139.76, 35.68], [139.77, 35.68], [139.77, 35.69], [139.76, 35.68]]],
- *       properties: { population: 4200 },
- *     },
- *   ],
- *   styleRule: {
- *     kind: 'graduated',
- *     property: 'population',
- *     breaks: [1000, 5000],
- *     colors: ['#eff3ff', '#6baed6', '#2171b5'],
- *     other: '#cccccc',
- *   },
- *   interactive: true,
- * });
- *
- * const unsubscribe = parcels.on('click', ({ feature }) => {
- *   console.log(feature.id, feature.properties);
- * });
- *
- * parcels.setVisible(false); // hide without discarding the features
- * parcels.remove(); // the same as draw.removeDataset('parcels')
- * ```
+ * them: editing, undo / redo, the events of the features, the selection UI, and
+ * `draw.features.list()` / `draw.document`. A caller who wants to edit one copies it into the
+ * document with `draw.features.create`; the library does not relate the two. The public
+ * `Dataset` of `draw.datasets` is built on it.
  */
 export interface Dataset {
   /** The dataset id given at creation */
@@ -344,7 +290,7 @@ export interface Dataset {
   /**
    * Where it is drawn relative to the Store (the current side)
    *
-   * When the side is changed with `moveDataset`, this value becomes the new side.
+   * When the side is changed by a move, this value becomes the new side.
    */
   readonly order: DatasetOrder;
   /** Whether click / hover are fired (hits are blocked even with false) */
@@ -360,26 +306,24 @@ export interface Dataset {
    */
   setVisible(visible: boolean): void;
   /**
-   * Replaces all the features that are shown (there is no partial update). The selection
-   * drops the ids that disappear
-   */
-  setFeatures(features: DatasetFeatureInput[]): void;
-  /**
-   * Replaces all the rows that are shown with a columnar table (there is no partial update).
+   * Replaces all the rows that are shown with GeoJSON features (there is no partial update).
    * The selection drops the ids that disappear
+   */
+  setRows(rows: readonly DatasetRow[]): void;
+  /**
+   * Replaces all the rows that are shown with a table (there is no partial update). The
+   * selection drops the ids that disappear
    *
    * The arrays are kept and read as they are, not copied. The rows are packed straight into the
    * GPU arrays, and a row becomes a feature only when it is asked for (a hit, the selection,
    * `getFeatures`, `collectVisible`). The bboxes, the spatial chunks and the spatial index of the
-   * hit testing are computed here unless `prepared` brings them.
+   * hit testing are computed here, unless the table was prepared with `prepareTable`.
    *
-   * @param input The table
-   * @param prepared What `prepareDatasetColumnar` (from `@sakuzu/maplibre-gl-draw/columnar`)
-   *   computed for this table, typically in the Worker that read it
-   * @throws when the shape of the table does not add up, or when `prepared` was made for a table
-   *   of another length
+   * @param table The table, or the result of `prepareTable` (from
+   *   `@sakuzu/maplibre-gl-draw/table`), typically computed in the Worker that read it
+   * @throws when the shape of the table does not add up
    */
-  setColumnar(input: DatasetColumnarInput, prepared?: DatasetColumnarPrepared): void;
+  setTable(table: Table | PreparedTable): void;
   /** Replaces the style rule (undefined clears it) */
   setStyleRule(rule: StyleRule | undefined): void;
   /**
@@ -416,7 +360,7 @@ export interface Dataset {
    * The features currently held, in draw order, as normalized by the dataset. The rule
    * colors and the base style are not merged in (use `collectVisible` for that)
    *
-   * For a columnar table every row with a geometry is built into a feature on the first call
+   * For a table every row with a geometry is built into a feature on the first call
    * (and kept), which costs as much as giving the rows as features in the first place.
    */
   getFeatures(): Feature[];
@@ -452,10 +396,10 @@ export interface Dataset {
    * The narrowing uses the spatial index and builds no feature, so the cost is proportional to
    * the number of rows in the range. It is the entry point for code that walks only what is
    * drawn, such as placing text next to points: choose rows with the `getRow*` reads and build
-   * the features of the chosen ones alone with `getRowFeature`.
+   * the features of the chosen ones alone with `getRow`.
    *
-   * A row is the one reported as `row` by `click` and `hover`: the index in the features given
-   * (or in the result of the provider), or the row of the columnar table. The numbers hold until
+   * A row is the one reported as `row` by `click` and `hover`: the index in the rows given (or
+   * in the result of the provider), or the row of the table. The numbers hold until
    * the contents are replaced (a `change` with the reason `features`).
    *
    * @param bounds The range in degrees (`minX` / `maxX` are longitudes, `minY` / `maxY`
@@ -464,14 +408,15 @@ export interface Dataset {
    */
   collectDrawnRows(bounds: BoundingBox): Int32Array;
   /**
-   * The feature of a row, with the rule colors and the base style applied (the same feature
+   * Reads a row as a feature, with the rule colors and the base style applied (the same feature
    * `collectVisible` returns for that row)
    *
-   * A row of a columnar table is built into a feature on each call.
+   * A row of a table is built into a feature on each call.
    *
-   * @returns null when the row is out of range
+   * @param index The row
+   * @returns undefined when the row is out of range
    */
-  getRowFeature(row: number): Feature | null;
+  getRow(index: number): Feature | undefined;
   /**
    * The id of a row, without building its feature
    *
@@ -517,7 +462,7 @@ export interface Dataset {
    * of the retained rendering. The retained batches are not touched, so switching the selection
    * never rebuilds a GPU resource.
    *
-   * An id that is not held is ignored. An id that disappears through setFeatures or through a
+   * An id that is not held is ignored. An id that disappears through setRows, setTable or a
    * provider result is dropped from the selection automatically.
    */
   setSelectedIds(ids: string[]): void;
@@ -604,7 +549,7 @@ export interface Dataset {
 
   /**
    * Removes the dataset and releases its GPU resources; the same as
-   * {@link MapLibreGLDraw.removeDataset}, including the `draw.dataset.remove` event.
+   * `draw.datasets.remove`, including the `dataset.removed` event.
    * Calling it again does nothing
    */
   remove(): void;
@@ -627,30 +572,48 @@ function truncatePositions(value: readonly unknown[]): unknown[] {
 }
 
 /**
- * Normalizes the input into a feature of the same shape as in the Store
+ * Normalizes a row into a feature of the same shape as in the Store
  *
- * It fills in the optional fields and, since it is not put into the Store, layerId defaults to an
- * empty string. The coordinates may contain 3-element positions coming from GeoJSON (with an
- * elevation), so a copy truncated to 2 elements is made only when they do (ordinary input with
- * only 2 elements is not copied).
+ * It fills in the fields a row does not have and, since it is not put into the Store, layerId is
+ * an empty string. A row without a geometry (null, or a GeometryCollection) becomes a hidden
+ * Point with NaN coordinates, so it keeps its place but is neither drawn nor hit. The
+ * coordinates may contain 3-element positions (with an elevation), so a copy truncated to 2
+ * elements is made only when they do (ordinary input with only 2 elements is not copied).
  *
+ * @param input The row
+ * @param index The row number, the id of a row without one
  * @internal
  */
-export function normalizeDisplayFeature(input: DatasetFeatureInput): Feature {
-  const coords = input.coordinates as readonly unknown[];
-  const coordinates = hasExtraPositionElements(coords)
-    ? (truncatePositions(coords) as Feature['coordinates'])
-    : input.coordinates;
+export function normalizeDisplayFeature(input: DatasetRow, index: number): Feature {
+  const id = input.id === undefined || input.id === null ? String(index) : String(input.id);
+  const properties = (input.properties ?? {}) as Record<string, unknown>;
+  const geometry = input.geometry;
+  if (!geometry || geometry.type === 'GeometryCollection') {
+    return {
+      id,
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [Number.NaN, Number.NaN] },
+      layerId: '',
+      groupId: undefined,
+      properties,
+      style: input.style ?? {},
+      locked: false,
+      visible: false,
+    };
+  }
+  const coords = geometry.coordinates as readonly unknown[];
   return {
-    id: input.id,
-    type: input.type,
-    coordinates,
-    layerId: input.layerId ?? '',
-    groupId: input.groupId,
-    properties: input.properties ?? {},
-    style: input.style,
-    locked: input.locked ?? false,
-    visible: input.visible !== false,
+    id,
+    type: geometry.type,
+    geometry: hasExtraPositionElements(coords)
+      ? ({ type: geometry.type, coordinates: truncatePositions(coords) } as GeoJSONGeometry)
+      : geometry,
+    layerId: '',
+    groupId: undefined,
+    properties,
+    style: input.style ?? {},
+    locked: false,
+    visible: true,
   };
 }
 

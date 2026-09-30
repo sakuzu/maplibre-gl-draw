@@ -10,6 +10,7 @@
  * (see SDFLineRenderer.patchRetainedBatchCoords).
  */
 
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type { RetainedLineBatch } from '../renderers/line/line-types.js';
 import type { SDFLineRenderer } from '../renderers/line/sdf-line.js';
@@ -117,14 +118,14 @@ export function computeLineCoordSlots(features: readonly Feature[]): Map<string,
 
   for (const feature of features) {
     if (feature.type === 'MultiLineString') {
-      for (const part of (feature.coordinates as Coordinate[][] | undefined) ?? []) {
+      for (const part of (coordinatesOf(feature) as Coordinate[][] | undefined) ?? []) {
         if (!part || part.length < 2) continue;
         offset += part.length;
       }
       continue;
     }
 
-    const coords = feature.coordinates as Coordinate[] | undefined;
+    const coords = coordinatesOf(feature) as Coordinate[] | undefined;
     if (!coords || coords.length < 2) continue;
 
     if (feature.type === 'LineString' || feature.type === 'Freehand') {
@@ -188,13 +189,13 @@ export function queueCoordPatch(
   const slot = chunk.lineOffsets.get(feature.id);
   if (!slot) return false;
 
-  const coords = feature.coordinates as Coordinate[];
+  const coords = coordinatesOf(feature) as Coordinate[];
   // If the vertex count differs from when the index table was built, the positions of the
   // following features are off as well
   if (!Array.isArray(coords) || coords.length !== slot.count) return false;
 
   const changed = computeCoordinateDiff(
-    previous.coordinates as Coordinate[],
+    coordinatesOf(previous) as Coordinate[],
     coords,
     MAX_PATCHED_VERTICES,
   );

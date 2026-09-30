@@ -11,10 +11,10 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { CustomRendererDrawContext } from '../extension/index.js';
+import type { FrameDrawContext } from '../extension/index.js';
 import type { SDFStrokeOptions, SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
-import { SnapIndicatorRenderer } from './indicator.js';
+import { createSnapIndicatorLook, SnapIndicatorRenderer } from './indicator.js';
 import type { SnapResult, SnapService } from './types.js';
 import { resolveSnapKinds } from './types.js';
 
@@ -24,6 +24,8 @@ function fakeService(result: SnapResult | null): SnapService {
     resolve: () => ({ lngLat: { lng: 0, lat: 0 } }),
     register: () => () => {},
     setEnabled: () => {},
+    setTolerance: () => {},
+    setDisableKey: () => {},
     isEnabled: () => true,
     setKindEnabled: () => {},
     isKindEnabled: () => true,
@@ -55,7 +57,7 @@ interface LineCall {
   zoom: number;
 }
 
-function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): CustomRendererDrawContext {
+function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): FrameDrawContext {
   return {
     pointShapeRenderer: {
       draw: (coord: [number, number], style: PointStyle, zoom: number) => {
@@ -72,7 +74,7 @@ function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): CustomRende
         lineCalls.push({ coords, style, options, zoom });
       },
     },
-  } as unknown as CustomRendererDrawContext;
+  } as unknown as FrameDrawContext;
 }
 
 const PROJECTION = {} as ProjectionData;
@@ -215,5 +217,31 @@ describe('SnapIndicatorRenderer', () => {
     }).draw(PROJECTION, 14, fakeContext(calls));
 
     expect(calls[0].style).toEqual(custom);
+  });
+
+  it('reads the look it is given on every drawing, and marks a kind of its own as a vertex', () => {
+    const calls: DrawCall[] = [];
+    const lineCalls: LineCall[] = [];
+    const look = createSnapIndicatorLook();
+    const segment = { start: [0, 0] as [number, number], end: [1, 1] as [number, number] };
+    const guide = new SnapIndicatorRenderer({
+      snapService: fakeService({
+        lngLat: { lng: 0.5, lat: 0.5 },
+        target: { kind: 'guide', segment },
+      }),
+      look,
+    });
+    look.styles.guide.size = 24;
+    look.guideLine.width = 5;
+    guide.draw(PROJECTION, 14, fakeContext(calls, lineCalls));
+    expect(calls[0].style.size).toBe(24);
+    expect(lineCalls[0].style.width).toBe(5);
+
+    look.styles.vertex.shape = 'star';
+    new SnapIndicatorRenderer({
+      snapService: fakeService({ lngLat: { lng: 0, lat: 0 }, target: { kind: 'grid-node' } }),
+      look,
+    }).draw(PROJECTION, 14, fakeContext(calls));
+    expect(calls[1].style.shape).toBe('star');
   });
 });

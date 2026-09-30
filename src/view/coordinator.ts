@@ -11,7 +11,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
 import type { Store } from '../store/store.js';
-import type { StateChanges } from '../store/types.js';
+import type { StoreChange } from '../store/types.js';
 
 /**
  * RenderCoordinator interface
@@ -47,19 +47,19 @@ export interface RenderCoordinatorDeps {
 /**
  * Determines whether a change requires a repaint
  */
-function shouldRepaint(changes: StateChanges): boolean {
+function shouldRepaint(changes: StoreChange): boolean {
   // A repaint is required if any of the following changed
   return !!(
-    (
-      changes.features || // creation, update or deletion of features
-      changes.layers || // layer changes
-      changes.groups || // group changes (reordering, show/hide)
-      changes.layerReorder || // reordering of items within a layer
-      changes.groupReorder || // reordering of features within a group
-      changes.selection || // selection state changes
-      changes.tentative || // changes to the transient state while drawing
-      changes.uiStateChanged
-    ) // changes to the UI state (dragState, boxSelection)
+    changes.features || // creation, update or deletion of features
+    changes.layers || // layer changes
+    changes.groups || // group changes (reordering, show/hide)
+    changes.layerReorder || // reordering of items within a layer
+    changes.groupReorder || // reordering of features within a group
+    changes.selection || // selection state changes
+    changes.tentative || // changes to the transient state while drawing
+    changes.uiStateChanged || // changes to the UI state (dragState, boxSelection)
+    // the whole document replaced
+    changes.reset
   );
 }
 
@@ -82,7 +82,7 @@ export class RenderCoordinatorImpl implements RenderCoordinator {
       return;
     }
 
-    this.unsubscribe = this.store.subscribe((changes: StateChanges) => {
+    this.unsubscribe = this.store.subscribe((changes: StoreChange) => {
       if (shouldRepaint(changes)) {
         this.map.triggerRepaint();
       }

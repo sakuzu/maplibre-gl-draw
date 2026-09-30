@@ -29,12 +29,13 @@
  * registry per draw instance (createFeatureCompanionRegistry). When several instances
  * (the hidden renderers of printing and thumbnails) hold different Stores that have the
  * same feature ids, the provider has no way to tell "is this a feature of my own Store?"
- * (a replaced DocumentStore may return a new object from getFeature every time, so identity
+ * (a replaced Store may return a new object from getFeature every time, so identity
  * cannot be used), so ownership is expressed by separating the registries.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { CustomRendererDrawContext } from '../extension/index.js';
+import type { MouseNormalizedEvent } from '../dispatcher/types.js';
+import type { FrameDrawContext } from '../extension/index.js';
 import type { LngLat, ScreenPoint } from '../shared/math/index.js';
 import type { Coordinate, Feature, Layer } from '../store/types.js';
 
@@ -74,7 +75,8 @@ export interface CompanionHitContext {
  * Draws something that accompanies a feature (a label, a callout) right below it in the
  * draw order, and makes it clickable in the same order.
  *
- * Register one with `draw.registerFeatureCompanionProvider(provider)`. What is drawn and what
+ * A `CompanionProvider` of `draw.extensions.companionProviders` is installed as one. What is
+ * drawn and what
  * is hit are resolved at the same position of the z order, so what is visible is what can be
  * grabbed. A click on a companion does not change the selection; it is handed to
  * `onCompanionClick`.
@@ -99,11 +101,12 @@ export interface FeatureCompanionProvider {
     feature: Feature,
     projectionData: ProjectionData,
     zoom: number,
-    context: CustomRendererDrawContext,
+    context: FrameDrawContext,
   ): void;
   /**
    * Called in the z scan of click resolution, after the feature itself misses and before
-   * the next feature.
+   * the next feature. The feature itself is hit on what it draws (the marker of a point
+   * included) with the click tolerance, so it always wins over its own companion.
    *
    * If it returns a hit, core consumes that click (it does not change the selection state,
    * nor does it clear the selection as an empty click would) and calls
@@ -111,12 +114,19 @@ export interface FeatureCompanionProvider {
    */
   hitTest(feature: Feature, point: ScreenPoint, context: CompanionHitContext): CompanionHit | null;
   /**
-   * The notification of a consumed click.
+   * The notification of a click on the companion.
    *
    * @param featureId The ID of the feature that owns the companion
    * @param hit The hit returned by hitTest
+   * @param event The click, when the engine has one to give
+   * @returns False to leave the click to the select mode, as a click on the feature that owns
+   *   the companion; anything else consumes it
    */
-  onCompanionClick(featureId: string, hit: CompanionHit): void;
+  onCompanionClick(
+    featureId: string,
+    hit: CompanionHit,
+    event?: MouseNormalizedEvent,
+  ): boolean | undefined;
 }
 
 /**
@@ -257,7 +267,7 @@ export function drawFeatureCompanionsInFrame(
   projectionData: ProjectionData,
   zoom: number,
   layer: Layer | undefined,
-  context: CustomRendererDrawContext,
+  context: FrameDrawContext,
   restoreBlendState?: () => void,
 ): boolean {
   if (!registry.any()) return false;
@@ -301,16 +311,25 @@ export function hitTestFeatureCompanions(
 }
 
 /**
- * Hands a consumed click back to the provider
+ * Hands a click on a companion to its provider
  *
  * If the provider has already been unregistered, nothing happens (the click stays
  * consumed and the selection state does not change).
  *
+ * @returns Whether the click was consumed; false when the provider leaves it to the select
+ *   mode
  * @internal
  */
 export function notifyFeatureCompanionClick(
   registry: FeatureCompanionRegistry,
   result: FeatureCompanionHitResult,
-): void {
-  registry.get(result.providerId)?.onCompanionClick(result.featureId, result.hit);
+  event?: MouseNormalizedEvent,
+): boolean {
+  const provider = registry.get(result.providerId);
+  if (!provider) return true;
+  const consumed =
+    event === undefined
+      ? provider.onCompanionClick(result.featureId, result.hit)
+      : provider.onCompanionClick(result.featureId, result.hit, event);
+  return consumed !== false;
 }

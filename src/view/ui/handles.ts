@@ -8,12 +8,13 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import { destinationPoint } from '../../geometry/index.js';
+import { destinationPoint } from '../../geometry/distance.js';
 import type { HandleType } from '../../shared/config/constants.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { mercatorMidpoint } from '../../shared/math/globe-subdivision.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
 import { applyMarginToBoundingBox, clampLatitude } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getRadiusHandleAngle } from '../../shared/utils/property.js';
 import { hasVertexRef, isSameVertexRef } from '../../shared/utils/vertex-ref.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
@@ -247,15 +248,15 @@ export function computeVertexHandles(
 
   if (feature.type === 'Point') {
     // A Point is a single vertex
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     handles.push({ type: 'vertex', position: coord, vertexRef: { ring: 0, index: 0 } });
   } else if (feature.type === 'LineString') {
-    collectLineVertexHandles(feature.coordinates as Coordinate[], handles);
+    collectLineVertexHandles(coordinatesOf(feature) as Coordinate[], handles);
   } else if (feature.type === 'Polygon') {
-    collectPolygonVertexHandles(feature.coordinates as Coordinate[][], handles);
+    collectPolygonVertexHandles(coordinatesOf(feature) as Coordinate[][], handles);
   } else if (feature.type === 'MultiPoint') {
     // Each coordinate is one part. ring / index are always 0
-    const points = feature.coordinates as Coordinate[];
+    const points = coordinatesOf(feature) as Coordinate[];
     for (let part = 0; part < points.length; part++) {
       handles.push({
         type: 'vertex',
@@ -264,12 +265,12 @@ export function computeVertexHandles(
       });
     }
   } else if (feature.type === 'MultiLineString') {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     for (let part = 0; part < parts.length; part++) {
       collectLineVertexHandles(parts[part], handles, part);
     }
   } else if (feature.type === 'MultiPolygon') {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (let part = 0; part < parts.length; part++) {
       collectPolygonVertexHandles(parts[part], handles, part);
     }
@@ -289,7 +290,7 @@ export function computeCircleRadiusHandle(feature: Feature): HandleInfo | null {
     return null;
   }
 
-  const center = feature.coordinates as Coordinate;
+  const center = coordinatesOf(feature) as Coordinate;
   const radiusMeters = getCircleRadius(feature);
   const radiusHandleAngle = getRadiusHandleAngle(feature);
 
@@ -313,7 +314,7 @@ export function computeCircleCenterHandle(feature: Feature): HandleInfo | null {
     return null;
   }
 
-  const center = feature.coordinates as Coordinate;
+  const center = coordinatesOf(feature) as Coordinate;
 
   return {
     type: 'center',
@@ -392,16 +393,16 @@ export function computeMidpointHandles(
   const handles: HandleInfo[] = [];
 
   if (feature.type === 'LineString') {
-    collectLineMidpointHandles(feature.coordinates as Coordinate[], handles);
+    collectLineMidpointHandles(coordinatesOf(feature) as Coordinate[], handles);
   } else if (feature.type === 'Polygon') {
-    collectPolygonMidpointHandles(feature.coordinates as Coordinate[][], handles);
+    collectPolygonMidpointHandles(coordinatesOf(feature) as Coordinate[][], handles);
   } else if (feature.type === 'MultiLineString') {
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     for (let part = 0; part < parts.length; part++) {
       collectLineMidpointHandles(parts[part], handles, part);
     }
   } else if (feature.type === 'MultiPolygon') {
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     for (let part = 0; part < parts.length; part++) {
       collectPolygonMidpointHandles(parts[part], handles, part);
     }
@@ -543,7 +544,7 @@ export class SelectionHandlesRenderer {
     zoom: number,
     options?: {
       activeVertex?: VertexRef;
-      selectedVertices?: VertexRef[];
+      selectedVertices?: readonly VertexRef[];
       visibleSet?: VisibleHandleSet | null;
     },
   ): void {
@@ -645,7 +646,11 @@ export class SelectionHandlesRenderer {
    * ring, so even when it is included in the references only one handle is drawn, as the
    * first vertex.
    */
-  drawFollowedVertexHandles(feature: Feature, followedVertices: VertexRef[], zoom: number): void {
+  drawFollowedVertexHandles(
+    feature: Feature,
+    followedVertices: readonly VertexRef[],
+    zoom: number,
+  ): void {
     if (followedVertices.length === 0) return;
 
     const handles = computeVertexHandles(feature).filter((h) =>
@@ -655,11 +660,27 @@ export class SelectionHandlesRenderer {
   }
 
   /**
+   * Draws the auxiliary handles of the extensions with the look of the vertex handles, the
+   * size their hit test uses
+   */
+  drawAuxiliaryHandles(positions: readonly Coordinate[], zoom: number): void {
+    this.drawHandlesWithStyle(
+      positions.map((position) => ({ position })),
+      this.config.vertexHandle.point,
+      zoom,
+    );
+  }
+
+  /**
    * Draws a group of handles with a single style
    *
    * When there are two or more of them and instancing is available, they are drawn together.
    */
-  private drawHandlesWithStyle(handles: HandleInfo[], style: PointStyle, zoom: number): void {
+  private drawHandlesWithStyle(
+    handles: ReadonlyArray<Pick<HandleInfo, 'position'>>,
+    style: PointStyle,
+    zoom: number,
+  ): void {
     if (handles.length === 0) return;
 
     if (!this.pointInstanceRenderer || handles.length < 2) {
@@ -743,7 +764,7 @@ export class SelectionHandlesRenderer {
       /** When specified, only that vertex is drawn (used while editing a vertex/midpoint) */
       activeVertex?: VertexRef;
       /** References of the selected vertices (for highlighting) */
-      selectedVertices?: VertexRef[];
+      selectedVertices?: readonly VertexRef[];
       /**
        * Callback that computes the additional resize handles (it receives the bbox after
        * the margin is applied)

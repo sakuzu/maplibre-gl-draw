@@ -28,7 +28,7 @@ import {
   getSelectedFeatureIds,
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import {
   getAdditionalResizeHandlesCallback,
   getAuxiliaryHandlesCallback,
@@ -37,7 +37,7 @@ import {
 
 export function updateCursorForSelection(
   event: MouseNormalizedEvent,
-  context: ModeContext,
+  context: EngineModeContext,
   config: SelectionUIConfig,
 ): void {
   const { store, map } = context;

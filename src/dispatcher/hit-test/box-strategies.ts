@@ -21,8 +21,9 @@ import {
   rectangleIntersectsOBB,
   rectangleIntersectsPolygon,
 } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getImageProperties } from '../../shared/utils/property.js';
-import type { BoundingBox, Coordinate, Feature, ImageStyle } from '../../store/types.js';
+import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
 import type { BoxSelectionStrategy } from './box-strategy.js';
 
 /**
@@ -38,7 +39,7 @@ export class PointBoxSelectionStrategy implements BoxSelectionStrategy {
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'Point') return false;
 
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     return pointInRectangle(coord, rect);
   }
 }
@@ -57,7 +58,7 @@ export class LineStringBoxSelectionStrategy implements BoxSelectionStrategy {
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'LineString') return false;
 
-    const coords = feature.coordinates as Coordinate[];
+    const coords = coordinatesOf(feature) as Coordinate[];
     return rectangleIntersectsLineString(rect, coords);
   }
 }
@@ -78,7 +79,7 @@ export class PolygonBoxSelectionStrategy implements BoxSelectionStrategy {
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'Polygon') return false;
 
-    const rings = feature.coordinates as Coordinate[][];
+    const rings = coordinatesOf(feature) as Coordinate[][];
     return rectangleIntersectsPolygon(rect, rings);
   }
 }
@@ -96,7 +97,7 @@ export class MultiPointBoxSelectionStrategy implements BoxSelectionStrategy {
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'MultiPoint') return false;
 
-    const parts = feature.coordinates as Coordinate[];
+    const parts = coordinatesOf(feature) as Coordinate[];
     return parts.some((coord) => pointInRectangle(coord, rect));
   }
 }
@@ -114,7 +115,7 @@ export class MultiLineStringBoxSelectionStrategy implements BoxSelectionStrategy
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'MultiLineString') return false;
 
-    const parts = feature.coordinates as Coordinate[][];
+    const parts = coordinatesOf(feature) as Coordinate[][];
     return parts.some((coords) => rectangleIntersectsLineString(rect, coords));
   }
 }
@@ -132,7 +133,7 @@ export class MultiPolygonBoxSelectionStrategy implements BoxSelectionStrategy {
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'MultiPolygon') return false;
 
-    const parts = feature.coordinates as Coordinate[][][];
+    const parts = coordinatesOf(feature) as Coordinate[][][];
     return parts.some((rings) => rings.length > 0 && rectangleIntersectsPolygon(rect, rings));
   }
 }
@@ -160,7 +161,7 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
     const obb = this.createOBBForImage(feature);
     if (!obb) {
       // When the OBB cannot be created, test with the coordinate alone
-      const coord = feature.coordinates as Coordinate;
+      const coord = coordinatesOf(feature) as Coordinate;
       return pointInRectangle(coord, rect);
     }
 
@@ -172,15 +173,14 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
     const properties = getImageProperties(feature);
     if (!properties.imageFileId) return null;
 
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     const latitude = coord[1];
-    const style = feature.style as ImageStyle | undefined;
 
     const imageWidth = properties.imageWidth || 100;
     const imageHeight = properties.imageHeight || 100;
 
-    const displayWidth = style?.width || imageWidth;
-    const displayHeight = style?.height || imageHeight;
+    const displayWidth = imageWidth;
+    const displayHeight = imageHeight;
 
     const createdZoom = properties.createdZoom || 14;
     const scale = properties.scale || 1;
@@ -193,7 +193,7 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
     const widthDeg = metersToDegreesLng(widthMeters, latitude);
     const heightDeg = metersToDegreesLat(heightMeters);
 
-    const rotation = (style?.rotation || 0) + (properties.rotation || 0);
+    const rotation = properties.rotation || 0;
 
     return createOBB(coord[0], coord[1], widthDeg, heightDeg, rotation);
   }
@@ -218,7 +218,7 @@ export class CircleBoxSelectionStrategy implements BoxSelectionStrategy {
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'Circle') return false;
 
-    const center = feature.coordinates as Coordinate;
+    const center = coordinatesOf(feature) as Coordinate;
     const radiusMeters = getCircleRadius(feature);
     if (!radiusMeters || radiusMeters <= 0) {
       return pointInRectangle(center, rect);

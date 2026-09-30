@@ -12,6 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../store/types.js';
 import { deleteVertex } from './vertex.js';
 
@@ -19,19 +20,24 @@ function closedPolygon(): Feature {
   return {
     id: 'poly',
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0], // A (index 0)
-        [1, 0], // B
-        [1, 1], // C
-        [0, 1], // D
-        [0, 0], // The closing point (a copy of A, index 4)
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0], // A (index 0)
+          [1, 0], // B
+          [1, 1], // C
+          [0, 1], // D
+          [0, 0], // The closing point (a copy of A, index 4)
+        ],
       ],
-    ],
+    },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -40,26 +46,31 @@ function polygonWithHole(): Feature {
   return {
     id: 'poly-hole',
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        [
+          [2, 2], // a (index 0)
+          [8, 2], // b
+          [8, 8], // c
+          [2, 8], // d
+          [2, 2], // The closing point (a copy of a, index 4)
+        ],
       ],
-      [
-        [2, 2], // a (index 0)
-        [8, 2], // b
-        [8, 8], // c
-        [2, 8], // d
-        [2, 2], // The closing point (a copy of a, index 4)
-      ],
-    ],
+    },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -108,18 +119,23 @@ describe('deleteVertex Polygon', () => {
     const triangle: Feature = {
       id: 'tri',
       type: 'Polygon',
-      coordinates: [
-        [
-          [0, 0],
-          [1, 0],
-          [1, 1],
-          [0, 0],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 0],
+          ],
         ],
-      ],
+      },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     expect(deleteVertex(triangle, { ring: 0, index: 1 })).toBeNull();
   });
@@ -147,7 +163,7 @@ describe('deleteVertex on an inner ring of a Polygon', () => {
       [2, 2],
     ]);
     expect(result[1][0]).toEqual(result[1][result[1].length - 1]);
-    expect(result[0]).toEqual((polygonWithHole().coordinates as Coordinate[][])[0]);
+    expect(result[0]).toEqual((coordinatesOf(polygonWithHole()) as Coordinate[][])[0]);
   });
 
   it('refuses to delete the closing point of the inner ring', () => {

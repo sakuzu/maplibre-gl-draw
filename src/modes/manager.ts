@@ -9,8 +9,8 @@
  */
 
 import type { Store } from '../store/store.js';
-import type { Mode, StateChanges } from '../store/types.js';
-import type { ModeContext, ModeFactory, ModeHandler } from './handler.js';
+import type { Mode, StoreChange } from '../store/types.js';
+import type { EngineModeContext, EngineModeFactory, EngineModeHandler } from './handler.js';
 
 /**
  * ModeManager interface
@@ -39,7 +39,7 @@ export interface ModeManager {
    * @returns the function that cancels this registration (unregisterMode, only while the
    *   factory is still the one registered for the name)
    */
-  registerMode(mode: Mode, factory: ModeFactory): () => void;
+  registerMode(mode: Mode, factory: EngineModeFactory): () => void;
 
   /**
    * Removes the mode of a name
@@ -49,11 +49,14 @@ export interface ModeManager {
    */
   unregisterMode(mode: Mode): void;
 
+  /** Whether a factory is registered for the mode */
+  hasMode(mode: Mode): boolean;
+
   /** Gets the current mode handler */
-  getHandler(): ModeHandler | null;
+  getHandler(): EngineModeHandler | null;
 
   /** Sets the context */
-  setContext(context: ModeContext): void;
+  setContext(context: EngineModeContext): void;
 
   /** Starts the initial mode and starts subscribing to the Store */
   start(): void;
@@ -102,7 +105,7 @@ export interface ModeManagerOptions {
    * `writesFeatures`). When it returns false the request is ignored and the current mode is
    * kept, like the interaction lock. When it is omitted, every registered mode can be entered.
    */
-  canEnter?: (handler: ModeHandler) => boolean;
+  canEnter?: (handler: EngineModeHandler) => boolean;
 }
 
 /**
@@ -113,15 +116,15 @@ export interface ModeManagerOptions {
  * @internal
  */
 export class ModeManagerImpl implements ModeManager {
-  private currentHandler: ModeHandler | null = null;
-  private factories = new Map<Mode, ModeFactory>();
-  private context: ModeContext | null = null;
+  private currentHandler: EngineModeHandler | null = null;
+  private factories = new Map<Mode, EngineModeFactory>();
+  private context: EngineModeContext | null = null;
   private unsubscribe: (() => void) | null = null;
   /**
    * The handler created by setMode to ask canEnter, which starts when the Store reports the
    * mode change (so a mode is never constructed twice for one transition)
    */
-  private pending: { mode: Mode; handler: ModeHandler } | null = null;
+  private pending: { mode: Mode; handler: EngineModeHandler } | null = null;
 
   constructor(
     private readonly store: Store,
@@ -131,7 +134,7 @@ export class ModeManagerImpl implements ModeManager {
   /**
    * Sets the context
    */
-  setContext(context: ModeContext): void {
+  setContext(context: EngineModeContext): void {
     this.context = context;
   }
 
@@ -169,11 +172,15 @@ export class ModeManagerImpl implements ModeManager {
     return this.store.getMode() === mode;
   }
 
-  registerMode(mode: Mode, factory: ModeFactory): () => void {
+  registerMode(mode: Mode, factory: EngineModeFactory): () => void {
     this.factories.set(mode, factory);
     return () => {
       if (this.factories.get(mode) === factory) this.unregisterMode(mode);
     };
+  }
+
+  hasMode(mode: Mode): boolean {
+    return this.factories.has(mode);
   }
 
   unregisterMode(mode: Mode): void {
@@ -183,7 +190,7 @@ export class ModeManagerImpl implements ModeManager {
     this.factories.delete(mode);
   }
 
-  getHandler(): ModeHandler | null {
+  getHandler(): EngineModeHandler | null {
     return this.currentHandler;
   }
 
@@ -192,7 +199,7 @@ export class ModeManagerImpl implements ModeManager {
    */
   start(): void {
     // Subscribe to the mode changes of the Store
-    this.unsubscribe = this.store.subscribe((changes: StateChanges) => {
+    this.unsubscribe = this.store.subscribe((changes: StoreChange) => {
       if (changes.mode) {
         this.handleModeChange(changes.mode.mode);
       }

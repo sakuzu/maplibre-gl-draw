@@ -28,7 +28,7 @@ import {
  * @param store The Store to read the selection from
  * @returns The feature ids. An empty array when nothing is selected
  */
-export function getSelectedFeatureIds(store: Store): string[] {
+export function getSelectedFeatureIds(store: Store): readonly string[] {
   const selection = store.getSelection();
   switch (selection.type) {
     case 'feature':
@@ -47,7 +47,7 @@ function featureIdsInLayer(store: Store, layerId: string): string[] {
   const layer = store.getLayer(layerId);
   if (!layer) return [];
   const ids: string[] = [];
-  for (const itemId of layer.order) {
+  for (const itemId of layer.items) {
     if (store.getFeature(itemId)) {
       ids.push(itemId);
     } else {

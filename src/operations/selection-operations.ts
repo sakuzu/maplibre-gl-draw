@@ -5,9 +5,10 @@
  * Selection operations
  *
  * Deletes what is selected. The Delete key of the select mode (modes/) and
- * `draw.deleteSelection()` (api/) both call this, so the two paths delete the same things.
+ * `draw.selection.delete()` (api/) both call this, so the two paths delete the same things.
  */
 
+import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { isFeatureLocked, isGroupLocked } from '../store/lock.js';
 import type { Store } from '../store/store.js';
 import type { FeatureCoordinates, VertexSelection } from '../store/types.js';
@@ -15,7 +16,7 @@ import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from './ver
 
 /**
  * Deletes what is selected, as one change. The Delete key of the select mode and
- * `draw.deleteSelection()` both run this.
+ * `draw.selection.delete()` both run this.
  *
  * - vertices selected: deletes those vertices
  * - feature: deletes the selected features
@@ -37,10 +38,23 @@ export function deleteSelection(store: Store): boolean {
   if (store.isReadOnly() || store.isInteractionLocked()) return false;
 
   // Delete the vertices when vertices are selected
-  const selectedVertices = store.getSelectedVertices();
-  if (selectedVertices && selectedVertices.vertexIndices.length > 0) {
+  const selectedVertices = store.getVertexSelection();
+  if (selectedVertices && selectedVertices.vertices.length > 0) {
     return deleteSelectedVertices(store, selectedVertices) > 0;
   }
+
+  return deleteSelectedItems(store);
+}
+
+/**
+ * Deletes the selected features, groups or layers as one change, leaving the vertex selection
+ * aside (see {@link deleteSelection} for what each selection deletes)
+ *
+ * @returns true when something was deleted; false while read-only or the interaction lock is
+ *   on, when nothing is selected, or when everything selected is locked
+ */
+export function deleteSelectedItems(store: Store): boolean {
+  if (store.isReadOnly() || store.isInteractionLocked()) return false;
 
   const selection = store.getSelection();
   if (selection.ids.length === 0) return false;
@@ -64,7 +78,7 @@ export function deleteSelection(store: Store): boolean {
   if (selection.type === 'group') {
     // Locked groups (themselves / the layer they belong to) are not deleted
     const findLayerOfGroup = (groupId: string) =>
-      store.getAllLayers().find((l) => l.order.includes(groupId));
+      store.listLayers().find((l) => l.items.includes(groupId));
     const groupIds = selection.ids.filter((groupId) => {
       const group = store.getGroup(groupId);
       return group !== undefined && !isGroupLocked(group, findLayerOfGroup);
@@ -99,7 +113,7 @@ export function deleteSelection(store: Store): boolean {
       const layer = store.getLayer(layerId);
       return layer !== undefined && !layer.locked && !holdsLockedItem(store, layerId);
     });
-    const deletable = layerIds.slice(0, Math.max(0, store.getAllLayers().length - 1));
+    const deletable = layerIds.slice(0, Math.max(0, store.listLayers().length - 1));
     if (deletable.length === 0) return false;
     store.transact(() => {
       store.setSelection(null, []);
@@ -119,11 +133,11 @@ export function deleteSelection(store: Store): boolean {
 function holdsLockedItem(store: Store, layerId: string): boolean {
   const layer = store.getLayer(layerId);
   if (!layer) return false;
-  for (const itemId of layer.order) {
+  for (const itemId of layer.items) {
     const group = store.getGroup(itemId);
     if (group?.locked) return true;
   }
-  return store.getAllFeatures().some((f) => f.layerId === layerId && isFeatureLocked(f, store));
+  return store.listFeatures().some((f) => f.layerId === layerId && isFeatureLocked(f, store));
 }
 
 /**
@@ -131,7 +145,7 @@ function holdsLockedItem(store: Store, layerId: string): boolean {
  *
  * @returns The number of vertices deleted
  */
-function deleteSelectedVertices(store: Store, selection: VertexSelection): number {
+export function deleteSelectedVertices(store: Store, selection: VertexSelection): number {
   const feature = store.getFeature(selection.featureId);
   if (!feature) return 0;
 
@@ -141,16 +155,19 @@ function deleteSelectedVertices(store: Store, selection: VertexSelection): numbe
   // Within the same part and the same ring, deletion goes in descending index order
   // (avoiding the shift caused by what was already removed. For MultiPoint the part itself
   // disappears, so parts are in descending order too)
-  const sortedRefs = sortVertexRefsForDeletion(selection.vertexIndices);
+  const sortedRefs = sortVertexRefsForDeletion(selection.vertices);
 
   // deleteVertex does not mutate its input and returns a new coordinate structure
   // (copy-on-write), so no upfront copy is needed. Successive deletions only need the return
   // value fed into the next input
-  let coords: FeatureCoordinates = feature.coordinates;
+  let coords: FeatureCoordinates = coordinatesOf(feature);
   let deletedCount = 0;
 
   for (const ref of sortedRefs) {
-    const result = deleteVertexOp({ ...feature, coordinates: coords }, ref);
+    const result = deleteVertexOp(
+      { ...feature, geometry: geometryFromCoordinates(feature.type, coords) },
+      ref,
+    );
     if (result !== null) {
       coords = result;
       deletedCount++;
@@ -159,7 +176,9 @@ function deleteSelectedVertices(store: Store, selection: VertexSelection): numbe
 
   if (deletedCount > 0) {
     store.transact(() => {
-      store.updateFeature(selection.featureId, { coordinates: coords });
+      store.updateFeature(selection.featureId, {
+        geometry: geometryFromCoordinates(feature.type, coords),
+      });
       store.setSelectedVertices(null);
     });
   }

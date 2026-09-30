@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SEGMENT_INDEX_THRESHOLD } from '../../dispatcher/hit-test/segment-grid.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { computeVertexHandles } from '../../view/ui/handles.js';
 import {
@@ -57,11 +58,13 @@ function makeFeature(type: string, coordinates: FeatureCoordinates): Feature {
   return {
     id: `f-${type}`,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -88,7 +91,7 @@ function flattenCoords(coordinates: FeatureCoordinates): Coordinate[] {
  * exercised as well.
  */
 function randomBBoxes(feature: Feature, count: number, seed: number): BoundingBox[] {
-  const coords = flattenCoords(feature.coordinates);
+  const coords = flattenCoords(coordinatesOf(feature));
   const random = mulberry32(seed);
   const boxes: BoundingBox[] = [];
 

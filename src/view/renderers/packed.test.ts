@@ -3,7 +3,7 @@
 
 /**
  * The builders from packed typed arrays write exactly what the builders from arrays of objects
- * write, so a columnar table and the same features draw the same picture
+ * write, so a table and the same features draw the same picture
  */
 
 import { describe, expect, it } from 'vitest';

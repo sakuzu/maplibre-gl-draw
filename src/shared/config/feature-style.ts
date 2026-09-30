@@ -112,22 +112,11 @@ export interface TentativeStyle {
  * The default look of the features, and of the geometry being drawn
  *
  * A key the style of a feature ({@link FeatureStyle}) leaves unset takes its value from here,
- * unless the style rule of the layer gives the color. Give the parts to change through the
- * `style` option of `createMapLibreGLDraw`; the parts left out keep their defaults.
+ * unless the style rule of the layer gives the color. The engine reads it from the `style`
+ * option of `createDraw`, translated to this shape; the parts left out keep their defaults.
  *
  * The selection does not change how a feature is drawn; it is shown by the box and the
  * handles of {@link SelectionUIConfig}.
- *
- * @example
- * ```ts
- * const draw = createMapLibreGLDraw(map, {
- *   style: {
- *     lineString: {
- *       stroke: { width: 3, color: [0, 0.33, 1, 1], opacity: 1, lineStyle: 'solid' },
- *     },
- *   },
- * });
- * ```
  */
 export interface FeatureStyleConfig {
   /**
@@ -148,6 +137,18 @@ export interface FeatureStyleConfig {
    * @defaultValue a `#FF0077` 2 px outline and a `#FF0077` fill at an alpha of 0.25
    */
   polygon: PolygonFeatureStyle;
+  /**
+   * Circle, when it looks different from the polygons
+   *
+   * @defaultValue the look of the polygons
+   */
+  circle?: PolygonFeatureStyle;
+  /**
+   * The opacity of an Image that has none of its own
+   *
+   * @defaultValue 1
+   */
+  image?: { opacity: number };
   /**
    * The geometry being drawn
    *
@@ -310,5 +311,19 @@ export function mergeFeatureStyleConfig(
         ...override.tentative?.circleRadiusHandle,
       },
     },
+    ...mergeOptionalPart('circle', base, override),
+    ...mergeOptionalPart('image', base, override),
   };
+}
+
+/** An optional part of the configuration: the override over the base, when either has it */
+function mergeOptionalPart<K extends 'circle' | 'image'>(
+  key: K,
+  base: FeatureStyleConfig,
+  override: Partial<FeatureStyleConfig>,
+): Partial<Pick<FeatureStyleConfig, K>> {
+  const value = override[key] ?? base[key];
+  return value === undefined
+    ? {}
+    : ({ [key]: structuredClone(value) } as Pick<FeatureStyleConfig, K>);
 }

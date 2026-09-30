@@ -2,8 +2,8 @@
 
 この手引きでは、利用者が地図の上でできることを説明します。6 つの描画
 モード、選んだものを移動、拡縮、回転し、頂点を編集する `select` モード、
-キーボードとタッチの入力、Multi の形状と穴、コードからの描画
-(`draw.input`)、新しい地物に付く名前を扱います。
+キーボードとタッチの入力、Multi の形状と穴、コードから地物を作る方法、
+新しい地物に付く名前を扱います。
 
 コード例では、[はじめかた](../getting-started.ja.md) のとおりに作った
 `draw` があるものとします。
@@ -11,18 +11,18 @@
 ## 最小のコード
 
 ```ts
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 // クリックで頂点を足し、Enter か最初の頂点のクリックで終える
 draw.setMode('draw_polygon');
 
-draw.on('draw.feature.create', ({ feature }) => {
+draw.on('feature.created', ({ feature }) => {
   console.log(feature.type, feature.properties.name);
 });
 
-draw.on('draw.mode.change', ({ mode }) => {
+draw.on('mode.changed', ({ mode }) => {
   console.log('mode', mode); // 多角形を描き終えると 'select'
 });
 ```
@@ -32,8 +32,8 @@ draw.on('draw.mode.change', ({ mode }) => {
 
 ## モード
 
-組み込みのモードは 7 つあります。既定は `select` です
-(`Options.defaultMode`)。
+組み込みのモードは 7 つあり、`MODES` に並んでいます。既定は `select`
+です (`defaultMode` の設定)。
 
 | モード | 作るもの | 操作 |
 | --- | --- | --- |
@@ -43,15 +43,18 @@ draw.on('draw.mode.change', ({ mode }) => {
 | `draw_polygon` | `Polygon` | 何度かクリックして終える |
 | `draw_circle` | `Circle` | 中心をクリックし、半径の位置をクリック |
 | `draw_freehand` | `Freehand` | ドラッグで 1 本の線を引く |
-| `draw_image` | `Image` | ホストがファイルを選ぶ (後述) |
+| `draw_image` | `Image` | アプリケーションがファイルを選ぶ (後述) |
 
 `draw.setMode(mode)` は、呼んだ後のモードが `mode` なら `true` を返し
-ます。次の場合は `false` を返し、何も変わりません。登録されたモードの
-ない名前を渡したとき、操作ロック中に描画モードを指定したとき、書き
-込めるレイヤーが無いとき (すべてのレイヤーがロックか非表示のとき。
-[レイヤーとグループ](layers.ja.md) を参照) に描画モードを指定したとき
-です。独自のモードは `registerMode` で追加します
-([プラグイン](plugins.ja.md))。
+ます。操作ロック中に描画モードを指定したときと、書き込めるレイヤーが
+無いとき (すべてのレイヤーがロックか非表示のとき。
+[レイヤーとグループ](layers.ja.md) を参照) に描画モードを指定したときは、
+`false` を返し、何も変わりません。モードの無い名前を渡すと、コード
+`not-found` の `DrawError` を投げます。
+
+今のモードは `draw.getMode()` で読めます。モードが変わるたびに、
+`mode.changed` が前のモードと合わせて届きます。独自のモードは
+`draw.extensions.modes.add` で足します ([プラグイン](plugins.ja.md))。
 
 ## 描画モード
 
@@ -67,22 +70,53 @@ draw.on('draw.mode.change', ({ mode }) => {
 | `draw_circle` | クリック、移動 | 2 回目のクリック | 破棄 | - |
 | `draw_freehand` | ドラッグ | 離す | 破棄 | - |
 
-- 線は頂点が 2 つ、多角形は 3 つ揃ってから、Enter か、最後 (線) または
-  最初 (多角形) の頂点のクリックで終わります。その頂点の上ではカーソルが
+- 線は頂点が 2 つ、多角形は 3 つ揃ってから、Enter か、ダブルクリックか、
+  最後 (線) または最初 (多角形) の頂点のクリックで終わります。その頂点の上ではカーソルが
   ポインターに変わります
 - Backspace と Delete は、線や多角形で最後に置いた頂点を削除します
 - 円の半径は中心とポインターの距離で決まり、半径が 1 m 以上になると
   2 回目のクリックで終わります
 - 線、多角形、円を描いている途中で別のモードに切り替えると、描きかけの
   形は捨てられます
-- 描画中のダブルクリックは 2 回のクリックとして扱い、地図はズームしません
+- 新しい位置でダブルクリックすると、その頂点を 1 つだけ追加してから形を
+  終えます。描画中のダブルクリックで地図はズームしません。最後に置いた
+  頂点をクリックしても、そこに 2 つ目の頂点は追加されません
 - 描画モードに入ると選択が解除されます
+
+描いている途中の形は、`previewStyle` の設定で表示します。キーは地物の
+スタイルと同じで、線のキーが線を、点のキーが頂点を決めます。頂点の縁は
+`pointStrokeColor` と `pointStrokeWidth` です。
+
+```ts
+draw.options.update({
+  previewStyle: { strokeColor: '#e11d48', strokeWidth: 2, pointRadius: 5 },
+});
+```
+
+その形が変わるたびに `preview.changed` が届き、形が作られたとき、
+捨てられたとき、モードを離れたときには `feature: null` で 1 回届きます。
+間引きはしないので、重い処理をするリスナーは自分で次のフレームまで
+待ってください。`feature` のほかに、モードが渡したときは
+`confirmedVertices` (始めから何個の頂点が置かれたか) と
+`highlightVertex` (強調して描く頂点) も届きます。描いている途中の長さを
+表示したり、形をほかの利用者と共有したりするのに使います。
+
+```ts
+import { length } from '@sakuzu/maplibre-gl-draw/geometry';
+
+draw.on('preview.changed', ({ feature }) => {
+  if (feature?.geometry.type === 'LineString') {
+    console.log(`${Math.round(length(feature.geometry))} m`);
+  }
+});
+```
 
 ### 描き終えた後
 
-点、線、多角形、円は、その選択と合わせて 1 つのトランザクションで作られ、
-新しい地物が選ばれた状態で `select` に戻ります。
-`draw.feature.create` と `draw.selection.change` が発火します。
+点、線、多角形、円は、その選択と合わせて 1 つの取引で作られ、新しい
+地物が選ばれた状態で `select` に戻ります。`feature.created` と
+`selection.changed` が届き、変更の全体について `document.changed` が
+1 回届きます。
 
 フリーハンドは違います。1 本の線 (押す、ドラッグする、離す) ごとに 1 つの
 地物になり、続けて線を引けるようにモードは `draw_freehand` の
@@ -90,29 +124,34 @@ draw.on('draw.mode.change', ({ mode }) => {
 指が触れたときや、ブラウザーがタッチを取り消したときは、その線を捨て
 ます。
 
-描いた地物には `properties.createdZoom` (描いたときのズーム) が付き、
-線の太さが地図に合わせて変わります ([スタイル](styles.ja.md) を参照)。
-画面上の太さを保ちたいアプリは、インスタンスを `scaleWithZoom: false`
-で作ります。そのときは、API で足した地物と同じく `createdZoom` が
-付きません。自動の名前が有効なら、描いた地物には `properties.name` も
-付きます。新しい地物はアクティブなレイヤーに入ります。アクティブなレイヤーが
+描いた地物には `properties['maplibre-gl-draw:createdZoom']` (描いたときの
+ズーム) が付き、線の太さが地図に合わせて変わります
+([スタイル](styles.ja.md) を参照)。画面上の太さを保ちたいアプリケー
+ションは、インスタンスを `scaleWithZoom: false` で作ります。そのときは、
+コードから作った地物と同じく、描いた地物にも基準のズームが付きません。
+
+自動の名前が有効なら、描いた地物には `properties.name` も付きます。
+新しい地物はアクティブなレイヤーに入ります。アクティブなレイヤーが
 ロックされているか非表示なら、書き込める最初のレイヤーに入ります。
 
 ### 画像
 
 ライブラリーはファイルのダイアログを開きません。`draw_image` に入ると、
-地図の中心、ズーム、入れる先のレイヤーを載せた `draw.image.request` を
-出し、すぐに `select` に戻ります。ホストは自前のファイル選択を表示し、
-選ばれたファイルを `draw.load` に渡します。
+位置、ズーム、画像を置くレイヤーを載せた `image.requested` を出し、
+すぐに `select` に戻ります。位置は、クリックからこのモードに入った
+とき (`map.clicked` のリスナーが入ったとき) はクリックした位置、
+それ以外は地図の中心です。アプリケーションは自前のファイル選択を
+表示し、選ばれたファイルを `draw.document.load` に渡します。
 
 ```ts
-draw.on('draw.image.request', ({ coordinate, zoom, layerId }) => {
+draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
-    if (file) await draw.load(file, { coordinate, zoom, layerId });
+    if (!file) return;
+    await draw.document.load(file, { coordinate: lngLat, zoom, layerId });
   });
   input.click();
 });
@@ -128,9 +167,8 @@ draw.setMode('draw_image');
 
 ライブラリーは、地図にドロップされたファイルを受け取りません。ドロップ
 された画像をその位置に置くには、アプリケーションがドロップを受け、その
-位置を付けて `draw.load` を呼びます
-([地図にドロップされたファイル](save-load.ja.md#地図にドロップされたファイル)
-を参照)。
+位置を付けて `draw.document.load` を呼びます
+([保存と読み込み](save-load.ja.md) を参照)。
 
 ## 選択と編集
 
@@ -160,38 +198,44 @@ draw.setMode('draw_image');
 | 半径のハンドル (`Circle`) | 中心を固定して半径を変えます |
 
 - 四隅をドラッグすると、円の半径と中心が一緒に変わります。半径の
-  ハンドルは中心を保ち、自分の角度 (`radiusHandleAngle`) を覚えています
-- 画像は軸ごとではなく全体で拡縮します (`scale` プロパティー)
+  ハンドルは中心を保ち、自分の角度
+  (`maplibre-gl-draw:radiusHandleAngle`) を覚えています
+- 画像は軸ごとではなく全体で拡縮します (`maplibre-gl-draw:scale`)
 - 点は画面上で一定の大きさなので、枠だけが表示されます
 - 中点のハンドルは、描かれた辺の上の、経度で真ん中の位置に置かれます
-- globe 投影でも、2 つの頂点を結ぶ辺はメルカトルの地図と同じ道筋を
-  たどります (緯線は緯線のままです)。maplibre 自身のレイヤーと同じです。
-  塗り、縁、枠、ハンドル、当たり判定がこの道筋にそろいます
+- 地球儀の表示でも、2 つの頂点を結ぶ辺はメルカトルの地図と同じ道筋を
+  たどります (緯線は緯線のままです)。地図のレイヤーと同じです。塗り、
+  縁、枠、ハンドル、当たり判定がこの道筋にそろいます
 - 座標が 1 つだけの地物 (1 点の `MultiPoint`) には頂点の
   ハンドルが出ますが、四隅と回転のハンドルは出ません
-- 1 回のドラッグは 1 つの変更になります。途中の状態は `isIntermediate`
-  付きで書き込まれ、離したときに確定します
+- 1 回のドラッグは 1 つの変更になります。ドラッグの間は
+  `intermediate: true` の `feature.updated` が届き、離したときに最後の
+  状態が書き込まれます。`drag.started` と `drag.ended` が始まりと終わりを
+  知らせます
 - ロックされた地物は選べますが、ハンドルが出ず、動きません
   ([レイヤーとグループ](layers.ja.md))
 
-頂点がとても多い線や多角形では、ハンドルを画面上で間引きます。
+枠とハンドルの色や大きさは `selectionStyle` の設定で決めます。頂点が
+とても多い線や多角形では、ハンドルを画面上で間引きます。
 [性能](performance.ja.md) を参照してください。
 
 ### 頂点
 
 頂点のハンドルをクリックするとその頂点が選ばれ、Shift+クリックで同じ
 地物の別の頂点を選択に足したり外したりできます。Delete か
-Backspace で、選んだ頂点を削除します。コードからも同じことができます。
+Backspace で、選んだ頂点を削除します。コードからは
+`draw.vertexSelection` で同じことができます。
 
 ```ts
-draw.selectVertices(featureId, [{ ring: 0, index: 2 }]);
-draw.getSelectedVertices(); // { featureId, vertexIndices: [...] }
-const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
+draw.vertexSelection.set(featureId, [{ ring: 0, index: 2 }]);
+draw.vertexSelection.get(); // { featureId, vertices: [...] }
+const removed = draw.vertexSelection.delete();
 ```
 
 頂点は `VertexRef` (`{ part?, ring, index }`) で指定します
-([Multi の形状と穴](#multi-の形状と穴) を参照)。頂点を削除しても、
-地物自体は消えません。
+([Multi の形状と穴](#multi-の形状と穴) を参照)。ロックされた地物では
+`set` が `false` を返します。変わるたびに `vertexSelection.changed` が
+届きます。頂点を削除しても、地物自体は消えません。
 
 - 線は少なくとも 2 点を保ちます
 - 多角形のリングは少なくとも 4 つの位置 (閉じた三角形) を保ちます。
@@ -223,17 +267,24 @@ const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 複数を選ぶと、全体を囲む 1 つの枠と、四隅と回転のハンドルが表示されます。
 枠の内側をドラッグすると、すべての地物が同じ量だけ動きます。
 四隅をドラッグすると、対角の隅を基準に、それぞれの規則ですべてを拡縮
-します (形状は座標を、画像は `scale` を、点は位置だけを変えます)。回転の
-ハンドルでは、枠の中心の周りに回転します (点のアイコンは正立を保ちます)。
+します (形状は座標を、画像は拡縮率を、点は位置だけを変えます)。回転の
+ハンドルでは、枠の中心の周りに回転します (点のマーカーは正立を保ちます)。
 
 タッチ画面には Shift キーが無いので、矩形選択と Shift+クリックは使えま
-せん。自前の操作を用意して `draw.select(ids)` を呼んでください。
+せん。自前の操作を用意して `draw.selection.set` や
+`draw.selection.add` を呼んでください。
 
-選択の対象はグループやレイヤーでもかまいません
-(`draw.select(id, 'group')`)。`draw.getSelectedFeatures()` は、
-地物を選んでいるときだけ地物を返します。
-`draw.deleteSelection()` は、Delete キーと同じく選んでいるものを削除
-します。
+```ts
+draw.selection.set('feature', [featureId]);
+draw.selection.add([feature.id]);
+const selected = draw.selection.features();
+```
+
+選択は一度に 1 種類のものを持ち、グループやレイヤーも選べます
+(`draw.selection.set('group', [groupId])`)。`selection.features()` は、
+選んだ地物か、選んだグループやレイヤーの中の地物を返します。
+`selection.delete()` は選んでいるものを削除します。選択が変わるたびに、
+前の選択と合わせて `selection.changed` が届きます。
 
 ## キーボード
 
@@ -255,9 +306,9 @@ const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 キーが地図に渡り、地図がパンします。地物をダブルクリックしても
 地図はズームしません。
 
-ウィンドウがフォーカスを失うと、ドラッグは確定せずに終わります。ページの
-外でボタンを離した場合は、ポインターが最後にあった位置で離したものとして
-扱います。
+ウィンドウがフォーカスを失うと、ドラッグは書き込まれずに終わります。
+ページの外でボタンを離した場合は、ポインターが最後にあった位置で離した
+ものとして扱います。
 
 ## タッチとペン
 
@@ -269,8 +320,8 @@ const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 指が触れるとドラッグは取り消されます。
 
 ペンは、ブラウザーが報告するイベントの種類のまま扱います。モードと
-プラグインが受け取る正規化されたイベントには `pointerType` (`'mouse'`、
-`'touch'`、`'pen'`) が入っています。
+プラグインが受け取るポインターのイベント (`DrawPointerEvent`) には
+`pointerType` (`'mouse'`、`'touch'`、`'pen'`) が入っています。
 
 ## Multi の形状と穴
 
@@ -278,11 +329,11 @@ const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 `MultiPoint`、`MultiLineString`、`MultiPolygon` と穴のある多角形は、
 次の方法で作られます。
 
-- GeoJSON の `draw.load` (Multi の形状は保たれます。`flattenMulti: true`
-  で単一の地物に分けられます)
+- GeoJSON の `draw.document.load` (Multi の形状は保たれます。
+  `flattenMulti: true` で単一の地物に分けられます)
 - 幾何演算 (離れた多角形を結合すると `MultiPolygon` になり、内側を
   型抜きすると穴になります。[吸着と幾何演算](snapping-geometry.ja.md))
-- 座標を渡した `draw.addFeature`
+- 形状を渡した `draw.features.create`
 
 これらも単一の形状と同じように描画、当たり判定、編集ができます。どの
 パートをクリックしても地物全体が選ばれ、枠はすべてのパートを
@@ -298,59 +349,100 @@ const removed = draw.deleteVertices(featureId, [{ ring: 0, index: 2 }]);
 
 `part` は 0 のときは省略できます。
 
-## コードからの描画
+## コードから地物を作る
 
-`draw.input` は、合成したクリック、移動、キーを、ポインターと同じ入口に
-送ります。描画モードからは実際の入力と区別できないので、吸着や
-プラグインも同じように働きます。数値での入力 (距離と方位、打ち込んだ
-座標)、自動化、テストに使えます。
+`draw.features.create` は型と GeoJSON の形状を受け取り、保存したとおりの
+地物を返します。フォームに入力された座標、距離と方位から求めた位置、
+自動化、テストに使えます。
+
+```ts
+import { destination } from '@sakuzu/maplibre-gl-draw/geometry';
+
+const start = [139.7, 35.68];
+const line = draw.features.create({
+  type: 'LineString',
+  geometry: {
+    type: 'LineString',
+    coordinates: [start, destination(start, 500, 90)], // 東へ 500 m
+  },
+  properties: { name: 'Survey line' },
+});
+if (line) draw.selection.set('feature', [line.id]);
+```
+
+- `layerId` か `groupId` で指定しない限り、地物はアクティブなレイヤーに
+  入ります。コードから作る地物は、利用者が描き込めないロック中や非表示の
+  レイヤーにも入れられます
+- 読み取り専用のあいだ、`create` は `null` を返します。入力が誤って
+  いれば `DrawError` を投げ、何も作りません
+- 円は中心を表す `Point` の形状で、半径は
+  `properties['maplibre-gl-draw:radiusMeters']` に入れます
+- コードから作った地物には自動の名前も基準のズームも付かず、モードも
+  選択も変わりません
+- `createMany` は複数の地物を 1 つの取引で作ります
+
+```ts
+draw.features.create({
+  type: 'Circle',
+  geometry: { type: 'Point', coordinates: [139.7, 35.68] },
+  properties: { 'maplibre-gl-draw:radiusMeters': 250 },
+});
+```
+
+組み込みのモードと同じ規則 (書き込めるレイヤー、自動の名前、基準の
+ズーム) で描く道具は、独自のモードとして作り、`commitFeature` で地物を
+作ります ([プラグイン](plugins.ja.md))。
+
+### 描画モードをコードから動かす
+
+`draw.drawing` は、いまの描画モードが描いている形をコードから動かします。
+1 つずつ入力された座標、ほかの入力機器、自動化に使えます。形を作るのは
+モードなので、ポインターで描いた形と同じく、書き込めるレイヤー、自動の
+名前、基準のズームが付き、描き終えると選択されます。
 
 ```ts
 draw.setMode('draw_line');
-draw.input.click([139.7, 35.68]);
-draw.input.click([139.71, 35.68]);
-draw.input.click([139.71, 35.69]);
-draw.input.key('Enter');
-
-// モードは select に戻り、新しい線が選択されている
-const [line] = draw.getSelectedFeatures();
+draw.drawing.addVertex([139.7, 35.68]); // その位置のクリックと同じ
+draw.drawing.moveTo([139.71, 35.69]); // プレビューが付いてくる
+draw.drawing.addVertex([139.71, 35.69]);
+draw.drawing.finish(); // Enter と同じ。モードは select に戻る
 ```
 
-- 座標は `[lng, lat]` か `{ lng, lat }` で渡します。画面上の位置は
-  ライブラリーが計算します
-- `click` は、実際のカーソルと同じように、先に同じ場所への移動を送り
-  ます。そのため円は、中心と縁の 1 点の 2 回のクリックで描けます
-- 多角形は最初の頂点のクリックでも終わります
-- `key('Escape')` で取り消し、`key('Backspace')` で最後の頂点を削除
-  します
-- `move` は描画のプレビューだけを動かします
-- 合成の入力も実際の入力と同じように吸着します。打ち込んだ座標を
-  そのまま置くには `{ snap: false }` を渡します
-
-```ts
-draw.input.click([139.7, 35.68], { snap: false });
-```
-
-自前のパネルで座標を決めている間は、`draw.input.setPointerHold(true)` を
-呼んでください。実際のポインターのクリックと移動がモードに届かなく
-なります (地図のパンとズームはできます)。パネルを閉じたら `false` に
-戻します。入力のパネルそのものはライブラリーに含まれていません。
+- `addVertex`、`moveTo`、`finish` は、位置を画面に投影した点での
+  クリック、移動、Enter と同じポインターとキーのイベントになります。
+  地図からの入力と同じく、モードより先にプラグインの `input` の
+  受け手を通ります。位置はそのまま使い、吸着はしません。イベントには
+  `programmatic: true` が付きます
+- 位置は正確な値として扱うので、ポインターのクリックの許容 (10 px) は
+  当てはまりません。最後の頂点から数ピクセルの頂点も置き、面の最初の
+  頂点の近くの頂点でも面を閉じません。閉じる頂点とまったく同じ位置の
+  ときだけ形を描き終えます
+- `addVertex` は、描画モードが動いていないとき、またはクリックを
+  受け取ったものがないときに `false` を返します。何が起きるかはモード
+  しだいです。`draw_point` では点を作り、線や面の閉じる頂点の上では形を
+  描き終えます
+- `finish` は、頂点が足りていれば、最後の頂点がどこにあっても形を
+  完成させます。描いている途中の形がないとき、またはモードが形を完成
+  させなかったとき (頂点が足りない) に `false` を返します
+- `cancel`、`undoVertex`、`redoVertex` は、描いている途中の形を捨て、
+  最後の頂点を取り除き、それを戻します
+- `isActive` は描画モードが描いているか最初の頂点を置ける状態かを、
+  `isDrawing` は描いている途中の形があるかを答えます
 
 ## 自動の名前
 
 新しい地物、レイヤー、グループには、型ごとの連番の名前が付き
 ます。`Point 1`、`LineString 1`、`Polygon 1`、`Circle 1`、`Freehand 1`、
-`Image 1`、`Layer 1`、`Group 1` のような名前です。拡張が描く独自の
-地物の型では、型の ID を語として使います。
+`Image 1`、`Layer 1`、`Group 1` のような名前です。独自の地物の型では、
+型の名前を語として使います。
 
 番号は使い回しません。`Point 1` と `Point 2` の後で `Point 2` を削除して
-もう一度描くと、`Point 3` になります。読み込みや `addFeature` で入って
+もう一度描くと、`Point 3` になります。読み込みやコードで文書に入って
 きた名前も数に入ります。
 
 ```ts
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   autoName: {
-    enabled: true,
     typeNames: { Point: 'Pin', Layer: 'Sheet' },
     formatter: (typeName, n) => `${typeName} #${n}`,
   },
@@ -360,22 +452,22 @@ const draw = createMapLibreGLDraw(map, {
 `autoName: false` にすると名前を付けません。その場合、新しい
 地物は `name` を持ちません。レイヤーとグループには必ず名前があるので、
 名前を指定せずに作ったものには型の語だけが付きます (`Layer`、または
-指定した `typeNames.Layer`)。
+指定した `typeNames.Layer`)。この設定は、インスタンスを動かしたまま
+`draw.options.update` で変えられます。
 
 ### ほかの言語の名前
 
 自動で付ける名前の語は、すべてこの 1 つの設定から取られます。既定は
 英語です。ライブラリーはこの語を翻訳しません。また、この語は
-`Options.messages` ([メッセージ](styles.ja.md#メッセージ)) には含まれ
-ません。ほかの言語で表示するホストは、使う型ごとの語を `typeNames` に
-渡してください。キーは型の ID で、`Point`、`LineString`、`Polygon`、
+`messages` の設定 ([スタイル](styles.ja.md)) には含まれません。ほかの
+言語で表示するアプリケーションは、使う型ごとの語を `typeNames` に
+渡してください。キーは型の名前で、`Point`、`LineString`、`Polygon`、
 `Circle`、`Freehand`、`Image`、`Layer`、`Group` と、描画に使う独自の
-地物の型の ID です。
+地物の型の名前です。
 
 ```ts
-const draw = createMapLibreGLDraw(map, {
+const draw = createDraw(map, {
   autoName: {
-    enabled: true,
     typeNames: {
       Point: 'ポイント',
       LineString: 'ライン',
@@ -404,25 +496,30 @@ const draw = createMapLibreGLDraw(map, {
 
 描画と編集は地図のキャンバスへのポインター入力で操作し、ライブラリーは
 ARIA のロールもラベルも付けません。キーボードでは、削除、矢印キーでの
-移動、グループ化、取り消しができます。`draw.input` を使うと、ホストで
-フォームなどの座標を入力する別の手段を用意できます。
+移動、グループ化、取り消しができます。`draw.features.create` を使うと、
+アプリケーションでフォームなどの座標を入力する別の手段を用意できます。
 
 ## 関連する例
 
 - [basic](../../examples/basic/) では、多角形を描き、
-  `draw.feature.create` と `draw.features.change` を受け取り、GeoJSON を
-  書き出します
+  `feature.created` と `document.changed` を受け取り、GeoJSON を
+  保存します
 
 ## リファレンス
 
-- [`MapLibreGLDraw`](../api/maplibre-gl-draw/interfaces/MapLibreGLDraw.md)
-  (`setMode`、選択と頂点のメソッド)
-- [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md)
-- [`InputOperations`](../api/maplibre-gl-draw/interfaces/InputOperations.md)
-- [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
-- [`AutoNameConfig`](../api/maplibre-gl-draw/interfaces/AutoNameConfig.md)
-- [`SelectionUIConfig`](../api/maplibre-gl-draw/interfaces/SelectionUIConfig.md)
+- [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`setMode`、
+  `getMode`)
+- [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md) と
+  [`MODES`](../api/maplibre-gl-draw/variables/MODES.md)
+- [`FeaturesCollection`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
+  と [`FeatureInput`](../api/maplibre-gl-draw/interfaces/FeatureInput.md)
+- [`SelectionResource`](../api/maplibre-gl-draw/interfaces/SelectionResource.md)
   と
-  [`FeatureStyleConfig`](../api/maplibre-gl-draw/interfaces/FeatureStyleConfig.md)
-  (ハンドルと描画のプレビューの色と大きさ)
+  [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)
+- [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
+- [`DrawingResource`](../api/maplibre-gl-draw/interfaces/DrawingResource.md)
+- [`AutoNameOptions`](../api/maplibre-gl-draw/interfaces/AutoNameOptions.md)
+- [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
+  と [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
+  (ハンドルと描いている途中の形の色と大きさ)
 - [イベント](../reference/events.md)

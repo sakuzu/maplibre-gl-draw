@@ -224,7 +224,7 @@ describe('buildLineBatchArrays', () => {
       ],
       0,
       [0, 0],
-      { resolve: () => 3, getRenderScale: () => 1.5 },
+      { resolve: () => 3, getScaleFactor: () => 1.5 },
     );
 
     expect(arrays?.instanceData[5]).toBe(2 * 2);

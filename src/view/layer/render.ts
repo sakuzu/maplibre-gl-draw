@@ -10,9 +10,9 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type {
-  CustomFeatureHandler,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  FeatureTypeHandler,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
@@ -21,6 +21,7 @@ import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
+import { customRendererOf } from './store-retained-classify.js';
 
 /**
  * Draw features and overlays layer by layer
@@ -73,10 +74,10 @@ export function renderLayers(
   selectedIdSet: Set<string>,
   defaultProjectionData: ProjectionData,
   zoom: number,
-  customRenderers: Map<string, CustomFeatureHandler['renderer']>,
-  customRendererContext: CustomRendererDrawContext,
+  customRenderers: Map<string, FeatureTypeHandler['renderer']>,
+  customRendererContext: FrameDrawContext,
   companions: FeatureCompanionRegistry,
-  layerAwareRenderers: LayerAwareOverlayRenderer[],
+  layerAwareRenderers: LayeredOverlayRenderer[],
   datasets?: DatasetManager,
   storeRetained?: StoreRetainedCache,
   restoreBlendState?: () => void,
@@ -198,25 +199,14 @@ export function renderLayers(
           restoreBlendState,
         );
 
-        const customRenderer = customRenderers.get(feature.type);
+        const customRenderer = customRendererOf(customRenderers, feature);
         if (customRenderer) {
           // To keep the draw order (painter's algorithm), the core batch that has accumulated is
           // flushed first and only then the custom feature is drawn immediately.
           // A batch is not painted until endFrame, so without flushing here a custom feature
           // would ignore layer.order and be drawn before the core features of the same layer.
           r.batchManager.endFrame();
-          customRenderer.draw(
-            {
-              id: feature.id,
-              type: feature.type,
-              coordinates: feature.coordinates,
-              properties: feature.properties,
-              style: feature.style,
-            },
-            defaultProjectionData,
-            zoom,
-            layerContext,
-          );
+          customRenderer.draw(feature, defaultProjectionData, zoom, layerContext);
           // Re-establish the blend state that the external renderer may have rewritten.
           restoreBlendState?.();
           // Restart the batch for the core features that follow.
@@ -257,10 +247,7 @@ export function renderLayers(
  * The same object is returned when the opacity is already the one of the context, so a map whose
  * layers are all opaque allocates nothing per layer.
  */
-export function layerRendererContext(
-  base: CustomRendererDrawContext,
-  layer: Layer,
-): CustomRendererDrawContext {
+export function layerRendererContext(base: FrameDrawContext, layer: Layer): FrameDrawContext {
   const opacity = layerDrawFactors(layer).opacity;
   return base.opacity === opacity ? base : { ...base, opacity };
 }

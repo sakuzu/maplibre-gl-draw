@@ -22,6 +22,7 @@ import type {
   VertexSelection,
 } from '../../store/types.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
+import type { AuxiliaryHandleContext } from './auxiliary-handles.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
 import { computeVisibleHandleSet, shouldThinHandles } from './handle-thinning.js';
 import type { HandleInfo } from './handles.js';
@@ -113,7 +114,7 @@ export function renderSelectionUI(
     // Get the selected vertex reference (only for the target feature)
     const selectedVertexRefs =
       selectedVertices?.featureId === selectedFeatures[0].id
-        ? selectedVertices.vertexIndices
+        ? selectedVertices.vertices
         : undefined;
 
     renderSingleSelectionHandles(
@@ -127,6 +128,17 @@ export function renderSelectionUI(
       prepareVisibleHandleSet(selectedFeatures[0], map, scope),
       scope,
     );
+    // The handles of the extensions, shown as the other handles are (hidden while another
+    // operation runs)
+    if (operation === null || operation === 'auxiliary') {
+      const context = auxiliaryHandleContext(map, zoom);
+      const positions = scope.auxiliaryHandles
+        .list()
+        .flatMap((provider) =>
+          provider.getHandles(selectedFeatures[0], context).map((handle) => handle.position),
+        );
+      if (positions.length > 0) selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+    }
   } else {
     renderMultiSelectionHandles(
       selectedFeatures,
@@ -137,6 +149,64 @@ export function renderSelectionUI(
       scope,
     );
   }
+}
+
+/**
+ * Draw the auxiliary handles that belong to no feature (`getGlobalHandles`), whatever is
+ * selected
+ *
+ * The caller draws them only while they can be grabbed (the select mode, and the document
+ * neither read-only nor under the interaction lock).
+ */
+export function renderGlobalAuxiliaryHandles(
+  zoom: number,
+  projectionData: CustomRenderMethodInput['defaultProjectionData'],
+  deps: SelectionUIDrawerDeps,
+  dragState: DragState | null,
+): void {
+  const { selectionHandlesRenderer, pointInstanceRenderer, map, scope } = deps;
+  if (!selectionHandlesRenderer) return;
+  const operation = dragState?.operation ?? null;
+  if (operation !== null && operation !== 'auxiliary') return;
+  const providers = scope.auxiliaryHandles.list();
+  if (!providers.some((provider) => provider.getGlobalHandles !== undefined)) return;
+
+  const context = auxiliaryHandleContext(map, zoom);
+  const positions = providers.flatMap(
+    (provider) => provider.getGlobalHandles?.(context).map((handle) => handle.position) ?? [],
+  );
+  if (positions.length === 0) return;
+
+  if (pointInstanceRenderer) pointInstanceRenderer.setProjectionData(projectionData);
+  selectionHandlesRenderer.setTransform(coordinateTransformOf(map));
+  selectionHandlesRenderer.setProjectionData(projectionData);
+  selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+}
+
+/** The coordinate transform of the map */
+function coordinateTransformOf(map: MapLibreMap): CoordinateTransform {
+  return {
+    project: (lngLat: Coordinate) => map.project([lngLat[0], lngLat[1]]),
+    unproject: (point: { x: number; y: number }) => {
+      const ll = map.unproject([point.x, point.y]);
+      return { lng: ll.lng, lat: ll.lat };
+    },
+  };
+}
+
+/**
+ * The context the providers of auxiliary handles get when their handles are drawn: the
+ * point is the center of the canvas, as there is no pointer to test
+ */
+function auxiliaryHandleContext(map: MapLibreMap, zoom: number): AuxiliaryHandleContext {
+  const transform = coordinateTransformOf(map);
+  const canvas = map.getCanvas();
+  return {
+    point: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 },
+    project: (lngLat) => transform.project(lngLat),
+    unproject: (point) => transform.unproject(point),
+    zoom,
+  };
 }
 
 /**
@@ -256,7 +326,7 @@ export function renderFollowedVertices(
     const feature = store.getFeature(followed.featureId);
     // The handles of features that disappeared or were hidden during the drag are not drawn
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
-    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertexIndices, zoom);
+    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertices, zoom);
   }
 }
 
@@ -270,7 +340,7 @@ function renderSingleSelectionHandles(
   selectionHandlesRenderer: SelectionHandlesRenderer,
   operation: DragState['operation'] | null,
   dragState: DragState | null,
-  selectedVertexRefs: VertexRef[] | undefined,
+  selectedVertexRefs: readonly VertexRef[] | undefined,
   visibleSet: VisibleHandleSet | undefined,
   scope: SelectionScope,
 ): void {
@@ -381,7 +451,7 @@ function renderNonCircleHandles(
   selectionHandlesRenderer: SelectionHandlesRenderer,
   operation: DragState['operation'] | null,
   dragState: DragState | null,
-  selectedVertexRefs: VertexRef[] | undefined,
+  selectedVertexRefs: readonly VertexRef[] | undefined,
   visibleSet: VisibleHandleSet | undefined,
   scope: SelectionScope,
 ): void {

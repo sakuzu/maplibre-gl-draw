@@ -4,7 +4,8 @@
 /**
  * MemoryStore
  *
- * The in-memory Store: a DrawStore over a MemoryDocumentStore.
+ * The in-memory Store: a DrawStore over a MemoryContractStore, which keeps a
+ * MemoryDocumentStore and the state of this client.
  *
  * MemoryDocumentStore is the in-memory implementation of the DocumentStore contract.
  * Keeping Feature / Layer / Group consistent (cascading updates on deletion, cascading
@@ -21,35 +22,33 @@ import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy, frozenFeature } from './memory/frozen.js';
-import type { DocumentStore, Store } from './store.js';
+import { MemoryClientState } from './memory/ui-state.js';
+import type { DocumentStore, Store, StoreContract } from './store.js';
 import type {
   Feature,
   FileData,
   Group,
   Layer,
   Metadata,
-  StateChanges,
+  Mode,
+  Selection,
+  SelectionType,
+  StoreChange,
   UpdateFeatureOptions,
   UpdateSource,
+  VertexSelection,
 } from './types.js';
 
 /**
  * The in-memory Store, the default
  *
  * `new MemoryStore()` is a complete Store (the document and the local state); it is what
- * `createMapLibreGLDraw` uses when no store is given.
+ * `createDraw` uses when no store is given.
  *
  * It keeps its own copy of what it is given and freezes what it returns. A feature, a layer
  * or a group it has returned or notified never changes afterwards (a change replaces it), and
  * writing into one throws a `TypeError` instead of changing the store behind its
  * notifications.
- *
- * @example
- * ```ts
- * // Create the store yourself to keep a reference to it (to read it in a test, say)
- * const store = new MemoryStore();
- * const draw = createMapLibreGLDraw(map, { store });
- * ```
  */
 export interface MemoryStore extends Store {}
 
@@ -57,9 +56,176 @@ export interface MemoryStore extends Store {}
 export const MemoryStore: { new (): MemoryStore; readonly prototype: MemoryStore } =
   class extends DrawStore {
     constructor() {
-      super(new MemoryDocumentStore());
+      super(new MemoryContractStore());
     }
   };
+
+/**
+ * The in-memory {@link StoreContract}: a MemoryDocumentStore and the state of this client, with
+ * one notification per transaction
+ *
+ * Its writes of the document apply whatever read-only says (the Store of core gates them), and
+ * throw for an argument that cannot apply, as MemoryDocumentStore does.
+ *
+ * @internal
+ */
+export class MemoryContractStore implements StoreContract {
+  readonly #bus = new ChangeBus();
+  readonly #document = new MemoryDocumentStore();
+  readonly #client = new MemoryClientState(this.#bus);
+
+  constructor() {
+    this.#document.subscribe((changes) => this.#bus.merge(changes));
+  }
+
+  // The document
+
+  getFeature(id: string): Feature | undefined {
+    return this.#document.getFeature(id);
+  }
+  listFeatures(): Feature[] {
+    return this.#document.listFeatures();
+  }
+  listFeaturesInOrder(): Feature[] {
+    return this.#document.listFeaturesInOrder();
+  }
+  getLayer(id: string): Layer | undefined {
+    return this.#document.getLayer(id);
+  }
+  listLayers(): Layer[] {
+    return this.#document.listLayers();
+  }
+  getLayerOrder(): readonly string[] {
+    return this.#document.getLayerOrder();
+  }
+  getGroup(id: string): Group | undefined {
+    return this.#document.getGroup(id);
+  }
+  listGroups(): Group[] {
+    return this.#document.listGroups();
+  }
+  getFile(id: string): FileData | undefined {
+    return this.#document.getFile(id);
+  }
+  listFiles(): FileData[] {
+    return this.#document.listFiles();
+  }
+  getMetadata(): Metadata {
+    return this.#document.getMetadata();
+  }
+
+  createFeature(feature: Feature): boolean {
+    return this.#apply(() => this.#document.createFeature(feature));
+  }
+  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
+    return this.#apply(() => this.#document.updateFeature(id, updates, options));
+  }
+  deleteFeature(id: string): boolean {
+    return this.#apply(() => this.#document.deleteFeature(id));
+  }
+  createLayer(layer: Layer): boolean {
+    return this.#apply(() => this.#document.createLayer(layer));
+  }
+  updateLayer(id: string, updates: Partial<Layer>): boolean {
+    return this.#apply(() => this.#document.updateLayer(id, updates));
+  }
+  deleteLayer(id: string): boolean {
+    return this.#apply(() => this.#document.deleteLayer(id));
+  }
+  setLayerOrder(order: string[]): boolean {
+    return this.#apply(() => this.#document.setLayerOrder(order));
+  }
+  reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean {
+    return this.#apply(() => this.#document.reorderInLayer(itemId, layerId, newIndex));
+  }
+  reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean {
+    return this.#apply(() => this.#document.reorderInGroup(featureId, groupId, newIndex));
+  }
+  createGroup(group: Group): boolean {
+    return this.#apply(() => this.#document.createGroup(group));
+  }
+  updateGroup(id: string, updates: Partial<Group>): boolean {
+    return this.#apply(() => this.#document.updateGroup(id, updates));
+  }
+  deleteGroup(id: string): boolean {
+    return this.#apply(() => this.#document.deleteGroup(id));
+  }
+  createFile(file: FileData): boolean {
+    return this.#apply(() => this.#document.createFile(file));
+  }
+  deleteFile(id: string): boolean {
+    return this.#apply(() => this.#document.deleteFile(id));
+  }
+  setMetadata(metadata: Partial<Metadata>): boolean {
+    return this.#apply(() => this.#document.setMetadata(metadata));
+  }
+
+  // The state of this client
+
+  getSelection(): Selection {
+    return this.#client.getSelection();
+  }
+  setSelection(type: SelectionType | null, ids: string[]): void {
+    this.#client.setSelection(type, ids);
+  }
+  getEditingIds(): readonly string[] {
+    return this.#client.getEditingIds();
+  }
+  startEditing(ids: string[]): void {
+    this.#client.startEditing(ids);
+  }
+  endEditing(ids: string[]): void {
+    this.#client.endEditing(ids);
+  }
+  getVertexSelection(): VertexSelection | null {
+    return this.#client.getVertexSelection();
+  }
+  setSelectedVertices(selection: VertexSelection | null): void {
+    this.#client.setSelectedVertices(selection);
+  }
+  getMode(): Mode {
+    return this.#client.getMode();
+  }
+  setMode(mode: Mode): void {
+    this.#client.setMode(mode);
+  }
+  isReadOnly(): boolean {
+    return this.#client.isReadOnly();
+  }
+  setReadOnly(value: boolean): void {
+    this.#client.setReadOnly(value);
+  }
+  isInteractionLocked(): boolean {
+    return this.#client.isInteractionLocked();
+  }
+  setInteractionLock(value: boolean): void {
+    this.#client.setInteractionLock(value);
+  }
+  isHidden(id: string): boolean {
+    return this.#client.isHidden(id);
+  }
+  listHidden(): ReadonlySet<string> {
+    return this.#client.listHidden();
+  }
+  setLocallyHidden(id: string, hidden: boolean): void {
+    this.#client.setLocallyHidden(id, hidden);
+  }
+
+  // Subscription and transactions
+
+  subscribe(listener: (changes: StoreChange) => void): () => void {
+    return this.#bus.subscribe(listener);
+  }
+  transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
+    return this.#bus.transact(() => this.#document.transact(fn, source), source);
+  }
+
+  /** Runs one write of the document; true once it applied */
+  #apply(write: () => void): boolean {
+    this.transact(write);
+    return true;
+  }
+}
 
 /**
  * The in-memory DocumentStore
@@ -74,11 +240,11 @@ export class MemoryDocumentStore implements DocumentStore {
   #metadata: Metadata = {};
 
   /**
-   * The content set of layer.order (layer ID -> the set of IDs listed in order).
+   * The content set of layer.items (layer ID -> the set of IDs listed in order).
    *
    * It is an index whose only purpose is to make membership tests O(1), and it always keeps
-   * the same content as `#layers.get(id).order` (an invariant). Because membership used to be
-   * tested with `layer.order.includes()`, inserting N entries at once into a layer whose order
+   * the same content as `#layers.get(id).items` (an invariant). Because membership used to be
+   * tested with `layer.items.includes()`, inserting N entries at once into a layer whose order
    * was already populated cost O(N^2) in total (the main cause of draw.load going quadratic).
    *
    * The order arrays the store returns are frozen, so the outside cannot rewrite them behind
@@ -121,7 +287,7 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#features.get(id);
   }
 
-  getAllFeatures(): Feature[] {
+  listFeatures(): Feature[] {
     return Array.from(this.#features.values());
   }
 
@@ -149,7 +315,7 @@ export class MemoryDocumentStore implements DocumentStore {
    *
    * options.isIntermediate has no effect on the application of the update (an intermediate
    * state is applied as usual). Only when it is set is it passed through to
-   * StateChanges.features.updated, so that the receiver can tell an intermediate update from
+   * StoreChange.features.updated, so that the receiver can tell an intermediate update from
    * a final one.
    *
    * When layerId or groupId changes the container of the feature (its group, or else its
@@ -215,23 +381,21 @@ export class MemoryDocumentStore implements DocumentStore {
     this.#bus.merge({ features: { deleted: [feature] } });
   }
 
-  getOrderedFeatures(): Feature[] {
+  listFeaturesInOrder(): Feature[] {
     const result: Feature[] = [];
     for (const layerId of this.#layerOrder) {
       const layer = this.#layers.get(layerId);
-      if (!layer?.visible) continue;
-
-      for (const itemId of layer.order) {
+      if (!layer) continue;
+      for (const itemId of layer.items) {
         const group = this.#groups.get(itemId);
         if (group) {
-          if (!group.visible) continue;
           for (const featureId of group.featureIds) {
             const feature = this.#features.get(featureId);
-            if (feature?.visible) result.push(feature);
+            if (feature) result.push(feature);
           }
         } else {
           const feature = this.#features.get(itemId);
-          if (feature?.visible) result.push(feature);
+          if (feature) result.push(feature);
         }
       }
     }
@@ -246,7 +410,7 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#layers.get(id);
   }
 
-  getAllLayers(): Layer[] {
+  listLayers(): Layer[] {
     return Array.from(this.#layers.values());
   }
 
@@ -255,15 +419,16 @@ export class MemoryDocumentStore implements DocumentStore {
       throw new Error(`Layer with id "${layer.id}" already exists`);
     }
     // The order stays open for the members created in the same notification
-    const stored: Layer = { ...frozenFields(layer), order: [...layer.order] };
+    const stored: Layer = { ...frozenFields(layer), items: [...layer.items] };
     this.#layers.set(layer.id, stored);
     this.#freshLayers.add(layer.id);
-    this.#layerOrderIndex.set(layer.id, new Set(layer.order));
+    this.#layerOrderIndex.set(layer.id, new Set(layer.items));
     // An id the application already placed on the stacking order keeps its position
     if (!this.#layerOrder.includes(layer.id)) this.#layerOrder.push(layer.id);
+    this.#syncGroupLayers(stored);
     // The created entry is the layer as it was created (the stored one may still gain members
     // in the same notification)
-    const created = Object.freeze({ ...stored, order: Object.freeze([...stored.order]) });
+    const created = Object.freeze({ ...stored, items: Object.freeze([...stored.items]) });
     this.#bus.merge({ layers: { created: [created as Layer] } });
   }
 
@@ -276,15 +441,16 @@ export class MemoryDocumentStore implements DocumentStore {
       ...previous,
       ...frozenFields(updates),
       id,
-      order: [...(updates.order ?? previous.order)],
+      items: [...(updates.items ?? previous.items)],
     };
-    if (this.#freshLayers.has(id)) Object.freeze(Object.freeze(previous).order);
+    if (this.#freshLayers.has(id)) Object.freeze(Object.freeze(previous).items);
     this.#layers.set(id, updated);
     this.#freshLayers.add(id);
     // Rebuild the index only when order has been replaced (if it is left as is, it is the same
-    // array as previous.order, so the index also stays valid).
-    if (updates.order) this.#layerOrderIndex.set(id, new Set(updated.order));
+    // array as previous.items, so the index also stays valid).
+    if (updates.items) this.#layerOrderIndex.set(id, new Set(updated.items));
     this.#bus.merge({ layers: { updated: [{ id, layer: updated, previous }] } });
+    if (updates.items) this.#syncGroupLayers(updated);
   }
 
   deleteLayer(id: string): void {
@@ -294,7 +460,7 @@ export class MemoryDocumentStore implements DocumentStore {
     }
 
     // Delete the features and groups in the layer
-    for (const itemId of [...layer.order]) {
+    for (const itemId of [...layer.items]) {
       const group = this.#groups.get(itemId);
       if (group) {
         for (const featureId of [...group.featureIds]) {
@@ -312,7 +478,7 @@ export class MemoryDocumentStore implements DocumentStore {
 
     // The last state of the layer (its order has emptied as its members left)
     const deleted = this.#layers.get(id) ?? layer;
-    Object.freeze(Object.freeze(deleted).order);
+    Object.freeze(Object.freeze(deleted).items);
     this.#freshLayers.delete(id);
     this.#layers.delete(id);
     this.#layerOrderIndex.delete(id);
@@ -336,7 +502,7 @@ export class MemoryDocumentStore implements DocumentStore {
    * (datasets, separators) are kept as they are. Only what cannot be an entry is dropped:
    * a value that is not a non-empty string, and a repeated entry after its first position.
    *
-   * The membership index within a layer (#layerOrderIndex) is an index over the layer.order of
+   * The membership index within a layer (#layerOrderIndex) is an index over the layer.items of
    * each layer, which is a different thing from this sequence, so it is not touched.
    */
   setLayerOrder(order: string[]): void {
@@ -352,21 +518,21 @@ export class MemoryDocumentStore implements DocumentStore {
     if (!current) {
       throw new Error(`Layer with id "${layerId}" not found`);
     }
-    const currentIndex = current.order.indexOf(itemId);
+    const currentIndex = current.items.indexOf(itemId);
     if (currentIndex === -1) {
       throw new Error(`Item "${itemId}" not found in layer "${layerId}"`);
     }
 
-    const previousOrder = [...current.order];
+    const previousOrder = [...current.items];
     const layer = this.#writableLayer(current);
-    layer.order.splice(currentIndex, 1);
-    layer.order.splice(newIndex, 0, itemId);
+    layer.items.splice(currentIndex, 1);
+    layer.items.splice(newIndex, 0, itemId);
     // An update of this layer already stacked in the notification carries the new object
     if (this.#bus.hasPendingLayerUpdate(layerId)) this.#bus.mergeLayerUpdate(layer, undefined);
 
     // Emit the dedicated layerReorder (not layers.updated)
     this.#bus.merge({
-      layerReorder: { layerId, order: [...layer.order], previous: previousOrder },
+      layerReorder: { layerId, order: [...layer.items], previous: previousOrder },
     });
   }
 
@@ -399,7 +565,7 @@ export class MemoryDocumentStore implements DocumentStore {
     return this.#groups.get(id);
   }
 
-  getAllGroups(): Group[] {
+  listGroups(): Group[] {
     return Array.from(this.#groups.values());
   }
 
@@ -412,7 +578,11 @@ export class MemoryDocumentStore implements DocumentStore {
 
   #createGroup(group: Group): void {
     const featureIdsCopy = [...group.featureIds];
-    const stored: Group = { ...frozenFields(group), featureIds: [...featureIdsCopy] };
+    // The layer of a group is the layer that lists it; a group that no layer lists yet is
+    // placed in the layer of its first member at the end of the operation
+    const layerId =
+      this.#layerListing(group.id) ?? this.#firstMemberLayer(featureIdsCopy) ?? group.layerId;
+    const stored: Group = { ...frozenFields(group), layerId, featureIds: [...featureIdsCopy] };
     this.#groups.set(group.id, stored);
     this.#freshGroups.add(group.id);
     this.#groupFeatureIndex.set(group.id, new Set(featureIdsCopy));
@@ -475,7 +645,7 @@ export class MemoryDocumentStore implements DocumentStore {
     for (const layer of [...this.#layers.values()]) {
       const index = this.#layerOrderSet(layer);
       if (!index.has(id)) continue;
-      const idx = layer.order.indexOf(id);
+      const idx = layer.items.indexOf(id);
       if (idx === -1) continue;
       const members = group.featureIds.filter(
         (fid) => this.#features.get(fid)?.layerId === layer.id && !index.has(fid),
@@ -501,7 +671,7 @@ export class MemoryDocumentStore implements DocumentStore {
       const index = this.#layerOrderSet(layer);
       if (!index.has(id)) continue;
 
-      const idx = layer.order.indexOf(id);
+      const idx = layer.items.indexOf(id);
       if (idx === -1) continue;
 
       this.#mutateLayerOrder(layer, (order) => {
@@ -519,15 +689,18 @@ export class MemoryDocumentStore implements DocumentStore {
 
   createFile(file: FileData): void {
     this.#fileStore.create(file);
+    this.#bus.merge({ files: { created: [this.#fileStore.get(file.id) as FileData] } });
   }
   getFile(id: string): FileData | undefined {
     return this.#fileStore.get(id);
   }
-  getAllFiles(): FileData[] {
+  listFiles(): FileData[] {
     return this.#fileStore.getAll();
   }
   deleteFile(id: string): void {
+    const file = this.#fileStore.get(id);
     this.#fileStore.delete(id);
+    if (file) this.#bus.merge({ files: { deleted: [file] } });
   }
 
   // ============================================================================
@@ -554,7 +727,7 @@ export class MemoryDocumentStore implements DocumentStore {
   // Subscribe / Transaction (delegated to ChangeBus)
   // ============================================================================
 
-  subscribe(listener: (changes: StateChanges) => void): () => void {
+  subscribe(listener: (changes: StoreChange) => void): () => void {
     return this.#bus.subscribe(listener);
   }
 
@@ -581,10 +754,10 @@ export class MemoryDocumentStore implements DocumentStore {
     const previous = hadUpdate
       ? undefined
       : fresh
-        ? { ...current, order: [...current.order] }
+        ? { ...current, items: [...current.items] }
         : current;
     const layer = this.#writableLayer(current);
-    mutate(layer.order);
+    mutate(layer.items);
     this.#bus.mergeLayerUpdate(layer, previous);
   }
 
@@ -603,18 +776,20 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** The layer's copy for the current notification (made on the first change) */
-  #writableLayer(current: Layer): Layer {
-    if (this.#freshLayers.has(current.id)) return current;
-    const layer: Layer = { ...current, order: [...current.order] };
+  #writableLayer(current: Layer): Layer & { items: string[] } {
+    // A layer copied for this notification has its own array until it is frozen
+    if (this.#freshLayers.has(current.id)) return current as Layer & { items: string[] };
+    const layer = { ...current, items: [...current.items] };
     this.#layers.set(layer.id, layer);
     this.#freshLayers.add(layer.id);
     return layer;
   }
 
   /** The group's copy for the current notification (made on the first change) */
-  #writableGroup(current: Group): Group {
-    if (this.#freshGroups.has(current.id)) return current;
-    const group: Group = { ...current, featureIds: [...current.featureIds] };
+  #writableGroup(current: Group): Group & { featureIds: string[] } {
+    // A group copied for this notification has its own array until it is frozen
+    if (this.#freshGroups.has(current.id)) return current as Group & { featureIds: string[] };
+    const group = { ...current, featureIds: [...current.featureIds] };
     this.#groups.set(group.id, group);
     this.#freshGroups.add(group.id);
     return group;
@@ -624,7 +799,7 @@ export class MemoryDocumentStore implements DocumentStore {
   #freezeFresh(): void {
     for (const id of this.#freshLayers) {
       const layer = this.#layers.get(id);
-      if (layer) Object.freeze(Object.freeze(layer).order);
+      if (layer) Object.freeze(Object.freeze(layer).items);
     }
     this.#freshLayers.clear();
     for (const id of this.#freshGroups) {
@@ -635,7 +810,7 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /**
-   * Returns the content set of layer.order (if not registered, builds it from order and
+   * Returns the content set of layer.items (if not registered, builds it from order and
    * registers it).
    *
    * On the regular paths (createLayer / updateLayer) it is always registered already, so this
@@ -644,7 +819,7 @@ export class MemoryDocumentStore implements DocumentStore {
   #layerOrderSet(layer: Layer): Set<string> {
     let index = this.#layerOrderIndex.get(layer.id);
     if (!index) {
-      index = new Set(layer.order);
+      index = new Set(layer.items);
       this.#layerOrderIndex.set(layer.id, index);
     }
     return index;
@@ -682,10 +857,10 @@ export class MemoryDocumentStore implements DocumentStore {
       .find((f): f is Feature => f !== undefined);
     const layer = first && this.#layers.get(first.layerId);
     if (!first || !layer) return;
-    const idx = layer.order.indexOf(first.id);
+    const idx = layer.items.indexOf(first.id);
     this.#pendingGroupPlacement.set(groupId, {
       layerId: layer.id,
-      index: idx === -1 ? layer.order.length : idx,
+      index: idx === -1 ? layer.items.length : idx,
     });
   }
 
@@ -707,6 +882,7 @@ export class MemoryDocumentStore implements DocumentStore {
         order.splice(Math.min(index, order.length), 0, groupId);
       });
       this.#layerOrderSet(layer).add(groupId);
+      this.#setGroupLayer(groupId, layer.id);
     }
 
     for (const id of features) {
@@ -714,6 +890,52 @@ export class MemoryDocumentStore implements DocumentStore {
       if (!feature || feature.groupId) continue;
       this.#addItemToLayerOrder(id, feature.layerId);
     }
+  }
+
+  /** The ID of the layer whose items list the item, or undefined */
+  #layerListing(itemId: string): string | undefined {
+    for (const layer of this.#layers.values()) {
+      if (this.#layerOrderSet(layer).has(itemId)) return layer.id;
+    }
+    return undefined;
+  }
+
+  /** The layer of the first of the features that exists, or undefined */
+  #firstMemberLayer(featureIds: readonly string[]): string | undefined {
+    for (const featureId of featureIds) {
+      const feature = this.#features.get(featureId);
+      if (feature) return feature.layerId;
+    }
+    return undefined;
+  }
+
+  /** Moves every group the items of the layer list to the layer (`Group.layerId`) */
+  #syncGroupLayers(layer: Layer): void {
+    if (this.#groups.size === 0) return;
+    for (const itemId of layer.items) {
+      if (this.#groups.has(itemId)) this.#setGroupLayer(itemId, layer.id);
+    }
+  }
+
+  /**
+   * Sets the layer of a group and notifies it as groups.updated, when it changes
+   *
+   * The change goes into the group's copy for the current notification, like a change of its
+   * featureIds (#mutateGroupFeatureIds).
+   */
+  #setGroupLayer(groupId: string, layerId: string): void {
+    const current = this.#groups.get(groupId);
+    if (!current || current.layerId === layerId) return;
+    const hadUpdate = this.#bus.hasPendingGroupUpdate(groupId);
+    const fresh = this.#freshGroups.has(groupId);
+    const previous = hadUpdate
+      ? undefined
+      : fresh
+        ? { ...current, featureIds: [...current.featureIds] }
+        : current;
+    const group = this.#writableGroup(current);
+    group.layerId = layerId;
+    this.#bus.mergeGroupUpdate(group, previous);
   }
 
   #isListedInAnyLayer(itemId: string): boolean {
@@ -770,7 +992,7 @@ export class MemoryDocumentStore implements DocumentStore {
     const index = this.#layerOrderSet(layer);
     if (!index.has(itemId)) return;
 
-    const idx = layer.order.indexOf(itemId);
+    const idx = layer.items.indexOf(itemId);
     if (idx === -1) return;
 
     this.#mutateLayerOrder(layer, (order) => {

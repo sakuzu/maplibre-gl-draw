@@ -69,12 +69,12 @@ setWorkerUrl(workerUrl);
 }
 ```
 
-いつもどおり地図を作り、それを `createMapLibreGLDraw` に渡します。
+いつもどおり地図を作り、それを `createDraw` に渡します。
 
 ```ts
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -83,17 +83,21 @@ const map = new maplibregl.Map({
   zoom: 12,
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 ```
 
-インスタンスは地図に自分のカスタムレイヤーを追加し、地物を入れる
-レイヤーを 1 つ (既定のレイヤー) 作り、`select` モードで始まります。地図の
-読み込みが終わる前に作ってもかまいません。スタイルの準備ができた時点で、
-描いたものが表示されます。
+インスタンスは地図の上に描き、地物を入れる空のレイヤーを 1 つ作り、
+`select` モードで始まります。地図の読み込みが終わる前に作ってもかまい
+ません。スタイルの準備ができた時点で、描いたものが表示されます。
+
+インスタンスが持つものには、いくつかの名前から届きます。文書の中身は
+`draw.features`、`draw.layers`、`draw.groups` で、利用者が選んでいる
+ものは `draw.selection` で扱います。文書の全体を保存したり読み込んだり
+するのは `draw.document` です。
 
 地図を持つページやコンポーネントを破棄するときは、`map.remove()` の前に
-`draw.destroy()` を呼んでください。インスタンスが追加したレイヤーと
-リスナーを取り除きます。
+`draw.destroy()` を呼んでください。インスタンスが地図に加えたものを
+すべて取り除きます。
 
 `examples/basic/main.ts` では手順 2 に当たります。
 
@@ -114,31 +118,34 @@ document.querySelector('#draw-polygon')?.addEventListener('click', () => {
 | --- | --- |
 | クリック | 頂点を追加します |
 | 最初の頂点をクリック (頂点が 3 つ以上のとき) | 多角形を確定します |
+| ダブルクリック (頂点が 3 つ以上のとき) | 多角形を確定します |
 | Enter | 多角形を確定します |
 | Backspace か Delete | 最後の頂点を削除します |
 | Escape | 頂点を破棄します。もう 1 回押すと `select` に戻ります |
 
-ダブルクリックすると頂点が 2 つ追加され、描画中は地図がズームしません。
+新しい位置でダブルクリックすると、その頂点を追加してから確定します。描画中は
+地図がズームしません。
 多角形を確定するとモードは `select` に戻り、新しい多角形が選ばれた状態に
 なるので、利用者はすぐに移動したり頂点をドラッグしたりできます。
 
 地物が作られると、インスタンスが知らせます。
 
 ```ts
-draw.on('draw.feature.create', ({ feature }) => {
+draw.on('feature.created', ({ feature }) => {
   console.log('created', feature.id, feature.type);
 });
 ```
 
-`feature` は GeoJSON の Feature ではなく、このライブラリー独自の
-レコードです。多角形の `coordinates` はリングの配列
-`[[[lng, lat], ...]]` で、最初の点が末尾にもう一度入ります。
+`feature.geometry` は GeoJSON の図形です。多角形の `coordinates` は
+リングの配列 `[[[lng, lat], ...]]` で、最初の点が末尾にもう一度入り
+ます。`feature.properties` も GeoJSON の properties で、利用者の属性と、
+ライブラリーが `maplibre-gl-draw:` で始まる鍵に置く少しの値が入ります。
 
 ツールバーの表示をモードに合わせる (`select` に自動で戻る場合も含めて)
-には、`draw.mode.change` を受け取ります。
+には、`mode.changed` を受け取ります。
 
 ```ts
-draw.on('draw.mode.change', ({ mode }) => {
+draw.on('mode.changed', ({ mode }) => {
   document
     .querySelector('#draw-polygon')
     ?.classList.toggle('active', mode === 'draw_polygon');
@@ -153,13 +160,15 @@ draw.on('draw.mode.change', ({ mode }) => {
 
 ## 4. 変更を受け取る
 
-`draw.feature.create` は地物 1 件ごとに発火します。すべての変更 (作成、
+`feature.created` は地物 1 件ごとに発火します。すべての変更 (作成、
 移動、頂点の編集、削除、読み込み) にまとめて対応するには、
-`draw.features.change` を受け取ります。このイベントはデータが 1 回
-変わるごとに発火し、一緒に変わったものをすべて含んでいます。
+`document.changed` を受け取ります。このイベントは取引ごとに 1 回届き、
+一緒に変わったものをすべて含んでいます。
 
 ```ts
-draw.on('draw.features.change', ({ created, updated, deleted, source }) => {
+draw.on('document.changed', ({ features, source }) => {
+  if (!features) return;
+  const { created = [], updated = [], deleted = [] } = features;
   console.log(
     `${created.length} created, ${updated.length} updated,`,
     `${deleted.length} deleted (${source})`,
@@ -167,21 +176,25 @@ draw.on('draw.features.change', ({ created, updated, deleted, source }) => {
 });
 ```
 
-`updated` には `{ feature, previous }` の組が入ります。`source` は変更の
-出所を表し、たとえば利用者の編集なら `'local'`、GeoJSON の読み込みなら
-`'batch'` です。
+`updated` の各項目には、`feature` と変わる前の `previous` が入ります。
+`source` は変更の出どころを表し、たとえば利用者の編集と API の呼び出し
+なら `'local'`、GeoJSON の読み込みなら `'load'` です。同じイベントで、
+レイヤー、グループ、文書の題の変更も届きます。
 
 API は、次の規則を押さえておくと分かりやすくなります。
 
-- メソッドは同期的です。`draw.setMode(...)` や `draw.deleteFeature(id)`
-  から戻った時点で、インスタンスを読めば新しい状態が得られます。Promise を
-  返すのは `load` だけです
-- イベントは変更が終わってから発火するので、ハンドラーからは新しい状態が
-  見えます
-- `draw.on` は、ハンドラーを外す関数を返します
+- メソッドは同期的です。`draw.setMode(...)` や
+  `draw.features.delete(id)` から戻った時点で、インスタンスを読めば新しい
+  状態が得られます。Promise を返すのは `draw.document.load` だけです
+- `create` と `update` は、書いたものを返します。無い ID のような誤った
+  引数には `DrawError` を投げます。読み取り専用のために書き込みを拒む
+  ときは `null` か `false` を返します
+- イベントは変更が終わってから発火するので、受け取る関数からは新しい
+  状態が見えます
+- `draw.on` は、購読をやめる関数を返します
 
 UI は、呼んだメソッドからではなくイベントから更新してください。利用者も
-データを変えるので、イベントを使えば両方を拾えます。
+描いたものを変えるので、イベントを使えば両方を拾えます。
 
 `examples/basic/main.ts` では手順 4 に当たります。すべてのイベントと
 その payload は [イベントのリファレンス](reference/events.md) (英語) に
@@ -189,51 +202,46 @@ UI は、呼んだメソッドからではなくイベントから更新して�
 
 ## 5. 保存と読み込み
 
-`export('geojson')` は、すべての地物を GeoJSON の FeatureCollection に
-して、文字列で返します。
+`draw.document.toGeoJSON()` は、すべての地物を GeoJSON の
+FeatureCollection にして返します。文字列にして、好きな所に保存します。
 
 ```ts
 const STORAGE_KEY = 'maplibre-gl-draw:basic';
 
 document.querySelector('#save')?.addEventListener('click', () => {
-  const { data } = draw.export('geojson');
-  localStorage.setItem(STORAGE_KEY, data);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(draw.document.toGeoJSON()));
 });
 ```
 
-結果には `mimeType` (`application/geo+json`) と、ファイル名の候補の
-`fileName` も入っています。データをダウンロードさせるときやサーバーへ
-送るときに使います。
-
-`load` で読み戻します。渡したものが GeoJSON の FeatureCollection か、
-独自の形式か、`File` かを自動で判別します。
+`draw.document.load` で読み戻します。渡したものが GeoJSON か、独自の
+形式か、JSON の文字列か、`File` かを自動で判別します。
 
 <!-- docs-check: continue -->
 
 ```ts
 const saved = localStorage.getItem(STORAGE_KEY);
 if (saved !== null) {
-  const result = await draw.load(JSON.parse(saved));
-  console.log(`loaded ${result.featureIds.length} features`);
-  for (const { index, reason } of result.skipped ?? []) {
+  const result = await draw.document.load(JSON.parse(saved));
+  console.log(`loaded ${result?.featureIds.length ?? 0} features`);
+  for (const { index, reason } of result?.skipped ?? []) {
     console.warn(`feature ${index} was skipped: ${reason}`);
   }
 }
 ```
 
-GeoJSON を読み込むと、地物は今ある地物に追加されます。地物が存在する
-レイヤーを指していればそのレイヤーに (このライブラリーが書き出した
-GeoJSON は指しています)、そうでなければアクティブなレイヤーに入ります。
-読めない地物 (知らない geometry の型や不正な座標) は除かれて `skipped` に
-並び、残りは読み込まれます。読み込んだ地物は、すべて 1 回の
-`draw.features.change` で届きます。
+読み取り専用のとき、`load` は `null` を返します。GeoJSON を読み込むと、
+地物は今ある地物に追加されます。地物が存在するレイヤーを指していれば
+そのレイヤーに (このライブラリーが書き出した GeoJSON は指しています)、
+そうでなければアクティブなレイヤーに入ります。読めない地物 (知らない
+geometry の型や不正な座標) は除かれて `skipped` に並び、残りは読み込まれ
+ます。読み込んだ地物は、すべて 1 回の `document.changed` で届きます。
 
 GeoJSON は地物ごとの属性とスタイルを保ちますが、レイヤーとグループ
-そのものや、その順序は保ちません。それも保つには独自の形式を使い、同じ
-ように `draw.export('native')` と `draw.load(...)` を呼びます。独自の
-形式を読み込むと、今のデータに追加するのではなく置き換えます。両方の
-形式の仕様は [データ形式のリファレンス](reference/data-format.md) (英語)
-にあります。
+そのものや、その順序は保ちません。それも保つには独自の形式を使います。
+`draw.document.toJSON()` が文書の全体を返し、`draw.document.load` で
+同じように読み戻せます。独自の形式を読み込むと、今の文書に追加するの
+ではなく置き換えます。両方の形式の仕様は
+[データ形式のリファレンス](reference/data-format.md) (英語) にあります。
 
 `examples/basic/main.ts` では手順 5 に当たります。
 

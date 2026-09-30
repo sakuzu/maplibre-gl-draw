@@ -109,10 +109,11 @@ function makePoint(id: string, coord: [number, number], style?: FeatureStyle): F
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   };
@@ -212,11 +213,13 @@ describe('BatchManager iteration over the parts of the Multi kinds', () => {
     return {
       id,
       type: 'MultiPoint',
-      coordinates: coords,
+      geometry: { type: 'MultiPoint', coordinates: coords },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 
@@ -270,28 +273,33 @@ describe('BatchManager iteration over the parts of the Multi kinds', () => {
     const multiPolygon: Feature = {
       id: 'mpoly',
       type: 'MultiPolygon',
-      coordinates: [
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [0, 0],
-            [10, 0],
-            [10, 10],
-            [0, 0],
+            [
+              [0, 0],
+              [10, 0],
+              [10, 10],
+              [0, 0],
+            ],
+          ],
+          [
+            [
+              [100, 100],
+              [110, 100],
+              [110, 110],
+              [100, 100],
+            ],
           ],
         ],
-        [
-          [
-            [100, 100],
-            [110, 100],
-            [110, 110],
-            [100, 100],
-          ],
-        ],
-      ],
+      },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
 
     manager.processFeature(multiPolygon, false);
@@ -442,10 +450,11 @@ describe('BatchManager line batches', () => {
     return {
       id,
       type: 'LineString',
-      coordinates: coords,
+      geometry: { type: 'LineString', coordinates: coords },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
-      style,
+      style: style ?? {},
       locked: false,
       visible: true,
     };
@@ -518,7 +527,7 @@ describe('BatchManager line batches', () => {
     const { manager, calls } = createLineManager();
 
     const feature = makeLine('a', coordsA, { strokeWidth: 3 });
-    feature.properties = { ...(feature.properties ?? {}), createdZoom: 12 };
+    feature.properties = { ...(feature.properties ?? {}), 'maplibre-gl-draw:createdZoom': 12 };
     manager.processFeature(feature, false);
     manager.endFrame();
 
@@ -542,8 +551,9 @@ describe('BatchManager line batches', () => {
     const multi: Feature = {
       id: 'ml',
       type: 'MultiLineString',
-      coordinates: [coordsA, coordsB],
+      geometry: { type: 'MultiLineString', coordinates: [coordsA, coordsB] },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       style: { strokeColor: '#ff0000' },
       locked: false,
@@ -609,15 +619,19 @@ describe('BatchManager line batches', () => {
       return {
         id,
         type: 'Polygon',
-        coordinates: [
-          [
-            [offset, 0],
-            [offset + 0.05, 0],
-            [offset + 0.05, 0.05],
-            [offset, 0],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [offset, 0],
+              [offset + 0.05, 0],
+              [offset + 0.05, 0.05],
+              [offset, 0],
+            ],
           ],
-        ],
+        },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         style: { strokeColor: color, lineStyle: 'dashed' },
         locked: false,
@@ -658,12 +672,13 @@ describe('BatchManager style rules of a layer', () => {
   };
 
   const layer: Layer = {
+    metadata: undefined,
     id: 'layer-1',
     name: 'Layer 1',
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
     styleRule: rule,
   };
 
@@ -781,7 +796,9 @@ describe('BatchManager the opacity of the layer', () => {
     visible: true,
     locked: false,
     opacity: 0.5,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   } as Layer;
 
   function createOpacityManager(drawer: FeatureDrawer = createDrawer()) {
@@ -815,17 +832,21 @@ describe('BatchManager the opacity of the layer', () => {
   const polygon = (id: string, style?: FeatureStyle): Feature => ({
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   });
@@ -838,14 +859,19 @@ describe('BatchManager the opacity of the layer', () => {
       {
         id: 'l',
         type: 'LineString',
-        coordinates: [
-          [0, 0],
-          [1, 1],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       },
       false,
     );

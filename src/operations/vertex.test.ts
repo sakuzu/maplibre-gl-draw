@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it } from 'vitest';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../store/types.js';
 import { addVertex, computeVertexMove, deleteVertex, startVertexMove } from './vertex.js';
 
@@ -11,11 +13,13 @@ function makePoint(coord: Coordinate): Feature {
   return {
     id: 'point-1',
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -23,11 +27,13 @@ function makeLineString(coords: Coordinate[]): Feature {
   return {
     id: 'line-1',
     type: 'LineString',
-    coordinates: coords,
+    geometry: { type: 'LineString', coordinates: coords },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -35,11 +41,13 @@ function makePolygon(...rings: Coordinate[][]): Feature {
   return {
     id: 'polygon-1',
     type: 'Polygon',
-    coordinates: rings,
+    geometry: { type: 'Polygon', coordinates: rings },
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -75,7 +83,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 0, index: 1 }],
+        vertices: [{ ring: 0, index: 1 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: [
           [0, 0],
@@ -100,7 +108,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [
+        vertices: [
           { ring: 0, index: 0 },
           { ring: 0, index: 2 },
         ],
@@ -127,7 +135,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [
+        vertices: [
           { ring: 0, index: 5 },
           { ring: 0, index: -1 },
         ],
@@ -152,7 +160,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 1, index: 0 }],
+        vertices: [{ ring: 1, index: 0 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: [
           [0, 0],
@@ -179,7 +187,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 0, index: 1 }],
+        vertices: [{ ring: 0, index: 1 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: [
           [
@@ -209,7 +217,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 0, index: 0 }],
+        vertices: [{ ring: 0, index: 0 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: [
           [
@@ -237,7 +245,7 @@ describe('computeVertexMove', () => {
       ]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 0, index: 4 }],
+        vertices: [{ ring: 0, index: 4 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: [
           [
@@ -261,9 +269,9 @@ describe('computeVertexMove', () => {
       const feature = makePolygonWithHole();
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 1, index: 1 }],
+        vertices: [{ ring: 1, index: 1 }],
         startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: JSON.parse(JSON.stringify(feature.coordinates)) as Coordinate[][],
+        initialCoordinates: JSON.parse(JSON.stringify(coordinatesOf(feature))) as Coordinate[][],
       };
 
       const result = computeVertexMove(state, { lng: 1, lat: 2 }, feature) as Coordinate[][];
@@ -283,9 +291,9 @@ describe('computeVertexMove', () => {
       const feature = makePolygonWithHole();
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 1, index: 0 }],
+        vertices: [{ ring: 1, index: 0 }],
         startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: JSON.parse(JSON.stringify(feature.coordinates)) as Coordinate[][],
+        initialCoordinates: JSON.parse(JSON.stringify(coordinatesOf(feature))) as Coordinate[][],
       };
 
       const result = computeVertexMove(state, { lng: 1, lat: 1 }, feature) as Coordinate[][];
@@ -300,9 +308,9 @@ describe('computeVertexMove', () => {
       const feature = makePolygonWithHole();
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 1, index: 4 }],
+        vertices: [{ ring: 1, index: 4 }],
         startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: JSON.parse(JSON.stringify(feature.coordinates)) as Coordinate[][],
+        initialCoordinates: JSON.parse(JSON.stringify(coordinatesOf(feature))) as Coordinate[][],
       };
 
       const result = computeVertexMove(state, { lng: -1, lat: -1 }, feature) as Coordinate[][];
@@ -314,12 +322,12 @@ describe('computeVertexMove', () => {
       const feature = makePolygonWithHole();
       const state = {
         featureId: feature.id,
-        vertexIndices: [
+        vertices: [
           { ring: 0, index: 0 },
           { ring: 1, index: 2 },
         ],
         startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: JSON.parse(JSON.stringify(feature.coordinates)) as Coordinate[][],
+        initialCoordinates: JSON.parse(JSON.stringify(coordinatesOf(feature))) as Coordinate[][],
       };
 
       const result = computeVertexMove(state, { lng: 2, lat: 2 }, feature) as Coordinate[][];
@@ -333,10 +341,10 @@ describe('computeVertexMove', () => {
 
     it('ignores an out-of-range ring number', () => {
       const feature = makePolygonWithHole();
-      const initial = JSON.parse(JSON.stringify(feature.coordinates)) as Coordinate[][];
+      const initial = JSON.parse(JSON.stringify(coordinatesOf(feature))) as Coordinate[][];
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 5, index: 0 }],
+        vertices: [{ ring: 5, index: 0 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: initial,
       };
@@ -351,7 +359,7 @@ describe('computeVertexMove', () => {
       const feature = makePoint([100, 50]);
       const state = {
         featureId: feature.id,
-        vertexIndices: [{ ring: 0, index: 0 }],
+        vertices: [{ ring: 0, index: 0 }],
         startLngLat: { lng: 0, lat: 0 },
         initialCoordinates: [100, 50] as Coordinate,
       };
@@ -373,15 +381,17 @@ describe('computeVertexMove', () => {
 describe('the copy-on-write of computeVertexMove', () => {
   const START = { lng: 0, lat: 0 };
 
-  function makeFeature(type: Feature['type'], coordinates: Feature['coordinates']): Feature {
+  function makeFeature(type: Feature['type'], coordinates: FeatureCoordinates): Feature {
     return {
       id: `${type}-cow`,
       type,
-      coordinates,
+      geometry: geometryFromCoordinates(type, coordinates),
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 
@@ -426,7 +436,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const snapshot = structuredClone(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ ring: 0, index: 500 }],
+      vertices: [{ ring: 0, index: 500 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -448,11 +458,11 @@ describe('the copy-on-write of computeVertexMove', () => {
 
   it('Polygon: keeps the closed ring synchronized while the untouched rings share references', () => {
     const feature = makePolygonWithHole();
-    const initial = feature.coordinates as Coordinate[][];
+    const initial = coordinatesOf(feature) as Coordinate[][];
     const snapshot = structuredClone(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ ring: 0, index: 0 }],
+      vertices: [{ ring: 0, index: 0 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -487,7 +497,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const snapshot = structuredClone(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ part: 1, ring: 0, index: 1 }],
+      vertices: [{ part: 1, ring: 0, index: 1 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -508,7 +518,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const snapshot = structuredClone(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ part: 0, ring: 1, index: 1 }],
+      vertices: [{ part: 0, ring: 1, index: 1 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -538,7 +548,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const snapshot = structuredClone(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ part: 1, ring: 0, index: 0 }],
+      vertices: [{ part: 1, ring: 0, index: 0 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -561,7 +571,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const feature = makeLineString(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ ring: 0, index: 1 }],
+      vertices: [{ ring: 0, index: 1 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -574,7 +584,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const second = computeVertexMove(
       state,
       { lng: 3, lat: -2 },
-      { ...feature, coordinates: first },
+      { ...feature, geometry: geometryFromCoordinates(feature.type, first) },
     ) as Coordinate[];
     expect(second[1]).toEqual([13, 8]);
 
@@ -589,11 +599,11 @@ describe('the copy-on-write of computeVertexMove', () => {
 
   it('does not mutate the closing point of initialCoordinates even on consecutive movements of a closed ring', () => {
     const feature = makePolygonWithHole();
-    const initial = feature.coordinates as Coordinate[][];
+    const initial = coordinatesOf(feature) as Coordinate[][];
     const snapshot = structuredClone(initial);
     const state = {
       featureId: feature.id,
-      vertexIndices: [{ ring: 1, index: 4 }],
+      vertices: [{ ring: 1, index: 4 }],
       startLngLat: START,
       initialCoordinates: initial,
     };
@@ -605,7 +615,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     const second = computeVertexMove(
       state,
       { lng: 2, lat: 2 },
-      { ...feature, coordinates: first },
+      { ...feature, geometry: geometryFromCoordinates(feature.type, first) },
     ) as Coordinate[][];
     expect(second[1][4]).toEqual([7, 7]);
     expect(second[1][0]).toEqual([7, 7]);
@@ -717,7 +727,7 @@ describe('addVertex', () => {
     it('does not add for an out-of-range ring number', () => {
       const feature = makePolygonWithHole();
       const result = addVertex(feature, { ring: 3, index: 0 }, [1, 1]) as Coordinate[][];
-      expect(result).toEqual(feature.coordinates);
+      expect(result).toEqual(coordinatesOf(feature));
     });
   });
 
@@ -726,11 +736,13 @@ describe('addVertex', () => {
       const feature: Feature = {
         id: 'circle-1',
         type: 'Circle',
-        coordinates: [5, 5] as Coordinate,
+        geometry: { type: 'Point', coordinates: [5, 5] as Coordinate },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       };
       const result = addVertex(feature, { ring: 0, index: 0 }, [10, 10]);
       expect(result).toEqual([5, 5]);
@@ -950,15 +962,17 @@ describe('deleteVertex', () => {
 // --- The copy-on-write of addVertex / deleteVertex ---
 
 describe('the copy-on-write of addVertex / deleteVertex', () => {
-  function makeFeature(type: Feature['type'], coordinates: Feature['coordinates']): Feature {
+  function makeFeature(type: Feature['type'], coordinates: FeatureCoordinates): Feature {
     return {
       id: `${type}-cow`,
       type,
-      coordinates,
+      geometry: geometryFromCoordinates(type, coordinates),
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 
@@ -1020,7 +1034,7 @@ describe('the copy-on-write of addVertex / deleteVertex', () => {
 
     it('Polygon: only the target ring becomes new, and the untouched inner ring shares its reference', () => {
       const feature = makePolygonWithHole();
-      const initial = feature.coordinates as Coordinate[][];
+      const initial = coordinatesOf(feature) as Coordinate[][];
       const snapshot = structuredClone(initial);
 
       const result = addVertex(feature, { ring: 0, index: 0 }, [10, 0]) as Coordinate[][];
@@ -1125,7 +1139,7 @@ describe('the copy-on-write of addVertex / deleteVertex', () => {
 
     it('Polygon: only the target ring becomes new, and the untouched inner ring shares its reference', () => {
       const feature = makePolygonWithHole();
-      const initial = feature.coordinates as Coordinate[][];
+      const initial = coordinatesOf(feature) as Coordinate[][];
       const snapshot = structuredClone(initial);
 
       const result = deleteVertex(feature, { ring: 0, index: 1 }) as Coordinate[][];
@@ -1140,7 +1154,7 @@ describe('the copy-on-write of addVertex / deleteVertex', () => {
 
     it('Polygon: does not mutate the coordinate pairs of the input even when the closing point is synchronized after the first vertex is deleted', () => {
       const feature = makePolygonWithHole();
-      const initial = feature.coordinates as Coordinate[][];
+      const initial = coordinatesOf(feature) as Coordinate[][];
       const snapshot = structuredClone(initial);
 
       const result = deleteVertex(feature, { ring: 0, index: 0 }) as Coordinate[][];
@@ -1233,7 +1247,7 @@ describe('the copy-on-write of addVertex / deleteVertex', () => {
 
       const first = deleteVertex(feature, { ring: 0, index: 0 }) as Coordinate[];
       const second = deleteVertex(
-        { ...feature, coordinates: first },
+        { ...feature, geometry: geometryFromCoordinates(feature.type, first) },
         {
           ring: 0,
           index: 0,
@@ -1272,12 +1286,12 @@ describe('startVertexMove', () => {
       );
       expect(result).not.toBeNull();
       expect(result!.featureId).toBe('line-1');
-      expect(result!.vertexIndices).toEqual([
+      expect(result!.vertices).toEqual([
         { ring: 0, index: 0 },
         { ring: 0, index: 2 },
       ]);
       expect(result!.startLngLat).toEqual(lngLat);
-      expect(result!.initialCoordinates).toEqual(feature.coordinates);
+      expect(result!.initialCoordinates).toEqual(coordinatesOf(feature));
     });
 
     it('returns null for an invalid index', () => {
@@ -1305,7 +1319,7 @@ describe('startVertexMove', () => {
     });
   });
 
-  it('returns null for an empty vertexIndices', () => {
+  it('returns null for an empty vertices', () => {
     const feature = makeLineString([
       [0, 0],
       [10, 10],
@@ -1351,14 +1365,14 @@ describe('startVertexMove', () => {
       ]);
       const result = startVertexMove(feature, [{ ring: 0, index: 1 }], lngLat);
       expect(result).not.toBeNull();
-      expect(result!.vertexIndices).toEqual([{ ring: 0, index: 1 }]);
+      expect(result!.vertices).toEqual([{ ring: 0, index: 1 }]);
     });
 
     it('accepts a vertex reference of an inner ring', () => {
       const feature = makePolygonWithHole();
       const result = startVertexMove(feature, [{ ring: 1, index: 3 }], lngLat);
       expect(result).not.toBeNull();
-      expect(result!.vertexIndices).toEqual([{ ring: 1, index: 3 }]);
+      expect(result!.vertices).toEqual([{ ring: 1, index: 3 }]);
     });
 
     it('returns null for an out-of-range index of an inner ring', () => {
@@ -1385,11 +1399,13 @@ describe('startVertexMove', () => {
       const feature: Feature = {
         id: 'polygon-empty',
         type: 'Polygon',
-        coordinates: [],
+        geometry: { type: 'Polygon', coordinates: [] },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       };
       expect(startVertexMove(feature, [{ ring: 0, index: 0 }], lngLat)).toBeNull();
     });
@@ -1400,11 +1416,13 @@ describe('startVertexMove', () => {
       const feature: Feature = {
         id: 'circle-1',
         type: 'Circle',
-        coordinates: [5, 5] as Coordinate,
+        geometry: { type: 'Point', coordinates: [5, 5] as Coordinate },
         layerId: 'layer-1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       };
       expect(startVertexMove(feature, [{ ring: 0, index: 0 }], lngLat)).toBeNull();
     });
@@ -1420,10 +1438,10 @@ describe('startVertexMove', () => {
     expect(result).not.toBeNull();
     // Coordinates follow the convention of immutable updates, so a reference is enough
     // for the snapshot at the start
-    expect(result!.initialCoordinates).toBe(feature.coordinates);
+    expect(result!.initialCoordinates).toBe(coordinatesOf(feature));
   });
 
-  it('makes vertexIndices a copy of the original array', () => {
+  it('makes vertices a copy of the original array', () => {
     const feature = makeLineString([
       [0, 0],
       [10, 10],
@@ -1431,10 +1449,10 @@ describe('startVertexMove', () => {
     const refs = [{ ring: 0, index: 0 }];
     const result = startVertexMove(feature, refs, lngLat);
     refs.push({ ring: 0, index: 999 });
-    expect(result!.vertexIndices).toEqual([{ ring: 0, index: 0 }]);
+    expect(result!.vertices).toEqual([{ ring: 0, index: 0 }]);
   });
 
-  it('copies each element of vertexIndices as well', () => {
+  it('copies each element of vertices as well', () => {
     const feature = makeLineString([
       [0, 0],
       [10, 10],
@@ -1442,6 +1460,6 @@ describe('startVertexMove', () => {
     const refs = [{ ring: 0, index: 0 }];
     const result = startVertexMove(feature, refs, lngLat);
     refs[0].index = 1;
-    expect(result!.vertexIndices).toEqual([{ ring: 0, index: 0 }]);
+    expect(result!.vertices).toEqual([{ ring: 0, index: 0 }]);
   });
 });

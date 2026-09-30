@@ -12,12 +12,12 @@
  * - The keys are typed. A value is either a string or a function that formats one (it
  *   receives numbers already turned into strings)
  * - `MESSAGES_EN` is the default, in English. The library ships no other language
- * - `Options.messages` overrides part of the table for one instance. The table belongs to
+ * - `DrawOptions.messages` overrides part of the table for one instance. The table belongs to
  *   the instance and is never module-level state
  * - There is no locale detection and no automatic switching: the host passes the table
  *   it wants
  * - The words of the names generated for features, layers and groups are not in this table:
- *   they come from the naming configuration (`AutoNameConfig`, the `autoName` option)
+ *   they come from the `autoName` option
  */
 
 /**
@@ -26,14 +26,14 @@
  *
  * The library builds no such string inline; it reads it from the table of the instance, so
  * the host can show them in its own language. Pass the entries to replace as the `messages`
- * option of `createMapLibreGLDraw`; the entries left out keep {@link MESSAGES_EN}. A value is
- * a string, or a function that formats one from numbers already turned into strings. There is
- * no locale detection and no other built-in language. The words of generated names ("Layer 1")
- * are translated through the `autoName` option (`AutoNameConfig`), not here.
+ * option of `createDraw`; the entries left out keep the English defaults. A value is a string,
+ * or a function that formats one from numbers already turned into strings. There is no locale
+ * detection and no other built-in language. The words of generated names ("Layer 1") are
+ * translated through the `autoName` option, not here.
  *
  * @example
  * ```ts
- * const draw = createMapLibreGLDraw(map, {
+ * const draw = createDraw(map, {
  *   messages: {
  *     legendOther: 'Sonstige',
  *     legendRange: (lower, upper) => `${lower} bis unter ${upper}`,

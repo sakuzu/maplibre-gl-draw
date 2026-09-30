@@ -22,26 +22,31 @@ import {
   type FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { handleSelectClick } from './click-handler.js';
 
 function polygon(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -72,7 +77,7 @@ function makeMap() {
 
 let store: MemoryStore;
 let top: TopHit | null;
-let context: ModeContext;
+let context: EngineModeContext;
 /** There is one companion rendering provider per draw instance */
 let companions: FeatureCompanionRegistry = createFeatureCompanionRegistry();
 let onCompanionClick: ReturnType<typeof vi.fn<FeatureCompanionProvider['onCompanionClick']>>;
@@ -96,7 +101,16 @@ function click(): void {
 beforeEach(() => {
   companions = createFeatureCompanionRegistry();
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   store.createFeature(polygon('f1', 'l1'));
   store.createFeature(polygon('f2', 'l1'));
   top = null;
@@ -105,9 +119,9 @@ beforeEach(() => {
     map: makeMap(),
     hitTestTopmost: () => top,
     featureCompanions: companions,
-    pluginManager: undefined,
+    plugins: undefined,
     selectionScope: createSelectionScope(),
-  } as unknown as ModeContext;
+  } as unknown as EngineModeContext;
 });
 
 describe('consumption of a companion click', () => {
@@ -120,7 +134,7 @@ describe('consumption of a companion click', () => {
 
     click();
 
-    expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'c1' });
+    expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'c1' }, expect.anything());
   });
 
   it('it does not change the selection (the selected feature stays as it is)', () => {

@@ -27,7 +27,7 @@ export const terrainScene: ShowcaseScene = {
   mapOnly: true,
   async load({ draw, map }) {
     addTerrain(map);
-    await draw.load(createDocument());
+    await draw.document.load(createDocument());
   },
 };
 
@@ -68,30 +68,33 @@ function createDocument() {
           {
             id: 'survey-map',
             type: 'Image',
-            coordinates: [11.4265, 47.3005],
+            geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
             properties: {
               name: 'Survey map',
-              createdZoom: 13,
-              imageFileId: 'file-survey',
-              imageWidth: 512,
-              imageHeight: 400,
+              'maplibre-gl-draw:createdZoom': 13,
+              'maplibre-gl-draw:imageFileId': 'file-survey',
+              'maplibre-gl-draw:imageWidth': 480,
+              'maplibre-gl-draw:imageHeight': 375,
             },
-            style: { width: 480, height: 375, imageOpacity: 0.9 },
+            style: { imageOpacity: 0.9 },
           },
           {
             id: 'forest-plot',
             type: 'Polygon',
-            coordinates: [
-              [
-                [11.333, 47.2835],
-                [11.3615, 47.2825],
-                [11.3745, 47.2925],
-                [11.371, 47.3035],
-                [11.3455, 47.3075],
-                [11.33, 47.2975],
-                [11.333, 47.2835],
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [11.333, 47.2835],
+                  [11.3615, 47.2825],
+                  [11.3745, 47.2925],
+                  [11.371, 47.3035],
+                  [11.3455, 47.3075],
+                  [11.33, 47.2975],
+                  [11.333, 47.2835],
+                ],
               ],
-            ],
+            },
             properties: { name: 'Forest plot' },
             style: {
               fillColor: '#FF006E',
@@ -110,26 +113,32 @@ function createDocument() {
           {
             id: 'meridian',
             type: 'LineString',
-            coordinates: [
-              [11.358, 47.255],
-              [11.358, 47.328],
-            ],
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [11.358, 47.255],
+                [11.358, 47.328],
+              ],
+            },
             properties: { name: 'Straight line north' },
             style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
           },
           {
             id: 'trail',
             type: 'LineString',
-            coordinates: [
-              [11.3995, 47.2862],
-              [11.3925, 47.2905],
-              [11.3985, 47.2945],
-              [11.3885, 47.2985],
-              [11.3945, 47.3018],
-              [11.3835, 47.3045],
-              [11.3862, 47.3122],
-              [11.3905, 47.3262],
-            ],
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [11.3995, 47.2862],
+                [11.3925, 47.2905],
+                [11.3985, 47.2945],
+                [11.3885, 47.2985],
+                [11.3945, 47.3018],
+                [11.3835, 47.3045],
+                [11.3862, 47.3122],
+                [11.3905, 47.3262],
+              ],
+            },
             properties: { name: 'Trail' },
             style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
           },
@@ -159,7 +168,7 @@ function point(
   return {
     id,
     type: 'Point' as const,
-    coordinates,
+    geometry: { type: 'Point' as const, coordinates },
     properties: { name: id },
     style: { pointShape, pointColor, pointRadius },
   };

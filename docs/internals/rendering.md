@@ -80,7 +80,7 @@ interface RenderCoordinator {
 }
 ```
 
-`shouldRepaint(changes)` is true when the `StateChanges` carry any of
+`shouldRepaint(changes)` is true when the `StoreChange` carry any of
 `features`, `layers` (including the order between layers), `groups`,
 `layerReorder`, `groupReorder`, `selection`, `tentative` (the in-progress
 geometry of a drawing mode) or `uiStateChanged` (drag state, box
@@ -265,8 +265,8 @@ created by one function, `buildGpuResources`, and dropped by one function,
 CPU-side state (the Store subscription, the triangulation and style rule
 caches, the collected drape elements) is outside the pair.
 
-- `onAdd` builds the pair and `onRemove` releases it. Custom feature
-  renderers and overlay renderers (`addOverlayRenderer`) stay registered
+- `onAdd` builds the pair and `onRemove` releases it. Feature type
+  renderers and overlay renderers (`draw.extensions.overlays`) stay registered
   across a removal and receive `onAdd` again when the layer comes back; an
   overlay added before the layer is on the map receives its `onAdd` when
   the engine is built
@@ -622,10 +622,10 @@ runs, which is what makes the two modes give the same picture.
 Draw order is the painter's algorithm: what is drawn later is on top. Our
 drawings never write depth, so the final stacking is exactly the order of
 the draw calls, and the order within a layer must match
-`store.getOrderedFeatures()` (see [Display order](#display-order)).
+`store.listFeaturesInOrder()` (see [Display order](#display-order)).
 
 Core features are accumulated and drawn together at `endFrame()`, whereas
-custom features registered with `registerFeatureHandler` are drawn at once
+features of the types added with `draw.extensions.featureTypes` are drawn at once
 by their own renderer. So `renderLayers` flushes the core batches with
 `batchManager.endFrame()` just before a custom feature, and reopens them
 with `beginFrame()` after it. Without that flush, every custom feature of a
@@ -634,8 +634,8 @@ putting core features on top regardless of the order.
 
 ### Companion drawing
 
-A feature companion (`view/feature-companion.ts`, registered with
-`registerFeatureCompanionProvider()`) lets an extension draw something that
+A feature companion (`view/feature-companion.ts`, added through
+`draw.extensions.companionProviders`) lets an extension draw something that
 belongs to a feature, at the same z position, and that can be grabbed at
 the same z order. The core does not know what a companion means; drawing is
 up to the provider.
@@ -881,9 +881,10 @@ Store features are therefore drawn in retained mode by default
 `store-retained-*.ts` parts). Retained batches are built per layer, and a
 frame only binds them, sets uniforms and draws. The vertex data does not
 depend on the camera (projection is done with per-frame uniforms), so it is
-rebuilt only when the features or their style change. Setting
-`storeRetained: false` in the rendering configuration returns to immediate
-mode; both give the same picture, z-order included.
+rebuilt only when the features or their style change. The option
+`rendering.cacheGeometry: false` (`storeRetained` in the internal
+rendering configuration) returns to immediate mode; both give the same
+picture, z-order included.
 
 ### Runs and chunks
 
@@ -910,7 +911,7 @@ The `immediate` kind covers:
   cutting depends on the zoom)
 - The point shape `icon` (no instancing)
 - Kinds retained mode does not handle, such as Image
-- Custom types registered with `registerFeatureHandler`
+- Feature types added with `draw.extensions.featureTypes`
 - Features with a companion, which need a hook right before the feature
 
 An immediate chunk owns no batch and is drawn with the same procedure as
@@ -981,7 +982,7 @@ too much is still correct, rebuilding too little leaves a stale picture.
   Selection, mode and UI state changes discard nothing either
 - Groups have no reverse lookup to their layers, so they discard
   everything; both are rare
-- The locally hidden set (`store.getLocallyHidden()`) is updated in place,
+- The locally hidden set (`store.listHidden()`) is updated in place,
   so `RetainedInvalidationWatch` (`store-retained-invalidation.ts`)
   compares its size and elements with the previous frame
 - The companion registry has a generation number that changes on every
@@ -1054,10 +1055,10 @@ the selection, the thinning and the terrain drape are written against it,
 so a new input form is one more implementation.
 
 - `FeatureArraySource` (`source.ts`) holds an array of features
-  (`features`, `setFeatures`, a provider). Its collector resolves the style
+  (`rows`, `setRows`, a provider). Its collector resolves the style
   of each feature as the Store path does
-- `ColumnarSource` (`columnar/source.ts`) holds a columnar table
-  (`columnar`, `setColumnar`). Its collector reads the coordinates from the
+- `TableSource` (`table-source.ts`) holds a table
+  (`table`, `setTable`). Its collector reads the coordinates from the
   typed arrays of the table and packs points and lines straight into the
   arrays of the GPU (`buildRetainedPacked` of the point renderer,
   `buildRetainedPackedBatch` of the line renderer), with no object per row.
@@ -1068,16 +1069,17 @@ so a new input form is one more implementation.
   renderers with a feature that carries only that color. The packed arrays
   hold the same values as the arrays of objects, so both forms draw the
   same picture (`view/renderers/packed.test.ts`,
-  `dataset/columnar/dataset.test.ts` and `e2e/columnar.e2e.test.ts`
+  `dataset/table-dataset.test.ts` and `e2e/table.e2e.test.ts`
   compare them)
 - The bboxes, the chunks and the spatial index of a table come from
-  `prepareDatasetColumnar` (`columnar/prepare.ts`), a pure function that
-  runs in a Worker. The public subpath `@sakuzu/maplibre-gl-draw/columnar`
-  exports only it and `columnarTransferables`, and its runtime imports are
-  checked to stay pure (`dataset/columnar/index.test.ts`). Without it,
-  `setColumnar` computes the same arrays on the main thread
+  `prepareTable` (`table/prepare.ts`), a pure function that runs in a
+  Worker. The public subpath `@sakuzu/maplibre-gl-draw/table` exports it
+  with `transferList`, the building of a table from GeoJSON and the types
+  of a table, and its runtime imports are checked to stay pure
+  (`table/index.test.ts`). Without it, `setTable` computes the same
+  arrays on the main thread
 - A table builds a feature for a row only when one is asked for: a hit,
-  the selection, `getFeatures`, `collectVisible`, `getRowFeature`, the
+  the selection, `getFeatures`, `collectVisible`, `getRow`, the
   predicate of `externalPointRender` (for the point rows), a row drawn in
   immediate mode (a dashed line or outline, a point shape without
   instancing), and the lines and polygons handed to the terrain drape.
@@ -1090,11 +1092,11 @@ so a new input form is one more implementation.
 
 ### Spatial chunks
 
-`partitionRows()` (`dataset/partition.ts`) splits the rows at the median
+`partitionRows()` (`table/partition.ts`) splits the rows at the median
 of the centers of their bboxes along the axis of the larger extent, the way
 a k-d tree is built, until a range is small enough. It reads only typed
 arrays (the bboxes and the vertex counts), so the same function splits an
-array of features and, in a Worker, a columnar table. A chunk holds the
+array of features and, in a Worker, a table. A chunk holds the
 numbers of its rows, not the features.
 
 - A range stops when it has at most `CHUNK_TARGET_SIZE` (96) features and
@@ -1114,7 +1116,7 @@ numbers of its rows, not the features.
   of the spatial index
 - Culling at draw time is an AABB test between the chunk bbox and the view.
   Hit testing uses the spatial index of the rows instead, a static R-tree
-  packed into typed arrays (`dataset/packed-rtree.ts`), built in one pass
+  packed into typed arrays (`table/packed-rtree.ts`), built in one pass
   when the contents are replaced
 
 ### Chunk batches
@@ -1170,7 +1172,7 @@ baked flat before terrain was active is re-baked once terrain is live.
 The batches of a chunk are discarded and rebuilt only when something baked
 into them changes:
 
-- `setFeatures()`, `setColumnar()` or a provider response (the chunking
+- `setRows()`, `setTable()` or a provider response (the chunking
   starts over)
 - `setStyleRule()`, `setBaseStyle()` (colors change; chunks are kept)
 - `setExternalPointRender()` (see
@@ -1234,7 +1236,7 @@ while the camera is still:
 The rebuilds that wait for the camera to stop still wait; a capture is
 taken with the camera still.
 
-`MapLibreGLDraw.hasPendingWork()` reports the work later frames finish on
+`Draw.hasPendingWork()` reports the work later frames finish on
 their own. It asks the engine (`CustomLayerInterface.hasPendingWork`),
 which asks:
 
@@ -1247,7 +1249,8 @@ which asks:
   frame drew (a hidden one, or one on no side of the frame, has no work);
   a provider call waiting for its debounce or its response
 - the overlay renderers, through the optional
-  `CustomOverlayRenderer.hasPendingWork`
+  `EngineOverlayRenderer.hasPendingWork` (`OverlayRenderer.hasPendingWork`
+  of the extension contract)
 
 maplibre fires `idle` after a frame even when a custom layer asked for
 another frame while drawing it, so `idle` alone does not tell. The host
@@ -1364,7 +1367,7 @@ reaches the baked data, so a change of the opacity alone rebuilds nothing
 - The analytic drape gives each Store layer a factor source of its own
   (below)
 - Custom renderers and feature companions receive it as
-  `CustomRendererDrawContext.opacity` (`layerRendererContext` in
+  `RenderContext.opacity` (`layerRendererContext` in
   `render.ts`) and multiply it into their own alpha. Overlays, the
   tentative geometry and the selection UI are not content of a layer and
   get 1
@@ -1852,8 +1855,8 @@ batches, and the editing UI of the current selection is never ghosted.
 The terrain frame state, generation counters and caches live in a
 `TerrainContext` (`terrain/context.ts`), one per custom layer. There is no
 current context: renderers receive it at construction, extension renderers
-through `CustomRendererDrawContext.terrain`, and plugins use
-`PluginContext.projectAnchor`. Draw instances on one page (a main map, a
+through `RenderContext.terrain`, and plugins use
+`ExtensionContext.terrain.project`. Draw instances on one page (a main map, a
 thumbnail) must not share counters, or a retained batch could wrongly
 conclude that nothing changed.
 
@@ -1918,10 +1921,10 @@ to physical pixels when drawn. All reads of the ratio go through
 - Renderers and datasets receive the source itself
   (`PixelRatioInput = number | (() => number) | PixelRatioProvider`), so a
   change reaches every reader from the next frame on. Extension renderers
-  get the resolved value as `CustomRendererDrawContext.pixelRatio`
-- `draw.setRenderScale()` multiplies a factor on top (default 1). A host
-  that shows the map scaled down uses it to shrink what is fixed in screen
-  pixels by the same ratio
+  get the resolved value as `RenderContext.pixelRatio`
+- `rendering.renderScale` of the options multiplies a factor on top
+  (default 1). A host that shows the map scaled down uses it to shrink what
+  is fixed in screen pixels by the same ratio
 - Retained batches bake the ratio and are rebuilt when it changes: the
   Store path compares `builtPixelRatio`, datasets use
   `syncDevicePixelRatio()`
@@ -1973,32 +1976,31 @@ At every level the end of an array is the foreground:
 2. Within a layer: the end of `layer.order` is in front
 3. Within a group: the end of `group.featureIds` is in front
 
-`getOrderedFeatures()` walks the levels in that order, skipping hidden
-layers, groups and features:
+`listFeaturesInOrder()` walks the levels in that order:
 
 ```typescript
 for (const layerId of layerOrder) {
   const layer = layers.get(layerId);
-  if (!layer || !layer.visible) continue;
-  for (const itemId of layer.order) {
+  if (!layer) continue;
+  for (const itemId of layer.items) {
     const group = groups.get(itemId);
     if (group) {
-      if (!group.visible) continue;
       for (const featureId of group.featureIds) {
         const feature = features.get(featureId);
-        if (feature?.visible) result.push(feature);
+        if (feature) result.push(feature);
       }
     } else {
       const feature = features.get(itemId);
-      if (feature?.visible) result.push(feature);
+      if (feature) result.push(feature);
     }
   }
 }
 ```
 
 The drawing uses `getDisplayFeatures(store)` (`store/local-visibility.ts`),
-this order without locally hidden features. Hit testing walks the same
-order in reverse; see [Hit testing](./hit-testing.md).
+this order without the features that a visible flag hides (on the feature,
+its group or its layer) and without locally hidden features. Hit testing
+walks the same order in reverse; see [Hit testing](./hit-testing.md).
 
 ### The stacking sequence
 
@@ -2023,7 +2025,7 @@ by its own id.
   `deleteLayer` removes its own id. Removing a dataset id is the
   caller's job: `removeDataset` does not touch `layerOrder`,
   since the dataset layer does not know the Store
-- The sequence is part of the document (the `DocumentStore` contract): the
+- The sequence is part of the document (the `StoreContract` rules): the
   native format writes it whole as `layerOrder` and a native load replaces
   it whole, and a replaced store holds it with the entries of the
   host. The datasets themselves are not in the document; the host adds
@@ -2058,7 +2060,7 @@ sequence into segments and draws each with its own custom layer, a slot
 
 - One custom layer per segment. The first has the id
   `maplibre-gl-draw-layer` and the others `maplibre-gl-draw-layer:<n>`
-  (`renderSlotLayerId`). `SlotManager` follows changes of `layerOrder`,
+  (`slotLayerId`). `SlotManager` follows changes of `layerOrder`,
   creates and removes slots, and adds and removes them from the map
 - Each slot's `render` passes only its own segment to `renderLayers`. The
   preparation of the frame (projection, terrain state, shaders, viewport)
@@ -2068,8 +2070,8 @@ sequence into segments and draws each with its own custom layer, a slot
 - The foreground (overlays, selection handles, the drawing preview) is
   drawn by the last slot. Nothing in the foreground can be placed above a
   separator
-- `getRenderSlots()` returns the segments and the layer ids of the slots,
-  and `draw.renderslots.change` announces changes. The host moves each
+- `draw.getLayerStack()` returns the segments and the layer ids of the
+  frames, and the `layerStack.changed` event announces changes. The host moves each
   native layer to just after the slot of the preceding segment; placing
   native layers is the host's job
 - Retained batches stay per layer. A change of segments, or of the segment

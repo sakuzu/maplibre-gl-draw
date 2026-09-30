@@ -10,7 +10,7 @@
 
 import type { KeyNormalizedEvent } from '../../dispatcher/types.js';
 import type { Coordinate, Mode } from '../../store/types.js';
-import type { ModeContext, ModeHandler } from '../handler.js';
+import type { EngineModeContext, EngineModeHandler } from '../handler.js';
 import { resolveCommitLayer } from './commit-layer.js';
 
 /**
@@ -18,13 +18,13 @@ import { resolveCommitLayer } from './commit-layer.js';
  *
  * @internal
  */
-export class DrawImageMode implements ModeHandler {
+export class DrawImageMode implements EngineModeHandler {
   readonly modeName: Mode = 'draw_image';
   readonly writesFeatures = true;
 
-  private context!: ModeContext;
+  private context!: EngineModeContext;
 
-  onStart(context: ModeContext): void {
+  onStart(context: EngineModeContext): void {
     this.context = context;
     const { map, store, eventEmitter } = this.context;
 
@@ -36,9 +36,11 @@ export class DrawImageMode implements ModeHandler {
       store.setSelection(null, []);
     }, 'silent');
 
-    // Get the center coordinate and the zoom of the map
+    // The position of the click that led here (a listener of the click entered the mode), or
+    // else the center of the map
+    const clicked = this.context.getClickPosition?.() ?? null;
     const center = map.getCenter();
-    const coordinate: Coordinate = [center.lng, center.lat];
+    const coordinate: Coordinate = clicked ? [clicked[0], clicked[1]] : [center.lng, center.lat];
     const zoom = map.getZoom();
     // Nothing is requested when no layer can be written (the mode returns to select)
     const layerId = resolveCommitLayer(this.context);

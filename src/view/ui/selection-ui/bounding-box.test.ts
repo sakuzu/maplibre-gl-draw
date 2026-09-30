@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { generateCirclePolygon } from '../../../geometry/index.js';
+import { generateCirclePolygon } from '../../../geometry/circle.js';
 import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { computeBoundingBox, rotateBoundingBox } from './bounding-box.js';
@@ -19,11 +19,13 @@ function makeCircle(center: Coordinate, radiusMeters: number): Feature {
   return {
     id: 'circle-1',
     type: 'Circle',
-    coordinates: center,
+    geometry: { type: 'Point', coordinates: center },
     layerId: 'layer-1',
-    properties: { radiusMeters },
+    groupId: undefined,
+    properties: { 'maplibre-gl-draw:radiusMeters': radiusMeters },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -67,11 +69,13 @@ describe('rotateBoundingBox', () => {
     const polygon: Feature = {
       id: 'polygon-1',
       type: 'Polygon',
-      coordinates: [[...corners, corners[0]]],
+      geometry: { type: 'Polygon', coordinates: [[...corners, corners[0]]] },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const bbox = computeBoundingBox(polygon);
     expect(bbox).not.toBeNull();
@@ -95,19 +99,24 @@ describe('rotateBoundingBox', () => {
     const bbox = computeBoundingBox({
       id: 'polygon-1',
       type: 'Polygon',
-      coordinates: [
-        [
-          [0, 40],
-          [20, 40],
-          [20, 60],
-          [0, 60],
-          [0, 40],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 40],
+            [20, 40],
+            [20, 60],
+            [0, 60],
+            [0, 40],
+          ],
         ],
-      ],
+      },
       layerId: 'layer-1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     });
     if (!bbox) throw new Error('no bbox');
     const frame = rotateBoundingBox(bbox, 1.2);

@@ -166,8 +166,8 @@ async function show(page: Page, features: FeatureInput[]): Promise<void> {
   await page.evaluate((list) => {
     const { draw } = window as unknown as E2EWindow;
     draw.setMode('select');
-    draw.deleteAllFeatures();
-    for (const feature of list) draw.addFeature(feature);
+    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    draw.features.createMany(list);
   }, features);
   await settle(page);
 }
@@ -213,10 +213,13 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await show(page, [
       {
         type: 'LineString',
-        coordinates: [
-          [-60, 45],
-          [60, 45],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-60, 45],
+            [60, 45],
+          ],
+        },
         style: { strokeColor: '#00FF00', strokeWidth: 4, strokeOpacity: 1 },
       },
     ]);
@@ -233,15 +236,18 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await show(page, [
       {
         type: 'Polygon',
-        coordinates: [
-          [
-            [-40, 20],
-            [40, 20],
-            [40, 50],
-            [-40, 50],
-            [-40, 20],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-40, 20],
+              [40, 20],
+              [40, 50],
+              [-40, 50],
+              [-40, 20],
+            ],
           ],
-        ],
+        },
         style: { fillColor: '#FF00FF', fillOpacity: 1, strokeOpacity: 0, strokeWidth: 0 },
       },
     ]);
@@ -283,28 +289,29 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
         if (!context) throw new Error('No 2D canvas');
         context.fillStyle = '#FF00FF';
         context.fillRect(0, 0, 64, 64);
-        await draw.load({
-          version: '2.0.0',
+        await draw.document.load({
+          version: '3.0.0',
           metadata: { title: 'image' },
           layerOrder: ['images'],
           layers: [
-            { id: 'images', name: 'Images', visible: true, locked: false, opacity: 1, order: [id] },
+            { id: 'images', name: 'Images', visible: true, locked: false, opacity: 1, items: [id] },
           ],
           features: [
             {
               id,
               type: 'Image',
-              coordinates: [0, 30],
+              geometry: { type: 'Point', coordinates: [0, 30] },
               layerId: 'images',
               visible: true,
               locked: false,
               properties: {
-                createdZoom: 1,
-                imageFileId: 'file-magenta',
-                imageWidth: 64,
-                imageHeight: 64,
+                'maplibre-gl-draw:createdZoom': 1,
+                'maplibre-gl-draw:imageFileId': 'file-magenta',
+                // Drawn at 400 x 160 px at the created zoom, whatever the size of the file
+                'maplibre-gl-draw:imageWidth': 400,
+                'maplibre-gl-draw:imageHeight': 160,
               },
-              style: { width: 400, height: 160, imageOpacity: 1 },
+              style: { imageOpacity: 1 },
             },
           ],
           files: {
@@ -356,10 +363,13 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await show(page, [
       {
         type: 'LineString',
-        coordinates: [
-          [-60, 0],
-          [60, 50],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-60, 0],
+            [60, 50],
+          ],
+        },
         style: { strokeColor: '#00FF00', strokeWidth: 4, strokeOpacity: 1, lineStyle: 'dashed' },
       },
     ]);
@@ -376,7 +386,7 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       // No guide along the parallel: only the line being drawn is there
-      draw.snapping.setEnabled(false);
+      draw.options.update({ snapping: { enabled: false } });
       draw.setMode('draw_line');
     });
     await click(page, west);
@@ -384,7 +394,9 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
     await settle(page);
     const drawing = await readPicture(page);
     await page.keyboard.press('Escape');
-    await page.evaluate(() => (window as unknown as E2EWindow).draw.snapping.setEnabled(true));
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: true } }),
+    );
     await settle(page);
 
     // The line being drawn is dashed: a dash reaches within 6 px of any point of it
@@ -399,10 +411,13 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
       {
         id: 'slanted',
         type: 'LineString',
-        coordinates: [
-          [-60, 0],
-          [60, 50],
-        ],
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-60, 0],
+            [60, 50],
+          ],
+        },
         style: { strokeColor: '#00FF00', strokeWidth: 4, strokeOpacity: 1 },
       },
     ]);
@@ -469,9 +484,9 @@ describe('the points near the edge of the sphere', () => {
     await page.evaluate((coord) => {
       const { map, draw } = window as unknown as E2EWindow;
       map.removeLayer('reference');
-      draw.addFeature({
+      draw.features.create({
         type: 'Point',
-        coordinates: coord,
+        geometry: { type: 'Point', coordinates: coord },
         style: { pointColor: '#00FF00', pointRadius: 6 },
       });
     }, coordinate);

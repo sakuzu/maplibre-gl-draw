@@ -6,11 +6,7 @@
 // colored by a style rule, and points fetched for the view as it moves, thinned where they
 // collide. Clicking one reports it; neither is editable or saved with the drawing.
 
-import {
-  createMapLibreGLDraw,
-  type DatasetFeatureInput,
-  type DatasetFeatureProvider,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type DatasetProvider, type DatasetRow } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -24,14 +20,14 @@ const map = new maplibregl.Map({
   center: CENTER,
   zoom: 13,
 });
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 /** 250 x 200 square cells around the center, with a value from 0 to 100 that varies smoothly */
-function createCells(): DatasetFeatureInput[] {
+function createCells(): DatasetRow[] {
   const cols = 250;
   const rows = 200;
   const size = 0.0006;
-  const cells: DatasetFeatureInput[] = [];
+  const cells: DatasetRow[] = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = CENTER[0] + (col - cols / 2) * size;
@@ -40,28 +36,31 @@ function createCells(): DatasetFeatureInput[] {
         50 + 30 * Math.sin(col / 17) * Math.cos(row / 13) + 20 * Math.sin((col + row) / 40),
       );
       cells.push({
+        type: 'Feature',
         id: `cell-${row}-${col}`,
-        type: 'Polygon',
-        coordinates: [
-          [
-            [x, y],
-            [x + size, y],
-            [x + size, y + size * 0.8],
-            [x, y + size * 0.8],
-            [x, y],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [x, y],
+              [x + size, y],
+              [x + size, y + size * 0.8],
+              [x, y + size * 0.8],
+              [x, y],
+            ],
           ],
-        ],
+        },
         properties: { value },
-        style: { fillOpacity: 0.6, strokeWidth: 0 },
       });
     }
   }
   return cells;
 }
 
-const grid = draw.addDataset({
+const grid = draw.datasets.add({
   id: 'grid',
-  features: createCells(),
+  rows: createCells(),
+  baseStyle: { fill: { fillOpacity: 0.6, strokeWidth: 0 } },
   styleRule: {
     kind: 'graduated',
     property: 'value',
@@ -75,17 +74,20 @@ const grid = draw.addDataset({
 
 // Points for the requested range (rounded to tiles), about 16 per tile width, at a stable
 // pseudo-random place in each step. A real provider would fetch them from a server
-const pointsFor: DatasetFeatureProvider = async (bbox, zoom) => {
+const pointsFor: DatasetProvider = async ([west, south, east, north], zoom) => {
   if (zoom < 12) return [];
   const step = 360 / 2 ** (Math.floor(zoom) + 4);
-  const points: DatasetFeatureInput[] = [];
-  for (let i = Math.floor(bbox.minX / step); i * step < bbox.maxX; i++) {
-    for (let j = Math.floor(bbox.minY / step); j * step < bbox.maxY; j++) {
+  const points: DatasetRow[] = [];
+  for (let i = Math.floor(west / step); i * step < east; i++) {
+    for (let j = Math.floor(south / step); j * step < north; j++) {
       const hash = Math.abs(Math.sin(i * 12.9898 + j * 78.233) * 43758.5453) % 1;
       points.push({
+        type: 'Feature',
         id: `point-${i}-${j}`,
-        type: 'Point',
-        coordinates: [(i + hash) * step, (j + ((hash * 7) % 1)) * step],
+        geometry: {
+          type: 'Point',
+          coordinates: [(i + hash) * step, (j + ((hash * 7) % 1)) * step],
+        },
         properties: { kind: ['shop', 'school', 'station'][Math.floor(hash * 3)] },
       });
     }
@@ -93,7 +95,7 @@ const pointsFor: DatasetFeatureProvider = async (bbox, zoom) => {
   return points;
 };
 
-const points = draw.addDataset({
+const points = draw.datasets.add({
   id: 'points',
   provider: pointsFor,
   styleRule: {
@@ -110,17 +112,15 @@ const points = draw.addDataset({
 });
 
 const output = document.getElementById('output') as HTMLPreElement;
-draw.on('draw.dataset.click', ({ datasetId, feature }) => {
-  output.textContent = feature
-    ? `${datasetId}: ${feature.id} ${JSON.stringify(feature.properties)}`
-    : '';
+draw.on('dataset.clicked', ({ datasetId, row }) => {
+  output.textContent = `${datasetId}: ${row.id} ${JSON.stringify(row.properties)}`;
 });
 
 // The cells go behind or in front of what is drawn
 const orderButton = document.getElementById('grid-order') as HTMLButtonElement;
 orderButton.addEventListener('click', () => {
   const inFront = !orderButton.classList.contains('active');
-  draw.moveDataset(grid.id, { order: inFront ? 'above-store' : 'below-store' });
+  draw.datasets.move(grid.id, { order: inFront ? 'above-store' : 'below-store' });
   orderButton.classList.toggle('active', inFront);
 });
 

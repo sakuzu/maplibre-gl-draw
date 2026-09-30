@@ -2,54 +2,56 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for DrawCircleMode
+ * Tests for the circle drawing mode
  *
  * The radius handle is placed on the rendered circle with the direct problem on the sphere
  * (destinationPoint), so the bearing recorded while the pointer moves must be the great-circle
  * bearing for the handle to land on the pointer.
  */
 
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
+import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
-import { DrawCircleMode } from './circle.js';
+import { createModeHarness } from '../../test-utils.js';
+import { ModeManagerImpl } from '../manager.js';
+import { drawCircleMode } from './circle.js';
 
-function mouse(type: 'click' | 'mousemove', coord: Coordinate): MouseNormalizedEvent {
+function pointer(coord: Coordinate): DrawPointerEvent {
   return {
-    type,
-    point: { x: coord[0] * 1000, y: coord[1] * 1000 },
-    lngLat: { lng: coord[0], lat: coord[1] },
-    originalEvent: {} as unknown as MouseEvent,
+    point: [coord[0] * 1000, coord[1] * 1000],
+    lngLat: coord,
+    snapped: { lngLat: coord },
     modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-  } as unknown as MouseNormalizedEvent;
+    pointerType: 'mouse',
+    original: {} as PointerEvent,
+  };
 }
 
-function start(store: MemoryStore): DrawCircleMode {
-  const mode = new DrawCircleMode();
+function start(store: MemoryStore) {
   const canvas = { style: { cursor: '' } };
-  mode.onStart({
-    map: { getCanvas: () => canvas, getZoom: () => 10 },
-    store,
-    autoNameGenerator: { generateName: () => undefined },
-    generateFeatureId: () => 'c1',
-    getCurrentLayerId: () => 'l1',
-    setMode: () => {},
-  } as unknown as ModeContext);
+  const map = {
+    getCanvas: () => canvas,
+    getZoom: () => 10,
+  } as unknown as MapLibreMap;
+  const modeManager = new ModeManagerImpl(store);
+  const harness = createModeHarness({ store, map, modeManager, getWritableLayerId: () => 'l1' });
+  const mode = drawCircleMode(harness.modeContext());
+  mode.onEnter?.();
   return mode;
 }
 
-describe('DrawCircleMode radius handle', () => {
+describe('the radius handle of the circle drawing mode', () => {
   it('the handle lands on the pointer at a high latitude (60 deg, 100 km, 45 deg)', () => {
     const store = new MemoryStore();
     const mode = start(store);
     const center: Coordinate = [10, 60];
-    const pointer = destinationPoint(center, 100_000, 45);
+    const target = destinationPoint(center, 100_000, 45);
 
-    mode.onClick(mouse('click', center));
-    mode.onMouseMove(mouse('mousemove', pointer));
+    mode.onClick?.(pointer(center));
+    mode.onPointerMove?.(pointer(target));
 
     const tentative = store.getTentative();
     expect(tentative?.type).toBe('Circle');
@@ -59,6 +61,6 @@ describe('DrawCircleMode radius handle', () => {
       tentative.radiusMeters ?? 0,
       tentative.radiusHandleAngle ?? 0,
     );
-    expect(haversineDistanceMeters(handle, pointer)).toBeLessThan(1);
+    expect(haversineDistanceMeters(handle, target)).toBeLessThan(1);
   });
 });

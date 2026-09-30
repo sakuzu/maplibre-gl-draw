@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Type definitions (the shapes of the native format, see src/shared/types/model.ts)
+// Type definitions (the shapes of the native format, see DrawDocument in src/api/model.ts)
 interface Coordinate {
   0: number;
   1: number;
@@ -26,10 +26,15 @@ interface Coordinate {
 
 type FeatureType = 'Point' | 'LineString' | 'Polygon' | 'Image' | 'Sticker';
 
+interface DrawGeometry {
+  type: 'Point' | 'LineString' | 'Polygon';
+  coordinates: Coordinate | Coordinate[] | Coordinate[][];
+}
+
 interface DrawFeature {
   id: string;
   type: FeatureType;
-  coordinates: Coordinate | Coordinate[] | Coordinate[][];
+  geometry: DrawGeometry;
   layerId: string;
   groupId?: string;
   properties: Record<string, unknown>;
@@ -44,11 +49,11 @@ interface DrawLayer {
   visible: boolean;
   locked: boolean;
   opacity: number;
-  order: string[];
+  items: string[];
   metadata?: Record<string, unknown>;
 }
 
-interface MapLibreGLDrawData {
+interface NativeDocument {
   version: string;
   created?: string;
   modified?: string;
@@ -118,7 +123,7 @@ function generatePoint(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'Point',
-    coordinates: randomCoordinate(),
+    geometry: { type: 'Point', coordinates: randomCoordinate() },
     layerId,
     properties: {},
     style: {
@@ -143,9 +148,9 @@ function generateLineString(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates },
     layerId,
-    properties: { createdZoom: 14 },
+    properties: { 'maplibre-gl-draw:createdZoom': 14 },
     style: {
       strokeColor: randomColor(),
       strokeWidth: Math.floor(random(1, 8)), // Random width of 1 to 7 px
@@ -178,9 +183,9 @@ function generatePolygon(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [coordinates],
+    geometry: { type: 'Polygon', coordinates: [coordinates] },
     layerId,
-    properties: { createdZoom: 14 },
+    properties: { 'maplibre-gl-draw:createdZoom': 14 },
     style: {
       fillColor,
       fillOpacity: 1, // Opaque
@@ -199,10 +204,10 @@ function generateSticker(id: string, layerId: string): DrawFeature {
   return {
     id,
     type: 'Sticker',
-    coordinates: randomCoordinate(),
+    geometry: { type: 'Point', coordinates: randomCoordinate() },
     layerId,
     properties: {
-      createdZoom: 12,
+      'maplibre-gl-draw:createdZoom': 12,
     },
     style: {
       fillColor: randomColor(),
@@ -213,7 +218,7 @@ function generateSticker(id: string, layerId: string): DrawFeature {
 }
 
 // Test data generation
-function generateTestData(count: number): MapLibreGLDrawData {
+function generateTestData(count: number): NativeDocument {
   const layerId = 'layer-1';
   const features: DrawFeature[] = [];
   const order: string[] = [];
@@ -242,7 +247,7 @@ function generateTestData(count: number): MapLibreGLDrawData {
   }
 
   return {
-    version: '2.0.0',
+    version: '3.0.0',
     created: new Date().toISOString(),
     modified: new Date().toISOString(),
     metadata: {
@@ -256,7 +261,7 @@ function generateTestData(count: number): MapLibreGLDrawData {
         visible: true,
         locked: false,
         opacity: 1,
-        order,
+        items: order,
       },
     ],
     layerOrder: [layerId],

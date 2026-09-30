@@ -64,7 +64,7 @@ export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = {
 
 /**
  * The precise hit test of one feature type, as registered through the `hitTest` of a
- * `CustomFeatureHandler`.
+ * `FeatureTypeHandler`.
  *
  * The library first narrows the candidates with its spatial index and then calls `test` on
  * each candidate from the front; the first that returns `true` receives the click. The
@@ -73,24 +73,6 @@ export const DEFAULT_HIT_TEST_OPTIONS: HitTestOptions = {
  * difference, divide it by cos φ of the click latitude (or multiply the tolerance by cos φ):
  * one degree of latitude is 1 / cos φ times longer on screen than one degree of longitude.
  * Distances are returned in the same unit.
- *
- * @example
- * ```ts
- * import type { HitTestStrategy } from '@sakuzu/maplibre-gl-draw';
- *
- * // A marker type hit within the tolerance around its single position
- * const markerHitTest: HitTestStrategy = {
- *   geometryType: 'Marker',
- *   test(feature, [lng, lat], tolerance) {
- *     return this.distance(feature, [lng, lat]) <= tolerance;
- *   },
- *   distance(feature, [lng, lat]) {
- *     const [x, y] = feature.coordinates as [number, number];
- *     const cos = Math.cos((lat * Math.PI) / 180);
- *     return Math.hypot(x - lng, (y - lat) / cos);
- *   },
- * };
- * ```
  */
 export interface HitTestStrategy {
   /** The feature type this strategy tests; a registration replaces the one for the type */
@@ -128,6 +110,19 @@ export interface HitTestStrategy {
    * @returns The distance (same unit) if within the tolerance, null if outside
    */
   testDistance?(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null;
+
+  /**
+   * How far beyond its geometry the feature is drawn, in CSS pixels (the radius of the marker
+   * of a point)
+   *
+   * The service adds it to the tolerance it hands to `test` for this feature, and widens the
+   * candidate search by it, so that a click on what is drawn hits the feature. Without it,
+   * the feature is hit within the tolerance of its geometry alone.
+   *
+   * @param feature The feature to test
+   * @returns The reach in CSS pixels (0 or more)
+   */
+  reachPx?(feature: Feature): number;
 }
 
 /**

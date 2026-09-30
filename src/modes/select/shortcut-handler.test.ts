@@ -11,13 +11,14 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createSelectionApi } from '../../api/selection-api.js';
 import { groupSelection } from '../../operations/layer-operations.js';
+import { deleteSelection } from '../../operations/selection-operations.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { handleDeleteShortcut, handleGroupShortcut } from './shortcut-handler.js';
 
 /** Records the ids the Store reported as deleted (the spatial index drops exactly those) */
@@ -32,26 +33,28 @@ class DeletionLog {
 
 function feature(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 let store: MemoryStore;
 let spatial: DeletionLog;
 let index: StoreSpatialIndex;
-let context: ModeContext;
+let context: EngineModeContext;
 
 beforeEach(() => {
   store = new MemoryStore();
   spatial = new DeletionLog(store);
   index = new StoreSpatialIndex(store);
-  context = { store, spatialIndex: index } as unknown as ModeContext;
+  context = { store, spatialIndex: index } as unknown as EngineModeContext;
 });
 
 describe('handleDeleteShortcut with a group selection', () => {
@@ -62,12 +65,15 @@ describe('handleDeleteShortcut with a group selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature(feature('f1', 'l1'));
     store.createFeature(feature('f2', 'l1'));
     store.createGroup({
       id: 'g1',
+      layerId: 'l1',
       name: 'g',
       featureIds: ['f1', 'f2'],
       locked: false,
@@ -93,7 +99,9 @@ describe('handleDeleteShortcut with a layer selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createLayer({
       id: 'l2',
@@ -101,7 +109,9 @@ describe('handleDeleteShortcut with a layer selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature(feature('f1', 'l1'));
     store.createFeature(feature('f2', 'l1'));
@@ -123,7 +133,9 @@ describe('handleDeleteShortcut with a layer selection', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
 
     store.setSelection('layer', ['l1']);
@@ -141,7 +153,9 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createLayer({
       id: 'l2',
@@ -149,7 +163,9 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature(feature('f1', 'l1'));
     store.createFeature(feature('f2', 'l1'));
@@ -196,7 +212,16 @@ describe('suppression of handleDeleteShortcut (interaction lock / readOnly)', ()
 describe('handleDeleteShortcut never removes a locked feature', () => {
   beforeEach(() => {
     for (const id of ['l1', 'l2']) {
-      store.createLayer({ id, name: id, visible: true, locked: false, opacity: 1, order: [] });
+      store.createLayer({
+        id,
+        name: id,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        items: [],
+        styleRule: undefined,
+        metadata: undefined,
+      });
     }
   });
 
@@ -205,6 +230,7 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
     store.createFeature({ ...feature('f2', 'l1'), locked: true });
     store.createGroup({
       id: 'g1',
+      layerId: 'l1',
       name: 'g',
       featureIds: ['f1', 'f2'],
       locked: false,
@@ -222,7 +248,14 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
   it('a layer holding a locked feature or a locked group is not deleted', () => {
     store.createFeature({ ...feature('f1', 'l1'), locked: true });
     store.createFeature(feature('f2', 'l2'));
-    store.createGroup({ id: 'g2', name: 'g', featureIds: ['f2'], locked: true, visible: true });
+    store.createGroup({
+      id: 'g2',
+      layerId: 'l1',
+      name: 'g',
+      featureIds: ['f2'],
+      locked: true,
+      visible: true,
+    });
 
     store.setSelection('layer', ['l1']);
     handleDeleteShortcut(context);
@@ -236,12 +269,21 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
   });
 });
 
-describe('draw.deleteSelection runs the same deletion as the Delete key', () => {
+describe('deleteSelection runs the same deletion as the Delete key', () => {
   /** Builds a store, selects, runs the deletion and returns the state and the notifications */
   function run(deleteWith: (s: MemoryStore) => boolean | undefined) {
     const s = new MemoryStore();
     for (const id of ['l1', 'l2']) {
-      s.createLayer({ id, name: id, visible: true, locked: false, opacity: 1, order: [] });
+      s.createLayer({
+        id,
+        name: id,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        items: [],
+        styleRule: undefined,
+        metadata: undefined,
+      });
     }
     s.createFeature(feature('f1', 'l1'));
     s.createFeature({ ...feature('f2', 'l1'), locked: true });
@@ -256,7 +298,7 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
       result,
       notifications,
       features: s
-        .getAllFeatures()
+        .listFeatures()
         .map((f) => f.id)
         .sort(),
       selection: s.getSelection().ids,
@@ -264,9 +306,9 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
   }
 
   it('deletes the unlocked features in one change and returns true', () => {
-    const viaApi = run((s) => createSelectionApi({ store: s }).deleteSelection());
+    const viaApi = run((s) => deleteSelection(s));
     const viaKey = run((s) => {
-      handleDeleteShortcut({ store: s } as unknown as ModeContext);
+      handleDeleteShortcut({ store: s } as unknown as EngineModeContext);
       return undefined;
     });
 
@@ -285,26 +327,31 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature({
       ...feature('line', 'l1'),
       type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [1, 0],
-        [2, 0],
-      ],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 0],
+          [2, 0],
+        ],
+      },
     });
     store.setSelection('feature', ['line']);
-    store.setSelectedVertices({ featureId: 'line', vertexIndices: [{ ring: 0, index: 1 }] });
+    store.setSelectedVertices({ featureId: 'line', vertices: [{ ring: 0, index: 1 }] });
 
-    expect(createSelectionApi({ store }).deleteSelection()).toBe(true);
-    expect(store.getFeature('line')?.coordinates).toEqual([
+    expect(deleteSelection(store)).toBe(true);
+    expect(coordinatesOf(store.getFeature('line'))).toEqual([
       [0, 0],
       [2, 0],
     ]);
-    expect(store.getSelectedVertices()).toBeNull();
+    expect(store.getVertexSelection()).toBeNull();
   });
 
   it('returns false and deletes nothing while read-only, locked or with nothing to delete', () => {
@@ -314,37 +361,47 @@ describe('draw.deleteSelection runs the same deletion as the Delete key', () => 
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createFeature(feature('f1', 'l1'));
     store.createFeature({ ...feature('f2', 'l1'), locked: true });
-    const api = createSelectionApi({ store });
 
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
 
     store.setSelection('feature', ['f2']);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
 
     store.setSelection('feature', ['f1']);
     store.setReadOnly(true);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
     store.setReadOnly(false);
     store.setInteractionLock(true);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
     expect(store.getFeature('f1')).toBeDefined();
 
     // The last layer is kept, so deleting it deletes nothing
     store.setInteractionLock(false);
     store.setSelection('layer', ['l1']);
-    expect(api.deleteSelection()).toBe(false);
+    expect(deleteSelection(store)).toBe(false);
     expect(store.getLayer('l1')).toBeDefined();
   });
 });
 
-describe('the group shortcut places the group where draw.groupSelection does', () => {
+describe('the group shortcut places the group where groupSelection does', () => {
   function build(): MemoryStore {
     const s = new MemoryStore();
-    s.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+    s.createLayer({
+      id: 'l1',
+      name: 'l1',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
+    });
     for (const id of ['a', 'b', 'c', 'd']) s.createFeature(feature(id, 'l1'));
     s.setSelection('feature', ['a', 'c']);
     return s;
@@ -356,12 +413,12 @@ describe('the group shortcut places the group where draw.groupSelection does', (
       store: viaKey,
       autoNameGenerator: new AutoNameGenerator(viaKey),
       generateFeatureId: () => 'g',
-    } as unknown as ModeContext);
+    } as unknown as EngineModeContext);
 
     const viaApi = build();
     groupSelection(viaApi, () => 'g', new AutoNameGenerator(viaApi));
 
-    expect(viaKey.getLayer('l1')?.order).toEqual(viaApi.getLayer('l1')?.order);
+    expect(viaKey.getLayer('l1')?.items).toEqual(viaApi.getLayer('l1')?.items);
     expect(viaKey.getGroup('g')?.featureIds).toEqual(viaApi.getGroup('g')?.featureIds);
   });
 });

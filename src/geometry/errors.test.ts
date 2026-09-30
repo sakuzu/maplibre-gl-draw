@@ -37,6 +37,7 @@ vi.mock('polygon-clipping', async (importOriginal) => {
 const { difference, intersection, normalizeArea, union, unionAll } = await import('./boolean.js');
 const { buffer } = await import('./buffer.js');
 const { GeometryError } = await import('./errors.js');
+const geometry = await import('./index.js');
 
 const square = [
   [
@@ -67,12 +68,15 @@ describe('GeometryError from the boolean operations', () => {
   it.each([
     [
       'Unable to complete output ring starting at [0, 0]. Last matching segment found ends at [1, 1].',
-      'unclosed-ring',
+      'engine-failure',
     ],
     ['Input geometry is not a valid Polygon or MultiPolygon', 'invalid-input'],
     ['Tried to create degenerate segment at [0, 0]', 'invalid-input'],
-    ['Infinite loop when passing sweep line over endpoints (queue size too big).', 'too-complex'],
-    ['Unable to find segment #3 [0, 0] -> [1, 1] in SweepLine tree.', 'internal'],
+    [
+      'Infinite loop when passing sweep line over endpoints (queue size too big).',
+      'engine-failure',
+    ],
+    ['Unable to find segment #3 [0, 0] -> [1, 1] in SweepLine tree.', 'engine-failure'],
   ])('maps "%s" to the reason %s', (message, code) => {
     failure.message = message;
     const error = captureError(() => union(square, shifted));
@@ -109,5 +113,54 @@ describe('GeometryError from the boolean operations', () => {
     failure.message = 'Unable to complete output ring starting at [0, 0].';
     failure.times = 1;
     expect(union(square, shifted).length).toBe(1);
+  });
+});
+
+describe('GeometryError from the public functions', () => {
+  const polygonA = { type: 'Polygon' as const, coordinates: square };
+  const polygonB = { type: 'Polygon' as const, coordinates: shifted };
+
+  it('names the public function that failed, keeping the reason and the cause', () => {
+    failure.message = 'Unable to complete output ring starting at [0, 0].';
+    const cases: [string, () => unknown][] = [
+      ['union', () => geometry.union([polygonA, polygonB])],
+      ['intersection', () => geometry.intersection([polygonA, polygonB])],
+      ['difference', () => geometry.difference(polygonA, [polygonB])],
+      ['buffer', () => geometry.buffer(polygonA, 1000)],
+      ['area', () => geometry.area(polygonA)],
+      ['makeValid', () => geometry.makeValid(polygonA)],
+      ['overlaps', () => geometry.overlaps(polygonA, polygonB)],
+      ['contains', () => geometry.contains(polygonA, polygonA)],
+      ['split', () => geometry.split(polygonA, { type: 'LineString', coordinates: [] })],
+    ];
+    for (const [name, run] of cases) {
+      const error = captureError(run) as InstanceType<typeof GeometryError>;
+      expect(error).toBeInstanceOf(GeometryError);
+      expect(error.operation).toBe(name);
+      expect(error.code).toBe('engine-failure');
+      expect(error.message).toBe(`${name}: the boolean operation failed`);
+      expect((error.cause as Error).message).toBe(failure.message);
+    }
+  });
+
+  it('throws invalid-input for an input of the wrong shape', () => {
+    const line = { type: 'LineString' as const, coordinates: [[0, 0] as [number, number]] };
+    const cases: [string, () => unknown][] = [
+      ['area', () => geometry.area(line as never)],
+      ['union', () => geometry.union([polygonA, line as never])],
+      ['distance', () => geometry.distance({} as never, [0, 0])],
+      ['bbox', () => geometry.bbox({ type: 'Feature', geometry: null, properties: {} } as never)],
+      ['bbox', () => geometry.bbox({ type: 'MultiPoint', coordinates: [] })],
+      ['simplify', () => geometry.simplify(polygonA, Number.NaN)],
+      ['along', () => geometry.along({ type: 'LineString', coordinates: [] }, 10)],
+      ['circle', () => geometry.circle([0, 0], -1)],
+    ];
+    for (const [name, run] of cases) {
+      const error = captureError(run) as InstanceType<typeof GeometryError>;
+      expect(error).toBeInstanceOf(GeometryError);
+      expect(error.code).toBe('invalid-input');
+      expect(error.operation).toBe(name);
+      expect(error.message.startsWith(`${name}: `)).toBe(true);
+    }
   });
 });

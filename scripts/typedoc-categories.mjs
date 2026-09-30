@@ -4,67 +4,52 @@
 // A TypeDoc plugin that sorts the API reference by task instead of by kind.
 //
 // The sources already group the public symbols: the section comments of each entry point
-// (src/index.ts, src/geometry/index.ts) and of the MapLibreGLDraw interface (src/api/api.ts).
-// This plugin reads those comments and gives every symbol a category, and every member of
-// MapLibreGLDraw a group, so that the grouping lives in one place, next to the code. A symbol
-// outside any section, or a section this file does not know, fails the build, so that the
-// reference cannot fall out of step with the sources.
+// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/webgl/index.ts) and of the
+// Draw interface (src/api/draw.ts). This plugin reads those comments and gives every symbol a
+// category, and every member of Draw a group, so that the grouping lives in one place, next to
+// the code. A symbol outside any section, or a section this file does not
+// know, fails the build, so that the reference cannot fall out of step with the sources.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Comment, CommentTag, Converter, ReflectionKind } from 'typedoc';
+import { Comment, CommentTag, Converter } from 'typedoc';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
-/** The sections of src/index.ts, merged into the categories of the reference (in this order) */
+/** The sections of src/index.ts, which are its categories (in this order) */
 const MAIN_CATEGORIES = [
-  ['Instance', ['The factory and the instance']],
-  ['Options', ['Options']],
-  ['Data model', ['The data model', 'The Store and its predicates']],
-  ['Events', ['Events']],
-  ['Operations', ['The operation groups of the instance']],
-  ['Datasets', ['Datasets']],
-  ['Snapping and tracing', ['Snapping', 'Tracing']],
-  ['Styles', ['Style rules (pure functions)', 'Property accessors']],
-  ['Extension points', ['Extension points']],
-  [
-    'Building blocks',
-    [
-      'Core services reached through ModeContext and CustomRendererDrawContext',
-      'Diagnostics (their fields follow the rendering)',
-      'WebGL building blocks',
-      'Terrain anchoring',
-      'Geometry and projection math',
-      'Selection UI, hit testing and viewport helpers',
-    ],
-  ],
+  'Entry and options',
+  'Document model',
+  'Inputs, patches and filters',
+  'State',
+  'Events',
+  'Errors',
+  'Datasets',
+  'Store',
+  'Extensions',
+  'Style rule functions',
 ];
 
-/** Section comments that head a layer rather than a topic */
-const LAYER_HEADINGS = new Set([
-  'Layer 1: the public API',
-  'Layer 2: building blocks for extension authors (may change in a minor release)',
-]);
+/** The sections of src/webgl/index.ts, which are its categories (in this order) */
+const WEBGL_CATEGORIES = [
+  'Shaders and projection',
+  'Blending and billboards',
+  'Quads',
+  'Lines',
+  'Terrain',
+  'Hit testing',
+  'Supporting types',
+];
 
-/** The sections of the MapLibreGLDraw interface, merged into groups (in this order) */
+/** The sections of the Draw interface, which are the groups of its members (in this order) */
 const MEMBER_GROUPS = [
-  ['Features', ['Feature API']],
-  ['Layers', ['Layer API']],
-  ['Groups', ['Group API']],
-  ['Selection', ['Selection API']],
-  ['Vertices', ['Vertex API']],
-  ['Modes', ['Mode API']],
-  ['Geometry', ['Geometry API']],
-  ['Snapping and tracing', ['Snapping API', 'Tracing API', 'Topology API']],
-  ['Input', ['Input API']],
-  ['Datasets', ['Dataset API']],
-  ['Events', ['Event API']],
-  ['Saving and loading', ['Import/Export API', 'Metadata API']],
-  ['Read-only and interaction lock', ['ReadOnly API', 'InteractionLock API', 'LocallyHidden API']],
-  ['Map and store', ['Map / Store API']],
-  ['Rendering', ['RenderSlot API', 'RenderScale API', 'Diagnostics API', 'Pending work API']],
-  ['Extending', ['Extension API (plugins / custom extensions)']],
-  ['Lifecycle', ['Lifecycle']],
+  'Resources',
+  'The map and the Store',
+  'Mode',
+  'Read-only and interaction lock',
+  'Transactions and events',
+  'Drawing',
+  'Lifecycle',
 ];
 
 /** The title of a section comment: its first line, without a trailing parenthesis */
@@ -101,21 +86,17 @@ function exportSections(file) {
   return sections;
 }
 
-/** Maps a line of src/api/api.ts to the section comment above it, inside MapLibreGLDraw */
+/** Maps a line of src/api/draw.ts to the section comment above it, inside Draw */
 function memberSections() {
-  const lines = readFileSync(join(ROOT, 'src/api/api.ts'), 'utf8').split('\n');
+  const lines = readFileSync(join(ROOT, 'src/api/draw.ts'), 'utf8').split('\n');
   const byLine = [];
   let section = null;
   let previousComment = false;
   let inside = false;
   lines.forEach((line, i) => {
-    if (/^export interface MapLibreGLDraw\b/.test(line)) inside = true;
+    if (/^export interface Draw\b/.test(line)) inside = true;
     if (inside && /^ {2}\/\/ /.test(line)) {
-      if (!previousComment)
-        section = titleOf(line)
-          .replace(/ \(.*$/, '')
-          .trim();
-      if (section === 'Extension API') section = 'Extension API (plugins / custom extensions)';
+      if (!previousComment) section = titleOf(line);
       previousComment = true;
     } else {
       previousComment = false;
@@ -124,12 +105,6 @@ function memberSections() {
     if (inside && /^}/.test(line)) inside = false;
   });
   return byLine;
-}
-
-function lookup(table) {
-  const map = new Map();
-  for (const [name, sections] of table) for (const s of sections) map.set(s, name);
-  return map;
 }
 
 function addTag(reflection, tag, text) {
@@ -143,11 +118,19 @@ export function load(app) {
   app.converter.on(Converter.EVENT_RESOLVE_BEGIN, (context) => {
     const project = context.project;
     const problems = [];
-    const categoryOf = lookup(MAIN_CATEGORIES);
-    const groupOf = lookup(MEMBER_GROUPS);
     const entries = [
-      { module: 'maplibre-gl-draw', file: 'src/index.ts', rename: (s) => categoryOf.get(s) },
+      {
+        module: 'maplibre-gl-draw',
+        file: 'src/index.ts',
+        rename: (s) => (MAIN_CATEGORIES.includes(s) ? s : undefined),
+      },
       { module: 'geometry', file: 'src/geometry/index.ts', rename: (s) => s },
+      { module: 'table', file: 'src/table/index.ts', rename: (s) => s },
+      {
+        module: 'webgl',
+        file: 'src/webgl/index.ts',
+        rename: (s) => (WEBGL_CATEGORIES.includes(s) ? s : undefined),
+      },
     ];
     for (const { module, file, rename } of entries) {
       const mod = project.children?.find((c) => c.name === module);
@@ -158,7 +141,7 @@ export function load(app) {
       const sections = exportSections(file);
       for (const child of mod.children ?? []) {
         const section = sections.get(child.name);
-        if (section === undefined || section === null || LAYER_HEADINGS.has(section)) {
+        if (section === undefined || section === null) {
           problems.push(`${file}: ${child.name} is not under a section comment`);
           continue;
         }
@@ -170,17 +153,17 @@ export function load(app) {
         addTag(child, '@category', category);
       }
     }
-    const api = project.getChildByName(['maplibre-gl-draw', 'MapLibreGLDraw']);
+    const draw = project.getChildByName(['maplibre-gl-draw', 'Draw']);
+    if (!draw) problems.push('no interface named Draw');
     const lines = memberSections();
-    for (const member of api?.children ?? []) {
+    for (const member of draw?.children ?? []) {
       const line = member.sources?.[0]?.line;
       const section = line === undefined ? null : lines[line];
-      const group = section ? groupOf.get(section) : undefined;
-      if (!group) {
-        problems.push(`MapLibreGLDraw.${member.name}: the section "${section}" has no group`);
+      if (!section || !MEMBER_GROUPS.includes(section)) {
+        problems.push(`Draw.${member.name}: the section "${section}" has no group`);
         continue;
       }
-      addTag(member.kind === ReflectionKind.Method ? member : member, '@group', group);
+      addTag(member, '@group', section);
     }
     if (problems.length > 0) {
       for (const p of problems) app.logger.error(`typedoc-categories: ${p}`);
@@ -188,5 +171,5 @@ export function load(app) {
   });
 }
 
-export const CATEGORY_ORDER = MAIN_CATEGORIES.map(([name]) => name);
-export const GROUP_ORDER = MEMBER_GROUPS.map(([name]) => name);
+export const CATEGORY_ORDER = MAIN_CATEGORIES;
+export const GROUP_ORDER = MEMBER_GROUPS;

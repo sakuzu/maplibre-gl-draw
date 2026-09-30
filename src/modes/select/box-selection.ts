@@ -7,9 +7,10 @@
  * Responsible for handling box selection in select mode
  */
 
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Feature } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 
 /**
  * Detect the features inside the box
@@ -17,7 +18,10 @@ import type { ModeContext } from '../handler.js';
  * First the candidates are obtained quickly through the SpatialIndex (rbush),
  * and then a precise inside-the-box test is performed.
  */
-export function queryFeaturesInBox(boxSelection: BoxSelection, context: ModeContext): string[] {
+export function queryFeaturesInBox(
+  boxSelection: BoxSelection,
+  context: EngineModeContext,
+): string[] {
   const { store, spatialIndex, boxSelectionRegistry } = context;
   const rects = boxRects(boxSelection.startPoint, boxSelection.endPoint);
 
@@ -105,7 +109,7 @@ export function boxRects(start: Coordinate, end: Coordinate): Rect[] {
 export function isFeatureInBox(
   feature: Feature,
   rect: { minX: number; minY: number; maxX: number; maxY: number },
-  boxSelectionRegistry: ModeContext['boxSelectionRegistry'],
+  boxSelectionRegistry: EngineModeContext['boxSelectionRegistry'],
 ): boolean {
   // Get the Strategy from the registry
   const strategy = boxSelectionRegistry.get(feature.type);
@@ -135,7 +139,7 @@ export function fallbackBoxSelection(
     );
   };
 
-  const coords = feature.coordinates;
+  const coords = coordinatesOf(feature);
 
   // When the coordinates are a single point
   if (

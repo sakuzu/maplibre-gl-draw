@@ -8,7 +8,7 @@
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import type { CustomFeatureHandler } from '../../extension/index.js';
+import type { FeatureTypeHandler } from '../../extension/index.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
@@ -69,7 +69,7 @@ export interface InitRenderersDeps {
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;
   renderingConfig: RenderingConfig;
-  customFeatureHandlers: CustomFeatureHandler[] | undefined;
+  customFeatureHandlers: FeatureTypeHandler[] | undefined;
   /** Injected rendering pixel ratio (when omitted, read from window every time) */
   pixelRatio?: PixelRatioInput;
   /** The state and the caches owned by the draw instance (never shared between instances) */
@@ -97,7 +97,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   } = deps;
   const textureCache = new TextureCache(gl);
   const terrain = scope.terrain;
-  const quadShader = new QuadShader(gl, terrain);
+  const quadShader = new QuadShader(gl).useTerrainState(terrain);
   const imageRenderer = new ImageRenderer(
     mapInstance,
     gl,

@@ -20,8 +20,7 @@
  *
  * Only the north-based guide works from the very first segment. The built-in provider
  * reads the step angle from SnapOptions.guideStepDegrees at every query (through a
- * getter), so a change at runtime takes effect without rebuilding the provider. A
- * provider made with createGuideSnapProvider keeps the step it was built with.
+ * getter), so a change at runtime takes effect without rebuilding the provider.
  *
  * A guide is not an infinite line; it is cut off at the equivalent of 4096 pixels on
  * screen. The priority order stays SNAP_KIND_PRIORITY, so a real vertex,
@@ -51,18 +50,18 @@ const GUIDE_MODES = new Set(['draw_line', 'draw_polygon']);
 const GUIDE_LENGTH_PIXELS = 4096;
 
 /**
- * The dependencies of {@link createGuideSnapProvider}.
+ * The dependencies of {@link createSteppedGuideSnapProvider}.
  *
  * The guides are built from the vertices committed so far in the drawing in progress, so the
  * Store alone is enough.
  */
 export interface GuideSnapProviderDeps {
-  /** The Store of the draw instance, such as `ctx.getStore()` of a plugin */
+  /** The Store of the draw instance */
   store: Store;
 }
 
 /**
- * The options of {@link createGuideSnapProvider}.
+ * The options of {@link createSteppedGuideSnapProvider}.
  */
 export interface GuideSnapProviderOptions {
   /**
@@ -149,52 +148,6 @@ function guideSegment(
     end: getPointAtAngle(anchor, lengthMeters, bearing),
     description,
   };
-}
-
-/**
- * Creates a snapping provider of construction guides for `draw_line` and `draw_polygon`.
- *
- * The guides start at the last committed vertex (the anchor): the north-based guides at every
- * `northStepDegrees` from true north (from the first vertex on), and the extension and the
- * perpendiculars of the previous segment (from the second vertex on). Each guide is a
- * segment 4096 screen px long, returned as a candidate of kind `'guide'` whose description
- * comes from `messages` (`snapNorth`, `snapExtension`, `snapPerpendicular`). Outside those
- * two modes it returns no candidates.
- *
- * The draw instance already registers a built-in one, whose step is set with
- * `options.snap.guideStepDegrees` and changed at runtime with `draw.snapping.setGuideStep`.
- * Register another one to add guides at a second step on top of the built-in ones.
- *
- * @param deps The Store to read the drawing in progress from
- * @param options The step angle, the tile size and the messages
- * @returns A provider to pass to `draw.snapping.register`
- *
- * @example
- * ```ts
- * import { createGuideSnapProvider, type Plugin } from '@sakuzu/maplibre-gl-draw';
- *
- * // Guides every 15 degrees from north, in addition to the built-in ones
- * let unregister: (() => void) | undefined;
- * const fineGuides: Plugin = {
- *   name: 'fine-guides',
- *   onInstall(ctx) {
- *     unregister = draw.snapping.register(
- *       createGuideSnapProvider({ store: ctx.getStore() }, { northStepDegrees: 15 }),
- *     );
- *   },
- *   onUninstall() {
- *     unregister?.();
- *   },
- * };
- * draw.addPlugin(fineGuides);
- * ```
- */
-export function createGuideSnapProvider(
-  deps: GuideSnapProviderDeps,
-  options: GuideSnapProviderOptions = {},
-): SnapProvider {
-  const step = resolveGuideStepDegrees(options.northStepDegrees);
-  return createSteppedGuideSnapProvider(deps, () => step, options);
 }
 
 /**

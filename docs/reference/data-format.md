@@ -1,23 +1,34 @@
 # Data format
 
-The two file formats that `draw.export()` writes and `draw.load()` reads:
-the native format, which keeps everything, and GeoJSON, which other GIS
-tools read. It also lists the coordinates and properties of each feature
-type and the checks a load performs. For how to save and load in an
-application, see [Saving and loading](../guides/save-load.md). For the
-fields of `Feature`, `Layer` and `Group` one by one, see the
+The two formats that `draw.document` writes and reads: the native format,
+which keeps everything, and GeoJSON, which other GIS tools read. It also
+lists the geometry and the properties of each feature type and the checks a
+load performs. For how to save and load in an application, see
+[Saving and loading](../guides/save-load.md). For the fields of
+[`Feature`](../api/maplibre-gl-draw/interfaces/Feature.md),
+[`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) and
+[`Group`](../api/maplibre-gl-draw/interfaces/Group.md) one by one, see the
 [generated API reference](../api/index.md).
+
+```ts
+const native = draw.document.toJSON(); // DrawDocument, the native format
+const geojson = draw.document.toGeoJSON(); // a GeoJSON FeatureCollection
+
+await draw.document.load(JSON.stringify(native)); // replaces the document
+await draw.document.load(geojson); // adds the features
+```
 
 ## Principles
 
-- GeoJSON first. A feature is a GeoJSON feature with a few extra fields,
-  and every built-in type can be written as GeoJSON
+- GeoJSON as it is. The `geometry` of a feature is a GeoJSON geometry, and
+  its `properties` are the GeoJSON properties. Both formats write them
+  unchanged
 - One coordinate system. Every position is WGS84 `[longitude, latitude]` in
   degrees. There is no elevation; a third element in the input is dropped
-- One prefix. Keys that belong to this library carry `maplibre-gl-draw:` in
-  GeoJSON, so they never collide with your attributes
-- Order is array order. At every level, the end of the array is the
-  foreground. There is no `zIndex`
+- One prefix. The values of the library in `properties` are under keys that
+  start with `maplibre-gl-draw:`. Every other key is an attribute of yours
+- Order is array order. At every level, the end of the array is the front.
+  There is no `zIndex`
 - One file. The native format carries the metadata, the layers, the
   stacking order, the groups, the features and the embedded images together
 
@@ -28,39 +39,40 @@ Every feature belongs to exactly one layer, and optionally to one group in
 that layer.
 
 ```text
-layerOrder[]: layer ids and entries of the application, the last is the
-              foreground
+layerOrder[]: layer IDs and entries of the application, the last is the
+              front
 
 layers
-  Layer { id, name, visible, locked, opacity, order[], styleRule? }
-    order[]: feature ids and group ids, the last is the foreground
+  Layer { id, name, visible, locked, opacity, items[], styleRule?, metadata? }
+    items[]: feature IDs and group IDs, the last is the front
 
 groups
-  Group { id, name, visible, locked, featureIds[] }
-    featureIds[]: the last is the foreground
+  Group { id, layerId, name, visible, locked, featureIds[] }
+    featureIds[]: the last is the front
 
 features
-  Feature { id, type, coordinates, layerId, groupId?,
-            properties, style?, visible, locked }
+  Feature { id, type, geometry, layerId, groupId?,
+            properties, style, visible, locked }
 ```
 
 ### Draw order
 
 The same rule holds at three levels.
 
-1. Between layers: the stacking order (`layerOrder`, read with
-   `draw.getLayerOrder()`), the last is the foreground
-2. Inside a layer: `layer.order`, a mix of feature ids and group ids, the
-   last is the foreground
-3. Inside a group: `group.featureIds`, the last is the foreground
+1. Between layers: the stacking order (`layerOrder`), the last is the front
+2. Inside a layer: `layer.items`, a mix of feature IDs and group IDs, the
+   last is the front
+3. Inside a group: `group.featureIds`, the last is the front
 
-A group occupies one place in `layer.order`, and its features are drawn
-there in the order of `featureIds`. The draw order of the whole document is
-therefore: for each layer in order, for each item of `layer.order`, the
+A group takes one place in `layer.items`, and its features are drawn there
+in the order of `featureIds`. The draw order of the whole document is
+therefore: for each layer in order, for each item of `layer.items`, the
 feature itself or the features of the group.
 
-```typescript
-function orderedFeatures(doc: Data): Feature[] {
+```ts
+import type { DrawDocument, Feature } from '@sakuzu/maplibre-gl-draw';
+
+function orderedFeatures(doc: DrawDocument): Feature[] {
   const features = new Map(doc.features.map((f) => [f.id, f]));
   const groups = new Map((doc.groups ?? []).map((g) => [g.id, g]));
   const layers = new Map((doc.layers ?? []).map((l) => [l.id, l]));
@@ -68,7 +80,7 @@ function orderedFeatures(doc: Data): Feature[] {
   for (const entry of doc.layerOrder) {
     const layer = layers.get(entry);
     if (!layer) continue; // an entry of the application
-    for (const itemId of layer.order) {
+    for (const itemId of layer.items) {
       const group = groups.get(itemId);
       const ids = group ? group.featureIds : [itemId];
       for (const id of ids) {
@@ -81,53 +93,62 @@ function orderedFeatures(doc: Data): Feature[] {
 }
 ```
 
-`draw.getOrderedFeatures()` returns the same order and also skips what is
-hidden at any of the three levels. How grouping and ungrouping move items
-in the order is described in [Layers](../guides/layers.md).
+`draw.features.list()` returns the features in the same order.
+`features.move` and `groups.move` change `items` and `featureIds`, which
+are read-only on the objects the instance returns. How grouping and
+ungrouping move items in the order is described in
+[Layers](../guides/layers.md).
 
 ### The stacking order
 
 The stacking order is part of the document: the native format saves it
-and a replaced store holds it. It lists every layer once, and it can
-also hold entries of the application that are not layers: the id of a
-dataset with `order: 'layer-order'`, drawn at that
-position, and separators for MapLibre's own layers (the `isExternalEntry`
-option). The meaning of such an entry is the application's. The library
+and a replaced Store holds it. It lists every layer once, and it can
+also hold entries of the application that are not layers: the ID of a
+dataset with `order: 'layer-order'`, drawn at that position, and the
+entries for which the `isExternalEntry` option returns true, which divide
+the stacking order so that MapLibre's own layers can go between the
+divisions. The meaning of such an entry is the application's. The library
 keeps its position and nothing more.
 
-- The entries are distinct non-empty strings. `setLayerOrder` drops
-  anything else and keeps a repeated entry at its first position
-- A new layer is appended at the front, unless the order already holds
-  its id
-- Deleting a layer takes its id out. No other operation adds or removes
-  an entry, so an entry of the application stays until the application
-  sets an order without it
+- The entries are distinct non-empty strings
+- A new layer is added at the front
+- Deleting a layer takes its ID out. `layers.reorder` moves the layers and
+  leaves every other entry where it is
 - An entry that names nothing is skipped when drawing and hit testing
 - A layer that is not on the order is not drawn
 
+`draw.getStore().getLayerOrder()` reads the whole order, entries of the
+application included. `layer.reordered` reports its changes.
+
 ### Containment
 
-Every feature is listed in exactly one container: in `group.featureIds`
-when it has a `groupId`, otherwise in `layer.order` of its layer. The Store
-keeps this on every change, and a load rejects data that breaks it. A
-feature whose `layerId` or `groupId` names something that does not exist
-cannot be stored.
+Every feature is listed in exactly one place: in `group.featureIds` when it
+has a `groupId`, otherwise in `layer.items` of its layer. A group lists
+only features of its own layer. The library keeps this on every change,
+and a feature whose `layerId` or `groupId` names something that does not
+exist cannot be stored.
 
 ## Feature types
 
-`type` decides the shape of `coordinates`. The nesting depth of the array is
-the structure of the geometry.
+`type` decides the kind of `geometry`. The built-in types that GeoJSON has
+hold their own kind; the others hold the kind that has their shape.
 
-| Type | `coordinates` |
+| Type | `geometry` |
 | --- | --- |
-| `Point`, `Image`, `Circle` | `[lng, lat]` |
-| `LineString`, `Freehand`, `MultiPoint` | `[lng, lat][]` |
-| `Polygon` | rings: `[lng, lat][][]` |
-| `MultiLineString` | parts: `[lng, lat][][]` |
-| `MultiPolygon` | parts of rings: `[lng, lat][][][]` |
+| `Point` | `Point` |
+| `Circle` | `Point`, the center |
+| `Image` | `Point`, the anchor |
+| `LineString` | `LineString` |
+| `Freehand` | `LineString` |
+| `Polygon` | `Polygon` |
+| `MultiPoint` | `MultiPoint` |
+| `MultiLineString` | `MultiLineString` |
+| `MultiPolygon` | `MultiPolygon` |
 
-A custom type registered with `registerFeatureHandler()` may use any
-regular depth (see [Custom feature types](../guides/custom-types.md)).
+A custom type declares the one kind its features hold in its
+`FeatureTypeDefinition` (see
+[Custom feature types](../guides/custom-types.md)). A `GeometryCollection`
+is never the geometry of a feature.
 
 ### Point
 
@@ -135,7 +156,7 @@ regular depth (see [Custom feature types](../guides/custom-types.md)).
 { "type": "Point", "coordinates": [139.6917, 35.6895] }
 ```
 
-core draws a point as a marker. It does not draw labels or icons; a
+The library draws a point as a marker. It does not draw labels or icons; a
 renderer of your own can keep what it needs in style keys of its own (see
 [style](#style)).
 
@@ -163,7 +184,7 @@ At least two positions.
 ```
 
 The first ring is the outer ring and the others are holes. Every ring has
-at least four positions and its first and last positions are equal.
+at least four positions, and its first and last positions are equal.
 
 ### MultiPoint, MultiLineString, MultiPolygon
 
@@ -181,42 +202,41 @@ deeper.
 }
 ```
 
-- A hit on any part hits the feature, and its bounding box covers every
+- A hit on any part hits the feature, and its selection box covers every
   part
-- Move, scale and rotate apply to every part together
-- Vertices are edited per part. The `part` field of `VertexRef` names the
+- Move, resize and rotate apply to every part together
+- Vertices are edited per part. The `part` of a `VertexRef` names the
   part. In a MultiPoint each position is one part, so there are vertex
   handles but no midpoint handles
-- No drawing mode creates them. They come from loading data and from the
-  results of geometry operations
+- No drawing mode creates them. They come from loading data, from
+  `draw.features.create` and from the results of the operations on areas
 
 ### Image
 
-An image placed at a point. The pixels are stored once in the document's
-files and referenced by id.
+An image placed at a point. The pixels are stored once in the files of the
+document and named by ID.
 
 ```json
 {
+  "id": "01J9Z8K3ZQ4M5T6V7W8X9Y0A1B",
   "type": "Image",
-  "coordinates": [139.6917, 35.6895],
+  "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
   "properties": {
-    "imageFileId": "01J9Z8K3...",
-    "imageWidth": 200,
-    "imageHeight": 150,
-    "createdZoom": 14,
-    "rotation": 0,
-    "scale": 1
-  }
+    "name": "Image 1",
+    "maplibre-gl-draw:imageFileId": "01J9Z8K3ZQ4M5T6V7W8X9Y0A1C",
+    "maplibre-gl-draw:imageWidth": 200,
+    "maplibre-gl-draw:imageHeight": 150,
+    "maplibre-gl-draw:createdZoom": 14,
+    "maplibre-gl-draw:rotation": 0,
+    "maplibre-gl-draw:scale": 1
+  },
+  "style": { "imageOpacity": 0.8 }
 }
 ```
 
-| Property | Meaning |
-| --- | --- |
-| `imageFileId` | Id of the entry in `files` |
-| `imageWidth`, `imageHeight` | Size of the image in pixels |
-| `createdZoom` | Zoom at which it is drawn at its pixel size |
-| `rotation` | Rotation in degrees (default 0) |
-| `scale` | Scale factor (default 1) |
+The image is drawn at its size in pixels at `createdZoom`, turned by
+`rotation` and grown by `scale`. Its opacity is `imageOpacity` of the
+style.
 
 ### Circle
 
@@ -225,28 +245,30 @@ A circle with a radius in meters, drawn as a true circle on the ground.
 ```json
 {
   "type": "Circle",
-  "coordinates": [139.6917, 35.6895],
+  "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
   "properties": {
-    "radiusMeters": 1000,
-    "radiusHandleAngle": 135,
-    "createdZoom": 14
+    "maplibre-gl-draw:radiusMeters": 1000,
+    "maplibre-gl-draw:radiusHandleAngle": 135,
+    "maplibre-gl-draw:createdZoom": 14
   }
 }
 ```
 
-`radiusMeters` is required. `radiusHandleAngle` is the direction, in
-degrees, in which the radius handle is shown.
+`maplibre-gl-draw:radiusMeters` is the radius. `radiusHandleAngle` is the
+direction, in degrees, in which the radius handle is shown.
 
 ### Freehand
 
-A line drawn by dragging. Its coordinates have the shape of a LineString;
-the type keeps it apart so that it is drawn and edited as a freehand
-stroke.
+A line drawn by dragging. Its geometry is a LineString; the type keeps it
+apart so that it is drawn and edited as a freehand stroke.
 
 ```json
 {
   "type": "Freehand",
-  "coordinates": [[139.690, 35.680], [139.691, 35.681], [139.693, 35.681]]
+  "geometry": {
+    "type": "LineString",
+    "coordinates": [[139.690, 35.680], [139.691, 35.681], [139.693, 35.681]]
+  }
 }
 ```
 
@@ -254,52 +276,84 @@ stroke.
 
 ### properties
 
-`feature.properties` holds your attributes, free-form. core reads and
-writes a few keys of its own there, without a prefix.
+`feature.properties` holds your attributes, free-form, and the values of
+the library under keys with the `maplibre-gl-draw:` prefix
+([`DRAW_PROPERTY_PREFIX`](../api/maplibre-gl-draw/variables/DRAW_PROPERTY_PREFIX.md)).
+Both formats write the keys as they are.
 
-- `name` and `description`
-- `createdZoom`, `rotation`, `scale`
-- `radiusMeters`, `radiusHandleAngle` of a Circle
-- `imageFileId`, `imageWidth`, `imageHeight` of an Image
+| Key (after the prefix) | Type | Meaning |
+| --- | --- | --- |
+| `createdZoom` | number | The reference zoom, where the feature was drawn |
+| `rotation` | number | The rotation in degrees; 0 when absent |
+| `scale` | number | The scale factor of a resize; 1 when absent |
+| `radiusMeters` | number | The radius of a Circle, in meters |
+| `radiusHandleAngle` | number | Where the radius handle points, in degrees |
+| `imageFileId` | string | The ID of the file of an Image |
+| `imageWidth` | number | The width of an Image, in pixels |
+| `imageHeight` | number | The height of an Image, in pixels |
 
-Only in GeoJSON output do `createdZoom`, `rotation`, `scale` and the Image
-keys get the `maplibre-gl-draw:` prefix. `name` and `description` are
-always written as plain keys, which other tools read as the name and the
-description.
+The full key is the prefix followed by the name in the table, such as
+`maplibre-gl-draw:createdZoom`.
+
+The library reads `name` and `description` as the name and the
+description of a feature; they are plain keys, which other tools read too.
+New features get a name from the `autoName` option.
+
+[`isDrawProperty(key)`](../api/maplibre-gl-draw/functions/isDrawProperty.md)
+tells the two kinds of key apart, so that an attribute panel can leave out
+the values of the library:
+
+```ts
+import { isDrawProperty } from '@sakuzu/maplibre-gl-draw';
+
+const attributes = Object.entries(feature.properties).filter(
+  ([key]) => !isDrawProperty(key),
+);
+```
 
 ### style
 
-`feature.style` is a `FeatureStyle` object (an `ImageStyle` for an Image).
-A key that is not set takes the default of the draw instance (the `style`
-option). Which keys apply depends on the type.
+`feature.style` is a
+[`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md), `{}`
+when the feature has no look of its own. A key that is not set takes the
+color of the style rule of its layer, or the default of the instance (the
+`style` option). Which keys apply depends on the type.
 
-- Point and MultiPoint: `pointColor`, `pointRadius`, `pointShape`
+- Point and MultiPoint: `pointColor`, `pointRadius`, `pointShape`,
+  `pointOpacity`, `pointStrokeColor` and `pointStrokeWidth` (the outline
+  of the marker, white and 2 pixels by default)
 - LineString, MultiLineString and Freehand: `strokeColor`,
   `strokeOpacity`, `strokeWidth`, `lineStyle`
 - Polygon, MultiPolygon and Circle: the stroke keys, `fillColor`,
   `fillOpacity`
 - Image: `imageOpacity`
 
+Colors are CSS color strings: `#rgb`, `#rrggbb`, the forms with alpha,
+`rgb()`, `hsl()` and the named colors.
+
 A key that `FeatureStyle` does not define is kept and written back
 unchanged, whatever its value, so an extension or an application can store
-keys of its own in the style. core does not check or read them; the code
-that reads such a key checks its value, because a value can also reach a
-feature through `updateFeature` or a replaced store. In TypeScript, add the
-keys to the `FeatureStyle` interface with declaration merging.
+keys of its own in the style. The library does not check or read them; the
+code that reads such a key checks its value, because a value can also reach
+a feature through `features.update` or a replaced Store. In TypeScript, add
+the keys to the `FeatureStyle` interface with declaration merging.
 
-The color that a layer's `styleRule` gives a feature is computed when
-drawing and is not written into `feature.style`. See
-[Styles](../guides/styles.md).
+The color that the `styleRule` of a layer gives a feature is computed when
+drawing and is not written into `feature.style`.
+`draw.features.getAppliedStyle(id)` returns the look a feature is drawn
+with. See [Styles](../guides/styles.md).
 
 ## Native format
 
 The native format keeps the whole document, including the layers, groups,
 style rules and images, so that a load gives back exactly what was
-exported. Its MIME type is `application/json`.
+written. `draw.document.toJSON()` returns it as a
+[`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md);
+serialize it with `JSON.stringify` and store it as `application/json`.
 
 ```json
 {
-  "version": "1.2.0",
+  "version": "3.0.0",
   "created": "2026-01-05T12:00:00.000Z",
   "modified": "2026-01-05T12:00:00.000Z",
   "metadata": { "title": "Survey", "description": "Field notes" },
@@ -311,7 +365,7 @@ exported. Its MIME type is `application/json`.
       "visible": true,
       "locked": false,
       "opacity": 1,
-      "order": ["feature-1", "group-1"],
+      "items": ["feature-1", "group-1"],
       "styleRule": {
         "kind": "categorical",
         "property": "type",
@@ -323,6 +377,7 @@ exported. Its MIME type is `application/json`.
   "groups": [
     {
       "id": "group-1",
+      "layerId": "layer-1",
       "name": "Group 1",
       "featureIds": ["feature-2", "feature-3"],
       "visible": true,
@@ -333,63 +388,71 @@ exported. Its MIME type is `application/json`.
     {
       "id": "feature-1",
       "type": "Point",
-      "coordinates": [139.6917, 35.6895],
+      "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
       "layerId": "layer-1",
       "properties": { "type": "residential" },
       "style": { "pointRadius": 8 },
       "visible": true,
       "locked": false
     }
-  ],
-  "files": {}
+  ]
 }
 ```
 
+- `created` and `modified` are the time of the call that wrote it
 - `metadata` and `files` are left out when they are empty
 - `metadata` declares `title` and `description`. An application can keep
   keys of its own there, such as the basemap it shows; they are written and
   read back as they are. In TypeScript, add them to the `Metadata`
   interface with declaration merging
-- `files` maps an id to `{ id, mimeType, dataURL }`. Only the files that an
-  exported Image uses are written
+- `files` maps an ID to `{ id, mimeType, dataURL }`. Only the files that an
+  Image of the document uses are written
 - `layerOrder` is the whole stacking order, entries of the application
   included (see [The stacking order](#the-stacking-order)). In the
-  example, `parcels` is a dataset drawn behind `layer-1`.
-  The order of the `layers` array has no meaning
-- `export('native', { featureIds })` or `{ layerIds }` writes only those
-  features, but all layers, groups and the whole stacking order
+  example, `parcels` is a dataset drawn behind `layer-1`. The order of the
+  `layers` array has no meaning
+- `groupId` of a feature in no group, and `styleRule` and `metadata` of a
+  layer that has none, are `undefined`, so `JSON.stringify` leaves them out
 
 ### Version
 
-`version` follows semantic versioning. The current version is `2.0.0`,
-which made `layerOrder` required. Data of version 1 is not read.
+`version` follows semantic versioning. The current version is `3.0.0`.
 
 - A minor version only adds fields. Data of an older minor version loads as
   it is. Data of a newer minor version loads with a warning on the console,
   and the fields it adds are kept but not interpreted
-- Data of another major version, or a `version` that is not
+- Data of version `2.x` is upgraded to `3.0.0` when it is loaded: a
+  `coordinates` array becomes the `geometry` of the type, the values of the
+  library in `properties` get their prefix, the `order` of a layer becomes
+  `items`, a group gets the `layerId` of the layer that lists it, and the
+  width, height, rotation and opacity in the style of an Image move to the
+  prefixed keys and `imageOpacity`
+- Data of any other major version, or a `version` that is not
   `major.minor.patch`, is rejected
 
 ### Loading
 
-Loading the native format replaces the whole document. Everything is
-checked before anything is changed, and the first problem rejects the load
-(the promise rejects and the document stays as it was).
+Loading the native format replaces the whole document; `mode: 'merge'` is
+refused with `invalid-input`. Everything is checked before anything is
+changed, and the first problem rejects the load: the promise rejects with a
+`DrawError` whose code is `invalid-input`, and the document stays as it
+was.
 
-- Every layer has a string `id` and `name`, boolean `visible` and
-  `locked`, a finite `opacity` and an `order` array of strings. Layer ids
+- `version` passes [Version](#version), and `features` is an array
+- Every layer has a non-empty string `id`, a string `name`, boolean
+  `visible` and `locked`, a finite `opacity` and an `items` array of
+  strings. `styleRule` and `metadata`, when present, are objects. Layer IDs
   are unique
 - `layerOrder` is an array of distinct non-empty strings that lists every
   layer of the data
-- Every group has a string `id` and `name`, boolean `visible` and `locked`
-  and a `featureIds` array of strings
-- Every feature has a string `id` and `type`, a `properties` object and
-  boolean `visible` and `locked`. Feature ids and group ids are unique
-  across both, because `layer.order` mixes them
-- `coordinates` follow the rules of [Geometry checks](#geometry-checks)
+- Every group has a non-empty string `id`, strings `name` and `layerId`,
+  boolean `visible` and `locked`, and a `featureIds` array of strings
+- Every feature has a non-empty string `id` and `type`, a `geometry` that
+  passes [Geometry checks](#geometry-checks), a `properties` object and
+  boolean `visible` and `locked`. Feature IDs and group IDs are unique
+  across both, because `layer.items` mixes them
 - The `layerId` of a feature is a layer of the data (or `default-layer`,
-  which the Store always keeps). A `groupId` is a group of the data
-- The containment rule holds
+  when the document has it). A `groupId` is a group of the data
 - Every entry of `files` has an `id` equal to its key and an image that
   passes [Embedded images](#embedded-images)
 - `style` is an object. Its keys are checked one by one as in
@@ -397,19 +460,22 @@ checked before anything is changed, and the first problem rejects the load
   the load
 
 The stacking order is replaced as a whole with `layerOrder`, so no entry of
-the previous document is left on it. `default-layer`, which the Store
-keeps, goes to the back when `layerOrder` does not list it.
+the previous document is left on it. `default-layer`, when the document has
+it, is kept and goes to the back when `layerOrder` does not list it.
 
-The result has `format: 'native'` and `replaced: true`.
+The load is one transaction with the source `load`. The result has
+`format: 'native'` and `replaced: true`.
 
 ## GeoJSON
 
-GeoJSON is for exchange with other tools. It carries the features with their
-attributes, and enough extra keys that a GeoJSON exported by this library
-loads back with its ids, layers, groups, visibility, lock state, style and
-images.
+GeoJSON is for exchange with other tools. It carries the features with
+their properties, and enough extra keys that a GeoJSON written by this
+library loads back with its IDs, layers, groups, visibility, lock state,
+style and images.
 
 ### Export
+
+`draw.document.toGeoJSON()` returns a FeatureCollection.
 
 ```json
 {
@@ -423,6 +489,7 @@ images.
       "properties": {
         "name": "City hall",
         "type": "residential",
+        "maplibre-gl-draw:createdZoom": 14,
         "maplibre-gl-draw:id": "feature-1",
         "maplibre-gl-draw:layerId": "layer-1",
         "maplibre-gl-draw:style": { "pointRadius": 8 }
@@ -435,107 +502,114 @@ images.
 The output follows RFC 7946. The stored features are not changed by an
 export.
 
+- `properties` are written as they are stored, with the values of the
+  library under their prefix
 - Polygon rings follow the right-hand rule: the outer ring is
   counter-clockwise and holes are clockwise, however they were drawn
 - Positions are rounded to 7 decimal places (about 1 cm)
-- The FeatureCollection has a `bbox` (`[west, south, east, north]`), except when
-  it is empty
+- The FeatureCollection has a `bbox` (`[west, south, east, north]`), except
+  when it is empty
 - Longitudes are brought into -180 to 180. A shape drawn across the
-  antimeridian is stored with longitudes slightly beyond 180 and written with
-  them wrapped. It is not cut at the line, so a reader that does not handle
-  the antimeridian may draw such a shape the long way round
+  antimeridian is stored with longitudes slightly beyond 180 and written
+  with them wrapped. It is not cut at the line, so a reader that does not
+  handle the antimeridian may draw such a shape the long way round
 - Features come in draw order, and hidden features follow at the end, so
   their visibility survives a round trip
 - Layers, groups and style rules are not written. Use the native format
   when you need them
 
+A reader that wants only your attributes drops the keys for which
+`isDrawProperty(key)` is true.
+
 ### Keys added to properties
+
+Besides the values of the library, the export adds these keys.
 
 | Key | Written |
 | --- | --- |
-| `maplibre-gl-draw:id` | Always (the feature's `id` has the same value) |
+| `maplibre-gl-draw:id` | Always, with the value of the `id` of the feature |
 | `maplibre-gl-draw:layerId` | Always |
 | `maplibre-gl-draw:groupId` | When the feature is in a group |
-| `maplibre-gl-draw:style` | When the feature has a style |
+| `maplibre-gl-draw:style` | When the style has a key |
 | `maplibre-gl-draw:visible` | `false`, only when hidden |
 | `maplibre-gl-draw:locked` | `true`, only when locked |
-| `maplibre-gl-draw:featureType` | For a type GeoJSON does not have |
-| `maplibre-gl-draw:createdZoom` | When set |
-| `maplibre-gl-draw:rotation` | When set |
-| `maplibre-gl-draw:scale` | When set |
-| `maplibre-gl-draw:imageFileId` | Image |
-| `maplibre-gl-draw:imageWidth` | Image |
-| `maplibre-gl-draw:imageHeight` | Image |
+| `maplibre-gl-draw:featureType` | When the type is not its geometry kind |
 | `maplibre-gl-draw:imageData` | Image: the pixels as a data URL |
 | `maplibre-gl-draw:imageMimeType` | Image: for example `image/webp` |
 
-`radiusMeters` and `radiusHandleAngle` of a Circle, and all your own
-attributes, are written without a prefix.
-
 ### Types that GeoJSON does not have
 
-Image, Circle, Freehand and custom types have no GeoJSON geometry. They
-are written by the shape of their coordinates, and the type name goes into
-`maplibre-gl-draw:featureType` as it is.
+Image, Circle, Freehand and custom types are written with their geometry,
+and the type name goes into `maplibre-gl-draw:featureType` as it is. An
+Image and a Circle become a `Point`, and a Freehand becomes a
+`LineString`.
 
-| Coordinates | Geometry written |
-| --- | --- |
-| One position | `Point` |
-| A sequence of positions | `LineString` |
-| Anything else | Not written (a console warning) |
-
-So an Image and a Circle become a `Point`, and a Freehand becomes a
-`LineString`. On load, a `Point` or `LineString` with the marker gets its
-type back. The marker is ignored, and the geometry type kept, when it is
-not a non-empty string, when it names a GeoJSON geometry type, or when it
-names a type whose coordinates have another shape (`Image` on a
-`LineString`, for example). A lower-case marker is also read: `image`,
-`circle` and `freehand` name the built-in types, and any other name gets its
-first letter capitalized.
+On load, a feature with the marker gets its type back, whatever the kind
+of its geometry: the marker wins over the kind. The marker is ignored,
+and the kind of the geometry kept, when it is not a non-empty string,
+when it names a GeoJSON geometry type in any letter case, or when it
+names a built-in type of another kind (`Image` on a `LineString`, for
+example).
 
 ### Import
 
-A GeoJSON load adds to the document; it does not replace it. The input is a
-FeatureCollection (a `.json` or `.geojson` file, or the parsed object).
-Every feature is checked and converted before anything is written.
+`draw.document.load(geojson)` adds the features to the document; with
+`mode: 'replace'` it then deletes the features and groups that were there
+before. The input is a FeatureCollection, a Feature or a geometry, as an
+object, a JSON string or a `.json` or `.geojson` file. Every feature is
+checked and converted before anything is written.
 
 - A feature that cannot be used is left out and reported in
-  `LoadResult.skipped` as `{ index, reason }`, and the others are imported.
-  It is left out when it is not an object, when `properties` is neither an
-  object nor `null`, when `geometry` is missing or `null`, when the
-  geometry type is unknown, or when the coordinates fail the
+  `LoadResult.skipped` as `{ index, reason }`, and the others are
+  imported. It is left out when it is not an object, when `properties` is
+  neither an object nor `null`, when `geometry` is missing or `null`, when
+  the geometry type is unknown, or when the coordinates fail the
   [Geometry checks](#geometry-checks)
 - Positions are cut to two elements. Ring orientation is kept as given
-- The id is `maplibre-gl-draw:id`, else the feature's `id`, else a new
-  one. A numeric id becomes a string. An id already used in the document,
+- The ID is `maplibre-gl-draw:id`, else the `id` of the feature, else a new
+  one. A numeric ID becomes a string. An ID already used in the document,
   or earlier in the same file, is replaced with a new one, so an export can
   be loaded back into the same document
-- `maplibre-gl-draw:layerId` is used when it names a layer of the document;
-  otherwise the feature goes into the active layer
+- The layer is the `layerId` of the options when it is given, or the
+  layer the `layer` option creates; otherwise `maplibre-gl-draw:layerId`
+  when it names a layer of the document, or else the active layer. With
+  the `group` option, every feature goes into one layer: the given or
+  created one, else the active layer
 - `groupId`, `visible`, `locked` and `style` are restored from their
-  prefixed keys. A `groupId` naming a group the document does not have is
-  dropped. The style is checked as in [Style checks](#style-checks)
-- `name` and `description` are read from the plain keys, and from
-  `maplibre-gl-draw:name` and `maplibre-gl-draw:description` when the plain
-  key is absent
-- Your attributes are copied as own properties, so a key such as
-  `__proto__` stays an ordinary key
+  prefixed keys. A `groupId` naming a group the document does not have, or
+  a group of another layer, is dropped, and so is every `groupId` with
+  `mode: 'replace'` or with the `group` option, which puts the features
+  into the group it creates. The style is checked as in
+  [Style checks](#style-checks)
+- The values of the library are kept under their prefixed keys; the other
+  prefixed keys are read as above and not stored. Every other key is copied
+  as an attribute, as an own property, so a key such as `__proto__` stays
+  an ordinary key
+- A feature without `name` gets one from the `autoName` option
+- A Circle whose `radiusMeters` and `radiusHandleAngle` are written without
+  the prefix has them read as the values of the library. An Image whose
+  style carries `width`, `height`, `rotation` or `opacity` has them moved
+  to the prefixed keys and `imageOpacity`
 - When `maplibre-gl-draw:style` is absent, the simplestyle keys are copied
   into the style: `stroke` to `strokeColor`, `stroke-width` to
   `strokeWidth`, `stroke-opacity` to `strokeOpacity`, `fill` to
   `fillColor`, `fill-opacity` to `fillOpacity`, `marker-color` to
-  `pointColor`. They also stay in `properties`. Export does not write
-  simplestyle
+  `pointColor`. Simplestyle has no key for the outline of a marker. They
+  also stay in `properties`. Export does not write simplestyle
 - An embedded image is accepted only on a `Point` whose marker is `Image`,
   and only in the form of [Embedded images](#embedded-images). A bad image
   rejects the whole load, because only an altered file can carry one
 
-The result has `format: 'geojson'`, `replaced: false`, the ids of the new
-features and `skipped` when anything was left out.
+The load is one transaction with the source `load`. With
+`mode: 'replace'` the same transaction deletes every feature and group of
+the document and keeps the layers, so an ID of the file may be one of the
+features it replaces. The result has `format: 'geojson'`, the IDs of the
+new features, `skipped` with the features left out, and `replaced: true`
+only with `mode: 'replace'`.
 
-```typescript
-const result = await draw.load(geojson);
-for (const { index, reason } of result.skipped ?? []) {
+```ts
+const result = await draw.document.load(geojson);
+for (const { index, reason } of result?.skipped ?? []) {
   console.warn(`feature ${index} was skipped: ${reason}`);
 }
 ```
@@ -545,31 +619,33 @@ for (const { index, reason } of result.skipped ?? []) {
 A Multi geometry becomes one Multi feature with one set of attributes, and
 is exported unchanged, so the round trip loses nothing. With
 `load(source, { flattenMulti: true })` each part becomes a feature of its
-own with a new id instead.
+own with a new ID instead.
 
-A `GeometryCollection` is folded by type when it is loaded.
+A `GeometryCollection` is folded by kind when it is loaded.
 
 - Geometries of one kind are gathered into one Multi feature (three
   Polygons become one MultiPolygon)
 - Mixed kinds become at most three features, one per kind (points, lines,
   polygons)
-- The folded features get new ids, and each gets a copy of the attributes
+- The folded features get new IDs, and each gets a copy of the attributes
 - A nested `GeometryCollection` is folded into the same features
-- When any of its geometries fails the checks, the whole dataset is
-  left out
+- When any of its geometries fails the checks, the whole feature is left
+  out
 
 ## Checks on load
 
 ### Geometry checks
 
-Both formats check coordinates with the same rules.
+Both formats check geometries with the same rules.
 
+- The geometry is an object of one of the six kinds with `coordinates`:
+  `Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString` or
+  `MultiPolygon`
+- A built-in type holds its own kind (see [Feature types](#feature-types))
 - Coordinates are nested arrays. A position is two finite numbers. No array
-  is empty
-- The depth matches the type (see [Feature types](#feature-types)). A
-  custom type may use any regular depth
-- A line (LineString, Freehand, each part of a MultiLineString) has at
-  least two positions
+  is empty, and the depth matches the kind
+- A line (a LineString, each part of a MultiLineString) has at least two
+  positions
 - A ring (of a Polygon, of each part of a MultiPolygon) has at least four
   positions, and its first and last positions are equal
 
@@ -582,9 +658,12 @@ are kept.
 
 | Key | Accepted value |
 | --- | --- |
-| `fillColor`, `strokeColor`, `pointColor` | `#rgb` or `#rrggbb` |
-| `fillOpacity`, `strokeOpacity`, `imageOpacity` | A number from 0 to 1 |
+| `fillColor`, `strokeColor`, `pointColor` | A CSS color |
+| `pointStrokeColor` | A CSS color |
+| `fillOpacity`, `strokeOpacity` | A number from 0 to 1 |
+| `pointOpacity`, `imageOpacity` | A number from 0 to 1 |
 | `strokeWidth`, `pointRadius` | A finite number, 0 or more |
+| `pointStrokeWidth` | A finite number, 0 or more |
 | `lineStyle` | `solid`, `dashed` or `dotted` |
 | `pointShape` | `circle`, `square`, `triangle` or `star` |
 
@@ -607,9 +686,13 @@ native format and in `maplibre-gl-draw:imageData` of GeoJSON.
 
 ## Image files
 
-`draw.load(file, { coordinate, zoom, layerId })` with an image file adds one
-Image feature at `coordinate`. `coordinate` is required; `zoom` becomes
-`createdZoom` (1 when omitted) and `layerId` defaults to the active layer.
-`draw.image.request` gives you all three (see [Events](./events.md)). The
-image is converted to WebP and scaled down when it is larger than 4096 px.
-The result has `format: 'image'` and `replaced: false`.
+`draw.document.load(file, { coordinate, zoom, layerId })` with an image
+file adds one Image feature at `coordinate` and selects it. `coordinate` is
+required; `zoom` becomes `createdZoom` (1 when omitted) and `layerId`
+defaults to the active layer. `image.requested` gives you all three (see
+[Events](./events.md)). The image is converted to WebP and scaled down when
+it is larger than 4096 px. With `mode: 'replace'`, the features and groups
+that were there before are deleted afterwards.
+
+The load is one transaction with the source `load`. The result has
+`format: 'image'` and `replaced: false`, or `true` with `mode: 'replace'`.

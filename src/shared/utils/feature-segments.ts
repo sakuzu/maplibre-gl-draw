@@ -15,6 +15,7 @@ import {
   SEGMENT_INDEX_THRESHOLD,
 } from '../math/segment-grid.js';
 import type { BoundingBox, Coordinate, Feature, VertexRef } from '../types/model.js';
+import { coordinatesOf } from './coordinates.js';
 
 /**
  * The visit function for an edge (called during the listing of edges)
@@ -103,11 +104,11 @@ export type PartVisitor = (
 export function forEachPart(feature: Feature, visit: PartVisitor): void {
   switch (feature.type) {
     case 'LineString':
-      visit(feature.coordinates as Coordinate[], 0, undefined, false);
+      visit(coordinatesOf(feature) as Coordinate[], 0, undefined, false);
       break;
 
     case 'Polygon': {
-      const rings = feature.coordinates as Coordinate[][];
+      const rings = coordinatesOf(feature) as Coordinate[][];
       for (let ring = 0; ring < rings.length; ring++) {
         visit(rings[ring], ring, undefined, true);
       }
@@ -115,7 +116,7 @@ export function forEachPart(feature: Feature, visit: PartVisitor): void {
     }
 
     case 'MultiLineString': {
-      const parts = feature.coordinates as Coordinate[][];
+      const parts = coordinatesOf(feature) as Coordinate[][];
       for (let part = 0; part < parts.length; part++) {
         visit(parts[part], 0, part, false);
       }
@@ -123,7 +124,7 @@ export function forEachPart(feature: Feature, visit: PartVisitor): void {
     }
 
     case 'MultiPolygon': {
-      const parts = feature.coordinates as Coordinate[][][];
+      const parts = coordinatesOf(feature) as Coordinate[][][];
       for (let part = 0; part < parts.length; part++) {
         const rings = parts[part];
         for (let ring = 0; ring < rings.length; ring++) {

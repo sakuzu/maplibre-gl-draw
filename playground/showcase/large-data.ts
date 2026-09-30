@@ -5,7 +5,7 @@
  * The large-data scene: a city of editable features
  *
  * Every building, street and place of the scene is an editable feature of the Store, loaded
- * with `draw.load()`: each one can be selected, moved and reshaped. The tilted camera shows
+ * with `draw.document.load()`: each one can be selected, moved and reshaped. The tilted camera shows
  * them near at hand, where they can be told apart, and far into the distance, where they
  * become a texture. A park in the foreground is selected, with its frame and vertex handles.
  *
@@ -15,7 +15,7 @@
  * river.
  */
 
-import type { Data, StyleRule } from '@sakuzu/maplibre-gl-draw';
+import type { DrawDocument, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import { QUIET_BASEMAP } from './overview';
@@ -34,7 +34,7 @@ const HALF_HEIGHT_KM = 4.2;
 /** The width of the land mask, in pixels */
 const MASK_WIDTH = 2048;
 
-/** The number of features, for the legend, and the time `draw.load` took, for the console */
+/** The number of features, for the legend, and the time `draw.document.load` took, for the console */
 const counts = { buildings: 0, streets: 0, places: 0, total: 0, loadMs: 0 };
 
 export const largeDataScene: ShowcaseScene = {
@@ -46,15 +46,15 @@ export const largeDataScene: ShowcaseScene = {
     await settled(map);
     const document = createCity(map);
     const started = performance.now();
-    await draw.load(document);
+    await draw.document.load(document);
     counts.loadMs = performance.now() - started;
     console.info(
       `large-data: ${counts.total} features (${counts.buildings} buildings, ` +
-        `${counts.streets} streets, ${counts.places} places), draw.load ${Math.round(counts.loadMs)} ms`,
+        `${counts.streets} streets, ${counts.places} places), draw.document.load ${Math.round(counts.loadMs)} ms`,
     );
   },
   async finish({ draw, map }) {
-    draw.select(SELECTED_FEATURE);
+    draw.selection.set('feature', [SELECTED_FEATURE]);
     addLegend(map);
   },
 };
@@ -157,7 +157,7 @@ function rectangle(
  * Builds the city over the extent around the center of the camera: streets on a bent grid,
  * blocks of houses on their lots, parks, and places on some of the houses
  */
-function createCity(map: maplibregl.Map): Data {
+function createCity(map: maplibregl.Map): DrawDocument {
   const center = map.getCenter();
   const frame = new Frame([center.lng, center.lat]);
   const isLand = landMask(map, frame);
@@ -214,9 +214,12 @@ function createCity(map: maplibregl.Map): Data {
         buildings.push({
           id: `park-${buildings.length}`,
           type: 'Polygon',
-          coordinates: [
-            rectangle(frame, west + 0.006, south + 0.006, east - 0.006, north - 0.006, 3),
-          ],
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              rectangle(frame, west + 0.006, south + 0.006, east - 0.006, north - 0.006, 3),
+            ],
+          },
           properties: { use: 'Park' },
           style: BUILDING_STYLE,
         });
@@ -290,7 +293,7 @@ function street(
   return {
     id: `street-${index}`,
     type: 'LineString',
-    coordinates,
+    geometry: { type: 'LineString', coordinates: coordinates },
     properties: { class: avenue ? 'Avenue' : 'Street' },
     style: { strokeWidth: avenue ? 5 : 2.5, strokeOpacity: 1 },
   };
@@ -328,9 +331,12 @@ function fillBlock(
       buildings.push({
         id: `building-${buildings.length}`,
         type: 'Polygon',
-        coordinates: [
-          rectangle(frame, x + 0.0012, houseSouth, x + width - 0.0012, houseSouth + depth),
-        ],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            rectangle(frame, x + 0.0012, houseSouth, x + width - 0.0012, houseSouth + depth),
+          ],
+        },
         properties: { use },
         style: BUILDING_STYLE,
       });
@@ -339,7 +345,10 @@ function fillBlock(
         places.push({
           id: `place-${places.length}`,
           type: 'Point',
-          coordinates: frame.toLngLat(x + width / 2, houseSouth + depth / 2),
+          geometry: {
+            type: 'Point',
+            coordinates: frame.toLngLat(x + width / 2, houseSouth + depth / 2),
+          },
           properties: { kind: kind.name },
           style: { pointShape: kind.shape, pointRadius: 4.5 },
         });
@@ -387,7 +396,7 @@ function selectedPark(
   return {
     id: SELECTED_FEATURE,
     type: 'Polygon',
-    coordinates: [ring],
+    geometry: { type: 'Polygon', coordinates: [ring] },
     properties: { use: 'Park', name: 'Park' },
     style: BUILDING_STYLE,
   };

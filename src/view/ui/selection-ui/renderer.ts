@@ -172,18 +172,13 @@ export class SelectionUIRenderer {
       // coordinates must not be treated as a Coordinate)
       if (hasZeroArea(bbox)) {
         const center = transform.project(bbox.center);
-        const extent = this.#extensions.resolvePointFrameExtent(feature);
-        const halfWidth = extent.halfWidth + margin;
-        const halfHeight = extent.halfHeight + margin;
-        const topLeft = transform.unproject({ x: center.x - halfWidth, y: center.y - halfHeight });
-        const bottomRight = transform.unproject({
-          x: center.x + halfWidth,
-          y: center.y + halfHeight,
-        });
-        minLng = Math.min(minLng, topLeft.lng, bottomRight.lng);
-        maxLng = Math.max(maxLng, topLeft.lng, bottomRight.lng);
-        minLat = Math.min(minLat, topLeft.lat, bottomRight.lat);
-        maxLat = Math.max(maxLat, topLeft.lat, bottomRight.lat);
+        for (const corner of this.#extensions.resolvePointFrameCorners(feature, center, margin)) {
+          const at = transform.unproject(corner);
+          minLng = Math.min(minLng, at.lng);
+          maxLng = Math.max(maxLng, at.lng);
+          minLat = Math.min(minLat, at.lat);
+          maxLat = Math.max(maxLat, at.lat);
+        }
         continue;
       }
 
@@ -227,7 +222,9 @@ export class SelectionUIRenderer {
    * point frame by the margin)
    *
    * The half width and half height of the frame can be registered per type
-   * (SelectionExtensionRegistry.resolvePointFrameExtent). Without a registration it is the former 12px square. The
+   * (SelectionExtensionRegistry.resolvePointFrameCorners), as an outline or as an extent.
+   * Without a registration it is the extent of the marker of a built-in point, else a 12px
+   * square. The
    * zero-area treatment itself does not change, so no resize / rotate handle appears for
    * a feature that passes through here.
    *
@@ -238,36 +235,16 @@ export class SelectionUIRenderer {
   #drawPointBoundingBox(feature: Feature, coord: Coordinate, zoom: number): void {
     if (!this.#transform) return;
 
-    const center = this.#transform.project(coord);
+    const transform = this.#transform;
+    const center = transform.project(coord);
     const margin = this.#config.boundingBox.margin;
-    const extent = this.#extensions.resolvePointFrameExtent(feature);
-    const halfWidth = extent.halfWidth + margin;
-    const halfHeight = extent.halfHeight + margin;
-
-    const topLeft = this.#transform.unproject({
-      x: center.x - halfWidth,
-      y: center.y - halfHeight,
-    });
-    const topRight = this.#transform.unproject({
-      x: center.x + halfWidth,
-      y: center.y - halfHeight,
-    });
-    const bottomRight = this.#transform.unproject({
-      x: center.x + halfWidth,
-      y: center.y + halfHeight,
-    });
-    const bottomLeft = this.#transform.unproject({
-      x: center.x - halfWidth,
-      y: center.y + halfHeight,
-    });
-
-    const coords: Coordinate[] = [
-      [topLeft.lng, topLeft.lat],
-      [topRight.lng, topRight.lat],
-      [bottomRight.lng, bottomRight.lat],
-      [bottomLeft.lng, bottomLeft.lat],
-      [topLeft.lng, topLeft.lat],
-    ];
+    const coords: Coordinate[] = this.#extensions
+      .resolvePointFrameCorners(feature, center, margin)
+      .map((corner) => {
+        const at = transform.unproject(corner);
+        return [at.lng, at.lat];
+      });
+    coords.push(coords[0]);
     this.#strokePath(coords, zoom);
   }
 

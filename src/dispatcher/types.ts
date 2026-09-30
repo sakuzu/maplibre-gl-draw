@@ -27,7 +27,7 @@ export interface ModifierKeys {
  * `'touch'` is one finger of a touch screen, `'pen'` a stylus (reported either through
  * the touch events, as on iPadOS, or through the mouse events the browser emits for
  * it), and `'mouse'` everything else. Input with no `pointerType` (synthetic input
- * through `draw.input`, for example) is treated as `'mouse'`.
+ * of the tests, for example) is treated as `'mouse'`.
  */
 export type PointerType = 'mouse' | 'touch' | 'pen';
 
@@ -69,6 +69,11 @@ export interface MouseNormalizedEvent {
    * which synthetic input chooses whether to go through snapping.
    */
   snap?: boolean;
+  /**
+   * Whether the event was made from code (`draw.drawing`) at an exact position, not by the
+   * pointer; the modes apply no click tolerance to it (`DrawPointerEvent.programmatic`)
+   */
+  programmatic?: boolean;
 }
 
 /**

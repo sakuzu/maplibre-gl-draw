@@ -75,9 +75,9 @@ beforeAll(async () => {
   await page.evaluate(async (exaggeration) => {
     const w = window as unknown as TerrainWindow;
     // A plugin that only keeps its context, the public way to read the anchors of the instance
-    w.draw.addPlugin({
+    w.draw.extensions.plugins.add({
       name: 'terrain-probe',
-      onInstall(context) {
+      onAdd(context) {
         w.probe = context;
       },
     });
@@ -129,7 +129,7 @@ describe('the ground of the symbols', () => {
     const pairs = await page.evaluate((list) => {
       const w = window as unknown as TerrainWindow;
       return list.map(([lng, lat]) => [
-        w.probe.anchorElevationMeters(lng, lat),
+        w.probe.terrain.elevation([lng, lat]),
         w.map.queryTerrainElevation([lng, lat]),
       ]);
     }, points);
@@ -144,9 +144,9 @@ describe('the ground of the symbols', () => {
     const offsets = await page.evaluate((list) => {
       const w = window as unknown as TerrainWindow;
       return list.map(([lng, lat]) => {
-        const anchor = w.probe.projectAnchor(lng, lat);
+        const anchor = w.probe.terrain.project([lng, lat]);
         const maplibre = w.map.project([lng, lat]);
-        return anchor ? Math.hypot(anchor.x - maplibre.x, anchor.y - maplibre.y) : null;
+        return anchor ? Math.hypot(anchor[0] - maplibre.x, anchor[1] - maplibre.y) : null;
       });
     }, points);
     for (const offset of offsets) {

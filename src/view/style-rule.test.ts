@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { MESSAGES_EN } from '../messages.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Feature, FeatureStyle, StyleRule } from '../store/types.js';
 import {
   applyRuleColor,
@@ -30,17 +31,18 @@ function makeFeature(
   return {
     id: 'f1',
     type,
-    coordinates: [
+    geometry: geometryFromCoordinates(type, [
       [
         [0, 0],
         [1, 0],
         [1, 1],
         [0, 0],
       ],
-    ],
+    ]),
     layerId: 'layer-1',
+    groupId: undefined,
     properties,
-    style,
+    style: style ?? {},
     locked: false,
     visible: true,
   };
@@ -404,5 +406,47 @@ describe('deriveLegend', () => {
     );
 
     expect(entries).toEqual([{ label: MESSAGES_EN.legendOther, color: '#888888' }]);
+  });
+});
+
+describe('the colors of the results', () => {
+  it('are normalized to #rrggbb whatever CSS color the rule writes', () => {
+    expect(evaluateStyleRule({ kind: 'single', color: 'red' }, {})).toBe('#ff0000');
+    const categorical: StyleRule = {
+      kind: 'categorical',
+      property: 'kind',
+      map: { a: 'rgb(0, 128, 255)', b: '#ABC' },
+      other: 'hsl(120, 100%, 50%)',
+    };
+    expect(evaluateStyleRule(categorical, { kind: 'a' })).toBe('#0080ff');
+    expect(evaluateStyleRule(categorical, { kind: 'b' })).toBe('#aabbcc');
+    expect(evaluateStyleRule(categorical, {})).toBe('#00ff00');
+    expect(deriveLegend(categorical).map((entry) => entry.color)).toEqual([
+      '#0080ff',
+      '#aabbcc',
+      '#00ff00',
+    ]);
+  });
+
+  it('interpolates a continuous ramp of any CSS colors and keeps its end points', () => {
+    const rule: StyleRule = {
+      kind: 'continuous',
+      property: 'v',
+      min: 0,
+      max: 10,
+      ramp: ['white', 'rgb(0, 0, 0)'],
+      other: 'gray',
+    };
+    expect(evaluateStyleRule(rule, { v: 0 })).toBe('#ffffff');
+    expect(evaluateStyleRule(rule, { v: 10 })).toBe('#000000');
+    const middle = evaluateStyleRule(rule, { v: 5 });
+    expect(middle).toMatch(/^#([0-9a-f]{2})\1\1$/);
+    expect(middle).not.toBe('#ffffff');
+    expect(middle).not.toBe('#000000');
+    expect(deriveLegend(rule).map((entry) => entry.color)).toEqual([
+      '#ffffff',
+      '#000000',
+      '#808080',
+    ]);
   });
 });

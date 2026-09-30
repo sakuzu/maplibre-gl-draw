@@ -88,8 +88,7 @@ export class PolygonBatchRenderer {
     this.earcutCache = scope.earcut ?? new EarcutCache();
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
-      terrain: this.terrain,
-    });
+    }).useTerrainState(this.terrain);
     this.vertexBuffer = gl.createBuffer();
     this.indexBuffer = gl.createBuffer();
     this.vao = gl.createVertexArray();

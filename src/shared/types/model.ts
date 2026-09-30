@@ -8,35 +8,35 @@
  * re-exports them).
  */
 
+import type { Geometry, Position } from 'geojson';
+
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
  */
 export type Coordinate = [number, number];
 
 /**
- * The coordinates of a feature, nested as deep as its type needs
+ * The coordinates of a GeoJSON geometry, nested as deep as its kind needs
  *
- * The nesting depth of the array expresses the structure of the geometry. It follows the
- * `coordinates` of the GeoJSON geometry of the same name.
- *
- * - `Coordinate`: Point, Image (the anchor of the image) and Circle (the center; the radius
- *   is `properties.radiusMeters`)
- * - `Coordinate[]`: LineString, Freehand and MultiPoint (a sequence of coordinates)
- * - `Coordinate[][]`: Polygon (an array of rings: ring 0 is the outer ring, the rest are
- *   holes) and MultiLineString (an array of lines)
- * - `Coordinate[][][]`: MultiPolygon (an array of polygons, each an array of rings)
+ * - `Position`: Point (the geometry of a Point, the anchor of an Image and the center of a
+ *   Circle)
+ * - `Position[]`: LineString (also of a Freehand) and MultiPoint
+ * - `Position[][]`: Polygon (an array of rings: ring 0 is the outer ring, the rest are holes)
+ *   and MultiLineString (an array of lines)
+ * - `Position[][][]`: MultiPolygon (an array of polygons, each an array of rings)
  *
  * A ring of a Polygon is closed: its last coordinate repeats its first.
  */
-export type FeatureCoordinates = Coordinate | Coordinate[] | Coordinate[][] | Coordinate[][][];
+export type FeatureCoordinates = Position | Position[] | Position[][] | Position[][][];
 
 /**
  * The type of a feature: one of the nine built-in types, or the name of a custom type
  *
  * The built-in types are Point, LineString, Polygon, MultiPoint, MultiLineString,
- * MultiPolygon, Image, Circle and Freehand. The type decides the shape of
- * `Feature.coordinates` ({@link FeatureCoordinates}). Any other string names a custom type,
- * which an extension adds with `registerFeatureHandler` ({@link CustomFeatureHandler}).
+ * MultiPolygon, Image, Circle and Freehand. The type decides the kind of `Feature.geometry`:
+ * a Circle and an Image hold the Point of their center and their anchor, and a Freehand holds
+ * a LineString. Any other string names a custom type, which an extension adds through
+ * `draw.extensions.featureTypes` (the engine reads it as a {@link FeatureTypeHandler}).
  *
  * The Multi types come from imports and from the results of geometry operations; no drawing
  * mode creates them.
@@ -84,7 +84,7 @@ export interface Selection {
   /** Selection type (null means nothing is selected) */
   type: SelectionType | null;
   /** IDs of the selected items */
-  ids: string[];
+  ids: readonly string[];
 }
 
 /**
@@ -124,7 +124,7 @@ export interface VertexSelection {
   /** The ID of the feature whose vertices are selected */
   featureId: string;
   /** The selected vertices */
-  vertexIndices: VertexRef[];
+  vertices: readonly VertexRef[];
 }
 
 /**
@@ -133,16 +133,16 @@ export interface VertexSelection {
  * Every key is optional. A color key left unset takes the color of the layer's style rule
  * ({@link StyleRule}) when the layer has one, and any other key left unset takes the default
  * of the `style` option ({@link FeatureStyleConfig}). The precedence is "the feature's own key
- * > the layer's style rule > the default". Colors are `#rgb` or `#rrggbb`.
+ * > the layer's style rule > the default". Colors are CSS colors.
  *
  * Each feature type reads its own keys:
  *
  * | Feature types | Keys |
  * | --- | --- |
- * | Point, MultiPoint | pointColor, pointRadius, pointShape |
+ * | Point, MultiPoint | pointColor, pointRadius, pointShape, pointOpacity, pointStrokeColor, pointStrokeWidth |
  * | LineString, MultiLineString, Freehand | strokeColor, strokeOpacity, strokeWidth, lineStyle |
  * | Polygon, MultiPolygon, Circle | the stroke keys, fillColor, fillOpacity |
- * | Image | imageOpacity and the keys of {@link ImageStyle} |
+ * | Image | imageOpacity |
  *
  * On import each key is validated and a key that fails is dropped.
  *
@@ -151,13 +151,6 @@ export interface VertexSelection {
  * extension or a host gives features style keys of its own this way. It declares them with
  * declaration merging and checks their values where it reads them, since a value can also
  * arrive through `updateFeature` or a replaced store without an import.
- *
- * @example
- * ```ts
- * draw.updateFeature(id, {
- *   style: { strokeColor: '#0055ff', strokeWidth: 4, lineStyle: 'dashed' },
- * });
- * ```
  *
  * @example A style key of an extension
  * ```ts
@@ -228,7 +221,7 @@ export interface FeatureStyle {
    */
   pointRadius?: number;
   /**
-   * The fill color of the marker of a point (the marker keeps its white outline)
+   * The fill color of the marker of a point (its outline is `pointStrokeColor`)
    *
    * @defaultValue `'#FF6633'`
    */
@@ -243,10 +236,29 @@ export interface FeatureStyle {
    * @defaultValue the shape of the `style` option (`'circle'` unless it is changed)
    */
   pointShape?: 'circle' | 'square' | 'triangle' | 'star';
+  /**
+   * The opacity of the marker of a point, from 0 to 1, multiplied into the opacity of its
+   * fill and of its outline
+   *
+   * @defaultValue `1`
+   */
+  pointOpacity?: number;
+  /**
+   * The color of the outline of the marker of a point
+   *
+   * @defaultValue `'#ffffff'`
+   */
+  pointStrokeColor?: string;
+  /**
+   * The width of the outline of the marker of a point, in CSS pixels (0 for none)
+   *
+   * @defaultValue `2`
+   */
+  pointStrokeWidth?: number;
 
   // Image
   /**
-   * The opacity of an image, from 0 to 1 (it takes precedence over {@link ImageStyle.opacity})
+   * The opacity of an image, from 0 to 1
    *
    * @defaultValue `1`
    */
@@ -254,51 +266,18 @@ export interface FeatureStyle {
 }
 
 /**
- * The style of an Image feature: {@link FeatureStyle} plus its size, rotation and opacity
+ * The values core keeps in `Feature.properties` of an Image feature, read into one object
  *
- * The image is drawn at its size at the zoom it was created at (`properties.createdZoom`)
- * and scales with the map from there, like a picture laid on the ground.
- */
-export interface ImageStyle extends FeatureStyle {
-  /**
-   * The width in pixels at the created zoom
-   *
-   * @defaultValue the width of the image (`properties.imageWidth`)
-   */
-  width?: number;
-  /**
-   * The height in pixels at the created zoom
-   *
-   * @defaultValue the height of the image (`properties.imageHeight`)
-   */
-  height?: number;
-  /**
-   * A rotation in degrees, added to `properties.rotation`
-   *
-   * @defaultValue `0`
-   */
-  rotation?: number;
-  /**
-   * The opacity from 0 to 1, used when {@link FeatureStyle.imageOpacity} is unset
-   *
-   * @defaultValue `1`
-   */
-  opacity?: number;
-}
-
-/**
- * The properties core keeps in `Feature.properties` of an Image feature
- *
- * The image mode and `load()` of an image file write them. The image data itself is a
- * {@link FileData} of the Store, which `imageFileId` names, so that several features can share
- * one image.
+ * The image mode and `load()` of an image file write them, under the keys that start with
+ * `maplibre-gl-draw:`. The image data itself is a {@link FileData} of the Store, which
+ * `imageFileId` names, so that several features can share one image.
  */
 export interface ImageProperties {
   /** The ID of the {@link FileData} that holds the image */
   imageFileId: string;
-  /** The width of the image in pixels */
+  /** The width in pixels the image is drawn at, at the created zoom */
   imageWidth: number;
-  /** The height of the image in pixels */
+  /** The height in pixels the image is drawn at, at the created zoom */
   imageHeight: number;
   /** The zoom the image was placed at; at this zoom it is drawn at its size in pixels */
   createdZoom: number;
@@ -311,8 +290,8 @@ export interface ImageProperties {
 /**
  * An embedded file of the document, such as the data of an image
  *
- * Features refer to it by ID (`properties.imageFileId` of an Image), and the native format
- * exports the files the exported features use.
+ * Features refer to it by ID (`maplibre-gl-draw:imageFileId` in `properties` of an Image),
+ * and the native format exports the files the exported features use.
  */
 export interface FileData {
   /** The ID of the file, unique within the document */
@@ -324,23 +303,25 @@ export interface FileData {
 }
 
 /**
- * A feature of the document: its geometry, the layer and group it belongs to, its attributes
- * and its style
+ * A feature of the document: its GeoJSON geometry, the layer and group it belongs to, its
+ * attributes and its style
  *
- * The draw instance returns features from `getFeature`, `getAllFeatures` and the events, and
- * creates them from a {@link FeatureInput}. What the instance returns is read-only: change a
- * feature with `updateFeature`, which stores a new object.
+ * The draw instance returns features from `draw.features` and the events, and creates them
+ * from an input. What the instance returns is read-only: a change stores a new object.
  *
  * The stacking order of the features is not a property of the feature: it is the position of
- * its ID in `Layer.order`, or in `Group.featureIds` when it belongs to a group.
+ * its ID in `Layer.items`, or in `Group.featureIds` when it belongs to a group.
  */
 export interface Feature {
   /** The ID of the feature, unique within the document (a ULID when core generates it) */
   id: string;
-  /** The type of the feature, which decides the shape of `coordinates` */
+  /** The type of the feature, which decides the kind of `geometry` */
   type: FeatureType;
-  /** The geometry, nested as {@link FeatureCoordinates} describes for each type */
-  coordinates: FeatureCoordinates;
+  /**
+   * The GeoJSON geometry (a Circle and an Image hold the Point of their center and their
+   * anchor, and a Freehand holds a LineString)
+   */
+  geometry: Geometry;
   /**
    * The ID of the layer the feature belongs to (for a feature in a group, the layer of the
    * group)
@@ -349,24 +330,24 @@ export interface Feature {
   /**
    * The ID of the group the feature belongs to, when it belongs to one
    *
-   * A feature in a group is listed in `Group.featureIds` instead of `Layer.order`.
+   * A feature in a group is listed in `Group.featureIds` instead of `Layer.items`.
    */
-  groupId?: string;
+  groupId: string | undefined;
   /**
-   * The attributes of the feature
+   * The GeoJSON properties: the attributes of the user and the values of the library
    *
-   * They are free-form, and GeoJSON export writes them as the GeoJSON properties. Core also
-   * reads and writes a few keys of its own here: `name` and `description`, `createdZoom`,
-   * `rotation` and `scale` (see {@link getCreatedZoom}, {@link getRotation} and
-   * {@link getScale}), `radiusMeters` and `radiusHandleAngle` of a Circle, and the keys of
-   * {@link ImageProperties} of an Image.
+   * A key that starts with `maplibre-gl-draw:` holds a value of the library: the created zoom,
+   * the rotation and the scale (see {@link getCreatedZoom}, {@link getRotation} and
+   * {@link getScale}), the radius of a Circle and the values of {@link ImageProperties} of an
+   * Image. Every other key is an attribute of the user, free-form; `name` and `description`
+   * are read as the name and the description. Exports write them as they are.
    */
   properties: Record<string, unknown>;
   /**
-   * The style of this feature (the defaults and the layer's style rule apply when omitted);
-   * an Image takes an {@link ImageStyle}
+   * The style of this feature, `{}` when it has none of its own (the defaults and the layer's
+   * style rule apply to the keys it leaves out)
    */
-  style?: FeatureStyle | ImageStyle;
+  style: FeatureStyle;
   /**
    * Whether the feature is locked
    *
@@ -385,10 +366,10 @@ export interface Feature {
 }
 
 /**
- * The input for adding a feature with `addFeature`: a {@link Feature} whose other fields
+ * The input for adding a feature to the Store: a {@link Feature} whose other fields
  * may be omitted
  *
- * Only `type` and `coordinates` are required; the other fields take the defaults written on
+ * Only `type` and `geometry` are required; the other fields take the defaults written on
  * them.
  */
 export interface FeatureInput {
@@ -396,14 +377,14 @@ export interface FeatureInput {
   id?: string;
   /** Feature type */
   type: FeatureType;
-  /** Coordinates */
-  coordinates: FeatureCoordinates;
+  /** The GeoJSON geometry, of the kind the type holds */
+  geometry: Geometry;
   /** Layer ID (the active layer when omitted) */
   layerId?: string;
   /** Properties (an empty object when omitted) */
   properties?: Record<string, unknown>;
   /** Style */
-  style?: FeatureStyle | ImageStyle;
+  style?: FeatureStyle;
   /** Locked state (false when omitted) */
   locked?: boolean;
   /** Visible state (true when omitted) */
@@ -434,20 +415,6 @@ export interface FeatureInput {
  * for `graduated`, say), takes `other` rather than the default color, so a rule that does not
  * apply can be told apart from a missing value. {@link evaluateStyleRule} evaluates a rule and
  * {@link deriveLegend} lists its legend entries; the library does not draw the legend.
- *
- * @example
- * ```ts
- * draw.updateLayer(layerId, {
- *   styleRule: {
- *     kind: 'graduated',
- *     property: 'population',
- *     breaks: [1000, 10000],
- *     colors: ['#fee8c8', '#fdbb84', '#e34a33'],
- *     other: '#cccccc',
- *   },
- * });
- * // population 500 -> #fee8c8, 5000 -> #fdbb84, 20000 -> #e34a33, missing -> #cccccc
- * ```
  */
 export type StyleRule =
   | { kind: 'single'; color: string }
@@ -467,7 +434,7 @@ export type StyleRule =
  * lock and style rule
  *
  * Every feature belongs to one layer. The layers are stacked in the order of
- * `getLayerOrder()`, and within a layer the items are stacked in the order of `order`. New
+ * `getLayerOrder()`, and within a layer the items are stacked in the order of `items`. New
  * features are drawn into the active layer.
  */
 export interface Layer {
@@ -494,7 +461,7 @@ export interface Layer {
    *
    * It is multiplied into the alpha of everything drawn for the layer (fills, lines, points,
    * images, and what the renderers of custom types and feature companions draw, which receive
-   * it as `CustomRendererDrawContext.opacity`). It is applied at draw time, so changing it is
+   * it as `FrameDrawContext.opacity`). It is applied at draw time, so changing it is
    * cheap: nothing is rebuilt. It is only a look: hit testing ignores it, and a feature in a
    * layer at opacity 0 can still be selected.
    */
@@ -505,32 +472,38 @@ export interface Layer {
    *
    * A feature in a group is listed in `Group.featureIds` instead.
    */
-  order: string[];
+  items: readonly string[];
   /** Free-form data of the host, saved and exported with the layer */
-  metadata?: Record<string, unknown>;
+  metadata: Record<string, unknown> | undefined;
   /**
    * Style rule (no rule when omitted)
    *
    * Because it is an ordinary field it is subject to saving, subscription and undo, and
    * it is updated with `updateLayer(id, { styleRule })`.
    */
-  styleRule?: StyleRule;
+  styleRule: StyleRule | undefined;
 }
 
 /**
  * A group of features within one layer, selected, moved and stacked as a unit
  *
- * A group is listed in `Layer.order` of its layer like a feature, and its members are listed
- * in `featureIds` (each member has `groupId` set). The layer of a group is the layer whose
- * order lists it, so a group has no `layerId`.
+ * A group is listed in `Layer.items` of its layer like a feature, and its members are listed
+ * in `featureIds` (each member has `groupId` set).
  */
 export interface Group {
   /** The ID of the group, unique within the document */
   id: string;
+  /**
+   * The ID of the layer the group is in: the layer whose `items` list it
+   *
+   * The Store keeps it: a group takes the layer that lists it when it is created, and a write
+   * that lists it in the items of another layer moves it to that layer.
+   */
+  layerId: string;
   /** The display name */
   name: string;
   /** The IDs of the members, back to front (the last is the frontmost) */
-  featureIds: string[];
+  featureIds: readonly string[];
   /**
    * Whether the group is locked (every member is then locked, see {@link isFeatureLocked})
    */
@@ -545,7 +518,7 @@ export interface Group {
  * A drawing mode keeps it in the Store while the user draws, and it is cleared when the
  * feature is committed or the drawing is cancelled. It is local state of this instance; a
  * subscriber that wants the drawing in progress reads it from the notifications of the Store
- * ({@link StateChanges.tentative}).
+ * ({@link StoreChange.tentative}).
  */
 export interface TentativeState {
   /** The type of the feature being drawn */
@@ -599,11 +572,14 @@ export interface TentativeState {
  * features.change carries the source of its flush.
  *
  * - local: an operation of the user or a call of the API (the default)
- * - silent: a change that a subscriber recording changes leaves out: loading a native file, which replaces
- *   the whole document, and clearing the selection when a mode starts
- * - batch: loading a GeoJSON file, a bulk change recorded as one step (it is one transaction,
- *   which is what makes it one notification)
- * - remote: a change that came from outside the instance. A replaced {@link DocumentStore}
+ * - silent: a change that a subscriber recording changes leaves out, such as clearing the
+ *   selection when a mode starts
+ * - load: a load of any format (or of several sources at once), with the replacement it
+ *   makes, recorded as one step (it is one transaction, which is what makes it one
+ *   notification)
+ * - batch: a bulk change of a host or an extension recorded as one step; core does not write
+ *   it
+ * - remote: a change that came from outside the instance. A replaced Store (see StoreContract)
  *   writes it for the changes it applies from elsewhere, so that subscribers can tell them from
  *   local edits and core keeps the local editing state (a vertex selection) consistent with them
  * - import: for a host or an extension that loads data by its own means; core does not write
@@ -614,6 +590,7 @@ export interface TentativeState {
 export type UpdateSource =
   | 'local'
   | 'silent'
+  | 'load'
   | 'batch'
   | 'remote'
   | 'import'
@@ -630,7 +607,7 @@ export interface UpdateFeatureOptions {
    * An intermediate state is always overwritten by the committing update that follows
    * (the one without options).
    * MemoryStore ignores it and applies the update as usual, and passes it through to
-   * isIntermediate of StateChanges.features.updated. An external store can look at this
+   * isIntermediate of StoreChange.features.updated. An external store can look at this
    * flag to decide whether to keep the update or to hold it apart until the commit.
    */
   isIntermediate?: boolean;
@@ -641,23 +618,15 @@ export interface UpdateFeatureOptions {
  *
  * `subscribe` of the Store delivers one per outermost transaction (or per write outside
  * one). Each category is present only when the transaction changed it. The document
- * categories (features, layers, groups, layerReorder, groupReorder, metadata) are what a
- * {@link DocumentStore} notifies; the others are local state of this client.
- *
- * @example
- * ```ts
- * draw.getStore().subscribe((changes) => {
- *   if (changes.source === 'remote') return;
- *   for (const feature of changes.features?.created ?? []) console.log('created', feature.id);
- * });
- * ```
+ * categories (features, layers, groups, layerReorder, groupReorder, metadata, files) are what a
+ * DocumentStore notifies; the others are local state of this client.
  */
-export interface StateChanges {
+export interface StoreChange {
   /**
    * The source of the operation
    *
    * Used by subscribers to identify the source of the operation. Core writes 'local',
-   * 'silent' and 'batch', and a replaced store writes 'remote' for the changes it applies
+   * 'silent' and 'load', and a replaced store writes 'remote' for the changes it applies
    * from outside (see {@link UpdateSource}); plugins and external store implementations can
    * use their own values.
    */
@@ -701,7 +670,7 @@ export interface StateChanges {
   /**
    * Reordering of items within a layer
    *
-   * The reordering of items (features or groups) within the layer.order array.
+   * The reordering of items (features or groups) within the layer.items array.
    * It is emitted separately from layers.updated, and is recorded as a dedicated command
    * by history management.
    */
@@ -746,7 +715,7 @@ export interface StateChanges {
   };
   /**
    * A flag indicating that the UI state (dragState, boxSelection) has changed
-   * These are not included in the details of StateChanges, but they are notified in order
+   * These are not included in the details of StoreChange, but they are notified in order
    * to trigger a redraw
    */
   uiStateChanged?: boolean;
@@ -755,6 +724,16 @@ export interface StateChanges {
     metadata: Metadata;
     previous: Metadata;
   };
+  /** The embedded files created and deleted */
+  files?: {
+    created?: FileData[];
+    deleted?: FileData[];
+  };
+  /**
+   * True when the notification replaces the whole document at once (a Store that takes a
+   * document from elsewhere sets it); it survives the folding of a transaction
+   */
+  reset?: boolean;
 }
 
 /**
@@ -779,17 +758,6 @@ export interface BoundingBox {
  * It declares a title and a description. An application keeps settings of its own here (the
  * basemap it shows, a default view) by adding keys to this interface with declaration
  * merging; the keys are stored and exported like the declared ones.
- *
- * @example
- * ```ts
- * declare module '@sakuzu/maplibre-gl-draw' {
- *   interface Metadata {
- *     basemap?: string;
- *   }
- * }
- *
- * draw.setMetadata({ basemap: 'https://example.com/style.json' });
- * ```
  */
 export interface Metadata {
   /** The title of the document */
@@ -806,7 +774,7 @@ export interface Metadata {
  * first problem. The format is described in the data format reference.
  */
 export interface Data {
-  /** The version of the native format (`'2.0.0'` for this release) */
+  /** The version of the native format (`'3.0.0'` for this release) */
   version: string;
   /** When the data was written (an ISO 8601 timestamp) */
   created?: string;
@@ -818,7 +786,7 @@ export interface Data {
   layers?: Layer[];
   /**
    * The stacking order, from the back: every layer of `layers` once, and the entries of the
-   * application that are not layers (see {@link DocumentStore.setLayerOrder}) at their
+   * application that are not layers (see the stacking order of StoreContract) at their
    * positions
    */
   layerOrder: string[];
@@ -884,11 +852,6 @@ export interface SkippedFeature {
 }
 
 /**
- * The format `export()` writes: the native format ({@link Data}) or GeoJSON
- */
-export type ExportFormat = 'native' | 'geojson';
-
-/**
  * Options of `export()`: the file name, and which features or layers to export
  */
 export interface ExportOptions {
@@ -898,20 +861,6 @@ export interface ExportOptions {
   featureIds?: string[];
   /** Export only certain layers */
   layerIds?: string[];
-}
-
-/**
- * What `export()` returns: the data as a string, with its MIME type and a file name
- */
-export interface ExportResult {
-  /** The export format */
-  format: ExportFormat;
-  /** The exported data */
-  data: string;
-  /** The MIME type */
-  mimeType: string;
-  /** The recommended file name */
-  fileName: string;
 }
 
 /**

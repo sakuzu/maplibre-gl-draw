@@ -20,12 +20,14 @@ import { describe, expect, it } from 'vitest';
 import type { DatasetManager } from '../../dataset/manager.js';
 import { createDatasetManager } from '../../dataset/manager.js';
 import type {
-  CustomFeatureHandler,
-  CustomRendererDrawContext,
-  LayerAwareOverlayRenderer,
+  FeatureTypeHandler,
+  FrameDrawContext,
+  LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { type RenderLayersRange, renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
@@ -33,9 +35,11 @@ import type { StoreRetainedCache, StoreRetainedDrawDeps } from './store-retained
 
 function makeFeature(id: string, type: Feature['type'], layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type,
-    coordinates:
+    geometry: geometryFromCoordinates(
+      type,
       type === 'Polygon'
         ? [
             [
@@ -46,10 +50,12 @@ function makeFeature(id: string, type: Feature['type'], layerId: string): Featur
             ],
           ]
         : [0, 0],
+    ),
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -65,7 +71,16 @@ function makeGetLayer(layerIds: string[]): (id: string) => Layer | undefined {
   const layers = new Set(layerIds);
   return (id: string) =>
     layers.has(id)
-      ? ({ id, name: id, visible: true, locked: false, opacity: 1, order: [] } as Layer)
+      ? ({
+          id,
+          name: id,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          items: [],
+          styleRule: undefined,
+          metadata: undefined,
+        } as Layer)
       : undefined;
 }
 
@@ -114,14 +129,14 @@ function runRenderLayers(
     getTentative: (): null => null,
   } as unknown as Store;
 
-  const customRenderers = new Map<string, CustomFeatureHandler['renderer']>();
-  const makeCustomRenderer = (): CustomFeatureHandler['renderer'] =>
+  const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
+  const makeCustomRenderer = (): FeatureTypeHandler['renderer'] =>
     ({
       draw: (feature: { id: string }): void => {
         // A custom feature is painted immediately
         paintLog.push(feature.id);
       },
-    }) as unknown as CustomFeatureHandler['renderer'];
+    }) as unknown as FeatureTypeHandler['renderer'];
   // Custom feature types an extension could register (Marker / Sticker, plus Point taken over)
   customRenderers.set('Marker', makeCustomRenderer());
   customRenderers.set('Sticker', makeCustomRenderer());
@@ -135,9 +150,9 @@ function runRenderLayers(
     {} as unknown as ProjectionData,
     14,
     customRenderers,
-    {} as unknown as CustomRendererDrawContext,
+    {} as unknown as FrameDrawContext,
     createFeatureCompanionRegistry(),
-    [] as LayerAwareOverlayRenderer[],
+    [] as LayeredOverlayRenderer[],
     datasets,
     undefined,
     undefined,
@@ -224,7 +239,7 @@ describe('renderLayers and datasets', () => {
     const display = createDisplay();
     display.add({
       id: 'disp',
-      features: [{ id: 'disp-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'disp-1', type: 'Point', coordinates: [0, 0] })],
       order: 'below-store',
     });
 
@@ -237,7 +252,7 @@ describe('renderLayers and datasets', () => {
     const display = createDisplay();
     display.add({
       id: 'disp',
-      features: [{ id: 'disp-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'disp-1', type: 'Point', coordinates: [0, 0] })],
       order: 'above-store',
     });
 
@@ -250,12 +265,12 @@ describe('renderLayers and datasets', () => {
     const display = createDisplay();
     display.add({
       id: 'under',
-      features: [{ id: 'under-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
       order: 'below-store',
     });
     display.add({
       id: 'over',
-      features: [{ id: 'over-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
       order: 'above-store',
     });
 
@@ -285,7 +300,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -303,7 +318,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -321,7 +336,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'orphan',
-        features: [{ id: 'orphan-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'orphan-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -334,7 +349,7 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
 
@@ -363,17 +378,17 @@ describe('renderLayers and datasets', () => {
       const display = createDisplay();
       display.add({
         id: 'under',
-        features: [{ id: 'under-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
         order: 'below-store',
       });
       display.add({
         id: 'middle',
-        features: [{ id: 'mid-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'mid-1', type: 'Point', coordinates: [0, 0] })],
         order: 'layer-order',
       });
       display.add({
         id: 'over',
-        features: [{ id: 'over-1', type: 'Point', coordinates: [0, 0] }],
+        rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
         order: 'above-store',
       });
 
@@ -406,11 +421,11 @@ describe('viewport of renderLayers', () => {
     });
     display.add({
       id: 'under',
-      features: [{ id: 'under-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'under-1', type: 'Point', coordinates: [0, 0] })],
     });
     display.add({
       id: 'over',
-      features: [{ id: 'over-1', type: 'Point', coordinates: [0, 0] }],
+      rows: [toRow({ id: 'over-1', type: 'Point', coordinates: [0, 0] })],
       order: 'above-store',
     });
     managerBoundsCalls = 0;
@@ -444,10 +459,10 @@ describe('viewport of renderLayers', () => {
       new Set<string>(),
       {} as unknown as ProjectionData,
       14,
-      new Map<string, CustomFeatureHandler['renderer']>(),
-      {} as unknown as CustomRendererDrawContext,
+      new Map<string, FeatureTypeHandler['renderer']>(),
+      {} as unknown as FrameDrawContext,
       createFeatureCompanionRegistry(),
-      [] as LayerAwareOverlayRenderer[],
+      [] as LayeredOverlayRenderer[],
       display,
     );
 
@@ -517,10 +532,10 @@ describe('renderLayers and the retained mode of the Store', () => {
       new Set<string>(),
       {} as unknown as ProjectionData,
       14,
-      new Map<string, CustomFeatureHandler['renderer']>(),
-      {} as unknown as CustomRendererDrawContext,
+      new Map<string, FeatureTypeHandler['renderer']>(),
+      {} as unknown as FrameDrawContext,
       createFeatureCompanionRegistry(),
-      [] as LayerAwareOverlayRenderer[],
+      [] as LayeredOverlayRenderer[],
       undefined,
       createStoreRetained(log),
     );
@@ -611,10 +626,10 @@ describe('renderLayers and the visible id set of immediate chunks', () => {
       new Set<string>(),
       {} as unknown as ProjectionData,
       14,
-      new Map<string, CustomFeatureHandler['renderer']>(),
-      {} as unknown as CustomRendererDrawContext,
+      new Map<string, FeatureTypeHandler['renderer']>(),
+      {} as unknown as FrameDrawContext,
       createFeatureCompanionRegistry(),
-      [] as LayerAwareOverlayRenderer[],
+      [] as LayeredOverlayRenderer[],
       undefined,
       createStoreRetained(seen, callsPerLayer),
     );
@@ -688,14 +703,16 @@ describe('renderLayers and the opacity of the layers', () => {
               visible: true,
               locked: false,
               opacity: OPACITY[id],
-              order: [],
+              items: [],
+              styleRule: undefined,
+              metadata: undefined,
             } as Layer)
           : undefined,
       getTentative: (): null => null,
     } as unknown as Store;
   }
 
-  const baseContext = { opacity: 1 } as unknown as CustomRendererDrawContext;
+  const baseContext = { opacity: 1 } as unknown as FrameDrawContext;
 
   it('passes each custom renderer the opacity of its layer, and overlays 1 (immediate mode)', () => {
     const seen: string[] = [];
@@ -703,31 +720,21 @@ describe('renderLayers and the opacity of the layers', () => {
       batchManager: { beginFrame: () => {}, processFeature: () => false, endFrame: () => {} },
       tentativeRenderer: { drawGeometry: (): void => {} },
     } as unknown as Renderers;
-    const customRenderers = new Map<string, CustomFeatureHandler['renderer']>([
+    const customRenderers = new Map<string, FeatureTypeHandler['renderer']>([
       [
         'Marker',
         {
-          draw: (
-            feature: { id: string },
-            _p: unknown,
-            _z: number,
-            context: CustomRendererDrawContext,
-          ) => {
+          draw: (feature: { id: string }, _p: unknown, _z: number, context: FrameDrawContext) => {
             seen.push(`${feature.id}:${context.opacity}`);
           },
-        } as unknown as CustomFeatureHandler['renderer'],
+        } as unknown as FeatureTypeHandler['renderer'],
       ],
     ]);
     const overlay = {
-      drawForLayer: (
-        layerId: string,
-        _p: unknown,
-        _z: number,
-        context: CustomRendererDrawContext,
-      ) => {
+      drawForLayer: (layerId: string, _p: unknown, _z: number, context: FrameDrawContext) => {
         seen.push(`overlay:${layerId}:${context.opacity}`);
       },
-    } as unknown as LayerAwareOverlayRenderer;
+    } as unknown as LayeredOverlayRenderer;
 
     renderLayers(
       r,

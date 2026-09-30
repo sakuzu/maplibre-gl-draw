@@ -18,18 +18,23 @@ function makeFeature(id: string, properties: Record<string, unknown>): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId: 'layer-1',
+    groupId: undefined,
     properties,
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

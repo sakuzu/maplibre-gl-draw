@@ -9,11 +9,15 @@
 
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
-import { mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
+import {
+  coordinatesOf,
+  geometryFromCoordinates,
+  mapCoordinatesDeep,
+} from '../../shared/utils/coordinates.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 
 /** The distance an arrow key moves the selection (pixels; with Shift, NUDGE_LARGE) */
 const NUDGE_SMALL = 1;
@@ -33,7 +37,7 @@ const ARROW_DIRECTIONS: Readonly<Record<string, readonly [number, number]>> = {
  * The behavior is identical to the API's groupSelection (the key, the menu and the API place the
  * new group at the same position).
  */
-export function handleGroupShortcut(context: ModeContext): void {
+export function handleGroupShortcut(context: EngineModeContext): void {
   const { store, autoNameGenerator, generateFeatureId } = context;
   if (store.isReadOnly() || store.isInteractionLocked()) return;
   groupSelection(store, generateFeatureId, autoNameGenerator);
@@ -46,17 +50,17 @@ export function handleGroupShortcut(context: ModeContext): void {
  * consistent): a group selection is dissolved, and for a member feature selection only that
  * member leaves.
  */
-export function handleUngroupShortcut(context: ModeContext): void {
+export function handleUngroupShortcut(context: EngineModeContext): void {
   const { store } = context;
   if (store.isReadOnly() || store.isInteractionLocked()) return;
   ungroupSelection(store);
 }
 
 /**
- * Handling of the Delete / Backspace key: deletes what is selected, exactly like
- * `draw.deleteSelection()` (vertices, features, groups or layers; locked items are kept).
+ * Handling of the Delete / Backspace key: deletes what is selected (vertices, features, groups
+ * or layers; locked items are kept) with `deleteSelection` of `operations/`.
  */
-export function handleDeleteShortcut(context: ModeContext): void {
+export function handleDeleteShortcut(context: EngineModeContext): void {
   deleteSelection(context.store);
 }
 
@@ -70,7 +74,7 @@ export function handleDeleteShortcut(context: ModeContext): void {
  *   the map (MapLibre pans with it)
  */
 export function handleNudgeShortcut(
-  context: ModeContext,
+  context: EngineModeContext,
   key: string,
   modifiers: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean },
 ): boolean {
@@ -86,7 +90,7 @@ export function handleNudgeShortcut(
 
   // One offset in degrees for every feature, taken at a point of the selection, so the
   // features keep their relative placement (the same translation as a move drag)
-  const reference = firstCoordinate(features[0].coordinates);
+  const reference = firstCoordinate(coordinatesOf(features[0]));
   if (!reference) return false;
   const step = modifiers.shift ? NUDGE_LARGE : NUDGE_SMALL;
   const from = map.project(reference);
@@ -96,8 +100,10 @@ export function handleNudgeShortcut(
 
   store.transact(() => {
     for (const feature of features) {
-      const coordinates = mapCoordinatesDeep(feature.coordinates, (c) => [c[0] + dx, c[1] + dy]);
-      store.updateFeature(feature.id, { coordinates });
+      const coordinates = mapCoordinatesDeep(coordinatesOf(feature), (c) => [c[0] + dx, c[1] + dy]);
+      store.updateFeature(feature.id, {
+        geometry: geometryFromCoordinates(feature.type, coordinates),
+      });
     }
   });
   return true;
@@ -112,7 +118,7 @@ function firstCoordinate(coordinates: FeatureCoordinates): Coordinate | null {
 /**
  * Handling of the Escape key
  */
-export function handleEscapeShortcut(context: ModeContext): void {
+export function handleEscapeShortcut(context: EngineModeContext): void {
   const { store, map } = context;
   const boxSelection = store.getBoxSelection();
 
@@ -131,7 +137,7 @@ export function handleEscapeShortcut(context: ModeContext): void {
   }
 
   // Clear the vertex selection when vertices are selected
-  const selectedVertices = store.getSelectedVertices();
+  const selectedVertices = store.getVertexSelection();
   if (selectedVertices) {
     store.setSelectedVertices(null);
     return;

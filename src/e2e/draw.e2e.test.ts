@@ -14,6 +14,7 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Feature } from '../index.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
@@ -62,9 +63,21 @@ async function setMode(page: Page, name: string): Promise<boolean> {
   return ok;
 }
 
-/** The tentative feature of the drawing in progress, or null */
-async function tentative(page: Page): Promise<unknown> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.getStore().getTentative());
+/** Whether a drawing is in progress, read through the context of a probe plugin */
+async function isDrawing(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const { draw } = window as unknown as E2EWindow;
+    const probe = window as unknown as { e2eDrawing?: { isDrawing(): boolean } };
+    if (!probe.e2eDrawing) {
+      draw.extensions.plugins.add({
+        name: 'e2e-probe',
+        onAdd(ctx) {
+          probe.e2eDrawing = ctx.drawing;
+        },
+      });
+    }
+    return probe.e2eDrawing?.isDrawing() === true;
+  });
 }
 
 async function clearAll(page: Page): Promise<void> {
@@ -72,14 +85,14 @@ async function clearAll(page: Page): Promise<void> {
     const { draw } = window as unknown as E2EWindow;
     draw.setReadOnly(false);
     draw.setMode('select');
-    draw.deleteAllFeatures();
+    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
   });
   await settle(page);
 }
 
 /** The outer ring of a Polygon feature */
 function outerRing(feature: Feature): number[][] {
-  return (feature.coordinates as number[][][])[0];
+  return (coordinatesOf(feature) as number[][][])[0];
 }
 
 let browser: Browser;
@@ -106,7 +119,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(-50, 20));
     const [point] = await features(page);
     expect(point.type).toBe('Point');
-    expectNear(point.coordinates as number[], await lngLatOf(page, at(-50, 20)));
+    expectNear(coordinatesOf(point) as number[], await lngLatOf(page, at(-50, 20)));
     expect(await mode(page)).toBe('select');
 
     await setMode(page, 'draw_point');
@@ -125,8 +138,8 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(100, 0));
     const [line] = await features(page);
     expect(line.type).toBe('LineString');
-    expect(line.coordinates).toHaveLength(3);
-    expectNear((line.coordinates as number[][])[1], await lngLatOf(page, at(0, -60)));
+    expect(coordinatesOf(line)).toHaveLength(3);
+    expectNear((coordinatesOf(line) as number[][])[1], await lngLatOf(page, at(0, -60)));
     expect(await mode(page)).toBe('select');
 
     await setMode(page, 'draw_line');
@@ -134,11 +147,24 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(0, 120));
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
     // The first Escape discards the line being drawn, the second leaves the mode
     expect(await mode(page)).toBe('draw_line');
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
+  });
+
+  it('finishes a line with a double click on a new position', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_line');
+    await click(page, at(-100, 0));
+    await click(page, at(0, -60));
+    await page.mouse.dblclick(at(100, 0).x, at(100, 0).y);
+    await settle(page);
+    expect(await mode(page)).toBe('select');
+    const [line] = await features(page);
+    expect(coordinatesOf(line)).toHaveLength(3);
+    expectNear((coordinatesOf(line) as number[][])[2], await lngLatOf(page, at(100, 0)));
   });
 
   it('draws a polygon closed on its first vertex, and Escape discards one', async () => {
@@ -160,10 +186,41 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(200, 100));
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
     expect(await mode(page)).toBe('draw_polygon');
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
+  });
+
+  it('finishes a polygon with a double click, on its last vertex or on a new position', async () => {
+    await clearAll(page);
+    const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
+    await setMode(page, 'draw_polygon');
+    await click(page, at(-80, -60));
+    await click(page, at(80, -60));
+    await click(page, at(80, 60));
+    await page.mouse.dblclick(at(80, 60).x, at(80, 60).y);
+    await settle(page);
+    expect(await mode(page)).toBe('select');
+    expect(await isDrawing(page)).toBe(false);
+    const [triangle] = await features(page);
+    expect(triangle.type).toBe('Polygon');
+    expect(outerRing(triangle)).toHaveLength(4);
+    expectNear(outerRing(triangle)[2], await lngLatOf(page, at(80, 60)));
+
+    await clearAll(page);
+    await setMode(page, 'draw_polygon');
+    await click(page, at(-80, -60));
+    await click(page, at(80, -60));
+    await click(page, at(80, 60));
+    await page.mouse.dblclick(at(-80, 60).x, at(-80, 60).y);
+    await settle(page);
+    expect(await mode(page)).toBe('select');
+    const [square] = await features(page);
+    expect(outerRing(square)).toHaveLength(5);
+    expectNear(outerRing(square)[3], await lngLatOf(page, at(-80, 60)));
+    // The double clicks did not zoom the map
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
   });
 
   it('draws a circle from its center and radius, and Escape discards one', async () => {
@@ -181,7 +238,43 @@ describe('drawing with the real pointer on a flat map', () => {
     await page.mouse.move(at(-100, -100).x, at(-100, -100).y, { steps: 4 });
     await press(page, 'Escape');
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
+  });
+
+  it('draws an area from code with draw.drawing, through the input of the plugins', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_polygon');
+    const seen = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const clicks: string[] = [];
+      const remove = draw.extensions.plugins.add({
+        name: 'e2e-drawing-probe',
+        onAdd() {},
+        input: {
+          onClick(event) {
+            clicks.push(event.original.type);
+          },
+        },
+      });
+      const placed = [
+        [139.699, 35.679],
+        [139.701, 35.679],
+        [139.701, 35.681],
+      ].map((position) => draw.drawing.addVertex(position));
+      const finished = draw.drawing.finish();
+      remove();
+      return { placed, finished, clicks };
+    });
+    await settle(page);
+    expect(seen).toEqual({
+      placed: [true, true, true],
+      finished: true,
+      clicks: ['click', 'click', 'click'],
+    });
+    const [area] = await features(page);
+    expect(area.type).toBe('Polygon');
+    expectNear(outerRing(area)[1], [139.701, 35.679], 1e-9);
+    expect(await mode(page)).toBe('select');
   });
 
   it('draws a freehand stroke with a drag, and Escape during a stroke discards it', async () => {
@@ -190,7 +283,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await drag(page, at(-120, 80), at(120, 40), 16);
     const [stroke] = await features(page);
     expect(stroke.type).toBe('Freehand');
-    expect((stroke.coordinates as number[][]).length).toBeGreaterThan(2);
+    expect((coordinatesOf(stroke) as number[][]).length).toBeGreaterThan(2);
     expect(await mode(page)).toBe('draw_freehand');
 
     // Escape while the button is down cancels the drag (dragcancel), and the release that
@@ -202,7 +295,30 @@ describe('drawing with the real pointer on a flat map', () => {
     await page.mouse.up();
     await settle(page);
     expect(await features(page)).toHaveLength(1);
-    expect(await tentative(page)).toBeNull();
+    expect(await isDrawing(page)).toBe(false);
+
+    await press(page, 'Escape');
+    expect(await mode(page)).toBe('select');
+  });
+
+  it('leaves the pan on after a freehand click, and a double click does not zoom the map', async () => {
+    await clearAll(page);
+    const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
+    await setMode(page, 'draw_freehand');
+    await click(page, at(0, 0));
+    expect(
+      await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
+    ).toBe(true);
+
+    await page.mouse.dblclick(at(40, 20).x, at(40, 20).y);
+    // Long enough for the zoom animation of a double click to have moved the map
+    await page.waitForTimeout(400);
+    await settle(page);
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
+    expect(
+      await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
+    ).toBe(true);
+    expect(await features(page)).toHaveLength(0);
 
     await press(page, 'Escape');
     expect(await mode(page)).toBe('select');
@@ -239,6 +355,21 @@ describe('drawing with the real pointer on a flat map', () => {
     expectNear(ring[1], await lngLatOf(page, at(40, -40)));
   });
 
+  it('moves a selected point with a drag anywhere in its frame: the marker and the margin', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_point');
+    await click(page, at(0, 0));
+    const [before] = await features(page);
+    await click(page, at(0, 0));
+    expect(await selectedIds(page)).toEqual([before.id]);
+
+    // The frame spans the marker (a radius of 6 px and an outline of 2 px) and the margin of
+    // 10 px: 18 px from the point, beyond the 16 px of a 12 px box with the margin
+    await drag(page, at(17, 0), at(67, 20));
+    const [after] = await features(page);
+    expectNear(coordinatesOf(after) as number[], await lngLatOf(page, at(50, 20)));
+  });
+
   it('does not move a feature when the press stays within the drag threshold', async () => {
     await clearAll(page);
     await setMode(page, 'draw_point');
@@ -248,7 +379,7 @@ describe('drawing with the real pointer on a flat map', () => {
     await click(page, at(0, 0));
     await drag(page, at(0, 0), at(2, 0), 2);
     const [after] = await features(page);
-    expect(after.coordinates).toEqual(before.coordinates);
+    expect(coordinatesOf(after)).toEqual(coordinatesOf(before));
     expect(await selectedIds(page)).toEqual([before.id]);
   });
 
@@ -294,6 +425,139 @@ describe('drawing with the real pointer on a flat map', () => {
   });
 });
 
+describe('a thin line and the stroke of a polygon under the real pointer', () => {
+  afterAll(async () => {
+    await page.evaluate(
+      (camera) => (window as unknown as E2EWindow).map.jumpTo(camera),
+      FLAT as { center: [number, number]; zoom: number },
+    );
+    await settle(page);
+  });
+
+  it('selects a line drawn far under one pixel wide, and a polygon by its stroke and its fill', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_line');
+    for (const p of [at(-200, -40), at(-40, -120), at(-40, -120)]) await click(page, p);
+    await setMode(page, 'draw_polygon');
+    for (const p of [at(40, 40), at(200, 40), at(200, 200), at(40, 200), at(40, 40)]) {
+      await click(page, p);
+    }
+    const [line, polygon] = await features(page);
+    expect([line.type, polygon.type]).toEqual(['LineString', 'Polygon']);
+    const [start, end] = coordinatesOf(line) as number[][];
+    const ring = outerRing(polygon);
+
+    // Created at zoom 14 with a width of 2 px: at zoom 11 it is drawn a quarter of a pixel wide
+    for (const zoom of [14, 12, 11]) {
+      await page.evaluate((z) => (window as unknown as E2EWindow).map.setZoom(z), zoom);
+      await settle(page);
+      const a = await pageOf(page, start);
+      const b = await pageOf(page, end);
+      const corner = await pageOf(page, ring[0]);
+      const opposite = await pageOf(page, ring[2]);
+      const clicks: Array<[PagePoint, string]> = [
+        // On the path of the line, and 4 px beside it
+        [{ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, line.id],
+        [{ x: a.x + (b.x - a.x) * 0.25, y: a.y + (b.y - a.y) * 0.25 + 4 }, line.id],
+        // On the top edge of the polygon, 3 px outside it, and inside its fill
+        [{ x: (corner.x + opposite.x) / 2, y: corner.y - 3 }, polygon.id],
+        [{ x: (corner.x + opposite.x) / 2, y: (corner.y + opposite.y) / 2 }, polygon.id],
+      ];
+      for (const [p, id] of clicks) {
+        await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+        await click(page, p);
+        expect({ zoom, p, ids: await selectedIds(page) }).toEqual({ zoom, p, ids: [id] });
+      }
+    }
+  });
+});
+
+describe('a point with a companion under the real pointer', () => {
+  it('selects the point with a click on its marker, and gives a click on the companion to it', async () => {
+    await clearAll(page);
+    const position = await lngLatOf(page, CENTER);
+    const id = await page.evaluate((coordinates) => {
+      const { draw } = window as unknown as E2EWindow;
+      const w = window as unknown as { e2eLeadClicks: string[] };
+      w.e2eLeadClicks = [];
+      const feature = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates },
+      });
+      if (!feature) throw new Error('no feature');
+      // Hit within 60 px of the point, as the padding of a leader line starting there
+      draw.extensions.companionProviders.add({
+        name: 'e2e-lead',
+        has: (f) => f.id === feature.id,
+        draw() {},
+        hitTest(f, ctx) {
+          const [x, y] = ctx.screen.project((f.geometry as { coordinates: number[] }).coordinates);
+          const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
+          return distancePx <= 60
+            ? { kind: 'companion', id: 'lead', featureId: f.id, distancePx }
+            : null;
+        },
+        onClick(f) {
+          w.e2eLeadClicks.push(f.id);
+          return true;
+        },
+      });
+      return feature.id;
+    }, position);
+    const leadClicks = () =>
+      page.evaluate(() => (window as unknown as { e2eLeadClicks: string[] }).e2eLeadClicks);
+
+    try {
+      // The center and the outline of the marker (6 px and a 2 px outline by default), beyond
+      // the tolerance of the position
+      for (const p of [at(0, 0), at(7, 0), at(0, -7)]) {
+        await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+        await click(page, p);
+        expect(await selectedIds(page)).toEqual([id]);
+      }
+      expect(await leadClicks()).toEqual([]);
+
+      // Away from the marker the companion takes the click, and the selection stays
+      await click(page, at(40, 0));
+      expect(await leadClicks()).toEqual([id]);
+      expect(await selectedIds(page)).toEqual([id]);
+    } finally {
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.extensions.companionProviders.remove('e2e-lead'),
+      );
+    }
+  });
+});
+
+describe('the stacking order on a real map', () => {
+  it('places external entries and layer-order datasets with reorder, and the runs follow', async () => {
+    const result = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.options.update({ isExternalEntry: (id) => id.startsWith('base:') });
+      const [first] = draw.layers.list();
+      const itemsBefore = [...first.items];
+      draw.layers.create({ id: 'e2e-second' });
+      draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layer-order' });
+      draw.layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
+      const placed = {
+        order: [...draw.getStore().getLayerOrder()],
+        runs: draw.getLayerStack().map(({ from, to }) => [from, to]),
+        items: draw.layers.list().map((layer) => [...layer.items]),
+      };
+      draw.layers.delete('e2e-second');
+      draw.datasets.remove('e2e-parcels');
+      draw.options.update({ isExternalEntry: () => false });
+      return { ...placed, firstId: first.id, itemsBefore };
+    });
+    expect(result.order).toEqual([result.firstId, 'base:roads', 'e2e-parcels', 'e2e-second']);
+    expect(result.runs).toEqual([
+      [0, 1],
+      [2, 4],
+    ]);
+    expect(result.items).toEqual([result.itemsBefore, []]);
+  });
+});
+
 describe('drawing on a pitched and rotated map', () => {
   beforeAll(async () => {
     await page.evaluate(() =>
@@ -306,7 +570,7 @@ describe('drawing on a pitched and rotated map', () => {
     await page.evaluate((camera) => {
       const { map, draw } = window as unknown as E2EWindow;
       map.jumpTo({ ...camera, pitch: 0, bearing: 0 });
-      draw.snapping.setEnabled(true);
+      draw.options.update({ snapping: { enabled: true } });
     }, FLAT);
   });
 
@@ -314,7 +578,9 @@ describe('drawing on a pitched and rotated map', () => {
     await clearAll(page);
     // Snapping is turned off: its constraints (a right angle, the extension of an edge) are
     // taken on the ground and would rightly pull a vertex off the pointer
-    await page.evaluate(() => (window as unknown as E2EWindow).draw.snapping.setEnabled(false));
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: false } }),
+    );
     const corners = [at(-60, -30), at(60, -40), at(70, 60), at(-70, 50)];
     await setMode(page, 'draw_polygon');
     for (const p of [...corners, corners[0]]) await click(page, p);
@@ -341,5 +607,107 @@ describe('drawing on a pitched and rotated map', () => {
     await drag(page, await pageOf(page, outerRing(moved)[1]), at(120, -90));
     const [edited] = await features(page);
     expectNear(outerRing(edited)[1], await lngLatOf(page, at(120, -90)));
+  });
+});
+
+describe('a replaced Store that held its features before the instance, with null fields', () => {
+  afterAll(async () => {
+    // The other tests use an instance over the built-in Store
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow & {
+        e2e: { createDraw: typeof import('../index.js').createDraw };
+      };
+      w.draw.destroy();
+      w.draw = w.e2e.createDraw(w.map);
+    });
+    await settle(page);
+  });
+
+  it('selects them with a click and with a Shift box', async () => {
+    const ids = await page.evaluate(
+      ({ point, line, polygon }) => {
+        type Contract = import('../index.js').Store;
+        const w = window as unknown as E2EWindow & {
+          e2e: {
+            createDraw: typeof import('../index.js').createDraw;
+            internals: { MemoryContractStore: new () => Contract };
+          };
+        };
+        const store = new w.e2e.internals.MemoryContractStore();
+        const base = {
+          properties: {},
+          layerId: 'held',
+          groupId: null as unknown as undefined,
+          visible: true,
+          locked: false,
+          style: {},
+        };
+        store.transact(() => {
+          store.createLayer({
+            id: 'held',
+            name: 'Held',
+            visible: true,
+            locked: false,
+            opacity: 1,
+            items: [],
+            // A Store may give the optional fields as null
+            styleRule: null as unknown as undefined,
+            metadata: null as unknown as undefined,
+          });
+          store.createFeature({
+            ...base,
+            id: 'p',
+            type: 'Point',
+            geometry: { type: 'Point', coordinates: point },
+          });
+          store.createFeature({
+            ...base,
+            id: 'l',
+            type: 'LineString',
+            geometry: { type: 'LineString', coordinates: line },
+          });
+          store.createFeature({
+            ...base,
+            id: 'g',
+            type: 'Polygon',
+            geometry: { type: 'Polygon', coordinates: [polygon] },
+          });
+        }, 'remote');
+        w.draw.destroy();
+        w.draw = w.e2e.createDraw(w.map, { store, initDefaultLayer: false });
+        // The instance reads the null of the Store as undefined
+        return w.draw.features
+          .list()
+          .filter((feature) => feature.groupId === undefined)
+          .map((feature) => feature.id);
+      },
+      {
+        point: await lngLatOf(page, at(-120, -80)),
+        line: [await lngLatOf(page, at(-40, -100)), await lngLatOf(page, at(40, -100))],
+        polygon: [
+          await lngLatOf(page, at(60, 40)),
+          await lngLatOf(page, at(160, 40)),
+          await lngLatOf(page, at(160, 120)),
+          await lngLatOf(page, at(60, 120)),
+          await lngLatOf(page, at(60, 40)),
+        ],
+      },
+    );
+    await settle(page);
+    expect(ids.sort()).toEqual(['g', 'l', 'p']);
+
+    await click(page, at(-120, -80));
+    expect(await selectedIds(page)).toEqual(['p']);
+    await click(page, at(0, -100));
+    expect(await selectedIds(page)).toEqual(['l']);
+    await click(page, at(110, 80));
+    expect(await selectedIds(page)).toEqual(['g']);
+
+    await click(page, at(-200, 150));
+    expect(await selectedIds(page)).toEqual([]);
+    await page.keyboard.down('Shift');
+    await drag(page, at(-180, -160), at(200, 160));
+    await page.keyboard.up('Shift');
+    expect((await selectedIds(page)).sort()).toEqual(['g', 'l', 'p']);
   });
 });

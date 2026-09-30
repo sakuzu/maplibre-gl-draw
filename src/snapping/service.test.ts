@@ -624,7 +624,7 @@ describe('SnapService', () => {
       expect(resolveAt(service).target?.kind).toBe('vertex');
     });
 
-    it('does not snap from the start when options.snap.enabled is false', () => {
+    it('does not snap from the start when the snapping option is off', () => {
       const service = createSnapService({ options: { enabled: false } });
       service.register(fixedProvider('p', [{ kind: 'vertex', coordinate: offsetByPixels(1, 0) }]));
 

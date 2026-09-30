@@ -18,6 +18,7 @@
  * two-stage arrangement). The condition for dropping is decided here by `canDrape`.
  */
 
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCreatedZoom } from '../../../shared/utils/property.js';
 import { getDisplayFeatures, isLocallyHidden } from '../../../store/local-visibility.js';
 import type { Store } from '../../../store/store.js';
@@ -357,7 +358,7 @@ function collectDataset(
       if (rings.length === 0) continue;
 
       const width = widthOf(feature, strokeStyle.width, context.pixelRatio);
-      pushElement(context, feature.coordinates as object, 0, rings, {
+      pushElement(context, coordinatesOf(feature) as object, 0, rings, {
         fill: fillColor,
         stroke: [
           strokeStyle.color[0],
@@ -388,7 +389,7 @@ function collectDataset(
     if (paths.length === 0) continue;
 
     const width = widthOf(feature, strokeStyle.width, context.pixelRatio);
-    pushElement(context, feature.coordinates as object, 1, paths, {
+    pushElement(context, coordinatesOf(feature) as object, 1, paths, {
       fill: [0, 0, 0, 0],
       stroke: [
         strokeStyle.color[0],
@@ -426,16 +427,16 @@ function widthOf(
 /** The rings of a polygon (with the closing point dropped) */
 function polygonRings(feature: Feature): Coordinate[][] {
   return feature.type === 'Polygon'
-    ? openRings(feature.coordinates as Coordinate[][])
-    : (feature.coordinates as Coordinate[][][]).flatMap((part) => openRings(part));
+    ? openRings(coordinatesOf(feature) as Coordinate[][])
+    : (coordinatesOf(feature) as Coordinate[][][]).flatMap((part) => openRings(part));
 }
 
 /** The paths of a line */
 function linePaths(feature: Feature): Coordinate[][] {
   const paths: Coordinate[][] =
     feature.type === 'LineString' || feature.type === 'Freehand'
-      ? [feature.coordinates as Coordinate[]]
-      : (feature.coordinates as Coordinate[][]);
+      ? [coordinatesOf(feature) as Coordinate[]]
+      : (coordinatesOf(feature) as Coordinate[][]);
   return paths.filter((path) => path.length >= 2);
 }
 

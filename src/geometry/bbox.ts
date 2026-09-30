@@ -21,14 +21,6 @@ import type { AreaCoordinates, BBox, Coordinate } from './types.js';
  * @param coordinates Positions `[lng, lat]` in degrees
  * @returns `[minLng, minLat, maxLng, maxLat]` in degrees. `null` when there is not a single
  *   finite coordinate (an empty array included)
- *
- * @example
- * ```ts
- * import { coordinatesBBox } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * coordinatesBBox([[139.7, 35.6], [139.8, 35.7]]); // [139.7, 35.6, 139.8, 35.7]
- * coordinatesBBox([]); // null
- * ```
  */
 export function coordinatesBBox(coordinates: Coordinate[]): BBox | null {
   let found = false;
@@ -67,8 +59,8 @@ export function boundingBox(coordinates: AreaCoordinates): BBox | null {
 /**
  * Determines whether two bounding boxes overlap, touching included.
  *
- * @param a A box `[minLng, minLat, maxLng, maxLat]`
- * @param b A box `[minLng, minLat, maxLng, maxLat]`
+ * @param a A box `[minLng, minLat, maxLng, maxLat]` in degrees
+ * @param b A box `[minLng, minLat, maxLng, maxLat]` in degrees
  * @returns `true` when the boxes share at least one point, an edge or a corner included
  */
 export function bboxIntersects(a: BBox, b: BBox): boolean {
@@ -78,8 +70,8 @@ export function bboxIntersects(a: BBox, b: BBox): boolean {
 /**
  * Determines whether one bounding box contains another, coincident boundaries included.
  *
- * @param outer The containing box `[minLng, minLat, maxLng, maxLat]`
- * @param inner The contained box `[minLng, minLat, maxLng, maxLat]`
+ * @param outer The containing box `[minLng, minLat, maxLng, maxLat]` in degrees
+ * @param inner The contained box `[minLng, minLat, maxLng, maxLat]` in degrees
  * @returns `true` when every point of `inner` lies in `outer`. A box contains itself
  */
 export function bboxContains(outer: BBox, inner: BBox): boolean {

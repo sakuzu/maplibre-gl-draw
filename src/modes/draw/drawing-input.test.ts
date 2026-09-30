@@ -2,23 +2,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the input of the click-driven drawing modes: undoVertex / redoVertex while
- * drawing, and the double click that must not zoom the map
+ * Tests for the input of the click-driven drawing modes: undoing and redoing vertices while
+ * drawing, and the double click that finishes the shape and must not zoom the map
  *
  * The real ModeManager and drawing modes are used; the clicks and keys are delivered to the
- * current handler the way InputRouter does. The map projects linearly (1 degree = 100 px), so
+ * current mode through the input route the InputRouter uses. The map projects linearly (1 degree = 100 px), so
  * the vertices below are far apart on the screen.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import type {
+  KeyNormalizedEvent,
+  MouseNormalizedEvent,
+  NormalizedEvent,
+} from '../../dispatcher/types.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
-import type { Coordinate, Mode } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
+import type { Coordinate } from '../../store/types.js';
+import { createModeHarness } from '../../test-utils.js';
 import { ModeManagerImpl } from '../manager.js';
-import { DrawLineMode } from './line.js';
-import { DrawPolygonMode } from './polygon.js';
+import { drawLineMode } from './line.js';
+import { drawPolygonMode } from './polygon.js';
 
 const NO_MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };
 
@@ -29,6 +34,13 @@ const D: Coordinate = [0, 1];
 
 let store: MemoryStore;
 let manager: ModeManagerImpl;
+let harness: ReturnType<typeof createModeHarness>;
+
+/** Delivers an event to the current mode; true when it consumed it */
+function deliver(event: NormalizedEvent): boolean {
+  const handler = manager.getHandler();
+  return handler ? harness.route.toMode(handler, event, event, null) === true : false;
+}
 
 function click([lng, lat]: Coordinate): void {
   const event: MouseNormalizedEvent = {
@@ -38,8 +50,26 @@ function click([lng, lat]: Coordinate): void {
     originalEvent: { preventDefault() {} } as MouseEvent,
     modifiers: { ...NO_MODIFIERS },
   };
-  manager.getHandler()?.onMouseMove?.({ ...event, type: 'mousemove' });
-  manager.getHandler()?.onClick?.(event);
+  deliver({ ...event, type: 'mousemove' });
+  deliver(event);
+}
+
+/**
+ * A double click as the browser delivers it: a move to the position, two clicks there with no
+ * move between them, then the dblclick
+ */
+function doubleClick([lng, lat]: Coordinate): void {
+  const event: MouseNormalizedEvent = {
+    type: 'click',
+    point: { x: lng * 100, y: -lat * 100 },
+    lngLat: { lng, lat },
+    originalEvent: { preventDefault() {} } as MouseEvent,
+    modifiers: { ...NO_MODIFIERS },
+  };
+  deliver({ ...event, type: 'mousemove' });
+  deliver(event);
+  deliver(event);
+  deliver({ ...event, type: 'dblclick' });
 }
 
 function key(k: string): void {
@@ -50,12 +80,21 @@ function key(k: string): void {
     modifiers: { ...NO_MODIFIERS },
     originalEvent: { preventDefault() {} } as KeyboardEvent,
   };
-  manager.getHandler()?.onKeyDown?.(event);
+  deliver(event);
 }
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   const canvas = { style: {} as { cursor?: string } };
   const map = {
     getZoom: () => 10,
@@ -65,22 +104,14 @@ beforeEach(() => {
   } as unknown as MapLibreMap;
 
   manager = new ModeManagerImpl(store);
+  harness = createModeHarness({ store, map, modeManager: manager, getWritableLayerId: () => 'l1' });
   manager.registerMode('select', () => ({ modeName: 'select' }));
-  manager.registerMode('draw_line', () => new DrawLineMode());
-  manager.registerMode('draw_polygon', () => new DrawPolygonMode());
-  let id = 0;
-  manager.setContext({
-    map,
-    store,
-    autoNameGenerator: { generateName: () => undefined },
-    generateFeatureId: () => `f${++id}`,
-    getCurrentLayerId: () => 'l1',
-    setMode: (mode: Mode) => manager.setMode(mode),
-  } as unknown as ModeContext);
+  harness.register('draw_line', drawLineMode);
+  harness.register('draw_polygon', drawPolygonMode);
   manager.start();
 });
 
-describe('undoVertex / redoVertex while drawing a line', () => {
+describe('undoing and redoing vertices while drawing a line', () => {
   it('takes back the last vertex and puts it back', () => {
     manager.setMode('draw_line');
     click(A);
@@ -92,7 +123,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
     expect(manager.redoVertex()).toBe(true);
     key('Enter');
 
-    expect(store.getAllFeatures().map((f) => f.coordinates)).toEqual([[A, B]]);
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
   });
 
   it('returns false with nothing to undo or redo, and a new vertex drops the redo', () => {
@@ -107,7 +138,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
     expect(manager.redoVertex()).toBe(false);
     key('Enter');
 
-    expect(store.getAllFeatures().map((f) => f.coordinates)).toEqual([[A, C]]);
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, C]]);
   });
 
   it('is false in a mode without a drawing (select)', () => {
@@ -116,7 +147,7 @@ describe('undoVertex / redoVertex while drawing a line', () => {
   });
 });
 
-describe('undoVertex / redoVertex while drawing a polygon', () => {
+describe('undoing and redoing vertices while drawing a polygon', () => {
   it('commits the ring without the vertex that was taken back', () => {
     manager.setMode('draw_polygon');
     click(A);
@@ -126,7 +157,7 @@ describe('undoVertex / redoVertex while drawing a polygon', () => {
     expect(manager.undoVertex()).toBe(true);
     key('Enter');
 
-    const ring = (store.getAllFeatures()[0].coordinates as Coordinate[][])[0];
+    const ring = (coordinatesOf(store.listFeatures()[0]) as Coordinate[][])[0];
     expect(ring).toEqual([A, B, C, A]);
   });
 });
@@ -135,20 +166,102 @@ describe('a double click while drawing', () => {
   it('is consumed by every click-driven drawing mode (MapLibre does not zoom)', () => {
     for (const mode of ['draw_line', 'draw_polygon'] as const) {
       manager.setMode(mode);
-      let prevented = false;
-      manager.getHandler()?.onDoubleClick?.({
+      // The router prevents the default action of a double click the mode consumes
+      const consumed = deliver({
         type: 'dblclick',
         point: { x: 0, y: 0 },
         lngLat: { lng: 0, lat: 0 },
-        originalEvent: {
-          preventDefault() {
-            prevented = true;
-          },
-        } as MouseEvent,
+        originalEvent: {} as MouseEvent,
         modifiers: { ...NO_MODIFIERS },
       });
-      expect(prevented).toBe(true);
+      expect(consumed).toBe(true);
       manager.setMode('select');
     }
+  });
+});
+
+describe('a double click finishes the shape', () => {
+  const rings = (): Coordinate[][] =>
+    store.listFeatures().map((f) => (coordinatesOf(f) as Coordinate[][])[0]);
+
+  it('finishes a polygon on its last vertex without a second vertex there', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    click(B);
+    click(C);
+    doubleClick(C);
+
+    expect(rings()).toEqual([[A, B, C, A]]);
+    expect(manager.getMode()).toBe('select');
+    expect(store.getTentative()).toBeNull();
+  });
+
+  it('adds the new position of a polygon once, then finishes it', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    click(B);
+    click(C);
+    doubleClick(D);
+
+    expect(rings()).toEqual([[A, B, C, D, A]]);
+    expect(manager.getMode()).toBe('select');
+  });
+
+  it('finishes a polygon whose third vertex the double click places', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    click(B);
+    doubleClick(C);
+
+    expect(rings()).toEqual([[A, B, C, A]]);
+  });
+
+  it('keeps drawing a polygon of fewer than three vertices', () => {
+    manager.setMode('draw_polygon');
+    click(A);
+    doubleClick(B);
+
+    expect(store.listFeatures()).toEqual([]);
+    expect(manager.getMode()).toBe('draw_polygon');
+    key('Enter');
+    expect(store.listFeatures()).toEqual([]);
+    click(C);
+    key('Enter');
+    expect(rings()).toEqual([[A, B, C, A]]);
+  });
+
+  it('finishes a line the same way, on its last vertex or on a new position', () => {
+    manager.setMode('draw_line');
+    click(A);
+    click(B);
+    doubleClick(B);
+    manager.setMode('draw_line');
+    click(A);
+    click(B);
+    doubleClick(C);
+
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([
+      [A, B],
+      [A, B, C],
+    ]);
+    expect(manager.getMode()).toBe('select');
+  });
+
+  it('finishes a line whose second vertex the double click places', () => {
+    manager.setMode('draw_line');
+    click(A);
+    doubleClick(B);
+
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
+    expect(manager.getMode()).toBe('select');
+  });
+
+  it('takes the second click of a line into no second vertex before one is placed', () => {
+    manager.setMode('draw_line');
+    doubleClick(A);
+    click(B);
+    key('Enter');
+
+    expect(store.listFeatures().map((f) => coordinatesOf(f))).toEqual([[A, B]]);
   });
 });

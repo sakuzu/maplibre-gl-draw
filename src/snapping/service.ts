@@ -17,8 +17,8 @@
  *   3. The priority order of the kinds is vertex > intersection > edge > guide
  *   4. Within the same priority, the closer one wins
  *
- * 'snap.change' is emitted only when the result changed (the public name is
- * 'draw.snap.change'). When the snap comes off, it is emitted once without a target.
+ * 'snap.change' is emitted only when the result changed (the event of the instance is
+ * 'snap.changed'). When the snap comes off, it is emitted once without a target.
  */
 
 import type { ModifierKeys } from '../dispatcher/types.js';
@@ -150,6 +150,8 @@ interface BestCandidate {
   target: SnapTarget;
   priority: number;
   distancePx: number;
+  /** The priority the candidate gave itself (0 when it gave none); higher wins a tie */
+  rank: number;
   /** Whether the candidate matches ctx.preferFeature (used as the tie-break on a tie) */
   preferred: boolean;
 }
@@ -162,9 +164,11 @@ function isBetterCandidate(
   priority: number,
   distancePx: number,
   preferred: boolean,
+  rank: number,
 ): boolean {
   if (best.priority !== priority) return priority < best.priority;
   if (best.distancePx !== distancePx) return distancePx < best.distancePx;
+  if (best.rank !== rank) return rank > best.rank;
   // Only on a complete tie does a candidate of the preferred feature overturn the one
   // that arrived first
   return preferred && !best.preferred;
@@ -227,18 +231,19 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
     best: BestCandidate | null,
     coordinate: Coordinate,
     target: SnapTarget,
+    priority: number,
     cursor: Coordinate,
     perPixel: DegreesPerPixel,
     preferred: boolean,
+    rank: number,
   ): BestCandidate | null {
     const distancePx = distanceInPixels(coordinate, cursor, perPixel);
     if (distancePx > options.tolerancePx) return best;
 
-    const priority = SNAP_KIND_PRIORITY[target.kind];
-    if (best && !isBetterCandidate(best, priority, distancePx, preferred)) {
+    if (best && !isBetterCandidate(best, priority, distancePx, preferred, rank)) {
       return best;
     }
-    return { coordinate, target, priority, distancePx, preferred };
+    return { coordinate, target, priority, distancePx, rank, preferred };
   }
 
   /** How far a longitude moves to reach its copy nearest to the cursor (0 in most cases) */
@@ -328,7 +333,9 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
           }
 
           // The target keeps the stored coordinates (it names the geometry that was snapped to)
-          const target: SnapTarget = { kind: candidate.kind };
+          const target: SnapTarget = {
+            kind: (!isSegmentCandidate(candidate) && candidate.ownKind) || candidate.kind,
+          };
           if (candidate.featureId !== undefined) target.featureId = candidate.featureId;
           if (candidate.datasetId !== undefined) target.datasetId = candidate.datasetId;
           if (candidate.description !== undefined) target.description = candidate.description;
@@ -348,7 +355,9 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
             candidate.featureId === ctx.preferFeature.featureId &&
             candidate.datasetId === ctx.preferFeature.datasetId;
 
-          best = evaluate(best, coordinate, target, cursor, perPixel, preferred);
+          const rank = isSegmentCandidate(candidate) ? 0 : (candidate.priority ?? 0);
+          const priority = SNAP_KIND_PRIORITY[candidate.kind];
+          best = evaluate(best, coordinate, target, priority, cursor, perPixel, preferred, rank);
         }
       }
     }
@@ -376,6 +385,14 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
 
     setEnabled(value: boolean): void {
       enabled = value;
+    },
+
+    setTolerance(px: number): void {
+      options.tolerancePx = px;
+    },
+
+    setDisableKey(key): void {
+      options.disableKey = key;
     },
 
     isEnabled(): boolean {

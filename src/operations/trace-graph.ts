@@ -107,24 +107,6 @@ function nodeKey(coordinate: Coordinate): string {
  * @param features The features to build from (pass only the visible ones)
  * @param bbox The extent in degrees; only the edges that touch it are taken in
  * @returns The graph. It has no nodes when no edge falls in `bbox`
- *
- * @example
- * ```ts
- * import { buildTraceGraph, findTracePath } from '@sakuzu/maplibre-gl-draw';
- *
- * const graph = buildTraceGraph(draw.getAllFeatures(), {
- *   minX: 139.7,
- *   minY: 35.6,
- *   maxX: 139.8,
- *   maxY: 35.7,
- * });
- * // The boundary vertices between two vertices of the same parcel
- * const between = findTracePath(
- *   graph,
- *   { coordinate: [139.71, 35.61], node: [139.71, 35.61] },
- *   { coordinate: [139.75, 35.65], node: [139.75, 35.65] },
- * );
- * ```
  */
 export function buildTraceGraph(features: readonly Feature[], bbox: BoundingBox): TraceGraph {
   const nodes = new Map<string, TraceGraphNode>();

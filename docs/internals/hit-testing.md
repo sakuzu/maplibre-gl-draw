@@ -99,8 +99,8 @@ spatial index is queried once.
 ### Companions
 
 A feature can have companions: things drawn with it and grabbed with it,
-supplied by a provider registered through
-`draw.registerFeatureCompanionProvider()` (`src/view/feature-companion.ts`).
+supplied by a provider added through
+`draw.extensions.companionProviders` (`src/view/feature-companion.ts`).
 A companion is drawn one z step below its feature, so the traversal asks
 the companions of a feature right after the test of the feature itself
 fails, and before it moves on to the next feature behind. The order in
@@ -112,6 +112,12 @@ here as well.
 - A companion decides a hit by its appearance in screen pixels, so the
   test needs `project` and the zoom. Without them the companion test is
   not performed
+- The feature itself is tested first, on what it draws: a point on its
+  marker (see "The marker of a point" below), a line or an area as its
+  strategy tests it, with the click tolerance. So a feature always wins
+  over its own companion, even when the companion is drawn from the
+  position of the feature and hit with a padding of its own (a leader
+  line)
 - When no provider is registered at all, the detour never happens. This is
   an O(1) check at the entry of the traversal, so the cost and the path of
   the plain traversal do not change
@@ -183,7 +189,7 @@ with a large icon, for instance) would drop out of the candidates before
 it ever reached the precise test.
 
 A type can therefore register, in CSS pixels, how far from its indexed
-extent a hit is possible: `candidateReachPx` in `registerFeatureHandler`,
+extent a hit is possible: `hitPaddingPx` of a `FeatureTypeDefinition`,
 which reaches `HitTestService.registerCandidateReach`. The value may be a
 function when it changes with the zoom or with settings; it is evaluated
 on every query. With registrations in place the radius grows by the
@@ -198,7 +204,8 @@ The degrees per pixel are `toleranceLngLat / clickTolerance`, so no extra
 `toleranceLngLat`.
 
 Only the candidate set grows. The tolerance handed to the second stage is
-still `toleranceLngLat`, and whether something is a hit is still decided by
+still `toleranceLngLat` (widened only by the reach of a strategy, see "The
+marker of a point"), and whether something is a hit is still decided by
 the strategy. A few more candidates are cheap, so the search is done once
 with the maximum rather than per type.
 
@@ -225,6 +232,27 @@ and returns the first feature that was hit. So on the Store alone:
 - A polygon in front blocks points, lines and polygons behind it
 - The inside of a hole is not a hit, so the click falls through to the
   feature behind
+
+### The marker of a point
+
+A built-in point is drawn as a marker: the radius of `pointRadius` (half
+the `size` of the point style by default) plus its outline when the
+outline is drawn. The position alone would be hit only within the
+tolerance, so a click on the rim of a marker larger than the tolerance
+would miss the point and fall through to what is behind it, a companion
+drawn from the point for instance.
+
+So the built-in `Point` and `MultiPoint` strategies carry a reach
+(`HitTestStrategy.reachPx`): the draw instance passes
+`pointMarkerReachPx`, which reads the size and the outline as the
+renderer does. In `hitTestAll()` the tolerance of such a feature is its
+reach plus the click tolerance, the candidate search is widened by the
+largest reach among the features, and the screen space test of the
+symbols (under terrain) adds it as well. `hitTestFeature()`, the path of
+the datasets, is unchanged: a dataset measures its own markers. A
+definition that takes some points (`appliesTo`) keeps the reach for the
+points it leaves to the built-in type, and its own `hitTest` decides for
+the others.
 
 ### The shape tested on the globe
 
@@ -330,7 +358,7 @@ subscription writes to it.
 `StoreSpatialIndex` subscribes to the Store when the draw instance is
 created, before any other subscriber, so a listener that queries the index
 during a notification already sees the change. It loads what the Store
-already holds, and for every feature a `StateChanges` names in
+already holds, and for every feature a `StoreChange` names in
 `features.created`, `updated` or `deleted` it re-derives the entry from the
 Store: a feature that is present is measured again, an absent one is
 dropped. Because the final state is read from the Store, the order of the
@@ -348,11 +376,11 @@ entries within one notification does not matter.
 - The intermediate updates of a drag (`isIntermediate`) are Store updates,
   so the index follows the shape being dragged. The tentative geometry of a
   drawing mode is not a feature and is not indexed
-- A type registered with `registerFeatureHandler` is measured with its
-  `getBoundingBox`, and registering it re-measures the features of that
-  type. When its extent changes for a reason the Store does not see (a
-  font that arrives later, for example), the plugin calls
-  `ctx.invalidateFeatures(type)`, which reaches `invalidateType(type)`
+- A type added with `draw.extensions.featureTypes` is measured with the
+  `getBoundingBox` of its engine handler, and adding it re-measures the
+  features of that type. When its extent changes for a reason the Store
+  does not see (a font that arrives later, for example), the extension
+  calls `ctx.invalidate({ type })`, which reaches `invalidateType(type)`
 - `setTileSize()` re-derives every feature, since the extent of an Image
   depends on the tile size
 - `destroy()` of the draw instance stops the subscription and empties the
@@ -546,7 +574,7 @@ be seen is what can be operated.
 
 Auxiliary handles let an extension put out handles that are neither
 vertices nor resize handles (`src/view/ui/auxiliary-handles.ts`,
-registered through `draw.registerAuxiliaryHandleProvider()`). They use the
+added through `draw.extensions.handleProviders`). They use the
 same screen rectangle test as the other handles, sized like the vertex
 handles. When one overlaps a vertex or a midpoint, the auxiliary handle
 wins; moving it aside and then grabbing the vertex is enough. With no
@@ -567,7 +595,7 @@ only difference is that there is no owning feature, which is expressed by
 When the bounding box of a single selection has zero area (a Point, a
 MultiPoint with one point), no rotate or resize handles are shown and the
 whole inside of the frame means move. The size of that frame can be
-registered per type (`getPointFrameExtent` in `registerFeatureHandler`,
+registered per type (`getPointFrameExtent` of the engine handler of the type,
 resolved by `resolvePointFrameExtent()` of the instance's
 `SelectionExtensionRegistry` in
 `src/view/ui/selection-ui/extension-registry.ts`). An unregistered type
@@ -670,10 +698,10 @@ where input is dispatched: the InputRouter intercepts the click and the
   feature later in the array is in front
 - Candidates come from the spatial index of each dataset (a static
   R-tree over the bboxes of its rows, packed into typed arrays:
-  `dataset/packed-rtree.ts`), and the precise test borrows
+  `table/packed-rtree.ts`), and the precise test borrows
   `HitTestService.hitTestFeature()`. The test is the same as for Store
   features, including the Multi types and holes. A dataset given as a
-  columnar table builds the features of the candidate rows only, and the
+  table builds the features of the candidate rows only, and the
   hit carries the row as well as the feature
 - A hit shows no selection UI and does not change the Store selection. It
   only fires the `click` and `hover` events

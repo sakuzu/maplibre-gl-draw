@@ -8,7 +8,7 @@
  * the page, and the playground creates its map from the scene's basemap and camera.
  */
 
-import type { Data, Feature, FileData, MapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { Draw, DrawDocument, Feature, FileData } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 import type { UnderlayRegistry } from '../gis/underlay';
@@ -23,7 +23,7 @@ export interface ShowcaseCamera {
 
 /** What a scene is given when it loads and when it finishes */
 export interface ShowcaseContext {
-  draw: MapLibreGLDraw;
+  draw: Draw;
   map: maplibregl.Map;
   underlays: UnderlayRegistry;
 }
@@ -49,7 +49,7 @@ export interface ShowcaseScene {
 }
 
 /** A feature of a scene's document: the fields a scene sets */
-export type SceneFeature = Pick<Feature, 'id' | 'type' | 'coordinates' | 'style' | 'properties'>;
+export type SceneFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
 
 /** A layer of a scene's document, with its features from the back */
 export interface SceneLayer {
@@ -62,9 +62,13 @@ export interface SceneLayer {
  * Builds a document in the native format from layers listed from the back, for a scene that
  * makes its drawing in code
  */
-export function buildDocument(title: string, layers: SceneLayer[], files: FileData[] = []): Data {
+export function buildDocument(
+  title: string,
+  layers: SceneLayer[],
+  files: FileData[] = [],
+): DrawDocument {
   return {
-    version: '2.0.0',
+    version: '3.0.0',
     metadata: { title },
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({
@@ -73,12 +77,15 @@ export function buildDocument(title: string, layers: SceneLayer[], files: FileDa
       visible: true,
       locked: false,
       opacity: 1,
-      order: layer.features.map((feature) => feature.id),
+      items: layer.features.map((feature) => feature.id),
+      styleRule: undefined,
+      metadata: undefined,
     })),
     features: layers.flatMap((layer) =>
       layer.features.map((feature) => ({
         ...feature,
         layerId: layer.id,
+        groupId: undefined,
         visible: true,
         locked: false,
       })),

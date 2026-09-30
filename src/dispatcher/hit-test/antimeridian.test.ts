@@ -29,16 +29,22 @@ function point(id: string, coord: Coordinate): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function line(id: string, coords: Coordinate[]): Feature {
-  return { ...point(id, [0, 0]), type: 'LineString', coordinates: coords };
+  return {
+    ...point(id, [0, 0]),
+    type: 'LineString',
+    geometry: { type: 'LineString', coordinates: coords },
+  };
 }
 
 let store: MemoryStore;
@@ -47,7 +53,16 @@ let service: HitTestServiceImpl;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new RBushSpatialIndex();
   service = new HitTestServiceImpl(store, spatialIndex);
 });
@@ -57,7 +72,7 @@ function load(features: Feature[]): Feature[] {
     store.createFeature(feature);
     spatialIndex.insert(feature);
   }
-  return store.getOrderedFeatures();
+  return store.listFeaturesInOrder();
 }
 
 describe('clickCopies', () => {

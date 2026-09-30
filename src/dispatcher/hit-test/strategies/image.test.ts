@@ -27,17 +27,19 @@ function image(lng: number, lat: number, rotation: number): Feature {
   return {
     id: 'img',
     type: 'Image',
-    coordinates: [lng, lat],
+    geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {
-      imageFileId: 'f',
-      imageWidth: IMG_W,
-      imageHeight: IMG_H,
-      createdZoom: 14,
-      rotation,
+      'maplibre-gl-draw:imageFileId': 'f',
+      'maplibre-gl-draw:imageWidth': IMG_W,
+      'maplibre-gl-draw:imageHeight': IMG_H,
+      'maplibre-gl-draw:createdZoom': 14,
+      'maplibre-gl-draw:rotation': rotation,
     },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

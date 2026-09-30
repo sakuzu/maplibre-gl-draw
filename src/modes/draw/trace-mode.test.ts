@@ -4,34 +4,22 @@
 /**
  * Integration tests for the tracing of the drawing modes
  *
- * Synthetic input (draw.input) is fed into the real InputRouter, and through the real
- * SnapService and the drawing modes (DrawLineMode / DrawPolygonMode) this checks that the
- * sequence of boundary vertices is inserted between clicks snapped to the boundary of an
- * existing feature.
- *
- * The assembly follows the same style as input-api.test.ts, with a SnapService holding the
- * snapping providers from the Store (vertex and edge) and the getSnapResult / trace of
- * ModeContext added to it.
+ * Synthetic input (`createSyntheticInput` of the test helpers) is fed into a whole engine on a map stub that projects
+ * linearly, and through the real InputRouter, SnapService and the line and polygon drawing
+ * modes this checks that the sequence of boundary vertices is inserted between clicks snapped
+ * to the boundary of an existing feature or of a dataset.
  */
 
-import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { InputOperations } from '../../api/input-api.js';
-import { createInputApi } from '../../api/input-api.js';
-import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
-import { createInputRouter } from '../../dispatcher/input-router.js';
-import type { NormalizedEvent } from '../../dispatcher/types.js';
-import type { TraceConfig } from '../../shared/config/trace.js';
-import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
-import { createSnapService } from '../../snapping/service.js';
-import type { SnapService } from '../../snapping/types.js';
-import { MemoryStore } from '../../store/memory.js';
-import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { BoundingBox, Coordinate, Feature, Mode } from '../../store/types.js';
-import type { ModeContext } from '../handler.js';
-import { ModeManagerImpl } from '../manager.js';
-import { DrawLineMode } from './line.js';
-import { DrawPolygonMode } from './polygon.js';
+import type { Draw } from '../../api/draw.js';
+import { createDrawOnEngine } from '../../api/impl/create-draw.js';
+import type { Engine } from '../../api/impl/engine.js';
+import { createEngine } from '../../api/impl/engine.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
+import type { Store } from '../../store/store.js';
+import type { Coordinate, Feature } from '../../store/types.js';
+import { createMapStub, createSyntheticInput } from '../../test-utils.js';
+import type { ModeManager } from '../manager.js';
 
 const ZOOM = 14;
 /** The degrees corresponding to one pixel at zoom 14 (= 360 / (512 * 2^14)) */
@@ -90,134 +78,58 @@ const D_RING: Coordinate[] = [
   D0,
 ];
 
-/** The display extent of the datasets (the whole world) */
-const WORLD = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+let engine: Engine;
+let draw: Draw;
+let store: Store;
+let modeManager: ModeManager;
+let input: ReturnType<typeof createSyntheticInput>;
+/** The layer the features are in */
+let layerId: string;
 
 /**
- * A normalizer that does no more than record events (synthetic input does not go through the
- * normalizer)
- */
-class FakeNormalizer {
-  private handlers = new Set<(event: NormalizedEvent) => void>();
-  attach(): void {}
-  detach(): void {}
-  on(handler: (event: NormalizedEvent) => void): void {
-    this.handlers.add(handler);
-  }
-  off(handler: (event: NormalizedEvent) => void): void {
-    this.handlers.delete(handler);
-  }
-}
-
-/** A map that does no more than map longitude/latitude and screen coordinates linearly */
-function createFakeMap(): MapLibreMap {
-  const canvas = { style: {} as { cursor?: string } };
-  return {
-    getZoom: () => ZOOM,
-    getCanvas: () => canvas,
-    project: (coord: Coordinate) => ({
-      x: (coord[0] - ORIGIN.lng) / DEG_PER_PIXEL,
-      y: (ORIGIN.lat - coord[1]) / DEG_PER_PIXEL,
-    }),
-    unproject: (point: [number, number]) => ({
-      lng: ORIGIN.lng + point[0] * DEG_PER_PIXEL,
-      lat: ORIGIN.lat - point[1] * DEG_PER_PIXEL,
-    }),
-  } as unknown as MapLibreMap;
-}
-
-let store: MemoryStore;
-let spatialIndex: RBushSpatialIndex;
-let modeManager: ModeManagerImpl;
-let input: InputOperations;
-let trace: TraceConfig;
-let snapService: SnapService;
-let datasets: DatasetManager;
-
-/**
- * Assembles the set of objects for the tests and places one polygon as the snap target
+ * Builds an engine on a map that projects linearly around ORIGIN at ZOOM, and places one
+ * polygon as the snap target
  */
 function setup(): void {
-  store = new MemoryStore();
-  store.createLayer({
-    id: 'l1',
-    name: 'l1',
-    visible: true,
-    locked: false,
-    opacity: 1,
-    order: [],
+  const stub = createMapStub();
+  Object.assign(stub.map, {
+    getZoom: () => ZOOM,
+    project: (coord: Coordinate | { lng: number; lat: number }) => {
+      const [lng, lat] = Array.isArray(coord) ? coord : [coord.lng, coord.lat];
+      return { x: (lng - ORIGIN.lng) / DEG_PER_PIXEL, y: (ORIGIN.lat - lat) / DEG_PER_PIXEL };
+    },
+    unproject: (point: [number, number] | { x: number; y: number }) => {
+      const [x, y] = Array.isArray(point) ? point : [point.x, point.y];
+      return { lng: ORIGIN.lng + x * DEG_PER_PIXEL, lat: ORIGIN.lat - y * DEG_PER_PIXEL };
+    },
+    getBounds: () => ({
+      getWest: () => -180,
+      getEast: () => 180,
+      getSouth: () => -85,
+      getNorth: () => 85,
+      getSouthWest: () => ({ lng: -180, lat: -85 }),
+      getNorthEast: () => ({ lng: 180, lat: 85 }),
+    }),
   });
-  spatialIndex = new RBushSpatialIndex();
+  engine = createEngine(stub.map, {}, { deferDefaultMode: true });
+  draw = createDrawOnEngine(engine);
+  engine.enterDefaultMode();
+  store = engine.context.store;
+  modeManager = engine.modeManager;
+  input = createSyntheticInput(engine);
+  layerId = store.listLayers()[0].id;
 
-  const target: Feature = {
+  store.createFeature({
     id: 'target',
     type: 'Polygon',
-    coordinates: [RING],
-    layerId: 'l1',
+    geometry: { type: 'Polygon', coordinates: [RING] },
+    layerId,
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
-  };
-  store.createFeature(target);
-  spatialIndex.insert(target);
-
-  const map = createFakeMap();
-  modeManager = new ModeManagerImpl(store);
-  modeManager.registerMode('select', () => ({ modeName: 'select' }));
-  modeManager.registerMode('draw_line', () => new DrawLineMode());
-  modeManager.registerMode('draw_polygon', () => new DrawPolygonMode());
-
-  snapService = createSnapService({ store, spatialIndex });
-  trace = { enabled: true };
-
-  // Snapping to data (a dataset) also goes through the same path as production
-  datasets = createDatasetManager({
-    getViewportBounds: () => WORLD,
-    getZoom: () => ZOOM,
-    onViewportChange: () => () => {},
-    requestRepaint: () => {},
+    style: {},
   });
-  const displaySnap = createDisplaySnapProviders({
-    datasets,
-    store,
-    spatialIndex,
-    isEnabled: () => snapService.isDatasetsEnabled(),
-  });
-  for (const provider of displaySnap.providers) {
-    snapService.register(provider);
-  }
-
-  let idCounter = 0;
-  const context = {
-    map,
-    store,
-    spatialIndex,
-    trace,
-    autoNameGenerator: { generateName: () => undefined },
-    generateFeatureId: () => `f${++idCounter}`,
-    getCurrentLayerId: () => 'l1',
-    setMode: (mode: Mode) => modeManager.setMode(mode),
-    getSnapResult: () => snapService.getResult(),
-    getDatasetFeature: (datasetId: string, featureId: string) =>
-      displaySnap.getFeature(datasetId, featureId),
-    getDatasetTraceFeatures: (bbox: BoundingBox) =>
-      snapService.isDatasetsEnabled() ? displaySnap.queryFeatures(bbox) : [],
-  } as unknown as ModeContext;
-
-  modeManager.setContext(context);
-  modeManager.start();
-
-  const normalizer = new FakeNormalizer();
-  const inputRouter = createInputRouter({
-    normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
-    modeManager,
-    context,
-    map,
-    snapService,
-  });
-  inputRouter.start();
-
-  input = createInputApi({ map, inputRouter }).input;
 }
 
 /** The snap target features placed in advance */
@@ -225,31 +137,32 @@ const EXISTING_IDS = new Set(['target', 'neighbor']);
 
 /** The feature produced by the drawing (excluding the snap target polygons) */
 function drawnFeature(): Feature {
-  const features = store.getAllFeatures().filter((f) => !EXISTING_IDS.has(f.id));
+  const features = store.listFeatures().filter((f) => !EXISTING_IDS.has(f.id));
   expect(features).toHaveLength(1);
   return features[0];
 }
 
 /** Places the polygon on the right (it shares the P2 - P3 edge) */
 function addNeighbor(): void {
-  const neighbor: Feature = {
+  store.createFeature({
     id: 'neighbor',
     type: 'Polygon',
-    coordinates: [NEIGHBOR_RING],
-    layerId: 'l1',
+    geometry: { type: 'Polygon', coordinates: [NEIGHBOR_RING] },
+    layerId,
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
-  };
-  store.createFeature(neighbor);
-  spatialIndex.insert(neighbor);
+    style: {},
+  });
 }
 
 beforeEach(() => {
   setup();
+  return () => engine.destroy();
 });
 
-describe('tracing of draw_line', () => {
+describe('tracing of the line drawing mode', () => {
   it('inserts the vertices in between when snapping to two vertices of the same polygon', () => {
     modeManager.setMode('draw_line');
 
@@ -257,7 +170,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P1, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P1, P2]);
   });
 
   it('continues the trace onto the adjoining feature connected by a shared vertex', () => {
@@ -269,7 +182,7 @@ describe('tracing of draw_line', () => {
     input.click(N0);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P1, P2, N0]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P1, P2, N0]);
   });
 
   it('can trace from a click snapped to the middle of an edge as well', () => {
@@ -282,7 +195,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([mid, P1, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([mid, P1, P2]);
   });
 
   it('inserts nothing when both points are snapped onto the same edge', () => {
@@ -294,7 +207,7 @@ describe('tracing of draw_line', () => {
     input.click(b);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([a, b]);
+    expect(coordinatesOf(drawnFeature())).toEqual([a, b]);
   });
 
   it('does not trace when a click that does not snap is inserted in between', () => {
@@ -305,7 +218,7 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, AWAY, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, AWAY, P2]);
   });
 
   it('previews the trace path on a mouse move', () => {
@@ -331,14 +244,14 @@ describe('tracing of draw_line', () => {
   });
 
   it('inserts nothing when tracing is disabled', () => {
-    trace.enabled = false;
+    draw.options.update({ tracing: { enabled: false } });
     modeManager.setMode('draw_line');
 
     input.click(P0);
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P2]);
   });
 
   it('does not trace on the click right after going back with Backspace', () => {
@@ -351,16 +264,23 @@ describe('tracing of draw_line', () => {
     input.click(P2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([P0, P2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([P0, P2]);
   });
 });
 
-describe('preference of the trace anchor (getSnapPreference)', () => {
+describe('preference of the trace anchor', () => {
   /** Puts one piece of data on (at a position away from the rings of the Store) */
-  function addDataset(): void {
-    datasets.add({
+  function putDataset(): void {
+    draw.datasets.add({
       id: 'data',
-      features: [{ id: 'dpoly', type: 'Polygon', coordinates: [D_RING] }],
+      rows: [
+        {
+          type: 'Feature',
+          id: 'dpoly',
+          geometry: { type: 'Polygon', coordinates: [D_RING] },
+          properties: {},
+        },
+      ],
     });
   }
 
@@ -379,7 +299,7 @@ describe('preference of the trace anchor (getSnapPreference)', () => {
   });
 
   it('also returns datasetId for a snap target originating from data', () => {
-    addDataset();
+    putDataset();
     modeManager.setMode('draw_line');
 
     input.click(D0);
@@ -388,14 +308,14 @@ describe('preference of the trace anchor (getSnapPreference)', () => {
   });
 
   it('the trace also holds between boundaries of data', () => {
-    addDataset();
+    putDataset();
     modeManager.setMode('draw_line');
 
     input.click(D0);
     input.click(D2);
     input.key('Enter');
 
-    expect(drawnFeature().coordinates).toEqual([D0, D1, D2]);
+    expect(coordinatesOf(drawnFeature())).toEqual([D0, D1, D2]);
   });
 
   it('goes back to null after a click that does not snap', () => {
@@ -428,7 +348,7 @@ describe('preference of the trace anchor (getSnapPreference)', () => {
   });
 
   it('returns nothing when tracing is disabled', () => {
-    trace.enabled = false;
+    draw.options.update({ tracing: { enabled: false } });
     modeManager.setMode('draw_line');
 
     input.click(P0);
@@ -445,7 +365,7 @@ describe('preference of the trace anchor (getSnapPreference)', () => {
   });
 });
 
-describe('tracing of draw_polygon', () => {
+describe('tracing of the polygon drawing mode', () => {
   it('takes in the vertices by tracing along the boundary', () => {
     modeManager.setMode('draw_polygon');
 
@@ -454,7 +374,7 @@ describe('tracing of draw_polygon', () => {
     input.click(AWAY);
     input.key('Enter');
 
-    const ring = (drawnFeature().coordinates as Coordinate[][])[0];
+    const ring = (coordinatesOf(drawnFeature()) as Coordinate[][])[0];
     // P0 -> (takes in P1) -> P2 -> AWAY -> the closing point
     expect(ring).toEqual([P0, P1, P2, AWAY, P0]);
   });

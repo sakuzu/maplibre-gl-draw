@@ -15,13 +15,14 @@
 import { circleBoundingBox } from '../../../geometry/circle.js';
 import { pixelsToDegreesLat, pixelsToDegreesLng } from '../../../shared/math/index.js';
 import { fromPlane, toPlane } from '../../../shared/math/mercator-plane.js';
+import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import {
   getCircleRadius,
   getCreatedZoom,
   getImageProperties,
 } from '../../../shared/utils/property.js';
 import { getBoundingBox } from '../../../store/spatial/index.js';
-import type { Coordinate, Feature, ImageStyle } from '../../../store/types.js';
+import type { Coordinate, Feature } from '../../../store/types.js';
 import type { SelectionExtensionRegistry } from './extension-registry.js';
 import type { BoundingBoxCoords } from './types.js';
 
@@ -60,7 +61,7 @@ export function computeBoundingBox(
   }
 
   if (feature.type === 'Point') {
-    const coord = feature.coordinates as Coordinate;
+    const coord = coordinatesOf(feature) as Coordinate;
     return {
       topLeft: coord,
       topRight: coord,
@@ -99,7 +100,7 @@ export function computeBoundingBox(
  * The frame of a Circle: the extent of the geodesic circle as it is drawn, around its center
  */
 function computeCircleBoundingBox(feature: Feature): BoundingBoxCoords {
-  const center = feature.coordinates as Coordinate;
+  const center = coordinatesOf(feature) as Coordinate;
   const radiusMeters = getCircleRadius(feature);
   const extent = radiusMeters && radiusMeters > 0 ? circleBoundingBox(center, radiusMeters) : null;
 
@@ -130,15 +131,14 @@ function computeCircleBoundingBox(feature: Feature): BoundingBoxCoords {
  * (the same method as computeQuadVertices in quad-shader.ts).
  */
 function computeOrientedBoundingBox(feature: Feature): BoundingBoxCoords | null {
-  const coord = feature.coordinates as Coordinate;
+  const coord = coordinatesOf(feature) as Coordinate;
   const [lng, lat] = coord;
   const tileSize = 512;
 
   const props = getImageProperties(feature);
-  const style = feature.style as ImageStyle | undefined;
 
-  const imageWidth = style?.width || props.imageWidth || 100;
-  const imageHeight = style?.height || props.imageHeight || 100;
+  const imageWidth = props.imageWidth || 100;
+  const imageHeight = props.imageHeight || 100;
   const scale = props.scale ?? 1;
   // getImageProperties().createdZoom returns 0 when it is missing, so ?? does not work.
   // getCreatedZoom(number|undefined) is used so that 14 is the default when it is missing.

@@ -18,7 +18,7 @@
  *   - The tentative feature being drawn (it is not a feature of the Store, so it never
  *     enters in the first place)
  *
- * For a custom feature type, CustomFeatureHandler.getSnapTargets is used when it is
+ * For a custom feature type, FeatureTypeHandler.getSnapTargets is used when it is
  * registered (the vertex provider calls it).
  */
 
@@ -66,7 +66,7 @@ export function createStoreVertexSnapProvider(deps: StoreSnapProviderDeps): Snap
 
       for (const feature of queryFeatures(deps, bbox, ctx)) {
         // A custom type is left to the registered getSnapTargets
-        const custom = deps.snapTargets?.get(feature.type);
+        const custom = deps.snapTargets?.forFeature(feature);
         if (custom) {
           for (const candidate of custom(feature, ctx)) {
             const featureId = candidate.featureId ?? feature.id;
@@ -114,7 +114,7 @@ export function createStoreEdgeSnapProvider(deps: StoreSnapProviderDeps): SnapPr
       for (const feature of queryFeatures(deps, bbox, ctx)) {
         // The candidates of a custom type are returned by the vertex provider
         // (getSnapTargets)
-        if (deps.snapTargets?.get(feature.type)) continue;
+        if (deps.snapTargets?.forFeature(feature)) continue;
         if (!hasSnapEdges(feature.type)) continue;
 
         collectFeatureSegmentsInBBox(feature, bbox, (start, end, startRef, endRef) => {

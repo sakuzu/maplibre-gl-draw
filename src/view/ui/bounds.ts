@@ -21,7 +21,7 @@ import {
   type BoundingBoxCoords,
   computeBoundingBox,
   hasZeroArea,
-  resolvePointFrameExtentWith,
+  resolvePointFrameCornersWith,
   type SelectionExtensionRegistry,
 } from './selection-ui/index.js';
 
@@ -128,7 +128,8 @@ export function computeCombinedGeoBoundingBox(
 /**
  * Compute the bounding box with a margin of a single-coordinate feature in geographic coordinates
  *
- * The extent of the frame of a point (registrable per type; 12px square when unregistered)
+ * The extent of the frame of a point (registrable per type; the marker of a built-in point, or
+ * a 12px square when unregistered)
  * plus the margin is computed in screen coordinates and converted into geographic ones.
  * The coordinate received is the center of the bbox (since features other than Point can
  * also be zero-area, e.g. a MultiPoint with a single point; coordinates must not be
@@ -143,18 +144,15 @@ function computeSingleCoordGeoBoundingBox(
 ): BoundingBoxCoords {
   const center = transform.project(coord);
 
-  // The half width and half height of the frame of the point + the margin
-  const extent = extensions
-    ? extensions.resolvePointFrameExtent(feature)
-    : resolvePointFrameExtentWith(undefined, feature);
-  const halfWidth = extent.halfWidth + margin;
-  const halfHeight = extent.halfHeight + margin;
+  // The corners of the frame of the point (its outline, or its extent) + the margin
+  const corners = extensions
+    ? extensions.resolvePointFrameCorners(feature, center, margin)
+    : resolvePointFrameCornersWith(undefined, undefined, feature, center, margin);
 
   // Convert the 4 corners in screen coordinates into geographic coordinates
-  const topLeft = transform.unproject({ x: center.x - halfWidth, y: center.y - halfHeight });
-  const topRight = transform.unproject({ x: center.x + halfWidth, y: center.y - halfHeight });
-  const bottomRight = transform.unproject({ x: center.x + halfWidth, y: center.y + halfHeight });
-  const bottomLeft = transform.unproject({ x: center.x - halfWidth, y: center.y + halfHeight });
+  const [topLeft, topRight, bottomRight, bottomLeft] = corners.map((corner) =>
+    transform.unproject(corner),
+  );
 
   return {
     topLeft: [topLeft.lng, topLeft.lat],

@@ -4,31 +4,30 @@
 /**
  * N scaling regression test of load
  *
- * Verifies that draw.load (a native bulk import) stays linear in the number of features,
+ * Verifies that `draw.document.load` (a native bulk import) stays linear in the number of
+ * features,
  * not by the absolute time but by "the ratio of the elapsed time when N is multiplied by
  * 4". To be robust against differences between machines, the threshold is 8x, halfway
  * between linear (4x) and quadratic (16x), and it fails if it goes back to quadratic.
  *
- * The measured path is shaped the same as in a browser. That is, the EventBridge is
- * connected, and for each public event "an idempotent subscriber that scans the whole
- * store every time" (the equivalent of recomputing a list in the application) is wired
- * up. A bulk import used to have the EventBridge expand 1 flush into N per-feature
- * events, and the subscriber scanned O(N) for each one, O(N^2) in total. This was made
- * linear by the folding of the events of a silent bulk flush and by the destructive
- * appending of the store's accumulation. The purpose of this test is to detect that
- * regression.
+ * The measured path is shaped the same as in a browser. That is, the events of the instance
+ * follow the Store, and "an idempotent subscriber that scans the whole store every time" (the
+ * equivalent of recomputing a list in the application) is wired to the events that arrive
+ * once per transaction (`document.changed`, and those of the layers, the groups and the
+ * metadata). If a bulk import were split into N transactions, the subscriber would scan O(N)
+ * for each one, O(N^2) in total. The purpose of this test is to detect that regression.
  *
  * One more test is placed here, which looks at whether the membership decision of
  * layer.order is O(1) with the store alone (see the describe below).
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Context } from '../api/context.js';
-import { createImportExportAPI } from '../api/import-export/index.js';
-import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
-import { EventBridgeImpl } from './event-bridge.js';
+import { createDocument } from '../api/impl/document.js';
+import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
+import { createResourceDeps } from '../test-utils.js';
 import { MemoryStore } from './memory.js';
-import { RBushSpatialIndex } from './spatial/spatial-index.js';
 import type { Data, Feature, Group, Layer } from './types.js';
 
 function mulberry32(seed: number): () => number {
@@ -53,7 +52,9 @@ function generate(count: number): Data {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   }));
   const features: Feature[] = [];
   const perLayer: string[][] = Array.from({ length: layerCount }, () => []);
@@ -62,24 +63,26 @@ function generate(count: number): Data {
     const type: Feature['type'] =
       r < 0.45 ? 'Point' : r < 0.7 ? 'LineString' : r < 0.9 ? 'Polygon' : 'Circle';
     const center: [number, number] = [139 + rand(), 35 + rand()];
-    let coordinates: Feature['coordinates'] = center;
+    let coordinates: FeatureCoordinates = center;
     const extra: Record<string, unknown> = {};
     if (type === 'LineString') coordinates = [center, [center[0] + 0.001, center[1]]];
     else if (type === 'Polygon')
       coordinates = [
         [center, [center[0] + 0.001, center[1]], [center[0], center[1] + 0.001], center],
       ];
-    else if (type === 'Circle') extra.radiusMeters = 100;
+    else if (type === 'Circle') extra['maplibre-gl-draw:radiusMeters'] = 100;
     const li = i % layerCount;
     const id = `f-${i}`;
     features.push({
       id,
       type,
-      coordinates,
+      geometry: geometryFromCoordinates(type, coordinates),
       layerId: `layer-${li}`,
+      groupId: undefined,
       properties: { ...extra, name: `n ${i}` },
       locked: false,
       visible: true,
+      style: {},
     });
     perLayer[li].push(id);
   }
@@ -99,92 +102,89 @@ function generate(count: number): Data {
         const f = features.find((x) => x.id === m);
         if (f) f.groupId = gid;
       }
-      groups.push({ id: gid, name: gid, featureIds: members, locked: false, visible: true });
+      groups.push({
+        id: gid,
+        layerId: `layer-${li}`,
+        name: gid,
+        featureIds: members,
+        locked: false,
+        visible: true,
+      });
       groupIds.push(gid);
       cursor += size;
     }
-    layers[li].order = [...groupIds, ...ids.slice(cursor)];
+    layers[li].items = [...groupIds, ...ids.slice(cursor)];
   }
-  return { version: '2.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
+  return { version: '3.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
 }
 
-// Measurement equivalent to a browser: wires up the EventBridge plus an O(N) idempotent
-// subscriber on every public event, and returns the elapsed time of 1 load. Because the
-// minimum is taken to resist noise, it returns the time of a single run and the caller
-// repeats it.
-function measureLoadOnce(data: Data): number {
+// Measurement equivalent to a browser: the events of the instance follow the Store, with an
+// O(N) idempotent subscriber on the events that arrive once per transaction, and returns the elapsed time of
+// 1 load. Because the minimum is taken to resist noise, it returns the time of a single run
+// and the caller repeats it.
+async function measureLoadOnce(data: Data): Promise<number> {
   const store = new MemoryStore();
-  const spatialIndex = new RBushSpatialIndex();
   store.createLayer({
     id: 'default-layer',
     name: 'L',
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
-  let c = 0;
-  const context = {
-    store,
-    spatialIndex,
-    generateFeatureId: () => `x-${c++}`,
-    getCurrentLayerId: () => 'default-layer',
-    autoNameGenerator: { generateName: () => undefined },
-  } as unknown as Context;
-  const api = createImportExportAPI(context);
+  const document = createDocument(createResourceDeps(store), () => {});
 
-  const emitter = new EventEmitterImpl();
-  const bridge = new EventBridgeImpl(store, emitter);
-  bridge.start();
+  const events = createEventHub();
+  const stop = connectStoreEvents(events, store);
   // An O(N) idempotent subscriber equivalent to recomputing a list in the frontend. If
-  // the folding breaks it is called N times and becomes quadratic.
+  // the load is split into many transactions it is called N times and becomes quadratic.
   const emitLike = () => {
     let acc = 0;
-    for (const f of store.getAllFeatures()) acc += f.id.length;
+    for (const f of store.listFeatures()) acc += f.id.length;
     if (acc < 0) throw new Error('unreachable');
   };
   for (const ev of [
-    'feature.create',
-    'feature.update',
-    'feature.delete',
-    'layer.create',
-    'layer.update',
-    'layer.delete',
-    'group.create',
-    'group.update',
-    'group.delete',
-    'metadata.change',
+    'layer.created',
+    'layer.updated',
+    'layer.deleted',
+    'group.created',
+    'group.updated',
+    'group.deleted',
+    'metadata.updated',
+    'document.changed',
   ] as const) {
-    emitter.on(ev, emitLike);
+    events.on(ev, emitLike);
   }
 
   const start = performance.now();
-  void api.load(data);
+  await document.load(data);
   const elapsed = performance.now() - start;
-  bridge.stop();
+  stop();
   return elapsed;
 }
 
-function minLoadMs(data: Data, reps: number): number {
+async function minLoadMs(data: Data, reps: number): Promise<number> {
   let best = Number.POSITIVE_INFINITY;
   for (let k = 0; k < reps; k++) {
-    const t = measureLoadOnce(data);
+    const t = await measureLoadOnce(data);
     if (t < best) best = t;
   }
   return best;
 }
 
 describe('load scaling (regression prevention)', () => {
-  it('keeps the load time under 8 times even when N is multiplied by 4 (not quadratic)', () => {
+  it('keeps the load time under 8 times even when N is multiplied by 4 (not quadratic)', async () => {
     const small = generate(1000);
     const large = generate(4000);
 
     // Warm-up (to exclude the outliers of JIT / the first compilation).
-    measureLoadOnce(small);
-    measureLoadOnce(large);
+    await measureLoadOnce(small);
+    await measureLoadOnce(large);
 
-    const tSmall = minLoadMs(small, 5);
-    const tLarge = minLoadMs(large, 5);
+    const tSmall = await minLoadMs(small, 5);
+    const tLarge = await minLoadMs(large, 5);
 
     const ratio = tLarge / tSmall;
     // About 4x if linear. About 16x if quadratic. If it exceeds 8x it is regarded as a
@@ -221,7 +221,9 @@ function measureSpreadMs(layerCount: number): number {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
   }
 
@@ -231,11 +233,13 @@ function measureSpreadMs(layerCount: number): number {
       store.createFeature({
         id: `f-${i}`,
         type: 'Point',
-        coordinates: [0, 0],
+        geometry: { type: 'Point', coordinates: [0, 0] },
         layerId: `L${i % layerCount}`,
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       });
     }
   }, 'silent');

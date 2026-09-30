@@ -63,7 +63,7 @@ export function drapeMercatorY(lat: number): number {
  *
  * The key is decided by the caller. For a feature in the Store the instance is replaced on
  * every edit, so the feature itself is the key; for a dataset the replacement
- * happens per `setFeatures` and the coordinate arrays are not reused, so the coordinate array
+ * happens per `setRows` and the coordinate arrays are not reused, so the coordinate array
  * is the key (when applying a style rule rebuilds only the feature instances, the same
  * coordinate arrays remain, so merely changing a color does not require converting a million
  * vertices again).

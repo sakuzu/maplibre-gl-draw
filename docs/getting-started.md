@@ -69,12 +69,12 @@ The page needs a container for the map and two buttons.
 }
 ```
 
-Create the map as usual, then pass it to `createMapLibreGLDraw`.
+Create the map as usual, then pass it to `createDraw`.
 
 ```ts
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -83,17 +83,21 @@ const map = new maplibregl.Map({
   zoom: 12,
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 ```
 
-The instance adds its custom layer to the map, creates one layer for the
-features (the default layer), and starts in `select` mode. It can be
-created before the map has finished loading; the drawing appears as soon
-as the style is ready.
+The instance draws on the map, creates one empty layer for the features,
+and starts in `select` mode. It can be created before the map has
+finished loading; the drawing appears as soon as the style is ready.
+
+Everything the instance holds is reached through a few names:
+`draw.features`, `draw.layers` and `draw.groups` for the document,
+`draw.selection` for what the user has selected, and `draw.document` to
+save and load the whole of it.
 
 When the page or component that owns the map goes away, call
-`draw.destroy()` before `map.remove()`. It removes the layers and
-listeners the instance added.
+`draw.destroy()` before `map.remove()`. It removes everything the
+instance added to the map.
 
 In `examples/basic/main.ts` this is step 2.
 
@@ -114,11 +118,13 @@ In `draw_polygon` mode the user draws like this.
 | --- | --- |
 | Click | Adds a vertex |
 | Click the first vertex (with 3 or more vertices) | Finishes the polygon |
+| Double click (with 3 or more vertices) | Finishes the polygon |
 | Enter | Finishes the polygon |
 | Backspace or Delete | Removes the last vertex |
 | Escape | Discards the vertices; a second Escape returns to `select` |
 
-A double click adds two vertices; it does not zoom the map while drawing.
+A double click on a new position adds that vertex before it finishes; it
+does not zoom the map while drawing.
 When the polygon is finished, the mode returns to `select` and the new
 polygon is selected, so the user can move it or drag its vertices right
 away.
@@ -126,20 +132,22 @@ away.
 The instance tells you when a feature is created.
 
 ```ts
-draw.on('draw.feature.create', ({ feature }) => {
+draw.on('feature.created', ({ feature }) => {
   console.log('created', feature.id, feature.type);
 });
 ```
 
-`feature` is the library's own record, not a GeoJSON Feature. Its
-`coordinates` for a polygon are the rings, `[[[lng, lat], ...]]`, with
-the first point repeated at the end.
+`feature.geometry` is a GeoJSON geometry. For a polygon its
+`coordinates` are the rings, `[[[lng, lat], ...]]`, with the first point
+repeated at the end. `feature.properties` are GeoJSON properties too:
+your attributes, and the few values the library keeps under keys that
+start with `maplibre-gl-draw:`.
 
 To keep a toolbar in step with the mode (including the automatic return
-to `select`), listen to `draw.mode.change`.
+to `select`), listen to `mode.changed`.
 
 ```ts
-draw.on('draw.mode.change', ({ mode }) => {
+draw.on('mode.changed', ({ mode }) => {
   document
     .querySelector('#draw-polygon')
     ?.classList.toggle('active', mode === 'draw_polygon');
@@ -154,13 +162,15 @@ In `examples/basic/main.ts` this is step 3.
 
 ## 4. Subscribe to changes
 
-`draw.feature.create` fires once per feature. To react to every change
-at once (creating, moving, editing vertices, deleting, loading), listen
-to `draw.features.change`. It fires once per change of the data and
-carries everything that changed together.
+`feature.created` fires once per feature. To react to every change at
+once (creating, moving, editing vertices, deleting, loading), listen to
+`document.changed`. It arrives once per transaction and carries
+everything that changed together.
 
 ```ts
-draw.on('draw.features.change', ({ created, updated, deleted, source }) => {
+draw.on('document.changed', ({ features, source }) => {
+  if (!features) return;
+  const { created = [], updated = [], deleted = [] } = features;
   console.log(
     `${created.length} created, ${updated.length} updated,`,
     `${deleted.length} deleted (${source})`,
@@ -168,21 +178,25 @@ draw.on('draw.features.change', ({ created, updated, deleted, source }) => {
 });
 ```
 
-`updated` holds pairs of `{ feature, previous }`. `source` says where the
-change came from, for example `'local'` for the user's edits and
-`'batch'` for a GeoJSON load.
+Each entry of `updated` holds the `feature` and its `previous` state.
+`source` says where the change came from, for example `'local'` for the
+user's edits and calls of the API, and `'load'` for a GeoJSON load.
+The same event covers layers, groups and the title of the document.
 
 A few rules make the API easy to reason about.
 
 - Methods are synchronous. After `draw.setMode(...)` or
-  `draw.deleteFeature(id)` returns, reading the instance gives the new
-  state. Only `load` returns a Promise
-- Events fire after the change is complete, so a handler sees the new
+  `draw.features.delete(id)` returns, reading the instance gives the new
+  state. Only `draw.document.load` returns a Promise
+- `create` and `update` return what they wrote. A wrong argument, such as
+  an ID that does not exist, throws a `DrawError`; a write refused
+  because the drawing is read-only returns `null` or `false`
+- Events fire after the change is complete, so a listener sees the new
   state
-- `draw.on` returns a function that removes the handler
+- `draw.on` returns a function that unsubscribes
 
 Update your UI from the events, not from the methods you called: the
-user changes the data too, and the events cover both.
+user changes the drawing too, and the events cover both.
 
 In `examples/basic/main.ts` this is step 4. The
 [event reference](reference/events.md) lists every event and its
@@ -190,50 +204,46 @@ payload.
 
 ## 5. Save and load
 
-`export('geojson')` returns every feature as a GeoJSON
-FeatureCollection, serialized as a string.
+`draw.document.toGeoJSON()` returns every feature as a GeoJSON
+FeatureCollection. Serialize it and keep it where you like.
 
 ```ts
 const STORAGE_KEY = 'maplibre-gl-draw:basic';
 
 document.querySelector('#save')?.addEventListener('click', () => {
-  const { data } = draw.export('geojson');
-  localStorage.setItem(STORAGE_KEY, data);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(draw.document.toGeoJSON()));
 });
 ```
 
-The result also carries `mimeType` (`application/geo+json`) and a
-suggested `fileName`, for when you offer the data as a download or send
-it to a server.
-
-`load` reads it back. It detects the format of what you give it: a
-GeoJSON FeatureCollection, the native format, or a `File`.
+`draw.document.load` reads it back. It detects the format of what you
+give it: GeoJSON, the native format, a JSON string or a `File`.
 
 <!-- docs-check: continue -->
 
 ```ts
 const saved = localStorage.getItem(STORAGE_KEY);
 if (saved !== null) {
-  const result = await draw.load(JSON.parse(saved));
-  console.log(`loaded ${result.featureIds.length} features`);
-  for (const { index, reason } of result.skipped ?? []) {
+  const result = await draw.document.load(JSON.parse(saved));
+  console.log(`loaded ${result?.featureIds.length ?? 0} features`);
+  for (const { index, reason } of result?.skipped ?? []) {
     console.warn(`feature ${index} was skipped: ${reason}`);
   }
 }
 ```
 
-Loading GeoJSON adds the features to the ones already there. They go
-into the active layer, unless they name a layer that exists (a GeoJSON
-exported by this library does). A feature that cannot be read (an
-unknown geometry type, invalid coordinates) is left out and listed in
-`skipped`, and the rest are loaded. All the loaded features arrive in
-one `draw.features.change`.
+`load` returns `null` when the drawing is read-only. Loading GeoJSON adds
+the features to the ones already there. They go into the active layer,
+unless they name a layer that exists (a GeoJSON written by this library
+does). A feature that cannot be read (an unknown geometry type, invalid
+coordinates) is left out and listed in `skipped`, and the rest are
+loaded. All the loaded features arrive in one `document.changed`.
 
 GeoJSON keeps each feature with its properties and style, but not the
 layers and groups themselves or their order. To keep those as well, use
-the native format, with `draw.export('native')` and `draw.load(...)` in
-the same way. Loading the native format replaces the current data
-instead of adding to it. Both formats are specified in the
+the native format: `draw.document.toJSON()` returns the whole document,
+and `draw.document.load` reads it back in the same way. Loading the
+native format replaces the current document instead of adding to it.
+Both formats are specified in the
 [data format reference](reference/data-format.md).
 
 In `examples/basic/main.ts` this is step 5.

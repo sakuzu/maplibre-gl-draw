@@ -57,7 +57,9 @@ export class FillShaderManager {
    */
   constructor(gl: WebGL2RenderingContext, terrain: TerrainContext = new TerrainContext()) {
     this.gl = gl;
-    this.projectionUniformManager = new ProjectionUniformManager(gl, { surface: true, terrain });
+    this.projectionUniformManager = new ProjectionUniformManager(gl, {
+      surface: true,
+    }).useTerrainState(terrain);
     this.vertexBuffer = gl.createBuffer();
     this.indexBuffer = gl.createBuffer();
     this.vao = gl.createVertexArray();

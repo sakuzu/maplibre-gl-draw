@@ -14,7 +14,9 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import { toRow } from '../test-utils.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import { FeatureArraySource } from './source.js';
@@ -31,7 +33,7 @@ import {
   worldUnitsPerPixel,
   zoomBandFor,
 } from './thinning.js';
-import type { DatasetFeatureInput, DatasetOptions } from './types.js';
+import type { DatasetOptions, DatasetRow } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
 /** Viewport covering the whole globe */
@@ -46,16 +48,16 @@ function pxDeg(band: number): number {
 /** The footprint radius of the default style (radius 6 + outline 2 + margin 2 = 10px) */
 const FOOTPRINT_PX = 10;
 
-function point(id: string, coord: Coordinate, style?: Feature['style']): DatasetFeatureInput {
-  return { id, type: 'Point', coordinates: coord, style };
+function point(id: string, coord: Coordinate, style?: Feature['style']): DatasetRow {
+  return toRow({ id, type: 'Point', coordinates: coord, style });
 }
 
-function line(id: string, coords: Coordinate[]): DatasetFeatureInput {
-  return { id, type: 'LineString', coordinates: coords };
+function line(id: string, coords: Coordinate[]): DatasetRow {
+  return toRow({ id, type: 'LineString', coordinates: coords });
 }
 
 /** Points laid out along the longitude in units of px (latitude 0) */
-function pointAtPx(id: string, px: number, band = 10, northPx = 0): DatasetFeatureInput {
+function pointAtPx(id: string, px: number, band = 10, northPx = 0): DatasetRow {
   return point(id, [px * pxDeg(band), northPx * pxDeg(band)]);
 }
 
@@ -141,7 +143,7 @@ function add(manager: DatasetManager, options: DatasetOptions): ReturnType<Datas
 
 /** Input for calling the pure function directly (the footprints are uniform px) */
 function winnersOf(
-  features: DatasetFeatureInput[],
+  features: DatasetRow[],
   band: number,
   radiusPx: number | ((feature: Feature) => number),
 ): string[] {
@@ -382,7 +384,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 1)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 1)],
     });
 
     expect(drawnIds(manager)).toEqual(['a', 'b']);
@@ -400,7 +402,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5), pointAtPx('c', 40)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5), pointAtPx('c', 40)],
       collisionThinning: { enabled: true },
     });
 
@@ -420,7 +422,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 25), pointAtPx('c', 50)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 25), pointAtPx('c', 50)],
       collisionThinning: { enabled: true },
     });
 
@@ -437,7 +439,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     add(manager, {
       id: 'c1',
-      features: [
+      rows: [
         point('big', [0, 0], { pointRadius: 30 }),
         point('small', [30 * pxDeg(10), 0], { pointRadius: 1 }),
       ],
@@ -452,7 +454,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 1)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 1)],
       collisionThinning: { enabled: true, fullDisplayZoom: 17 },
     });
 
@@ -471,7 +473,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager(14);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0, 14), pointAtPx('b', 1, 14)],
+      rows: [pointAtPx('a', 0, 14), pointAtPx('b', 1, 14)],
       collisionThinning: { enabled: true, fullDisplayZoom: 17 },
     });
 
@@ -492,7 +494,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 21)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 21)],
       collisionThinning: { enabled: true },
     });
 
@@ -508,7 +510,7 @@ describe('the application to a dataset', () => {
     const { manager, setBounds } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5), pointAtPx('c', 40)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5), pointAtPx('c', 40)],
       collisionThinning: { enabled: true },
     });
 
@@ -529,7 +531,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
     const reasons: string[] = [];
@@ -552,7 +554,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
     const revision = dataset.getDrawnRowsRevision();
@@ -576,7 +578,7 @@ describe('the application to a dataset', () => {
     const { manager, setZoom, moveEnd } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
     expect(drawnIds(manager, 10.9)).toEqual(['b']);
@@ -595,7 +597,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager(12.5);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
     expect(dataset.getThinningStats()).toMatchObject({ enabled: true, band: 12, visible: 2 });
@@ -605,7 +607,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager(10);
     add(manager, {
       id: 'c1',
-      features: [
+      rows: [
         pointAtPx('a', 0),
         pointAtPx('b', 5),
         line('l1', [
@@ -628,7 +630,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager(10);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
     dataset.setVisible(false);
@@ -640,17 +642,17 @@ describe('the application to a dataset', () => {
     expect(dataset.getThinningStats().band).toBe(12);
   });
 
-  it('setFeatures and a style change pick the winners again (the cache is invalidated)', () => {
+  it('setRows and a style change pick the winners again (the cache is invalidated)', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
     });
 
     expect(drawnIds(manager)).toEqual(['b']);
 
-    dataset.setFeatures([pointAtPx('x', 0), pointAtPx('y', 40)]);
+    dataset.setRows([pointAtPx('x', 0), pointAtPx('y', 40)]);
     expect(drawnIds(manager)).toEqual(['x', 'y']);
     expect(dataset.getThinningStats()).toMatchObject({ total: 2, visible: 2 });
 
@@ -663,14 +665,14 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
       interactive: true,
     });
 
     const at = (coord: Coordinate): string | null => {
       const hit = manager.hitTestSide('below-store', coord, pxDeg(10) * 2, (feature, position) => {
-        const [x, y] = feature.coordinates as Coordinate;
+        const [x, y] = coordinatesOf(feature) as Coordinate;
         return Math.hypot(x - position[0], y - position[1]) <= pxDeg(10) * 2;
       });
       return hit?.feature?.id ?? null;
@@ -689,7 +691,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 5)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 5)],
       collisionThinning: { enabled: true },
       interactive: true,
     });
@@ -700,7 +702,7 @@ describe('the application to a dataset', () => {
       [0, 0],
       pxDeg(10),
       (feature, position, tolerance) => {
-        const [x, y] = feature.coordinates as Coordinate;
+        const [x, y] = coordinatesOf(feature) as Coordinate;
         return Math.hypot(x - position[0], y - position[1]) <= tolerance;
       },
     );
@@ -713,7 +715,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 40)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 40)],
       collisionThinning: { enabled: true },
     });
 
@@ -735,7 +737,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0), pointAtPx('b', 40)],
+      rows: [pointAtPx('a', 0), pointAtPx('b', 40)],
       collisionThinning: { enabled: true },
     });
     const reasons: string[] = [];
@@ -755,7 +757,7 @@ describe('the application to a dataset', () => {
     const { manager, setEffectiveZoom } = createManager(16);
     const dataset = add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0, 16), pointAtPx('b', 30, 16)],
+      rows: [pointAtPx('a', 0, 16), pointAtPx('b', 30, 16)],
       collisionThinning: { enabled: true },
     });
 
@@ -775,7 +777,7 @@ describe('the application to a dataset', () => {
     const { manager, setEffectiveZoom } = createManager(17.5);
     add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0, 17), pointAtPx('b', 30, 17)],
+      rows: [pointAtPx('a', 0, 17), pointAtPx('b', 30, 17)],
       collisionThinning: { enabled: true },
     });
 
@@ -790,7 +792,7 @@ describe('the application to a dataset', () => {
     const { manager, setEffectiveZoom } = createManager(16);
     add(manager, {
       id: 'c1',
-      features: [pointAtPx('a', 0, 16), pointAtPx('b', 30, 16)],
+      rows: [pointAtPx('a', 0, 16), pointAtPx('b', 30, 16)],
       collisionThinning: { enabled: true },
     });
 
@@ -803,7 +805,7 @@ describe('the application to a dataset', () => {
     const { manager } = createManager();
     add(manager, {
       id: 'c1',
-      features: [
+      rows: [
         line('l1', [
           [0, 0],
           [pxDeg(10), 0],
@@ -835,6 +837,7 @@ describe('the time the selection takes (a guide; no exact time is claimed)', () 
     for (let i = 0; i < count; i++) {
       features[i] = normalizeDisplayFeature(
         point(`p${i}`, [139.6 + random() * 0.6, 35.5 + random() * 0.4]),
+        i,
       );
     }
 
@@ -863,7 +866,7 @@ describe('CollisionSelection (the selection in slices)', () => {
   it('gives the same winners however it is sliced', () => {
     const count = SELECTION_SLICE_ROWS * 3 + 17;
     const features = Array.from({ length: count }, (_, i) =>
-      normalizeDisplayFeature(pointAtPx(`p${i}`, (i * 7) % 900, 10, (i * 13) % 700)),
+      normalizeDisplayFeature(pointAtPx(`p${i}`, (i * 7) % 900, 10, (i * 13) % 700), i),
     );
     const rows = new FeatureArraySource(features);
     const whole = selectCollisionWinnerRows(rows, 10, () => FOOTPRINT_PX);
@@ -1002,7 +1005,7 @@ describe('CollisionThinningState', () => {
   it('a band being picked ahead is finished by a frame that needs it, not started again', () => {
     const count = SELECTION_SLICE_ROWS * 2;
     const features = Array.from({ length: count }, (_, i) =>
-      normalizeDisplayFeature(pointAtPx(`p${i}`, i % 500, 10, Math.floor(i / 500))),
+      normalizeDisplayFeature(pointAtPx(`p${i}`, i % 500, 10, Math.floor(i / 500)), i),
     );
     const host = createHost();
     const source = new FeatureArraySource(features);

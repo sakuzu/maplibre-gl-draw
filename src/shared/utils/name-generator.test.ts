@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { Feature, FeatureType } from '../../store/types.js';
+import { geometryFromCoordinates } from './coordinates.js';
 import { AutoNameGenerator, normalizeAutoNameConfig } from './name-generator.js';
 
 let store: MemoryStore;
@@ -19,13 +20,15 @@ let idSeq: number;
 
 function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Feature {
   const feature: Feature = {
+    groupId: undefined,
     id: `f-${++idSeq}`,
     type,
-    coordinates: [0, 0],
+    geometry: geometryFromCoordinates(type, [0, 0]),
     layerId,
     properties: name === undefined ? {} : { name },
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(feature);
   return feature;
@@ -34,7 +37,16 @@ function createFeature(type: FeatureType, name?: string, layerId = 'l1'): Featur
 beforeEach(() => {
   store = new MemoryStore();
   idSeq = 0;
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
 });
 
 describe('normalizeAutoNameConfig', () => {
@@ -154,9 +166,18 @@ describe('AutoNameGenerator.generateLayerName / generateGroupName', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
-    store.createGroup({ id: 'g5', name: 'Group 5', featureIds: [], locked: false, visible: true });
+    store.createGroup({
+      id: 'g5',
+      layerId: 'l1',
+      name: 'Group 5',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    });
 
     const generator = new AutoNameGenerator(store);
 
@@ -206,10 +227,13 @@ describe('the incremental following of AutoNameGenerator', () => {
       visible: true,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     store.createGroup({
       id: 'g30',
+      layerId: 'l1',
       name: 'Group 30',
       featureIds: [],
       locked: false,
@@ -238,7 +262,7 @@ describe('the computational cost of AutoNameGenerator', () => {
     }
 
     const generator = new AutoNameGenerator(store);
-    const spy = vi.spyOn(store, 'getAllFeatures');
+    const spy = vi.spyOn(store, 'listFeatures');
 
     for (let i = 0; i < 100; i++) {
       generator.generateName('Point');
@@ -254,7 +278,7 @@ describe('the computational cost of AutoNameGenerator', () => {
 
   it('the full scan happens only once, the first time, even during a bulk import', () => {
     const generator = new AutoNameGenerator(store);
-    const spy = vi.spyOn(store, 'getAllFeatures');
+    const spy = vi.spyOn(store, 'listFeatures');
 
     store.transact(() => {
       for (let i = 0; i < 1_000; i++) {

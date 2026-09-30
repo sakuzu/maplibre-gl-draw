@@ -42,7 +42,7 @@ Each item has the same five parts.
   `[0, 1 - (style._order.length + 2) * numSublayers * depthEpsilon]`, and
   the same range is given to the terrain mesh and to `'3d'` custom layers.
   Depth test and blending are on, face culling is off.
-- What we rely on — assumption. Every render slot in
+- What we rely on — assumption. Every frame of the stacking order in
   `src/view/layer/custom-layer.ts` is registered with `renderingMode: '3d'`
   and receives the depth test enabled with `LEQUAL`.
   `applySegmentDepthState` in `src/view/layer/gl-state.ts` (at the start
@@ -288,8 +288,8 @@ Each item has the same five parts.
   in a pitched view). The WGS84 circumference made every elevation
   0.1 % too small (1 px at the top of a 6,700 m exaggerated peak).
 - Check when upgrading — `src/e2e/terrain.e2e.test.ts` compares
-  `PluginContext.anchorElevationMeters` with `map.queryTerrainElevation`
-  (within 1e-6 m) and `PluginContext.projectAnchor` with `map.project`
+  `ExtensionContext.terrain.elevation` with `map.queryTerrainElevation`
+  (within 1e-6 m) and `ExtensionContext.terrain.project` with `map.project`
   (within 0.01 px) over a pitched view of a known DEM.
   `src/view/terrain/ground.test.ts` covers the coverage keys and the
   fallback.
@@ -570,8 +570,8 @@ Each item has the same five parts.
   render scope (`src/view/layer/render-scope.ts`) together with the
   per-feature triangulation and style caches. No reader looks up "the
   instance drawn last": renderers receive their context at construction,
-  an extension renderer gets it as `CustomRendererDrawContext.terrain`, a
-  plugin projects through `PluginContext.projectAnchor`, and hit testing is
+  an extension renderer gets its anchors as `RenderContext.terrain`, a
+  plugin projects through `ExtensionContext.terrain.project`, and hit testing is
   bound per map with `setAnchorProjector(map, ...)`. The registries of the
   extension points belong to the draw instance as well (see
   [architecture](./architecture.md)). The depth-test record is kept per
@@ -583,7 +583,7 @@ Each item has the same five parts.
   appear in the other, and a feature with the same ID in two instances is
   drawn with the other's triangles.
 - Check when upgrading — `src/view/terrain/context.test.ts`,
-  `src/api/instance-isolation.test.ts` and
+  `src/api/impl/extensions.test.ts` and
   `src/view/layer/render-scope.test.ts`.
 - Conditions for removal — none. It matches upstream's design.
 
@@ -654,11 +654,11 @@ Each item has the same five parts.
   `src/view/layer/attach.ts` reads `map.style?._loaded === true`, the same
   condition `_checkLoaded` checks, and is the only reader.
   `attachSlotLayers()` checks it when Draw is created and on every
-  `styledata`, and adds the render slots missing from the map. The field is
+  `styledata`, and adds the frames missing from the map. The field is
   in the type definitions but its leading `_` marks it internal; the timing
   of `styledata` is part of the reliance.
 - Symptoms when it breaks — if the field is renamed, the check is always
-  false and the render slots are never added. Nothing throws and nothing
+  false and the frames are never added. Nothing throws and nothing
   is logged: features exist in the Store but nothing is drawn. If
   `styledata` stops firing after a style change, the slots are not
   restored after `setStyle`, with the same silent result.
@@ -908,7 +908,7 @@ Each item has the same five parts.
   dataset, the triangulation of huge polygons, the index of the terrain
   drape, the hand-over of the drape) asks for the next frame with
   `triggerRepaint`, which maplibre does not count as unfinished.
-  `MapLibreGLDraw.hasPendingWork()` (`src/api/instance-api.ts`, asking the
+  `Draw.hasPendingWork()` (`src/api/impl/drawing.ts`, asking the
   custom layer in `src/view/layer/custom-layer.ts`) reports that work, and
   a host that reads the picture back waits for `idle` and then for a
   `render` after which it is false

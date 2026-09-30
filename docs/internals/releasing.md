@@ -7,18 +7,19 @@ code.
 ## Versions
 
 The package follows [semantic versioning](https://semver.org/). The first
-public release is `1.0.0`, and the rules are the following.
+public release was `1.0.0`, and the rules are the following.
 
-- A major release (`1.x` to `2.0.0`) is required for any incompatible
+- A major release (`2.x` to `3.0.0`) is required for any incompatible
   change of the public API (layer 1 of the public surface, see
   [the reference](../reference/README.md)): a removed or changed signature
   or behavior, a change of the stored data format that old data cannot be
   read under, or a higher lower bound of the maplibre-gl peer or of Node.
-- A minor release (`1.0.x` to `1.1.0`) carries compatible additions. It
-  may also change a building block for extension authors (layer 2)
-  incompatibly; such a change is marked in `CHANGELOG.md`, and an
-  extension declares the minors of core it was tested against (`~1.0.0`).
-- A patch release (`1.0.0` to `1.0.1`) carries fixes only. Adding a
+- A minor release (`2.0.x` to `2.1.0`) carries compatible additions. It
+  may also change a building block for extension authors (layer 2, the
+  `/webgl` entry) incompatibly; such a change is marked in
+  `CHANGELOG.md`, and an extension declares the minors of core it was
+  tested against (`~2.0.0`).
+- A patch release (`2.0.0` to `2.0.1`) carries fixes only. Adding a
   checked minor of maplibre-gl to the peer is a patch.
 
 ## Supported versions of maplibre-gl and Node
@@ -77,17 +78,15 @@ shipped in the package (it is listed in `files`).
   version's section (`scripts/release-notes.mjs`), so the section must
   exist and must not be empty.
 
-The first release is `1.0.0`: `package.json` already carries that
-version, so the `npm version` step below is skipped for it. Its section
-says that it is the first public release and summarizes what the package
-does, instead of listing the changes made before any release.
+When `package.json` already carries the version being released, as it
+does for `2.0.0`, the `npm version` step below is skipped.
 
-npm cannot create a package by trusted publishing, so `1.0.0` is
-published by hand, with `npm publish` from a clean checkout of the
-release commit and the maintainer's 2FA, before its tag is pushed. The
-release workflow then skips the publish step for a version that is
-already on npm and creates the GitHub release. After that, the trusted
-publisher is registered and tokens are disallowed:
+npm cannot create a package by trusted publishing, so the first release,
+`1.0.0`, was published by hand, with `npm publish` from a clean checkout
+of the release commit and the maintainer's 2FA, before its tag was
+pushed. The release workflow skips the publish step for a version that
+is already on npm and creates the GitHub release. After the first
+release, the trusted publisher is registered and tokens are disallowed:
 
 ```sh
 npm trust github @sakuzu/maplibre-gl-draw --file release.yml \

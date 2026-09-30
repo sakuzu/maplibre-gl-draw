@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { generateCirclePolygon } from '../../geometry/index.js';
+import { generateCirclePolygon } from '../../geometry/circle.js';
 import type { Coordinate, Feature } from '../types.js';
 import { getBoundingBox, RBushSpatialIndex } from './spatial-index.js';
 
@@ -11,37 +11,43 @@ import { getBoundingBox, RBushSpatialIndex } from './spatial-index.js';
  */
 function createPoint(id: string, coord: Coordinate, layerId = 'layer1'): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function createLineString(id: string, coords: Coordinate[], layerId = 'layer1'): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'LineString',
-    coordinates: coords,
+    geometry: { type: 'LineString', coordinates: coords },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
 function createPolygon(id: string, rings: Coordinate[][], layerId = 'layer1'): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
-    coordinates: rings,
+    geometry: { type: 'Polygon', coordinates: rings },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -52,13 +58,15 @@ function createCircle(
   layerId = 'layer1',
 ): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Circle',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId,
-    properties: { radiusMeters },
+    properties: { 'maplibre-gl-draw:radiusMeters': radiusMeters },
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -281,11 +289,13 @@ describe('RBushSpatialIndex', () => {
       const customFeature: Feature = {
         id: 'custom1',
         type: 'Marker',
-        coordinates: [10, 20] as Coordinate,
+        geometry: { type: 'Point', coordinates: [10, 20] as Coordinate },
         layerId: 'layer1',
+        groupId: undefined,
         properties: {},
         locked: false,
         visible: true,
+        style: {},
       };
 
       index.setCustomBoundingBoxCalculator('Marker', () => ({
@@ -420,15 +430,20 @@ describe('getBoundingBox', () => {
     const freehand: Feature = {
       id: 'f1',
       type: 'Freehand',
-      coordinates: [
-        [5, 10],
-        [15, 25],
-        [10, 5],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [5, 10],
+          [15, 25],
+          [10, 5],
+        ] as Coordinate[],
+      },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const bbox = getBoundingBox(freehand);
 
@@ -442,15 +457,20 @@ describe('getBoundingBox', () => {
     const multiPoint: Feature = {
       id: 'mp1',
       type: 'MultiPoint',
-      coordinates: [
-        [10, 20],
-        [30, 5],
-        [-5, 40],
-      ] as Coordinate[],
+      geometry: {
+        type: 'MultiPoint',
+        coordinates: [
+          [10, 20],
+          [30, 5],
+          [-5, 40],
+        ] as Coordinate[],
+      },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const bbox = getBoundingBox(multiPoint);
 
@@ -464,20 +484,25 @@ describe('getBoundingBox', () => {
     const multiLine: Feature = {
       id: 'ml1',
       type: 'MultiLineString',
-      coordinates: [
-        [
-          [0, 0],
-          [10, 10],
-        ],
-        [
-          [100, -20],
-          [110, -10],
-        ],
-      ] as Coordinate[][],
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [0, 0],
+            [10, 10],
+          ],
+          [
+            [100, -20],
+            [110, -10],
+          ],
+        ] as Coordinate[][],
+      },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const bbox = getBoundingBox(multiLine);
 
@@ -491,37 +516,42 @@ describe('getBoundingBox', () => {
     const multiPolygon: Feature = {
       id: 'mpoly1',
       type: 'MultiPolygon',
-      coordinates: [
-        [
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [0, 0],
-            [10, 0],
-            [10, 10],
-            [0, 10],
-            [0, 0],
+            [
+              [0, 0],
+              [10, 0],
+              [10, 10],
+              [0, 10],
+              [0, 0],
+            ],
+            [
+              [2, 2],
+              [8, 2],
+              [8, 8],
+              [2, 8],
+              [2, 2],
+            ],
           ],
           [
-            [2, 2],
-            [8, 2],
-            [8, 8],
-            [2, 8],
-            [2, 2],
+            [
+              [100, 100],
+              [120, 100],
+              [120, 130],
+              [100, 130],
+              [100, 100],
+            ],
           ],
-        ],
-        [
-          [
-            [100, 100],
-            [120, 100],
-            [120, 130],
-            [100, 130],
-            [100, 100],
-          ],
-        ],
-      ] as Coordinate[][][],
+        ] as Coordinate[][][],
+      },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const bbox = getBoundingBox(multiPolygon);
 
@@ -539,24 +569,29 @@ describe('getBoundingBox', () => {
   });
 
   it('a custom type without a calculator is measured by the extent of its coordinates', () => {
-    const base = { layerId: 'layer1', properties: {}, locked: false, visible: true };
+    const base = { layerId: 'layer1', properties: {}, style: {}, locked: false, visible: true };
     const single: Feature = {
+      groupId: undefined,
       ...base,
       id: 'u1',
       type: 'Unknown',
-      coordinates: [10, 20] as Coordinate,
+      geometry: { type: 'Point', coordinates: [10, 20] as Coordinate },
     };
     expect(getBoundingBox(single)).toEqual({ minX: 10, minY: 20, maxX: 10, maxY: 20 });
 
     const line: Feature = {
+      groupId: undefined,
       ...base,
       id: 'u2',
       type: 'Route',
-      coordinates: [
-        [1, 2],
-        [5, -3],
-        [3, 4],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [1, 2],
+          [5, -3],
+          [3, 4],
+        ] as Coordinate[],
+      },
     };
     expect(getBoundingBox(line)).toEqual({ minX: 1, minY: -3, maxX: 5, maxY: 4 });
   });
@@ -565,7 +600,7 @@ describe('getBoundingBox', () => {
     const odd = {
       id: 'u3',
       type: 'Unknown',
-      coordinates: 'x',
+      geometry: { type: 'Point', coordinates: 'x' },
       layerId: 'layer1',
       properties: {},
       locked: false,
@@ -650,11 +685,13 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
     const multiLine: Feature = {
       id: 'ml1',
       type: 'MultiLineString',
-      coordinates: proxy,
+      geometry: { type: 'MultiLineString', coordinates: proxy },
       layerId: 'layer1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
 
     const first = getBoundingBox(multiLine);

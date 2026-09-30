@@ -9,6 +9,8 @@
  * identical to immediate mode.
  */
 
+import type { FeatureTypeRenderer } from '../../extension/renderers.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { type PointShape, toInstancedPointShape } from '../renderers/point/point-instance.js';
@@ -21,6 +23,20 @@ import type { RetainedStyleResolver } from '../renderers/retained.js';
  * batch kind and the point shape). A position where the kind changes becomes a run boundary.
  */
 export type RunKind = 'polygon' | 'line' | `point-${PointShape}` | 'immediate';
+
+/**
+ * The custom renderer that draws a feature: the one registered for its type, unless it
+ * refuses the feature, which the built-in drawing of the type then draws
+ */
+export function customRendererOf<R>(
+  customTypes: ReadonlyMap<string, R>,
+  feature: Feature,
+): R | undefined {
+  const renderer = customTypes.get(feature.type);
+  if (renderer === undefined) return undefined;
+  const { appliesTo } = renderer as Pick<FeatureTypeRenderer, 'appliesTo'>;
+  return appliesTo && !appliesTo.call(renderer, feature) ? undefined : renderer;
+}
 
 /**
  * Classifies a feature into the kind of its run
@@ -40,7 +56,7 @@ export function classifyFeature(
   layer?: Layer,
 ): RunKind {
   // A custom type is drawn immediately (it cannot go on a core batch)
-  if (customTypes.has(feature.type)) return 'immediate';
+  if (customRendererOf(customTypes, feature)) return 'immediate';
 
   // A feature that has a companion (feature companion) needs a hook right before it, so it cannot
   // go on a retained batch. It is split out into an immediate chunk and drawn one at a time (on
@@ -86,29 +102,29 @@ export function featureOrigin(feature: Feature | undefined): [number, number] {
 
   switch (feature.type) {
     case 'MultiPoint': {
-      const coord = (feature.coordinates as Coordinate[])[0];
+      const coord = (coordinatesOf(feature) as Coordinate[])[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'LineString':
     case 'Freehand': {
-      const coord = (feature.coordinates as Coordinate[])[0];
+      const coord = (coordinatesOf(feature) as Coordinate[])[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'MultiLineString': {
-      const coord = (feature.coordinates as Coordinate[][])[0]?.[0];
+      const coord = (coordinatesOf(feature) as Coordinate[][])[0]?.[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'Polygon': {
-      const coord = (feature.coordinates as Coordinate[][])[0]?.[0];
+      const coord = (coordinatesOf(feature) as Coordinate[][])[0]?.[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     case 'MultiPolygon': {
-      const coord = (feature.coordinates as Coordinate[][][])[0]?.[0]?.[0];
+      const coord = (coordinatesOf(feature) as Coordinate[][][])[0]?.[0]?.[0];
       return coord ? [coord[0], coord[1]] : [0, 0];
     }
     default: {
       // A single coordinate, such as Point / Circle
-      const coord = feature.coordinates as Coordinate;
+      const coord = coordinatesOf(feature) as Coordinate;
       return Array.isArray(coord) && typeof coord[0] === 'number' ? [coord[0], coord[1]] : [0, 0];
     }
   }

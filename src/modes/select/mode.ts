@@ -34,7 +34,7 @@ import {
   getSelectedFeatureIds,
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
-import type { ModeContext, ModeHandler } from '../handler.js';
+import type { EngineModeContext, EngineModeHandler } from '../handler.js';
 import { queryFeaturesInBox } from './box-selection.js';
 import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
@@ -65,10 +65,10 @@ function selectsExactly(selection: Selection, ids: readonly string[]): boolean {
 }
 
 /** @internal */
-export class SelectMode implements ModeHandler {
+export class SelectMode implements EngineModeHandler {
   readonly modeName: Mode = 'select';
 
-  #context!: ModeContext;
+  #context!: EngineModeContext;
   #dragHandler = new SelectModeDragHandler();
   #config: SelectionUIConfig = DEFAULT_SELECTION_CONFIG;
 
@@ -76,7 +76,7 @@ export class SelectMode implements ModeHandler {
   // Lifecycle
   // ============================================================================
 
-  onStart(context: ModeContext): void {
+  onStart(context: EngineModeContext): void {
     this.#context = context;
     context.map.getCanvas().style.cursor = 'default';
 
@@ -86,7 +86,7 @@ export class SelectMode implements ModeHandler {
       for (const id of editingIds) {
         const feature = context.store.getFeature(id);
         if (feature) {
-          context.pluginManager?.notifyFeatureCreated(feature.id, feature.type);
+          context.plugins?.notifyFeatureCreated(feature.id);
         }
       }
       context.store.endEditing([...editingIds]);
@@ -94,13 +94,13 @@ export class SelectMode implements ModeHandler {
   }
 
   onStop(): void {
-    const { store, map, pluginManager } = this.#context;
+    const { store, map, plugins } = this.#context;
 
-    pluginManager?.finishPluginInteraction();
+    plugins?.finishPluginInteraction();
     this.#dragHandler.reset(store);
 
     if (store.getBoxSelection()) store.setBoxSelection(null);
-    if (store.getSelectedVertices()) store.setSelectedVertices(null);
+    if (store.getVertexSelection()) store.setSelectedVertices(null);
     if (!map.dragPan.isEnabled()) map.dragPan.enable();
 
     // Clear the selection when switching modes (not notified as a change)
@@ -132,11 +132,11 @@ export class SelectMode implements ModeHandler {
    * @returns true when there was a hit (the event is consumed)
    */
   onMouseDown(event: MouseNormalizedEvent): boolean {
-    const { pluginManager, map, store } = this.#context;
+    const { plugins, map, store } = this.#context;
 
     // During a plugin interaction: consume clicks inside the container
-    if (pluginManager?.isPluginInteracting()) {
-      const container = pluginManager.getPluginInteractionContainer();
+    if (plugins?.isPluginInteracting()) {
+      const container = plugins.getPluginInteractionContainer();
       if (container) {
         const target = event.originalEvent.target as HTMLElement;
         if (container.contains(target)) return true;
@@ -265,7 +265,7 @@ export class SelectMode implements ModeHandler {
   // ============================================================================
 
   onDragStart(event: DragNormalizedEvent): void {
-    if (this.#context.pluginManager?.isPluginInteracting()) return;
+    if (this.#context.plugins?.isPluginInteracting()) return;
 
     const { store, map } = this.#context;
     // Group / layer selections are also resolved to their members (so dragging the selection box
@@ -354,7 +354,7 @@ export class SelectMode implements ModeHandler {
     const hitFeatureId = top.feature.id;
 
     if (!selectedIds.includes(hitFeatureId)) {
-      const filtered = this.#context.pluginManager?.filterSelectionCandidates([hitFeatureId]) ?? [
+      const filtered = this.#context.plugins?.filterSelectionCandidates([hitFeatureId]) ?? [
         hitFeatureId,
       ];
       if (filtered.length === 0) return;
@@ -371,7 +371,7 @@ export class SelectMode implements ModeHandler {
   }
 
   onDragMove(event: DragNormalizedEvent): void {
-    const { store, map, pluginManager } = this.#context;
+    const { store, map, plugins } = this.#context;
     const boxSelection = store.getBoxSelection();
 
     // Update the box selection
@@ -384,7 +384,7 @@ export class SelectMode implements ModeHandler {
       // Live selection preview (a frame that selects the same features changes nothing)
       const hitIds = queryFeaturesInBox(updatedBoxSelection, this.#context);
       const filtered =
-        hitIds.length > 0 ? (pluginManager?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
+        hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
       if (!selectsExactly(store.getSelection(), filtered)) {
         if (filtered.length === 0) {
           store.setSelection(null, []);
@@ -401,14 +401,14 @@ export class SelectMode implements ModeHandler {
   }
 
   onDragEnd(event: DragNormalizedEvent): void {
-    const { store, map, pluginManager } = this.#context;
+    const { store, map, plugins } = this.#context;
     const boxSelection = store.getBoxSelection();
 
     // Commit the box selection
     if (boxSelection) {
       const hitIds = queryFeaturesInBox(boxSelection, this.#context);
       const filtered =
-        hitIds.length > 0 ? (pluginManager?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
+        hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
       if (filtered.length === 0) {
         store.setSelection(null, []);
       } else {
@@ -456,12 +456,12 @@ export class SelectMode implements ModeHandler {
   // ============================================================================
 
   onKeyDown(event: KeyNormalizedEvent): void {
-    const { pluginManager, store } = this.#context;
+    const { plugins, store } = this.#context;
 
     // Skip destructive key operations during a plugin interaction
-    if (pluginManager?.isPluginInteracting()) {
+    if (plugins?.isPluginInteracting()) {
       if (event.key === 'Escape') {
-        pluginManager.cancelPluginInteraction();
+        plugins.cancelPluginInteraction();
       }
       return;
     }
@@ -505,7 +505,7 @@ export class SelectMode implements ModeHandler {
   }
 
   onMouseMove(event: MouseNormalizedEvent): void {
-    if (this.#dragHandler.isActive() || this.#context.pluginManager?.isPluginInteracting()) {
+    if (this.#dragHandler.isActive() || this.#context.plugins?.isPluginInteracting()) {
       return;
     }
     updateCursorForSelection(event, this.#context, this.#config);

@@ -24,12 +24,12 @@
  * the last state, so as the diff of a single flush it means the same as before folding.
  */
 
-import type { Group, Layer, StateChanges, UpdateSource } from '../types.js';
+import type { Group, Layer, StoreChange, UpdateSource } from '../types.js';
 
-export type StoreListener = (changes: StateChanges) => void;
+export type StoreListener = (changes: StoreChange) => void;
 
-type LayerUpdate = NonNullable<NonNullable<StateChanges['layers']>['updated']>[number];
-type GroupUpdate = NonNullable<NonNullable<StateChanges['groups']>['updated']>[number];
+type LayerUpdate = NonNullable<NonNullable<StoreChange['layers']>['updated']>[number];
+type GroupUpdate = NonNullable<NonNullable<StoreChange['groups']>['updated']>[number];
 
 /** Position of the entry for the same ID (for layers / groups respectively) */
 interface UpdateIndex {
@@ -93,7 +93,7 @@ function appendGroupUpdates(
   return list;
 }
 
-function appendChanges(target: StateChanges, changes: StateChanges, index: UpdateIndex): void {
+function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateIndex): void {
   // features
   if (changes.features) {
     if (!target.features) target.features = {};
@@ -145,14 +145,23 @@ function appendChanges(target: StateChanges, changes: StateChanges, index: Updat
   if (changes.tentative) target.tentative = changes.tentative;
   if (changes.mode) target.mode = changes.mode;
   if (changes.uiStateChanged) target.uiStateChanged = true;
+  if (changes.reset === true) target.reset = true;
   if (changes.metadata) target.metadata = changes.metadata;
+
+  // files
+  if (changes.files) {
+    if (!target.files) target.files = {};
+    const t = target.files;
+    if (changes.files.created) t.created = appendField(t.created, changes.files.created);
+    if (changes.files.deleted) t.deleted = appendField(t.deleted, changes.files.deleted);
+  }
 }
 
 export class ChangeBus {
   readonly #listeners = new Set<StoreListener>();
   readonly #beforeFlush: (() => void) | undefined;
   #transactionDepth = 0;
-  #pendingChanges: StateChanges = {};
+  #pendingChanges: StoreChange = {};
   #currentSource: UpdateSource = 'local';
   #updateIndex: UpdateIndex = { layers: new Map(), groups: new Map() };
 
@@ -201,7 +210,7 @@ export class ChangeBus {
   /**
    * Merges the changes into pendingChanges. Flushes immediately if outside a transaction.
    */
-  merge(changes: StateChanges): void {
+  merge(changes: StoreChange): void {
     appendChanges(this.#pendingChanges, changes, this.#updateIndex);
     if (this.#transactionDepth === 0) {
       this.#flushChanges();
@@ -239,7 +248,7 @@ export class ChangeBus {
     this.#beforeFlush?.();
     if (Object.keys(this.#pendingChanges).length === 0) return;
 
-    const changes: StateChanges = this.#pendingChanges;
+    const changes: StoreChange = this.#pendingChanges;
     changes.source = this.#currentSource;
     // Swap in a new container for the next accumulation (the flushed object is retained by the
     // listeners, so always recreate it so that appends do not pollute it).

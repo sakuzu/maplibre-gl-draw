@@ -1,34 +1,58 @@
 # Events
 
 Every event that `draw.on()` delivers, what it carries, when it fires and in
-which order. The payload types are exported from `@sakuzu/maplibre-gl-draw`
-(`EventPayloads` maps each event name to its payload). For the method
-signatures see the [generated API reference](../api/index.md).
+which order. The names and payloads are the keys of
+[`DrawEvents`](../api/maplibre-gl-draw/interfaces/DrawEvents.md), and a
+dataset has events of its own,
+[`DatasetEvents`](../api/maplibre-gl-draw/interfaces/DatasetEvents.md). For
+the method signatures see the [generated API reference](../api/index.md).
 
 ## Subscribing
 
-```typescript
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+```ts
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
-const off = draw.on('draw.feature.create', ({ feature }) => {
-  console.log('created', feature.id);
+const stop = draw.on('feature.created', ({ feature, source }) => {
+  console.log('created', feature.id, source);
 });
 
-// Later: either call the returned function or pass the same handler to off()
-off();
+// Later: call the returned function, or pass the same listener to off()
+stop();
+
+// Only the next occurrence
+draw.once('document.loaded', ({ result }) => console.log(result.featureIds));
 ```
 
-`on()` returns a function that removes the handler, which is the same as
-calling `draw.off(event, handler)` with the handler you passed.
+`on` and `once` return the function that unsubscribes. `off(event,
+listener)` removes a listener given to either of them. A listener that is
+not a function throws a `DrawError` with the code `invalid-input`.
 
-Handlers run synchronously, inside the call that caused the change. When
-`draw.addFeature()` returns, its `draw.feature.create` handlers have already
-run. A handler that throws is logged with `console.error` and does not stop
-the other handlers of the same event, nor the operation that emitted it. A
-handler added or removed while an event is being delivered takes effect from
-the next event.
+An extension subscribes with `on`, `off` and `once` of its context. They
+take the same names and payloads, and the subscriptions end by themselves
+when the extension is removed (see [Plugins](../guides/plugins.md)).
+
+## Delivery
+
+Listeners run synchronously, inside the call that caused the change. When
+`draw.features.create()` returns, its `feature.created` listeners have
+already run.
+
+A listener that throws is logged with `console.error`. It stops neither
+the other listeners of the same event nor the operation that emitted it.
+
+A listener added or removed while an event is being delivered takes effect
+from the next event.
+
+When a listener reads the instance (for example `draw.features.get()`), it
+sees the state after the whole transaction, not the state between two
+events of it.
+
+No event can refuse or rewrite a change: every event arrives after the
+change is made.
+
+`draw.destroy()` drops every listener. No event fires after it.
 
 ## Event list
 
@@ -36,338 +60,387 @@ the next event.
 
 | Event | Payload |
 | --- | --- |
-| `draw.feature.create` | `{ feature: Feature }` |
-| `draw.feature.update` | `{ feature: Feature; previous: Feature }` |
-| `draw.feature.delete` | `{ feature: Feature }` |
-| `draw.features.change` | `FeaturesChangePayload` |
-
-`FeaturesChangePayload` has this shape.
-
-```typescript
-interface FeaturesChangePayload {
-  created: Feature[];
-  updated: { feature: Feature; previous: Feature }[];
-  deleted: Feature[];
-  source: UpdateSource;
-}
-```
+| `feature.created` | `{ feature; source }` |
+| `feature.updated` | `{ feature; previous; source; intermediate }` |
+| `feature.deleted` | `{ feature; source }` |
+| `feature.moved` | `{ feature; from: MoveTarget; to: MoveTarget; source }` |
 
 ### Layers and groups
 
 | Event | Payload |
 | --- | --- |
-| `draw.layer.create` | `{ layer: Layer }` |
-| `draw.layer.update` | `{ layer: Layer; previous: Layer }` |
-| `draw.layer.delete` | `{ layer: Layer }` |
-| `draw.layer.reorder` | `{ order: string[]; previous: string[] }` |
-| `draw.group.create` | `{ group: Group }` |
-| `draw.group.update` | `{ group: Group; previous: Group }` |
-| `draw.group.delete` | `{ group: Group }` |
+| `layer.created` | `{ layer; source }` |
+| `layer.updated` | `{ layer; previous; source }` |
+| `layer.deleted` | `{ layer; source }` |
+| `layer.reordered` | `{ order; previous; source }` |
+| `group.created` | `{ group; source }` |
+| `group.updated` | `{ group; previous; source }` |
+| `group.deleted` | `{ group; source }` |
 
-`draw.layer.reorder` is the order of the layers themselves (the end is the
-foreground). A change of the order of the features or groups inside one
-layer arrives as `draw.layer.update` with the new `layer.order`, and a change
-of the order inside a group as `draw.group.update` with the new
-`group.featureIds`.
-
-### State of this client
+### The document
 
 | Event | Payload |
 | --- | --- |
-| `draw.selection.change` | `{ type, ids, previousType, previousIds }` |
-| `draw.mode.change` | `{ mode: Mode; previousMode: Mode }` |
-| `draw.metadata.change` | `{ metadata: Metadata; previous: Metadata }` |
+| `metadata.updated` | `{ metadata; previous; source }` |
+| `document.changed` | `DocumentChange` |
+| `document.loaded` | `{ result: LoadResult; source }` |
 
-`type` is `'feature' | 'group' | 'layer' | null` (`null` when nothing is
-selected). The selection only holds what can be seen, so hiding or deleting
-a selected item also fires `draw.selection.change`.
-
-### Operations and input
+### The state of this client
 
 | Event | Payload |
 | --- | --- |
-| `draw.geometry.applied` | `GeometryAppliedPayload` |
-| `draw.snap.change` | `SnapResult` |
-| `draw.image.request` | `{ coordinate; zoom; layerId }` |
-| `draw.map.click` | `{ lngLat: [lng, lat]; point: { x, y } }` |
-| `draw.dataset.click` | `{ datasetId; feature; row; lngLat }` |
+| `selection.changed` | `{ selection: Selection; previous: Selection }` |
+| `vertexSelection.changed` | `{ selection; previous }` |
+| `mode.changed` | `{ mode; previous }` |
+| `hidden.changed` | `{ ids }` |
+| `readOnly.changed` | `{ readOnly }` |
+| `interactionLock.changed` | `{ locked }` |
+
+### Input
+
+| Event | Payload |
+| --- | --- |
+| `drag.started` | `{ kind; featureIds }` |
+| `drag.ended` | `{ kind; featureIds; cancelled }` |
+| `snap.changed` | `{ result: SnapResult \| null }` |
+| `preview.changed` | `{ feature; confirmedVertices?; highlightVertex? }` |
+| `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
+| `dataset.clicked` | `{ datasetId; rowIndex; row; lngLat; point }` |
+| `image.requested` | `{ lngLat; zoom; layerId }` |
 
 ### Datasets
 
 | Event | Payload |
 | --- | --- |
-| `draw.dataset.add` | `{ datasetId: string }` |
-| `draw.dataset.remove` | `{ datasetId: string }` |
-| `draw.dataset.reorder` | `{ order: string[] }` |
+| `dataset.added` | `{ dataset: Dataset }` |
+| `dataset.removed` | `{ datasetId }` |
+| `dataset.reordered` | `{ order; previous }` |
 
-### Rendering and loading
+### Drawing
 
 | Event | Payload |
 | --- | --- |
-| `draw.renderslots.change` | `{ slots: RenderSlot[] }` |
-| `draw.load.error` | `{ source; featureId; error }` |
+| `layerStack.changed` | `{ entries: LayerStackEntry[] }` |
+| `error` | `{ error: DrawError; source; featureId? }` |
 
-## Units of emission
+`lngLat` is `[longitude, latitude]` in degrees, and `point` is `[x, y]` in
+CSS pixels from the top left of the map.
 
-The Store collects changes and notifies them once per flush. A flush is one
-transaction (a `load`, a drag commit, a geometry operation, a
-`transact()` of your own), or one mutation made outside a transaction.
-Nested transactions flush once, when the outermost one ends.
+## Transactions
 
-### One event per change
+Every write belongs to a transaction. A method of the API is one
+transaction, and so is a method whose name ends in `Many`, a load, a drag
+step and `draw.transact(fn)`. A nested `transact` joins the outermost one.
 
-`draw.feature.*`, `draw.layer.*` and `draw.group.*` fire once for every
-change, whatever caused it. Loading 1,000 features fires
-`draw.feature.create` 1,000 times. This is what a subscriber that keeps
-another copy in sync (a server, a search index) needs.
+The events of the document fire when the outermost transaction ends, all
+together, in the order below.
 
-Within one flush, several updates of the same layer or group are folded into
-one `draw.layer.update` / `draw.group.update` whose `previous` is the state
-before the flush and whose `layer` / `group` is the state after it. Creating
-a feature also changes the `order` of its layer (or the `featureIds` of its
-group), so it is followed by an update of that container.
+### One event per item
 
-### One event per flush
+`feature.*`, `layer.*` and `group.*` fire once for every item that
+changed, whatever caused the change. Loading 1,000 features fires
+`feature.created` 1,000 times. This is what a listener that keeps another
+copy in step (a server, a search index) needs.
 
-`draw.features.change` fires once per flush that changed any feature, after
-the per-feature events of that flush, and carries all of them in the order
-they were made. A subscriber that only rebuilds a view on any change (a
-feature list, a legend) should use this event, so that a load of 1,000
-features costs one rebuild instead of 1,000.
+Within one transaction, several updates of the same layer or group arrive
+as one `layer.updated` or `group.updated`: its `previous` is the state
+before the transaction and its `layer` or `group` the state after it.
 
-`source` tells where the flush came from.
+Creating a feature also changes the `items` of its layer (or the
+`featureIds` of its group), so it comes with an update of that layer or
+group. A change of the order inside a layer arrives as `layer.updated` with
+the new `items`, and inside a group as `group.updated` with the new
+`featureIds`.
 
-- `'local'`: operations of the user and calls of the API, including an
-  image `load()`
-- `'batch'`: a GeoJSON `load()`, a bulk change meant to be one step
-- `'silent'`: a native `load()`, which replaces everything, and clearing the
-  selection when a drawing mode starts; not meant to be recorded
-- `'remote'`: a change that a replaced `DocumentStore` applied from
-  outside the instance
-- `'import'`: part of the type for hosts and plugins that load data by
-  their own means; core itself does not emit it
-- any other string: given by a plugin or a custom Store
+### One event per transaction
 
-core keeps no history of changes. `source` and the flush boundary are what
-a subscriber that records changes goes by (see
+`document.changed` fires once per transaction that changed the document
+(features, layers, groups, metadata or files), after every other event of
+it, with a [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)
+that holds every change of the transaction by category. A category is
+present only when the transaction changed it.
+
+| Field | What it holds |
+| --- | --- |
+| `source` | Where the writes came from |
+| `features` | The features created, updated and deleted |
+| `layers` | The layers created, updated and deleted, and the stacking order |
+| `groups` | `created`, `updated` and `deleted` |
+| `layerReorder` | The new order of the items of a layer |
+| `groupReorder` | The new order of the features of a group |
+| `metadata` | The new title and description, and the ones before |
+| `files` | The embedded files created and deleted |
+| `selection` | The new selection and the one before |
+| `editing` | The IDs of the features whose editing started and ended |
+| `mode` | The new mode and the one before |
+| `reset` | `true` when a Store replaced the whole document at once |
+
+A listener that rebuilds a view on any change (a feature list, a legend)
+listens to `document.changed`, so that a load of 1,000 features costs one
+rebuild instead of 1,000.
+
+A change of the selection, of the editing or of the mode alone does not
+fire `document.changed`: it has its own event. When the same transaction
+also changed the document, `document.changed` carries them along in
+`selection`, `editing` and `mode`. A listener that saves the document can
+therefore save on every `document.changed`.
+
+Neither the shape being drawn nor the state of a drag fires
+`document.changed`. Hiding an item on this client (`draw.hidden`),
+read-only and the interaction lock fire `hidden.changed`,
+`readOnly.changed` and `interactionLock.changed`, and never
+`document.changed`.
+
+### Order within one transaction
+
+The events of one transaction are emitted in this order.
+
+1. `feature.created` for each created feature
+2. `feature.updated` for each updated feature, each followed by
+   `feature.moved` when the update moved it to another layer or group
+3. `feature.deleted` for each deleted feature
+4. `layer.created`, `layer.updated`, `layer.deleted`, then
+   `layer.reordered`
+5. `group.created`, `group.updated`, `group.deleted`
+6. `metadata.updated`
+7. `selection.changed`
+8. `mode.changed`
+9. `vertexSelection.changed`
+10. `hidden.changed`, `readOnly.changed`, then `interactionLock.changed`
+11. `document.changed`
+
+## Sources
+
+The events of features, layers, groups and metadata carry `source`, and
+so does `document.changed`. It says where the writes of the transaction
+came from.
+
+| Source | Writes |
+| --- | --- |
+| `local` | The user's operations and the calls of the API: the default |
+| `load` | A load of any format, with the replacement of `mode: 'replace'` |
+| `batch` | A bulk change meant to be one step |
+| `silent` | A change a recorder of changes leaves out |
+| `remote` | A change a replaced Store applies from outside the instance |
+| `import` | Data an application or an extension loads by its own means |
+| any other | Given to `transact`, by an extension or by a replaced Store |
+
+The library itself writes `local`, `load` and `silent` (the selection a
+drawing mode clears as it is entered). A load of any format is one
+transaction with `load`: with `mode: 'replace'`, deleting what was there
+before is part of it, so it fires one `document.changed`.
+`document.loadMany` writes all its sources in one such transaction.
+
+The library keeps no history of changes. `source` and the transaction
+boundary are what a listener that records changes goes by (see
 [Saving and loading](../guides/save-load.md)).
 
-### Drags
+## Drags
 
-A drag (moving, scaling, rotating or editing vertices) writes the feature on
-every pointer move as an intermediate state, and writes the final state once
-when the pointer is released. Each of those writes is its own flush, so
-`draw.feature.update` and `draw.features.change` fire on every move. Throttle
-your handler, or act on `draw.features.change` only when the drag has ended,
-if the work is expensive. A drag cancelled with Esc writes the original
-shape back, which is one more update.
+A drag (moving, resizing or rotating features, moving vertices, dragging a
+handle) writes the features on every pointer move, each move a
+transaction of its own. The updates of those moves carry
+`intermediate: true` in `feature.updated` (`isIntermediate` in
+`document.changed`). When the pointer is released, one more update with
+`intermediate: false` writes the final state.
 
-A custom Store receives the intermediate flag through `StateChanges`; the
-public events do not carry it.
+A listener that does expensive work on changes skips the updates with
+`intermediate: true`, or waits for `drag.ended`.
 
-## Order within one flush
+`drag.started` fires when a drag of the select mode starts, and
+`drag.ended` when it ends. They come in pairs with the same `kind` and
+`featureIds`.
 
-The events of one flush are emitted in this order.
-
-1. `draw.feature.create` for each created feature
-2. `draw.feature.update` for each updated feature
-3. `draw.feature.delete` for each deleted feature
-4. `draw.features.change`
-5. `draw.layer.create`, `draw.layer.update`, `draw.layer.delete`, then
-   `draw.layer.reorder`
-6. `draw.group.create`, `draw.group.update`, `draw.group.delete`
-7. `draw.layer.update` and `draw.group.update` for an order change inside a
-   layer or a group
-8. `draw.selection.change`
-9. `draw.mode.change`
-10. `draw.metadata.change`
-
-When a handler reads the Store (for example `draw.getFeature()`), it sees
-the state after the whole flush, not the state between two events.
-
-A geometry operation commits its result in one flush (the result is
-created, the inputs are deleted and the result is selected), and then emits
-`draw.geometry.applied`.
-
-A click in select mode is handled in this order: the mode updates the
-selection (`draw.selection.change`, if it changed), then the
-datasets resolve the click (`click` on the dataset and
-`draw.dataset.click`), then `draw.map.click` fires.
+- `kind` is `feature` for moving features, `vertex` for moving or adding a
+  vertex, and `handle` for the handles of the selection (resizing,
+  rotating, the radius of a circle)
+- `cancelled` is `true` when the drag was cancelled (Escape, a change of
+  mode, a change from outside). The features are written back to where
+  they were before `drag.ended` fires
 
 ## Details per event
 
-### draw.geometry.applied
+### feature.moved
 
-Fires when an operation of `draw.geometry` finishes. `operation` is
-`'union' | 'subtract' | 'intersect' | 'buffer' | 'split'` and `inputIds`
-lists the inputs in z order (the last is the frontmost).
+Fires after the `feature.updated` of a feature that changed its layer or
+its group: `features.move`, `groups.create`, `selection.group` and the
+rest. `from` and `to` are `MoveTarget`s, with the position in the new
+place as `index`. `{ groupId: null }` in `to` means the feature left its
+group and stayed in its layer.
 
-- `status: 'applied'` means result features were created. Their ids are in
-  `resultIds`, in z order
-- `status: 'empty'` means the operation ran but the result had no area (an
-  intersection of shapes that do not overlap, a subtraction that removed
-  everything, a split that did not divide the polygon). The inputs are left
-  unchanged and `resultIds` is empty
-- When the operation did not run at all (fewer than two targets, for
-  example), nothing is emitted
+A move to another position in the same layer or group changes no field of
+the feature, so it fires only `layer.updated` or `group.updated`.
 
-`resultId` is `resultIds[0]` or `null`, a shorthand for operations with one
-result. union, subtract and intersect have at most one result. buffer has
-one result per input, and `resultIds[i]` belongs to `inputIds[i]`; an input
-that buffer skipped is not listed. For split, `inputIds` is
-`[polygon, cuttingLine]`, the line stays, and there are two or more
-results.
+### layer.reordered
 
-```typescript
-draw.on('draw.geometry.applied', (e) => {
-  if (e.status === 'empty') return;
-  console.log(e.operation, e.inputIds, '->', e.resultIds);
-});
-```
+Fires when the stacking order changed. `order` and `previous` are the whole
+stacking order, from the back, including the entries that are not layers.
 
-### draw.snap.change
+### document.loaded
 
-Fires while drawing or editing, when the snapping target changes. It also
-fires when the target is an edge whose coordinates move. When snapping is
-lost, it fires once with a `SnapResult` that has no `target`. Use it for a
-status line such as "snapped to vertex".
+Fires after `draw.document.load()` read something, when every event of the
+load has fired, and once per item after `draw.document.loadMany()`.
+`result` is the `LoadResult` the promise resolves to (the one of the item),
+and `source` is the source of its writes, `load`. A load refused because
+the document is read-only, and a load that fails, fire nothing. The layer
+and the group that `LoadOptions.layer` and `LoadOptions.group` create come
+in the same `document.changed` as the features, with `layer.created` and
+`group.created` before this event, and `result.layerId` and
+`result.groupId` name them.
 
-### draw.image.request
+### selection.changed
 
-Fires when the `draw_image` mode starts. core does not open a file dialog;
-your application picks the file and passes it to `load()` with the
-`coordinate`, `zoom` and `layerId` from the payload. The mode returns to
-`select` right after emitting. It does not fire when no layer can be
-written.
+`selection` and `previous` are `{ type, ids }`, where `type` is `feature`,
+`group`, `layer` or `null` when nothing is selected. The selection holds
+only what can be seen, so hiding or deleting a selected item fires it too.
 
-### draw.map.click
+### vertexSelection.changed
 
-The click of select mode, emitted for every click whether it hit a feature,
-a dataset or nothing. The coordinates are the raw ones,
-before snapping. It does not affect selection and does not fire in the
-drawing modes. Use it when you need "a click anywhere on the map", such as
-placing a marker of your own.
+Fires when the selected vertices change. `selection` is `null` when no
+vertex is selected.
 
-### draw.dataset.click
+### hidden.changed
 
-How a click in select mode was resolved against the
-datasets, in one event.
+Fires when the items this client hides change: `draw.hidden`, or the
+deletion of a hidden item. `ids` is the whole set after the change, not the
+difference.
 
-- The frontmost thing under the pointer is a feature of an interactive
-  dataset: `datasetId`, `feature` and `row` (the index of the feature
-  in what the dataset was given, or its row in a columnar table) are set
-- Nothing was hit, or a dataset with `interactive: false` blocked the
-  click: all three are `null`
-- The frontmost thing is a feature of the Store: not emitted
-- No dataset exists: not emitted
+### readOnly.changed and interactionLock.changed
 
-The `click` event of a single dataset fires only on a hit, so a click on
-empty space, which usually clears a selection that came from a dataset,
-can only be seen through this event.
+Fire when `draw.setReadOnly` or `draw.setInteractionLocked` changes the
+value. Setting the value it already has fires nothing.
 
-### draw.dataset.add and draw.dataset.remove
+### snap.changed
+
+Fires while drawing or editing, when the target of the snapping changes.
+When the pointer leaves every target, it fires once with `result: null`.
+Use it for a status line such as "snapped to a vertex".
+
+### preview.changed
+
+Fires every time the shape being drawn changes: at each vertex, at each
+move of the pointer that moves the shape, and once with `feature: null`
+when the shape is created, discarded or left. Nothing is throttled.
+`feature` has the type, the geometry and the layer of the shape, the ID it
+will be created with, and the radius of a circle. `confirmedVertices` and
+`highlightVertex` are the options the shape was shown with
+(`ModeContext.preview.set`): how many vertices from the start are placed,
+and the vertex drawn highlighted. Each is left out when the mode did not
+give it, and both are left out when the shape is cleared. Use it to show
+the length while drawing, or to share the shape with other users and
+draw it for them as the drawing user sees it.
+
+### map.clicked
+
+Every click on the map in the select mode, whether it hit a feature, a row
+of a dataset or nothing. `lngLat` is the position of the pointer before
+snapping, and `hit` the frontmost thing under it (`kind` is `feature`,
+`dataset` or `companion`), or `null` when the click hit nothing. It does
+not change the selection, and it does not fire in the drawing modes nor for
+a click that an extension consumed. Use it when you need "a click anywhere
+on the map", such as placing a marker of your own.
+
+### dataset.clicked
+
+A click in the select mode on a row of an interactive dataset that is the
+frontmost thing under the pointer. It fires just before `map.clicked`, and
+the dataset itself fires `clicked` with the same payload. A click on a
+feature of the document, or on nothing, does not fire it: listen to
+`map.clicked` for those.
+
+### image.requested
+
+Fires when the mode `draw_image` starts. The library does not open a file
+dialog: your application picks the file and loads it with
+`draw.document.load(file, { coordinate: lngLat, zoom, layerId })`.
+`lngLat` is the clicked position when a click led to the mode (a listener
+of `map.clicked` entered it), and the center of the map when the mode was
+entered otherwise, such as by `draw.setMode('draw_image')` from a button.
+`layerId` is the layer the image goes into. The mode returns to `select`
+right after, and the mode cannot start while no layer can be written.
+
+### dataset.added and dataset.removed
 
 A dataset was added or removed.
 
-- `draw.dataset.add` fires in `addDataset`, once the dataset
-  is listed: `draw.getDataset(datasetId)` returns it inside
-  the handler
-- `draw.dataset.remove` fires in `removeDataset` or the
-  `remove()` of the dataset, once it is no longer listed. Removing an
-  id that does not exist fires nothing
-- Neither fires for a move (that is `draw.dataset.reorder`), for a change
-  of the contents (that is the `change` event of the dataset), nor when
-  the draw instance is destroyed
-- A dataset added again under the same id is a new object: a remove
-  and then an add
+- `dataset.added` fires in `draw.datasets.add`, once the dataset is
+  listed: `draw.datasets.get(id)` returns it inside the listener
+- `dataset.removed` fires in `draw.datasets.remove`, once the dataset is
+  no longer listed
+- Neither fires for a move (that is `dataset.reordered`), for a change of
+  the rows or the look (that is the `changed` event of the dataset), nor
+  when the instance is destroyed
 
-The datasets that exist before you subscribe are not announced, so
-read `draw.getDatasets()` once when you start following them
-(see [Large data](../guides/large-data.md)).
+The datasets that exist before you subscribe are not announced, so read
+`draw.datasets.list()` once when you start following them (see
+[Showing large data](../guides/large-data.md)).
 
-A plugin subscribes to the same events as `dataset.add` and
-`dataset.remove` with `ctx.on` (see [Plugins](../guides/plugins.md)).
+### dataset.reordered
 
-### draw.dataset.reorder
+`draw.datasets.move` changed the order of the datasets. `order` and
+`previous` are their IDs from the back to the front, as
+`draw.datasets.list()` returns them.
 
-`moveDataset` changed the order of the
-datasets. `order` is their ids from the back to the front, the same
-as `draw.getDatasets()`.
+- It fires when a dataset moved within its side of the document, or to
+  another side, even when the IDs read in the same sequence
+- A move that leaves the dataset where it was fires nothing
+- The position of a dataset with `order: 'layer-order'` follows the
+  stacking order of the document, which is `layer.reordered`
 
-- It fires when a dataset moved within its side, or to another side.
-  A change of side fires it even when the ids read in the same sequence
-  (the last of `below-store` moved to `above-store`, for example)
-- A move that leaves the dataset where it was fires nothing, nor does
-  an id that does not exist
-- Adding and removing a dataset fire `draw.dataset.add` and
-  `draw.dataset.remove` instead
-- The position of a `layer-order` dataset follows the layer order of
-  the Store, which is `draw.layer.reorder`
+### layerStack.changed
 
-A plugin subscribes to it as `dataset.reorder`.
-
-### Display dataset events
-
-A dataset has its own events, subscribed on the dataset.
-
-```typescript
-const roads = draw.addDataset({
-  id: 'roads',
-  features,
-  interactive: true,
-});
-
-roads.on('click', ({ feature, lngLat }) => {
-  showPopup(feature.properties, lngLat);
-});
-roads.on('hover', ({ feature }) => setHighlight(feature?.id ?? null));
-roads.on('change', ({ reason }) => rebuildLabels(reason));
-```
-
-- `click` with `{ datasetId, feature, row, lngLat }` fires when a
-  feature of this dataset is the frontmost hit. `row` is the index of
-  the feature in what the dataset was given, or its row in a columnar
-  table
-- `hover` with `{ datasetId, feature, row, lngLat }` fires when the
-  hovered feature changes. `feature` and `row` are `null` when the pointer
-  leaves
-- `change` with `{ reason }` fires when the contents, style, visibility,
-  selection or thinning winners change
-
-`click` and `hover` fire only with `interactive: true`; `change` fires
-regardless. `reason` is `'features'` (`setFeatures`, `setColumnar` or a
-provider result),
-`'style'` (`setStyleRule` or `setBaseStyle`), `'visibility'` (`setVisible`
-actually switched), `'selection'` (`setSelectedIds` actually changed) or
-`'thinning'` (the set of features kept by collision thinning changed). A
-`'thinning'` caused by `setCollisionThinning` or `setZoomScale` fires
-inside the call; one caused by the camera entering another integer zoom
-fires right after the frame that drew the new set. See
-[Large data](../guides/large-data.md).
-
-### draw.renderslots.change
-
-Fires when a frame (one custom layer that draws one interval of the layer
-order) is added or removed, or when an interval changes. `slots` is the same
-list that `draw.getRenderSlots()` returns. An application that places its
-own maplibre layers between the frames re-places them here (see
+Fires when the divisions of the stacking order change: one is added or
+removed, or the range of layers it draws changes. `entries` is the same
+list that `draw.getLayerStack()` returns. An application that places its
+own MapLibre layers between the divisions places them again here (see
 [Layers](../guides/layers.md)).
 
-### draw.load.error
+### error
 
-An asynchronous load that no call returns has failed.
+The image of an Image feature could not be decoded. `source` is `image`,
+`featureId` names the feature, and `error` is a `DrawError` with the code
+`unsupported-format` whose `details` holds what was thrown. It fires once
+per image, and the feature is drawn without it.
 
-- `source: 'image'`: the image of an Image feature could not be decoded.
-  `featureId` is set. It fires once per failed image (a failed image is not
-  retried) and the feature is drawn without its image
+A failure of `draw.document.load()` rejects its promise instead.
 
-`error` is what was thrown. Errors of `draw.load()` itself reject its
-promise instead.
+## The events of a dataset
 
-## Hooks and events
+A dataset has its own events, subscribed on the dataset with `on` and
+`off`.
 
-A plugin can also receive changes through the hooks of `Plugin`
-(`feature:afterCreate`, `drag:start`, `drag:end` and so on). Hooks carry a
-`MutationContext`, receive the features of one operation together, and
-report the start and end of a drag, which the events do not. See
-[Plugins](../guides/plugins.md).
+```ts
+const roads = draw.datasets.add({ id: 'roads', rows, interactive: true });
+
+roads.on('clicked', ({ row, lngLat }) => {
+  showPopup(row.properties, lngLat);
+});
+roads.on('hovered', ({ rowIndex }) => setHighlight(rowIndex));
+roads.on('changed', ({ reason }) => rebuildLegend(reason));
+```
+
+- `clicked` with `{ datasetId, rowIndex, row, lngLat, point }` fires when
+  a row of this dataset is the frontmost hit of a click
+- `hovered` with the same fields fires when the pointer moves onto another
+  row, or off every row
+- `changed` with `{ reason }` fires when the rows, the look, the
+  visibility, the selection or the thinning changed
+
+`clicked` and `hovered` fire only in the select mode, and only for a
+dataset with `interactive: true`. `rowIndex` is the index of the row in
+what the dataset was given, and `row` the row as a GeoJSON feature. When
+the pointer leaves every row, `hovered` fires once with `rowIndex` and
+`row` set to `null`. Moving over the same row fires nothing.
+
+`changed` fires whatever `interactive` is. `reason` is one of these.
+
+- `rows`: `setRows`, `setTable`, or the rows a provider returned
+- `style`: `setStyleRule` or `setBaseStyle`
+- `visibility`: `setVisible` switched it
+- `selection`: `setSelectedRowIds` changed the selected rows
+- `thinning`: the rows the thinning of overlapping points draws changed.
+  One caused by `setCollisionThinning` or `setZoomScale` fires inside the
+  call; one caused by the camera entering another zoom band fires right
+  after the map drew the new rows
+
+See [Showing large data](../guides/large-data.md).

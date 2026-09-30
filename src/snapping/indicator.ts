@@ -21,7 +21,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
-import type { CustomOverlayRenderer, CustomRendererDrawContext } from '../extension/index.js';
+import type { EngineOverlayRenderer, FrameDrawContext } from '../extension/index.js';
 import type { PointStyle } from '../shared/types/style.js';
 import type { SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
 import type { SnapService, SnapTargetKind } from './types.js';
@@ -118,6 +118,31 @@ export const DEFAULT_SNAP_INDICATOR_STYLES: SnapIndicatorStyles = {
 };
 
 /**
+ * The look of the indicator: the mark of each kind and the guide line. The renderer reads it
+ * on every drawing, so a change of the options applies to the next frame
+ *
+ * @internal
+ */
+export interface SnapIndicatorLook {
+  /** The mark drawn at the snapped point, per kind */
+  styles: SnapIndicatorStyles;
+  /** The line drawn along a guide that is snapped to */
+  guideLine: SDFStrokeStyle;
+}
+
+/**
+ * A look of the indicator with the defaults, which the caller may change in place
+ *
+ * @internal
+ */
+export function createSnapIndicatorLook(): SnapIndicatorLook {
+  return structuredClone({
+    styles: DEFAULT_SNAP_INDICATOR_STYLES,
+    guideLine: DEFAULT_SNAP_GUIDE_LINE_STYLE,
+  });
+}
+
+/**
  * The dependencies of the snapping indicator
  *
  * @internal
@@ -125,6 +150,8 @@ export const DEFAULT_SNAP_INDICATOR_STYLES: SnapIndicatorStyles = {
 export interface SnapIndicatorRendererDeps {
   /** Where the snapping result to draw is obtained from */
   snapService: SnapService;
+  /** The look, read on every drawing; `styles` and `guideLineStyle` are ignored with it */
+  look?: SnapIndicatorLook;
   /** A replacement of the styles (per kind) */
   styles?: Partial<SnapIndicatorStyles>;
   /** A replacement of the style of the guide line (dashed) */
@@ -136,25 +163,26 @@ export interface SnapIndicatorRendererDeps {
  *
  * @internal
  */
-export class SnapIndicatorRenderer implements CustomOverlayRenderer {
+export class SnapIndicatorRenderer implements EngineOverlayRenderer {
   readonly name = 'snap-indicator';
   readonly order = 'overlay' as const;
 
   private snapService: SnapService;
-  private styles: SnapIndicatorStyles;
-  private guideLineStyle: SDFStrokeStyle;
+  private look: SnapIndicatorLook;
 
   constructor(deps: SnapIndicatorRendererDeps) {
     this.snapService = deps.snapService;
-    this.styles = { ...DEFAULT_SNAP_INDICATOR_STYLES, ...deps.styles };
-    this.guideLineStyle = deps.guideLineStyle ?? DEFAULT_SNAP_GUIDE_LINE_STYLE;
+    this.look = deps.look ?? {
+      styles: { ...DEFAULT_SNAP_INDICATOR_STYLES, ...deps.styles },
+      guideLine: deps.guideLineStyle ?? DEFAULT_SNAP_GUIDE_LINE_STYLE,
+    };
   }
 
   onAdd(_gl: WebGL2RenderingContext, _map: MapLibreMap): void {
     // It uses the existing drawing primitives, so it holds no GPU resources of its own
   }
 
-  draw(projectionData: ProjectionData, zoom: number, context: CustomRendererDrawContext): void {
+  draw(projectionData: ProjectionData, zoom: number, context: FrameDrawContext): void {
     const result = this.snapService.getResult();
     if (!result?.target) return;
 
@@ -169,14 +197,16 @@ export class SnapIndicatorRenderer implements CustomOverlayRenderer {
       ];
       context.sdfLineRenderer.draw(
         line,
-        this.guideLineStyle,
+        this.look.guideLine,
         { widthUnit: 'pixels', closed: false },
         zoom,
         projectionData,
       );
     }
 
-    const style = this.styles[target.kind];
+    // A kind of a provider's own is shown as a vertex
+    const { styles } = this.look;
+    const style = styles[target.kind as SnapTargetKind] ?? styles.vertex;
     context.pointShapeRenderer.draw([result.lngLat.lng, result.lngLat.lat], style, zoom);
   }
 

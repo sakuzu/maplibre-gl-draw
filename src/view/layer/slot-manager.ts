@@ -16,9 +16,9 @@ import type { CustomLayerInterface, Map as MapLibreMap } from 'maplibre-gl';
 import {
   partitionLayerOrder,
   type RenderSegment,
-  type RenderSlot,
-  renderSlotLayerId,
+  type StackSlot,
   sameSegments,
+  slotLayerId,
 } from './slots.js';
 
 /** What the manager needs */
@@ -31,7 +31,7 @@ export interface SlotManagerDeps {
   /** Predicate that identifies the separators (always false when omitted = a single slot) */
   isExternalEntry?: (entryId: string) => boolean;
   /** Where the changes of the slots and of the segments are notified */
-  onSlotsChange?: (slots: RenderSlot[]) => void;
+  onSlotsChange?: (slots: StackSlot[]) => void;
   /** Creates the CustomLayer of the slot at `index` (index 1 onwards) */
   createSlotLayer: (index: number) => CustomLayerInterface;
 }
@@ -99,9 +99,9 @@ export class SlotManager {
   }
 
   /** The list of slots (public form) */
-  getRenderSlots(): RenderSlot[] {
+  getStackSlots(): StackSlot[] {
     return this.currentSegments.map((segment, index) => ({
-      layerId: this.slotLayers[index]?.id ?? renderSlotLayerId(index),
+      layerId: this.slotLayers[index]?.id ?? slotLayerId(index),
       from: segment.from,
       to: segment.to,
     }));
@@ -141,7 +141,7 @@ export class SlotManager {
         map.removeLayer(slot.id);
       }
     }
-    onSlotsChange?.(this.getRenderSlots());
+    onSlotsChange?.(this.getStackSlots());
     map.triggerRepaint?.();
   }
 

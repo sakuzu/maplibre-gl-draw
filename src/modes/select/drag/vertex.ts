@@ -9,9 +9,10 @@ import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { collectSharedVertexMoves } from '../../../operations/shared-vertex.js';
 import type { VertexState } from '../../../operations/vertex.js';
 import { addVertex, computeVertexMove, startVertexMove } from '../../../operations/vertex.js';
+import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import { hasVertexRef } from '../../../shared/utils/vertex-ref.js';
 import type { Coordinate, VertexRef } from '../../../store/types.js';
-import type { ModeContext } from '../../handler.js';
+import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
 import { dragStartLngLat } from './operation.js';
@@ -19,14 +20,17 @@ import { dragStartLngLat } from './operation.js';
 /**
  * Whether the modifier key that temporarily disables shared-vertex following is held down
  *
- * The temporary-disable key is shared with snapping (options.snap.disableKey, 'alt' by default).
+ * The temporary-disable key is shared with snapping (`snapping.disableKey` of the options, 'alt' by default).
  * Holding it down when starting a drag escapes to a solitary move for that one drag only.
  *
  * The decision looks only at the normalized modifier keys of the drag start event (core does not
  * deal with raw DOM events). Pressing or releasing the key mid-drag does not change the set.
  * When disableKey is 'none', no modifier-key-based temporary disabling is performed.
  */
-function isSharedVertexDragSuppressed(event: DragNormalizedEvent, context: ModeContext): boolean {
+function isSharedVertexDragSuppressed(
+  event: DragNormalizedEvent,
+  context: EngineModeContext,
+): boolean {
   const disableKey = context.snapOptions?.disableKey ?? 'alt';
   if (disableKey === 'none') return false;
   return event.modifiers?.[disableKey] === true;
@@ -46,7 +50,9 @@ function applyVertexMove(
   if (!feature) return;
 
   const newCoords = computeVertexMove(state, lngLat, feature);
-  writes.write(store, state.featureId, { coordinates: newCoords });
+  writes.write(store, state.featureId, {
+    geometry: geometryFromCoordinates(feature.type, newCoords),
+  });
 }
 
 /**
@@ -74,7 +80,9 @@ export class VertexDrag implements DragOperation {
     if (!feature) return;
 
     const newCoords = computeVertexMove(this.state, event.lngLat, feature);
-    writes.write(store, this.state.featureId, { coordinates: newCoords });
+    writes.write(store, this.state.featureId, {
+      geometry: geometryFromCoordinates(feature.type, newCoords),
+    });
 
     // Preview update for the features following along through a shared vertex. They are written
     // one at a time in the same manner as the main one (an intermediate updateFeature).
@@ -93,7 +101,7 @@ export function startVertexDrag(
   event: DragNormalizedEvent,
   featureId: string,
   vertexRef: VertexRef,
-  context: ModeContext,
+  context: EngineModeContext,
 ): VertexDrag | null {
   const { store, spatialIndex } = context;
   const feature = store.getFeature(featureId);
@@ -102,17 +110,17 @@ export function startVertexDrag(
   const startLngLat = dragStartLngLat(event);
 
   // Check the currently selected vertices
-  const selectedVertices = store.getSelectedVertices();
-  let vertexRefsToMove: VertexRef[];
+  const selectedVertices = store.getVertexSelection();
+  let vertexRefsToMove: readonly VertexRef[];
 
   if (
     selectedVertices &&
     selectedVertices.featureId === featureId &&
-    hasVertexRef(selectedVertices.vertexIndices, vertexRef)
+    hasVertexRef(selectedVertices.vertices, vertexRef)
   ) {
     // If the vertex being dragged is one of the selected vertices, move every selected vertex
     // (a multiple selection spanning rings and parts can be moved as-is too)
-    vertexRefsToMove = selectedVertices.vertexIndices;
+    vertexRefsToMove = selectedVertices.vertices;
   } else {
     // Otherwise move only the vertex being dragged
     vertexRefsToMove = [vertexRef];
@@ -143,7 +151,7 @@ export function startVertexDrag(
   store.setFollowedVertices?.(
     sharedVertexStates.map((followerState) => ({
       featureId: followerState.featureId,
-      vertexIndices: followerState.vertexIndices,
+      vertices: followerState.vertices,
     })),
   );
 
@@ -176,7 +184,7 @@ export function startMidpointDrag(
   const newCoord: Coordinate = [startLngLat.lng, startLngLat.lat];
   const newCoords = addVertex(feature, after, newCoord);
 
-  store.updateFeature(featureId, { coordinates: newCoords });
+  store.updateFeature(featureId, { geometry: geometryFromCoordinates(feature.type, newCoords) });
 
   // The added vertex is afterIndex + 1 in the same part and same ring
   const newVertexRef: VertexRef = { ...after, index: after.index + 1 };

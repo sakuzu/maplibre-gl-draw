@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type { RetainedLineBatch } from '../renderers/line/line-types.js';
 import type { RetainedLineRenderer } from '../renderers/retained.js';
@@ -30,11 +31,12 @@ function makeLine(id: string, coordinates: Coordinate[], type: Feature['type'] =
   return {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
     properties: PROPERTIES,
     locked: false,
     visible: true,
+    style: {},
   } as Feature;
 }
 

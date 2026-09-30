@@ -10,42 +10,39 @@
  * default the widths of a drawn feature follow the zoom.
  */
 
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { KeyNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import type {
+  ModeHandler as ContractModeHandler,
+  DrawPointerEvent,
+  ModeFactory,
+} from '../../api/extension/mode.js';
 import { MemoryStore } from '../../store/memory.js';
-import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Mode } from '../../store/types.js';
-import type { ModeContext, ModeHandler } from '../handler.js';
-import { DrawCircleMode } from './circle.js';
-import { DrawLineMode } from './line.js';
-import { DrawPointMode } from './point.js';
-import { DrawPolygonMode } from './polygon.js';
+import { createModeHarness, keyInput } from '../../test-utils.js';
+import { ModeManagerImpl } from '../manager.js';
+import { drawCircleMode } from './circle.js';
+import { drawLineMode } from './line.js';
+import { drawPointMode } from './point.js';
+import { drawPolygonMode } from './polygon.js';
 
 const ZOOM = 12.5;
 
-function click(lng: number, lat: number): MouseNormalizedEvent {
+function pointer(lng: number, lat: number): DrawPointerEvent {
   return {
-    type: 'click',
-    point: { x: lng * 1000, y: lat * 1000 },
-    lngLat: { lng, lat },
-    originalEvent: {} as unknown as MouseEvent,
+    point: [lng * 1000, lat * 1000],
+    lngLat: [lng, lat],
+    snapped: { lngLat: [lng, lat] },
     modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-  } as unknown as MouseNormalizedEvent;
+    pointerType: 'mouse',
+    original: {} as PointerEvent,
+  };
 }
 
-const ENTER = {
-  type: 'keydown',
-  key: 'Enter',
-  code: 'Enter',
-  modifiers: { shift: false, ctrl: false, alt: false, meta: false },
-  originalEvent: { preventDefault() {} } as unknown as KeyboardEvent,
-} as unknown as KeyNormalizedEvent;
-
-/** Draws one feature with the mode and returns its properties */
-function drawWith(
-  handler: ModeHandler,
+/** Draws one feature with a mode of the extension contract and returns its properties */
+function drawWithContract(
+  factory: ModeFactory,
   scaleWithZoom: boolean,
-  input: (handler: ModeHandler) => void,
+  input: (handler: ContractModeHandler) => void,
 ): Record<string, unknown> {
   const store = new MemoryStore();
   store.createLayer({
@@ -54,76 +51,73 @@ function drawWith(
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   });
-  let idCounter = 0;
   const canvas = { style: { cursor: '' } };
-  handler.onStart?.({
-    map: {
-      getCanvas: () => canvas,
-      getZoom: () => ZOOM,
-      getCenter: () => ({ lng: 0, lat: 0 }),
-      project: (c: [number, number]) => ({ x: c[0] * 1000, y: c[1] * 1000 }),
-      dragPan: { enable: () => {}, disable: () => {} },
-      doubleClickZoom: { enable: () => {}, disable: () => {} },
-      triggerRepaint: () => {},
-    },
-    store,
-    spatialIndex: new RBushSpatialIndex(),
-    eventEmitter: { emit: () => {} },
-    autoNameGenerator: { generateName: () => undefined },
-    generateFeatureId: () => `f${++idCounter}`,
-    getCurrentLayerId: () => 'a',
-    setMode: (mode: Mode) => store.setMode(mode),
-    scaleWithZoom,
-  } as unknown as ModeContext);
+  const map = {
+    getCanvas: () => canvas,
+    getZoom: () => ZOOM,
+    // As the points of the pointer events below
+    project: ([lng, lat]: [number, number]) => ({ x: lng * 1000, y: lat * 1000 }),
+  } as unknown as MapLibreMap;
+  const modeManager = new ModeManagerImpl(store);
+  const harness = createModeHarness({ store, map, modeManager, scaleWithZoom });
+  const handler = factory(harness.modeContext());
+  handler.onEnter?.();
   input(handler);
-  const [feature] = store.getAllFeatures();
+  const [feature] = store.listFeatures();
   expect(feature).toBeDefined();
   return feature.properties;
 }
 
-const MODES: Array<[string, () => ModeHandler, (handler: ModeHandler) => void]> = [
-  ['a point', () => new DrawPointMode(), (h) => h.onClick?.(click(1, 1))],
+const CONTRACT_MODES: Array<[string, ModeFactory, (handler: ContractModeHandler) => void]> = [
+  ['a point', drawPointMode, (h) => h.onClick?.(pointer(1, 1))],
   [
     'a line',
-    () => new DrawLineMode(),
+    drawLineMode,
     (h) => {
-      h.onClick?.(click(1, 1));
-      h.onClick?.(click(2, 2));
-      h.onKeyDown?.(ENTER);
+      h.onClick?.(pointer(1, 1));
+      h.onClick?.(pointer(2, 2));
+      h.onKeyDown?.(keyInput('Enter'));
     },
   ],
   [
     'a polygon',
-    () => new DrawPolygonMode(),
+    drawPolygonMode,
     (h) => {
-      h.onClick?.(click(1, 1));
-      h.onClick?.(click(2, 1));
-      h.onClick?.(click(2, 2));
-      h.onKeyDown?.(ENTER);
+      h.onClick?.(pointer(1, 1));
+      h.onClick?.(pointer(2, 1));
+      h.onClick?.(pointer(2, 2));
+      h.onKeyDown?.(keyInput('Enter'));
     },
   ],
   [
     'a circle',
-    () => new DrawCircleMode(),
+    drawCircleMode,
     (h) => {
-      h.onClick?.(click(1, 1));
-      h.onMouseMove?.({ ...click(1.01, 1), type: 'mousemove' });
-      h.onClick?.(click(1.01, 1));
+      h.onClick?.(pointer(1, 1));
+      h.onPointerMove?.(pointer(1.01, 1));
+      h.onClick?.(pointer(1.01, 1));
     },
   ],
 ];
 
 describe('the created zoom of a drawn feature', () => {
-  it.each(MODES)('is recorded on %s when the widths follow the zoom', (_name, create, input) => {
-    expect(drawWith(create(), true, input).createdZoom).toBe(ZOOM);
-  });
+  it.each(CONTRACT_MODES)(
+    'is recorded on %s when the widths follow the zoom',
+    (_n, factory, input) => {
+      expect(drawWithContract(factory, true, input)['maplibre-gl-draw:createdZoom']).toBe(ZOOM);
+    },
+  );
 
-  it.each(MODES)(
+  it.each(CONTRACT_MODES)(
     'is not recorded on %s when the widths stay the same on the screen',
-    (_name, create, input) => {
-      expect(drawWith(create(), false, input)).not.toHaveProperty('createdZoom');
+    (_n, factory, input) => {
+      expect(drawWithContract(factory, false, input)).not.toHaveProperty([
+        'maplibre-gl-draw:createdZoom',
+      ]);
     },
   );
 });

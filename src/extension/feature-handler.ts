@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The feature handler contract of an extension
+ * The feature type handler of the engine
  *
- * The shape an extension implements to add a custom feature type: its renderer, its hit
- * testing, its box selection, its bounding boxes, its resize and its snapping candidates, all
- * registered at once with `registerFeatureHandler`. It is types only and sits low in the layer
- * order, so the view, snapping and operations layers read it without reaching up into api.
+ * The shape the engine reads a feature type that is not built in through: its renderer, its
+ * hit testing, its box selection, its bounding boxes, its resize and its snapping candidates.
+ * A `FeatureTypeDefinition` of the extension contract is installed as one of these by the
+ * adapters of `api/impl/adapters.ts`. It is types only and sits low in the layer order, so the
+ * view, snapping and operations layers read it without reaching up into api.
  */
 
 import type { BoxSelectionStrategy } from '../dispatcher/hit-test/box-strategy.js';
@@ -19,15 +20,15 @@ import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import type { SnapCandidate, SnapProviderContext } from '../snapping/types.js';
 import type { HandleInfo } from '../view/ui/handles.js';
 import type { PointFrameExtent } from '../view/ui/selection-ui/index.js';
-import type { CustomFeatureRenderer } from './renderers.js';
+import type { FeatureTypeRenderer } from './renderers.js';
 
 /**
- * Custom resize result
+ * The result of the resize computation for a feature type that is not built in, used when
+ * processing different from the standard resize (changing scale) is needed
  *
- * The result of the resize computation for a custom feature.
- * Used when processing different from the standard resize (changing scale) is needed.
+ * @internal
  */
-export interface CustomResizeResult {
+export interface TypeResizeResult {
   /** The new coordinates */
   coordinates: Coordinate;
   /** The new width (in pixels, optional) */
@@ -37,58 +38,33 @@ export interface CustomResizeResult {
 }
 
 /**
- * The type of a custom resize computation function
+ * The resize computation of a feature type that is not built in
+ *
+ * @internal
  */
-export type CustomResizeCalculator = (
+export type TypeResizeCalculator = (
   handle: HandleType,
   state: ResizeState,
   currentLngLat: { lng: number; lat: number },
   feature: Feature,
-) => CustomResizeResult | null;
+) => TypeResizeResult | null;
 
 /**
- * A custom feature type: how its features are drawn, hit, selected, resized and snapped to
- *
- * Register it with `draw.registerFeatureHandler(handler)`, usually from `onInstall` of a
- * {@link Plugin}. The registration belongs to that draw instance, and the returned function
- * removes it. Features of the type are ordinary features in the Store (`type` is the name of
- * the handler), so they are saved, exported, grouped and stacked like the built-in types;
- * GeoJSON export writes the type in `maplibre-gl-draw:featureType` so that it comes back.
+ * A feature type that is not built in: how its features are drawn, hit, selected, resized and
+ * snapped to
  *
  * `type`, `renderer` and `hitTest` are required. The rest have fallbacks: box selection and
  * the bounding box use the coordinates, and without `getSelectionBoundingBox` no selection UI
  * is drawn.
  *
- * @example
- * ```ts
- * import type { CustomFeatureHandler, Feature } from '@sakuzu/maplibre-gl-draw';
- *
- * // A "marker" type: one coordinate, drawn as a square, hit within the tolerance
- * const distanceTo = (feature: Feature, [lng, lat]: [number, number]) => {
- *   const [x, y] = feature.coordinates as [number, number];
- *   return Math.hypot(x - lng, y - lat);
- * };
- *
- * const markerHandler: CustomFeatureHandler = {
- *   type: 'marker',
- *   renderer: markerRenderer, // see CustomFeatureRenderer
- *   hitTest: {
- *     geometryType: 'marker',
- *     test: (feature, coordinate, tolerance) => distanceTo(feature, coordinate) <= tolerance,
- *     distance: (feature, coordinate) => distanceTo(feature, coordinate),
- *   },
- * };
- *
- * const unregister = draw.registerFeatureHandler(markerHandler);
- * draw.addFeature({ type: 'marker', coordinates: [139.767, 35.681] });
- * ```
+ * @internal
  */
-export interface CustomFeatureHandler {
+export interface FeatureTypeHandler {
   /** The feature type name */
   readonly type: string;
 
   /** The custom renderer */
-  readonly renderer: CustomFeatureRenderer;
+  readonly renderer: FeatureTypeRenderer;
 
   /** The custom hit testing strategy */
   readonly hitTest: HitTestStrategy;
@@ -137,7 +113,8 @@ export interface CustomFeatureHandler {
    * or rotation handles, move inside the box). This function only decides the dimensions of that
    * box (the special treatment of zero area itself does not change).
    *
-   * When it is omitted, or returns null, the default 12px square is used.
+   * When it is omitted, or returns null, the extent of the marker of a built-in point is used,
+   * or else the default 12px square.
    *
    * @param feature The target feature
    */
@@ -183,7 +160,7 @@ export interface CustomFeatureHandler {
     state: ResizeState,
     currentLngLat: { lng: number; lat: number },
     feature: Feature,
-  ): CustomResizeResult | null;
+  ): TypeResizeResult | null;
 
   /**
    * Returns the snapping candidates

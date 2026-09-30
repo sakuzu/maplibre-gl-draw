@@ -10,7 +10,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { CustomFeatureHandler, CustomRendererDrawContext } from '../../extension/index.js';
+import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
@@ -19,6 +19,7 @@ import {
   type FeatureCompanionRegistry,
 } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
+import { customRendererOf } from './store-retained-classify.js';
 
 /**
  * Draw target used when falling back to immediate mode (the same shape as BatchManager)
@@ -38,9 +39,9 @@ export interface StoreRetainedDrawDeps {
   /** Immediate-mode draw target that draws the features which cannot be retained */
   batchManager: StoreImmediateTarget;
   /** Renderers of the custom feature types (type name → renderer) */
-  customRenderers: Map<string, CustomFeatureHandler['renderer']>;
+  customRenderers: Map<string, FeatureTypeHandler['renderer']>;
   /** Draw context passed to a custom renderer */
-  customRendererContext: CustomRendererDrawContext;
+  customRendererContext: FrameDrawContext;
   /** Providers of companion drawing and companion hits (those of this draw instance) */
   companions: FeatureCompanionRegistry;
   /**
@@ -105,23 +106,12 @@ export function drawFeaturesImmediate(
       deps.restoreBlendState,
     );
 
-    const customRenderer = customRenderers.get(feature.type);
+    const customRenderer = customRendererOf(customRenderers, feature);
     if (customRenderer) {
       // To keep the draw order (painter's algorithm), the core batch that has accumulated is
       // flushed first and only then the custom feature is drawn immediately.
       batchManager.endFrame();
-      customRenderer.draw(
-        {
-          id: feature.id,
-          type: feature.type,
-          coordinates: feature.coordinates,
-          properties: feature.properties,
-          style: feature.style,
-        },
-        projectionData,
-        zoom,
-        customRendererContext,
-      );
+      customRenderer.draw(feature, projectionData, zoom, customRendererContext);
       // Re-establish the blend state that the external renderer may have rewritten
       deps.restoreBlendState?.();
       batchManager.beginFrame(projectionData, zoom, layer);

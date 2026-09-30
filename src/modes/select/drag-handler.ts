@@ -14,12 +14,13 @@
  */
 
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
+import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Feature } from '../../store/types.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
-import type { ModeContext } from '../handler.js';
+import type { EngineModeContext } from '../handler.js';
 import { type AuxiliaryDrag, resolveAuxiliaryDrag } from './drag/auxiliary.js';
 import { IntermediateWrites } from './drag/intermediate-writes.js';
 import { startMoveDrag } from './drag/move.js';
@@ -27,6 +28,9 @@ import type { DragOperation, DragScope } from './drag/operation.js';
 import { startRadiusDrag } from './drag/radius.js';
 import { startResizeDrag, startRotateDrag } from './drag/transform.js';
 import { startMidpointDrag, startVertexDrag } from './drag/vertex.js';
+
+/** What a drag grabbed: the features, a vertex or a handle of the selection */
+type DragKind = EngineSignals['drag.started']['kind'];
 
 /**
  * SelectModeDragHandler
@@ -41,13 +45,15 @@ export class SelectModeDragHandler {
   /** The intermediate writes of the running drag, committed or aborted when it ends */
   private readonly writes = new IntermediateWrites();
   /**
-   * The features announced by drag:start, while drag:end has not been sent for them
+   * The features announced by drag.started, while drag.ended has not been sent for them
    *
-   * drag:end always follows, with the same IDs, whether the drag is committed or aborted, so a
-   * plugin that opens a scope on drag:start always closes it.
+   * drag.ended always follows, with the same IDs, whether the drag is committed or aborted, so
+   * a listener that opens a scope on drag.started always closes it.
    */
-  private hookedFeatureIds: string[] | null = null;
-  private hookPluginManager: ModeContext['pluginManager'] | null = null;
+  private announcedFeatureIds: string[] | null = null;
+  /** What the announced drag grabbed, and the emitter its end is announced on */
+  private announcedKind: DragKind | null = null;
+  private announcer: EventEmitter | null = null;
   /**
    * The selection scope of the draw instance the current drag belongs to (the resize and
    * rotate strategies of custom types, and the auxiliary handle providers). Set by startDrag
@@ -60,10 +66,10 @@ export class SelectModeDragHandler {
   startDrag(
     hitResult: HandleHitResult,
     event: DragNormalizedEvent,
-    context: ModeContext,
+    context: EngineModeContext,
     bbox: BoundingBoxCoords | null,
   ): void {
-    const { store, pluginManager } = context;
+    const { store } = context;
     this.scope = context.selectionScope;
 
     // Selection-independent auxiliary handles (getGlobalHandles) have no feature they sit on,
@@ -115,14 +121,12 @@ export class SelectModeDragHandler {
       if (!auxiliaryDrag) return;
     }
 
-    // Notify plugins that the drag has started. Auxiliary handles are excluded: core writes no
+    // Announce that the drag has started. Auxiliary handles are excluded: core writes no
     // intermediate updates to the Store and the provider commits through its own transaction, so
-    // putting them on the editing scope of drag:start / drag:end would
+    // putting them on the editing scope of drag.started / drag.ended would
     // have the record of the commit transaction swallowed by that scope.
     if (hitResult.type !== 'auxiliary') {
-      pluginManager?.runHook('drag:start', { featureIds: [...selectedIds] }, { source: 'local' });
-      this.hookedFeatureIds = [...selectedIds];
-      this.hookPluginManager = pluginManager ?? null;
+      this.announce(hitResult.type, [...selectedIds], context.eventEmitter);
     }
 
     // Disable MapLibre's map dragging
@@ -202,7 +206,7 @@ export class SelectModeDragHandler {
    * Note: re-rendering is triggered automatically by RenderCoordinator subscribing to Store
    * changes
    */
-  updateDrag(event: DragNormalizedEvent, context: ModeContext): void {
+  updateDrag(event: DragNormalizedEvent, context: EngineModeContext): void {
     const { store } = context;
     // One frame of a drag is one change: the updates of every feature it moves reach the
     // subscribers in a single notification
@@ -215,8 +219,8 @@ export class SelectModeDragHandler {
    * @param event The drag end event (passed to the auxiliary handle's delegate. When omitted,
    *   the last move / start event that was forwarded is used)
    */
-  endDrag(context: ModeContext, event?: DragNormalizedEvent): void {
-    const { store, pluginManager } = context;
+  endDrag(context: EngineModeContext, event?: DragNormalizedEvent): void {
+    const { store } = context;
     const wasAuxiliary = this.operation?.type === 'auxiliary';
 
     // The drag always ends: whatever the delegate, the commit or a plugin throws, map dragging
@@ -227,13 +231,13 @@ export class SelectModeDragHandler {
       this.operation?.finish?.(event);
 
       // Commit the intermediate updates made during the drag in a single transaction before
-      // notifying drag:end (plugins see the state after the commit). If no feature was touched,
-      // do nothing.
+      // announcing drag.ended (listeners see the state after the commit). If no feature was
+      // touched, do nothing.
       this.writes.commit(store);
 
-      // Notify plugins that the drag has ended (paired with drag:start, with the same IDs even
+      // Announce that the drag has ended (paired with drag.started, with the same IDs even
       // when the selection changed during the drag; auxiliary handles are excluded)
-      if (!wasAuxiliary) this.endDragHook(pluginManager);
+      if (!wasAuxiliary) this.announceEnd(false);
     } finally {
       // Re-enable MapLibre's map dragging
       context.map.dragPan.enable();
@@ -249,7 +253,7 @@ export class SelectModeDragHandler {
    * @param store When passed, the highlight of the following vertices (UI state) is cleared as
    *   well. The cleanup is the same whether the drag was committed or aborted.
    */
-  reset(store?: ModeContext['store']): void {
+  reset(store?: EngineModeContext['store']): void {
     // Even on an abort (mode switch / a change from outside), end is delivered to the delegate
     // exactly once. When coming through endDrag it has already been delivered, so nothing
     // happens here.
@@ -258,19 +262,39 @@ export class SelectModeDragHandler {
     this.operation = null;
     this.writes.discard(store);
     store?.setFollowedVertices?.(null);
-    // An aborted drag still closes what drag:start opened (after the features are restored)
-    this.endDragHook(this.hookPluginManager ?? undefined);
+    // An aborted drag still closes what drag.started opened (after the features are restored)
+    this.announceEnd(true);
   }
 
   /**
-   * Sends the drag:end that pairs with the drag:start of the current drag, once
+   * Sends the drag.ended that pairs with the drag.started of the current drag, once
    */
-  private endDragHook(pluginManager: ModeContext['pluginManager']): void {
-    const featureIds = this.hookedFeatureIds;
-    this.hookedFeatureIds = null;
-    this.hookPluginManager = null;
-    if (!featureIds) return;
-    pluginManager?.runHook('drag:end', { featureIds }, { source: 'local' });
+  private announceEnd(cancelled: boolean): void {
+    const featureIds = this.announcedFeatureIds;
+    const kind = this.announcedKind;
+    const announcer = this.announcer;
+    this.announcedFeatureIds = null;
+    this.announcedKind = null;
+    this.announcer = null;
+    if (!featureIds || !kind) return;
+    announcer?.emit('drag.ended', { kind, featureIds: [...featureIds], cancelled });
+  }
+
+  /**
+   * Announces the start of a drag on the emitter of the instance; its end is announced with
+   * the same IDs, committed or cancelled
+   */
+  private announce(
+    type: HandleHitResult['type'],
+    featureIds: string[],
+    emitter: EventEmitter | undefined,
+  ): void {
+    const kind: DragKind =
+      type === 'move' ? 'feature' : type === 'vertex' || type === 'midpoint' ? 'vertex' : 'handle';
+    this.announcedFeatureIds = [...featureIds];
+    this.announcedKind = kind;
+    this.announcer = emitter ?? null;
+    emitter?.emit('drag.started', { kind, featureIds: [...featureIds] });
   }
 
   /**

@@ -5,13 +5,15 @@
  * StoreSpatialIndex
  *
  * The spatial index as a value derived from the Store. It subscribes to the Store and
- * re-derives the entry of every feature a StateChanges names (created / updated / deleted)
+ * re-derives the entry of every feature a StoreChange names (created / updated / deleted)
  * from the Store itself, so it holds exactly the features the Store holds, with the extent
  * they have now:
  *
  * - every write path (the public API, the drawing modes, the drag, import, plugins, a mode
  *   of an extension, a change applied from elsewhere to a replaced Store) reaches it in the same way
  * - a write the Store refuses (read-only) notifies nothing, so it leaves no trace here
+ * - the features a Store holds when the index is created are loaded then, and a notification
+ *   with `reset` (the whole document replaced from elsewhere) rebuilds the index from the Store
  * - an update of the properties (the radius of a Circle, the scale and rotation of an Image)
  *   re-indexes the feature like an update of the coordinates
  * - the intermediate updates of a drag are Store updates too (isIntermediate), so the shape
@@ -23,7 +25,7 @@
  */
 
 import type { Store } from '../store.js';
-import type { BoundingBox, Coordinate, Feature, StateChanges } from '../types.js';
+import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
 import {
   type CustomBoundingBoxCalculator,
   RBushSpatialIndex,
@@ -42,7 +44,7 @@ export class StoreSpatialIndex implements SpatialIndex {
     this.#store = store;
     this.#unsubscribe = store.subscribe((changes) => this.#apply(changes));
     // A Store handed in from outside can already hold features
-    this.#index.load(store.getAllFeatures());
+    this.#index.load(store.listFeatures());
   }
 
   findNear(coordinate: Coordinate, tolerance: number): string[] {
@@ -87,7 +89,7 @@ export class StoreSpatialIndex implements SpatialIndex {
    * For a type whose extent changed for a reason the Store does not see.
    */
   invalidateType(type: string): void {
-    for (const feature of this.#store.getAllFeatures()) {
+    for (const feature of this.#store.listFeatures()) {
       if (feature.type === type) {
         this.#index.update(feature.id, feature);
       }
@@ -113,7 +115,13 @@ export class StoreSpatialIndex implements SpatialIndex {
     this.#index.clear();
   }
 
-  #apply(changes: StateChanges): void {
+  #apply(changes: StoreChange): void {
+    // A replacement of the whole document is read again from the Store, whatever the
+    // notification lists: the index then holds exactly what the new document holds
+    if (changes.reset === true) {
+      this.#rebuild();
+      return;
+    }
     const features = changes.features;
     if (!features) return;
 
@@ -149,6 +157,6 @@ export class StoreSpatialIndex implements SpatialIndex {
 
   #rebuild(): void {
     this.#index.clear();
-    this.#index.load(this.#store.getAllFeatures());
+    this.#index.load(this.#store.listFeatures());
   }
 }

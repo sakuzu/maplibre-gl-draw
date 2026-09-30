@@ -12,6 +12,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType, VertexRef } from '../store/types.js';
 import type { VertexState } from './vertex.js';
 import {
@@ -24,15 +26,17 @@ import {
 
 // --- Helpers ---
 
-function makeFeature(type: FeatureType, coordinates: Feature['coordinates']): Feature {
+function makeFeature(type: FeatureType, coordinates: FeatureCoordinates): Feature {
   return {
     id: `${type}-1`,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'layer-1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -99,7 +103,7 @@ function moveVertices(
   feature: Feature,
   refs: VertexRef[],
   delta: { lng: number; lat: number },
-): Feature['coordinates'] {
+): FeatureCoordinates {
   const state = startVertexMove(feature, refs, START);
   expect(state).not.toBeNull();
   return computeVertexMove(state as VertexState, delta, feature);
@@ -114,12 +118,15 @@ function moveVertices(
 function deleteVertices(
   feature: Feature,
   refs: VertexRef[],
-): { coordinates: Feature['coordinates']; deletedCount: number } {
-  let coordinates: Feature['coordinates'] = JSON.parse(JSON.stringify(feature.coordinates));
+): { coordinates: FeatureCoordinates; deletedCount: number } {
+  let coordinates: FeatureCoordinates = JSON.parse(JSON.stringify(coordinatesOf(feature)));
   let deletedCount = 0;
 
   for (const ref of sortVertexRefsForDeletion(refs)) {
-    const result = deleteVertex({ ...feature, coordinates }, ref);
+    const result = deleteVertex(
+      { ...feature, geometry: geometryFromCoordinates(feature.type, coordinates) },
+      ref,
+    );
     if (result !== null) {
       coordinates = result;
       deletedCount++;
@@ -258,8 +265,12 @@ describe('vertex operations on a MultiLineString', () => {
 
   it('does not change the coordinates when adding to an out-of-range part', () => {
     const feature = makeMultiLineString();
-    expect(addVertex(feature, { part: 5, ring: 0, index: 0 }, [5, 5])).toEqual(feature.coordinates);
-    expect(addVertex(feature, { part: 0, ring: 1, index: 0 }, [5, 5])).toEqual(feature.coordinates);
+    expect(addVertex(feature, { part: 5, ring: 0, index: 0 }, [5, 5])).toEqual(
+      coordinatesOf(feature),
+    );
+    expect(addVertex(feature, { part: 0, ring: 1, index: 0 }, [5, 5])).toEqual(
+      coordinatesOf(feature),
+    );
   });
 
   it('deletes a vertex of the given part (the other parts are unchanged)', () => {
@@ -378,8 +389,12 @@ describe('vertex operations on a MultiPolygon', () => {
 
   it('does not change the coordinates when adding to an out-of-range part or ring', () => {
     const feature = makeMultiPolygon();
-    expect(addVertex(feature, { part: 2, ring: 0, index: 0 }, [0, 0])).toEqual(feature.coordinates);
-    expect(addVertex(feature, { part: 1, ring: 1, index: 0 }, [0, 0])).toEqual(feature.coordinates);
+    expect(addVertex(feature, { part: 2, ring: 0, index: 0 }, [0, 0])).toEqual(
+      coordinatesOf(feature),
+    );
+    expect(addVertex(feature, { part: 1, ring: 1, index: 0 }, [0, 0])).toEqual(
+      coordinatesOf(feature),
+    );
   });
 
   it('keeps the ring closed even when a vertex of the inner ring of the given part is deleted', () => {
@@ -492,7 +507,9 @@ describe('vertex operations on a MultiPoint', () => {
 
   it('has no vertex addition from a midpoint (the coordinates do not change)', () => {
     const feature = makeMultiPoint();
-    expect(addVertex(feature, { part: 0, ring: 0, index: 0 }, [5, 5])).toEqual(feature.coordinates);
+    expect(addVertex(feature, { part: 0, ring: 0, index: 0 }, [5, 5])).toEqual(
+      coordinatesOf(feature),
+    );
   });
 });
 
@@ -506,9 +523,9 @@ describe('only part 0 is valid for a single geometry', () => {
     ] as Coordinate[]);
     const state: VertexState = {
       featureId: feature.id,
-      vertexIndices: [{ part: 1, ring: 0, index: 0 }],
+      vertices: [{ part: 1, ring: 0, index: 0 }],
       startLngLat: START,
-      initialCoordinates: feature.coordinates,
+      initialCoordinates: coordinatesOf(feature),
     };
 
     expect(computeVertexMove(state, { lng: 5, lat: 5 }, feature)).toEqual([
@@ -528,12 +545,12 @@ describe('only part 0 is valid for a single geometry', () => {
     ] as Coordinate[][]);
     const state: VertexState = {
       featureId: feature.id,
-      vertexIndices: [{ part: 1, ring: 0, index: 1 }],
+      vertices: [{ part: 1, ring: 0, index: 1 }],
       startLngLat: START,
-      initialCoordinates: feature.coordinates,
+      initialCoordinates: coordinatesOf(feature),
     };
 
-    expect(computeVertexMove(state, { lng: 5, lat: 5 }, feature)).toEqual(feature.coordinates);
+    expect(computeVertexMove(state, { lng: 5, lat: 5 }, feature)).toEqual(coordinatesOf(feature));
   });
 
   it('returns null for a deletion with part > 0', () => {
@@ -564,7 +581,7 @@ describe('only part 0 is valid for a single geometry', () => {
       [0, 0],
       [10, 10],
     ] as Coordinate[]);
-    expect(addVertex(line, { part: 1, ring: 0, index: 0 }, [5, 5])).toEqual(line.coordinates);
+    expect(addVertex(line, { part: 1, ring: 0, index: 0 }, [5, 5])).toEqual(coordinatesOf(line));
   });
 
   it('makes startVertexMove refuse part > 0', () => {

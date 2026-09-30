@@ -12,12 +12,12 @@ import type { Color, LineStyle } from '../../../shared/types/style.js';
 
 export type { Color, LineStyle };
 
-/** The style of a line drawn by {@link SDFLineRenderer}. */
+/** The style of a line drawn by the shared line renderer. */
 export interface SDFStrokeStyle {
   /** The line width in CSS px (at `createdZoom` when the options give one) */
   width: number;
   /** The color as `[r, g, b, a]`, each 0..1 */
-  color: Color;
+  color: [number, number, number, number];
   /** The opacity, 0..1, multiplied into the color */
   opacity: number;
   /** Solid, dashed or dotted */
@@ -35,7 +35,7 @@ export interface SDFStrokeStyle {
  */
 export type WidthUnit = 'pixels' | 'meters';
 
-/** The options of one {@link SDFLineRenderer.draw} call. */
+/** The options of one `draw` call of the shared line renderer. */
 export interface SDFStrokeOptions {
   /** The unit of the width. The renderer draws `width` in CSS px */
   widthUnit: WidthUnit;

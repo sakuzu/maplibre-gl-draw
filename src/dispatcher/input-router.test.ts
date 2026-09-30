@@ -15,8 +15,10 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DisplayInteractions } from '../dataset/interaction.js';
-import type { ModeContext, ModeHandler, SnapInputType } from '../modes/handler.js';
+import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
+import type { FeatureCoordinates } from '../shared/types/model.js';
+import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createSnapService } from '../snapping/service.js';
 import type { SnapContext, SnapService } from '../snapping/types.js';
 import { MemoryStore } from '../store/memory.js';
@@ -54,7 +56,7 @@ class FakeNormalizer {
 }
 
 /** A mode handler that only records the events it receives */
-class RecordingMode implements ModeHandler {
+class RecordingMode implements EngineModeHandler {
   modeName = 'select';
   clicks: MouseNormalizedEvent[] = [];
   moves: MouseNormalizedEvent[] = [];
@@ -70,7 +72,7 @@ class RecordingMode implements ModeHandler {
    *
    * Assigning it inside a test produces the case where the mode implements the hook.
    */
-  isSnapEnabledFor?: (inputType: SnapInputType) => boolean;
+  isSnapEnabledFor?: (inputType: SnapInputKind) => boolean;
 
   getSnapPreference(): { featureId: string; datasetId?: string } | null {
     return this.snapPreference;
@@ -146,19 +148,21 @@ function makeDragMoveEvent(
   return makeDragEvent('dragmove', lng, lat, overrides);
 }
 
-function addFeature(id: string, type: string, coordinates: Feature['coordinates']): void {
+function putFeature(id: string, type: string, coordinates: FeatureCoordinates): void {
   const feature: Feature = {
     id,
     type,
-    coordinates,
+    geometry: geometryFromCoordinates(type, coordinates),
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer('l1', { order: [...layer.order, id] });
+  if (layer) store.updateLayer('l1', { items: [...layer.items, id] });
   spatialIndex.insert(feature);
 }
 
@@ -170,7 +174,7 @@ function startRouter(
   const modeManager = {
     getHandler: () => mode,
   } as unknown as ModeManager;
-  const context = { store, map } as unknown as ModeContext;
+  const context = { store, map } as unknown as EngineModeContext;
 
   const router = createInputRouter({
     normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
@@ -226,7 +230,9 @@ beforeEach(() => {
     visible: true,
     locked: false,
     opacity: 1,
-    order: [],
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
   };
   store.createLayer(layer);
   normalizer = new FakeNormalizer();
@@ -236,7 +242,7 @@ beforeEach(() => {
 
 describe('Snapping of InputRouter', () => {
   it('click reaches the mode with the snapped coordinates', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     emit(makeMouseEvent('click', nearTarget(4).lng, nearTarget(4).lat));
@@ -246,7 +252,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('mousemove and dragmove also arrive with the snapped coordinates', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     emit(makeMouseEvent('mousemove', nearTarget(3).lng, nearTarget(3).lat));
@@ -257,7 +263,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('dragstart and dragend also arrive with the snapped coordinates', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     const cursor = nearTarget(3);
@@ -269,7 +275,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('does not snap to the feature being moved during a move drag (no pull-back)', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
     store.setDragState({ operation: 'move', movingFeatureIds: ['p1'] });
 
@@ -280,8 +286,8 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('snaps to features that are not being moved even during a move drag', () => {
-    addFeature('p1', 'Point', TARGET);
-    addFeature('p2', 'Point', [TARGET[0] + 0.05, TARGET[1]]);
+    putFeature('p1', 'Point', TARGET);
+    putFeature('p2', 'Point', [TARGET[0] + 0.05, TARGET[1]]);
     startRouter();
     store.setDragState({ operation: 'move', movingFeatureIds: ['p2'] });
 
@@ -292,7 +298,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('snaps to the nearest point on an edge when over that edge', () => {
-    addFeature('line', 'LineString', [
+    putFeature('line', 'LineString', [
       [TARGET[0], TARGET[1] - 0.01],
       [TARGET[0], TARGET[1] + 0.01],
     ]);
@@ -306,7 +312,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('arrives with the original coordinates outside the tolerance', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     const cursor = nearTarget(30);
@@ -316,7 +322,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('does not snap while the modifier key (Alt) is held down', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     const cursor = nearTarget(2);
@@ -330,7 +336,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('an event with snap: false is not passed through snapping', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     const cursor = nearTarget(2);
@@ -342,7 +348,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('only the input types the mode declined via isSnapEnabledFor pass untouched', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
     // The same declaration as freehand (no snapping only in the middle of a stroke)
     mode.isSnapEnabledFor = (inputType) => inputType !== 'dragmove';
@@ -360,7 +366,7 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('a mode that does not implement isSnapEnabledFor snaps for every type (default)', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter();
 
     const cursor = nearTarget(3);
@@ -391,8 +397,8 @@ describe('Snapping of InputRouter', () => {
     expect(seen[1]).toEqual({ featureId: 'f1', datasetId: 'data' });
   });
 
-  it('can be stopped by the equivalent of draw.snapping.setEnabled(false)', () => {
-    addFeature('p1', 'Point', TARGET);
+  it('can be stopped by turning snapping off in the options', () => {
+    putFeature('p1', 'Point', TARGET);
     startRouter();
     snapService.setEnabled(false);
 
@@ -403,12 +409,12 @@ describe('Snapping of InputRouter', () => {
   });
 
   it('the coordinates are left as-is when snapService is not passed', () => {
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     const map = { getZoom: () => ZOOM } as unknown as MapLibreMap;
     const router = createInputRouter({
       normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
       modeManager: { getHandler: () => mode } as unknown as ModeManager,
-      context: { store, map } as unknown as ModeContext,
+      context: { store, map } as unknown as EngineModeContext,
       map,
     });
     router.start();
@@ -422,7 +428,7 @@ describe('Snapping of InputRouter', () => {
   it('excludes the grabbed vertex during a vertex drag and snaps to other ones', () => {
     // The grabbed vertex (index 0) and a vertex 40 pixels away (index 1)
     const other: [number, number] = [TARGET[0] + 40 * DEG_PER_PIXEL_LNG, TARGET[1]];
-    addFeature('line', 'LineString', [TARGET, other]);
+    putFeature('line', 'LineString', [TARGET, other]);
     startRouter();
 
     store.setDragState({
@@ -493,7 +499,7 @@ describe('notification of a click in select mode (the source of draw.map.click)'
 
   it('fires with the raw coordinates in select mode whether or not anything is hit', () => {
     const notified: MapClickEventPayload[] = [];
-    addFeature('p1', 'Point', TARGET);
+    putFeature('p1', 'Point', TARGET);
     startRouter(undefined, (payload) => notified.push(payload));
 
     emit(makeMouseEvent('click', nearTarget(4).lng, nearTarget(4).lat));

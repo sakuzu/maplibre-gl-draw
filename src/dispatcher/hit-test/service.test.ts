@@ -12,6 +12,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature, FeatureType } from '../../store/types.js';
@@ -32,11 +33,13 @@ function polygon(id: string, rings: Coordinate[][]): Feature {
   return {
     id,
     type: 'Polygon',
-    coordinates: rings,
+    geometry: { type: 'Polygon', coordinates: rings },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -55,11 +58,13 @@ function point(id: string, coord: Coordinate): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: coord,
+    geometry: { type: 'Point', coordinates: coord },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -69,7 +74,16 @@ let service: HitTestServiceImpl;
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   spatialIndex = new RBushSpatialIndex();
   // A 5px tolerance (0.5 degrees on the test map) keeps the numbers below round
   service = new HitTestServiceImpl(store, spatialIndex, { clickTolerance: 5 });
@@ -147,7 +161,7 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   const wideStrategy: HitTestStrategy = {
     geometryType: 'Point',
     test: (feature, coordinate) => {
-      const [lng, lat] = feature.coordinates as Coordinate;
+      const [lng, lat] = coordinatesOf(feature) as Coordinate;
       return Math.hypot(coordinate[0] - lng, coordinate[1] - lat) <= 3;
     },
     distance: () => 0,
@@ -214,6 +228,73 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   });
 });
 
+describe('the marker of a point (pointMarkerReachPx)', () => {
+  /** A service whose points are drawn with a marker reaching `reach` px from the position */
+  function withMarker(reach: (feature: Feature) => number): HitTestServiceImpl {
+    return new HitTestServiceImpl(store, spatialIndex, {
+      clickTolerance: 5,
+      pointMarkerReachPx: reach,
+    });
+  }
+
+  it('hits a point anywhere on its marker, with the tolerance around it', () => {
+    const marked = withMarker(() => 8);
+    const ordered = load([point('pt', [5, 5])]);
+    const findNear = vi.spyOn(spatialIndex, 'findNear');
+
+    // 12px from the position: on the marker (8px) with the tolerance (5px), and beyond the
+    // tolerance alone
+    expect(marked.hitTest({ x: 62, y: -50 }, unproject, ordered)?.feature.id).toBe('pt');
+    expect(service.hitTest({ x: 62, y: -50 }, unproject, ordered)).toBeNull();
+    // 14px: beyond both
+    expect(marked.hitTest({ x: 64, y: -50 }, unproject, ordered)).toBeNull();
+    // The candidates are searched as far: 0.5 degrees + 8px x 0.1 degrees/px
+    expect(findNear.mock.calls[0][1]).toBeCloseTo(1.3, 10);
+  });
+
+  it('follows the marker of each feature, and reaches every part of a MultiPoint', () => {
+    const marked = withMarker((feature) => (feature.id === 'big' ? 30 : 8));
+    const multi: Feature = {
+      ...point('multi', [0, 0]),
+      type: 'MultiPoint',
+      geometry: {
+        type: 'MultiPoint',
+        coordinates: [
+          [-20, 0],
+          [20, 0],
+        ],
+      },
+    };
+    const ordered = load([point('big', [5, 5]), multi]);
+
+    expect(marked.hitTest({ x: 80, y: -50 }, unproject, ordered)?.feature.id).toBe('big');
+    expect(marked.hitTest({ x: 212, y: 0 }, unproject, ordered)?.feature.id).toBe('multi');
+  });
+
+  it('leaves the test of one feature (the path of the datasets) and a replaced strategy as they were', () => {
+    const marked = withMarker(() => 8);
+    const ordered = load([point('pt', [5, 5])]);
+
+    // 1 degree = 10px from the position, with the tolerance of 5px in degrees
+    expect(marked.hitTestFeature(ordered[0], [6, 5], 0.5)).toBe(false);
+
+    marked.registerStrategy(new PointHitTestStrategy());
+    expect(marked.hitTest({ x: 62, y: -50 }, unproject, ordered)).toBeNull();
+  });
+
+  it('widens the screen space test of the symbols by the marker as well', () => {
+    const marked = new HitTestServiceImpl(store, spatialIndex, {
+      clickTolerance: 5,
+      pointMarkerReachPx: () => 8,
+      anchorScreen: { project: () => ({ x: 100, y: 0 }) },
+    });
+    const ordered = load([point('pt', [10, 0])]);
+
+    expect(marked.hitTestAll({ x: 112, y: 0 }, unproject, ordered)).toHaveLength(1);
+    expect(marked.hitTestAll({ x: 114, y: 0 }, unproject, ordered)).toHaveLength(0);
+  });
+});
+
 describe('the single scan of hitTestAll', () => {
   /** A strategy that counts the calls to the test and the distance computation */
   function createSpyStrategy(geometryType: FeatureType, withTestDistance: boolean) {
@@ -265,14 +346,19 @@ describe('the single scan of hitTestAll', () => {
     const line: Feature = {
       id: 'line',
       type: 'LineString',
-      coordinates: [
-        [0, 4],
-        [10, 4],
-      ] as Coordinate[],
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 4],
+          [10, 4],
+        ] as Coordinate[],
+      },
       layerId: 'l1',
+      groupId: undefined,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
     const ordered = load([
       polygon('poly', [square(0, 0, 10)]),
@@ -320,7 +406,14 @@ describe('the visibility lookup of HitTestService', () => {
     // reading a layer costs time proportional to the feature count. Many features are
     // placed in the candidate set, and the queries to the store are checked to level off
     // at the number of containers rather than the number of features.
-    store.createGroup({ id: 'g1', name: 'g1', featureIds: [], locked: false, visible: true });
+    store.createGroup({
+      id: 'g1',
+      layerId: 'l1',
+      name: 'g1',
+      featureIds: [],
+      locked: false,
+      visible: true,
+    });
     const features: Feature[] = [];
     for (let i = 0; i < 200; i++) {
       const f = point(`p${i}`, [5, 5]);

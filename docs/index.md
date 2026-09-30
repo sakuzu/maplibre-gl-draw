@@ -25,14 +25,14 @@ features:
   - title: Terrain and the globe
     details: Drawing works the same on a tilted map, on 3D terrain and on the globe, across the antimeridian too.
     link: /guides/terrain
-  - title: Large data
-    details: Datasets show tens of thousands of parcels or a million points fast, from features or straight from GeoParquet and Arrow columns.
+  - title: Datasets
+    details: Show tens of thousands of parcels or a million points fast beside the drawing, from GeoJSON features or straight from GeoParquet and Arrow columns.
     link: /guides/large-data
   - title: Geometry anywhere
     details: Union, subtract, intersect, split, buffer, length and area are plain functions that also run in Node and in workers.
     link: /guides/snapping-geometry
   - title: Extend it
-    details: Plugins, custom modes and custom feature types build on the same extension points the library uses itself.
+    details: Plugins, modes, feature types, overlays and providers are all added the same way, through the contract the built-in drawing modes use too.
     link: /guides/plugins
 ---
 

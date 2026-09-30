@@ -31,7 +31,6 @@ Priority reflects how far a bug spreads, not how much code a module has.
 ### P2, important
 
 - HitTestService. The base of every user operation
-- ChangeMerger. The accuracy of transactions and batched notifications
 - Vertex editing. References into Multi geometries and rings break easily
 - SnapService. The single entry point for the coordinates of every mode
 - Dataset. Retained resources and their rebuild triggers
@@ -56,18 +55,11 @@ tests pin the invariants every other module assumes: creating, updating
 and deleting features, layers and groups keeps the layer order, group
 membership, selection and editing state consistent (an empty group is
 removed, a deleted feature leaves the selection). Transactions gather
-changes into one `StateChanges`, nest, carry their source and clear on an
-exception. `getOrderedFeatures` returns the drawing order with hidden
-features, layers and groups left out.
+changes into one `StoreChange`, nest, carry their source and clear on an
+exception. `listFeaturesInOrder` returns every feature in the drawing
+order, hidden ones included.
 
-### 2. ChangeMerger
-
-`src/store/change-merger.ts`. Merging two `StateChanges` concatenates the
-array fields, lets the later value win for scalar fields, and ORs the
-UI-state flag. The edge cases (empty sides, the same feature updated
-twice) keep batching from losing or inventing changes.
-
-### 3. HitTestService
+### 2. HitTestService
 
 `src/dispatcher/hit-test/service.ts`. Hit testing follows the visual
 stacking order, not the distance: the front feature that passes its test
@@ -76,7 +68,7 @@ locked ones remain selectable. Multi geometries hit on any part. Custom
 strategies and candidate reaches can be registered without changing the
 meaning of a hit. See [hit testing](./hit-testing.md).
 
-### 4. Vertex editing
+### 3. Vertex editing
 
 `src/operations/vertex.ts`. The interpretation of a vertex reference
 (`{ part?, ring, index }`), the minimum vertex count per part and ring,
@@ -84,7 +76,7 @@ and the syncing of the closing vertex of a ring. Shared-vertex dragging
 moves only exactly matching vertices, fixes the set when the drag starts,
 and skips locked or hidden features.
 
-### 5. SnapService
+### 4. SnapService
 
 `src/snapping/service.ts`. Candidate resolution: tolerance, the kind
 priority (vertex, intersection, edge, guide), distance as the tie-break,
@@ -92,7 +84,7 @@ and the bypass when snapping is off or the release key is held. A
 throwing provider does not stop the others. `snap.change` is emitted only
 when the result changes.
 
-### 6. Dataset
+### 5. Dataset
 
 `src/dataset/`. Chunking by count and vertex weight with the draw order
 kept, viewport culling, retained batches that rebuild only on the
@@ -100,18 +92,18 @@ triggers that matter, the tile-range provider (no calls for movement
 inside the same range, stale responses ignored), hit arbitration against
 the Store, and the pitch correction of collision thinning.
 
-### 7. Distance
+### 6. Distance
 
 `src/shared/math/distance.ts`. Euclidean and haversine distance, point to
 segment and polyline distance, and the metre to degree conversions,
 checked against known values.
 
-### 8. CoordinateTransform
+### 7. CoordinateTransform
 
 `src/shared/math/transform.ts`. The Mercator conversion at the edges of
 the world and the bounding-box margin helper.
 
-### 9. Geometry module
+### 8. Geometry module
 
 `src/geometry/`. Pure functions checked from inputs and outputs alone:
 the boolean operations and buffer, including empty results; robustness
@@ -119,7 +111,7 @@ against self-intersection, duplicate vertices and zero area;
 determinism; and the dependency rule that the module touches neither
 maplibre, the DOM nor the Store.
 
-### 10. Style rules
+### 9. Style rules
 
 `src/view/style-rule.ts` and `src/view/cache/style-rule.ts`. Each rule
 kind (single, categorical, graduated, continuous), the fallback colour
@@ -127,7 +119,7 @@ for missing or mistyped values, OKLab interpolation, the precedence of an
 individual colour over the rule, cache invalidation on feature and rule
 changes, and legend derivation.
 
-### 11. Retained Store rendering
+### 10. Retained Store rendering
 
 `src/view/layer/store-retained.ts` and `src/view/layer/render.ts`. The
 contract is "the same picture as immediate mode". A stub that records GL
@@ -137,7 +129,7 @@ retained and immediate chunks, which changes rebuild which chunks,
 viewport thinning of chunks, and the fallback to immediate mode when a
 batch cannot be built. See [rendering](./rendering.md).
 
-### 12. Immediate-mode renderers
+### 11. Immediate-mode renderers
 
 `src/view/renderers/`. Reuse of GPU resources across draws (no rebuilt
 buffers, sub-image uploads), indexed rendering that keeps fill before
@@ -145,19 +137,19 @@ outline in input order, negative line widths for fixed-width lines, and
 the single-pass point renderer that keeps overlapping points in input
 order.
 
-### 13. AutoNameGenerator
+### 12. AutoNameGenerator
 
 `src/shared/utils/name-generator.ts`. Serial names per type that never
 reuse a number, pick up names added from outside, and avoid a full scan
 on every call during a bulk import.
 
-### 14. Bulk-import scaling
+### 13. Bulk-import scaling
 
 `src/store/load-scaling.test.ts`. A timing test that guards complexity,
 judged by ratios rather than absolute times: four times the data must
 not take anywhere near sixteen times as long.
 
-### 15. Handle thinning
+### 14. Handle thinning
 
 `src/view/ui/handle-thinning.ts`. Editing handles of dense features are
 thinned by screen spacing. The tests use a linear projection stub and
@@ -165,7 +157,7 @@ check that the thinned set is a subset of the full enumeration, that the
 cache follows the camera with a debounce, and that hit testing uses the
 set currently displayed.
 
-### 16. Many vertices
+### 15. Many vertices
 
 Indices, caches and incremental updates that keep dense features fast:
 the segment grid used by hit testing, the offset model of the shaders,
@@ -174,10 +166,10 @@ copy-on-write vertex operations and the coordinate bounding-box cache.
 Each is checked for exact agreement with the slower full scan it
 replaces, with seeded random data.
 
-### 17. Extension points
+### 16. Extension points
 
 The contracts of companion rendering and hits, selection-independent
-auxiliary handles, plugin uninstall on `destroy()`, and dash length in
+auxiliary handles, plugin removal on `destroy()`, and dash length in
 screen pixels. The key property is that when no provider is registered,
 the route and the cost are unchanged. See [plugins](../guides/plugins.md)
 and [custom types](../guides/custom-types.md).
@@ -193,8 +185,9 @@ hidden features.
 
 ### The input route
 
-Synthesized input (`draw.input`) enters through the same router as real
-pointer input, so `src/api/input-api.test.ts` and
+Synthesized input (`createSyntheticInput` of `src/test-utils.ts`) enters
+through the same router as real pointer input, so
+`src/modes/draw/trace-mode.test.ts` and
 `src/dispatcher/input-router.test.ts` can check the whole route from
 input through snapping to the mode: vertices confirmed by a click, snapped
 drag start and end, a dragged vertex that does not snap to itself, and
@@ -210,18 +203,18 @@ compatibility mouse events.
 ## End-to-End Tests
 
 The tests above run on a stub map that projects longitude and latitude
-linearly with neither pitch nor bearing, and `draw.input` enters after the
-normalizer. They do not cover what the browser and maplibre do first:
-real mouse and keyboard events, maplibre's event system and projection,
-the drag threshold, canvas focus, and hit testing against what is really
-drawn.
+linearly with neither pitch nor bearing, and their input enters after
+the normalizer, through `dispatch` of the InputRouter. They do not cover
+what the browser and maplibre do first: real mouse and keyboard events,
+maplibre's event system and projection, the drag threshold, canvas focus,
+and hit testing against what is really drawn.
 
 The end-to-end tests in `src/e2e/` cover that route. `harness.ts` bundles
 `page-entry.ts` and the sources it imports (not `dist`) with vite in
 memory, leaves maplibre-gl external, and serves the bundle next to
 maplibre's own build to headless Chromium. The page runs a real maplibre
 `Map` with an empty style, so nothing is fetched from the network, and a
-`createMapLibreGLDraw` instance on it. The tests drive the page with
+`createDraw` instance on it. The tests drive the page with
 `page.mouse` and `page.keyboard` and read results through the public API.
 
 The scenarios in `src/e2e/draw.e2e.test.ts` draw every basic shape and
@@ -263,7 +256,7 @@ excluded from `npm test`. The browser is installed once with
 
 ## End-to-End Tests of the Examples
 
-Every example under `examples/NN-*/` (from `basic` to `columnar-worker`)
+Every example under `examples/NN-*/` (from `basic` to `table-worker`)
 is also a test. The intent is that each example is opened in headless
 Chromium, must render without errors (the map and the library's layers
 appear and nothing is logged to the console as an error), and then

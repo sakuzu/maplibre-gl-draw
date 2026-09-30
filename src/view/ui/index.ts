@@ -37,11 +37,11 @@ export type {
   AdditionalResizeHandlesCalculator,
   BoundingBoxCoords,
   CustomBoundingBoxCalculator,
-  CustomResizeCalculator,
   PointFrameExtent,
   PointFrameExtentProvider,
   ResizeStrategy,
   SelectionExtensionRegistry,
+  TypeResizeCalculator,
 } from './selection-ui/index.js';
 export {
   computeBoundingBox,

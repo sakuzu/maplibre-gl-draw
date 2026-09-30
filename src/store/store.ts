@@ -6,19 +6,23 @@
  *
  * All of the state lives in one place (Single Source of Truth), split along one line:
  *
- *   - DocumentStore: the document (features, layers, groups, the stacking order, files and
- *     metadata). It is the part a host may replace (`Options.store`) to keep the document
- *     elsewhere, and it knows nothing about the user interface.
- *   - UiState: the local state of this client (selection, editing, tentative geometry, box
- *     selection, drag, vertex selection, mode, read-only, interaction lock, local
- *     visibility). core owns it; it is never part of the document.
+ *   - StoreContract: the document (features, layers, groups, the stacking order, files and
+ *     metadata) and the state of this client that the public `Store` holds (selection,
+ *     editing, vertex selection, mode, read-only, interaction lock, local visibility). It is
+ *     what a host may replace (`Options.store`), and core reads and writes it only through the
+ *     methods of the public `Store`.
+ *   - The state only the drawing reads (the geometry being drawn, the box selection, the drag,
+ *     the vertices that follow along). core owns it around whatever holds the rest.
  *
- * Store joins the two for core: it reads and writes the document through the DocumentStore,
- * holds the UiState, gates the writes while read-only, keeps the UiState in step with
- * deletions, and delivers both kinds of change in one notification. StoreView is the part of
+ * Store joins the two for core: it reads and writes the contract, holds the drawing state,
+ * gates the writes while read-only, keeps the state of this client in step with deletions,
+ * and delivers every change of a transaction in one notification. StoreView is the part of
  * it the host sees (`draw.getStore()`): reads, subscription and transactions, no writes.
+ *
+ * DocumentStore is the document half the in-memory contract store is built on.
  */
 
+import type { Store as PublicStore } from '../api/extension/store.js';
 import type {
   BoxSelection,
   DragState,
@@ -30,7 +34,7 @@ import type {
   Mode,
   Selection,
   SelectionType,
-  StateChanges,
+  StoreChange,
   TentativeState,
   UpdateFeatureOptions,
   UpdateSource,
@@ -38,73 +42,37 @@ import type {
 } from './types.js';
 
 /**
- * The document: the part of the state a host may replace to keep it elsewhere
+ * The Store a host gives with the `store` option: the public `Store`, with the rules core
+ * relies on
  *
- * The state of a draw instance is split along one line:
+ * Core programs against the members of the public `Store` only: every read and every write it
+ * makes, the writes of the state of this client included, goes through them. It adds nothing
+ * to them; the state only the drawing reads (the geometry being drawn, the box selection, the
+ * drag, the vertices that follow along) stays with core. The rules an implementation keeps are
+ * written on the public `Store` and `StoreView` (`src/api/extension/store.ts`).
+ */
+export interface StoreContract extends PublicStore {}
+
+/**
+ * The document, in memory: the half the in-memory {@link StoreContract} is built on
  *
- * | Type | What it is |
- * | --- | --- |
- * | `DocumentStore` | The document: features, layers, groups, the stacking order, files and metadata |
- * | {@link UiState} | The local state of this instance, never part of the document |
- * | {@link Store} | Both behind the read-only gate, for core and plugins |
- * | {@link StoreView} | Reads, `subscribe` and `transact`, from `draw.getStore()` |
- * | {@link MemoryStore} | The in-memory `Store`, the default |
- *
- * A host that keeps the document elsewhere (a database, for example) implements this
- * interface and passes it as the `store` option. Core keeps the
- * local state (the selection, the features being edited, the geometry being drawn, the box
- * selection, the drag, the vertex selection, the mode, read-only, the interaction lock and
- * local visibility) around it. An implementation keeps the following contract.
- *
- * Containment: every feature is listed in exactly one container, in `group.featureIds` of its
- * group when it has `groupId`, otherwise in `layer.order` of its layer. An implementation
- * keeps it on every mutation, so that no stored feature is left out of drawing, hit testing
- * and ordered export.
- *
- * The stacking order: `getLayerOrder()` is part of the document, saved and held with
- * the rest, and it holds more than layers. An application can place entries of its own in
- * it (the id of a dataset with `order: 'layer-order'`, a separator for
- * the `isExternalEntry` option); what such an entry means is the application's, and the
- * document only keeps its position. The entries are distinct non-empty strings: an
- * implementation drops any other value and keeps a repeated entry at its first position.
- * `createLayer` appends the new layer at the front unless the order already holds its id,
- * and `deleteLayer` takes that layer's id out. No other operation adds or removes entries;
- * an entry that is not a layer stays until the application sets an order without it, even
- * when what it names is gone. A layer that is not on the order is not drawn.
- *
- * Returned objects: callers treat every object and array a getter returns as read-only.
- * An implementation must not change an object after it has returned or notified it; a
- * change stores a new object instead (MemoryStore freezes what it returns, so a write
- * into it throws).
+ * An implementation keeps the containment, the stacking order and the returned objects as
+ * {@link StoreContract} describes them.
  *
  * Errors: a write with an argument that cannot apply (an id that does not exist, a
  * `layerId` or `groupId` that names nothing, a duplicate id) throws and stores nothing.
- * Read-only is not the document's concern: core gates the writes before they get here, and
- * changes applied from elsewhere never pass that gate. An implementation
- * that receives changes from elsewhere may ignore, instead of throwing, an update to an
- * id that such a change has already removed (the caller cannot know about the removal
- * yet); the notification then carries nothing for that id.
+ * Read-only is not the document's concern: core gates the writes before they get here.
  *
- * Notifications: `subscribe` delivers the document categories of StateChanges (features,
- * layers, groups, layerReorder, groupReorder, metadata) with their source, and `transact`
- * groups the changes of a function into one notification. Any other category a notification
- * carries is ignored by core. A change applied from elsewhere is notified like a local one,
- * with the source `'remote'`, and core follows it: a deleted item leaves the selection, the
- * vertex selection ends when its feature changed, and the hooks of the plugins fire.
- *
- * @example
- * ```ts
- * // A document kept elsewhere: wrap it in a DocumentStore and hand it to the draw instance
- * const document: DocumentStore = createSyncedDocument(roomId);
- * const draw = createMapLibreGLDraw(map, { store: document });
- * ```
+ * Notifications: `subscribe` delivers the document categories of StoreChange (features,
+ * layers, groups, layerReorder, groupReorder, metadata, files) with their source, and
+ * `transact` groups the changes of a function into one notification.
  */
 export interface DocumentStore {
   // Features
   /** Returns the feature with this ID, or undefined */
   getFeature(id: string): Feature | undefined;
   /** Every feature, in no particular order */
-  getAllFeatures(): Feature[];
+  listFeatures(): Feature[];
   /**
    * Creates a feature and lists it in its container
    *
@@ -145,19 +113,20 @@ export interface DocumentStore {
    */
   deleteFeature(id: string): void;
   /**
-   * Gets the array of features in display order
+   * Every feature in stacking order
    *
    * Iterates in layer order -> order within the layer -> featureIds order within the
-   * group, skipping what the shared visible flag hides at any of the three levels.
-   * The head of the array is the backmost and the end is the foreground.
+   * group, whatever the visible flags say. A layer that is not on the stacking order is not
+   * drawn, and its features are not listed. The head of the array is the backmost and the
+   * end is the foreground.
    */
-  getOrderedFeatures(): Feature[];
+  listFeaturesInOrder(): Feature[];
 
   // Layers
   /** Returns the layer with this ID, or undefined */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */
-  getAllLayers(): Layer[];
+  listLayers(): Layer[];
   /**
    * Creates a layer and appends it to the stacking order (as the frontmost entry), unless the
    * order already holds its id, which then keeps its position
@@ -190,7 +159,7 @@ export interface DocumentStore {
   /** Returns the group with this ID, or undefined */
   getGroup(id: string): Group | undefined;
   /** Every group, in no particular order */
-  getAllGroups(): Group[];
+  listGroups(): Group[];
   /**
    * Creates a group and sets `groupId` on its existing members, which leave the order of
    * their layer. A group that no layer lists by the end of the operation takes the place of
@@ -211,7 +180,7 @@ export interface DocumentStore {
   /** Returns the file with this ID, or undefined */
   getFile(id: string): FileData | undefined;
   /** Every file */
-  getAllFiles(): FileData[];
+  listFiles(): FileData[];
   /** Deletes a file (the features that refer to it are not changed) */
   deleteFile(id: string): void;
 
@@ -226,9 +195,9 @@ export interface DocumentStore {
    *
    * @returns The unsubscribe function
    */
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  subscribe(listener: (changes: StoreChange) => void): () => void;
   /**
-   * Runs fn and notifies its changes together as a single StateChanges
+   * Runs fn and notifies its changes together as a single StoreChange
    *
    * Not atomic: when fn throws, the writes made before the throw stay applied, they are
    * notified, and the exception is rethrown.
@@ -240,11 +209,14 @@ export interface DocumentStore {
 }
 
 /**
- * The local state of this instance: never part of the document, owned by core
+ * The local state of this instance as core reads and writes it: never part of the document
  *
- * Core keeps it for every draw instance, whatever {@link DocumentStore} holds the document.
- * The host reads it through {@link StoreView} and changes it through the methods of the draw
- * instance (`setMode`, `setSelection`, `setReadOnly` and so on).
+ * The state of this client the public contract names (selection, editing, vertex selection,
+ * mode, read-only, interaction lock, local visibility) is kept by the {@link StoreContract};
+ * the drawing state (the geometry being drawn, the box selection, the drag, the vertices that
+ * follow along) is kept by core. The host reads it through {@link StoreView} and changes it
+ * through the methods of the draw instance (`setMode`, `setSelection`, `setReadOnly` and so
+ * on).
  */
 export interface UiState {
   // Selection
@@ -281,7 +253,7 @@ export interface UiState {
 
   // Vertex selection
   /** The selected vertices, or null when no vertex is selected */
-  getSelectedVertices(): VertexSelection | null;
+  getVertexSelection(): VertexSelection | null;
   /** Sets or clears the selected vertices */
   setSelectedVertices(selection: VertexSelection | null): void;
 
@@ -317,9 +289,9 @@ export interface UiState {
   setInteractionLock(value: boolean): void;
 
   /** Local visibility: the ids (feature / group / layer) hidden on this client only */
-  isLocallyHidden(id: string): boolean;
+  isHidden(id: string): boolean;
   /** Every ID hidden on this client only */
-  getLocallyHidden(): ReadonlySet<string>;
+  listHidden(): ReadonlySet<string>;
   /** Hides or shows a feature, a group or a layer on this client only */
   setLocallyHidden(id: string, hidden: boolean): void;
 }
@@ -331,42 +303,29 @@ export interface UiState {
  * Writes go through the methods of the draw instance (or, in a plugin, the PluginContext),
  * so a host cannot reach past the checks those methods make. `transact` groups the writes
  * made through them into one notification.
- *
- * @example
- * ```ts
- * const store = draw.getStore();
- * const unsubscribe = store.subscribe((changes) => {
- *   if (changes.features) saveLater(store.getAllFeatures());
- * });
- * // Two writes, one notification
- * store.transact(() => {
- *   draw.updateFeature(a, { visible: false });
- *   draw.updateFeature(b, { visible: false });
- * });
- * ```
  */
 export interface StoreView {
   // The document
   /** Returns the feature with this ID, or undefined */
   getFeature(id: string): Feature | undefined;
   /** Every feature, in no particular order */
-  getAllFeatures(): Feature[];
-  /** The visible features in drawing order, back to front */
-  getOrderedFeatures(): Feature[];
+  listFeatures(): Feature[];
+  /** Every feature in stacking order, back to front, whatever the visible flags say */
+  listFeaturesInOrder(): Feature[];
   /** Returns the layer with this ID, or undefined */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */
-  getAllLayers(): Layer[];
+  listLayers(): Layer[];
   /** The stacking order of the layers, back to front */
   getLayerOrder(): readonly string[];
   /** Returns the group with this ID, or undefined */
   getGroup(id: string): Group | undefined;
   /** Every group, in no particular order */
-  getAllGroups(): Group[];
+  listGroups(): Group[];
   /** Returns the file with this ID, or undefined */
   getFile(id: string): FileData | undefined;
   /** Every file */
-  getAllFiles(): FileData[];
+  listFiles(): FileData[];
   /** Returns the metadata of the document */
   getMetadata(): Metadata;
 
@@ -382,7 +341,7 @@ export interface StoreView {
   /** The drag in progress, or null */
   getDragState(): DragState | null;
   /** The selected vertices, or null when no vertex is selected */
-  getSelectedVertices(): VertexSelection | null;
+  getVertexSelection(): VertexSelection | null;
   /**
    * The vertices that follow along when shared vertices move together (null except during a
    * drag)
@@ -395,9 +354,9 @@ export interface StoreView {
   /** Whether the interaction lock is on */
   isInteractionLocked(): boolean;
   /** Whether this feature, group or layer is hidden on this client only */
-  isLocallyHidden(id: string): boolean;
+  isHidden(id: string): boolean;
   /** Every ID hidden on this client only */
-  getLocallyHidden(): ReadonlySet<string>;
+  listHidden(): ReadonlySet<string>;
 
   /**
    * Subscribes to the changes of the document and of the local state
@@ -407,9 +366,9 @@ export interface StoreView {
    *
    * @returns The unsubscribe function
    */
-  subscribe(listener: (changes: StateChanges) => void): () => void;
+  subscribe(listener: (changes: StoreChange) => void): () => void;
   /**
-   * Runs fn and notifies every change it makes as a single StateChanges
+   * Runs fn and notifies every change it makes as a single StoreChange
    *
    * Not atomic: when fn throws, the writes made before the throw stay applied, they are
    * notified, and the exception is rethrown.
@@ -425,7 +384,7 @@ export interface StoreView {
  *
  * Every document write returns true when it was applied and false when it was refused
  * because the Store is read-only (it never throws for that). An argument that cannot apply
- * throws, as in DocumentStore. When a feature, group or layer is deleted (by a write here or
+ * may throw, as in {@link StoreContract}. When a feature, group or layer is deleted (by a write here or
  * by a change applied to the document from elsewhere), its id leaves the selection, the
  * features being edited and the locally hidden set in the same notification. A change that
  * hides a selected item (its visible flag, the one of its group or layer, or local hiding)
@@ -434,7 +393,7 @@ export interface StoreView {
  * document and of the local state of one transaction.
  *
  * A plugin reaches it with `getStore()` of {@link PluginContext}; the host gets the read-only
- * {@link StoreView}. The write methods behave as those of {@link DocumentStore}.
+ * {@link StoreView}. The write methods behave as those of {@link StoreContract}.
  */
 export interface Store extends StoreView, UiState {
   /** Creates a feature (see {@link DocumentStore.createFeature}) */

@@ -19,11 +19,13 @@ function feature(id: string): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [0, 0],
+    geometry: { type: 'Point', coordinates: [0, 0] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -35,7 +37,16 @@ const nameGen = {
 
 beforeEach(() => {
   store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   idSeq = 0;
   store.createFeature(feature('f1'));
   store.createFeature(feature('f2'));
@@ -52,7 +63,7 @@ describe('groupSelection', () => {
     expect(groupId).toBe('grp-1');
     expect(store.getFeature('f1')?.groupId).toBe('grp-1');
     expect(store.getFeature('f2')?.groupId).toBe('grp-1');
-    expect(store.getLayer('l1')?.order).toContain('grp-1');
+    expect(store.getLayer('l1')?.items).toContain('grp-1');
   });
 
   it('rejects regrouping a feature that belongs to a group that really exists', () => {
@@ -80,20 +91,20 @@ describe('groupSelection', () => {
     expect(groupId).toBe('grp-1');
     expect(store.getFeature('f1')?.groupId).toBe('grp-1');
     expect(store.getFeature('f2')?.groupId).toBe('grp-1');
-    expect(store.getLayer('l1')?.order).toContain('grp-1');
+    expect(store.getLayer('l1')?.items).toContain('grp-1');
   });
 
   it('adds the group to order even for a stale feature missing from order (orphan)', () => {
     // Set a stale groupId and also drop it from layer.order to create the orphan state
     store.updateFeature('f1', { groupId: 'ghost-group' });
     store.updateFeature('f2', { groupId: 'ghost-group' });
-    store.updateLayer('l1', { order: [] });
+    store.updateLayer('l1', { items: [] });
 
     store.setSelection('feature', ['f1', 'f2']);
     const groupId = groupSelection(store, generateId, nameGen);
 
     expect(groupId).toBe('grp-1');
     // The group is not missing from order even when no selected feature is in order
-    expect(store.getLayer('l1')?.order).toEqual(['grp-1']);
+    expect(store.getLayer('l1')?.items).toEqual(['grp-1']);
   });
 });

@@ -11,6 +11,7 @@
 
 import { circleBoundingBox } from '../../geometry/circle.js';
 import { DEFAULT_TILE_SIZE } from '../../shared/math/index.js';
+import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import { getBoundingBox } from '../../store/spatial/index.js';
 import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
@@ -191,7 +192,7 @@ export function computeFeaturesBBox(
 
     if (feature.type === 'Circle') {
       const radiusMeters = getCircleRadius(feature);
-      const center = feature.coordinates as Coordinate;
+      const center = coordinatesOf(feature) as Coordinate;
       if (radiusMeters && radiusMeters > 0 && typeof center?.[0] === 'number') {
         // The box of the geodesic circle, whose east and west extremes lie poleward of due
         // east and west; it contains the polygon used for drawing (generateCirclePolygon).
@@ -204,7 +205,7 @@ export function computeFeaturesBBox(
       }
     }
 
-    walkCoordinates(feature.coordinates, visit);
+    walkCoordinates(coordinatesOf(feature), visit);
   }
 
   return found ? [minLng, minLat, maxLng, maxLat] : null;

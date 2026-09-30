@@ -1,354 +1,619 @@
 # 独自の地物の型
 
-draw のインスタンスには、組み込みの型 (`Point`、`LineString`、
-`Polygon`、Multi 型、`Circle`、`Freehand`、`Image`) のほかに、
-自分で定義した型の地物も入れられます。その型の描き方と当たり
-判定、必要なら選択、拡縮、吸着の扱いを、
-`registerFeatureHandler` を 1 回呼んでインスタンスに伝えます。
-このほかに、地物ではないもののための拡張点が 3 つあります。
-補助ハンドル、随伴、オーバーレイの描画器です。
+draw のインスタンスは、組み込みの型 (`Point`、`LineString`、
+`Polygon`、Multi の型、`Circle`、`Freehand`、`Image`) のほかに、自分で
+決めた型の地物を持てます。1 つの定義 `FeatureTypeDefinition` で、その
+型の描き方と当たり方を決め、必要なら選び方、形の変え方、吸着のさせ方も
+決めます。その周りには、自分の型の地物ではないもののための拡張が 3 種類
+あります。1 つは地物の上に描く重ね描きです。残りは提供者で、どの型にも
+吸着の候補、ハンドル、付き物を足します。
 
-これらの拡張点では、地図の WebGL の文脈を直接扱います。この
-手引きは、WebGL2 と maplibre-gl のカスタムレイヤーを知って
-いることを前提にしています。
+描画器は地図の WebGL の文脈を受け取りますが、たいていはライブラリーの
+共有の描画器で描き、シェーダーを書きません。
 
 ## 最小のコード
 
-`Route` 型の例です。決まった色の破線で描く線で、クリックの許容
-範囲の中なら当たります。
+決まった色の破線で描く線、`Route` 型です。
 
 ```ts
-import {
-  createMapLibreGLDraw,
-  type CustomFeatureHandler,
-  type CustomFeatureRenderer,
-  type Feature,
-  type HitTestStrategy,
-} from '@sakuzu/maplibre-gl-draw';
+import type { Feature, FeatureTypeDefinition, Position } from '@sakuzu/maplibre-gl-draw';
+import type { LineString } from 'geojson';
 
-type Position = [number, number];
+function verticesOf(feature: Feature): Position[] {
+  return (feature.geometry as LineString).coordinates;
+}
 
-const routeRenderer: CustomFeatureRenderer = {
-  name: 'route',
-  onAdd() {},
-  draw(feature, projectionData, zoom, context) {
-    context.sdfLineRenderer.draw(
-      feature.coordinates as Position[],
-      // context.opacity is the opacity of the feature's layer
-      {
+const route: FeatureTypeDefinition = {
+  type: 'Route',
+  geometry: 'LineString',
+  renderer: {
+    onAdd() {},
+    draw(feature, ctx) {
+      ctx.line.draw(verticesOf(feature), {
         width: 3,
-        color: [0.9, 0.3, 0.1, 1],
-        opacity: context.opacity,
+        color: '#e64d1a',
+        opacity: ctx.opacity,
         lineStyle: 'dashed',
-      },
-      { widthUnit: 'pixels', closed: false },
-      zoom,
-      projectionData,
-    );
+      });
+    },
+    onRemove() {},
   },
-  onRemove() {},
 };
 
-/** Distance to a segment, in degrees of longitude at the latitude of p */
-function segmentDistance(p: Position, a: Position, b: Position): number {
-  const k = 1 / Math.cos((p[1] * Math.PI) / 180);
-  const ax = a[0] - p[0];
-  const ay = (a[1] - p[1]) * k;
-  const bx = b[0] - p[0];
-  const by = (b[1] - p[1]) * k;
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len = dx * dx + dy * dy;
-  const raw = len === 0 ? 0 : -(ax * dx + ay * dy) / len;
-  const t = Math.max(0, Math.min(1, raw));
-  return Math.hypot(ax + t * dx, ay + t * dy);
-}
+const removeRoute = draw.extensions.featureTypes.add(route);
 
-function routeDistance(feature: Feature, p: Position): number {
-  const c = feature.coordinates as Position[];
-  let best = Number.POSITIVE_INFINITY;
-  for (let i = 1; i < c.length; i++) {
-    best = Math.min(best, segmentDistance(p, c[i - 1], c[i]));
-  }
-  return best;
-}
-
-const routeHitTest: HitTestStrategy = {
-  geometryType: 'Route',
-  distance: routeDistance,
-  test: (feature, coordinate, toleranceLngLat) =>
-    routeDistance(feature, coordinate) <= toleranceLngLat,
-};
-
-const routeHandler: CustomFeatureHandler = {
+draw.features.create({
   type: 'Route',
-  renderer: routeRenderer,
-  hitTest: routeHitTest,
-};
-
-const draw = createMapLibreGLDraw(map);
-const unregister = draw.registerFeatureHandler(routeHandler);
-
-draw.addFeature({
-  type: 'Route',
-  coordinates: [
-    [139.70, 35.68],
-    [139.72, 35.69],
-    [139.74, 35.68],
-  ],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [139.7, 35.68],
+      [139.72, 35.69],
+      [139.74, 35.68],
+    ],
+  },
 });
 ```
 
-経路は、アクティブなレイヤーの中で、レイヤーの順序どおりの位置
-にオレンジの破線で表示され、クリックすると選択されます。
-ハンドラーが `getSelectionBoundingBox` を持たないので、選択の枠
-は描かれません。`unregister()` を呼ぶと、ハンドラーが登録した
-ものがすべて取り消されます。
+経路は有効なレイヤーに入り、重なりの順のその位置に、オレンジの破線で
+描かれます。クリックすると選べます。自分の `hitTest` を持たない型は、その図形の
+とおりに当たるからです。`removeRoute()` を呼ぶと定義が外れます。その型の
+地物は文書に残りますが、型をもう一度足すまで描かれず、当たりもしません。
 
 ## 独自の型の保存のされ方
 
-独自の型の地物は、`type` が自分の型名になっている、ふつうの
-Store の地物です。`coordinates` は 1 つの位置か、位置の列です。
-保存、読み込み、書き出しは、ほかの地物と同じようにできます。
-GeoJSON では、座標の形に応じて `Point` か `LineString` として
-書き出し、型名を `maplibre-gl-draw:featureType` プロパティーに
-入れます。そのため、読み込むと元の型に戻ります
-([データ形式](../reference/data-format.md) を参照してください)。
+独自の型の地物は、`type` が型の名前で、`geometry` が定義の決めた種類の
+GeoJSON の図形であるふつうの地物です。ほかの地物と同じように作り、
+変え、保存し、読み込めます。
 
-その型の地物を作るモードは、文脈の
-`autoNameGenerator.generateName(type)` で名前を付けます。語は型名です。
-ただし、ホストが `autoName.typeNames` の同じキーで語を渡したときは
-その語になります。利用者に見せる型では、ホストが翻訳できるように、
-型名を文書に書いてください
+- ライブラリーの形式は型をそのまま保ちます
+- GeoJSON にはこの型に当たる種類が無いので、書き出しは図形をそのまま
+  書き、型の名前をプロパティー `maplibre-gl-draw:featureType` に書き
+  ます。そのファイルを読み込むと、図形の種類にかかわらず型が戻ります
+  ([データ形式](../reference/data-format.md))
+- 組み込みの型の名前は使われているので、
+  `draw.extensions.featureTypes.add` はそれらに `already-exists` を
+  投げます。組み込みの型の描き方を変えるには、その型を差し替えます
+  ([組み込みの型の差し替え](#組み込みの型の差し替え))
+
+モードが `commitFeature` でこの型の地物を作ると、自動の名前が付きます。
+その語は型の名前です。ホストが `autoName.typeNames` の同じ鍵で語を
+渡せば、そちらを使います。利用者に見せる型は、ホストが訳せるように、
+型の名前を文書に書いておいてください
 ([自動の名前](drawing.ja.md#ほかの言語の名前))。
 
-描画器は、アイコンやラベルを置く側のように、地物ごとに自分の値を
-必要とすることがよくあります。そうした値は、core が定めていないキーで
-`properties` か `style` に入れます。こうしたキーは、変えずに保存、
-書き出し、読み込みされ、core は検査しません。そのため、描画器が値を
-使う前に確かめます。style のキーは、TypeScript では宣言のマージで
-宣言します。
+描画器は、地物ごとに自分の値を要することがよくあります。印の大きさ
+などです。そうした値は、ライブラリーが決めていない鍵で `style` か
+`properties` に置きます。値はそのまま保存、書き出し、読み込みされ、
+ライブラリーは検査しません。描画器は、値を使う前に確かめてください。
+`style` の鍵は、宣言のマージで TypeScript に伝えます。
 
 ```ts
 declare module '@sakuzu/maplibre-gl-draw' {
   interface FeatureStyle {
-    routeArrow?: 'none' | 'end' | 'both';
+    routeEnds?: 'none' | 'dot';
   }
 }
 
-const arrow = feature.style?.routeArrow;
-const drawArrow = arrow === 'end' || arrow === 'both';
+const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
 ```
 
 ## 描画器
 
-`draw(feature, projectionData, zoom, context)` は、その型の
-表示中の地物ごとに、レイヤーの順序の中でその地物がある位置で
-1 回ずつ呼ばれます。ライブラリーは呼び出しの前後で自分のバッチ
-を描き出すので、描いたものは後ろの地物と前の地物の間に収まり
-ます。
+`FeatureRenderer` は 3 つのメソッドを持ちます。引数の順は MapLibre の
+カスタムレイヤーと同じです。
 
-`context` には、描画器がそのフレームで必要とするものが入って
-います。
+- `onAdd(map, gl)` は、描画器が地図に載るときに呼ばれます。自分の GL の
+  オブジェクトを持つ描画器は、ここで作ります
+- `draw(feature, ctx)` は、その型の見えている地物ごとに 1 回、重なりの
+  順のその地物の位置で呼ばれます。描いたものは、後ろの地物と前の地物の
+  間に入ります
+- `onRemove(map, gl)` は、`onAdd` で作ったものを解放します
 
-- `shaderData`、`centerLngLat`、`mainMatrixArray` は、自前の
-  シェーダーで投影するときに使います。高いズームでも精度を保つ
-  ため、位置は表示の中心からの相対座標で描きます。
-  `calculateOffsetUniforms` で、文脈からその uniform を計算
-  できます。後で挙げる共有の描画器はそのフレーム用の準備が済んで
-  いるので、それで描く描画器ではこれらは要りません
-- `pixelRatio` は、CSS ピクセルから物理ピクセルへの比です。
-  `window.devicePixelRatio` ではなく、こちらを使ってください
-- `terrain` は、このフレームの地形の状態です (後述)
-- `opacity` は、地物が属するレイヤーの不透明度 (0〜1) です。
-  ライブラリーは、レイヤーに描くものにこの値を掛けます。地物が
-  レイヤーと一緒に薄くなるように、例のとおり自分のアルファにも
-  掛けてください。共有の描画器は、この値を自動では掛けません。
-  オーバーレイの描画器では 1 です
-- `sdfLineRenderer`、`fillShaderManager`、`pointShapeRenderer`
-  は、インスタンスが共有する描画器です。例では線の描画器で描く
-  ので、自前の GL オブジェクトは作っていません
+`onAdd` と `onRemove` は 2 回以上来ることがあります。描画は壊されて
+作り直されることがあるためです。地図がスタイルを変えたときや、WebGL の
+文脈が失われて戻ったときです。`onRemove` の後にもう一度 `onAdd` を受けられるように
+してください。
 
-`onAdd(gl, map)` と `onRemove()` は、何度も届くことがあります。
-レイヤーが外されて追加し直されたとき (`setStyle` の後) と、
-WebGL の文脈が失われて復元されたときに、描画の仕組みを破棄して
-作り直すからです。GL オブジェクトは `onAdd` で (または `draw`
-の中で必要になったときに) 作り、`onRemove` で解放し、その後に
-また `onAdd` が来ても対応できるようにしてください。
+`RenderContext` は、描画器が描くのに要るものを持ちます。
 
-表示範囲が日付変更線をまたぐときは、1 つのフレームで世界の写し
-をそれぞれ描きます。`draw` は写しごとに、その写しの投影で呼ばれ
-ます。地図のカメラではなく引数からすべてを計算すれば、正しい
-写しの上に描けます。
+- `line`、`fill`、`point` は、線、面、点の印の共有の描画器です。位置を
+  度で、色を CSS の色で、大きさをピクセルで受け取り、投影と地形には
+  自分で従います
+- `opacity` は、地物のレイヤーの不透明度で、0 から 1 です。共有の描画器
+  はこれを自分では掛けません。渡す不透明度に掛けてください。そうすると、
+  地物がレイヤーと一緒に薄くなります
+- `zoom` と `pixelRatio` です。`window.devicePixelRatio` ではなく
+  `pixelRatio` を使ってください
+- `terrain` は地面の高さです ([地形](#地形) を参照)
+- `gl`、`shader`、`offset`、`projection` は、自分でシェーダーを書く
+  描画器のためのものです ([自分のシェーダー](#自分のシェーダー) を参照)
 
-## 当たり判定
-
-`hitTest` は、クリックが地物に当たったかどうかを決めます。
-`test` と `distance` では、距離をクリックした地点の緯度における
-経度の度で表します。`toleranceLngLat` は、クリックの許容範囲
-(既定は 6 CSS ピクセル) をこの単位に換算したものです。緯度の差
-と比べるときは、例のように、緯度の差を緯度の cos で割ってくだ
-さい。`testDistance` は省略可能で、判定と距離の計算を 1 回で
-行い、距離か `null` を返します。
-
-当たり判定では、まず空間索引で候補を絞ります。このとき、各地物
-の外接矩形を許容範囲の分だけ広げて使います。アイコンのように、
-形から離れた所でも当たる型では、`test` の前に候補から外れない
-ように `candidateReachPx` (数か関数) を指定してください。
-
-索引は Store の変化に追随します。作成、更新、削除のたびに、
-その地物の範囲を `getBoundingBox` (既定は座標の範囲) で測り
-直します。後から読み込まれるフォントのように、範囲が Store の
-外のものに左右されるときは、それが変わったときにプラグインから
-`ctx.invalidateFeatures(type)` を呼んでください。
-
-`boxSelection` は、地物が選択の矩形の中にあるかどうかを決め
-ます。既定では座標で判定します。
-
-## 選択、拡縮、吸着
-
-ハンドラーのそのほかのメンバーは省略できます。
-
-| メンバー | 省略したとき |
-| --- | --- |
-| `getSelectionBoundingBox` | 選択の UI を描かない |
-| `getPointFrameExtent` | 面積 0 の地物に 12 px の枠 |
-| `getAdditionalResizeHandles` | 四隅のハンドルだけ |
-| `computeCustomResize` | 標準の拡縮 |
-| `resizeStrategy` | `scale` プロパティーで決まる |
-| `getSnapTargets` | 地物の頂点と辺 |
-
-`getSelectionBoundingBox` は向きのある箱を返し、回転の情報も
-含められます。`getPointFrameExtent` は、面積 0 の地物の枠の
-大きさ (CSS ピクセルでの幅の半分と高さの半分) を決めます。
-そうした地物は点の見た目のままで、拡縮と回転のハンドルを
-持ちません。`getSnapTargets` は、標準の候補の代わりに、点と線分
-の候補を返します。
-
-## 地形
-
-地形が有効なとき、描画器はライブラリーを通して地面の上に物を
-置きます。ライブラリーの内部を直接触ることはありません。`draw`
-の中では、自分の `ProjectionUniformManager` か `QuadShader` の
-`setTerrain` に `context.terrain` を渡し、地形の関数
-(`anchorElevationMeters`、`anchorGhostOpacity`、
-`drawQuadSurfaceOnTerrain` など) の最初の引数にも渡します。
-この値はその呼び出しの間だけ有効です。描画の外では、プラグイン
-から `ctx.projectAnchor`、`ctx.anchorElevationMeters`、
-`ctx.getAnchorElevationGeneration` を使います。どれも、その
-プラグインのインスタンスの地形を読みます。詳しくは
-[地形](terrain.ja.md) を参照してください。
-
-## 補助ハンドル
-
-補助ハンドルは、頂点でも拡縮のハンドルでもない、自前の
-ハンドルです。たとえば、曲線の制御点や吹き出しの尻尾です。
-
-<!-- docs-check:
-type Position = [number, number];
--->
+面を塗り、縁を描く型です。
 
 ```ts
-draw.registerAuxiliaryHandleProvider({
-  id: 'route-midpoint',
-  getHandles(feature) {
-    if (feature.type !== 'Route') return [];
-    const c = feature.coordinates as Position[];
-    return [{ id: 'mid', position: c[Math.floor(c.length / 2)] }];
+import type { FeatureRenderer } from '@sakuzu/maplibre-gl-draw';
+import type { Polygon } from 'geojson';
+
+const zoneRenderer: FeatureRenderer = {
+  onAdd() {},
+  draw(feature, ctx) {
+    const rings = (feature.geometry as Polygon).coordinates;
+    const color = feature.style.fillColor ?? '#2563eb';
+    ctx.fill.draw(rings, { color, opacity: 0.2 * ctx.opacity });
+    for (const ring of rings) {
+      ctx.line.draw(
+        ring,
+        { width: 2, color, opacity: ctx.opacity, lineStyle: 'dotted' },
+        { closed: true },
+      );
+    }
   },
-  onHandleDragStart(hit) {
-    return hit.handleId === 'mid'; // true takes over the drag
-  },
-  onHandleDragMove(event) {
-    // Move your preview to event.lngLat
-  },
-  onHandleDragEnd(event) {
-    // Commit with draw.updateFeature
-  },
+  onRemove() {},
+};
+
+draw.extensions.featureTypes.add({
+  type: 'Zone',
+  geometry: 'Polygon',
+  renderer: zoneRenderer,
 });
 ```
 
-ライブラリーが行うのは、ハンドルの当たり判定とドラッグの受け
-渡しだけです。ハンドルを描くのも (たとえばオーバーレイの描画器
-で)、結果を書き込むのも自分で行います。
+線の描画器は、既定では幅をピクセルで受け取ります。
+`widthUnit: 'meters'` にすると地上のメートルになります。`createdZoom`
+を渡すと、そのズームでの幅を基準に、線がズームに合わせて太くなったり
+細くなったりします。
 
-- `getHandles` は、地物が 1 つだけ選択されている間、当たり判定
-  のたびに呼ばれるので、軽い処理にしてください。
-  `getGlobalHandles` を使うと、選択に関係なく出るハンドルを
-  足せます
-- ハンドルの判定は、回転と拡縮のハンドルの直後、頂点と中点
-  の前に行います
-- `onHandleDragStart` が true を返すと、地図のパンが止まり、
-  移動と終了が自分のほうに届きます。`onHandleDragEnd` は、
-  モードの切り替えや外からの変更でドラッグが中断された
-  ときも含めて、必ずちょうど 1 回届きます
-- Store が読み取り専用の間、操作ロック中、地物がロックされて
-  いる間は、何も受け渡しません
-- ドラッグの間、ライブラリーは何も書き込まず、ドラッグのフック
-  も実行しません
+表示が経度 ±180 度の子午線をまたぐと、描画は世界の写しをそれぞれ
+見せ、`draw` は写しごとに 1 回呼ばれます。描くものを地図のカメラから
+ではなく、地物と窓口から計算してください。そうすれば正しい写しに
+描かれます。
 
-## 随伴
+## 当たり判定
 
-随伴は、地物と一緒にその 1 つ下に描かれ、重なりの順序の同じ
-位置でクリックできるものです。たとえば、引き出し線、影、バッジ
-です。`registerFeatureCompanionProvider` で
-`FeatureCompanionProvider` を登録します。
+`hitTest` が無いと、その型の地物は図形のとおりに当たります。線なら
+ポインターの近く、面ならポインターの下です。`hitTest(feature, ctx)` は
+それを置き換えます。画面の点、その地図の位置、ピクセルでのクリックの
+許容量、位置を投影する `screen` を受け取り、`Hit` か `null` を返します。
 
-- `has(feature)` は、毎フレーム、毎クリックで、すべての地物に
-  ついて呼ばれます。自分で持つ索引を使って、定数時間で答えて
+<!-- docs-check:
+declare function verticesOf(feature: Feature): Position[];
+declare const routeRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+import type { FeatureTypeDefinition, ScreenPoint } from '@sakuzu/maplibre-gl-draw';
+
+/** 点から線分までの距離 (ピクセル) */
+function segmentDistance(p: ScreenPoint, a: ScreenPoint, b: ScreenPoint) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len = dx * dx + dy * dy;
+  const dot = (p[0] - a[0]) * dx + (p[1] - a[1]) * dy;
+  const t = len === 0 ? 0 : Math.max(0, Math.min(1, dot / len));
+  return Math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1]);
+}
+
+const hitRoute: FeatureTypeDefinition = {
+  type: 'Route',
+  geometry: 'LineString',
+  renderer: routeRenderer,
+  hitTest(feature, ctx) {
+    const points = verticesOf(feature).map((v) => ctx.screen.project(v));
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 1; i < points.length; i++) {
+      const d = segmentDistance(ctx.point, points[i - 1], points[i]);
+      best = Math.min(best, d);
+    }
+    if (best > ctx.tolerancePx) return null;
+    const id = feature.id;
+    return { kind: 'feature', id, featureId: id, distancePx: best };
+  },
+};
+```
+
+- 当たり判定の候補は、各地物の範囲を許容量だけ広げて集めます。点の
+  周りに描く印のように、図形より遠くで当たる型は、その距離を
+  `hitPaddingPx` に書きます。そうすると、`hitTest` に届く前にその型の
+  地物が外されません
+- 点の周りに決まった半径の円を描くように、地面の上の距離で図形より
+  広く描く型は、その範囲を `bbox(feature)` から
+  `[west, south, east, north]` (度) で返します。空間の索引は、図形の
+  範囲の代わりにこれを使います。当たり判定と矩形の選択の候補、
+  `features.list({ bbox })`、描くほど画面に近い地物の見極めに
+  使われます
+- 範囲は文書に従い、地物が変わるたびに測り直されます。範囲が文書の外の
+  何かで決まるときは、それが変わったときにプラグインから
+  `ctx.invalidate({ type: 'Route' })` を呼びます
+- `boxSelect(feature, box, ctx)` は、選択の矩形が地物を取るかを、
+  ピクセルの矩形で決めます。無ければ図形で決まります
+
+## 選択とハンドル
+
+定義のほかのメンバーは省けます。
+
+| メンバー | 無いとき |
+| --- | --- |
+| `bounds` | 枠は図形の範囲に従います |
+| `outline` | 枠は `bounds` の箱です |
+| `handles` | その型に自分のハンドルはありません |
+| `onHandleDrag` | ハンドルをドラッグしても何も変わりません |
+| `snapCandidates` | 図形の頂点と辺が候補です |
+
+`bounds` は、画面の上の枠を `{ min, max }` (ピクセル) で返します。
+描くものが無い地物には `null` を返します。`Point` の図形を持つ型では、
+点の周りの枠の大きさを決めます。
+
+`outline` は、斜めに描く箱のように、形が回る型のためのものです。枠の
+4 つの角を、画面の上のピクセルで返します。順は、回す前の形の左上、
+右上、右下、左下です。枠は `bounds` の箱の代わりにこの角に沿って
+描かれます。`Point` 以外の図形では、大きさを変えるハンドルと回す
+ハンドルもこの角と辺に付きます。`Point` の型の枠には、それらの
+ハンドルは付きません。`outline` が 4 つの角以外を返したときは、枠は
+`bounds` から決まります。`ctx.screen.outline` は、組み込みの型も
+含めて、どの地物の枠の角も読めるので、地物の周りに描くものを枠に
+合わせられます。型は、自分の `outline` や `bounds` の中から自分の
+地物についてこれを呼びません。
+
+`outline`、`bounds`、`ctx.screen.outline` は、どれも枠の余白
+(`selectionStyle.boundingBox.margin`。既定は 10 ピクセル) を含みません。
+余白は、エンジンが枠を描くときに足します。点も含めてどの型でも、枠の
+各辺は角から余白の分だけ外に立ち、大きさを変えるハンドルと回す
+ハンドルはその枠に付きます。
+
+`handles` は、選ばれている地物のハンドルを返します。それぞれ ID、位置、
+カーソルを持ちます。ハンドルをドラッグすると、ポインターが動くたびに
+`onHandleDrag` が呼ばれ、ドラッグの終わりにもう一度呼ばれます。返した
+`FeaturePatch` は地物に当てられます。動いている間の差分は途中の更新
+で、終わりの差分が残ります。
+
+<!-- docs-check:
+declare function verticesOf(feature: Feature): Position[];
+declare const routeRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
+
+const reshapeRoute: FeatureTypeDefinition = {
+  type: 'Route',
+  geometry: 'LineString',
+  renderer: routeRenderer,
+  // 頂点ごとに、その頂点を動かすハンドルを置く
+  handles(feature) {
+    return verticesOf(feature).map((position, index) => ({
+      id: String(index),
+      position,
+      kind: 'vertex',
+      cursor: 'move',
+    }));
+  },
+  onHandleDrag(feature, handle, event) {
+    const coordinates = [...verticesOf(feature)];
+    coordinates[Number(handle.id)] = event.lngLat;
+    return { geometry: { type: 'LineString', coordinates } };
+  },
+};
+```
+
+ライブラリーは、選ばれている地物のハンドルを頂点のハンドルと同じ
+見た目 (`selectionStyle` の `vertexHandle`) で描き、同じ大きさで当たり
+判定をして、ドラッグを渡します。ほかのハンドルをドラッグしている間は
+隠れます。描画が読み取り専用のとき、操作ロックの間、地物がロックされて
+いる間は、表示もドラッグもしません。
+
+`onHandleDragStart(feature, handle, event)` は、ハンドルのドラッグが
+始まる前に問われます。`false` を返すとドラッグを拒み、ポインターは
+ハンドルが無いときと同じ動きをします。
+`onHandleDragEnd(feature, handle, event)` は、始まったドラッグの最後の
+`onHandleDrag` の後に 1 回呼ばれます。地物はそのときの姿で届き、無く
+なっていれば `null` です。ドラッグが途中で断たれたときも呼ばれます。
+始まりに測った値のように、ドラッグの始めから終わりまで持つものに
+使います。
+
+`snapCandidates` は、その型の地物の近くでポインターが吸着する位置を
+返します。図形の頂点と辺の代わりになります。
+
+## 組み込みの型の差し替え
+
+`draw.extensions.featureTypes.override(definition)` は、同じ名前の
+組み込みの型の代わりに定義を置きます。差し替えられる型は `Point`、
+`LineString`、`Polygon`、`Circle`、`Freehand`、`Image` です。定義は、
+組み込みの型が持つ `geometry` を持ちます。円と画像は `Point`、
+手書きの線は `LineString` です。その型の地物は、以後その描画器で
+描かれます。定義の `hitTest`、`boxSelect`、`bounds`、`outline`、
+`bbox`、`snapCandidates` は、あれば組み込みの型のものに代わります。
+定義が省いたメンバーは、組み込みの型のものが残ります。`handles` は、
+組み込みの型のハンドルと一緒に出ます。
+
+<!-- docs-check:
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
+declare const pointRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+const restore = draw.extensions.featureTypes.override({
+  type: 'Point',
+  geometry: 'Point',
+  renderer: pointRenderer,
+});
+
+// 組み込みの点に戻ります
+restore();
+```
+
+返る関数、`remove('Point')`、差し替えたプラグインの取り外しの
+どれでも、組み込みの型が戻ります。`add` は組み込みの型の名前を
+これまでどおり拒みます。差し替えている型は、戻すまで重ねて差し替え
+られません。
+
+`appliesTo(feature)` は、アイコンを持つ点のように、差し替えを型の
+一部の地物に絞ります。これが false を返す地物は、組み込みの型を
+そのまま使います。ほかの組み込みの地物とまとめて描かれ、組み込みの
+当たり判定、範囲選択、枠、ハンドル、吸着の候補、広がりが残ります。
+残りの地物は定義で描かれ、当たりが決まります。地物が変わるたびに
+問い直すので、答えは地物だけから決めてください。`add` はこれを
+無視します。独自の型は、その型の地物をすべて受け持ちます。
+
+<!-- docs-check:
+declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
+declare const iconRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+draw.extensions.featureTypes.override({
+  type: 'Point',
+  geometry: 'Point',
+  renderer: iconRenderer,
+  appliesTo: (feature) => typeof feature.properties.icon === 'string',
+});
+```
+
+## 地形
+
+地形があるとき、共有の描画器は描くものを自分で地面に載せます。自分の
+印のためには、`ctx.terrain` が高さを渡します。
+
+- `elevation(lngLat)` は地面の高さ (メートル) で、地形が無ければ 0 です。
+  点の描画器に `elevationMeters` として渡すと、印が地面に載ります
+- `project(lngLat)` は、地面まで持ち上げた位置の画面の点です。地形が
+  無ければ `null` です
+- `ghostOpacity(lngLat)` は、地形がカメラからその位置を隠すところで
+  低くなります。印の不透明度に掛けてください
+- `generation()` は、高さが変わったかもしれないときに変わります。高さを
+  覚えておく描画器は、これで読み直す時を知ります
+
+描画の外では、プラグインが窓口の `ctx.terrain` で同じ地形を読みます。
+[地形](terrain.ja.md) を参照してください。
+
+## 重ね描き
+
+重ね描きは、1 つの地物ではないものを描きます。選択の上の印、格子、
+自分のプレビューなどです。描画器と同じ `onAdd`、`draw`、`onRemove` を
+同じ決まりで持ち、ほかに `name` を持ちます。
+`draw.extensions.overlays.add` で足し、返る関数で外します。
+
+選ばれている経路のハンドルに印を付ける重ね描きです。
+
+<!-- docs-check:
+declare function verticesOf(feature: Feature): Position[];
+-->
+
+```ts
+import type { OverlayRenderer } from '@sakuzu/maplibre-gl-draw';
+
+const routeHandleMarks: OverlayRenderer = {
+  name: 'route-handles',
+  onAdd() {},
+  draw(ctx) {
+    for (const feature of draw.selection.features()) {
+      if (feature.type !== 'Route') continue;
+      for (const position of verticesOf(feature)) {
+        ctx.point.draw(position, {
+          shape: 'circle',
+          size: 8,
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+          strokeColor: '#e64d1a',
+          strokeWidth: 2,
+          strokeOpacity: 1,
+        });
+      }
+    }
+  },
+  onRemove() {},
+};
+
+draw.extensions.overlays.add(routeHandleMarks);
+```
+
+- `draw(ctx)` は、地物と選択の上に描きます
+- `drawForLayer(layerId, ctx)` は、1 つのレイヤーのすぐ上に描きます。
+  レイヤーの間に入るもののためです
+- `drawVertices(ctx)` は、すべてのレイヤーの地物と選択の上に描きます。
+  前のレイヤーに隠れずに見えている必要のある頂点のためです
+- `order` は重ね描きどうしの順です。小さいものが先に、大きいものの下に
+  描かれます。同じ順の重ね描きは、足した順に描かれます
+
+Worker で作るデータのように、何回かの描画をかけて何かを用意する重ね
+描きは、`hasPendingWork()` を実装し、用意が終わるまで true を返します。
+`draw.hasPendingWork()` はすべての重ね描きに尋ねるので、完全な絵を待つ
+ホストはこの重ね描きも待ちます ([性能](performance.ja.md))。
+
+## 提供者
+
+提供者は、自分のものではない型の地物に、吸着の候補、ハンドル、付き物を
+足します。組み込みの型にも足せます。どれも `name` を持ち、
+`draw.extensions` のそれぞれのコレクションに足します。
+
+### 吸着の候補
+
+`SnapProvider` は、ポインターの近くの候補を返します。0.001 度の格子に
+吸着させる提供者です。
+
+```ts
+import type { SnapProvider } from '@sakuzu/maplibre-gl-draw';
+
+const grid: SnapProvider = {
+  name: 'grid',
+  candidates(ctx) {
+    const step = 0.001;
+    const [lng, lat] = ctx.lngLat;
+    return [
+      {
+        position: [Math.round(lng / step) * step, Math.round(lat / step) * step],
+        kind: 'guide',
+        source: 'grid',
+      },
+    ];
+  },
+};
+
+draw.extensions.snapProviders.add(grid);
+```
+
+窓口は、画面と地図の上のポインター、ピクセルでの許容量、`screen`、
+`excludeIds` を渡します。`excludeIds` は、描いている途中の地物のように
+吸着させてはいけない地物です。`priority` は、同じ距離の候補の間の
+順を決めます。大きい方が勝ちます。自分で決めた `kind` は頂点として
+順位を決め、吸着の結果 (`target.kind`) にそのまま届きます。
+
+### ハンドル
+
+`HandleProvider` は、選ばれている地物に自分のハンドルを出します。
+`handles(feature, screen)` がハンドルを返し、
+`onDrag(feature, handle, event)` がドラッグで変わる差分を返します。
+定義の `onHandleDrag` と同じです。`globalHandles(screen)` は、どの
+地物にも属さず、何を選んでいても出るハンドルを返します。そのドラッグ
+では `feature` が `null` で届き、変わるものは提供者が自分で書き込み
+ます。`onDragStart` と `onDragEnd` は、定義の `onHandleDragStart` と
+`onHandleDragEnd` と同じように、ドラッグの前後で呼ばれます。
+`onDragStart` は `false` を返してドラッグを拒めます。定義と同じく、
+ハンドルはライブラリーが頂点のハンドルと同じ見た目で描きます。
+
+### 付き物
+
+`CompanionProvider` は、地物の 1 段下に何かを描き、重なりの順の同じ
+位置でクリックを受けます。`highlight` の印が付いた点の下に光の輪を
+描く例です。
+
+```ts
+import type { CompanionProvider } from '@sakuzu/maplibre-gl-draw';
+import type { Point } from 'geojson';
+
+const halo: CompanionProvider = {
+  name: 'halo',
+  has: (feature) =>
+    feature.type === 'Point' && feature.properties.highlight === true,
+  draw(feature, ctx) {
+    ctx.point.draw((feature.geometry as Point).coordinates, {
+      shape: 'circle',
+      size: 28,
+      fillColor: '#facc15',
+      fillOpacity: 0.4 * ctx.opacity,
+      strokeColor: '#facc15',
+      strokeWidth: 0,
+      strokeOpacity: 0,
+    });
+  },
+  hitTest(feature, ctx) {
+    const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
+    const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
+    return distancePx <= 14
+      ? { kind: 'companion', id: feature.id, featureId: feature.id, distancePx }
+      : null;
+  },
+  onClick(feature) {
+    console.log('the halo of', feature.id);
+    return true;
+  },
+};
+
+draw.extensions.companionProviders.add(halo);
+```
+
+- `has(feature)` は、描画と当たり判定のたびにすべての地物について
+  尋ねられます。地物そのものか、自分で持つ索引から、すぐに答えて
   ください
-- `draw` は、地物そのものの直前に呼ばれます。`context.opacity`
-  に地物のレイヤーの不透明度が入るので、アルファに掛けてくだ
-  さい
-- `hitTest` は、クリックが地物そのものに当たらなかったときに、
-  その後ろの地物より先に呼ばれます。当たるとクリックを消費し、
-  選択はそのままにして、`onCompanionClick` を呼びます
-- 随伴を持つ地物は、保持型のバッチの外で描かれます。そうした
-  地物は少なめにしてください
+- `draw` は、地物そのものの直前に呼ばれます
+- `hitTest` は、その地物の段で尋ねられます。ポインターが地物そのもの
+  に当たらなかったときに、その後ろの地物より先に尋ねられます。その
+  ため、画面の同じ点へのクリックは次の順で行き先が決まります
+  - 選択のハンドルが最初です。付き物の下にあっても掴めます
+  - 次に、重なりの順の手前から、地物そのもの、その付き物の順です。
+    地物は、点の印、線、面にクリックの許容範囲を加えたところで当たり、
+    自分の付き物に勝ちます。付き物は、その地物より後ろの地物に勝ちます
+  - データセットの行に届くのは、手前の地物にも付き物にも当たらなかった
+    ところだけです。地物より手前に重ねたデータセットは、その両方より
+    先です
+- 当たると `onClick` が呼ばれます。true を返すとクリックはそこで消費
+  され、選択はそのままです。それ以外では、選択モードがそのクリックを
+  地物へのクリックとして扱います
 
-## オーバーレイの描画器
+## 自分のシェーダー
 
-`addOverlayRenderer` を使うと、地物に結び付かない WebGL の描画
-を足せます。描く位置は、地物の後ろ (`order: 'background'`)、
-地物の前 (`'foreground'`)、選択 UI の前 (`'overlay'`) のどれか
-です。描画器は地物の描画器と同じ `onAdd`、`draw`、`onRemove` を
-持ち、文脈の喪失と日付変更線についての決まりも同じです。返って
-きた関数を呼ぶと取り除けます。
+共有の描画器は、線、面、点の印を描きます。それ以外のものは、描画器が
+`ctx.gl` で自分のシェーダーをコンパイルして描きます。位置は、
+`ctx.shader` (地図の投影の関数)、`ctx.offset` (精度を落とさずにカメラの
+近くを描くための表示の中心)、`ctx.projection` で決めます。
 
-何フレームかかけて何かを用意する描画器 (Worker で作る資源など) は、
-`hasPendingWork()` を実装し、用意が終わるまで true を返してください。
-終えるための再描画は、描画器が自分で求めます。`draw.hasPendingWork()`
-はすべてのオーバーレイの描画器に尋ねるので、完全な絵を待つホスト
-([性能](performance.ja.md#絵を取り出すための完全なフレーム) を参照)
-は、この描画器の仕事も待ちます。描画の設定で `timeSlicing: false`
-のときは、ふだん何フレームかに分ける仕事を、そのフレームの中で
-終えてください。
+入口 `@sakuzu/maplibre-gl-draw/webgl` には、ライブラリーのシェーダーの
+土台になっている部品があります。投影の GLSL とその uniform のための
+`ProjectionUniformManager`、`createProgram`、`QuadShader`、共有の描画器
+が破線と地形に使う規則です ([webgl の入口](../api/webgl/index.md))。
+主の入口と違い、マイナーリリースで変わることがあります
+([版](../reference/README.md))。
 
-## 部品
+地形の上に描く部品は、描画の呼び出しの描画の文脈か、その `terrain` を
+受け取ります。描く前に `ProjectionUniformManager` や `QuadShader` の
+`setTerrain(ctx)` を呼び、`terrainTessellationStep(ctx)` と
+`drawQuadSurfaceOnTerrain(ctx, ...)` にも渡します。描画の文脈はその
+呼び出しの間だけ有効なので、呼び出しごとにそのときのものを渡して
+ください。`null` や、ライブラリーが渡したものでないオブジェクトを
+渡すと、地形なしで描きます。
 
-ライブラリーが自分の描画に使っている部品は、組み立て用の部品と
-して公開しています。共有の描画器、`ProjectionUniformManager`、
-`QuadShader`、地形のアンカー、向きのある箱、投影の計算です。
-これらは公開面の 2 層目にあたり、マイナーリリースで変わること
-があります。その違いは
-[リファレンスの概要](../reference/README.md) で説明しています。
-組み込みの型と同じように描く型ではこれらを使い、それ以外は自分
-のコードで書いてください。
+```ts
+import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
+import {
+  densifyPath,
+  type ProjectionUniformManager,
+  terrainTessellationStep,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+function pathOnTerrain(
+  ctx: RenderContext,
+  program: WebGLProgram,
+  uniforms: ProjectionUniformManager,
+  coordinates: [number, number][],
+): [number, number][] {
+  ctx.gl.useProgram(program);
+  uniforms.setTerrain(ctx);
+  uniforms.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+  const step = terrainTessellationStep(ctx);
+  // path を送って描く
+  return step ? densifyPath(coordinates, step) : coordinates;
+}
+```
 
 ## 関連する例
 
 - [examples/custom-feature-type/](../../examples/custom-feature-type/)
-  では、共有の線の描画器を使った描画器、当たり判定、矩形選択の
-  戦略を持つ型を登録します
+  では、共有の線の描画器で描き、当たり判定、矩形選択、枠、ハンドルを
+  持つ型を足します
 
 ## リファレンス
 
-- [CustomFeatureHandler](../api/maplibre-gl-draw/interfaces/CustomFeatureHandler.md)
-- [CustomFeatureRenderer](../api/maplibre-gl-draw/interfaces/CustomFeatureRenderer.md)
-  と [CustomRendererDrawContext](../api/maplibre-gl-draw/interfaces/CustomRendererDrawContext.md)
-- [HitTestStrategy](../api/maplibre-gl-draw/interfaces/HitTestStrategy.md)
-  と [BoxSelectionStrategy](../api/maplibre-gl-draw/interfaces/BoxSelectionStrategy.md)
-- [AuxiliaryHandleProvider](../api/maplibre-gl-draw/interfaces/AuxiliaryHandleProvider.md)
-- [FeatureCompanionProvider](../api/maplibre-gl-draw/interfaces/FeatureCompanionProvider.md)
-- [CustomOverlayRenderer](../api/maplibre-gl-draw/interfaces/CustomOverlayRenderer.md)
-- [SDFLineRenderer](../api/maplibre-gl-draw/interfaces/SDFLineRenderer.md)
+- [FeatureTypeDefinition](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md)
+  と [Handle](../api/maplibre-gl-draw/interfaces/Handle.md)
+- [FeatureRenderer](../api/maplibre-gl-draw/interfaces/FeatureRenderer.md)
+  と [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
+- [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md)、
+  [FillRenderer](../api/maplibre-gl-draw/interfaces/FillRenderer.md)、
+  [PointRenderer](../api/maplibre-gl-draw/interfaces/PointRenderer.md)
+- [HitTestContext](../api/maplibre-gl-draw/interfaces/HitTestContext.md)
+  と [Hit](../api/maplibre-gl-draw/interfaces/Hit.md)
+- [OverlayRenderer](../api/maplibre-gl-draw/interfaces/OverlayRenderer.md)
+- [SnapProvider](../api/maplibre-gl-draw/interfaces/SnapProvider.md)、
+  [HandleProvider](../api/maplibre-gl-draw/interfaces/HandleProvider.md)、
+  [CompanionProvider](../api/maplibre-gl-draw/interfaces/CompanionProvider.md)
+- [TerrainAnchors](../api/maplibre-gl-draw/interfaces/TerrainAnchors.md)

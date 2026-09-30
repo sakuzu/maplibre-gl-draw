@@ -10,8 +10,8 @@
  * rate.
  */
 
-import type { DatasetFeatureInput } from '@sakuzu/maplibre-gl-draw';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import type { DatasetRow } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 // The stylesheet of the installed maplibre-gl (the version the page runs against).
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -36,7 +36,7 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-const draw = createMapLibreGLDraw(map, { defaultMode: 'select' });
+const draw = createDraw(map, { defaultMode: 'select' });
 
 const el = (id: string): HTMLElement => {
   const node = document.getElementById(id);
@@ -44,25 +44,28 @@ const el = (id: string): HTMLElement => {
   return node;
 };
 
-function buildFeatures(): DatasetFeatureInput[] {
-  const feats: DatasetFeatureInput[] = [];
+function buildFeatures(): DatasetRow[] {
+  const feats: DatasetRow[] = [];
   for (let i = 0; i < GRID_NX; i++) {
     for (let j = 0; j < GRID_NY; j++) {
       const x = ORIGIN_LNG + i * CELL_DEG;
       const y = ORIGIN_LAT + j * CELL_DEG;
       const s = CELL_DEG * 0.93;
       feats.push({
+        type: 'Feature',
         id: `g-${i}-${j}`,
-        type: 'Polygon' as const,
-        coordinates: [
-          [
-            [x, y],
-            [x + s, y],
-            [x + s, y + s],
-            [x, y + s],
-            [x, y],
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [x, y],
+              [x + s, y],
+              [x + s, y + s],
+              [x, y + s],
+              [x, y],
+            ],
           ],
-        ],
+        },
         properties: { v: (i * 7 + j * 13) % 100 },
       });
     }
@@ -73,9 +76,9 @@ function buildFeatures(): DatasetFeatureInput[] {
 map.on('load', () => {
   const feats = buildFeatures();
   const t0 = performance.now();
-  draw.addDataset({
+  draw.datasets.add({
     id: 'perf-grid',
-    features: feats,
+    rows: feats,
     styleRule: {
       kind: 'graduated',
       property: 'v',
@@ -183,15 +186,15 @@ runBtn.addEventListener('click', async () => {
   // Baseline: remove the dataset and run the same animation
   result.textContent = 'Measuring 1/2 (baseline: without the dataset)...';
   const saved = buildFeatures();
-  draw.removeDataset('perf-grid');
+  draw.datasets.remove('perf-grid');
   await new Promise((r) => setTimeout(r, 300));
   const base = await measureOnce();
 
   // Main measurement: put the dataset back and run the same animation
   result.textContent = 'Measuring 2/2 (with the dataset)...';
-  draw.addDataset({
+  draw.datasets.add({
     id: 'perf-grid',
-    features: saved,
+    rows: saved,
     styleRule: {
       kind: 'graduated',
       property: 'v',

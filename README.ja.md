@@ -93,12 +93,15 @@ GeoParquet や Arrow の表は、点、線、多角形が行ごとに混ざっ�
 決められ、クリックすると属性を読めます
 ([大量のデータ](docs/guides/large-data.ja.md))。
 
-### 書き出しと読み込み
+### 保存と読み込み
 
-独自形式で書き出すと、レイヤー、グループ、スタイル、画像まで含めて
-保存でき、読み込めば同じ状態に戻ります。GeoJSON で書き出せば、ほかの
-ツールと地物をやり取りできます。地物を保存するストアは差し替えられ、
-変更はすべてイベントで通知されます
+文書を独自形式で書き出すと、レイヤー、グループ、スタイル、画像まで
+含めて保存でき、読み込めば同じ状態に戻ります。GeoJSON で書き出せば、
+ほかのツールと地物をやり取りできます。地物は GeoJSON の図形と
+GeoJSON の properties を持つので、ファイルはコードで読む地物と同じ形に
+なります。
+変更は取引ごとに 1 つのイベントで、出どころを添えて届きます。文書を
+保存するストアは差し替えられます
 ([保存と読み込み](docs/guides/save-load.ja.md))。
 
 ### 閲覧専用
@@ -108,7 +111,9 @@ GeoParquet や Arrow の表は、点、線、多角形が行ごとに混ざっ�
 
 ### 拡張
 
-プラグイン、独自のモード、独自の地物型を足して拡張できます
+プラグイン、独自のモード、独自の描き方を持つ地物の型、重ね描き、
+吸着の候補やハンドルの提供者を足せます。どの種類も同じ方法で足し、
+足したときに返る関数で外します
 ([プラグイン](docs/guides/plugins.ja.md)、
 [独自の型](docs/guides/custom-types.ja.md))。
 
@@ -132,12 +137,12 @@ GeoParquet や Arrow の表は、点、線、多角形が行ごとに混ざっ�
 - [閲覧専用][ex-read-only]
   - 閲覧専用モード、操作のロック、ロックしたレイヤー
 - [プラグイン][ex-plugin]
-  - フックと独自のモードを持つプラグイン
+  - イベント、API、独自のモードを持つプラグイン
 - [独自の地物型][ex-custom-feature-type]
-  - 独自のレンダラーと当たり判定を持つ地物型
+  - 独自の描き方、当たり判定、範囲選択を持つ地物の型
 - [データセット][ex-large-data]
   - 5 万のマス目の色分けと、見えている範囲の点の取り寄せ
-- [100 万の点][ex-columnar-worker]
+- [100 万の点][ex-table-worker]
   - Worker で読み込む 100 万の点
 
 ## インストール
@@ -156,7 +161,7 @@ maplibre-gl (`~6.11.1`) を使います。まだ入っていなければ、npm 7
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-import { createMapLibreGLDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 
 // maplibre-gl v6 はページごとに 1 回 worker の URL を要する (これは Vite の例)
 maplibregl.setWorkerUrl(workerUrl);
@@ -168,7 +173,7 @@ const map = new maplibregl.Map({
   zoom: 12,
 });
 
-const draw = createMapLibreGLDraw(map);
+const draw = createDraw(map);
 
 // 自分のボタンで描き始める。クリックで頂点を足し、最初の頂点のクリックか
 // Enter で確定する
@@ -176,19 +181,34 @@ document.querySelector('#polygon')?.addEventListener('click', () => {
   draw.setMode('draw_polygon');
 });
 
-draw.on('draw.feature.create', ({ feature }) => {
-  console.log(feature.id, feature.type, feature.coordinates);
+draw.on('feature.created', ({ feature }) => {
+  console.log(feature.id, feature.type, feature.geometry);
 });
 
-// すべての地物を GeoJSON の FeatureCollection (文字列) で得る
+// すべての地物を GeoJSON の FeatureCollection で得る
 document.querySelector('#save')?.addEventListener('click', () => {
-  const { data } = draw.export('geojson');
-  console.log(data);
+  console.log(JSON.stringify(draw.document.toGeoJSON()));
 });
 ```
 
 ページ全体は [examples/basic/](examples/basic/) にあります。
 [はじめかた](docs/getting-started.ja.md) で順を追って説明しています。
+
+## 入口
+
+ほかの入口が要るとき以外は、main の入口から import します。
+
+- `@sakuzu/maplibre-gl-draw` は、描画のインスタンス (`createDraw`)、
+  その地物、レイヤー、グループ、データセット、イベント、設定、拡張の
+  窓口です
+- `@sakuzu/maplibre-gl-draw/geometry` は、地図の要らない図形の計算
+  です。長さや面積を測る、円やバッファーを作る、面を合成して分ける
+  ことができます。Node や Worker でも動きます
+- `@sakuzu/maplibre-gl-draw/table` は、大きな表を Worker で読んで
+  データセットに渡す部品です
+- `@sakuzu/maplibre-gl-draw/webgl` は、独自のシェーダーを書くための
+  部品です。小さい版で変わることがあります。ほかの 3 つはセマンティック
+  バージョニングに従います
 
 ## 動作環境
 
@@ -209,7 +229,7 @@ document.querySelector('#save')?.addEventListener('click', () => {
 ## ドキュメント
 
 [docs/README.ja.md](docs/README.ja.md) に、はじめかた、手引き、
-リファレンス、内部の文書を読む順に並べています。mapbox-gl-draw や
+リファレンス、内部の文書を読む順に並べています。1.0、mapbox-gl-draw、
 terra-draw から移る場合は [移行](docs/guides/migrating.ja.md) を参照して
 ください。
 
@@ -245,4 +265,4 @@ AGPL が製品に合わない場合は、Kasika, Inc. (可視化技研株式会�
 [ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
 [ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
 [ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
-[ex-columnar-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-worker/
+[ex-table-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/table-worker/

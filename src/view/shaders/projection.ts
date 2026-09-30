@@ -10,6 +10,9 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { TerrainAnchors } from '../../api/extension/context.js';
+import type { RenderContext } from '../../api/extension/render.js';
+import { terrainStateOf } from '../terrain/binding.js';
 import type { TerrainContext } from '../terrain/context.js';
 import type { TerrainShadeLight } from '../terrain/shade.js';
 import {
@@ -158,26 +161,40 @@ export class ProjectionUniformManager {
   /**
    * The terrain state of the draw instance being drawn (null draws without terrain)
    *
-   * The renderers of a CustomLayer pass their instance's context at construction. A renderer
-   * of an extension implementation, which may be shared between draw instances, calls
-   * `setTerrain(context.terrain)` with the context it receives in each draw call.
+   * The renderers of a CustomLayer bind their instance's state after construction. A renderer
+   * of an extension, which may be shared between draw instances, calls `setTerrain(ctx)` with
+   * the render context it receives in each draw call.
    */
-  private terrain: TerrainContext | null;
+  private terrain: TerrainContext | null = null;
 
-  constructor(
-    gl: WebGL2RenderingContext,
-    options: { surface?: boolean; terrain?: TerrainContext | null } = {},
-  ) {
+  /**
+   * @param gl - The WebGL context of the map
+   * @param options - `surface`: whether the renderer draws things stuck to the ground (areas
+   *   and lines), which lie flat on the frames that draw them flat
+   */
+  constructor(gl: WebGL2RenderingContext, options: { surface?: boolean } = {}) {
     this.gl = gl;
     this.surface = options.surface === true;
-    this.terrain = options.terrain ?? null;
   }
 
   /**
-   * Sets the terrain state the next uniforms are taken from (null draws without terrain)
+   * Sets the terrain the next uniforms are taken from.
+   *
+   * @param terrain - The render context of the draw call, or its `terrain`; `null` (or an
+   *   object the engine did not hand out) draws without terrain
    */
-  setTerrain(terrain: TerrainContext | null): void {
+  setTerrain(terrain: RenderContext | TerrainAnchors | null): void {
+    this.terrain = terrainStateOf(terrain);
+  }
+
+  /**
+   * Sets the terrain state of an instance directly
+   *
+   * @internal
+   */
+  useTerrainState(terrain: TerrainContext | null): this {
     this.terrain = terrain;
+    return this;
   }
 
   /**

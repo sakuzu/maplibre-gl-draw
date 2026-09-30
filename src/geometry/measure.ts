@@ -26,13 +26,6 @@ import { EARTH_RADIUS_METERS, toRadians } from './units.js';
  * @param path The vertices `[lng, lat]` in degrees
  * @returns The length in meters. 0 for fewer than 2 positions. NaN when a position is not
  *   finite
- *
- * @example
- * ```ts
- * import { geodesicLength } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * geodesicLength([[0, 0], [1, 0], [1, 1]]); // about 222,390 m
- * ```
  */
 export function geodesicLength(path: Coordinate[]): number {
   let total = 0;
@@ -77,14 +70,6 @@ function sphericalRingArea(ring: Ring): number {
  * @returns The area in square meters. 0 when nothing with an area remains
  * @throws {@link GeometryError} when the boolean operation engine fails even after the
  *   retry on the 1e-9 degree grid
- *
- * @example
- * ```ts
- * import { sphericalArea } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // A 1 x 1 degree square on the equator
- * sphericalArea([[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]); // about 1.236e10 m²
- * ```
  */
 export function sphericalArea(polygon: AreaCoordinates): number {
   let total = 0;
@@ -210,18 +195,6 @@ function scanlineCrossings(polygon: AreaCoordinates, lat: number): number[] {
  *
  * @param polygon Polygon or MultiPolygon coordinates in degrees
  * @returns The point `[lng, lat]` in degrees. `null` when there is not a single position
- *
- * @example
- * ```ts
- * import { centroid, pointOnSurface } from '@sakuzu/maplibre-gl-draw/geometry';
- *
- * // A U shape: the centroid falls in the gap between the arms
- * const u: [number, number][][] = [
- *   [[0, 0], [3, 0], [3, 3], [2, 3], [2, 1], [1, 1], [1, 3], [0, 3], [0, 0]],
- * ];
- * centroid(u); // [1.5, 1.357...] (outside)
- * pointOnSurface(u); // [0.5, 1.357...] (inside the left arm)
- * ```
  */
 export function pointOnSurface(polygon: AreaCoordinates): Coordinate | null {
   const center = centroid(polygon);

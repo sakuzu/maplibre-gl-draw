@@ -43,7 +43,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { getDisplayFeatures, isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Feature, Layer, StateChanges } from '../../store/types.js';
+import type { BoundingBox, Feature, Layer, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
@@ -135,7 +135,7 @@ export class StoreRetainedCache {
     this.frame++;
     this.featuresByLayer = null;
     // Every watch is advanced on every frame (no short circuit), so each keeps its snapshot
-    const hiddenChanged = this.watch.locallyHiddenChanged(this.store.getLocallyHidden());
+    const hiddenChanged = this.watch.locallyHiddenChanged(this.store.listHidden());
     const companionsChanged = this.watch.companionsChanged(companions);
     const terrainChanged = this.watch.terrainChanged(this.terrain);
     if (hiddenChanged || companionsChanged || terrainChanged) this.invalidateAll();
@@ -219,7 +219,7 @@ export class StoreRetainedCache {
    * The decisions are conservative (rebuilding too much still renders correctly; rebuilding too
    * little leaves a stale picture).
    */
-  applyChanges(changes: StateChanges): void {
+  applyChanges(changes: StoreChange): void {
     // The visibility and the ordering of a group have no reverse lookup to a layer, so everything
     // is discarded (both are rare operations)
     if (changes.groups || changes.groupReorder) {

@@ -18,7 +18,7 @@
  * Billboards are not drawn in a single place. Both the instanced billboard (point-instance) and
  * the per-point shapes (point-shape: triangle, star, icon, and the degenerate path for the
  * default circle) draw billboards. Wrapping only the instanced side leaves hand-drawn points as
- * half circles. A hand-drawn Point may be taken over by a registered CustomFeatureRenderer,
+ * half circles. A hand-drawn Point may be taken over by a registered FeatureTypeRenderer,
  * and then never goes through the instanced path at all. That is why this function is shared
  * by every renderer that draws billboards. SDF glyphs laid flat on the map plane (text that is
  * not painted into a ground quad) go through here for the same reason.

@@ -1,310 +1,497 @@
 # プラグイン
 
-プラグインは、draw のインスタンスに足す振る舞いをひとまとめに
-したものです。変更への反応、モードの追加、地物の型の追加、
-オーバーレイの描画などを入れられます。名前を持つふつうの
-オブジェクトで、`draw.addPlugin` で登録します。プラグインは、
-登録のときに受け取る `PluginContext` を通してインスタンスを
-操作します。
+拡張は、draw のインスタンスに振る舞いを足すものです。プラグイン、
+モード、地物の型、重ね描き、提供者があります。この手引きでは、
+プラグインとモードを説明します。プラグインは、ほかの拡張を自分の状態と
+一緒にまとめます。モードは、有効な間の入力を受け取ります。地物の型、重ね描き、提供者は
+[独自の地物の型](custom-types.ja.md) で説明します。
 
 ## 最小のコード
 
-作成、更新、削除された地物をすべてログに出すプラグインです。
+作成、変更、削除された地物をすべてログに出すプラグインです。
 
 ```ts
-import {
-  createMapLibreGLDraw,
-  type Plugin,
-  type PluginContext,
-} from '@sakuzu/maplibre-gl-draw';
+import type { Plugin } from '@sakuzu/maplibre-gl-draw';
 
-function createLoggerPlugin(): Plugin {
-  let unsubscribe: Array<() => void> = [];
+const logger: Plugin = {
+  name: 'logger',
+  onAdd(ctx) {
+    ctx.on('feature.created', ({ feature, source }) => {
+      console.log('created', feature.id, feature.type, source);
+    });
+    ctx.on('feature.updated', ({ feature, intermediate }) => {
+      if (!intermediate) console.log('changed', feature.id);
+    });
+    ctx.on('feature.deleted', ({ feature }) => {
+      console.log('deleted', feature.id);
+    });
+  },
+};
 
+const removeLogger = draw.extensions.plugins.add(logger);
+```
+
+地物を描くと、コンソールに `created` と出ます。`removeLogger()` を
+呼ぶとプラグインが外れ、ログが止まります。`ctx.on` で行った購読は、
+プラグインと一緒に終わります。
+
+## 拡張の種類
+
+拡張の種類ごとに、`draw.extensions` の下にコレクションがあります。
+
+| コレクション | 入れるもの |
+| --- | --- |
+| `plugins` | ほかの拡張と状態のまとまり |
+| `modes` | 入力の受け方。`draw.setMode` で切り替えます |
+| `featureTypes` | 自分の描き方と当たり判定を持つ地物の型 |
+| `overlays` | 地物の上やレイヤーの間に描くもの |
+| `snapProviders` | 独自の吸着の候補 |
+| `handleProviders` | 選んだ地物に付ける独自のハンドル |
+| `companionProviders` | 地物の 1 段下に描き、そこでクリックを受けるもの |
+
+どのコレクションも同じメソッドを持ちます。`add` と `addMany` で登録し、
+`remove(name)` と `removeMany(names)` で外します。`get`、`list`、
+`count`、`has` で名前から引けます。`add` は、足したものを外す関数を
+返します。
+
+使われている名前を渡すと、コード `already-exists` の `DrawError` が
+投げられます。無い名前を `remove` に渡すと `not-found` です。
+`addMany` と `removeMany` は、全部を行うか何も行わないかのどちらかです。
+
+## Plugin オブジェクト
+
+プラグインはふつうのオブジェクトです。`name` と `onAdd` が必須で、
+名前はインスタンスの中で一意にします。
+
+| メンバー | 用途 |
+| --- | --- |
+| `onAdd(ctx)` | 窓口を受け取ります。購読と拡張の追加はここで行います |
+| `onRemove()` | 窓口の外で持っているものを解放します |
+| `api` | `draw.extensions.plugins.getApi(name)` で読むもの |
+| `input` | モードより先に呼ばれる入力の受け手 |
+| `interaction` | 選択モードのフックと排他的な操作 |
+
+### API を渡す
+
+`api` を使うと、ページやほかのプラグインに関数を渡せます。`Plugin` の
+型引数でその形を書きます。
+
+```ts
+import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+
+interface CounterApi {
+  count(): number;
+}
+
+function createCounter(): Plugin<CounterApi> {
+  let created = 0;
   return {
-    name: 'logger',
-
-    onInstall(ctx: PluginContext) {
-      unsubscribe = [
-        ctx.on('feature.create', ({ feature }) => {
-          console.log('created', feature.id, feature.type);
-        }),
-        ctx.on('feature.update', ({ feature }) => {
-          console.log('updated', feature.id);
-        }),
-        ctx.on('feature.delete', ({ feature }) => {
-          console.log('deleted', feature.id);
-        }),
-      ];
-    },
-
-    onUninstall() {
-      for (const off of unsubscribe) off();
-      unsubscribe = [];
+    name: 'counter',
+    api: { count: () => created },
+    onAdd(ctx) {
+      ctx.on('feature.created', () => {
+        created += 1;
+      });
     },
   };
 }
 
-const draw = createMapLibreGLDraw(map);
-const removeLogger = draw.addPlugin(createLoggerPlugin());
+draw.extensions.plugins.add(createCounter());
+const counter = draw.extensions.plugins.getApi<CounterApi>('counter');
+console.log(counter?.count());
 ```
 
-地物を描くと、コンソールに `created` と出ます。`removeLogger()`
-を呼ぶとプラグインが外れ、`onUninstall` が実行されてログが
-止まります。
+両方のプラグインを自分で作るなら、一方をもう一方の工場関数に渡す方が
+簡単です。`getApi` は、名前しか知らないコードのためのものです。
 
-## Plugin オブジェクト
+## 窓口が渡すもの
 
-必須なのは `name` だけで、インスタンスの中で一意にする必要が
-あります。すでに登録されている名前のプラグインを登録しようと
-すると、警告を出して登録を飛ばします。そのときに返る関数は何も
-しません。
+`onAdd` は `PluginContext` を受け取ります。プラグインがインスタンスに
+触れる道はこれだけです。
 
-| メンバー | 用途 |
-| --- | --- |
-| `onInstall(ctx)` | 文脈を受け取ります。購読と登録はここで行います |
-| `onUninstall()` | `onInstall` で確保したものを解放します |
-| `hooks` | 変更が起きた後に反応します (後述) |
-| `modes` | プラグインと一緒に登録、削除されるモードです |
-| `api` | ほかのコードが `draw.getPluginApi(name)` で受け取るオブジェクトです |
+- `draw` は公開 API の全体です。プラグインは、アプリケーションと同じ
+  ようにこれを通して文書を読み書きします
+- `store` は、文書とこの端末の状態を読むための窓口です。`subscribe`
+  で、すべての変化を購読できます
+- `on`、`off`、`once` はイベントのためのものです。ここで行った購読は、
+  プラグインを外すと終わります
+- `extensions` は `draw.extensions` と同じコレクションです。ここで
+  足したものは、プラグインと一緒に外れます
+- `names` はインスタンスの自動の名前です。`names.next('Layer')` は、
+  オプション `autoName` のとおりに次の名前を返します
+  ([自動の名前](drawing.ja.md#自動の名前))
+- `screen` は、地図の位置と画面の点の変換、ズーム、ピクセル比と、
+  どの地物についても画面の上の広がり (`bounds`) と、形に合わせて
+  回した選択の枠の 4 つの角 (`outline`。枠を描くときの余白は含みません)
+  です
+- `terrain` は、このインスタンスの地形の上の位置と高さです
+  ([地形](terrain.ja.md))
+- `invalidate` は、文書の外の何かが見た目を変えたときに、地物を描き
+  直させます
+- `drawing` は `draw.drawing` と同じものです。地図からの入力と同じように
+  頂点を置き、プレビューを動かし、形を描き終えます (`addVertex`、
+  `moveTo`、`finish`)。最後の頂点を取り除き、また戻します
+  (`undoVertex`、`redoVertex`)。Escape と同じようにその形を取り消し、
+  モードは離れません (`cancel`)。描画モードが描いているかを答えます
+  (`isActive`、`isDrawing`)
+  ([描画と編集](drawing.ja.md#描画モードをコードから動かす))
 
-プラグインは入力の処理にも加われます。使えるのは次のものです。
-`onKeyDown` (true を返すと、モードより先にキーを消費します)、
-`onMouseMove`、`onDragMove`、`onMouseLeave`、`filterSelection`
-(選択の候補を絞ります)、`onFeatureClick` と
-`onFeatureDoubleClick` (処理したら true を返します)、
-`onFeatureCreated`、そして、インライン編集のような排他的な操作を
-プラグインが持つための 4 つのメンバー (`isInteracting`、
-`finishInteraction`、`cancelInteraction`、
-`getInteractionContainer`) です。
+### 文書に書く
 
-`api` を使うと、ホストやほかのプラグインに関数を公開できます。
-
-```ts
-const counter: Plugin = {
-  name: 'counter',
-  api: { count: () => draw.getAllFeatures().length },
-};
-draw.addPlugin(counter);
-
-const api = draw.getPluginApi<{ count(): number }>('counter');
-api?.count();
-```
-
-プラグインどうしをつなぐときは、なるべくコンストラクターで渡して
-ください。`getPluginApi` はそれができないときの手段です。
-
-## 文脈で使えるもの
-
-`onInstall` は `PluginContext` を受け取ります。プラグインが
-インスタンスを操作する手段は、この文脈だけです。
-
-- `draw` はインスタンスそのものです。公開 API と拡張点
-  (`registerMode`、`registerFeatureHandler`、
-  `addOverlayRenderer` など) に使います
-- 読み取りの API。`getFeature`、`getAllFeatures`、`getLayer`、
-  `getSelection`、`getMode` などがあります
-- 書き込みの API。`addFeatures`、`updateFeature`、
-  `deleteFeatures`、`createLayer`、`createGroup`、`setSelection`
-  などがあります。1 回の呼び出しが Store の 1 つのトランザク
-  ションになります。`batch(fn)` を使うと、複数の書き込みを 1 つ
-  にまとめられます
-- イベントの `on`、`off`、`emit`
-- `setMode`。モードが拒まれたときは false を返します
-- `getStore()`。書き込みのメソッドを含む Store そのものです。
-  文書を直接扱うプラグインが使います
-- `autoNameGenerator`。インスタンスの自動の名前付けです。利用者が
-  入力した名前を持たない地物、レイヤー、グループを作るプラグインは、
-  ここで名前を付けます (`generateName(type)`、`generateLayerName()`、
-  `generateGroupName()`)。こうすると、名前の語はホストの `autoName`
-  オプションから取られます ([自動の名前](drawing.ja.md#自動の名前))
-- `invalidateFeatures(type)`、`computeBoundingBox(feature)`、
-  地形のアンカー。独自の地物の型で使います
-  ([独自の型](custom-types.ja.md) を参照してください)
-
-文脈のイベントには、`draw.` の接頭辞を除いた名前を使います。
-`ctx.on('feature.create', ...)` は
-`draw.on('draw.feature.create', ...)` と同じイベントです。
-どちらも購読を解除する関数を返します。
-
-すべてのデータセットを相手にするプラグイン (その地物に
-自分で何かを描くものなど) は、`dataset.add` と `dataset.remove`
-でデータセットの追加と削除を追います。プラグインを入れた時点で
-すでにデータセットがあることもあるので、`onInstall` で
-`ctx.draw.getDatasets()` も一度読みます。データセット
-の順に描くプラグインは、後ろから前の順の id を持つ
-`dataset.reorder` も聞きます。
+プラグインは、アプリケーションと同じメソッドで書き込みます。いくつかの
+書き込みを 1 つの変化にするには `transact` で包みます。`source` を
+渡すと、受け手は変化の出どころを見分けられます。
 
 <!-- docs-check:
-declare const ctx: PluginContext;
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
+-->
+
+```ts
+ctx.draw.transact(
+  () => {
+    const layer = ctx.draw.layers.create({ name: ctx.names.next('Layer') });
+    if (layer) {
+      ctx.draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+        layerId: layer.id,
+      });
+    }
+  },
+  { source: 'my-plugin' },
+);
+```
+
+決まりはインスタンスと同じです。もう無い ID のような誤った引数は
+`DrawError` を投げます。読み取り専用やロックのために拒まれた書き込みは
+`null` か `false` を返します。どちらの場合も何も変わりません。変化の
+後に反応するプラグインは、対象がもう無いかもしれないので、先に `has`
+で確かめます。
+
+取り消しのように、自分の記録から変化を当て直すプラグインは、変化の後に
+ロックされた地物にも書き込む必要があります。そのときは `transact` に
+`ignoreLocks: true` を渡します。その中の書き込みは、地物、グループ、
+レイヤーのロックを無視します。読み取り専用は無視しません。また、
+利用者がロックされた地物を動かせないことは変わりません。
+
+<!-- docs-check:
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
+declare const id: string;
+-->
+
+```ts
+ctx.draw.transact(
+  () => ctx.draw.features.update(id, { properties: { name: 'Before' } }),
+  { source: 'my-plugin', ignoreLocks: true },
+);
+```
+
+### イベント
+
+プラグインは、`draw.on` と同じ名前のイベントで変化に反応します
+([イベント](../reference/events.md))。イベントは変化の後に届き、何が
+書き込んだかを問いません。API、描画モード、ドラッグ、Delete キー、
+読み込み、ほかのプラグイン、差し替えた Store のどれでも届きます。
+
+- `document.changed` は、文書を変えた取引ごとに 1 回、その取引で
+  変わったものの全部と `source` を持って届きます
+- `feature.updated` は、ドラッグの途中では `intermediate: true` を
+  持ちます。その後に必ず確定の更新が届きます
+- `drag.started` と `drag.ended` は、選択モードの移動、拡縮、回転、
+  頂点のドラッグの前後に届きます
+- 受け手は変化を止めることも書き換えることもできません。変化を起こさ
+  せたくないときは、地物かレイヤーをロックするか、描画を読み取り専用に
+  します ([読み取り専用](read-only.ja.md))
+
+すべてのデータセットを扱うプラグインは、`dataset.added` と
+`dataset.removed` で追いかけます。プラグインを足した時点でデータ
+セットがすでにあることもあるので、`onAdd` で `draw.datasets.list()`
+も読みます。
+
+<!-- docs-check:
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
 declare function follow(datasetId: string): void;
 declare function forget(datasetId: string): void;
 -->
 
 ```ts
-for (const dataset of ctx.draw.getDatasets()) follow(dataset.id);
-ctx.on('dataset.add', ({ datasetId }) => follow(datasetId));
-ctx.on('dataset.remove', ({ datasetId }) => forget(datasetId));
+for (const dataset of ctx.draw.datasets.list()) follow(dataset.id);
+ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
+ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 ```
 
-書き込みの API はどれも、最後の引数に省略可能な `source` を取り
-ます。これが変更通知の出どころになる (省くと `'local'`) ので、
-フックや `draw.features.change` で、誰が変更したかを見分けられ
-ます。
+## 入力
 
-<!-- docs-check:
-declare const ctx: PluginContext;
-declare const id: string;
--->
+`input` は、どのモードのときでも、モードより先にポインターとキーを
+受け取ります。受け手はモードと同じもの (`onPointerDown`、
+`onPointerMove`、`onClick`、`onDragStart`、`onKeyDown` など) で、true
+を返すとイベントを消費します。後から足したプラグインとモードには
+届きません。
 
-```ts
-ctx.deleteFeatures([id], 'remote');
-```
-
-もう存在しない id を指定した書き込みは無視されます。プラグイン
-は変更の後に反応することが多く、その時点で対象がすでに無いこと
-があるからです。Store が読み取り専用の間は、書き込みをしても
-何も変わらず、`addFeatures` は空の配列を返します。
-
-## フック
-
-`hooks` を使うと、Store を購読しなくても変更に反応できます。
+キーでモードを切り替えるプラグインです。
 
 ```ts
-const audit: Plugin = {
-  name: 'audit',
-  hooks: {
-    'feature:afterCreate': (features, ctx) => {
-      console.log('created', features.map((f) => f.id), ctx.source);
-    },
-    'feature:afterUpdate': (updated, original) => {
-      console.log('updated', updated.length, 'of', original.length);
-    },
-  },
-};
-```
+import type { Plugin, PluginContext } from '@sakuzu/maplibre-gl-draw';
 
-| フック | 引数 |
-| --- | --- |
-| `feature:afterCreate`、`feature:afterDelete` | 地物の配列、ctx |
-| `feature:afterUpdate` | 更新後、更新前、ctx |
-| `group:` と `layer:` の同じ 3 つ | 1 件 (と更新前) |
-| `selection:afterChange` | 新しい id、前の id、ctx |
-| `drag:start`、`drag:end` | `{ featureIds }`、ctx |
-
-- 変更のフックは、変更が起きた後に実行されます。どこからの
-  書き込みでも実行されます。公開 API、描画モード、ドラッグ、
-  Delete キー、読み込み、プラグイン、自分で渡した Store に適用
-  された変更のどれでも同じです
-- 1 つのトランザクションで実行されるフックは、同じ
-  `ctx.source` と `ctx.batchId` を受け取ります
-- ドラッグの途中の更新は知らせません。ドラッグを終えたときの
-  更新は知らせます
-- Store が拒んだ書き込み (読み取り専用のとき) では、フックは
-  実行されません
-- `drag:start` と `drag:end` は、選択モードでの移動、拡縮、
-  回転、頂点のドラッグ、半径のドラッグの前後に実行されます
-- 変更の前に実行されるフックはありません。フックで変更を止め
-  たり書き換えたりはできません
-
-## 独自のモード
-
-モードは、有効になっている間の入力を受け取ります。
-`draw.registerMode(name, factory)` で登録するか、プラグインの
-`modes` に書いて、プラグインと一緒に登録と削除が行われるように
-します。ファクトリーは `ModeHandler` を返し、`onStart` が
-`ModeContext` を受け取ります。
-
-```ts
-import type { ModeContext, ModeHandler } from '@sakuzu/maplibre-gl-draw';
-
-function createStampMode(): ModeHandler {
-  let ctx: ModeContext;
+function createShortcuts(): Plugin {
+  let ctx: PluginContext | null = null;
   return {
-    modeName: 'stamp',
-    writesFeatures: true,
-    onStart(context) {
+    name: 'shortcuts',
+    onAdd(context) {
       ctx = context;
     },
-    onClick(event) {
-      const layerId = ctx.getCurrentLayerId();
-      if (layerId === '') {
-        ctx.setMode('select');
-        return;
-      }
-      ctx.store.createFeature({
-        id: ctx.generateFeatureId(),
-        type: 'Point',
-        coordinates: [event.lngLat.lng, event.lngLat.lat],
-        layerId,
-        properties: {},
-        locked: false,
-        visible: true,
-      });
+    onRemove() {
+      ctx = null;
     },
-    onKeyDown(event) {
-      if (event.key === 'Escape') ctx.setMode('select');
+    input: {
+      onKeyDown(event) {
+        if (!ctx || event.modifiers.ctrl || event.modifiers.meta) return false;
+        if (event.key === 'p') return ctx.draw.setMode('draw_point');
+        if (event.key === 'l') return ctx.draw.setMode('draw_line');
+        return false;
+      },
     },
   };
 }
 
-draw.registerMode('stamp', createStampMode);
-draw.setMode('stamp');
+draw.extensions.plugins.add(createShortcuts());
 ```
 
-Escape を押すまで、クリックするたびに現在のレイヤーへ点が追加
-されます。
+- プラグインは、足した順に入力を受け取ります
+- 消費した押し下げは地図に届かないので、地図はパンしません。消費した
+  ダブルクリックで地図がズームすることもありません。`writes: true` の
+  モードがいまのモードのあいだは、どのダブルクリックでもズームしません
+- 消費したキーは地図に届きます。地図にも使わせたくないとき (矢印、
+  `+`、`-`) は、`event.original.preventDefault()` を呼びます
+- `onPointerLeave` は、ポインターが地図の外に出たときに届きます
 
-- `writesFeatures: true` にすると、組み込みの描画モードと同じ
-  ように、書き込めるレイヤーが無い間は `setMode` がそのモードを
-  拒みます
-- モードが有効な間に、レイヤーが書き込めなくなることがあります
-  (削除、ロック、非表示)。確定するときに `getCurrentLayerId()`
-  を読み直してください。空文字列なら地物を作らず、描きかけの形
-  を捨てて (`store.setTentative(null)`)、`select` に戻ります
-- `onDragCancel` は、押した指やボタンを離さないまま押下が終わった
-  とき (2 本目の指が触れた、タッチが取り消されたなど) に届き
-  ます。何も確定せず、押下で変えたものを元に戻し、
-  `map.dragPan` を止めていたなら有効に戻してください
-- ダブルクリックやキー (矢印、`+`、`-`) を地図の側でも処理させ
-  たくないときは、`onDoubleClick` か `onKeyDown` で
-  `event.originalEvent.preventDefault()` を呼びます
+## 選択モードのフック
 
-## 登録の取り消し
+`interaction` を使うと、プラグインが選択モードの動きに加われます。
 
-登録はどれも、その登録を取り消す関数を返します。対象は
-`addPlugin`、`registerMode`、`registerFeatureHandler`、
-`addOverlayRenderer`、`registerAuxiliaryHandleProvider`、
-`registerFeatureCompanionProvider`、`snapping.register` です。
-`remove...` という名前のメソッドはありません。
+- `filterSelection(candidateIds)` は、クリックや矩形で選ぶ前に
+  呼ばれ、選んでよい ID を返します
+- `onFeatureClick(feature, event)` は、選ばれている地物がもう一度
+  クリックされたときに呼ばれます。true を返すと、プラグインがその
+  クリックを処理したことになります
+- `onFeatureDoubleClick(feature, event)` は、地物がダブルクリック
+  されたときに、その地物を選んだ後で呼ばれます
+- `onDrawCommit(feature)` は、描画モードが地物を作ったときに呼ばれ
+  ます。`ctx.commitFeature` の確定 (組み込みの描画モードもこれを使い
+  ます) と、`image.requested` の後の読み込みが置いた画像です
 
-- プラグインの登録を取り消すと、その `modes` のモードが削除され
-  (そのどれかが有効なら、先に `select` に切り替わります)、
-  `onUninstall` が実行されます
-- 有効になっているモードを削除すると、先に `select` に切り替わり
-  ます
-- 同じ名前や型がその後で登録し直されている場合、前の取り消しの
-  関数を呼んでも、後の登録はそのまま残ります
-- 登録は、登録したインスタンスだけのものです。同じページにある
-  別の draw のインスタンスからは見えません
-- `destroy()` は、すべてのプラグインの登録を取り消し
-  (`onUninstall` が実行されます)、インスタンスのすべての登録を
-  消します。破棄したインスタンスへの登録は無視され、何もしない
-  関数が返ります
+一部の地物を選択から外す絞り込みです。
+
+```ts
+import type { Plugin, PluginContext } from '@sakuzu/maplibre-gl-draw';
+
+function createBackgroundFilter(): Plugin {
+  let ctx: PluginContext | null = null;
+  return {
+    name: 'background',
+    onAdd(context) {
+      ctx = context;
+    },
+    interaction: {
+      filterSelection(candidateIds) {
+        return candidateIds.filter(
+          (id) => ctx?.draw.features.get(id)?.properties.background !== true,
+        );
+      },
+    },
+  };
+}
+```
+
+### 排他的な操作
+
+プラグインは、地図の上に出す入力欄のような、地物に対する自分の操作を
+持てます。`isBusy()` が true を返す間、選択モードは動きません。
+ドラッグも選択もせず、Escape 以外のキーを無視します。
+
+- `container()` が返す要素の中の押し下げはプラグインに任され、地図は
+  パンしません
+- その要素の外をクリックすると `finish()` が呼ばれます
+- Escape で `cancel()` が呼ばれます
+- 選択モードを出ると `finish()` が呼ばれます
+
+## モード
+
+モードは、有効な間の入力を受け取ります。
+`draw.extensions.modes.add(name, factory)` で足すか、プラグインと一緒
+に外れるように `ctx.extensions.modes.add` で足し、`draw.setMode(name)`
+で切り替えます。
+
+工場関数は `ModeContext` を受け取り、`ModeHandler` を返します。工場
+関数はモードに入るたびに呼ばれるので、クロージャーに持つ状態は毎回
+新しく始まります。モードが窓口を通して行った購読は、モードを出ると
+終わります。
+
+2 回のクリックで長方形を描くモードです。
+
+```ts
+import type { FeatureInput, ModeFactory, Position } from '@sakuzu/maplibre-gl-draw';
+
+function rectangle(a: Position, b: Position): FeatureInput {
+  return {
+    type: 'Polygon',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[a, [b[0], a[1]], b, [a[0], b[1]], a]],
+    },
+  };
+}
+
+const drawRectangle: ModeFactory = (ctx) => {
+  let first: Position | null = null;
+  const reset = () => {
+    first = null;
+    ctx.preview.clear();
+  };
+
+  return {
+    writes: true,
+    onEnter: () => ctx.cursor.set('crosshair'),
+    onExit() {
+      ctx.cursor.reset();
+      reset();
+    },
+    onCancel: reset,
+    onPointerMove(event) {
+      if (first) ctx.preview.set(rectangle(first, event.snapped.lngLat));
+    },
+    onClick(event) {
+      if (!first) {
+        first = event.snapped.lngLat;
+        return true;
+      }
+      const feature = ctx.commitFeature(rectangle(first, event.snapped.lngLat));
+      reset();
+      if (feature) ctx.draw.selection.set('feature', [feature.id]);
+      return true;
+    },
+    // 素早い 2 回のクリックは 2 つの角で、地図はズームしない
+    onDoubleClick: () => true,
+    onKeyDown(event) {
+      if (event.key !== 'Escape') return false;
+      if (first) reset();
+      else ctx.setMode('select');
+      return true;
+    },
+  };
+};
+
+draw.extensions.modes.add('draw_rectangle', drawRectangle);
+draw.setMode('draw_rectangle');
+```
+
+1 回目のクリックで角を置き、ポインターに合わせて長方形が見え、2 回目の
+クリックで作ります。Escape で描いている長方形を捨て、もう一度 Escape を
+押すと `select` に戻ります。
+
+### ハンドラー
+
+`ModeHandler` のメンバーはすべて省けます。
+
+| メンバー | 用途 |
+| --- | --- |
+| `onEnter`、`onExit` | モードに入るときと出るとき |
+| `onCancel` | 描いているものを捨ててモードに留まる |
+| 入力の受け手 | `input` と同じです。true でイベントを消費します |
+| `writes` | 新しい地物を受けるレイヤーがあるときだけ入れます |
+| `snapPreference` | どの入力を吸着させ、何を優先するか |
+| `onUndoVertex`、`onRedoVertex` | 最後の頂点を取り除き、また戻す |
+
+`onCancel` は、プラグインもモードも消費しなかった Escape と、Store が
+文書の全部を置き換えたとき (`reset: true` の通知) に呼ばれます。
+モードは描いていたものを捨て、今のモードのまま留まります。
+
+### 窓口が足すもの
+
+`ModeContext` は、プラグインの窓口のうち `extensions` 以外をすべて
+持ち、モードに要るものを足します。
+
+- `commitFeature(input)` は、組み込みのモードと同じように地物を作り
+  ます。受けられるレイヤーに入れ、新しい ID、自動の名前、基準の
+  ズームを付けます。書き込みが拒まれると `null` を返します
+- `preview.set(feature, options)` は描いている途中の形を見せ、
+  `preview.clear()` は隠します。`confirmedVertices` は、その頂点まで
+  の線を実線に、残りを破線にします。`highlightVertex` は、面を閉じる
+  最初の頂点のような頂点を目立たせます
+- `hitTest(point)` は画面の点にある一番手前の地物かデータセットの行を
+  返し、`snap(point)` はその点が吸着する先を返します
+- `cursor.set(cursor)` と `cursor.reset()` は地図のカーソルを変えます。
+  `reset` はモードが `onEnter` で決めたカーソルに戻し、モードが決めた
+  カーソルはモードを出るときに外れます
+- `writableLayer()` は新しい地物が入るレイヤーを返します。受けられる
+  レイヤーが無ければ `null` です
+- `listTraceRows(bbox)` は、形がなぞれるデータセットの行を返します
+- `setMode(mode)` はモードを変え、`selectionStyle` は選択の見た目を
+  返します
+
+モードが有効な間に、レイヤーが地物を受けられなくなることがあります。
+削除、ロック、非表示のときです。そのとき `commitFeature` は描いている
+途中の形を捨てて `select` に戻り、`null` を返します。
+
+### 吸着
+
+ポインターのイベントは 2 つの位置を持ちます。`lngLat` はポインターの
+ある位置で、`snapped.lngLat` は吸着した先です。頂点になる位置には `snapped` を使います。
+`snapPreference` で吸着を絞れます。
+
+- `unsnapped` には、位置を吸着させない受け手の名前を並べます。ドラッグ
+  で引く線は `onDrag` を外します。こうすると内側の点はポインターに
+  付いていき、両端は吸着します
+- `prefer` には、同じ距離に候補があるときに優先する地物を書きます。
+  なぞり始めた境界などです
+
+描いている途中で好みが変わるモードは、`snapPreference` をゲッターで
+書きます。入力のたびに読まれます。
+
+### ドラッグ
+
+ドラッグで描くモードは、ポインターが下りたときに地図のパンを止め、
+ドラッグが終わったら戻します。
+
+- `onPointerDown` で `ctx.draw.getMap().dragPan.disable()` を呼び、
+  `onDragStart`、`onDrag`、`onDragEnd` で描きます
+- `onDragCancel` は、離さずに押し下げが終わったとき (2 本目の指、
+  取り消されたタッチ) に届きます。何も作らず、押し下げで始めたものを
+  捨てます
+- パンは `onDragEnd`、`onDragCancel`、`onExit` で戻します
+
+## 拡張を外す
+
+`add` が返す関数は足したものを外します。2 回目以降に呼んでも何も
+起きません。`remove(name)` は同じことを名前で行います。
+
+- プラグインを外すと、まず `onRemove` が呼ばれ、次に
+  `ctx.extensions` で足したものが外れ、購読が終わります
+- 有効なモードを外すと、先に `select` に入ります
+- 組み込みのモードと地物の型の名前は使われているので、`add` はそれら
+  に `already-exists` を投げます
+- 拡張は、足したインスタンスに属します。ページにあるほかの draw の
+  インスタンスからは見えません
+- `draw.destroy()` は、先にプラグインを外し、それからほかの拡張を
+  すべて外します
 
 ## 関連する例
 
-- [examples/plugin/](../../examples/plugin/) では、フック
-  を持つロガーのプラグインと独自のモードを登録し、また取り消し
-  ます
+- [examples/plugin/](../../examples/plugin/) では、独自のモード、
+  イベント、API を持つプラグインを足し、また外します
 
 ## リファレンス
 
-- [Plugin](../api/maplibre-gl-draw/interfaces/Plugin.md)
-- [PluginContext](../api/maplibre-gl-draw/interfaces/PluginContext.md)
-- [Hooks](../api/maplibre-gl-draw/interfaces/Hooks.md) と
-  [MutationContext](../api/maplibre-gl-draw/interfaces/MutationContext.md)
-- [ModeHandler](../api/maplibre-gl-draw/interfaces/ModeHandler.md) と
+- [Plugin](../api/maplibre-gl-draw/interfaces/Plugin.md) と
+  [PluginContext](../api/maplibre-gl-draw/interfaces/PluginContext.md)
+- [ExtensionContext](../api/maplibre-gl-draw/interfaces/ExtensionContext.md)
+- [ExtensionsCollections](../api/maplibre-gl-draw/interfaces/ExtensionsCollections.md)
+  と [PluginsCollection](../api/maplibre-gl-draw/interfaces/PluginsCollection.md)
+- [ModeFactory](../api/maplibre-gl-draw/type-aliases/ModeFactory.md)、
+  [ModeHandler](../api/maplibre-gl-draw/interfaces/ModeHandler.md)、
   [ModeContext](../api/maplibre-gl-draw/interfaces/ModeContext.md)
-- 文脈のイベントの名前については
-  [EventMap](../api/maplibre-gl-draw/interfaces/EventMap.md)
+- [InputHandlers](../api/maplibre-gl-draw/interfaces/InputHandlers.md)、
+  [DrawPointerEvent](../api/maplibre-gl-draw/interfaces/DrawPointerEvent.md)、
+  [DrawKeyEvent](../api/maplibre-gl-draw/interfaces/DrawKeyEvent.md)
+- [SnapPreference](../api/maplibre-gl-draw/interfaces/SnapPreference.md)
+- イベントの名前は [DrawEvents](../api/maplibre-gl-draw/interfaces/DrawEvents.md)

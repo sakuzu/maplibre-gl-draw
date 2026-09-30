@@ -26,11 +26,13 @@ function point(id: string, lng: number, lat: number): Feature {
   return {
     id,
     type: 'Point',
-    coordinates: [lng, lat],
+    geometry: { type: 'Point', coordinates: [lng, lat] },
     layerId: 'l1',
+    groupId: undefined,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 

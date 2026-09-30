@@ -11,6 +11,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { FeatureCoordinates } from '../../shared/types/model.js';
+import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
@@ -59,13 +61,32 @@ function mercatorCamera(center: Coordinate, zoom: number, bearing: number): Came
   };
 }
 
-function feature(id: string, type: Feature['type'], coordinates: Feature['coordinates']): Feature {
-  return { id, type, coordinates, layerId: 'l1', properties: {}, locked: false, visible: true };
+function feature(id: string, type: Feature['type'], coordinates: FeatureCoordinates): Feature {
+  return {
+    id,
+    type,
+    geometry: geometryFromCoordinates(type, coordinates),
+    layerId: 'l1',
+    groupId: undefined,
+    properties: {},
+    locked: false,
+    visible: true,
+    style: {},
+  };
 }
 
 function serviceWith(features: Feature[]): HitTestServiceImpl {
   const store = new MemoryStore();
-  store.createLayer({ id: 'l1', name: 'l1', visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   const index = new RBushSpatialIndex();
   for (const f of features) {
     store.createFeature(f);
@@ -79,7 +100,7 @@ function hitsAtOffset(make: (camera: Camera) => Feature, camera: Camera, offsetP
   const f = make(camera);
   const service = serviceWith([f]);
   const anchor = camera.project(
-    f.type === 'Point' ? (f.coordinates as Coordinate) : (f.coordinates as Coordinate[])[0],
+    f.type === 'Point' ? (coordinatesOf(f) as Coordinate) : (coordinatesOf(f) as Coordinate[])[0],
   );
   const click = { x: anchor.x + offsetPx, y: anchor.y };
   return service.hitTestAll(click, camera.unproject, [f]).length > 0;

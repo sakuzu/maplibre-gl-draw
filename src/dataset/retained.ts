@@ -24,13 +24,14 @@
  *
  * A build has two phases, both advanced by the time budget of the frame: the dataset, which
  * walks the rows of the chunk and resolves their styles into the intermediate data (a
- * `ChunkCollector`; the features of an array go through `collectFeatures`, a columnar table
- * through `columnar/collect.ts`), and the building of the GPU resources from it.
+ * `ChunkCollector`; the features of an array go through `collectFeatures`, a table through
+ * `table-source.ts`), and the building of the GPU resources from it.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
 import { generateCirclePolygon } from '../shared/math/index.js';
 import type { Coordinate, Feature } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../shared/utils/property.js';
 import { toLineBatchItem, toPointInstanceData } from '../view/renderers/batch-manager.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../view/renderers/draw-factors.js';
@@ -267,7 +268,7 @@ function grow<T extends Float64Array | Int32Array>(array: T, length: number): T 
  * Intermediate data accumulated while building
  *
  * A collector fills either the arrays of objects (the features of an array) or the packed
- * builders (a columnar table); the building reads both.
+ * builders (a table); the building reads both.
  *
  * @internal
  */
@@ -944,7 +945,7 @@ export function collectFeature(
     case 'Point':
       collectPoint(
         feature,
-        feature.coordinates as Coordinate,
+        coordinatesOf(feature) as Coordinate,
         draft,
         styles,
         isExternallyRenderedPoint,
@@ -953,24 +954,31 @@ export function collectFeature(
     case 'MultiPoint':
       // Whether the predicate applies to Point alone is up to the predicate itself (the test is
       // in one place)
-      for (const coord of feature.coordinates as Coordinate[]) {
+      for (const coord of coordinatesOf(feature) as Coordinate[]) {
         collectPoint(feature, coord, draft, styles, isExternallyRenderedPoint);
       }
       return;
     case 'LineString':
     case 'Freehand':
-      collectLine(feature, feature.coordinates as Coordinate[], draft, styles, skipSolid);
+      collectLine(feature, coordinatesOf(feature) as Coordinate[], draft, styles, skipSolid);
       return;
     case 'MultiLineString':
-      for (const coords of feature.coordinates as Coordinate[][]) {
+      for (const coords of coordinatesOf(feature) as Coordinate[][]) {
         collectLine(feature, coords, draft, styles, skipSolid);
       }
       return;
     case 'Polygon':
-      collectPolygon(feature, feature.coordinates as Coordinate[][], draft, styles, 0, skipSolid);
+      collectPolygon(
+        feature,
+        coordinatesOf(feature) as Coordinate[][],
+        draft,
+        styles,
+        0,
+        skipSolid,
+      );
       return;
     case 'MultiPolygon': {
-      const parts = feature.coordinates as Coordinate[][][];
+      const parts = coordinatesOf(feature) as Coordinate[][][];
       for (let i = 0; i < parts.length; i++) {
         collectPolygon(feature, parts[i], draft, styles, i, skipSolid);
       }
@@ -979,7 +987,7 @@ export function collectFeature(
     case 'Circle': {
       const radiusMeters = getCircleRadius(feature);
       if (!radiusMeters || radiusMeters <= 0) return;
-      const center = feature.coordinates as Coordinate;
+      const center = coordinatesOf(feature) as Coordinate;
       collectPolygon(feature, [generateCirclePolygon(center, radiusMeters)], draft, styles);
       return;
     }

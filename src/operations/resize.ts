@@ -9,11 +9,12 @@
  * draw instance are passed in as an argument ({@link ResizeExtensions}).
  */
 
-import type { CustomResizeResult } from '../extension/index.js';
+import type { TypeResizeResult } from '../extension/index.js';
 import type { HandleType } from '../shared/config/constants.js';
 import { fromPlane, toPlane } from '../shared/math/mercator-plane.js';
+import { getDrawProperty, hasDrawProperty } from '../shared/properties.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
-import { mapCoordinatesDeep } from '../shared/utils/coordinates.js';
+import { coordinatesOf, mapCoordinatesDeep } from '../shared/utils/coordinates.js';
 import { getCircleRadius, getImageProperties } from '../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../store/types.js';
 
@@ -25,7 +26,7 @@ export type ResizeCalculator = (
   state: ResizeState,
   currentLngLat: { lng: number; lat: number },
   feature: Feature,
-) => CustomResizeResult | null;
+) => TypeResizeResult | null;
 
 /**
  * The extension points the resize reads from the draw instance
@@ -61,7 +62,7 @@ function hasScaleProperty(feature: Feature, extensions?: ResizeExtensions): bool
   return (
     feature.properties !== null &&
     typeof feature.properties === 'object' &&
-    'scale' in feature.properties
+    hasDrawProperty(feature.properties, 'scale')
   );
 }
 
@@ -73,8 +74,7 @@ function getFeatureScale(feature: Feature): number {
     const props = getImageProperties(feature);
     return props.scale ?? 1;
   }
-  const props = feature.properties as Record<string, unknown>;
-  return typeof props.scale === 'number' ? props.scale : 1;
+  return getDrawProperty(feature, 'scale') ?? 1;
 }
 
 /**
@@ -347,7 +347,7 @@ export function startResize(
   const initialHeight = new Map<string, number>();
 
   for (const feature of features) {
-    initialCoordinates.set(feature.id, JSON.parse(JSON.stringify(feature.coordinates)));
+    initialCoordinates.set(feature.id, JSON.parse(JSON.stringify(coordinatesOf(feature))));
 
     // For a feature that has a scale property, store the initial scale
     if (hasScaleProperty(feature, extensions)) {

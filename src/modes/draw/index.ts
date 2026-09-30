@@ -5,9 +5,9 @@
  * Draw Modes module
  */
 
-export { DrawCircleMode } from './circle.js';
-export { DrawFreehandMode } from './freehand.js';
+export { drawCircleMode } from './circle.js';
+export { drawFreehandMode } from './freehand.js';
 export { DrawImageMode } from './image.js';
-export { DrawLineMode } from './line.js';
-export { DrawPointMode } from './point.js';
-export { DrawPolygonMode } from './polygon.js';
+export { drawLineMode } from './line.js';
+export { drawPointMode } from './point.js';
+export { drawPolygonMode } from './polygon.js';

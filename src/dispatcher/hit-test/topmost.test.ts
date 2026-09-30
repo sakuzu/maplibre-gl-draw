@@ -15,6 +15,7 @@ import { createDatasetManager, type DatasetManager } from '../../dataset/manager
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import { toRow } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
   createFeatureCompanionRegistry,
@@ -39,21 +40,26 @@ const unproject = (p: { x: number; y: number }): { lng: number; lat: number } =>
 /** A square polygon that contains the center (5,5) */
 function polygon(id: string, layerId: string): Feature {
   return {
+    groupId: undefined,
     id,
     type: 'Polygon',
-    coordinates: [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-        [0, 0],
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
       ],
-    ],
+    },
     layerId,
     properties: {},
     locked: false,
     visible: true,
+    style: {},
   };
 }
 
@@ -79,7 +85,16 @@ beforeEach(() => {
 });
 
 function createLayer(id: string): void {
-  store.createLayer({ id, name: id, visible: true, locked: false, opacity: 1, order: [] });
+  store.createLayer({
+    id,
+    name: id,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
 }
 
 function createFeature(feature: Feature): void {
@@ -88,14 +103,14 @@ function createFeature(feature: Feature): void {
 }
 
 /** A dataset (it holds one point at the same position as the center) */
-function addDataset(
+function putDataset(
   id: string,
   order: 'below-store' | 'above-store' | 'layer-order',
   interactive = true,
 ): ReturnType<DatasetManager['add']> {
   return manager.add({
     id,
-    features: [{ id: `${id}-f`, type: 'Point', coordinates: CENTER_COORD }],
+    rows: [toRow({ id: `${id}-f`, type: 'Point', coordinates: CENTER_COORD })],
     interactive,
     order,
   });
@@ -129,7 +144,7 @@ describe('the order of the unified z traversal', () => {
   });
 
   it('places an above-store dataset in front of every layer', () => {
-    addDataset('above', 'above-store');
+    putDataset('above', 'above-store');
 
     const top = createTester()(CENTER);
 
@@ -138,7 +153,7 @@ describe('the order of the unified z traversal', () => {
   });
 
   it('places a below-store dataset behind every layer', () => {
-    addDataset('below', 'below-store');
+    putDataset('below', 'below-store');
 
     expect(createTester()(CENTER)?.kind).toBe('store');
   });
@@ -146,7 +161,7 @@ describe('the order of the unified z traversal', () => {
   it('a dataset inserted into the order wins or loses by its position in it', () => {
     createLayer('l2');
     createFeature(polygon('f2', 'l2'));
-    addDataset('middle', 'layer-order');
+    putDataset('middle', 'layer-order');
 
     // l1 -> middle -> l2: the frontmost one is the feature of l2
     store.setLayerOrder(['l1', 'middle', 'l2']);
@@ -160,13 +175,13 @@ describe('the order of the unified z traversal', () => {
   });
 
   it('does not let a layer-order dataset that is not in the order occlude anything', () => {
-    addDataset('orphan', 'layer-order');
+    putDataset('orphan', 'layer-order');
 
     expect(createTester()(CENTER)?.kind).toBe('store');
   });
 
   it('skips an unknown ID in the order', () => {
-    addDataset('middle', 'layer-order');
+    putDataset('middle', 'layer-order');
     store.setLayerOrder(['l1', 'unknown-entry', 'middle']);
 
     const top = createTester()(CENTER);
@@ -176,14 +191,14 @@ describe('the order of the unified z traversal', () => {
   });
 
   it('does not let a hidden dataset occlude anything', () => {
-    const dataset = addDataset('above', 'above-store');
+    const dataset = putDataset('above', 'above-store');
     dataset.setVisible(false);
 
     expect(createTester()(CENTER)?.kind).toBe('store');
   });
 
   it('returns null when nothing is hit', () => {
-    addDataset('above', 'above-store');
+    putDataset('above', 'above-store');
 
     expect(createTester()({ x: 5000, y: -5000 })).toBeNull();
   });
@@ -196,7 +211,7 @@ describe('the meaning of interactive', () => {
   });
 
   it('lets a dataset with interactive: false occlude too (feature is null)', () => {
-    addDataset('above', 'above-store', false);
+    putDataset('above', 'above-store', false);
 
     const top = createTester()(CENTER);
 
@@ -208,8 +223,8 @@ describe('the meaning of interactive', () => {
   });
 
   it('does not descend to the dataset behind even with interactive: false', () => {
-    addDataset('below', 'below-store');
-    addDataset('above', 'above-store', false);
+    putDataset('below', 'below-store');
+    putDataset('above', 'above-store', false);
 
     const top = createTester()(CENTER);
     expect(top?.kind === 'dataset' && top.dataset.id).toBe('above');
@@ -240,7 +255,7 @@ describe('the short circuit when there is no dataset', () => {
   it('returns to the short circuit when a dataset is hidden', () => {
     createLayer('l1');
     createFeature(polygon('f1', 'l1'));
-    const dataset = addDataset('above', 'above-store');
+    const dataset = putDataset('above', 'above-store');
     const getLayerOrder = vi.spyOn(store, 'getLayerOrder');
 
     dataset.setVisible(false);
@@ -255,7 +270,7 @@ describe('passing orderedFeatures in', () => {
   it('uses the list that was passed in as it is (it does not fetch from the Store again)', () => {
     createLayer('l1');
     createFeature(polygon('f1', 'l1'));
-    addDataset('below', 'below-store');
+    putDataset('below', 'below-store');
 
     const orderedFeatures = [store.getFeature('f1') as Feature];
     const top = createTester()(CENTER, { orderedFeatures });
@@ -269,21 +284,26 @@ describe('the z order and the consumption of the companions (feature companion)'
    * fails) */
   function awayPolygon(id: string, layerId: string): Feature {
     return {
+      groupId: undefined,
       id,
       type: 'Polygon',
-      coordinates: [
-        [
-          [100, 100],
-          [110, 100],
-          [110, 110],
-          [100, 110],
-          [100, 100],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [100, 100],
+            [110, 100],
+            [110, 110],
+            [100, 110],
+            [100, 100],
+          ],
         ],
-      ],
+      },
       layerId,
       properties: {},
       locked: false,
       visible: true,
+      style: {},
     };
   }
 
@@ -362,7 +382,7 @@ describe('the z order and the consumption of the companions (feature companion)'
   it('picks them up in the same order on the path with datasets (stacking order)', () => {
     createLayer('l1');
     createFeature(awayPolygon('f1', 'l1'));
-    addDataset('below', 'below-store');
+    putDataset('below', 'below-store');
     registerCompanion(['f1']);
 
     expect(createTester()(CENTER)?.kind).toBe('companion');
@@ -371,7 +391,7 @@ describe('the z order and the consumption of the companions (feature companion)'
   it('lets a dataset in front win over the companions', () => {
     createLayer('l1');
     createFeature(awayPolygon('f1', 'l1'));
-    addDataset('above', 'above-store');
+    putDataset('above', 'above-store');
     registerCompanion(['f1']);
 
     expect(createTester()(CENTER)?.kind).toBe('dataset');
@@ -384,7 +404,9 @@ describe('the z order and the consumption of the companions (feature companion)'
       visible: false,
       locked: false,
       opacity: 1,
-      order: [],
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
     createFeature(awayPolygon('f1', 'l1'));
     const hitTest = vi.fn(() => ({ id: 'c1' }));
