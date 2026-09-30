@@ -93,8 +93,10 @@ draw.options.update({
 その形が変わるたびに `preview.changed` が届き、形が作られたとき、
 捨てられたとき、モードを離れたときには `feature: null` で 1 回届きます。
 間引きはしないので、重い処理をするリスナーは自分で次のフレームまで
-待ってください。描いている途中の長さを表示したり、形をほかの利用者と
-共有したりするのに使います。
+待ってください。`feature` のほかに、モードが渡したときは
+`confirmedVertices` (始めから何個の頂点が置かれたか) と
+`highlightVertex` (強調して描く頂点) も届きます。描いている途中の長さを
+表示したり、形をほかの利用者と共有したりするのに使います。
 
 ```ts
 import { length } from '@sakuzu/maplibre-gl-draw/geometry';

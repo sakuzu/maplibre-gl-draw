@@ -157,12 +157,27 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
     // The shape being drawn, once per notification that set or cleared it
     const tentative = changes.tentative;
     if (tentative && (tentative.state !== null || tentative.previous !== null)) {
-      hub.emit('preview.changed', { feature: toPreviewFeature(tentative.state) });
+      hub.emit('preview.changed', toPreviewPayload(tentative.state));
     }
 
     const change = toDocumentChange(changes);
     if (change) hub.emit('document.changed', change);
   });
+}
+
+/**
+ * The payload of `preview.changed`: the shape being drawn, with the options `preview.set` was
+ * given (each left out when it was not given, both when the shape is cleared)
+ *
+ * @internal
+ */
+export function toPreviewPayload(state: TentativeState | null): DrawEvents['preview.changed'] {
+  const payload: DrawEvents['preview.changed'] = { feature: toPreviewFeature(state) };
+  if (state?.confirmedCount !== undefined) payload.confirmedVertices = state.confirmedCount;
+  if (state?.highlightedVertexIndex !== undefined) {
+    payload.highlightVertex = state.highlightedVertexIndex;
+  }
+  return payload;
 }
 
 /**

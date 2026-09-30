@@ -110,7 +110,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   read-only and the locks of a feature, its group and its layer.
 - The events `feature.moved`, `document.loaded`,
   `vertexSelection.changed`, `drag.started`, `drag.ended` and
-  `preview.changed`, which carries the shape being drawn.
+  `preview.changed`, which carries the shape being drawn and the
+  `confirmedVertices` and `highlightVertex` it was shown with.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
 - `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,

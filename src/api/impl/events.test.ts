@@ -600,6 +600,52 @@ describe('preview.changed', () => {
     expect(shapes()).toHaveLength(before + 1);
   });
 
+  it('carries the options the shape was shown with, and none when it is cleared', () => {
+    local.extensions.modes.add('custom', (ctx) => ({
+      onClick(event) {
+        ctx.preview.set(
+          {
+            type: 'LineString',
+            geometry: { type: 'LineString', coordinates: [[0, 0], event.lngLat] },
+          },
+          { confirmedVertices: 1, highlightVertex: 0 },
+        );
+        return true;
+      },
+      onPointerMove(event) {
+        ctx.preview.set({
+          type: 'LineString',
+          geometry: { type: 'LineString', coordinates: [[0, 0], event.lngLat] },
+        });
+        return true;
+      },
+      onKeyDown() {
+        ctx.preview.clear();
+        return true;
+      },
+    }));
+    local.setMode('custom');
+    const input = createSyntheticInput(engine);
+    input.click([1, 1]);
+    input.move([2, 2]);
+    input.key('x');
+    // The click moves the pointer first
+    const changes = payloadsOf(signals, 'preview.changed').slice(-3);
+    expect(changes[0]).toMatchObject({ confirmedVertices: 1, highlightVertex: 0 });
+    expect(changes[0].feature?.type).toBe('LineString');
+    expect(Object.keys(changes[1]).sort()).toEqual(['feature']);
+    expect(changes[2]).toEqual({ feature: null });
+  });
+
+  it('carries the placed vertices of a built-in line', () => {
+    local.setMode('draw_line');
+    const input = createSyntheticInput(engine);
+    input.click([0, 0]);
+    input.move([0.5, 0.5]);
+    const changes = payloadsOf(signals, 'preview.changed');
+    expect(changes[changes.length - 1]?.confirmedVertices).toBe(1);
+  });
+
   it('carries the radius of a circle', () => {
     local.setMode('draw_circle');
     const input = createSyntheticInput(engine);
