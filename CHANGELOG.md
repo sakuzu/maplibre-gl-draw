@@ -92,6 +92,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   `table`. Its members use the word row, and it has its own events,
   `clicked`, `hovered` and `changed`.
 - The native format is 3.0.0. A file of 2.x is upgraded on load.
+- Every load, of any format, is one transaction with the source `load`
+  once the source is read: a document of the library is no longer
+  loaded with `silent`, nor an image with `local`.
 - The GeoJSON export writes the `properties` of a feature as they are
   stored, with their prefix.
 
@@ -112,6 +115,9 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   `vertexSelection.changed`, `drag.started`, `drag.ended` and
   `preview.changed`, which carries the shape being drawn and the
   `confirmedVertices` and `highlightVertex` it was shown with.
+- `document.loadMany`, which reads several sources and writes all of
+  them in one transaction: one `document.changed` for an import of
+  several files.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
 - `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,
@@ -261,7 +267,7 @@ out on both sides.
 | `deleteVertices` | `vertexSelection.delete()` | The selected ones |
 | `getMetadata` | `metadata.get()` | |
 | `setMetadata` | `metadata.update` | Returns the `Metadata` |
-| `load` | `document.load` | `null` when read-only |
+| `load` | `document.load`, `loadMany` | `null` when read-only |
 | `export('native')` | `document.toJSON()` | An object, not a string |
 | `export('geojson')` | `document.toGeoJSON()` | An object, not a string |
 | `getSuggestedFileName` | (removed) | The app names its files |

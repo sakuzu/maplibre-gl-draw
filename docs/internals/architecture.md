@@ -334,8 +334,10 @@ optional category per kind of change:
 `UpdateSource` is `'local'`, `'silent'`, `'load'`, `'batch'`, `'remote'`,
 `'import'` or any other string an extension chooses. `silent` marks a bulk
 change that should not be recorded (clearing the selection when a drawing
-mode starts); `load` labels a GeoJSON load, recorded as one unit (it is one
-transaction, the replacement of `mode: 'replace'` included); `batch` labels
+mode starts); `load` labels a load of any format, or of several sources
+with `loadMany`, recorded as one unit (it is one transaction written after
+every source is read, the replacement of `mode: 'replace'` included);
+`batch` labels
 a bulk change of a host or an extension recorded as one unit; `remote`
 marks a change a replaced Store applied from outside the instance. The
 source is only a label: it never changes which events are emitted or how

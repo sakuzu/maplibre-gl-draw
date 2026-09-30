@@ -13,9 +13,10 @@ import { DrawError } from '../errors.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
 import { isGeoJSONFeatureCollection, isNativeFormat } from './import-export/format-detection.js';
 import { exportGeoJSON } from './import-export/geojson-export.js';
-import { loadGeoJSON } from './import-export/geojson-import.js';
-import { loadImage } from './import-export/image-import.js';
-import { exportNative, loadNative } from './import-export/native-format.js';
+import { prepareGeoJSON } from './import-export/geojson-import.js';
+import { prepareImage } from './import-export/image-import.js';
+import { exportNative, prepareNative } from './import-export/native-format.js';
+import type { PreparedLoad } from './import-export/types.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, isRecord, notFound } from './shared.js';
 
@@ -32,12 +33,8 @@ const GEOMETRY_TYPES: ReadonlySet<string> = new Set([
 /** A source after the files and the strings are read */
 type ReadSource = { kind: 'data'; data: unknown } | { kind: 'image'; file: File };
 
-/** The source of the writes of a load of each format, as its notification carries it */
-const LOAD_SOURCES: Readonly<Record<LoadResult['format'], string>> = {
-  native: 'silent',
-  geojson: 'load',
-  image: 'local',
-};
+/** The source of the writes of a load, of every format, as its notification carries it */
+const LOAD_SOURCE = 'load';
 
 /**
  * Creates `draw.document`
@@ -52,27 +49,56 @@ export function createDocument(
 ): DocumentResource {
   const { store } = deps;
 
-  const load = async (source: LoadSource, options: LoadOptions = {}) => {
-    let result: LoadResult | null;
+  /** Reads a source, or null when the document is read-only; every failure is a DrawError */
+  const prepare = async (source: LoadSource, options?: LoadOptions) => {
     try {
-      result = await read(source, options);
+      return await read(source, options);
     } catch (error) {
       // Whatever went wrong, the promise rejects with a DrawError
       throw asDrawError('invalid-input', error);
     }
-    if (result) onLoaded?.(result, LOAD_SOURCES[result.format]);
-    return result;
+  };
+
+  /**
+   * Writes the loads that were read in one transaction and announces each one, or returns
+   * null when the document became read-only while they were read
+   */
+  const writeAll = (prepared: readonly PreparedLoad[]): LoadResult[] | null => {
+    if (store.isReadOnly()) return null;
+    const results = store.transact(() => prepared.map((load) => load.write()), LOAD_SOURCE);
+    for (const result of results) onLoaded?.(result, LOAD_SOURCE);
+    return results;
   };
 
   return {
-    load,
+    async load(source, options) {
+      const prepared = await prepare(source, options);
+      return prepared ? (writeAll([prepared])?.[0] ?? null) : null;
+    },
+
+    async loadMany(items) {
+      if (!Array.isArray(items)) throw invalidInput('The items must be an array');
+      for (const item of items as unknown[]) {
+        if (!isRecord(item) || !('source' in item)) {
+          throw invalidInput('Each item must be an object with a source');
+        }
+      }
+      // Everything is read before anything is written, so a failure writes nothing
+      const prepared: PreparedLoad[] = [];
+      for (const { source, options } of items) {
+        const load = await prepare(source, options);
+        if (!load) return null;
+        prepared.push(load);
+      }
+      return writeAll(prepared);
+    },
 
     toJSON: (): DrawDocument => exportNative(store),
 
     toGeoJSON: (): FeatureCollection => exportGeoJSON(store),
   };
 
-  async function read(source: LoadSource, options: LoadOptions = {}): Promise<LoadResult | null> {
+  async function read(source: LoadSource, options: LoadOptions = {}): Promise<PreparedLoad | null> {
     if (!isRecord(options as unknown)) throw invalidInput('The options must be an object');
     const mode = options.mode;
     if (mode !== undefined && mode !== 'replace' && mode !== 'merge') {
@@ -87,13 +113,15 @@ export function createDocument(
       store,
       autoNameGenerator: deps.autoNameGenerator,
       generateFeatureId: deps.generateId,
-      getCurrentLayerId: () => layerId ?? deps.getActiveLayerId(),
+      // The layer of the options, unless another load of the same transaction removed it
+      getCurrentLayerId: () =>
+        layerId !== undefined && store.getLayer(layerId) ? layerId : deps.getActiveLayerId(),
     };
 
     if (read.kind === 'image') {
       if (!options.coordinate) throw invalidInput('An image needs the coordinate option');
       const replace = mode === 'replace';
-      const result = await loadImage(
+      const prepared = await prepareImage(
         read.file,
         {
           coordinate: options.coordinate as Coordinate,
@@ -105,7 +133,8 @@ export function createDocument(
         // With replace, the features and groups go in the transaction that adds the image
         replace ? () => deleteFeaturesAndGroups(store) : undefined,
       );
-      return replace ? { ...result, replaced: true } : result;
+      if (!replace) return prepared;
+      return { write: () => ({ ...prepared.write(), replaced: true }) };
     }
 
     const { data } = read;
@@ -114,7 +143,7 @@ export function createDocument(
         throw invalidInput('A document of the library can only replace the document');
       }
       try {
-        return await loadNative(data, { store });
+        return await prepareNative(data, { store });
       } catch (error) {
         throw asDrawError('invalid-input', error);
       }
@@ -128,7 +157,7 @@ export function createDocument(
     }
     // The layer given to the load wins over the one a feature names; with replace, the
     // features and groups are replaced in the transaction that writes the new ones
-    return loadGeoJSON(collection, importDeps, {
+    return prepareGeoJSON(collection, importDeps, {
       flattenMulti: options.flattenMulti,
       layerId,
       replace: mode === 'replace',

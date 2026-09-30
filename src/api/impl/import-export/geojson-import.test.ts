@@ -12,7 +12,14 @@ import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js'
 import { MemoryStore } from '../../../store/memory.js';
 import type { Feature } from '../../../store/types.js';
 import { convertFeatureToGeoJSON } from './geojson-export.js';
-import { loadGeoJSON } from './geojson-import.js';
+import type { GeoJSONLoadResult } from './geojson-import.js';
+import { prepareGeoJSON } from './geojson-import.js';
+
+/** Reads the collection, then writes it in one transaction, as `document.load` does */
+async function loadGeoJSON(...args: Parameters<typeof prepareGeoJSON>): Promise<GeoJSONLoadResult> {
+  const prepared = await prepareGeoJSON(...args);
+  return args[1].store.transact(() => prepared.write(), 'load') as GeoJSONLoadResult;
+}
 
 function feature(geometry: unknown, properties: Record<string, unknown> = {}): unknown {
   return { type: 'Feature', geometry, properties };

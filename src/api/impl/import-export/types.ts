@@ -5,7 +5,17 @@
  * Types internal to the Import/Export module
  */
 
-import type { Feature, FileData } from '../../../store/types.js';
+import type { Feature, FileData, LoadResult } from '../../../store/types.js';
+
+/**
+ * A load whose source is read, checked and decoded: what is left is to write it, inside the
+ * transaction of the caller. Nothing that can fail is left to `write`, because a transaction
+ * does not roll back.
+ */
+export interface PreparedLoad {
+  /** Writes what was read and returns what was loaded */
+  write(): LoadResult;
+}
 
 /**
  * GeoJSON import result (internal use).

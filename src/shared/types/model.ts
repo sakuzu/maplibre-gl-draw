@@ -572,10 +572,11 @@ export interface TentativeState {
  * features.change carries the source of its flush.
  *
  * - local: an operation of the user or a call of the API (the default)
- * - silent: a change that a subscriber recording changes leaves out: loading a native file, which replaces
- *   the whole document, and clearing the selection when a mode starts
- * - load: loading a GeoJSON file or replacing the features with one, recorded as one step (it
- *   is one transaction, which is what makes it one notification)
+ * - silent: a change that a subscriber recording changes leaves out, such as clearing the
+ *   selection when a mode starts
+ * - load: a load of any format (or of several sources at once), with the replacement it
+ *   makes, recorded as one step (it is one transaction, which is what makes it one
+ *   notification)
  * - batch: a bulk change of a host or an extension recorded as one step; core does not write
  *   it
  * - remote: a change that came from outside the instance. A replaced Store (see StoreContract)

@@ -11,14 +11,15 @@ import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js'
 import type { Store } from '../../../store/store.js';
 import type { Feature, FileData, LoadOptions, LoadResult } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
+import type { PreparedLoad } from './types.js';
 
 /**
- * Imports an image file and creates an Image feature
+ * Decodes an image file for a load that creates an Image feature; the writes are left to the
+ * transaction of the caller
  *
- * @param beforeWrite - Runs first in the transaction that writes the image, such as the
- *   deletion of a replace
+ * @param beforeWrite - Runs first when the image is written, such as the deletion of a replace
  */
-export async function loadImage(
+export async function prepareImage(
   file: File,
   options: LoadOptions,
   deps: {
@@ -28,8 +29,9 @@ export async function loadImage(
     getCurrentLayerId: () => string;
   },
   beforeWrite?: () => void,
-): Promise<LoadResult> {
-  if (!options.coordinate) {
+): Promise<PreparedLoad> {
+  const coordinate = options.coordinate;
+  if (!coordinate) {
     throw new DrawError('invalid-input', 'Image files require coordinate option');
   }
 
@@ -44,49 +46,49 @@ export async function loadImage(
     });
   }
 
-  // Create the FileData
-  const fileId = generateFeatureId();
-  const fileData: FileData = {
-    id: fileId,
-    mimeType: processed.mimeType,
-    dataURL: processed.dataUrl,
-  };
+  // The IDs, the layer and the automatic name are taken when the image is written, so that a
+  // load that fails later takes nothing
+  const write = (): LoadResult => {
+    const fileId = generateFeatureId();
+    const fileData: FileData = {
+      id: fileId,
+      mimeType: processed.mimeType,
+      dataURL: processed.dataUrl,
+    };
+    const featureId = generateFeatureId();
+    const layerId =
+      options.layerId && store.getLayer(options.layerId) ? options.layerId : getCurrentLayerId();
+    const autoName = autoNameGenerator.generateName('Image');
+    const feature: Feature = {
+      groupId: undefined,
+      id: featureId,
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: coordinate },
+      layerId,
+      properties: {
+        ...drawProperties({
+          imageFileId: fileId,
+          imageWidth: processed.width,
+          imageHeight: processed.height,
+          createdZoom: options.zoom ?? 1,
+        }),
+        ...(autoName !== undefined && { name: autoName }),
+      },
+      locked: false,
+      visible: true,
+      style: {},
+    };
 
-  // Create the Image feature
-  const featureId = generateFeatureId();
-  const layerId = options.layerId || getCurrentLayerId();
-  const autoName = autoNameGenerator.generateName('Image');
-  const feature: Feature = {
-    groupId: undefined,
-    id: featureId,
-    type: 'Image',
-    geometry: { type: 'Point', coordinates: options.coordinate },
-    layerId,
-    properties: {
-      ...drawProperties({
-        imageFileId: fileId,
-        imageWidth: processed.width,
-        imageHeight: processed.height,
-        createdZoom: options.zoom ?? 1,
-      }),
-      ...(autoName !== undefined && { name: autoName }),
-    },
-    locked: false,
-    visible: true,
-    style: {},
-  };
-
-  // Create the file and the feature in a transaction
-  store.transact(() => {
     beforeWrite?.();
     store.createFile(fileData);
     store.createFeature(feature);
     store.setSelection('feature', [featureId]);
-  });
 
-  return {
-    format: 'image',
-    featureIds: [featureId],
-    replaced: false,
+    return {
+      format: 'image',
+      featureIds: [featureId],
+      replaced: false,
+    };
   };
+  return { write };
 }

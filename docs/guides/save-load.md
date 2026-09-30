@@ -120,6 +120,9 @@ input?.addEventListener('change', async () => {
   layers
 - The data is checked before the document changes, so a load that rejects
   leaves the drawing as it was
+- Once the source is read (and an image decoded), every write of the load
+  is one transaction with the source `load`, whatever the format: one
+  `document.changed`, one step for a listener that records changes
 - A document of the library is rejected as a whole, with the code
   `invalid-input`, when something in it is malformed, refers to something
   missing, or has a major version the library cannot read. A document of
@@ -143,6 +146,25 @@ Each load that reads something emits `document.loaded` with the same
 result, and each feature it adds emits `feature.created`. To react once
 per load, listen to `document.changed` or `document.loaded`
 ([Events](../reference/events.md)).
+
+### Several sources at once
+
+`draw.document.loadMany(items)` reads every source first and then writes
+all of them in one transaction, so that an import of several files is one
+`document.changed`: one step to undo and one change to send. The items
+are written in order, each as `load` would write it.
+
+```ts
+declare const files: File[];
+
+const results = await draw.document.loadMany(
+  files.map((file) => ({ source: file, options: { mode: 'merge' as const } })),
+);
+console.log(results?.length); // null while read-only
+```
+
+When one source cannot be read, the promise rejects with its `DrawError`
+and nothing is written. `document.loaded` arrives once per item.
 
 ## Files dropped on the map
 
@@ -311,9 +333,8 @@ document, or to put an earlier state of it back, is in every
 - one transaction is one change, so a geometry operation, a group or a
   drag of several features comes as one step
 - `source` tells where it came from: `'local'` for edits and calls of the
-  API, `'load'` for a GeoJSON load, `'silent'` for a load of a document
-  of the library, `'remote'` for a store of your own, and any value you
-  pass to `transact`
+  API, `'load'` for a load of any format, `'remote'` for a store of your
+  own, and any value you pass to `transact`
 - an update in the middle of a drag carries `isIntermediate: true`; the
   update without it that follows ends the drag
 

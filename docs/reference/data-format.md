@@ -463,7 +463,7 @@ The stacking order is replaced as a whole with `layerOrder`, so no entry of
 the previous document is left on it. `default-layer`, when the document has
 it, is kept and goes to the back when `layerOrder` does not list it.
 
-The load is one transaction with the source `silent`. The result has
+The load is one transaction with the source `load`. The result has
 `format: 'native'` and `replaced: true`.
 
 ## GeoJSON
@@ -690,5 +690,5 @@ defaults to the active layer. `image.requested` gives you all three (see
 it is larger than 4096 px. With `mode: 'replace'`, the features and groups
 that were there before are deleted afterwards.
 
-The load is one transaction with the source `local`. The result has
+The load is one transaction with the source `load`. The result has
 `format: 'image'` and `replaced: false`, or `true` with `mode: 'replace'`.

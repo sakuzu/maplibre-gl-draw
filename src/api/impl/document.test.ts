@@ -239,12 +239,58 @@ describe('draw.document', () => {
     const notifications: Array<string | undefined> = [];
     store.subscribe((change) => notifications.push(change.source));
     await doc.load(saved);
-    expect(notifications).toEqual(['silent']);
+    expect(notifications).toEqual(['load']);
   });
 
   it('returns null while read-only', async () => {
     store.setReadOnly(true);
     expect(await doc.load(geojson)).toBeNull();
+    expect(store.listFeatures()).toHaveLength(1);
+  });
+});
+
+describe('document.loadMany', () => {
+  const point = (id: string, coordinates: number[]) => ({
+    type: 'FeatureCollection' as const,
+    features: [
+      {
+        type: 'Feature' as const,
+        id,
+        properties: {},
+        geometry: { type: 'Point' as const, coordinates },
+      },
+    ],
+  });
+
+  it('writes a document of the library and two GeoJSON files in one notification', async () => {
+    const saved = doc.toJSON();
+    const notifications: Array<string | undefined> = [];
+    store.subscribe((change) => notifications.push(change.source));
+    const results = await doc.loadMany([
+      { source: saved },
+      { source: JSON.stringify(point('p', [3, 4])) },
+      { source: point('q', [5, 6]), options: { layerId: 'l1' } },
+    ]);
+    expect(notifications).toEqual(['load']);
+    expect(results?.map((result) => result.format)).toEqual(['native', 'geojson', 'geojson']);
+    expect(store.listFeatures().map((feature) => feature.id)).toEqual(['a', 'p', 'q']);
+  });
+
+  it('writes nothing when one item cannot be read, and rejects with its DrawError', async () => {
+    const notifications: unknown[] = [];
+    store.subscribe((change) => notifications.push(change));
+    const failure = doc.loadMany([{ source: point('p', [3, 4]) }, { source: 'not json' }]);
+    await expect(failure).rejects.toBeInstanceOf(DrawError);
+    await expect(failure).rejects.toMatchObject({ code: 'unsupported-format' });
+    expect(notifications).toEqual([]);
+    expect(store.listFeatures()).toHaveLength(1);
+  });
+
+  it('returns null while read-only, and refuses items that are not objects with a source', async () => {
+    await expect(doc.loadMany([1] as never)).rejects.toMatchObject({ code: 'invalid-input' });
+    await expect(doc.loadMany({} as never)).rejects.toMatchObject({ code: 'invalid-input' });
+    store.setReadOnly(true);
+    expect(await doc.loadMany([{ source: point('p', [3, 4]) }])).toBeNull();
     expect(store.listFeatures()).toHaveLength(1);
   });
 });

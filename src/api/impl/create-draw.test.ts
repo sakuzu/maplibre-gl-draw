@@ -238,3 +238,27 @@ describe('destroy', () => {
     expect(() => instance.destroy()).not.toThrow();
   });
 });
+
+describe('document.loadMany', () => {
+  it('arrives as one document.changed with the source load, and one document.loaded per item', async () => {
+    const saved = draw.document.toJSON();
+    const changes: DocumentChange[] = [];
+    const loaded: string[] = [];
+    draw.on('document.changed', (change) => changes.push(change));
+    draw.on('document.loaded', ({ result, source }) => loaded.push(`${result.format}:${source}`));
+    const point = (coordinates: number[]) => ({
+      type: 'Feature' as const,
+      properties: {},
+      geometry: { type: 'Point' as const, coordinates },
+    });
+    await draw.document.loadMany([
+      { source: saved },
+      { source: point([1, 2]) },
+      { source: JSON.stringify(point([3, 4])) },
+    ]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0].source).toBe('load');
+    expect(draw.features.count()).toBe(2);
+    expect(loaded).toEqual(['native:load', 'geojson:load', 'geojson:load']);
+  });
+});

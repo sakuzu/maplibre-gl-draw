@@ -117,6 +117,10 @@ input?.addEventListener('change', async () => {
   グループを置き換え、レイヤーは残します
 - データは文書を変える前に検証するので、失敗した読み込みでは、描いた
   ものはそのまま残ります
+- ソースを読み終えた後 (画像ならデコードした後) の書き込みは、形式に
+  かかわらず、出どころ `load` の 1 つのトランザクションになります。
+  `document.changed` は 1 回で、変更を記録するリスナーにとっては 1 つの
+  手順です
 - ライブラリーの文書は、どこかの形が不正なとき、存在しないものを参照
   しているとき、ライブラリーが読めない major の版のときは、全体を
   受け付けず、コード `invalid-input` で失敗します。前の major の版の
@@ -140,6 +144,25 @@ input?.addEventListener('change', async () => {
 追加した地物ごとに `feature.created` を出します。読み込み 1 回ごとに
 反応するには、`document.changed` か `document.loaded` を受けてください
 ([イベント](../reference/events.md))。
+
+### 複数のソースをまとめて読む
+
+`draw.document.loadMany(items)` は、すべてのソースを先に読み、それから
+全部を 1 つのトランザクションで書きます。そのため、複数のファイルの
+取り込みが 1 回の `document.changed` になり、取り消すのも送るのも 1 回で
+済みます。項目は順に、`load` と同じように書きます。
+
+```ts
+declare const files: File[];
+
+const results = await draw.document.loadMany(
+  files.map((file) => ({ source: file, options: { mode: 'merge' as const } })),
+);
+console.log(results?.length); // 読み取り専用のあいだは null
+```
+
+読めないソースが 1 つでもあれば、その `DrawError` で失敗し、何も書き
+ません。`document.loaded` は項目ごとに届きます。
 
 ## 地図にドロップされたファイル
 
@@ -308,9 +331,8 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 - 1 つのトランザクションが 1 つの変更になるので、幾何演算、グループ化、
   複数の地物のドラッグは 1 つの手順として届きます
 - `source` は変更の出どころを示します。編集と API の呼び出しなら
-  `'local'`、GeoJSON の読み込みなら `'load'`、ライブラリーの文書の
-  読み込みなら `'silent'`、自前のストアなら `'remote'` で、`transact` に
-  渡した任意の値も入ります
+  `'local'`、どの形式の読み込みでも `'load'`、自前のストアなら
+  `'remote'` で、`transact` に渡した任意の値も入ります
 - ドラッグの途中の更新には `isIntermediate: true` が付きます。その後に
   来る、これが付いていない更新でドラッグが終わります
 

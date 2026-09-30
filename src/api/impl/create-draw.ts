@@ -26,7 +26,7 @@ import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound, requireRecord, withLocksIgnored } from './shared.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
-const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load']);
+const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load', 'document.loadMany']);
 
 /**
  * Builds the draw instance on an engine and hands it to the extensions of the engine

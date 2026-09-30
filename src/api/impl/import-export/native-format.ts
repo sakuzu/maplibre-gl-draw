@@ -11,6 +11,7 @@ import type { Data, ExportOptions, FileData, LoadResult } from '../../../store/t
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
+import type { PreparedLoad } from './types.js';
 
 /** The layer that survives the replacement (it is updated in place when the data has it) */
 const DEFAULT_LAYER_ID = 'default-layer';
@@ -67,9 +68,10 @@ export function exportNative(store: Store, options?: ExportOptions): Data {
 }
 
 /**
- * Imports the native format (replaces the existing data)
+ * Reads the native format for a load that replaces the existing data: everything is checked
+ * here, and the writes are left to the transaction of the caller
  */
-export async function loadNative(data: Data, deps: { store: Store }): Promise<LoadResult> {
+export async function prepareNative(data: Data, deps: { store: Store }): Promise<PreparedLoad> {
   const { store } = deps;
 
   // Validate before applying. Since store.transact does not roll back, if an exception
@@ -91,8 +93,8 @@ export async function loadNative(data: Data, deps: { store: Store }): Promise<Lo
   // not mention it (every layer must be on the stacking order to be drawn)
   const retainedUnlisted = [...retainedLayerIds].filter((id) => !layerOrder.includes(id));
 
-  // Import atomically (silent, so a subscriber that records changes leaves it out)
-  store.transact(() => {
+  // The writes, in the transaction of the caller, which makes them one change
+  const write = (): LoadResult => {
     // 1. Clear the existing data
     const existingFeatures = store.listFeatures();
     for (const feature of existingFeatures) {
@@ -149,11 +151,12 @@ export async function loadNative(data: Data, deps: { store: Store }): Promise<Lo
     if (upgraded.metadata) {
       store.setMetadata(upgraded.metadata);
     }
-  }, 'silent');
 
-  return {
-    format: 'native',
-    featureIds,
-    replaced: true,
+    return {
+      format: 'native',
+      featureIds,
+      replaced: true,
+    };
   };
+  return { write };
 }
