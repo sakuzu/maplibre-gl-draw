@@ -67,14 +67,17 @@ export function createDocument(
    * Reads a source, or null when the document is read-only; every failure is a DrawError
    *
    * @param pending - The IDs the layers and groups of the same write take, added to
+   * @param createdLayers - The IDs of the layers the earlier items of the same write create,
+   *   added to: a later item may name one with `layerId`
    */
   const prepare = async (
     source: LoadSource,
     options: LoadOptions | undefined,
     pending: Set<string>,
+    createdLayers: Set<string>,
   ) => {
     try {
-      return await read(source, options, pending);
+      return await read(source, options, pending, createdLayers);
     } catch (error) {
       // Whatever went wrong, the promise rejects with a DrawError
       throw asDrawError('invalid-input', error);
@@ -122,7 +125,7 @@ export function createDocument(
 
   return {
     async load(source, options) {
-      const prepared = await prepare(source, options, new Set());
+      const prepared = await prepare(source, options, new Set(), new Set());
       return prepared ? (writeAll([prepared])?.[0] ?? null) : null;
     },
 
@@ -136,8 +139,9 @@ export function createDocument(
       // Everything is read before anything is written, so a failure writes nothing
       const prepared: PreparedItem[] = [];
       const pending = new Set<string>();
+      const createdLayers = new Set<string>();
       for (const { source, options } of items) {
-        const item = await prepare(source, options, pending);
+        const item = await prepare(source, options, pending, createdLayers);
         if (!item) return null;
         prepared.push(item);
       }
@@ -153,6 +157,7 @@ export function createDocument(
     source: LoadSource,
     given: LoadOptions | undefined,
     pending: Set<string>,
+    createdLayers: Set<string>,
   ): Promise<PreparedItem | null> {
     const options = given ?? {};
     if (!isRecord(options as unknown)) throw invalidInput('The options must be an object');
@@ -163,13 +168,21 @@ export function createDocument(
     if (options.layer !== undefined && options.layerId !== undefined) {
       throw invalidInput('layer and layerId cannot be given together');
     }
-    if (options.layerId !== undefined && !store.getLayer(options.layerId)) {
+    // A layer an earlier item of the same write creates is known: it is written before this one
+    if (
+      options.layerId !== undefined &&
+      !store.getLayer(options.layerId) &&
+      !createdLayers.has(options.layerId)
+    ) {
       throw notFound('layer', options.layerId);
     }
     // The new layer and group take their IDs now, so that the items of one write differ
     const layer =
       options.layer !== undefined ? prepareLayer(deps, options.layer, pending) : undefined;
-    if (layer) pending.add(layer.layer.id);
+    if (layer) {
+      pending.add(layer.layer.id);
+      createdLayers.add(layer.layer.id);
+    }
     const group =
       options.group !== undefined
         ? prepareGroupShell(deps, options.group, GROUP_KEYS, pending)

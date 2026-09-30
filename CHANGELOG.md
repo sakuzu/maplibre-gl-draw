@@ -142,7 +142,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `LoadOptions.layer` and `LoadOptions.group`, which create a layer for
   the features and a group of them in the transaction of the load, for
   `load` and for each item of `loadMany`, and `LoadResult.layerId` and
-  `LoadResult.groupId`, their IDs.
+  `LoadResult.groupId`, their IDs. An item of `loadMany` may name with
+  `layerId` the layer an earlier item creates.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
 - `layers.getOrder()`, the stacking order as `layers.reorder` takes it:

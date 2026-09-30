@@ -43,15 +43,18 @@ export interface DocumentResource {
    * the earlier items left (a document of the library replaces what the earlier items wrote).
    * `document.loaded` arrives once per item, after the writes.
    *
-   * A layer named by `layerId` that an earlier item removed is replaced with the active layer.
-   * With `layer` and `group` in the options of the items, an import of one layer per file and
-   * one group per folder is still one transaction.
+   * An item may name with `layerId` a layer that an earlier item creates with `layer`, so the
+   * items can fill one new layer and a group of it. A layer named by `layerId` that an earlier
+   * item removed is replaced with the active layer. With `layer` and `group` in the options of
+   * the items, an import of one layer per file and one group per folder is still one
+   * transaction.
    *
    * @param items - The sources, each with the options `load` takes
    * @returns What was read from each item, in the order of the items, or `null` when the
    *   document is read-only
    * @throws `DrawError` (the promise rejects) as `load` does, for the first item that cannot
-   *   be read; nothing is written then. `invalid-input` when `items` is not an array of objects
+   *   be read (`not-found` for a `layerId` that neither the document nor an earlier item has);
+   *   nothing is written then. `invalid-input` when `items` is not an array of objects
    *   with a `source`
    */
   loadMany(

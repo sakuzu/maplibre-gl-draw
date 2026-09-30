@@ -483,7 +483,8 @@ export interface LoadOptions {
   mode?: 'replace' | 'merge';
   /**
    * The layer to add the features to. It wins over the layer a GeoJSON feature names with
-   * `maplibre-gl-draw:layerId`; when it is left out, that layer is used, or else the active one
+   * `maplibre-gl-draw:layerId`; when it is left out, that layer is used, or else the active one.
+   * In `document.loadMany` it may also be a layer an earlier item creates with `layer`.
    */
   layerId?: string;
   /**
