@@ -126,6 +126,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `document.loadMany`, which reads several sources and writes all of
   them in one transaction: one `document.changed` for an import of
   several files.
+- `LoadOptions.layer` and `LoadOptions.group`, which create a layer for
+  the features and a group of them in the transaction of the load, for
+  `load` and for each item of `loadMany`, and `LoadResult.layerId` and
+  `LoadResult.groupId`, their IDs.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
 - `layers.getOrder()`, the stacking order as `layers.reorder` takes it:

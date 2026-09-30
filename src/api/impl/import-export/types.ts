@@ -49,4 +49,11 @@ export interface GeoJSONImportOptions {
    * same transaction that writes the features of the file, and the layers stay
    */
   replace?: boolean;
+  /**
+   * Whether every feature goes into one layer (the one of `layerId`, else the current one) and
+   * leaves the group it names, because the load puts them all into a new group
+   */
+  oneGroup?: boolean;
+  /** IDs the features must not take, such as those of a layer and a group the load creates */
+  reservedIds?: ReadonlySet<string>;
 }

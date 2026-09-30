@@ -68,29 +68,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     return inOrder().filter((group) => matches(group, entries));
   };
 
-  /** Creates a prepared group where its frontmost member was */
-  const createOne = (prepared: StoredGroup): void => {
-    const members = new Set(prepared.featureIds);
-    const layer = store.getLayer(prepared.layerId);
-    if (layer) {
-      // The group takes the place of its frontmost member standing in the layer
-      let at = -1;
-      for (let i = layer.items.length - 1; i >= 0; i--) {
-        if (members.has(layer.items[i])) {
-          at = i;
-          break;
-        }
-      }
-      const items: string[] = [];
-      layer.items.forEach((itemId, i) => {
-        if (i === at) items.push(prepared.id);
-        if (!members.has(itemId)) items.push(itemId);
-      });
-      if (at === -1) items.push(prepared.id);
-      store.updateLayer(layer.id, { items });
-    }
-    store.createGroup(prepared);
-  };
+  const createOne = (prepared: StoredGroup): void => insertGroup(store, prepared);
 
   return {
     get: (id) => store.getGroup(id),
@@ -193,6 +171,77 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
   }
 }
 
+/**
+ * Creates a group where its frontmost member was, in the transaction of the caller
+ *
+ * @internal
+ */
+export function insertGroup(store: Store, prepared: StoredGroup): void {
+  const members = new Set(prepared.featureIds);
+  const layer = store.getLayer(prepared.layerId);
+  if (layer) {
+    // The group takes the place of its frontmost member standing in the layer
+    let at = -1;
+    for (let i = layer.items.length - 1; i >= 0; i--) {
+      if (members.has(layer.items[i])) {
+        at = i;
+        break;
+      }
+    }
+    const items: string[] = [];
+    layer.items.forEach((itemId, i) => {
+      if (i === at) items.push(prepared.id);
+      if (!members.has(itemId)) items.push(itemId);
+    });
+    if (at === -1) items.push(prepared.id);
+    store.updateLayer(layer.id, { items });
+  }
+  store.createGroup(prepared);
+}
+
+/** The fields of a group that do not depend on its features */
+export type GroupShell = Omit<StoredGroup, 'layerId' | 'featureIds'>;
+
+/**
+ * Checks the fields of a group input other than its features and builds them: its ID, taken
+ * or generated, its name and its flags; throws DrawError on a wrong input
+ *
+ * @param keys - The keys the input may have
+ * @param pending - The IDs taken by the other entries of the same write
+ * @internal
+ */
+export function prepareGroupShell(
+  deps: Pick<ResourceDeps, 'store' | 'generateId' | 'autoNameGenerator'>,
+  input: Omit<GroupInput, 'featureIds'>,
+  keys: readonly string[],
+  pending: ReadonlySet<string>,
+): GroupShell {
+  const { store } = deps;
+  requireRecord(input, 'The input');
+  const record = input as unknown as Record<string, unknown>;
+  onlyKeys(record, keys, 'The input');
+  optionalString(record, 'name');
+  optionalBoolean(record, 'visible');
+  optionalBoolean(record, 'locked');
+  let id: string;
+  if (input.id === undefined) {
+    id = deps.generateId();
+  } else {
+    id = requireId(input.id);
+    if (isTaken(store, id) || pending.has(id)) {
+      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+        id,
+      });
+    }
+  }
+  return {
+    id,
+    name: input.name ?? deps.autoNameGenerator.generateGroupName(),
+    visible: input.visible ?? true,
+    locked: input.locked ?? false,
+  };
+}
+
 /** Checks an input and builds the group to store; throws DrawError on a wrong input */
 function prepareGroup(
   deps: ResourceDeps,
@@ -202,11 +251,6 @@ function prepareGroup(
 ): StoredGroup {
   const { store } = deps;
   requireRecord(input, 'The input');
-  const record = input as unknown as Record<string, unknown>;
-  onlyKeys(record, INPUT_KEYS, 'The input');
-  optionalString(record, 'name');
-  optionalBoolean(record, 'visible');
-  optionalBoolean(record, 'locked');
   const ids = requireIds(input.featureIds, 'featureIds');
   if (ids.length === 0) throw invalidInput('A group needs at least one feature');
   const members = ids.map((featureId) => {
@@ -221,26 +265,11 @@ function prepareGroup(
   if (members.some((feature) => feature.layerId !== layerId)) {
     throw invalidInput('The features of a group must be in the same layer');
   }
-
-  let id: string;
-  if (input.id === undefined) {
-    id = deps.generateId();
-  } else {
-    id = requireId(input.id);
-    if (isTaken(store, id) || pending.has(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-        id,
-      });
-    }
-  }
-
+  const shell = prepareGroupShell(deps, input, INPUT_KEYS, pending);
   return {
-    id,
+    ...shell,
     layerId,
-    name: input.name ?? deps.autoNameGenerator.generateGroupName(),
     featureIds: inStackingOrder(store, members).map((feature) => feature.id),
-    visible: input.visible ?? true,
-    locked: input.locked ?? false,
   };
 }
 

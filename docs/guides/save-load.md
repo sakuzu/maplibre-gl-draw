@@ -138,6 +138,16 @@ input?.addEventListener('change', async () => {
 - GeoJSON features go into the layer of `options.layerId` when it is
   given, otherwise into the layer named by their `maplibre-gl-draw:layerId`
   when it exists, otherwise into the active layer
+- `options.layer` (a `LayerInput`) creates a layer in the same
+  transaction and puts every feature into it; `LoadResult.layerId` is its
+  ID. It cannot be given together with `layerId` (`invalid-input`)
+- `options.group` (a `GroupInput` without `featureIds`) puts every
+  feature read into one new group, created in the same transaction where
+  the features land. The features then all go into one layer (that of
+  `layer` or `layerId`, else the active one) and leave any group a
+  GeoJSON feature names. `LoadResult.groupId` is its ID; nothing read, no
+  group. A document of the library, which brings its own layers and
+  groups, takes neither `layer` nor `group`
 - Multi geometries are kept as Multi features; `flattenMulti: true` splits
   them into single features. A `GeometryCollection` is folded into at most
   one Multi feature per geometry type
@@ -165,6 +175,23 @@ console.log(results?.length); // null while read-only
 
 When one source cannot be read, the promise rejects with its `DrawError`
 and nothing is written. `document.loaded` arrives once per item.
+
+With `layer` and `group` in the options of the items, an import of a
+folder, one layer per file and one group for the folder, is still one
+transaction: the new layers, the features and the groups arrive in one
+`document.changed` and one notification of the Store.
+
+```ts
+declare const folder: { name: string; files: File[] };
+
+const results = await draw.document.loadMany(
+  folder.files.map((file) => ({
+    source: file,
+    options: { layer: { name: file.name }, group: { name: folder.name } },
+  })),
+);
+for (const result of results ?? []) console.log(result.layerId, result.groupId);
+```
 
 ## Files dropped on the map
 

@@ -570,13 +570,17 @@ checked and converted before anything is written.
   one. A numeric ID becomes a string. An ID already used in the document,
   or earlier in the same file, is replaced with a new one, so an export can
   be loaded back into the same document
-- The layer is the `layerId` of the options when it is given; otherwise
-  `maplibre-gl-draw:layerId` when it names a layer of the document, or
-  else the active layer
+- The layer is the `layerId` of the options when it is given, or the
+  layer the `layer` option creates; otherwise `maplibre-gl-draw:layerId`
+  when it names a layer of the document, or else the active layer. With
+  the `group` option, every feature goes into one layer: the given or
+  created one, else the active layer
 - `groupId`, `visible`, `locked` and `style` are restored from their
   prefixed keys. A `groupId` naming a group the document does not have, or
   a group of another layer, is dropped, and so is every `groupId` with
-  `mode: 'replace'`. The style is checked as in [Style checks](#style-checks)
+  `mode: 'replace'` or with the `group` option, which puts the features
+  into the group it creates. The style is checked as in
+  [Style checks](#style-checks)
 - The values of the library are kept under their prefixed keys; the other
   prefixed keys are read as above and not stored. Every other key is copied
   as an attribute, as an own property, so a key such as `__proto__` stays

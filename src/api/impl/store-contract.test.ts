@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryContractStore } from '../../store/memory.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
+import type { DocumentChange } from '../events.js';
 import type { Store } from '../extension/store.js';
 import type { Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
@@ -176,5 +177,60 @@ describe('a Store of the application', () => {
     expect(host.store.isInteractionLocked()).toBe(true);
     // Hiding the selected feature took it out of the selection, in the Store of the application
     expect(host.store.getSelection()).toEqual({ type: null, ids: [] });
+  });
+});
+
+/** Undoes a change of the document in one transaction of the Store, from what it carries */
+function undo(store: Store, change: DocumentChange): void {
+  store.transact(() => {
+    for (const group of change.groups?.created ?? []) store.deleteGroup(group.id);
+    for (const feature of change.features?.created ?? []) store.deleteFeature(feature.id);
+    for (const layer of change.layers?.created ?? []) store.deleteLayer(layer.id);
+    for (const { id, previous } of change.layers?.updated ?? []) {
+      if (store.getLayer(id)) store.updateLayer(id, previous);
+    }
+    const order = change.layers?.orderChanged;
+    if (order) store.setLayerOrder(order.previous);
+  }, 'undo');
+}
+
+describe('a load into a Store of the application', () => {
+  it('writes the new layers and group of loadMany as one change, undone at once', async () => {
+    const collection = (...ids: string[]) => ({
+      type: 'FeatureCollection' as const,
+      features: ids.map((id, i) => ({
+        type: 'Feature' as const,
+        id,
+        properties: {},
+        geometry: { type: 'Point' as const, coordinates: [i, i] },
+      })),
+    });
+    const before = draw.document.toJSON();
+    const changes: DocumentChange[] = [];
+    const unsubscribe = host.store.subscribe((change) => changes.push(change));
+    const results = await draw.document.loadMany([
+      { source: collection('a'), options: { layer: { name: 'roads.geojson' } } },
+      {
+        source: collection('b', 'c'),
+        options: { layer: { name: 'shops.geojson' }, group: { name: 'town' } },
+      },
+    ]);
+    expect(changes).toHaveLength(1);
+    const [roads, shops] = results ?? [];
+    expect(draw.features.get('a')?.layerId).toBe(roads?.layerId);
+    expect(draw.groups.get(shops?.groupId ?? '')).toMatchObject({
+      name: 'town',
+      layerId: shops?.layerId,
+      featureIds: ['b', 'c'],
+    });
+    expect(draw.features.get('b')).toMatchObject({
+      layerId: shops?.layerId,
+      groupId: shops?.groupId,
+    });
+
+    undo(host.store, changes[0]);
+    unsubscribe();
+    expect(changes).toHaveLength(2);
+    expect(draw.document.toJSON()).toEqual(before);
   });
 });

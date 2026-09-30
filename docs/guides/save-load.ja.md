@@ -136,6 +136,18 @@ input?.addEventListener('change', async () => {
 - GeoJSON の地物は、`options.layerId` を指定すればそのレイヤーに、
   無ければ `maplibre-gl-draw:layerId` のレイヤーがあればそのレイヤーに、
   それも無ければアクティブなレイヤーに入ります
+- `options.layer` (`LayerInput`) を指定すると、同じトランザクションで
+  レイヤーを作り、すべての地物をそこに入れます。その ID は
+  `LoadResult.layerId` に載ります。`layerId` と一緒には指定できません
+  (`invalid-input`)
+- `options.group` (`featureIds` の無い `GroupInput`) を指定すると、
+  読んだ地物をすべて、同じトランザクションで作る 1 つのグループに
+  入れます。グループは地物が入った場所に置きます。このとき地物はすべて
+  1 つのレイヤー (`layer` か `layerId` のレイヤー、無ければアクティブな
+  レイヤー) に入り、GeoJSON の地物が指すグループには入りません。その ID
+  は `LoadResult.groupId` に載ります。何も読まなければグループは作り
+  ません。ライブラリーの文書は自分のレイヤーとグループを持つので、
+  `layer` も `group` も受け付けません
 - Multi の形状は Multi の地物のまま保ちます。`flattenMulti: true`
   を指定すると単一の地物に分けます。`GeometryCollection` は、
   形状の型ごとに多くても 1 つの Multi の地物にまとめます
@@ -163,6 +175,23 @@ console.log(results?.length); // 読み取り専用のあいだは null
 
 読めないソースが 1 つでもあれば、その `DrawError` で失敗し、何も書き
 ません。`document.loaded` は項目ごとに届きます。
+
+項目のオプションに `layer` と `group` を指定すれば、ファイルごとに
+レイヤーを 1 つ、フォルダーにグループを 1 つ作る取り込みも 1 つの
+トランザクションのままです。新しいレイヤーと地物とグループは、1 回の
+`document.changed` と、Store の 1 回の通知で届きます。
+
+```ts
+declare const folder: { name: string; files: File[] };
+
+const results = await draw.document.loadMany(
+  folder.files.map((file) => ({
+    source: file,
+    options: { layer: { name: file.name }, group: { name: folder.name } },
+  })),
+);
+for (const result of results ?? []) console.log(result.layerId, result.groupId);
+```
 
 ## 地図にドロップされたファイル
 

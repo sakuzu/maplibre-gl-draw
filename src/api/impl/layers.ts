@@ -83,16 +83,9 @@ export function createLayers(
   };
 
   /** Creates prepared layers and puts each at its index of the stacking order */
-  const createAll = (prepared: Array<{ layer: StoredLayer; index: number | undefined }>) => {
+  const createAll = (prepared: PreparedLayer[]) => {
     store.transact(() => {
-      for (const { layer, index } of prepared) {
-        store.createLayer(layer);
-        if (index !== undefined) {
-          const order = store.getLayerOrder().filter((id) => id !== layer.id);
-          order.splice(Math.min(index, order.length), 0, layer.id);
-          store.setLayerOrder(order);
-        }
-      }
+      for (const entry of prepared) insertLayer(store, entry);
     });
     return prepared.map(({ layer }) => store.getLayer(layer.id) as StoredLayer);
   };
@@ -228,12 +221,44 @@ function holdsLock(store: Store, layer: StoredLayer): boolean {
     .some((feature) => feature.layerId === layer.id && featureLocked(store, feature));
 }
 
-/** Checks an input and builds the layer to store; throws DrawError on a wrong input */
-function prepareLayer(
-  deps: ResourceDeps,
+/**
+ * A layer checked and built from an input, with its position in the stacking order
+ *
+ * @internal
+ */
+export interface PreparedLayer {
+  /** The layer to store */
+  layer: StoredLayer;
+  /** The position in the stacking order, 0 at the back; the front when undefined */
+  index: number | undefined;
+}
+
+/**
+ * Creates a prepared layer and puts it at its index of the stacking order, in the transaction
+ * of the caller
+ *
+ * @internal
+ */
+export function insertLayer(store: Store, { layer, index }: PreparedLayer): void {
+  store.createLayer(layer);
+  if (index !== undefined) {
+    const order = store.getLayerOrder().filter((id) => id !== layer.id);
+    order.splice(Math.min(index, order.length), 0, layer.id);
+    store.setLayerOrder(order);
+  }
+}
+
+/**
+ * Checks an input and builds the layer to store; throws DrawError on a wrong input
+ *
+ * @param pending - The IDs taken by the other entries of the same write
+ * @internal
+ */
+export function prepareLayer(
+  deps: Pick<ResourceDeps, 'store' | 'generateId' | 'autoNameGenerator'>,
   input: LayerInput,
   pending: ReadonlySet<string>,
-): { layer: StoredLayer; index: number | undefined } {
+): PreparedLayer {
   const { store } = deps;
   requireRecord(input, 'The input');
   const record = input as unknown as Record<string, unknown>;
