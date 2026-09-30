@@ -213,6 +213,16 @@ describe('reorder', () => {
     expect(codeOf(() => layers.reorder(['a', 'b', 'base']))).toBe('invalid-input');
   });
 
+  it('gives the stacking order as reorder takes it, without the entries it would refuse', () => {
+    layers = createLayers(createResourceDeps(store), (id) => id === 'dataset');
+    store.setLayerOrder(['a', 'dataset', 'gone', 'b', 'c']);
+    const order = layers.getOrder();
+    expect(order).toEqual(['a', 'dataset', 'b', 'c']);
+    expect(Object.isFrozen(order)).toBe(true);
+    expect(layers.reorder([...order].reverse())).toBe(true);
+    expect(layers.getOrder()).toEqual(['c', 'b', 'dataset', 'a']);
+  });
+
   it('refuses while read-only', () => {
     store.setReadOnly(true);
     expect(layers.reorder(['c', 'b', 'a'])).toBe(false);

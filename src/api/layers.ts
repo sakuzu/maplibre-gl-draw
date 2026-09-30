@@ -108,6 +108,15 @@ export interface LayersCollection {
    */
   reorder(order: readonly string[]): boolean;
   /**
+   * The stacking order as {@link LayersCollection.reorder} takes it: the IDs of every layer and
+   * of the other entries placed on it (the datasets whose order is `layer-order` and the
+   * entries the `isExternalEntry` option recognizes), from the back. An entry that is no longer
+   * one of those is left out, so the array can be changed and given to `reorder` as it is.
+   *
+   * @returns A frozen array of IDs
+   */
+  getOrder(): readonly string[];
+  /**
    * The layer that drawn features go into.
    *
    * @returns The active layer, or `null` when there is no layer

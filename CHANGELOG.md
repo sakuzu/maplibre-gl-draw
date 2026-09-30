@@ -120,6 +120,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   several files.
 - `DRAW_PROPERTY_PREFIX`, `isDrawProperty`, `DrawProperties` and
   `MODES`.
+- `layers.getOrder()`, the stacking order as `layers.reorder` takes it:
+  the layers, the `layer-order` datasets and the external entries.
 - `FeatureFilter.shown`, which keeps the features whose own `visible`,
   their group's and their layer's are all true; `visible` stays the
   feature's own flag.

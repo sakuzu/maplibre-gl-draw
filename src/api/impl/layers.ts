@@ -196,6 +196,12 @@ export function createLayers(
       return store.setLayerOrder(merged);
     },
 
+    getOrder() {
+      return Object.freeze(
+        store.getLayerOrder().filter((id) => store.getLayer(id) !== undefined || isStackEntry(id)),
+      );
+    },
+
     getActive() {
       const id = deps.getActiveLayerId();
       return store.getLayer(id) ?? null;

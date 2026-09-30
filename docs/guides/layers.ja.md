@@ -94,6 +94,14 @@ Delete キー) は、少なくとも 1 つのレイヤーを残します。
 (重なりの順のほかの項目も置けます。後で述べます)、
 `features.move` と `groups.move` が地物とグループを置きます。`index` を
 渡さない移動は移動先の手前に置き、`index: 0` は一番奥です。
+`layers.getOrder()` は、ほかの項目も含めて、重なりの順を `reorder` が
+受け取る形で返します。そのため、並べ替えてそのまま戻せます。
+
+```ts
+const order = [...draw.layers.getOrder()];
+const front = order.pop() as string;
+draw.layers.reorder([front, ...order]); // 一番手前を一番奥へ
+```
 
 <!-- docs-check:
 declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
@@ -289,7 +297,8 @@ draw.on('layerStack.changed', placeMapLayers);
   インスタンスに渡す Store に持たせます。`layers.reorder` に渡さなかった
   項目は、その位置に残ります
 - `draw.getStore().getLayerOrder()` は、自前の項目も含めた重なりの順の
-  全体を返します
+  全体を返します。`draw.layers.getOrder()` は、そこから `layers.reorder`
+  が受け付けない項目を除いたものを返します
 - `draw.getLayerStack()` は並びを奥から返します。それぞれが、重なりの順の
   範囲 `[from, to)` と、それを描く地図のレイヤーの ID を持ちます
 - 自前の項目が無ければ並びは 1 つで、`maplibre-gl-draw-layer` です

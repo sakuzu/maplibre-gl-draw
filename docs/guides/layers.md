@@ -93,7 +93,15 @@ The front is at the end of every list:
 place other entries of the stacking order, below), and
 `features.move` and `groups.move` place features and groups. Without an
 `index` a move goes to the front of its destination; `index: 0` is the
-back.
+back. `layers.getOrder()` returns the stacking order as `reorder` takes
+it, the other entries placed on it included, so it can be changed and
+given back:
+
+```ts
+const order = [...draw.layers.getOrder()];
+const front = order.pop() as string;
+draw.layers.reorder([front, ...order]); // the front goes to the back
+```
 
 <!-- docs-check:
 declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
@@ -288,7 +296,8 @@ draw.on('layerStack.changed', placeMapLayers);
   instance. An entry that `layers.reorder` is not given keeps its
   position
 - `draw.getStore().getLayerOrder()` returns the whole stacking order, the
-  entries of your own included
+  entries of your own included, and `draw.layers.getOrder()` the same
+  without the entries `layers.reorder` would refuse
 - `draw.getLayerStack()` returns the runs from the back, each with its
   range `[from, to)` on the stacking order and the ID of the map layer
   that draws it
