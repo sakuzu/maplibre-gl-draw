@@ -46,50 +46,10 @@ import type {
  * relies on
  *
  * Core programs against the members of the public `Store` only: every read and every write it
- * makes, the writes of the state of this client included (selection, editing, vertex
- * selection, mode, read-only, interaction lock, local visibility), goes through them. It adds
- * nothing to them; the state only the drawing reads (the geometry being drawn, the box
- * selection, the drag, the vertices that follow along) stays with core. An implementation
- * keeps the following rules.
- *
- * IDs: the IDs of features and groups are unique together (both are listed in
- * `Layer.items`), the IDs of layers are unique, and so are the IDs of files. A write that would
- * take an ID in use does not apply.
- *
- * Containment: every feature is listed in exactly one container, in `Group.featureIds` of its
- * group when it has `groupId`, otherwise in `Layer.items` of its layer; every group is listed
- * in `Layer.items` of one layer. `Layer.items` changes with the writes that move items: a new
- * feature or group is listed, a deleted one is taken out, a change of `layerId` or `groupId`
- * moves the feature, and a group whose last member leaves is deleted. `Group.layerId` is
- * maintained by the Store: it is the layer whose `items` list the group.
- *
- * The stacking order: `getLayerOrder()` is part of the document and may hold entries that are
- * not layers (a dataset with `order: 'layer-order'`, a separator of the application). Its
- * entries are distinct non-empty strings. `createLayer` appends the new layer at the front
- * unless the order already holds it, `deleteLayer` takes it out, and no other write adds or
- * removes entries.
- *
- * Returned objects: callers treat what a getter returns as read-only, and an implementation
- * never changes an object after it has returned or notified it (a change stores a new
- * object).
- *
- * Writes: a write returns false and changes nothing when it is refused. Core does not call the
- * writes of the document while `isReadOnly()` is true; the interaction lock does not stop any
- * write. A write with an argument that cannot apply (an ID that names nothing) may throw
- * instead, storing nothing.
- *
- * Notifications: `subscribe` delivers one `DocumentChange` per outermost transaction (or per
- * write outside one), with its source, and `transact` groups the writes of a function into
- * one notification. A replacement of the whole document made in one `transact` (a load) is
- * delivered as one `DocumentChange`. A write of the selection, the editing or the mode is
- * notified with its category; a write of the vertex selection, read-only, the interaction lock
- * or the local visibility may be notified with no category. A change applied from elsewhere is
- * notified like a local one, with the source `'remote'`, and core follows it: a deleted item
- * leaves the selection, the editing and the local visibility through the writes of this
- * contract.
- *
- * The state of this client is never part of the document: it is not saved, and a change applied
- * from elsewhere does not carry it.
+ * makes, the writes of the state of this client included, goes through them. It adds nothing
+ * to them; the state only the drawing reads (the geometry being drawn, the box selection, the
+ * drag, the vertices that follow along) stays with core. The rules an implementation keeps are
+ * written on the public `Store` and `StoreView` (`src/api/extension/store.ts`).
  */
 export interface StoreContract extends PublicStore {}
 

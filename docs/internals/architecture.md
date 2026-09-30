@@ -284,7 +284,8 @@ when no store is given. When `Options.store` is a Store of the host,
 ### The Store contract
 
 A few rules bind every `StoreContract` implementation. They are written in
-the TSDoc of `StoreContract`.
+the TSDoc of the public `Store` and `StoreView`
+(`src/api/extension/store.ts`), where an implementer reads them.
 
 - IDs: features and groups share one space of IDs, as both are listed in
   `Layer.items`; layers and files have their own.

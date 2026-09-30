@@ -289,25 +289,13 @@ subscribes to it and groups writes with its `transact`. It does not call
 the writes of the document while `isReadOnly()` is true. The shape being
 drawn, the box selection and the drag stay in the instance.
 
-A store of your own keeps a few rules:
-
-- The IDs of features and groups are unique together, and so are the IDs
-  of layers and those of files
-- Every feature is listed in exactly one place: in the `featureIds` of its
-  group when it has a `groupId`, otherwise in the `items` of its layer.
-  Every group is in the `items` of one layer, and its `layerId` names that
-  layer
-- An object it has returned or notified is never changed afterwards; a
-  change stores a new object
-- A write whose argument cannot apply (an ID that does not exist, a layer
-  or group that names nothing, an ID taken twice) changes nothing
-- `transact` groups the changes of a function into one notification of
-  `subscribe`, so a load that replaces the whole document is one
-  `DocumentChange`. A write of the selection, the editing or the mode is
-  notified with its category
-- A change it applies from outside the instance is notified like a local
-  one, with the source `'remote'`. The instance draws it, and a deleted
-  item leaves the selection
+A store of your own keeps a few rules: unique IDs, the `items` of the
+layers and the `layerId` of the groups kept in step, one notification
+per outermost transaction, a document taken from elsewhere delivered as
+one `DocumentChange` with `reset: true`, and writes that return whether
+they were applied. They are written in full on
+[`Store`](../api/maplibre-gl-draw/interfaces/Store.md) and
+[`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md).
 
 The document it holds is the one `document.toJSON()` writes; its shape is
 in [the data format reference](../reference/data-format.md).
