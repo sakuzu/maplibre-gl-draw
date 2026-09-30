@@ -165,7 +165,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - In `/geometry`: `midpoint`, `along`, `nearestPointOnLine`,
   `perimeter`, `makeValid`, `rewind` and `metersToDegrees`.
 - In `/table`: `tableFromFeatures`, `createTableBuilder` and
-  `TableBuilder`, which build a table from GeoJSON.
+  `TableBuilder`, which build a table from GeoJSON, and
+  `PreparedTable.length` and `PreparedTable.bounds`, the number of rows
+  and the extent of a prepared table (`null` when no row has a
+  geometry).
 
 ### Removed in 2.0.0
 

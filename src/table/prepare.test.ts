@@ -80,7 +80,18 @@ describe('prepareTable', () => {
     const prepared = prepareTable(input);
     expect(prepared.table).toBe(input);
     expect(prepared.length).toBe(10);
-    expect(prepared.bounds).toHaveLength(40);
+    expect(prepared.rowBounds).toHaveLength(40);
+  });
+
+  it('tells the extent of the rows with a geometry, or null when none has one', () => {
+    const table: Table = {
+      length: 3,
+      geometry: { type: 'Point', coords: Float64Array.of(1, 5, -2, 3, Number.NaN, Number.NaN) },
+      validity: Uint8Array.of(0b011),
+    };
+    expect(prepareTable(table).bounds).toEqual([-2, 3, 1, 5]);
+    const empty: Table = { length: 0, geometry: { type: 'Point', coords: new Float64Array(0) } };
+    expect(prepareTable(empty).bounds).toBeNull();
   });
 
   it('lists every buffer once for the transfer', () => {
@@ -124,7 +135,8 @@ describe('prepareTable', () => {
       },
     };
     const prepared = prepareTable(table);
-    expect(Array.from(prepared.bounds)).toEqual([1, 1, 1, 1, 0, 0, 2, 2]);
+    expect(Array.from(prepared.rowBounds)).toEqual([1, 1, 1, 1, 0, 0, 2, 2]);
+    expect(prepared.bounds).toEqual([0, 0, 2, 2]);
     const buffers = transferList(table);
     expect(buffers).toEqual(
       [types, offsets, point, line, lineOffsets].map((array) => array.buffer),

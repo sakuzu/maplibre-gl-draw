@@ -12,6 +12,7 @@
  * A pure module: it depends on neither maplibre nor WebGL nor the DOM.
  */
 
+import type { BBox } from '../geometry/types.js';
 import { buildPackedRTree } from './packed-rtree.js';
 import { partitionRows } from './partition.js';
 import { isDictionaryColumn, TableReader } from './table.js';
@@ -43,13 +44,14 @@ import type { Column, PreparedTable, Table, TableGeometry } from './types.js';
  */
 export function prepareTable(table: Table): PreparedTable {
   const reader = new TableReader(table);
-  const bounds = reader.computeBounds();
-  const chunks = partitionRows(bounds, reader.computeVertexCounts());
-  const index = buildPackedRTree(bounds);
+  const rowBounds = reader.computeBounds();
+  const chunks = partitionRows(rowBounds, reader.computeVertexCounts());
+  const index = buildPackedRTree(rowBounds);
   return {
     table,
     length: reader.length,
-    bounds,
+    bounds: extentOf(rowBounds),
+    rowBounds,
     chunkRows: chunks.rows,
     chunkOffsets: chunks.offsets,
     chunkBounds: chunks.bounds,
@@ -59,6 +61,22 @@ export function prepareTable(table: Table): PreparedTable {
     indexEntries: index.indices,
     indexLevels: index.levelBounds,
   };
+}
+
+/** The extent of the bboxes of the rows (NaN for a row without a geometry), or null */
+function extentOf(rowBounds: Float64Array): BBox | null {
+  let west = Number.POSITIVE_INFINITY;
+  let south = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < rowBounds.length; i += 4) {
+    if (Number.isNaN(rowBounds[i])) continue;
+    west = Math.min(west, rowBounds[i]);
+    south = Math.min(south, rowBounds[i + 1]);
+    east = Math.max(east, rowBounds[i + 2]);
+    north = Math.max(north, rowBounds[i + 3]);
+  }
+  return west <= east ? [west, south, east, north] : null;
 }
 
 /**
@@ -117,7 +135,7 @@ export function transferList(table: Table | PreparedTable): ArrayBuffer[] {
   for (const column of Object.values(input.columns ?? {})) addColumn(column);
 
   if (prepared) {
-    add(prepared.bounds);
+    add(prepared.rowBounds);
     add(prepared.chunkRows);
     add(prepared.chunkOffsets);
     add(prepared.chunkBounds);

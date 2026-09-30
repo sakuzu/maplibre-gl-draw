@@ -317,6 +317,19 @@ the first click finds the index ready. Given a bare table, `setTable`
 computes the same arrays itself. `draw.datasets.add` takes either as
 the `table` option.
 
+A prepared table also tells its number of rows (`length`) and its
+extent (`bounds`, `[west, south, east, north]`, or `null` when no row has
+a geometry), for example to fit the map to what was read:
+
+<!-- docs-check:
+declare const prepared: import('@sakuzu/maplibre-gl-draw/table').PreparedTable;
+-->
+
+```ts
+if (prepared.bounds) map.fitBounds(prepared.bounds, { padding: 20 });
+console.log(`${prepared.length} rows`);
+```
+
 ### Fetching what is in view
 
 A `provider` is called when the part of the map in view changes, with

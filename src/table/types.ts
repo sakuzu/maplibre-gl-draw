@@ -10,6 +10,8 @@
  * copy.
  */
 
+import type { BBox } from '../geometry/types.js';
+
 /**
  * The geometry type of a geometry column of a single type.
  *
@@ -227,25 +229,26 @@ export interface Table {
  *
  * Besides the table it carries the bbox of each row, the spatial chunks and the spatial index
  * of the hit testing, all in typed arrays, so it can be sent from a Worker without a copy
- * ({@link transferList}). Treat everything but `table` as opaque: pass the whole object as
- * `table` to {@link maplibre-gl-draw!DatasetsCollection.add | draw.datasets.add} or to
+ * ({@link transferList}). It also tells the number of rows and the extent of the table. Treat
+ * everything else as opaque: pass the whole object as `table` to {@link maplibre-gl-draw!DatasetsCollection.add | draw.datasets.add} or to
  * {@link maplibre-gl-draw!Dataset.setTable | Dataset.setTable}.
  */
 export interface PreparedTable {
   /** The table the rest was computed for */
   readonly table: Table;
-  /**
-   * The number of rows it was computed for (it must equal the `length` of the table)
-   *
-   * @internal
-   */
+  /** The number of rows, the `length` of the table it was computed for */
   readonly length: number;
+  /**
+   * The extent of the rows with a geometry, as `[west, south, east, north]` in degrees, or
+   * `null` when no row has a geometry
+   */
+  readonly bounds: BBox | null;
   /**
    * The bbox of each row, `[minX, minY, maxX, maxY]` (NaN for a row without a geometry)
    *
    * @internal
    */
-  readonly bounds: Float64Array;
+  readonly rowBounds: Float64Array;
   /**
    * The rows of every chunk, chunk after chunk
    *

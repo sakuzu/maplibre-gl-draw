@@ -240,15 +240,15 @@ export class TableSource implements DisplaySource {
     this.table = new TableReader(input);
     this.length = this.table.length;
     const ready = prepared ?? prepareTable(input);
-    if (!(ready.bounds instanceof Float64Array) || !(ready.indexBoxes instanceof Float64Array)) {
+    if (!(ready.rowBounds instanceof Float64Array) || !(ready.indexBoxes instanceof Float64Array)) {
       throw new Error('Table: a prepared table must be made by prepareTable');
     }
-    if (ready.length !== this.length || ready.bounds.length !== this.length * 4) {
+    if (ready.length !== this.length || ready.rowBounds.length !== this.length * 4) {
       throw new Error(
         `Table: the prepared table was made for ${ready.length} rows, the table has ${this.length}`,
       );
     }
-    this.bounds = ready.bounds;
+    this.bounds = ready.rowBounds;
     this.chunks = toDisplayChunks({
       rows: ready.chunkRows,
       offsets: ready.chunkOffsets,

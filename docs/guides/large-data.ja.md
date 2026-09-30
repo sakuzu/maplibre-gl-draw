@@ -314,6 +314,19 @@ worker.postMessage(file);
 `setTable` が同じ配列を自分で計算します。`draw.datasets.add` の
 `table` オプションは、どちらも受け取ります。
 
+下ごしらえ済みの表は、行の数 (`length`) と範囲 (`bounds`。
+`[west, south, east, north]` で、幾何を持つ行が無ければ `null`) も
+持ちます。たとえば、読んだものに地図を合わせるのに使えます。
+
+<!-- docs-check:
+declare const prepared: import('@sakuzu/maplibre-gl-draw/table').PreparedTable;
+-->
+
+```ts
+if (prepared.bounds) map.fitBounds(prepared.bounds, { padding: 20 });
+console.log(`${prepared.length} 行`);
+```
+
 ### 見えている範囲の分を取り寄せる
 
 `provider` は、地図の見えている範囲が変わると、その範囲

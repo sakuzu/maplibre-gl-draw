@@ -118,7 +118,7 @@ describe('createTableBuilder: the geometry', () => {
     const geometry = table.geometry as TableGeometry;
     expect(geometry.type).toBe('LineString');
     expect(geometry.offsets?.map((o) => Array.from(o))).toEqual([[0, 0, 2, 2]]);
-    const bounds = prepareTable(table).bounds;
+    const bounds = prepareTable(table).rowBounds;
     expect(Number.isNaN(bounds[0])).toBe(true);
     expect(Array.from(bounds.subarray(4, 8))).toEqual([0, 0, 1, 1]);
     expect(Number.isNaN(bounds[8])).toBe(true);
@@ -165,7 +165,7 @@ describe('createTableBuilder: the geometry', () => {
     const table = builder.finish();
     expect((table.geometry as TableGeometry).type).toBe('Polygon');
     expect(() => new TableReader(table)).not.toThrow();
-    expect(Number.isNaN(prepareTable(table).bounds[0])).toBe(true);
+    expect(Number.isNaN(prepareTable(table).rowBounds[0])).toBe(true);
   });
 
   it('keeps only the first two values of a position', () => {
@@ -304,6 +304,6 @@ describe('tableFromFeatures', () => {
     expect(buffers).toContain(mixed.types.buffer);
     expect(buffers).toContain(mixed.children[1].coords.buffer);
     expect(buffers).toContain((table.columns!.size as Float64Array).buffer);
-    expect(buffers).toContain(prepared.bounds.buffer);
+    expect(buffers).toContain(prepared.rowBounds.buffer);
   });
 });
