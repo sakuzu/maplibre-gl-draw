@@ -86,6 +86,15 @@ export const drawFreehandMode: ModeFactory = (ctx) => {
       return false;
     },
 
+    // A press released without a drag drew nothing: the map pans again
+    onPointerUp() {
+      if (!stroke) releasePan();
+      return false;
+    },
+
+    // The two clicks of a double click drew nothing, and the map does not zoom
+    onDoubleClick: () => true,
+
     onDragStart(event) {
       stroke = [event.snapped.lngLat];
       showPreview();

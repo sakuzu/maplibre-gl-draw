@@ -116,6 +116,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   the rim of the marker went to what was behind it, a companion drawn
   from the point among others. A feature therefore always wins over its
   own companion at the same point.
+- A double click never zooms the map while a drawing mode (a mode with
+  `writes: true`) is the current mode, whether or not the mode takes
+  it; the freehand mode takes it, and a press it releases without a
+  drag leaves the pan of the map on.
 
 ### Added in 2.0.0
 

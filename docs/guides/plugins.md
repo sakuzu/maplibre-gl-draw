@@ -260,7 +260,8 @@ draw.extensions.plugins.add(createShortcuts());
 
 - The plugins receive the input in the order they were added
 - A consumed press does not reach the map, so the map does not pan. A
-  consumed double click does not zoom the map
+  consumed double click does not zoom the map, and while a mode with
+  `writes: true` is the current mode no double click does
 - A consumed key still reaches the map. To stop the map from also
   using it (the arrows, `+`, `-`), call `event.original.preventDefault()`
 - `onPointerLeave` arrives when the pointer leaves the map

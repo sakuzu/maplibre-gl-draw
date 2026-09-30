@@ -301,6 +301,29 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(await mode(page)).toBe('select');
   });
 
+  it('leaves the pan on after a freehand click, and a double click does not zoom the map', async () => {
+    await clearAll(page);
+    const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
+    await setMode(page, 'draw_freehand');
+    await click(page, at(0, 0));
+    expect(
+      await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
+    ).toBe(true);
+
+    await page.mouse.dblclick(at(40, 20).x, at(40, 20).y);
+    // Long enough for the zoom animation of a double click to have moved the map
+    await page.waitForTimeout(400);
+    await settle(page);
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
+    expect(
+      await page.evaluate(() => (window as unknown as E2EWindow).map.dragPan.isEnabled()),
+    ).toBe(true);
+    expect(await features(page)).toHaveLength(0);
+
+    await press(page, 'Escape');
+    expect(await mode(page)).toBe('select');
+  });
+
   it('selects a polygon with a click and moves it with a drag', async () => {
     await clearAll(page);
     await setMode(page, 'draw_polygon');

@@ -98,7 +98,8 @@ export interface InputHandlers {
 export interface ModeHandler extends Partial<InputHandlers> {
   /**
    * Whether the mode writes new features. Such a mode is entered only while a layer can be
-   * written; false when it is left out.
+   * written, and a double click never zooms the map while it is the current mode, whether or
+   * not it takes the double click; false when it is left out.
    */
   readonly writes?: boolean;
   /** How the mode wants the positions of its input snapped; every input snaps when left out */
