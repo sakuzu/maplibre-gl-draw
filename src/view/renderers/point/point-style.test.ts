@@ -52,4 +52,23 @@ describe('resolvePointStyle', () => {
     expect(resolvePointStyle({ pointOpacity: -1 }, DEFAULTS).fillOpacity).toBe(1);
     expect(resolvePointStyle({ pointOpacity: Number.NaN }, DEFAULTS).fillOpacity).toBe(1);
   });
+
+  it('takes the outline of the marker from pointStrokeColor and pointStrokeWidth', () => {
+    const style = resolvePointStyle(
+      { pointStrokeColor: '#000080', pointStrokeWidth: 4, strokeColor: '#ff0000', strokeWidth: 9 },
+      DEFAULTS,
+    );
+
+    expect(style.strokeColor).toEqual([0, 0, 128 / 255, 1]);
+    expect(style.strokeWidth).toBe(4);
+    const instance = toPointInstanceData([0, 0], style);
+    expect(instance.strokeWidth).toBe(4);
+    // Without them the marker keeps the outline of the default
+    expect(resolvePointStyle({ strokeColor: '#ff0000' }, DEFAULTS)).toMatchObject({
+      strokeColor: [1, 1, 1, 1],
+      strokeWidth: 2,
+    });
+    expect(resolvePointStyle({ pointStrokeWidth: 0 }, DEFAULTS).strokeWidth).toBe(0);
+    expect(resolvePointStyle({ pointStrokeWidth: -1 }, DEFAULTS).strokeWidth).toBe(2);
+  });
 });

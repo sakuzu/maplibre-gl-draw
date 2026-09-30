@@ -513,6 +513,8 @@ function appliedStyle(
     pointRadius: point.size / 2,
     pointShape: point.shape === 'icon' ? 'circle' : point.shape,
     pointOpacity: 1,
+    pointStrokeColor: toHex(point.strokeColor),
+    pointStrokeWidth: point.strokeWidth,
     imageOpacity: config.image?.opacity ?? 1,
   };
   const layer = store.getLayer(feature.layerId);

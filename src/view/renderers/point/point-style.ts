@@ -39,12 +39,22 @@ function featurePointOpacity(style: FeatureStyle): number {
 }
 
 /**
+ * The width of the outline of the marker a feature names, or undefined when it names none or
+ * a value that is not a finite number of 0 or more
+ */
+function featurePointStrokeWidth(style: FeatureStyle): number | undefined {
+  const width = style.pointStrokeWidth;
+  return typeof width === 'number' && Number.isFinite(width) && width >= 0 ? width : undefined;
+}
+
+/**
  * Merges the style of a point feature (already carrying the rule color) into the default
  *
  * The keys of the feature win key by key: `pointColor` becomes the fill, `pointRadius` the
- * size (a diameter), `pointShape` the shape. `pointOpacity` is multiplied into the opacity of
- * the fill and of the outline of the marker. A key left unset (or a shape that is not one of
- * the four a feature may name, or an opacity outside 0 to 1) keeps the default.
+ * size (a diameter), `pointShape` the shape, `pointStrokeColor` and `pointStrokeWidth` the
+ * outline. `pointOpacity` is multiplied into the opacity of the fill and of the outline of the
+ * marker. A key left unset (or a shape that is not one of the four a feature may name, an
+ * opacity outside 0 to 1, or a negative width) keeps the default.
  *
  * @param style The style of the feature (undefined when it has none)
  * @param defaults The point style of the `style` option of the instance
@@ -64,6 +74,10 @@ export function resolvePointStyle(
     fillColor: style.pointColor ? toColor(style.pointColor, 1) : defaults.fillColor,
     size: style.pointRadius ? style.pointRadius * 2 : defaults.size,
     fillOpacity: defaults.fillOpacity * opacity,
+    strokeColor: style.pointStrokeColor
+      ? toColor(style.pointStrokeColor, 1)
+      : defaults.strokeColor,
+    strokeWidth: featurePointStrokeWidth(style) ?? defaults.strokeWidth,
     strokeOpacity: defaults.strokeOpacity * opacity,
   };
 }

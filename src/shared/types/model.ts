@@ -139,7 +139,7 @@ export interface VertexSelection {
  *
  * | Feature types | Keys |
  * | --- | --- |
- * | Point, MultiPoint | pointColor, pointRadius, pointShape, pointOpacity |
+ * | Point, MultiPoint | pointColor, pointRadius, pointShape, pointOpacity, pointStrokeColor, pointStrokeWidth |
  * | LineString, MultiLineString, Freehand | strokeColor, strokeOpacity, strokeWidth, lineStyle |
  * | Polygon, MultiPolygon, Circle | the stroke keys, fillColor, fillOpacity |
  * | Image | imageOpacity |
@@ -221,7 +221,7 @@ export interface FeatureStyle {
    */
   pointRadius?: number;
   /**
-   * The fill color of the marker of a point (the marker keeps its white outline)
+   * The fill color of the marker of a point (its outline is `pointStrokeColor`)
    *
    * @defaultValue `'#FF6633'`
    */
@@ -243,6 +243,18 @@ export interface FeatureStyle {
    * @defaultValue `1`
    */
   pointOpacity?: number;
+  /**
+   * The color of the outline of the marker of a point
+   *
+   * @defaultValue `'#ffffff'`
+   */
+  pointStrokeColor?: string;
+  /**
+   * The width of the outline of the marker of a point, in CSS pixels (0 for none)
+   *
+   * @defaultValue `2`
+   */
+  pointStrokeWidth?: number;
 
   // Image
   /**

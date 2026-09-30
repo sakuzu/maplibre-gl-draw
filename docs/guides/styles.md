@@ -33,13 +33,16 @@ takes the rule color or the default.
 | Types | Keys |
 | --- | --- |
 | points | `pointColor`, `pointRadius`, `pointShape`, `pointOpacity` |
+| outlines of points | `pointStrokeColor`, `pointStrokeWidth` |
 | lines | `strokeColor`, `strokeOpacity`, `strokeWidth`, `lineStyle` |
 | areas | the line keys, `fillColor`, `fillOpacity` |
 | `Image` | `imageOpacity` |
 
 Points are `Point` and `MultiPoint`; lines are `LineString`,
 `MultiLineString` and `Freehand`; areas are `Polygon`, `MultiPolygon` and
-`Circle`.
+`Circle`. The outline of a point marker is `pointStrokeColor` (white by
+default) and `pointStrokeWidth` (2 by default); `strokeColor` and
+`strokeWidth` are the lines and the outlines of areas only.
 
 ```ts
 draw.features.create({
@@ -117,8 +120,8 @@ const draw = createDraw(map, {
 ```
 
 - `previewStyle` is the look of the shape being drawn: its stroke keys
-  give its lines and the outlines of its vertices, its point keys its
-  vertices
+  give its lines, its point keys its vertices (`pointStrokeColor` and
+  `pointStrokeWidth` their outlines)
 - `selectionStyle` is the look of the box around the selection and of its
   handles (resize, rotate, vertex, midpoint and radius handles, the center
   of a circle and the box of a box selection). Each part you give

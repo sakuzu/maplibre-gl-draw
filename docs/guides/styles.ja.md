@@ -34,12 +34,15 @@ draw.features.update(featureId, { style: { fillColor: '#ff9800' } });
 | 型 | キー |
 | --- | --- |
 | 点 | `pointColor`、`pointRadius`、`pointShape`、`pointOpacity` |
+| 点の縁 | `pointStrokeColor`、`pointStrokeWidth` |
 | 線 | `strokeColor`、`strokeOpacity`、`strokeWidth`、`lineStyle` |
 | 面 | 線のキー、`fillColor`、`fillOpacity` |
 | `Image` | `imageOpacity` |
 
 点は `Point` と `MultiPoint`、線は `LineString`、`MultiLineString`、
-`Freehand`、面は `Polygon`、`MultiPolygon`、`Circle` です。
+`Freehand`、面は `Polygon`、`MultiPolygon`、`Circle` です。点の印の縁は
+`pointStrokeColor` (既定は白) と `pointStrokeWidth` (既定は 2) で、
+`strokeColor` と `strokeWidth` は線と面の縁だけに使われます。
 
 ```ts
 draw.features.create({
@@ -117,8 +120,9 @@ const draw = createDraw(map, {
 });
 ```
 
-- `previewStyle` は描いている途中の形の見た目です。線のキーはその線と
-  頂点の輪郭に、点のキーはその頂点に使われます
+- `previewStyle` は描いている途中の形の見た目です。線のキーはその線に、
+  点のキーはその頂点に使われます。頂点の輪郭は `pointStrokeColor` と
+  `pointStrokeWidth` です
 - `selectionStyle` は、選択を囲む枠とそのハンドル (拡縮、回転、頂点、
   中点、半径のハンドル、円の中心、矩形選択の矩形) の見た目です。渡した
   部分は、その部分の既定値を置き換えるので、部分ごとにすべての項目を

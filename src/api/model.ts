@@ -65,11 +65,14 @@ export interface FeatureStyle {
   fillColor?: string;
   /** The opacity of the fill, from 0 to 1 */
   fillOpacity?: number;
-  /** The color of a line or an outline */
+  /** The color of a line or of the outline of an area (`pointStrokeColor` for a point) */
   strokeColor?: string;
-  /** The width of a line or an outline, in pixels at the reference zoom */
+  /**
+   * The width of a line or of the outline of an area, in pixels at the reference zoom
+   * (`pointStrokeWidth` for a point)
+   */
   strokeWidth?: number;
-  /** The opacity of a line or an outline, from 0 to 1 */
+  /** The opacity of a line or of the outline of an area, from 0 to 1 */
   strokeOpacity?: number;
   /** The dash pattern of a line or an outline */
   lineStyle?: LineStyle;
@@ -79,8 +82,12 @@ export interface FeatureStyle {
   pointRadius?: number;
   /** The shape of a point marker */
   pointShape?: PointShape;
-  /** The opacity of a point marker, from 0 to 1 */
+  /** The opacity of a point marker, its fill and its outline, from 0 to 1 */
   pointOpacity?: number;
+  /** The color of the outline of a point marker; `#ffffff` by default */
+  pointStrokeColor?: string;
+  /** The width of the outline of a point marker, in pixels (0 for none); 2 by default */
+  pointStrokeWidth?: number;
   /** The opacity of an image, from 0 to 1 */
   imageOpacity?: number;
 }

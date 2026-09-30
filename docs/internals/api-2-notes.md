@@ -116,6 +116,11 @@ native data of version 2 and on the GeoJSON import of an Image.
 
 `pointOpacity` is new: the point renderer multiplies it into the opacity
 of the fill and of the outline of the marker (1 when unset).
+`pointStrokeColor` and `pointStrokeWidth` are new too: the outline of the
+marker (white and 2 pixels when unset). `strokeColor` and `strokeWidth`
+are the lines and the outlines of areas only; in the `style.point` and
+`previewStyle` options they no longer give the outline of a marker. No
+data changes, because the style of a feature had no key for it before.
 
 ## The native format
 

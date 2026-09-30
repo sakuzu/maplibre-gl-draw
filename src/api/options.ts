@@ -417,7 +417,8 @@ export interface RuntimeOptions {
   };
   /**
    * The look of the geometry being drawn, with the keys of the style of a feature: the stroke
-   * keys give its lines and the outlines of its vertices, the point keys its vertices
+   * keys give its lines, the point keys its vertices (`pointStrokeColor` and
+   * `pointStrokeWidth` their outlines)
    */
   previewStyle?: Partial<FeatureStyle>;
   /** The look of the box and the handles of the selection */

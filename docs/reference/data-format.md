@@ -320,7 +320,8 @@ color of the style rule of its layer, or the default of the instance (the
 `style` option). Which keys apply depends on the type.
 
 - Point and MultiPoint: `pointColor`, `pointRadius`, `pointShape`,
-  `pointOpacity`
+  `pointOpacity`, `pointStrokeColor` and `pointStrokeWidth` (the outline
+  of the marker, white and 2 pixels by default)
 - LineString, MultiLineString and Freehand: `strokeColor`,
   `strokeOpacity`, `strokeWidth`, `lineStyle`
 - Polygon, MultiPolygon and Circle: the stroke keys, `fillColor`,
@@ -589,8 +590,8 @@ checked and converted before anything is written.
   into the style: `stroke` to `strokeColor`, `stroke-width` to
   `strokeWidth`, `stroke-opacity` to `strokeOpacity`, `fill` to
   `fillColor`, `fill-opacity` to `fillOpacity`, `marker-color` to
-  `pointColor`. They also stay in `properties`. Export does not write
-  simplestyle
+  `pointColor`. Simplestyle has no key for the outline of a marker. They
+  also stay in `properties`. Export does not write simplestyle
 - An embedded image is accepted only on a `Point` whose marker is `Image`,
   and only in the form of [Embedded images](#embedded-images). A bad image
   rejects the whole load, because only an altered file can carry one
@@ -654,9 +655,11 @@ are kept.
 | Key | Accepted value |
 | --- | --- |
 | `fillColor`, `strokeColor`, `pointColor` | A CSS color |
+| `pointStrokeColor` | A CSS color |
 | `fillOpacity`, `strokeOpacity` | A number from 0 to 1 |
 | `pointOpacity`, `imageOpacity` | A number from 0 to 1 |
 | `strokeWidth`, `pointRadius` | A finite number, 0 or more |
+| `pointStrokeWidth` | A finite number, 0 or more |
 | `lineStyle` | `solid`, `dashed` or `dotted` |
 | `pointShape` | `circle`, `square`, `triangle` or `star` |
 

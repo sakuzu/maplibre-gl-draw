@@ -373,7 +373,10 @@ function applyStroke(stroke: StrokeStyle, style: FeatureStyle, lineStyle = true)
   if (lineStyle && style.lineStyle !== undefined) stroke.lineStyle = style.lineStyle;
 }
 
-/** A point marker with the point and stroke keys of a style */
+/**
+ * A point marker with the point keys of a style: `pointStrokeColor` and `pointStrokeWidth` give
+ * its outline, and `pointOpacity` is multiplied into its fill and its outline
+ */
 function applyPoint(point: PointStyle, style: FeatureStyle): void {
   if (style.pointShape !== undefined) point.shape = style.pointShape;
   if (style.pointRadius !== undefined) point.size = style.pointRadius * 2;
@@ -381,14 +384,13 @@ function applyPoint(point: PointStyle, style: FeatureStyle): void {
   if (style.pointColor !== undefined || style.pointOpacity !== undefined) {
     point.fillOpacity = alphaOf(style.pointColor) * (style.pointOpacity ?? 1);
   }
-  if (style.strokeColor !== undefined) {
-    point.strokeColor = withAlpha(toColor(style.strokeColor), 1);
+  if (style.pointStrokeColor !== undefined) {
+    point.strokeColor = withAlpha(toColor(style.pointStrokeColor), 1);
   }
-  if (style.strokeColor !== undefined || style.strokeOpacity !== undefined) {
-    point.strokeOpacity =
-      alphaOf(style.strokeColor) * (style.strokeOpacity ?? style.pointOpacity ?? 1);
+  if (style.pointStrokeColor !== undefined || style.pointOpacity !== undefined) {
+    point.strokeOpacity = alphaOf(style.pointStrokeColor) * (style.pointOpacity ?? 1);
   }
-  if (style.strokeWidth !== undefined) point.strokeWidth = style.strokeWidth;
+  if (style.pointStrokeWidth !== undefined) point.strokeWidth = style.pointStrokeWidth;
 }
 
 /** A fill with the fill keys of a style; a color without an opacity keeps the alpha before */
@@ -431,15 +433,15 @@ export function toFeatureStyleConfig(options: RuntimeOptions): FeatureStyleConfi
     // The line to the pointer keeps its dashes
     applyStroke(tentative.tentativeStroke, preview, false);
     for (const vertex of [tentative.vertex, tentative.highlightedVertex]) {
-      applyPoint(vertex, { ...preview, strokeWidth: undefined });
+      applyPoint(vertex, preview);
     }
     // The highlighted vertex stays larger than the others
     if (preview.pointRadius !== undefined) {
       tentative.highlightedVertex.size = preview.pointRadius * 2 + 4;
     }
     for (const marker of [tentative.circleCenterMarker, tentative.circleRadiusHandle]) {
-      if (preview.strokeColor !== undefined) {
-        marker.strokeColor = withAlpha(toColor(preview.strokeColor), 1);
+      if (preview.pointStrokeColor !== undefined) {
+        marker.strokeColor = withAlpha(toColor(preview.pointStrokeColor), 1);
       }
     }
   }

@@ -82,7 +82,8 @@ draw.on('mode.changed', ({ mode }) => {
 - 描画モードに入ると選択が解除されます
 
 描いている途中の形は、`previewStyle` の設定で表示します。キーは地物の
-スタイルと同じで、線のキーが線と頂点の縁を、点のキーが頂点を決めます。
+スタイルと同じで、線のキーが線を、点のキーが頂点を決めます。頂点の縁は
+`pointStrokeColor` と `pointStrokeWidth` です。
 
 ```ts
 draw.options.update({

@@ -116,6 +116,8 @@ describe('the options at creation', () => {
       { store: {} },
       { selectionStyle: { boundingBox: { stroke: { color: 'nope' } } } },
       { previewStyle: { strokeWidth: -1 } },
+      { previewStyle: { pointStrokeWidth: -1 } },
+      { style: { point: { pointStrokeColor: 'nope' } } },
       { rendering: { renderScale: 0 } },
       { autoName: true },
       { messages: { snapNorth: 3 } },
@@ -134,7 +136,15 @@ describe('options.update', () => {
     const refresh = vi.spyOn(engine.customLayer, 'refresh');
     options.update({
       style: {
-        point: { pointColor: '#00ff00', pointRadius: 5, pointShape: 'star' },
+        point: {
+          pointColor: '#00ff00',
+          pointRadius: 5,
+          pointShape: 'star',
+          pointStrokeColor: '#000080',
+          pointStrokeWidth: 3,
+          strokeColor: '#ff0000',
+          strokeWidth: 9,
+        },
         line: { strokeColor: 'hsl(240, 100%, 50%)', strokeWidth: 4, lineStyle: 'dashed' },
         polygon: { fillColor: 'blue' },
         circle: { fillColor: 'yellow', fillOpacity: 1 },
@@ -146,6 +156,9 @@ describe('options.update', () => {
       fillColor: [0, 1, 0, 1],
       size: 10,
       shape: 'star',
+      // The outline of the marker comes from the point keys, not the stroke keys
+      strokeColor: toColor('#000080'),
+      strokeWidth: 3,
     });
     expect(featureStyle.lineString.stroke).toMatchObject({
       color: [0, 0, 1, 1],
@@ -165,13 +178,24 @@ describe('options.update', () => {
   });
 
   it('changes the look of the geometry being drawn', () => {
-    options.update({ previewStyle: { strokeColor: '#000', strokeWidth: 5, pointRadius: 3 } });
+    options.update({
+      previewStyle: {
+        strokeColor: '#000',
+        strokeWidth: 5,
+        pointRadius: 3,
+        pointStrokeColor: '#f00',
+        pointStrokeWidth: 1,
+      },
+    });
     const { tentative } = engine.context.featureStyle;
     expect(tentative.stroke.color).toEqual([0, 0, 0, 1]);
     expect(tentative.stroke.width).toBe(5);
     expect(tentative.tentativeStroke.lineStyle).toBe('dashed');
     expect(tentative.vertex.size).toBe(6);
-    expect(tentative.vertex.strokeColor).toEqual([0, 0, 0, 1]);
+    // The outline of the vertices is the outline of a point marker
+    expect(tentative.vertex.strokeColor).toEqual([1, 0, 0, 1]);
+    expect(tentative.vertex.strokeWidth).toBe(1);
+    expect(tentative.circleCenterMarker.strokeColor).toEqual([1, 0, 0, 1]);
   });
 
   it('changes the look of the selection and of the box selection', () => {

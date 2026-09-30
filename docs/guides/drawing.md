@@ -83,8 +83,9 @@ leaves the mode for `select` only when nothing is being drawn.
 - A drawing mode clears the selection when it starts
 
 The shape being drawn is shown with the `previewStyle` option, which takes
-the keys of a feature style: the stroke keys give its lines and the
-outlines of its vertices, the point keys its vertices.
+the keys of a feature style: the stroke keys give its lines, the point
+keys its vertices (`pointStrokeColor` and `pointStrokeWidth` their
+outlines).
 
 ```ts
 draw.options.update({

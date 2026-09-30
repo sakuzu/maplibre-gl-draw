@@ -455,6 +455,8 @@ describe('getAppliedStyle', () => {
       strokeWidth: 2,
       lineStyle: 'solid',
       pointOpacity: 1,
+      pointStrokeColor: '#ffffff',
+      pointStrokeWidth: 2,
       imageOpacity: 1,
     });
     store.updateLayer('l1', { styleRule: { kind: 'single', color: '#00ff00' } });
@@ -462,6 +464,35 @@ describe('getAppliedStyle', () => {
     features.update('a', { style: { fillColor: '#0000ff', strokeWidth: 5 } });
     expect(features.getAppliedStyle('a')).toMatchObject({ fillColor: '#0000ff', strokeWidth: 5 });
     expect(features.getAppliedStyle('x')).toBeUndefined();
+  });
+
+  it('gives the outline of a point marker apart from the stroke of lines and areas', () => {
+    const point = features.create({
+      type: 'Point',
+      layerId: 'l1',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      style: { pointStrokeColor: '#000080', pointStrokeWidth: 1 },
+    });
+    if (!point) throw new Error('not created');
+    expect(features.getAppliedStyle(point.id)).toMatchObject({
+      pointStrokeColor: '#000080',
+      pointStrokeWidth: 1,
+      strokeColor: '#ff0077',
+      strokeWidth: 2,
+    });
+    expect(
+      codeOf(() =>
+        features.create({
+          type: 'Point',
+          layerId: 'l1',
+          geometry: { type: 'Point', coordinates: [0, 0] },
+          style: { pointStrokeWidth: -1 },
+        }),
+      ),
+    ).toBe('invalid-input');
+    expect(codeOf(() => features.update(point.id, { style: { pointStrokeColor: 'nope' } }))).toBe(
+      'invalid-input',
+    );
   });
 
   it('takes the defaults of the circles and the images when the options give them', () => {

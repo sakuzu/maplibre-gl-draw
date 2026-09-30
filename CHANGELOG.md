@@ -117,6 +117,10 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - `FeaturePatch`, `LayerInput`, `LayerPatch`, `GroupInput`,
   `GroupPatch`, the filters, `MoveTarget`, `LoadSource`, and the `mode`
   of `LoadOptions` (`replace` or `merge`).
+- `FeatureStyle.pointStrokeColor` and `pointStrokeWidth`, the outline of
+  a point marker (white and 2 pixels by default). `strokeColor` and
+  `strokeWidth` are the lines and the outlines of areas, also in the
+  options `style.point` and `previewStyle`.
 - `FeatureStyle.pointOpacity`, the option `previewStyle` for the shape
   being drawn, and `selectionStyle.boxSelection` for the selection box.
 - `ScreenContext.outline`, the four corners of the selection frame of
