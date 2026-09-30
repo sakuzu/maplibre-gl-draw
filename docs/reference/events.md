@@ -282,7 +282,11 @@ Fires after `draw.document.load()` read something, when every event of the
 load has fired, and once per item after `draw.document.loadMany()`.
 `result` is the `LoadResult` the promise resolves to (the one of the item),
 and `source` is the source of its writes, `load`. A load refused because
-the document is read-only, and a load that fails, fire nothing.
+the document is read-only, and a load that fails, fire nothing. The layer
+and the group that `LoadOptions.layer` and `LoadOptions.group` create come
+in the same `document.changed` as the features, with `layer.created` and
+`group.created` before this event, and `result.layerId` and
+`result.groupId` name them.
 
 ### selection.changed
 

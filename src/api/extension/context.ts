@@ -75,7 +75,8 @@ export interface ScreenContext {
    * unturned. It answers for every type: an image and any other turned shape give the turned
    * corners, a line or an area the corners of its extent, a point the frame around it, and a
    * custom type the corners of its `outline`, or of its `bounds` when it has none. A feature
-   * off the screen still has one.
+   * off the screen still has one. The engine draws the frame with every edge moved the margin
+   * outward from these corners.
    *
    * A custom type must not call it for its own features from its `outline` or `bounds`, which
    * it calls.

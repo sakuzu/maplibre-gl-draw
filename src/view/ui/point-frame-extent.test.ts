@@ -157,7 +157,7 @@ describe('the outline of the selection box of a point', () => {
   const turned = (): Feature =>
     makeFeature({ type: 'Turned', geometry: { type: 'Point', coordinates: [1, 1] } });
 
-  it('draws the frame along the outline, expanded by the margin', () => {
+  it('draws the frame along the outline, every edge moved out by the margin', () => {
     const bbox = computeFeatureGeoBoundingBox(
       turned(),
       transform,
@@ -167,9 +167,10 @@ describe('the outline of the selection box of a point', () => {
     if (!bbox) throw new Error('bbox cannot be computed');
     const top = transform.project(bbox.topLeft);
     const right = transform.project(bbox.topRight);
+    // The edges of the diamond are turned by 45 degrees, so its tips move by MARGIN * sqrt(2)
     expect(top.x).toBeCloseTo(100);
-    expect(top.y).toBeCloseTo(-100 - (40 + MARGIN));
-    expect(right.x).toBeCloseTo(100 + 40 + MARGIN);
+    expect(top.y).toBeCloseTo(-100 - (40 + MARGIN * Math.SQRT2));
+    expect(right.x).toBeCloseTo(100 + 40 + MARGIN * Math.SQRT2);
     expect(right.y).toBeCloseTo(-100);
   });
 

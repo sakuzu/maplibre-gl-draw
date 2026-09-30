@@ -21,13 +21,18 @@ export interface DocumentResource {
    * The source is read (and an image decoded) first; then every write is one transaction with
    * the source `load`, whatever the format: one `document.changed` and one notification of the
    * Store, one step for a subscriber that records changes. A load that fails writes nothing.
+   * The layer of `options.layer` and the group of `options.group` are created in that
+   * transaction too.
    *
    * @returns What was read, or `null` when the document is read-only
    * @throws `DrawError` (the promise rejects; every failure is a `DrawError`) with the code
    *   `unsupported-format` when the source cannot be read (text that is not JSON, data that is
    *   neither a document of the library nor GeoJSON, an image file that cannot be decoded), or
    *   `invalid-input` when the document is not valid (a document of the library that breaks
-   *   its format, an embedded image that is broken, an image without `coordinate`)
+   *   its format, an embedded image that is broken, an image without `coordinate`, `layer`
+   *   with `layerId`, `layer` or `group` with a document of the library), `not-found` for a
+   *   `layerId` the document does not have, or `already-exists` for an ID of `layer` or
+   *   `group` that is taken
    */
   load(source: LoadSource, options?: LoadOptions): Promise<LoadResult | null>;
   /**
@@ -39,6 +44,8 @@ export interface DocumentResource {
    * `document.loaded` arrives once per item, after the writes.
    *
    * A layer named by `layerId` that an earlier item removed is replaced with the active layer.
+   * With `layer` and `group` in the options of the items, an import of one layer per file and
+   * one group per folder is still one transaction.
    *
    * @param items - The sources, each with the options `load` takes
    * @returns What was read from each item, in the order of the items, or `null` when the

@@ -170,7 +170,11 @@ export interface SelectionStyleOptions {
       /** A dash pattern in CSS pixels, `[dash, gap]`, instead of that of `lineStyle` */
       dashArray?: number[];
     };
-    /** The gap between the features and the box, in CSS pixels */
+    /**
+     * The gap between the features and the box, in CSS pixels: every edge of the box stands
+     * this far outside the outline of the selection (`ScreenContext.outline`), and the resize
+     * and rotate handles sit on the box
+     */
     margin: number;
   };
   /** The resize handles at the corners of the box */

@@ -286,6 +286,73 @@ describe('document.loadMany', () => {
     expect(store.listFeatures()).toHaveLength(1);
   });
 
+  it('creates a layer per item and a group of one item in the transaction of the load', async () => {
+    const notifications: Array<string | undefined> = [];
+    store.subscribe((change) => notifications.push(change.source));
+    const results = await doc.loadMany([
+      { source: point('p', [3, 4]), options: { layer: { name: 'first' } } },
+      {
+        source: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              id: 'q',
+              properties: { 'maplibre-gl-draw:layerId': 'l1' },
+              geometry: { type: 'Point', coordinates: [5, 6] },
+            },
+            {
+              type: 'Feature',
+              id: 'r',
+              properties: {},
+              geometry: { type: 'Point', coordinates: [7, 8] },
+            },
+          ],
+        },
+        options: { layer: { name: 'second' }, group: { name: 'folder' } },
+      },
+    ]);
+    expect(notifications).toEqual(['load']);
+    const [first, second] = results ?? [];
+    expect(first).toMatchObject({ featureIds: ['p'], layerId: expect.any(String) });
+    expect(first?.groupId).toBeUndefined();
+    expect(second).toMatchObject({ featureIds: ['q', 'r'], layerId: expect.any(String) });
+    const firstLayer = store.getLayer(first?.layerId ?? '');
+    const secondLayer = store.getLayer(second?.layerId ?? '');
+    expect(firstLayer).toMatchObject({ name: 'first', items: ['p'] });
+    expect(store.getFeature('p')?.layerId).toBe(firstLayer?.id);
+    // The group stands in the new layer where its features landed
+    const group = store.getGroup(second?.groupId ?? '');
+    expect(group).toMatchObject({
+      name: 'folder',
+      layerId: secondLayer?.id,
+      featureIds: ['q', 'r'],
+    });
+    expect(secondLayer).toMatchObject({ name: 'second', items: [group?.id] });
+    expect(store.getFeature('q')).toMatchObject({ layerId: secondLayer?.id, groupId: group?.id });
+    expect(store.getLayerOrder()).toEqual(['l1', firstLayer?.id, secondLayer?.id]);
+  });
+
+  it('refuses layer with layerId, and layer or group with a document of the library', async () => {
+    const saved = doc.toJSON();
+    const refused = [
+      doc.load(point('p', [3, 4]), { layer: {}, layerId: 'l1' }),
+      doc.load(saved, { layer: {} }),
+      doc.load(saved, { group: {} }),
+      doc.load(point('p', [3, 4]), { group: { featureIds: [] } as never }),
+      doc.loadMany([
+        { source: point('p', [3, 4]), options: { layer: { id: 'same' } } },
+        { source: point('q', [3, 4]), options: { group: { id: 'same' } } },
+      ]),
+    ];
+    for (const load of refused.slice(0, 4)) {
+      await expect(load).rejects.toMatchObject({ code: 'invalid-input' });
+    }
+    await expect(refused[4]).rejects.toMatchObject({ code: 'already-exists' });
+    expect(store.listLayers().map((layer) => layer.id)).toEqual(['l1']);
+    expect(store.listFeatures().map((feature) => feature.id)).toEqual(['a']);
+  });
+
   it('returns null while read-only, and refuses items that are not objects with a source', async () => {
     await expect(doc.loadMany([1] as never)).rejects.toMatchObject({ code: 'invalid-input' });
     await expect(doc.loadMany({} as never)).rejects.toMatchObject({ code: 'invalid-input' });

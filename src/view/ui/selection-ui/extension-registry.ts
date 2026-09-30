@@ -14,6 +14,7 @@
  * calculators take it as an argument.
  */
 
+import { expandQuad } from '../../../shared/math/transform.js';
 import type { Feature } from '../../../store/types.js';
 import type {
   AdditionalResizeHandlesCalculator,
@@ -200,8 +201,8 @@ export function resolvePointFrameExtentWith(
  * The four corners of the selection frame of a zero-area feature on the screen, expanded by
  * the margin, with optional providers
  *
- * An outline of four finite corners is expanded outward from its middle by the margin; any
- * other outline, or none, gives the rectangle of the extent around the center.
+ * An outline of four finite corners has every edge moved outward by the margin; any other
+ * outline, or none, gives the rectangle of the extent around the center, widened the same way.
  */
 export function resolvePointFrameCornersWith(
   extentProvider: PointFrameExtentProvider | undefined,
@@ -216,16 +217,7 @@ export function resolvePointFrameCornersWith(
     outline.length === 4 &&
     outline.every((corner) => Number.isFinite(corner.x) && Number.isFinite(corner.y))
   ) {
-    const middleX = outline.reduce((sum, corner) => sum + corner.x, 0) / 4;
-    const middleY = outline.reduce((sum, corner) => sum + corner.y, 0) / 4;
-    return outline.map((corner) => {
-      const dx = corner.x - middleX;
-      const dy = corner.y - middleY;
-      const distance = Math.hypot(dx, dy);
-      if (distance === 0) return { x: corner.x, y: corner.y };
-      const scale = (distance + margin) / distance;
-      return { x: middleX + dx * scale, y: middleY + dy * scale };
-    });
+    return expandQuad(outline, margin);
   }
   const extent = resolvePointFrameExtentWith(extentProvider, feature);
   const halfWidth = extent.halfWidth + margin;

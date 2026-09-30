@@ -94,9 +94,11 @@ export interface FeatureTypeDefinition {
   /**
    * The outline of the selection frame of a feature on the screen, in pixels, for a type whose
    * shape turns: its four corners in the order top left, top right, bottom right, bottom left
-   * of the shape as it stands unturned. The engine draws the selection frame along it when it
-   * is given, and from `bounds` otherwise. For a type of any geometry but `Point`, the resize
-   * and rotate handles sit on it too; a `Point` type keeps a frame with no such handles.
+   * of the shape as it stands unturned, without the margin of the frame
+   * (`selectionStyle.boundingBox.margin`). The engine draws the selection frame along it when
+   * it is given, and from `bounds` otherwise, with every edge moved the margin outward. For a
+   * type of any geometry but `Point`, the resize and rotate handles sit on the corners of that
+   * frame too; a `Point` type keeps a frame with no such handles.
    *
    * @returns The four corners; anything else (or an empty array) gives the frame of `bounds`
    */

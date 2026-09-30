@@ -255,6 +255,12 @@ const hitRoute: FeatureTypeDefinition = {
 合わせられます。型は、自分の `outline` や `bounds` の中から自分の
 地物についてこれを呼びません。
 
+`outline`、`bounds`、`ctx.screen.outline` は、どれも枠の余白
+(`selectionStyle.boundingBox.margin`。既定は 10 ピクセル) を含みません。
+余白は、エンジンが枠を描くときに足します。点も含めてどの型でも、枠の
+各辺は角から余白の分だけ外に立ち、大きさを変えるハンドルと回す
+ハンドルはその枠に付きます。
+
 `handles` は、選ばれている地物のハンドルを返します。それぞれ ID、位置、
 カーソルを持ちます。ハンドルをドラッグすると、ポインターが動くたびに
 `onHandleDrag` が呼ばれ、ドラッグの終わりにもう一度呼ばれます。返した

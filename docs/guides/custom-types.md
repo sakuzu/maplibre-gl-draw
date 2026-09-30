@@ -266,6 +266,12 @@ reads the corners of the frame of any feature, of the built-in types
 too, so that something drawn around a feature can follow its frame; a
 type does not call it for its own features from `outline` or `bounds`.
 
+Neither `outline`, `bounds` nor `ctx.screen.outline` includes the
+margin of the frame (`selectionStyle.boundingBox.margin`, 10 pixels by
+default). The engine adds it when it draws: every edge of the frame
+stands the margin outside the corners, for every type, points
+included, and the resize and rotate handles sit on the frame.
+
 `handles` returns the handles of a selected feature, each with an ID,
 a position and a cursor. A drag of one calls `onHandleDrag` for every
 move of the pointer and once more when the drag ends, and the

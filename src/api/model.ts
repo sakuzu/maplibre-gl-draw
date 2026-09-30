@@ -486,6 +486,21 @@ export interface LoadOptions {
    * `maplibre-gl-draw:layerId`; when it is left out, that layer is used, or else the active one
    */
   layerId?: string;
+  /**
+   * A layer to create for the features, written in the same transaction as them; every
+   * feature goes into it, as with `layerId`, and `LoadResult.layerId` gives its ID. It cannot
+   * be given together with `layerId` (`invalid-input`), nor with a document of the library,
+   * which brings its own layers.
+   */
+  layer?: LayerInput;
+  /**
+   * A group to create for the features, written in the same transaction as them: every
+   * feature read goes into it, and it stands where they land in their layer. The features all
+   * go into one layer (the one of `layer` or `layerId`, else the active one), and a group a
+   * GeoJSON feature names is not kept. `LoadResult.groupId` gives its ID; no group is created
+   * when nothing is read. It cannot be given with a document of the library.
+   */
+  group?: Omit<GroupInput, 'featureIds'>;
   /** Where to place an image */
   coordinate?: Position;
   /** The zoom an image is placed at */
@@ -512,6 +527,10 @@ export interface LoadResult {
   replaced: boolean;
   /** The GeoJSON features that were left out */
   skipped?: SkippedFeature[];
+  /** The ID of the layer created from `LoadOptions.layer` */
+  layerId?: string;
+  /** The ID of the group created from `LoadOptions.group`, when something was read */
+  groupId?: string;
 }
 
 // ============================================================================

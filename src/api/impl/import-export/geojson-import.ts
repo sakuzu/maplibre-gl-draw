@@ -697,6 +697,7 @@ export async function prepareGeoJSON(
     const takenIds = new Set<string>();
     const isTaken = (id: string): boolean =>
       takenIds.has(id) ||
+      options?.reservedIds?.has(id) === true ||
       (!replace && (store.getFeature(id) !== undefined || store.getGroup(id) !== undefined));
     const resolveId = (id: string): string => {
       let resolved = id;
@@ -714,6 +715,7 @@ export async function prepareGeoJSON(
     };
 
     const forcedLayerId = options?.layerId;
+    const oneGroup = options?.oneGroup === true;
     for (const { feature } of results) {
       feature.id = resolveId(feature.id);
       // References are resolved against this store: a layer given to the load wins over the one
@@ -723,9 +725,11 @@ export async function prepareGeoJSON(
       // order and never be drawn.
       if (forcedLayerId !== undefined && store.getLayer(forcedLayerId)) {
         feature.layerId = forcedLayerId;
-      } else if (forcedLayerId !== undefined || !store.getLayer(feature.layerId)) {
+      } else if (forcedLayerId !== undefined || oneGroup || !store.getLayer(feature.layerId)) {
         feature.layerId = currentLayerId;
       }
+      // The features of a load that makes a group of them leave the group they name
+      if (oneGroup) delete feature.groupId;
       if (feature.groupId !== undefined) {
         const group = replace ? undefined : store.getGroup(feature.groupId);
         if (!group || group.layerId !== feature.layerId) delete feature.groupId;

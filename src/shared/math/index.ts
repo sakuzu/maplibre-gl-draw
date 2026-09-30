@@ -76,6 +76,7 @@ export {
   clampCoordinate,
   clampLatitude,
   createCoordinateTransform,
+  expandQuad,
   getAnchorProjector,
   lngLatToMercator,
   setAnchorProjector,
