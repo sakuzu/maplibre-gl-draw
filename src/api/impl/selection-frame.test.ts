@@ -17,6 +17,8 @@ import { createSelectionExtensionRegistry } from '../../view/ui/selection-ui/ext
 import { SelectionUIRenderer } from '../../view/ui/selection-ui/renderer.js';
 import type { ScreenPoint } from '../events.js';
 import { createScreenContext } from './contexts.js';
+import { createDrawOnEngine } from './create-draw.js';
+import { createEngine } from './engine.js';
 
 /** The zoom at which a pixel of the map plane is a pixel of the stub map (100 px a degree) */
 const ZOOM = Math.log2((360 * 100) / 512);
@@ -142,12 +144,65 @@ describe('the selection frame', () => {
   it('keeps ScreenContext.outline without the margin', () => {
     const [point] = FEATURES;
     const [x, y] = screen.project((point.geometry as GeoJSON.Point).coordinates);
-    // The default frame of a point is a 12 px square around it, with no margin
+    // Without a draw instance to give the extent of the marker, the frame of a point is a
+    // 12 px square around it, with no margin
     expect(screen.outline(point)).toEqual([
       [x - 6, y - 6],
       [x + 6, y - 6],
       [x + 6, y + 6],
       [x - 6, y + 6],
     ]);
+  });
+});
+
+describe('the selection frame of a built-in point of a draw instance', () => {
+  /** The half sides of the outline and of the drawn frame of a point with this style */
+  function frameOf(style: Feature['style']): { outline: number; frame: number } {
+    const { map: engineMap } = createMapStub();
+    const engine = createEngine(engineMap, {}, { deferDefaultMode: true });
+    try {
+      const draw = createDrawOnEngine(engine);
+      const created = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [0.1, 0.1] },
+        style,
+      });
+      if (!created) throw new Error('no feature');
+      const stored = engine.context.store.getFeature(created.id) as Feature;
+      const registry = engine.context.selectionScope.extensions;
+      const engineScreen = createScreenContext({
+        map: engineMap,
+        pixelRatio: { resolve: () => 1 } as never,
+        selectionExtensions: registry,
+      });
+      const [x] = engineScreen.project([0.1, 0.1]);
+      const frames: Coordinate[][] = [];
+      const renderer = new SelectionUIRenderer(
+        { draw: (coords: Coordinate[]) => frames.push(coords) } as unknown as StrokeRenderer,
+        DEFAULT_SELECTION_CONFIG,
+        registry,
+      );
+      renderer.setTransform(createCoordinateTransform(engineMap));
+      renderer.draw([stored], ZOOM);
+      const right = engineScreen.project(frames[0][1])[0];
+      return { outline: engineScreen.outline(stored)[1][0] - x, frame: right - x };
+    } finally {
+      engine.destroy();
+    }
+  }
+
+  it('spans the marker (the radius and its outline), with the margin outside it', () => {
+    // A radius of 6 px and an outline of 2 px by default: a 16 px frame before the margin
+    expect(frameOf({})).toEqual({
+      outline: expect.closeTo(8, 6),
+      frame: expect.closeTo(8 + MARGIN, 6),
+    });
+  });
+
+  it('follows the size of the marker and of its outline', () => {
+    expect(frameOf({ pointRadius: 20, pointStrokeWidth: 4 })).toEqual({
+      outline: expect.closeTo(24, 6),
+      frame: expect.closeTo(24 + MARGIN, 6),
+    });
   });
 });

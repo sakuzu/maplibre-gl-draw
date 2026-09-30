@@ -332,6 +332,21 @@ describe('drawing with the real pointer on a flat map', () => {
     expectNear(ring[1], await lngLatOf(page, at(40, -40)));
   });
 
+  it('moves a selected point with a drag anywhere in its frame: the marker and the margin', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_point');
+    await click(page, at(0, 0));
+    const [before] = await features(page);
+    await click(page, at(0, 0));
+    expect(await selectedIds(page)).toEqual([before.id]);
+
+    // The frame spans the marker (a radius of 6 px and an outline of 2 px) and the margin of
+    // 10 px: 18 px from the point, beyond the 16 px of a 12 px box with the margin
+    await drag(page, at(17, 0), at(67, 20));
+    const [after] = await features(page);
+    expectNear(coordinatesOf(after) as number[], await lngLatOf(page, at(50, 20)));
+  });
+
   it('does not move a feature when the press stays within the drag threshold', async () => {
     await clearAll(page);
     await setMode(page, 'draw_point');

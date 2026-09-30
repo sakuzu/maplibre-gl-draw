@@ -727,11 +727,12 @@ describe('the outline of any feature on the screen', () => {
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 1] },
     });
+    // The frame of a point spans its marker: a radius of 6 px and an outline of 2 px
     expect(screen.outline(point)).toEqual([
-      [494, 194],
-      [506, 194],
-      [506, 206],
-      [494, 206],
+      [492, 192],
+      [508, 192],
+      [508, 208],
+      [492, 208],
     ]);
     engine.destroy();
   });

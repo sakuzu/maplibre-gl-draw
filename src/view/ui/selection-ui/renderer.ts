@@ -223,7 +223,8 @@ export class SelectionUIRenderer {
    *
    * The half width and half height of the frame can be registered per type
    * (SelectionExtensionRegistry.resolvePointFrameCorners), as an outline or as an extent.
-   * Without a registration it is the former 12px square. The
+   * Without a registration it is the extent of the marker of a built-in point, else a 12px
+   * square. The
    * zero-area treatment itself does not change, so no resize / rotate handle appears for
    * a feature that passes through here.
    *

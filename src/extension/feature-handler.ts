@@ -113,7 +113,8 @@ export interface FeatureTypeHandler {
    * or rotation handles, move inside the box). This function only decides the dimensions of that
    * box (the special treatment of zero area itself does not change).
    *
-   * When it is omitted, or returns null, the default 12px square is used.
+   * When it is omitted, or returns null, the extent of the marker of a built-in point is used,
+   * or else the default 12px square.
    *
    * @param feature The target feature
    */
