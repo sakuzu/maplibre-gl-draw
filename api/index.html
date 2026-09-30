@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>@sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>@sakuzu/maplibre-gl-draw - v2.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script><script async src="assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">@sakuzu/maplibre-gl-draw - v2.0.0</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -7,37 +7,56 @@
 <div class="container container-main">
 <div class="col-content">
 <div class="tsd-page-title">
-<h1>@sakuzu/maplibre-gl-draw - v1.0.0</h1></div>
-<div class="tsd-panel tsd-typography"><h1 id="sakuzumaplibre-gl-draw-api-reference" class="tsd-anchor-link">@sakuzu/maplibre-gl-draw API reference<a href="#sakuzumaplibre-gl-draw-api-reference" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
-<p>A library for drawing and editing shapes on a
-<a href="https://maplibre.org/maplibre-gl-js/docs/">MapLibre GL JS</a> map. It
-draws with its own WebGL2 renderer, so a drawing of 200,000 features
-stays editable, and it draws on 3D terrain and on the globe as it does
-on a flat map. Large data that is shown but not edited goes into a
-dataset, which draws tens of thousands of parcels or a million points
-fast.</p>
-<p>This is the reference of every public symbol, generated from the
-sources. To learn how to use the library, start with the guides.</p>
+<h1>@sakuzu/maplibre-gl-draw - v2.0.0</h1></div>
+<div class="tsd-panel tsd-typography"><h1 id="api-reference" class="tsd-anchor-link">API reference<a href="#api-reference" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
+<p>The reference of every public symbol of <code>@sakuzu/maplibre-gl-draw</code>,
+generated from the sources. To learn how to use the library, start with
+<a href="media/getting-started.md">Getting started</a> and the guides.</p>
+<h2 id="where-to-start" class="tsd-anchor-link">Where to start<a href="#where-to-start" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <ul>
-<li><a href="https://sakuzu.github.io/maplibre-gl-draw/">Playground</a>: every
-feature in one editor</li>
-<li><a href="https://sakuzu.github.io/maplibre-gl-draw/examples/">Examples</a>: small
-pages, one part of the library each</li>
-<li><a href="https://github.com/sakuzu/maplibre-gl-draw/blob/main/docs/getting-started.md">Getting started</a>
-and the
-<a href="https://github.com/sakuzu/maplibre-gl-draw/blob/main/docs/README.md">guides</a></li>
-<li><a href="https://github.com/sakuzu/maplibre-gl-draw">Source on GitHub</a></li>
+<li>To put a drawing on a map, start from
+<a href="functions/maplibre-gl-draw.createDraw.html" class="tsd-kind-function">createDraw</a>
+and its <a href="interfaces/maplibre-gl-draw.DrawOptions.html" class="tsd-kind-interface">DrawOptions</a>.</li>
+<li>To add, change and remove features, layers and groups, use the
+collections of the instance, <a href="interfaces/maplibre-gl-draw.Draw.html" class="tsd-kind-interface">Draw</a>. Its
+page is grouped by task.</li>
+<li>A <a href="interfaces/maplibre-gl-draw.Feature.html" class="tsd-kind-interface">Feature</a>,
+a <a href="interfaces/maplibre-gl-draw.Layer.html" class="tsd-kind-interface">Layer</a> and
+a <a href="interfaces/maplibre-gl-draw.Group.html" class="tsd-kind-interface">Group</a> are the data model.</li>
+<li>To react to changes and clicks, see the events of
+<a href="interfaces/maplibre-gl-draw.DrawEvents.html" class="tsd-kind-interface">DrawEvents</a>.</li>
+<li>To style features, see
+<a href="interfaces/maplibre-gl-draw.FeatureStyle.html" class="tsd-kind-interface">FeatureStyle</a> and
+<a href="types/maplibre-gl-draw.StyleRule.html" class="tsd-kind-type-alias">StyleRule</a>.</li>
+<li>To show large data that is not edited, see
+<a href="interfaces/maplibre-gl-draw.Dataset.html" class="tsd-kind-interface">Dataset</a> and
+<a href="types/maplibre-gl-draw.DatasetOptions.html" class="tsd-kind-type-alias">DatasetOptions</a>.</li>
+<li>To save and load, see
+<a href="interfaces/maplibre-gl-draw.DrawDocument.html" class="tsd-kind-interface">DrawDocument</a> and
+<a href="interfaces/maplibre-gl-draw.LoadOptions.html" class="tsd-kind-interface">LoadOptions</a>.</li>
+<li>To add a plugin, a mode or a feature type, see
+<a href="interfaces/maplibre-gl-draw.Plugin.html" class="tsd-kind-interface">Plugin</a>,
+<a href="interfaces/maplibre-gl-draw.ModeHandler.html" class="tsd-kind-interface">ModeHandler</a> and
+<a href="interfaces/maplibre-gl-draw.FeatureTypeDefinition.html" class="tsd-kind-interface">FeatureTypeDefinition</a>.</li>
 </ul>
-<h2 id="modules" class="tsd-anchor-link">Modules<a href="#modules" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
-<p>The package has three entry points, one module each.</p>
+<h2 id="entry-points" class="tsd-anchor-link">Entry points<a href="#entry-points" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The package has four entry points. Import from the first one unless
+you need the others.</p>
 <ul>
-<li><a href="modules/index.html" class="tsd-kind-module"> index</a> (<code>@sakuzu/maplibre-gl-draw</code>): the factory, the instance
-and its options, the data model, the events, datasets and the
-extension points</li>
-<li><a href="modules/geometry.html" class="tsd-kind-module"> geometry</a> (<code>@sakuzu/maplibre-gl-draw/geometry</code>): pure geometry
-functions that need no map, so they also run in Node and in workers</li>
-<li><a href="modules/columnar.html" class="tsd-kind-module"> columnar</a> (<code>@sakuzu/maplibre-gl-draw/columnar</code>): the
-preparation of a columnar table for a dataset, importable in a Worker</li>
+<li><code>@sakuzu/maplibre-gl-draw</code> (<a href="modules/maplibre-gl-draw.html" class="tsd-kind-module">the reference</a>):
+the instance, its options, the data model, the events, datasets and
+the extension contract.</li>
+<li><code>@sakuzu/maplibre-gl-draw/geometry</code> (<a href="modules/geometry.html" class="tsd-kind-module">the reference</a>):
+geometry calculations that need no map: measure lengths and areas,
+build circles and buffers, combine polygons, test whether a point lies
+in a polygon, and tidy shapes. They also work in code that does not use
+the drawing engine (workers, servers, tests).</li>
+<li><code>@sakuzu/maplibre-gl-draw/table</code> (<a href="modules/table.html" class="tsd-kind-module">the reference</a>):
+the parts for reading a large table in a Worker and putting it on the
+map as a dataset.</li>
+<li><code>@sakuzu/maplibre-gl-draw/webgl</code> (<a href="modules/webgl.html" class="tsd-kind-module">the reference</a>):
+building blocks for custom shaders. They may change in a minor
+release; everything else follows semantic versioning.</li>
 </ul>
 </div></div>
 <div class="col-sidebar">
@@ -54,11 +73,12 @@ preparation of a columnar table for a dataset, importable in a Worker</li>
 <div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
 <details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
 <h3>On This Page</h3></summary>
-<div class="tsd-accordion-details"><a href="#sakuzumaplibre-gl-draw-api-reference"><span>@sakuzu/maplibre-<wbr/>gl-<wbr/>draw <wbr/>API reference</span></a>
+<div class="tsd-accordion-details"><a href="#api-reference"><span>API reference</span></a>
 <ul>
-<li><a href="#modules"><span>Modules</span></a></li></ul></div></details></div>
+<li><a href="#where-to-start"><span>Where to start</span></a></li>
+<li><a href="#entry-points"><span>Entry points</span></a></li></ul></div></details></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<nav class="tsd-navigation"><a href="modules.html">@sakuzu/maplibre-gl-draw - v2.0.0</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>

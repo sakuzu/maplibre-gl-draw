@@ -1,5 +1,5 @@
-<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>centroid | @sakuzu/maplibre-gl-draw - v1.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
-<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>centroid | @sakuzu/maplibre-gl-draw - v2.0.0</title><meta name="description" content="Documentation for @sakuzu/maplibre-gl-draw"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="../index.html" class="title">@sakuzu/maplibre-gl-draw - v2.0.0</a>
 <div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
 <ul role="listbox" id="tsd-search-results"></ul>
 <div id="tsd-search-status" aria-live="polite" aria-atomic="true">
@@ -14,25 +14,29 @@
 <section class="tsd-panel">
 <ul class="tsd-signatures">
 <li class="">
-<div class="tsd-signature tsd-anchor-link" id="centroid"><span class="tsd-kind-call-signature">centroid</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">polygon</span><span class="tsd-signature-symbol">:</span> <a href="../types/geometry.AreaCoordinates.html" class="tsd-signature-type tsd-kind-type-alias">AreaCoordinates</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <a href="../types/geometry.Coordinate.html" class="tsd-signature-type tsd-kind-type-alias">Coordinate</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#centroid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
+<div class="tsd-signature tsd-anchor-link" id="centroid"><span class="tsd-kind-call-signature">centroid</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">polygon</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Polygon</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">MultiPolygon</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">geometry</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Geometry</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Point</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><a href="#centroid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></div>
 <div class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>Returns the area-weighted centroid of a polygon.</p>
-<p>The area of the holes is subtracted, and the parts of a MultiPolygon are combined with
-their areas as the weights. The computation is on the lng/lat plane, an approximation
-meant for shapes of the scale of an edit. The centroid of a concave shape can fall
-outside it; use <a href="geometry.pointOnSurface.html" class="tsd-kind-function">pointOnSurface</a> for a point that is always inside.</p>
+<div class="tsd-comment tsd-typography"><p>Returns the centroid of a polygon, weighted by area.</p>
 </div>
 <div class="tsd-parameters">
 <h4 class="tsd-parameters-title">Parameters</h4>
 <ul class="tsd-parameter-list">
-<li><span><span class="tsd-kind-parameter">polygon</span>: <a href="../types/geometry.AreaCoordinates.html" class="tsd-signature-type tsd-kind-type-alias">AreaCoordinates</a></span>
-<div class="tsd-comment tsd-typography"><p>Polygon or MultiPolygon coordinates in degrees</p>
+<li><span><span class="tsd-kind-parameter">polygon</span>: <span class="tsd-signature-type">Polygon</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">MultiPolygon</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">geometry</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Geometry</span> <span class="tsd-signature-symbol">}</span></span>
+<div class="tsd-comment tsd-typography"><p>The Polygon or MultiPolygon, or a feature whose geometry is one; coordinates
+in degrees. Holes are subtracted and the parts are weighted by their areas on the lng/lat
+plane</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <a href="../types/geometry.Coordinate.html" class="tsd-signature-type tsd-kind-type-alias">Coordinate</a> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>The centroid <code>[lng, lat]</code> in degrees. The mean of all the vertices when the area
-is 0. <code>null</code> when there is not a single position</p>
-<aside class="tsd-sources">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Point</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><p>The centroid as a Point, in degrees; it can fall outside a concave polygon (see
+<a href="geometry.pointOnSurface.html" class="tsd-kind-function">pointOnSurface</a>). The mean of the positions when the area is 0. null when there is
+no position</p>
+
+<div class="tsd-comment tsd-typography">
+<div class="tsd-tag-throws">
+<h4 class="tsd-anchor-link" id="throws">Throws<a href="#throws" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><p><a href="../classes/geometry.GeometryError.html" class="tsd-kind-class">GeometryError</a> (<code>invalid-input</code>) when the input is not a Polygon or a
+MultiPolygon</p>
+</div></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/e7e67d19ebebb9833c7e8e3a5222795c17e3c527/src/geometry/measure.ts#L157">src/geometry/measure.ts:157</a></li></ul></aside></div></li></ul></section></div>
+<li>Defined in <a href="https://github.com/sakuzu/maplibre-gl-draw/blob/8e4fca7b8119082870c3d3cd8f63e84371848f52/src/geometry/public-measure.ts#L323">src/geometry/public-measure.ts:323</a></li></ul></aside></div></li></ul></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -46,7 +50,7 @@ is 0. <code>null</code> when there is not a single position</p>
 <li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
 <div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div></div>
 <div class="site-menu">
-<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v1.0.0</a>
+<nav class="tsd-navigation"><a href="../modules.html">@sakuzu/maplibre-gl-draw - v2.0.0</a>
 <ul class="tsd-small-nested-navigation" id="tsd-nav-container">
 <li>Loading...</li></ul></nav></div></div></div><footer>
 <p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
