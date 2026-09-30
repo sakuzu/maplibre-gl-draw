@@ -8,6 +8,7 @@
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
+import type { DrawingResource } from './drawing.js';
 import type { DrawEvents } from './events.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
@@ -53,6 +54,8 @@ export interface Draw {
   readonly selection: SelectionResource;
   /** The selected vertices of one feature in this client */
   readonly vertexSelection: VertexSelectionResource;
+  /** The shape the current drawing mode is drawing, to drive it from code */
+  readonly drawing: DrawingResource;
   /** The title and the description of the document */
   readonly metadata: MetadataResource;
   /** The options that can change while the instance runs */

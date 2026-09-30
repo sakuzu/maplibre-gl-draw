@@ -317,7 +317,7 @@ export function createExtensionContext(
   screen: ScreenContext,
   subscriptions: Subscriptions,
 ): ExtensionContext {
-  const { store, modeManager, spatialIndex, map } = services;
+  const { store, spatialIndex, map } = services;
   const listeners = new Map<unknown, Map<string, () => void>>();
   const forget = (event: string, listener: unknown): void => {
     const byEvent = listeners.get(listener);
@@ -371,17 +371,10 @@ export function createExtensionContext(
       }
       map.triggerRepaint();
     },
-    drawing: {
-      undoVertex: () => modeManager.undoVertex(),
-      redoVertex: () => modeManager.redoVertex(),
-      isDrawing: () => store.getTentative() !== null,
-      cancel() {
-        if (store.getTentative() === null) return false;
-        // The mode drops what it was drawing (onCancel of a mode of the contract)
-        modeManager.notifyStateReset();
-        if (store.getTentative() !== null) store.setTentative(null);
-        return true;
-      },
+    // The same object as draw.drawing, read when it is asked for: the draw instance is attached
+    // after the host is built
+    get drawing() {
+      return services.getDraw().drawing;
     },
   };
 }
@@ -512,7 +505,9 @@ export function createModeContext(
     names: base.names,
     screen: base.screen,
     invalidate: base.invalidate,
-    drawing: base.drawing,
+    get drawing() {
+      return base.drawing;
+    },
     setMode: (mode) => services.modeManager.setMode(mode),
     hitTest(point, options) {
       const at = { x: point[0], y: point[1] };

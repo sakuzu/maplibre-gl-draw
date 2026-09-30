@@ -12,7 +12,7 @@ import type { DrawOptions } from '../options.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
-import { createDrawing } from './drawing.js';
+import { createDrawing, createDrawingResource } from './drawing.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { createFeatures } from './features.js';
@@ -74,6 +74,7 @@ export function createDrawOnEngine(
     hidden: createHidden(deps),
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
+    drawing: createDrawingResource(engine),
     metadata: createMetadata(deps),
     options: { get: drawOptions.get, update: drawOptions.update },
     document: createDocument(deps, (result, source) =>

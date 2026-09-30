@@ -54,9 +54,12 @@ export interface InputRouter {
    *
    * It takes exactly the same path as an event arriving from InputNormalizer.
    * Snapping, delivery to the extensions and the interception by datasets
-   * all take effect in the same way. The tests use this to drive the modes.
+   * all take effect in the same way. The tests and `draw.drawing` use this to drive the modes.
+   *
+   * @returns True when a receiver took the event: a plugin or a mode of the extension contract
+   *   consumed it, or the mode of the engine has a receiver for it
    */
-  dispatch(event: NormalizedEvent): void;
+  dispatch(event: NormalizedEvent): boolean;
 
   /**
    * Toggles the hold on input that originates from the pointer
@@ -362,13 +365,17 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     return 'mode';
   }
 
-  /** A click: to the extensions, the mode, the datasets and the map.clicked notification */
-  function handleClickEvent(handler: EngineModeHandler, event: MouseNormalizedEvent): void {
+  /**
+   * A click: to the extensions, the mode, the datasets and the map.clicked notification
+   *
+   * @returns Whether a receiver took it
+   */
+  function handleClickEvent(handler: EngineModeHandler, event: MouseNormalizedEvent): boolean {
     // Deliver to the mode with the snapped coordinates (if nothing snapped,
     // the original event is used unchanged)
     const { event: snapped, result } = applySnap(event, 'click');
     const route = toExtensions(handler, event, snapped, result);
-    if (route === 'consumed') return;
+    if (route === 'consumed') return true;
     if (route === 'engine') handleClick(handler, snapped);
     // Delivery to datasets happens only in select mode. A click
     // in a drawing mode places a vertex, and delivering that same click as a
@@ -390,15 +397,22 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
         point: { x: event.point.x, y: event.point.y },
       });
     }
+    return route === 'engine' && handler.onClick !== undefined;
   }
 
-  function handleEvent(input: NormalizedEvent, options: HandleEventOptions = {}): void {
+  /**
+   * Hands an event to the extensions and the mode
+   *
+   * @returns Whether a receiver took it: a plugin or a mode of the contract consumed it, or
+   *   the mode of the engine has a receiver for it
+   */
+  function handleEvent(input: NormalizedEvent, options: HandleEventOptions = {}): boolean {
     // Only input originating from the real pointer is stopped while held.
     // Synthetic input (dispatch) is let through
-    if (pointerHeld && !options.synthetic && HELD_EVENT_TYPES.has(input.type)) return;
+    if (pointerHeld && !options.synthetic && HELD_EVENT_TYPES.has(input.type)) return false;
 
     const handler = modeManager.getHandler();
-    if (!handler) return;
+    if (!handler) return false;
 
     // The single place where the longitude of the input is decided (see toStoredCopy)
     const event = toStoredCopy(input, firstTentativeCoordinate(context.store.getTentative()));
@@ -407,29 +421,27 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       case 'click':
         trackClick?.([event.lngLat.lng, event.lngLat.lat]);
         try {
-          handleClickEvent(handler, event);
+          return handleClickEvent(handler, event);
         } finally {
           trackClick?.(null);
         }
-        break;
       case 'dblclick':
-        if (toExtensions(handler, event, event, null) === 'engine') {
-          handler.onDoubleClick?.(event);
-        }
-        break;
+        return engineOr(toExtensions(handler, event, event, null), handler.onDoubleClick, () =>
+          handler.onDoubleClick?.(event),
+        );
       case 'mousedown':
-        if (toExtensions(handler, event, event, null) === 'engine') {
-          handleMouseDown(handler, event);
-        }
-        break;
+        return engineOr(toExtensions(handler, event, event, null), handler.onMouseDown, () =>
+          handleMouseDown(handler, event),
+        );
       case 'mouseup':
-        if (toExtensions(handler, event, event, null) === 'engine') handler.onMouseUp?.(event);
-        break;
+        return engineOr(toExtensions(handler, event, event, null), handler.onMouseUp, () =>
+          handler.onMouseUp?.(event),
+        );
       case 'mousemove': {
         const { event: snapped, result } = applySnap(event, 'mousemove');
-        if (extensionInput?.toPlugins(event, snapped, result)) break;
+        if (extensionInput?.toPlugins(event, snapped, result)) return true;
         const consumed = extensionInput?.toMode(handler, event, snapped, result);
-        if (consumed === true) break;
+        if (consumed === true) return true;
         if (consumed === undefined) handler.onMouseMove?.(snapped);
         // The hover of datasets is likewise limited to select mode,
         // by the same rule as click. When switching to a drawing mode, a hover that
@@ -440,11 +452,11 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
         } else {
           displayInteractions?.reset();
         }
-        break;
+        return consumed === undefined && handler.onMouseMove !== undefined;
       }
       case 'contextmenu':
         // contextmenu currently has no special handling
-        break;
+        return false;
       // The start and end of a drag also go through snapping. This is to keep
       // "start drawing exactly at a corner of a boundary and end at a corner" for
       // drag-driven drawing (freehand). The drag operations of select mode use
@@ -452,44 +464,59 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       // as their start position, so they are unaffected by the replacement here.
       case 'dragstart': {
         const { event: snapped, result } = applySnap(event, 'dragstart');
-        if (toExtensions(handler, event, snapped, result) === 'engine') {
-          handler.onDragStart?.(snapped);
-        }
-        break;
+        return engineOr(toExtensions(handler, event, snapped, result), handler.onDragStart, () =>
+          handler.onDragStart?.(snapped),
+        );
       }
       case 'dragmove': {
         const { event: snapped, result } = applySnap(event, 'dragmove');
-        if (extensionInput?.toPlugins(event, snapped, result)) break;
-        if (extensionInput?.toMode(handler, event, snapped, result) === undefined) {
-          handler.onDragMove?.(snapped);
-        }
-        break;
+        if (extensionInput?.toPlugins(event, snapped, result)) return true;
+        const consumed = extensionInput?.toMode(handler, event, snapped, result);
+        if (consumed !== undefined) return consumed;
+        handler.onDragMove?.(snapped);
+        return handler.onDragMove !== undefined;
       }
       case 'dragend': {
         const { event: snapped, result } = applySnap(event, 'dragend');
-        if (toExtensions(handler, event, snapped, result) === 'engine') {
-          handler.onDragEnd?.(snapped);
-        }
-        break;
+        return engineOr(toExtensions(handler, event, snapped, result), handler.onDragEnd, () =>
+          handler.onDragEnd?.(snapped),
+        );
       }
       // A press ended without a release (a second finger, or the browser cancelled the
       // touch). No coordinates are decided, so it does not go through snapping, and it
       // is never held: the mode must always get the chance to abort the press.
       case 'dragcancel':
-        if (toExtensions(handler, event, event, null) === 'engine') {
-          handler.onDragCancel?.(event);
-        }
-        break;
-      case 'keydown':
-        if (extensionInput?.toPlugins(event, event, null)) break;
-        if (extensionInput?.toMode(handler, event, event, null) === undefined) {
-          handler.onKeyDown?.(event);
-        }
-        break;
+        return engineOr(toExtensions(handler, event, event, null), handler.onDragCancel, () =>
+          handler.onDragCancel?.(event),
+        );
+      case 'keydown': {
+        if (extensionInput?.toPlugins(event, event, null)) return true;
+        const consumed = extensionInput?.toMode(handler, event, event, null);
+        if (consumed !== undefined) return consumed;
+        handler.onKeyDown?.(event);
+        return handler.onKeyDown !== undefined;
+      }
       case 'keyup':
-        if (toExtensions(handler, event, event, null) === 'engine') handler.onKeyUp?.(event);
-        break;
+        return engineOr(toExtensions(handler, event, event, null), handler.onKeyUp, () =>
+          handler.onKeyUp?.(event),
+        );
     }
+  }
+
+  /**
+   * Runs the receiver of the mode of the engine when the route leads to it
+   *
+   * @param receiver - The receiver of the mode of the engine, to tell whether it has one
+   * @returns Whether a receiver took the event
+   */
+  function engineOr(
+    route: 'consumed' | 'mode' | 'engine',
+    receiver: unknown,
+    run: () => void,
+  ): boolean {
+    if (route !== 'engine') return route === 'consumed';
+    run();
+    return receiver !== undefined;
   }
 
   function handleClick(handler: EngineModeHandler, event: MouseNormalizedEvent): void {

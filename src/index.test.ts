@@ -50,6 +50,7 @@ const MAIN = [
   'DrawErrorCode',
   'DrawEventListener',
   'DrawEvents',
+  'DrawingResource',
   'DrawKeyEvent',
   'DrawOptions',
   'DrawPointerEvent',

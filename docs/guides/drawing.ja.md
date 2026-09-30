@@ -391,6 +391,36 @@ draw.features.create({
 ズーム) で描く道具は、独自のモードとして作り、`commitFeature` で地物を
 作ります ([プラグイン](plugins.ja.md))。
 
+### 描画モードをコードから動かす
+
+`draw.drawing` は、いまの描画モードが描いている形をコードから動かします。
+1 つずつ入力された座標、ほかの入力機器、自動化に使えます。形を作るのは
+モードなので、ポインターで描いた形と同じく、書き込めるレイヤー、自動の
+名前、基準のズームが付き、描き終えると選択されます。
+
+```ts
+draw.setMode('draw_line');
+draw.drawing.addVertex([139.7, 35.68]); // その位置のクリックと同じ
+draw.drawing.moveTo([139.71, 35.69]); // プレビューが付いてくる
+draw.drawing.addVertex([139.71, 35.69]);
+draw.drawing.finish(); // Enter と同じ。モードは select に戻る
+```
+
+- `addVertex`、`moveTo`、`finish` は、位置を画面に投影した点での
+  クリック、移動、Enter と同じポインターとキーのイベントになります。
+  地図からの入力と同じく、モードより先にプラグインの `input` の
+  受け手を通ります。位置はそのまま使い、吸着はしません
+- `addVertex` は、描画モードが動いていないとき、またはクリックを
+  受け取ったものがないときに `false` を返します。何が起きるかはモード
+  しだいです。`draw_point` では点を作り、線や面の閉じる頂点の上では形を
+  描き終えます
+- `finish` は、描いている途中の形がないとき、またはモードが形を完成
+  させなかったとき (頂点が足りない) に `false` を返します
+- `cancel`、`undoVertex`、`redoVertex` は、描いている途中の形を捨て、
+  最後の頂点を取り除き、それを戻します
+- `isActive` は描画モードが描いているか最初の頂点を置ける状態かを、
+  `isDrawing` は描いている途中の形があるかを答えます
+
 ## 自動の名前
 
 新しい地物、レイヤー、グループには、型ごとの連番の名前が付き
@@ -479,6 +509,7 @@ ARIA のロールもラベルも付けません。キーボードでは、削除
   と
   [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)
 - [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
+- [`DrawingResource`](../api/maplibre-gl-draw/interfaces/DrawingResource.md)
 - [`AutoNameOptions`](../api/maplibre-gl-draw/interfaces/AutoNameOptions.md)
 - [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
   と [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)

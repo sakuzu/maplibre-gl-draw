@@ -394,6 +394,38 @@ A tool that should draw the way the built-in modes do (the writable layer,
 the automatic name and the reference zoom) is a mode of your own, which
 creates its features with `commitFeature` ([Plugins](plugins.md)).
 
+### Driving a drawing mode from code
+
+`draw.drawing` drives the shape the current drawing mode is drawing, for
+coordinates typed one by one, another input device or an automated run.
+The shape is made by the mode, so it gets the writable layer, the
+automatic name and the reference zoom, and it is selected when it is
+finished, as a shape drawn with the pointer.
+
+```ts
+draw.setMode('draw_line');
+draw.drawing.addVertex([139.7, 35.68]); // as a click there
+draw.drawing.moveTo([139.71, 35.69]); // the preview follows
+draw.drawing.addVertex([139.71, 35.69]);
+draw.drawing.finish(); // as Enter; the mode goes back to select
+```
+
+- `addVertex`, `moveTo` and `finish` are made into the pointer and key
+  events a click, a move and Enter make, at the point of the screen the
+  position projects to. They go through the `input` receivers of the
+  plugins before the mode, as the map's own input does. The position is
+  used as it is: nothing snaps it
+- `addVertex` returns `false` when no drawing mode is active or nothing
+  took the click. What it does is up to the mode: in `draw_point` it
+  creates the point, and on the closing vertex of a line or an area it
+  finishes the shape
+- `finish` returns `false` when no shape is in progress or the mode did
+  not complete it (too few vertices)
+- `cancel`, `undoVertex` and `redoVertex` drop the shape in progress,
+  remove its last vertex and put it back
+- `isActive` tells whether a drawing mode is drawing or ready to place its
+  first vertex, and `isDrawing` whether a shape is in progress
+
 ## Automatic names
 
 New features, layers and groups get a name with a serial number per type:
@@ -480,6 +512,7 @@ application offer another way to enter coordinates, such as a form.
   and
   [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)
 - [`VertexRef`](../api/maplibre-gl-draw/interfaces/VertexRef.md)
+- [`DrawingResource`](../api/maplibre-gl-draw/interfaces/DrawingResource.md)
 - [`AutoNameOptions`](../api/maplibre-gl-draw/interfaces/AutoNameOptions.md)
 - [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
   and [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)

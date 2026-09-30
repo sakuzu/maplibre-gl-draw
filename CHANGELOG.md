@@ -125,8 +125,14 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
   being drawn, and `selectionStyle.boxSelection` for the selection box.
 - `ScreenContext.outline`, the four corners of the selection frame of
   any feature on the screen, turned as the shape is.
+- `draw.drawing`, which drives the shape the current drawing mode is
+  drawing from code: `addVertex`, `moveTo` and `finish` act as a click,
+  a pointer move and Enter would, without snapping and through the
+  `input` receivers of the plugins, and `cancel`, `undoVertex`,
+  `redoVertex`, `isActive` and `isDrawing` go with them.
 - The contexts of the extensions: `terrain`, `names`, `screen` and
-  `invalidate` and `drawing` (with `cancel`) for every kind, and
+  `invalidate` and `drawing` (the same object as `draw.drawing`) for
+  every kind, and
   `hitTest`, `snap`, `commitFeature`, `preview`, `cursor` and
   `listTraceRows` for a mode.
 - `FeatureTypeDefinition.outline`, the four corners of the selection
@@ -153,7 +159,8 @@ the library in `properties` under the `maplibre-gl-draw:` prefix.
 - Every name of 1.0 that changed, with no deprecated alias. The export
   `generateCirclePolygon` of the main entry, deprecated in 1.0, is
   removed; use `circle` from `@sakuzu/maplibre-gl-draw/geometry`.
-- `draw.input`, the synthetic input.
+- `draw.input`, the synthetic input. `draw.drawing` drives a drawing
+  mode from code.
 - The namespaces `draw.geometry`, `draw.snapping`, `draw.tracing` and
   `draw.topology`: their operations are methods of `features`, options
   of `draw.options` and `extensions.snapProviders`.
@@ -279,8 +286,10 @@ out on both sides.
 | `topology` | `options` | |
 | `topology.setSharedVertexDrag` | `options.update` | See `TopologyOptions` |
 | `topology.isSharedVertexDrag` | `options.get()` | See `TopologyOptions` |
-| `input` | (removed) | No synthetic input |
-| `input.click`, `move`, `key` | (removed) | |
+| `input` | `drawing` | Drives a drawing mode |
+| `input.click` | `drawing.addVertex` | No snapping |
+| `input.move` | `drawing.moveTo` | No snapping |
+| `input.key` | (removed) | `drawing.finish`, `drawing.cancel` |
 | `input.setPointerHold` | (removed) | |
 | `input.isPointerHeld` | (removed) | |
 | `addPlugin` | `extensions.plugins.add` | |
@@ -490,6 +499,7 @@ The `PluginContext`. Its writes took a `source`; in 2.0 wrap them in
 | `notifyStateReset` | (removed) | The Store reports it |
 | `undoVertex`, `redoVertex` | `drawing.undoVertex`, `redoVertex` | |
 | (none) | `drawing.isDrawing`, `drawing.cancel` | |
+| (none) | `drawing.addVertex`, `moveTo`, `finish`, `isActive` | |
 | `invalidateFeatures(type)` | `invalidate({ type })` | |
 | `projectAnchor(lng, lat)` | `terrain.project([lng, lat])` | |
 | `anchorElevationMeters` | `terrain.elevation` | |

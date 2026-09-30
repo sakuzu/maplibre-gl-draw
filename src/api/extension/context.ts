@@ -11,6 +11,7 @@
 import type { BBox, Position } from 'geojson';
 import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
+import type { DrawingResource } from '../drawing.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature, FeatureInput, FeatureType, Layer } from '../model.js';
@@ -127,33 +128,11 @@ export interface ExtensionContext {
    *   is left out
    */
   invalidate(filter?: { type?: string; ids?: string[] }): void;
-  /** The shape being drawn by the current mode, for undoing and redoing its vertices */
-  readonly drawing: {
-    /**
-     * Removes the last vertex of the shape being drawn.
-     *
-     * @returns True when a vertex was removed; false when nothing is being drawn or the mode
-     *   has no vertex to remove
-     */
-    undoVertex(): boolean;
-    /**
-     * Puts back the vertex the last `undoVertex` removed.
-     *
-     * @returns True when a vertex was put back
-     */
-    redoVertex(): boolean;
-    /** Whether the current mode is drawing a shape that is not created yet */
-    isDrawing(): boolean;
-    /**
-     * Cancels the shape being drawn, as an Escape does while drawing: the mode drops it
-     * (`ModeHandler.onCancel`), the preview is cleared and the mode stays the current one.
-     * When nothing is being drawn it does nothing; unlike an Escape, it does not leave the
-     * mode.
-     *
-     * @returns True when a shape was being drawn and was cancelled
-     */
-    cancel(): boolean;
-  };
+  /**
+   * The shape the current drawing mode is drawing: the same object as `draw.drawing`, to place,
+   * finish, cancel, undo and redo its vertices
+   */
+  readonly drawing: DrawingResource;
 }
 
 /**

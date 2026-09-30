@@ -59,6 +59,7 @@ export type { GroupsCollection } from './api/groups.js';
 export type { HiddenCollection } from './api/hidden.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
 export type { MetadataResource } from './api/metadata.js';
+export type { DrawingResource } from './api/drawing.js';
 export type { DocumentResource } from './api/document.js';
 
 // Document model

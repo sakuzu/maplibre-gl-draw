@@ -319,7 +319,9 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       names: base.names,
       screen: base.screen,
       invalidate: base.invalidate,
-      drawing: base.drawing,
+      get drawing() {
+        return base.drawing;
+      },
       extensions: createExtensionsCollections(registries, (remove) => added.push(remove)),
     };
     try {
