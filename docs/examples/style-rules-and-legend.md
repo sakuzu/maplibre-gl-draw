@@ -14,8 +14,9 @@ style-rules-and-legend
 
 The 400 buildings are features of the drawing, taken from the Overture
 Maps sample: those nearest the center among the buildings with a
-height. They open colored by their height, in classes cut at 10, 20, 40
-and 80 m. Open the Legend tab of the panel on the left to see the rows
+height. They open on the light grey Positron basemap, so that the colors
+read, colored by their height, in classes cut at 10, 20, 40 and 80 m.
+Open the Legend tab of the panel on the left to see the rows
 of the rule. Press `R` to switch the layer to the next kind of rule: by
 the class of the building, a gradient of the height, and one color. Most
 buildings have no class, and take the color for a value the rule cannot

@@ -15,14 +15,17 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, basemapUrl, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 /** The center of the sample data, around which the page takes its buildings */
 const CENTER: [number, number] = [139.778, 35.678];
+// Positron, a light grey basemap, so that the colors of the rules read; the basemap row of the
+// standard UI names it, and `?basemap=<id>` opens on another
+const BASEMAP = 'positron';
 const map = new maplibregl.Map({
   container: 'map',
-  style: basemapStyle(),
+  style: basemapStyle(basemapUrl(BASEMAP)),
   center: CENTER,
   zoom: 16,
   attributionControl: {
@@ -147,7 +150,7 @@ draw.on('feature.updated', ({ feature, intermediate }) => {
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, {
   basemaps: BASEMAPS,
-  basemap: initialBasemapId(),
+  basemap: initialBasemapId(BASEMAP),
   locale,
   legend: true,
   inspector: { tabs: ['attributes', 'style'] },
