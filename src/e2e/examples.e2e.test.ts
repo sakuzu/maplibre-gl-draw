@@ -965,6 +965,114 @@ describe('the examples', () => {
     await close();
   });
 
+  it('read-only-viewer switches read-only with R, the interaction lock with K, the lock of the Blocks layer with B and local hiding with H', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('read-only-viewer');
+    await loaded(page);
+    const press = async (key: string) => {
+      await page.keyboard.press(key);
+      await settle(page);
+    };
+    const state = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        const blocks = draw.layers.list().find((layer) => layer.name === 'Blocks');
+        if (blocks === undefined) throw new Error('No Blocks layer');
+        return {
+          readOnly: draw.isReadOnly(),
+          interactionLocked: draw.isInteractionLocked(),
+          layerLocked: blocks.locked === true,
+          hidden: draw.hidden.has(blocks.id),
+          visible: blocks.visible !== false,
+        };
+      });
+    const tower = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return draw.features.list().find((f) => f.properties.name === 'North tower');
+    });
+    if (tower === undefined) throw new Error('No North tower');
+    const geometryOf = (id: string) =>
+      page.evaluate(
+        (featureId) => (window as unknown as E2EWindow).draw.features.get(featureId)?.geometry,
+        id,
+      );
+    const rename = () =>
+      page.evaluate(
+        (id) =>
+          (window as unknown as E2EWindow).draw.features.update(id, {
+            properties: { note: 'changed' },
+          }) !== null,
+        tower.id,
+      );
+    // The viewer opens read-only, with the three other states off
+    expect(await state()).toEqual({
+      readOnly: true,
+      interactionLocked: false,
+      layerLocked: false,
+      hidden: false,
+      visible: true,
+    });
+    expect(await rename()).toBe(false);
+    // The tools start, and what they draw is not kept
+    await page.getByRole('button', { name: 'Polygon', exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
+      'draw_polygon',
+    );
+    await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
+    expect(await featureCount(page)).toBe(8);
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    // Locking a layer is a write, so read-only refuses it
+    await press('b');
+    expect((await state()).layerLocked).toBe(false);
+
+    // R: writable again, by code too
+    await press('r');
+    expect((await state()).readOnly).toBe(false);
+    expect(await rename()).toBe(true);
+
+    // K: the lock stops the tools of the user; code still writes
+    await press('k');
+    expect((await state()).interactionLocked).toBe(true);
+    await page.getByRole('button', { name: 'Polygon', exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).not.toBe(
+      'draw_polygon',
+    );
+    await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
+    expect(await featureCount(page)).toBe(8);
+    expect(await rename()).toBe(true);
+    await press('k');
+    expect((await state()).interactionLocked).toBe(false);
+
+    // B: the locked layer keeps its features where they are; unlocked, a drag moves them
+    const [[corner]] = (tower.geometry as GeoJSON.Polygon).coordinates;
+    const inside = [corner[0] + 0.0008, corner[1] + 0.00055];
+    await page.evaluate(
+      (center) =>
+        (window as unknown as E2EWindow).map.jumpTo({ center: center as [number, number] }),
+      inside,
+    );
+    await settle(page);
+    await press('b');
+    expect((await state()).layerLocked).toBe(true);
+    await click(page, at(0, 0));
+    await drag(page, at(0, 0), at(-50, 40));
+    expect(await geometryOf(tower.id)).toEqual(tower.geometry);
+    await press('b');
+    expect((await state()).layerLocked).toBe(false);
+    await click(page, at(0, 0));
+    await drag(page, at(0, 0), at(-50, 40));
+    expect(await geometryOf(tower.id)).not.toEqual(tower.geometry);
+
+    // H: hidden on this page only; the layer stays visible in the document, under read-only too
+    await press('r');
+    await press('h');
+    expect(await state()).toMatchObject({ readOnly: true, hidden: true, visible: true });
+    await press('h');
+    expect((await state()).hidden).toBe(false);
+    await close();
+  });
+
   it('plugins adds the tool of the mode of the plugin, which stamps a point', {
     timeout: TIMEOUT,
   }, async () => {

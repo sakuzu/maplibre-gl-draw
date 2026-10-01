@@ -151,8 +151,9 @@ keeps the hidden items and the lock itself.
 ## Examples
 
 - [Read-only viewer](../examples/read-only-viewer.md) loads a drawing,
-  makes it read-only and locks the interaction, and shows the attributes
-  of the feature clicked
+  makes it read-only and shows the attributes of the feature clicked;
+  its keys switch read-only, the interaction lock, a locked layer and
+  local hiding apart
 
 ## Reference
 
