@@ -80,6 +80,13 @@ export interface DrawUIOptions {
    * selection, and ? for the list of the shortcuts; true when left out
    */
   shortcuts?: boolean;
+  /**
+   * Whether the map's padding follows the interface: the width of a panel that stands beside the
+   * map on its side, and the toolbar's height with its gap at the bottom, so that `fitBounds` and
+   * `easeTo` keep clear of them. Floating panels and sheets leave it at 0. The padding the map
+   * had is given back by `destroy()`. True when left out
+   */
+  padding?: boolean;
 }
 
 /** A toolbar on the page */

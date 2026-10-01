@@ -32,20 +32,17 @@
   color-scheme: light;
 }
 
-/* Laid over the map: the root covers its container and lets the pointer through to the map, and
- * the parts of the interface take the pointer where they are */
+/* Laid over the map: the root covers its container and lets the pointer through to the map. In
+ * createDrawUI, kata's Shell (overlay) gives the pointer back to its regions: the side regions,
+ * the toolbar, the scrim, the floating panes, the sheets and the list of shortcuts. The toolbar
+ * put alone (createToolbar) has no shell, so it takes the pointer itself; its menus are inside
+ * it. The tooltips kata appends to the root let the pointer through */
 .mgd-ui[data-overlay] {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-.mgd-ui[data-overlay] :is([data-role="drawbar"], dialog, [popover]) {
-  pointer-events: auto;
-}
-.mgd-ui[data-overlay] [data-region="left"] {
-  pointer-events: auto;
-}
-.mgd-ui[data-overlay] [data-role="inspector"] {
+.mgd-ui[data-overlay] > [data-role="drawbar"] {
   pointer-events: auto;
 }
 

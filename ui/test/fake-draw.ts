@@ -99,6 +99,16 @@ export function fakeDraw(
   canvas.tabIndex = 0;
   container.appendChild(canvas);
   document.body.appendChild(container);
+  // The map: its container, its canvas and its padding
+  let padding = { top: 10, bottom: 20, left: 30, right: 40 };
+  const map = {
+    getContainer: () => container,
+    getCanvas: () => canvas,
+    getPadding: () => ({ ...padding }),
+    setPadding: vi.fn((next: typeof padding) => {
+      padding = { ...next };
+    }),
+  };
 
   const emit = (event: string, payload: unknown) => {
     for (const listener of listeners.get(event) ?? []) listener(payload);
@@ -277,7 +287,7 @@ export function fakeDraw(
         if (patch.snapping?.enabled !== undefined) snapping = patch.snapping.enabled;
       }),
     },
-    getMap: () => ({ getContainer: () => container, getCanvas: () => canvas }),
+    getMap: () => map,
     // What the inspector reads besides (fakeDocument has a stand-in with every member it uses)
     isReadOnly: () => false,
     transact: <T>(fn: () => T) => fn(),
@@ -294,6 +304,7 @@ export function fakeDraw(
     asDraw: draw as unknown as Draw,
     container,
     canvas,
+    map,
     /** Fires an event of the draw instance */
     emit,
     /** Changes the selection from outside the interface, as a click on the map would */

@@ -43,6 +43,7 @@ import {
   type Messages,
   resolveMessages,
 } from './messages.js';
+import { type Beside, type MapPadding, mapPadding } from './padding.js';
 import { Box } from './store.js';
 import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.js';
 import type {
@@ -88,10 +89,15 @@ export type {
 /** The class of the root element of the interface */
 const ROOT_CLASS = 'mgd-ui';
 
-/** Creates the root element of the interface inside a container */
+/**
+ * Creates the root element of the interface inside a container. It is kata's root in a page kata
+ * does not own (data-kata-root): the tooltips and the probes of the tokens that kata appends go
+ * into it, where the tokens, the language and the theme apply.
+ */
 function createRoot(container: HTMLElement, overlay: boolean): HTMLElement {
   const root = document.createElement('div');
   root.className = ROOT_CLASS;
+  root.setAttribute('data-kata-root', '');
   if (overlay) root.dataset.overlay = '';
   container.appendChild(root);
   return root;
@@ -143,7 +149,10 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * bottom and the keyboard shortcuts.
  *
  * It draws the toolbar, the shortcuts, the layer panel and the legend on the left, and the
- * inspector on the right while something is selected.
+ * inspector on the right while something is selected. The map's padding follows the interface:
+ * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
+ * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
+ * its padding back.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
@@ -169,6 +178,9 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
 
   const root = createRoot(options.container ?? draw.getMap().getContainer(), true);
   applyLocale(root, messages, options.locale ?? 'en');
+  // The map keeps its view clear of the panels beside the stage and of the toolbar
+  const padding: MapPadding | null =
+    options.padding === false ? null : mapPadding(draw.getMap(), root);
   const view = mount(DrawUIView, {
     target: root,
     props: {
@@ -180,6 +192,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       shortcuts: options.shortcuts !== false,
       inspector,
       sections,
+      onbeside: padding ? (beside: Beside) => padding.update(beside) : undefined,
     },
   });
   // The shell opens the left region in an effect: run it now, so that the panels are there when
@@ -250,6 +263,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      padding?.destroy();
       unmount(view);
       root.remove();
     },
