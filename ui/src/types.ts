@@ -4,6 +4,7 @@
 // The types of the API.
 
 import type { Draw, Mode } from '@sakuzu/maplibre-gl-draw';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { InspectorHandle, InspectorOptions } from './inspector/types.js';
 import type { Locale } from './messages.js';
 import type { Theme } from './theme.js';
@@ -125,6 +126,33 @@ export interface DrawUIOptions {
    * for some of them. `destroy()` removes them
    */
   mapControls?: boolean | MapControlsOptions;
+  /**
+   * The basemaps a menu at the top right of the map offers, beside the theme button. Choosing
+   * one replaces the map's style with its `style` (`map.setStyle(style, { diff: false })`), and
+   * the draw instance adds its layers again on top of the new style. The menu shows with two or
+   * more; none when left out
+   */
+  basemaps?: Basemap[];
+  /**
+   * The ID of the basemap shown as current at the start. When left out, the first of `basemaps`
+   * whose `style` is the URL of the map's style (`map.getStyleUrl()`), or none
+   */
+  basemap?: string;
+  /** Called with the basemap after it changed, from the menu or from `setBasemap` */
+  onbasemap?: (basemap: Basemap) => void;
+}
+
+/** A basemap of the menu of `createDrawUI` */
+export interface Basemap {
+  /** The name of the basemap, unique in the list */
+  id: string;
+  /** The name shown in the menu */
+  label: string;
+  /**
+   * The style of the map, as `map.setStyle` takes it: the URL of a style or a style object
+   * (maplibre-gl's StyleSpecification)
+   */
+  style: NonNullable<Parameters<MapLibreMap['setStyle']>[0]>;
 }
 
 /** Which of maplibre-gl's own controls `createDrawUI` adds to the map; each is true when left out */
@@ -188,6 +216,16 @@ export interface DrawUI {
    * @throws Error when the theme is not `light`, `dark` or `auto`
    */
   setTheme(theme: Theme): void;
+  /**
+   * Changes the basemap: replaces the map's style with the style of the basemap of `basemaps`
+   * that has this ID, marks it current in the menu and calls `onbasemap`. Nothing happens when
+   * it is current already
+   *
+   * @throws Error when no basemap of `basemaps` has this ID
+   */
+  setBasemap(id: string): void;
+  /** The current basemap, or null when none of `basemaps` is */
+  getBasemap(): Basemap | null;
   /** Removes the interface and stops following the draw instance. A second call does nothing */
   destroy(): void;
 }

@@ -203,6 +203,8 @@ export interface Messages {
   /** The button that switches the theme: what pressing it does, to the light and to the dark */
   toLight: string;
   toDark: string;
+  /** The menu of the basemaps */
+  basemap: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */

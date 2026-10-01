@@ -73,7 +73,14 @@ export function feature(
 }
 
 export function fakeDraw(
-  options: { mode?: Mode; ids?: string[]; snapping?: boolean; doc?: FakeDocument } = {},
+  options: {
+    mode?: Mode;
+    ids?: string[];
+    snapping?: boolean;
+    doc?: FakeDocument;
+    /** The URL of the map's style */
+    styleUrl?: string;
+  } = {},
 ) {
   const listeners = new Map<string, Set<Listener>>();
   let mode: Mode = options.mode ?? 'select';
@@ -99,8 +106,9 @@ export function fakeDraw(
   canvas.tabIndex = 0;
   container.appendChild(canvas);
   document.body.appendChild(container);
-  // The map: its container, its canvas, its padding and its controls
+  // The map: its container, its canvas, its padding, its controls and its style
   let padding = { top: 10, bottom: 20, left: 30, right: 40 };
+  let styleUrl: string | null = options.styleUrl ?? null;
   const map = {
     getContainer: () => container,
     getCanvas: () => canvas,
@@ -110,6 +118,11 @@ export function fakeDraw(
     }),
     addControl: vi.fn((_control: unknown, _position?: string) => map),
     removeControl: vi.fn((_control: unknown) => map),
+    getStyleUrl: () => styleUrl,
+    setStyle: vi.fn((style: unknown, _options?: unknown) => {
+      styleUrl = typeof style === 'string' ? style : null;
+      return map;
+    }),
   };
 
   const emit = (event: string, payload: unknown) => {

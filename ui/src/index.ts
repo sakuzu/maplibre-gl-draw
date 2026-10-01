@@ -24,6 +24,7 @@
 
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import { flushSync, mount, unmount } from 'svelte';
+import { type BasemapControl, basemapControl, basemapSettings } from './basemaps.js';
 import DrawUIView from './components/DrawUI.svelte';
 import InspectorView from './components/Inspector.svelte';
 import LayerPanelView from './components/LayerPanel.svelte';
@@ -78,6 +79,7 @@ export type { Locale, Messages } from './messages.js';
 export type { Theme } from './theme.js';
 export type {
   AloneOptions,
+  Basemap,
   DrawUI,
   DrawUIOptions,
   LayerPanelHandle,
@@ -158,16 +160,18 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * inspector on the right while something is selected. The map's padding follows the interface:
  * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
- * its padding back. A button at the top right switches between the light and the dark look, and
- * maplibre-gl's own controls go to the bottom corners of the map (the globe, the compass and the
+ * its padding back. A button at the top right switches between the light and the dark look, a
+ * menu beside it changes the basemap when `options.basemaps` has two or more, and maplibre-gl's
+ * own controls go to the bottom corners of the map (the globe, the compass and the
  * zoom at the right, the scale at the left); `destroy()` removes them.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
  * @returns The interface, to change and to remove
  * @throws Error when a tool of `options.toolbar.tools` is not valid, a tab of
- *   `options.inspector.tabs` is not `style` or `attributes`, or the theme is not `light`, `dark`
- *   or `auto`
+ *   `options.inspector.tabs` is not `style` or `attributes`, the theme is not `light`, `dark` or
+ *   `auto`, a basemap of `options.basemaps` has no ID, no label or no style or shares its ID, or
+ *   `options.basemap` is the ID of none of them
  */
 export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const themeName = checkTheme(options.theme);
@@ -187,6 +191,12 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const sections = new Box<InspectorSectionSpec[]>([]);
 
   const map = draw.getMap();
+  const basemapList = basemapSettings(
+    options.basemaps,
+    options.basemap,
+    typeof map.getStyleUrl === 'function' ? map.getStyleUrl() : null,
+  );
+  const basemaps: BasemapControl = basemapControl(map, basemapList, options.onbasemap);
   const root = createRoot(options.container ?? map.getContainer(), true);
   // The look the root shows, which the theme button follows
   const light = new Box(false);
@@ -217,6 +227,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       light,
       themeToggle: options.themeToggle !== false,
       ontheme: (next: Theme) => theme.set(next),
+      basemaps,
     },
   });
   // The shell opens the left region in an effect: run it now, so that the panels are there when
@@ -287,6 +298,13 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
     setTheme(next: Theme) {
       if (destroyed) return;
       theme.set(next);
+    },
+    setBasemap(id: string) {
+      if (destroyed) return;
+      basemaps.set(id);
+    },
+    getBasemap() {
+      return basemaps.get();
     },
     destroy() {
       if (destroyed) return;

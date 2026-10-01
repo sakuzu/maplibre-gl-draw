@@ -148,4 +148,5 @@ export const en: Readonly<Messages> = Object.freeze({
   running: 'Running',
   toLight: 'Switch to light',
   toDark: 'Switch to dark',
+  basemap: 'Basemap',
 });

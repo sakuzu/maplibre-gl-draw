@@ -38,9 +38,9 @@
 /* Laid over the map: the root covers its container and lets the pointer through to the map. In
  * createDrawUI, kata's Shell (overlay) gives the pointer back to its regions: the side regions,
  * the toolbar, the scrim, the floating panes, the sheets and the list of shortcuts. The button
- * that opens the left region again and the button that switches the theme lie outside the
- * shell's regions, and the toolbar put alone (createToolbar) has no shell, so they take the
- * pointer themselves; the toolbar's menus are inside it. The tooltips kata appends to the root
+ * that opens the left region again, the button that switches the theme and the basemap menu lie
+ * outside the shell's regions, and the toolbar put alone (createToolbar) has no shell, so they
+ * take the pointer themselves; the menus of the toolbar and of the basemaps are inside them. The tooltips kata appends to the root
  * let the pointer through */
 .mgd-ui[data-overlay] {
   position: absolute;
@@ -49,7 +49,8 @@
 }
 .mgd-ui[data-overlay] > [data-role="drawbar"],
 .mgd-ui[data-overlay] > [data-role="reopen"],
-.mgd-ui[data-overlay] > [data-role="theme"] {
+.mgd-ui[data-overlay] > [data-role="theme"],
+.mgd-ui[data-overlay] > [data-role="basemap"] {
   pointer-events: auto;
 }
 
