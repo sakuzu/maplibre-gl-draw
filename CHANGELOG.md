@@ -30,7 +30,7 @@ the project follows semantic versioning.
   the standard UI built first (`npm run ui:build`).
 - Changed: the site (<https://sakuzu.github.io/maplibre-gl-draw/>) is
   the documentation site: getting started and the guides in English and
-  Japanese, a gallery of eighteen examples with the standard UI, each on
+  Japanese, a gallery of twenty examples with the standard UI, each on
   a page that runs it beside its code, the playground under
   `/playground/` and the API reference under `/api/`. The examples with
   buttons of their own (`basic`, `save-load`, `style-rules`,

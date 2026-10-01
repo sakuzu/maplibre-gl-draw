@@ -19,6 +19,8 @@ them in this order.
 | [get-started](get-started/) | Drawing, selecting and changing a feature in the panel on the right, the change events | [Getting started](../docs/getting-started.md) |
 | [style-features](style-features/) | The style of each feature side by side (colors, widths, dashes, point shapes and sizes), the defaults of a type, a style set from code and in the panel | [Styles](../docs/guides/styles.md) |
 | [feature-properties](feature-properties/) | Attributes loaded from GeoJSON, changed in the Attributes tab and with `features.update` | [Data format](../docs/reference/data-format.md) |
+| [zoom-and-scale](zoom-and-scale/) | Widths at the reference zoom of each feature that grow and shrink with the map, widths fixed on the screen, `scaleWithZoom` switched with a key | [Styles](../docs/guides/styles.md) |
+| [editing-shapes](editing-shapes/) | The frame, the vertex and midpoint handles, an area with a hole, a `MultiPolygon`, shared vertices moved together and switched with a key | [Drawing and editing](../docs/guides/drawing.md#selecting-and-editing) |
 | [layers-and-groups](layers-and-groups/) | Two layers and a group made from code, the order, the active layer, visibility, locks and opacity in the layer panel | [Layers and groups](../docs/guides/layers.md) |
 | [style-rules-and-legend](style-rules-and-legend/) | The four kinds of style rule on a layer and the Legend tab | [Styles](../docs/guides/styles.md) |
 | [snapping-and-tracing](snapping-and-tracing/) | The snapping options, the guide lines, tracing a boundary, the snapping switch of the toolbar | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
@@ -34,7 +36,6 @@ them in this order.
 | [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector | [Plugins](../docs/guides/plugins.md) |
 | [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, and a section of the inspector for them | [Custom types](../docs/guides/custom-types.md) |
 | [custom-ui](custom-ui/) | A toolbar and a panel of your own on the public API, without the standard UI | [Drawing and editing](../docs/guides/drawing.md) |
-| [zoom-and-scale](zoom-and-scale/) | Widths at the reference zoom of each feature that grow and shrink with the map, widths fixed on the screen, `scaleWithZoom` switched with a key | [Styles](../docs/guides/styles.md) |
 
 ## Running them
 

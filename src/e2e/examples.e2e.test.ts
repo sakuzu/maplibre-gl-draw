@@ -810,4 +810,70 @@ describe('the examples', () => {
     expect(await state()).toMatchObject({ option: true, active: 'scaled' });
     await close();
   });
+  it('editing-shapes moves a shared vertex in both parcels, then in one after T', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('editing-shapes');
+    type Shared = { lower: number[]; upper: number[] };
+    const shared = await page.evaluate(() => (window as unknown as { SHARED: Shared }).SHARED);
+    const parcels = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        const ring = (name: string) => {
+          const feature = draw.features.list().find((f) => f.properties.name === name);
+          return (feature?.geometry as GeoJSON.Polygon | undefined)?.coordinates[0] ?? [];
+        };
+        return { west: ring('West parcel'), east: ring('East parcel') };
+      });
+    const has = (ring: number[][], position: number[]) =>
+      ring.some(([lng, lat]) => lng === position[0] && lat === position[1]);
+    const before = await parcels();
+    expect(has(before.west, shared.upper) && has(before.east, shared.upper)).toBe(true);
+    expect(
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.selection.features().map((f) => f.properties.name),
+      ),
+    ).toEqual(['West parcel']);
+
+    // The selected west parcel shows a handle at the upper end of the shared edge: dragged, the
+    // vertex moves in both parcels, which keep one position there
+    const upper = await pageOf(page, shared.upper);
+    await drag(page, upper, { x: upper.x - 30, y: upper.y + 20 });
+    const moved = await parcels();
+    expect(has(moved.west, shared.upper) || has(moved.east, shared.upper)).toBe(false);
+    const westOnly = moved.west.filter((p) => !has(before.west, p));
+    expect(westOnly).toHaveLength(1);
+    expect(has(moved.east, westOnly[0])).toBe(true);
+
+    // T switches the shared vertices off: the lower end moves in the west parcel alone
+    await page.keyboard.press('t');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.options.get().topology?.sharedVertexDrag,
+      ),
+    ).toBe(false);
+    const lower = await pageOf(page, shared.lower);
+    await drag(page, lower, { x: lower.x - 30, y: lower.y - 20 });
+    const after = await parcels();
+    expect(has(after.west, shared.lower)).toBe(false);
+    expect(after.east).toEqual(moved.east);
+
+    // A click on the area with a hole selects it; its geometry has the outer ring and the hole,
+    // and the hole gets vertex handles of its own (their white fill)
+    const courtyard = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const feature = draw.features.list().find((f) => f.properties.name === 'Courtyard');
+      const rings = (feature?.geometry as GeoJSON.Polygon | undefined)?.coordinates ?? [];
+      return { id: feature?.id, rings };
+    });
+    const [outer, hole] = courtyard.rings;
+    // Halfway between the west edges of the outer ring and of the hole
+    await click(page, await pageOf(page, [(outer[0][0] + hole[0][0]) / 2, hole[0][1]]));
+    expect(
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+    ).toEqual([courtyard.id]);
+    expect(courtyard.rings).toHaveLength(2);
+    expect((await colorsAround(page, hole[1])).some(isWhite)).toBe(true);
+    await close();
+  });
 });

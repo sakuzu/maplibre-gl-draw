@@ -33,7 +33,8 @@
       "src/api/features.ts",
       "src/api/selection.ts",
       "src/api/impl/selection.ts",
-      "src/view/ui/**"
+      "src/view/ui/**",
+      "examples/editing-shapes/**"
     ],
     "docs/guides/layers.md": [
       "src/api/layers.ts",
@@ -219,6 +220,9 @@
     ],
     "docs/examples/zoom-and-scale.md": [
       "examples/zoom-and-scale/**"
+    ],
+    "docs/examples/editing-shapes.md": [
+      "examples/editing-shapes/**"
     ],
     "docs/examples/playground.md": [
       "playground/**"

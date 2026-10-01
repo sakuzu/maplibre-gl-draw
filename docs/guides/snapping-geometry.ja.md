@@ -406,6 +406,9 @@ if (shrunk === null) {
 - [Geometry operations](../examples/geometry-operations.ja.md) では、
   パネルから `union`、`intersection`、`difference`、`split`、`buffer` を
   実行し、選んだ地物の長さと面積を測ります
+- [Editing shapes](../examples/editing-shapes.ja.md) では、2 つの区画の
+  共有する頂点をいっしょに動かし、`topology.sharedVertexDrag` をキーで
+  切り替えます
 
 ## リファレンス
 

@@ -138,5 +138,12 @@
     "description": "Widths in pixels at the reference zoom of each feature grow and shrink with the map like paint on the ground; without a reference zoom they stay the same on the screen.",
     "descriptionJa": "地物ごとの基準のズームでのピクセルの太さは、地面に塗った線のように地図とともに太くも細くもなります。基準のズームを持たない地物は、画面の上で同じ太さのままです。",
     "order": 3
+  },
+  "editing-shapes": {
+    "title": "Editing shapes",
+    "titleJa": "Editing shapes",
+    "description": "The handles of a selected feature: the frame that resizes and rotates it, its vertices and midpoints, an area with a hole, an area of two parts, and two parcels whose shared vertices move together.",
+    "descriptionJa": "選んだ地物のハンドルです。大きさを変えて回す枠、頂点と辺の中点、穴のある面、2 つの部分からなる面、共有する頂点がいっしょに動く 2 つの区画です。",
+    "order": 3.5
   }
 }

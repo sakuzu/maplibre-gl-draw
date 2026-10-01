@@ -505,6 +505,9 @@ ARIA のロールもラベルも付けません。キーボードでは、削除
   描き、`document.changed` を受け取ります
 - [Build your own UI](../examples/custom-ui.ja.md) では、自分のボタンから
   `setMode` を呼び、`mode.changed` と選択を追います
+- [Editing shapes](../examples/editing-shapes.ja.md) では、枠、頂点と
+  中点のハンドル、穴のある面、`MultiPolygon`、いっしょに動く共有の頂点を
+  見せます
 
 ## リファレンス
 

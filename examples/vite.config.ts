@@ -15,6 +15,8 @@ const PAGES = [
   'get-started',
   'style-features',
   'feature-properties',
+  'zoom-and-scale',
+  'editing-shapes',
   'layers-and-groups',
   'style-rules-and-legend',
   'snapping-and-tracing',
@@ -30,7 +32,6 @@ const PAGES = [
   'plugins',
   'custom-feature-types',
   'custom-ui',
-  'zoom-and-scale',
 ];
 
 export default defineConfig({
