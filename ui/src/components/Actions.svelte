@@ -239,8 +239,10 @@
     gap: var(--kata-gap-sm);
     min-width: 0;
   }
+  /* The rows are as high as a switch: their buttons are small buttons, as in a list */
   .control {
     flex: 1 1 auto;
     min-width: 0;
+    --kata-box: var(--kata-height-button-sm);
   }
 </style>
