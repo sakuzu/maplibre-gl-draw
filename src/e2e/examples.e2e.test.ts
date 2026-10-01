@@ -1378,7 +1378,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('custom-feature-types unregisters the type with U, and registers it again', {
+  it('custom-feature-types unregisters the type from the card of actions, and registers it again with U', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('custom-feature-types');
@@ -1415,8 +1415,10 @@ describe('the examples', () => {
 
     // Without the type the routes stay in the data, but they are not drawn and a click passes
     // through them
-    await press('u');
+    expect(await actionChecked(page, 'Route type')).toBe(true);
+    await pressAction(page, 'Route type');
     expect(await state()).toMatchObject({ registered: false, count: 2 });
+    expect(await actionChecked(page, 'Route type')).toBe(false);
     expect(await blue()).toBe(false);
     expect(await clickHill()).toEqual([]);
     // A selection box still takes one, by the fallback test of the library on its positions
@@ -1431,8 +1433,9 @@ describe('the examples', () => {
     await page.keyboard.up('Shift');
     expect((await state()).selected).toEqual([hill.id]);
 
-    // Registered again, they come back as they were
+    // Registered again with the key, they come back as they were
     await press('u');
+    expect(await actionChecked(page, 'Route type')).toBe(true);
     expect(await state()).toMatchObject({ registered: true, count: 2 });
     expect(await blue()).toBe(true);
     expect(await clickHill()).toEqual([hill.id]);
