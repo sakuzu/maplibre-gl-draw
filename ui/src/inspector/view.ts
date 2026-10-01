@@ -109,11 +109,11 @@ export function typeLabel(type: FeatureType, m: Messages): string {
     case 'Image':
       return m.image;
     case 'MultiPoint':
-      return m.typeMultiPoint;
+      return m.multiPoint;
     case 'MultiLineString':
-      return m.typeMultiLineString;
+      return m.multiLine;
     case 'MultiPolygon':
-      return m.typeMultiPolygon;
+      return m.multiPolygon;
     default:
       return type;
   }

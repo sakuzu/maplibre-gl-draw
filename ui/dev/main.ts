@@ -67,6 +67,34 @@ const FEATURES: FeatureInput[] = [
 ];
 draw.features.createMany(FEATURES);
 
+/** A second layer of places colored by their kind, two of them in a group */
+const places = draw.layers.create({
+  name: 'Places',
+  styleRule: {
+    kind: 'categorical',
+    property: 'kind',
+    map: { park: '#3fa34d', station: '#e4572e' },
+    other: '#888888',
+  },
+});
+if (places) {
+  const point = (name: string, kind: string, coordinates: [number, number]): FeatureInput => ({
+    type: 'Point',
+    geometry: { type: 'Point', coordinates },
+    layerId: places.id,
+    properties: { name, kind },
+  });
+  const created = draw.features.createMany([
+    point('Hibiya Park', 'park', [139.7559, 35.6736]),
+    point('Kitanomaru Park', 'park', [139.7514, 35.6918]),
+    point('Yurakucho', 'station', [139.7631, 35.675]),
+    point('Bridge', 'landmark', [139.7745, 35.6838]),
+  ]);
+  if (created) {
+    draw.groups.create({ name: 'Parks', featureIds: [created[0].id, created[1].id] });
+  }
+}
+
 const ui = createDrawUI(draw, { locale: params.get('locale') === 'ja' ? 'ja' : 'en' });
 
 Object.assign(window, { map, draw, ui });

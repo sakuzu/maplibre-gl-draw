@@ -124,9 +124,9 @@
         disabled={view.readOnly}
         onclick={() => draw.features.update(feature.id, { locked: !feature.locked })}
       >
-        {feature.locked ? m.unlockAction : m.lockAction}
+        {feature.locked ? m.unlock : m.lock}
       </Button>
-      <Button onclick={toggleHidden}>{view.hidden ? m.showAction : m.hideAction}</Button>
+      <Button onclick={toggleHidden}>{view.hidden ? m.show : m.hide}</Button>
     {/snippet}
   </Footer>
 {/snippet}

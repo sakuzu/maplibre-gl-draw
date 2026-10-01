@@ -61,13 +61,19 @@ export interface DrawUIOptions {
    * left out
    */
   inspector?: boolean | InspectorOptions;
-  /** The layer panel on the left. Accepted, and not drawn yet in this version */
-  layers?: boolean;
-  /** The legend beside the layer panel. Accepted, and not drawn yet in this version */
+  /**
+   * The layer panel on the left, in a tab beside the legend, or false for none; true when left
+   * out
+   */
+  layers?: boolean | LayerPanelOptions;
+  /** The legend, in a tab beside the layer panel, or false for none; true when left out */
   legend?: boolean;
   /** The words: `en` (the default), `ja`, or words laid over English */
   locale?: Locale;
-  /** The units of the measurements of the inspector, unless its options name others; metric when left out */
+  /**
+   * The units of the measurements of the inspector, unless its options name others; metric when
+   * left out
+   */
   units?: 'metric' | 'imperial';
   /**
    * Whether the keyboard shortcuts are on: the keys of the tools, Delete and Backspace for the
@@ -111,6 +117,10 @@ export interface DrawUI {
   readonly toolbar: ToolbarHandle | null;
   /** The tools of the toolbar */
   readonly tools: ToolsHandle;
+  /** The layer panel, or null when there is none */
+  readonly layers: LayerPanelHandle | null;
+  /** The legend, or null when there is none */
+  readonly legend: LegendHandle | null;
   /** The inspector, or null when there is none */
   readonly inspector: InspectorHandle | null;
   /** Changes the words */
@@ -138,3 +148,55 @@ export type DrawUIDraw = ToolbarDraw &
   Pick<Draw, 'getMap'> & {
     readonly selection: Pick<Draw['selection'], 'get' | 'delete' | 'clear'>;
   };
+
+/** What the layer panel shows */
+export interface LayerPanelOptions {
+  /** Whether the features show under the layers and the groups; true when left out */
+  features?: boolean;
+  /** Whether the add menu (a new layer, a new group) shows; true when left out */
+  add?: boolean;
+  /** Whether the rows can be dragged to reorder them; true when left out */
+  reorder?: boolean;
+}
+
+/** A layer panel on the page */
+export interface LayerPanelHandle {
+  /** The element of the layer panel */
+  readonly element: HTMLElement;
+  /** Removes the layer panel. A second call does nothing */
+  destroy(): void;
+}
+
+/** A legend on the page */
+export interface LegendHandle {
+  /** The element of the legend */
+  readonly element: HTMLElement;
+  /** Removes the legend. A second call does nothing */
+  destroy(): void;
+}
+
+/** What the left region of `createDrawUI` shows, or null when there is no left region */
+export interface LeftSettings {
+  /** The layer panel, or null for none */
+  layers: Required<LayerPanelOptions> | null;
+  /** Whether the legend shows */
+  legend: boolean;
+}
+
+/** The members of a draw instance that the layer panel uses */
+export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
+  readonly layers: Pick<
+    Draw['layers'],
+    'get' | 'getOrder' | 'reorder' | 'create' | 'update' | 'getActive' | 'setActive'
+  >;
+  readonly groups: Pick<Draw['groups'], 'get' | 'update' | 'move'>;
+  readonly features: Pick<Draw['features'], 'get' | 'update' | 'move' | 'getAppliedStyle'>;
+  readonly selection: Pick<Draw['selection'], 'get' | 'set' | 'clear' | 'group'>;
+  readonly hidden: Pick<Draw['hidden'], 'has' | 'remove'>;
+};
+
+/** The members of a draw instance that the legend uses */
+export type LegendDraw = Pick<Draw, 'on' | 'off'> & {
+  readonly layers: Pick<Draw['layers'], 'get' | 'getOrder'>;
+  readonly features: Pick<Draw['features'], 'list'>;
+};

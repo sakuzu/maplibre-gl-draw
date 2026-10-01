@@ -23,6 +23,7 @@ import type {
   Metadata,
   MoveTarget,
 } from './model.js';
+import type { RuntimeOptions } from './options.js';
 import type {
   LayerStackEntry,
   Mode,
@@ -157,6 +158,12 @@ export interface DrawEvents {
   'readOnly.changed': { readOnly: boolean };
   /** The interaction lock was turned on or off */
   'interactionLock.changed': { locked: boolean };
+  /**
+   * `draw.options.update` changed the options; `options` and `previous` are what
+   * `draw.options.get()` returns after and before the change. An update that leaves every
+   * value as it was does not fire it
+   */
+  'options.changed': { options: Readonly<RuntimeOptions>; previous: Readonly<RuntimeOptions> };
   /** The snapping target changed */
   'snap.changed': { result: SnapResult | null };
   /**

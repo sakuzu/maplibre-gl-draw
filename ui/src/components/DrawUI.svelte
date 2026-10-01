@@ -13,8 +13,16 @@
   import { fromMapCanvas, toolbarShortcuts } from '../shortcuts.js';
   import { type Box, follow } from '../store.js';
   import { toSpec } from '../tools.js';
-  import type { DrawUIDraw, ToolbarSettings, ToolEntry } from '../types.js';
+  import type {
+    DrawUIDraw,
+    LayerPanelDraw,
+    LeftSettings,
+    LegendDraw,
+    ToolbarSettings,
+    ToolEntry,
+  } from '../types.js';
   import Inspector from './Inspector.svelte';
+  import LeftPanel from './LeftPanel.svelte';
   import Toolbar from './Toolbar.svelte';
 
   // DrawUI: kata's Shell laid over the map. The stage is left empty, so the map shows through
@@ -25,14 +33,17 @@
     tools,
     messages,
     toolbar,
+    left,
     shortcuts = true,
     inspector,
     sections,
   }: {
-    draw: DrawUIDraw & InspectorDraw;
+    draw: DrawUIDraw & LayerPanelDraw & LegendDraw & InspectorDraw;
     tools: Box<ToolEntry[]>;
     messages: Box<Messages>;
     toolbar: Box<ToolbarSettings | null>;
+    /** The left region: the layer panel and the legend */
+    left: Box<LeftSettings | null>;
     /** Whether the keyboard shortcuts are on */
     shortcuts?: boolean;
     /** The inspector on the right, or null when there is none */
@@ -63,6 +74,24 @@
         )
       : [],
   );
+  const side = $derived(left.get());
+  // The left region is open at first; the shell closes it (Escape, the scrim, the sheet's close
+  // button) and Shift+L opens and closes it
+  let leftOpen = $state(true);
+  const leftKeys = $derived<Shortcut[]>(
+    shortcuts && side
+      ? [
+          {
+            key: 'shift+l',
+            label: m.toggleLayers,
+            group: m.panelsGroup,
+            run: () => {
+              leftOpen = !leftOpen;
+            },
+          },
+        ]
+      : [],
+  );
 
   // Escape on the canvas is core's (it cancels the drawing or clears the selection). Elsewhere,
   // with no pane to close, it clears the selection
@@ -85,6 +114,12 @@
   {/if}
 {/snippet}
 
+{#snippet leftRegion()}
+  {#if side}
+    <LeftPanel {draw} {messages} settings={side} />
+  {/if}
+{/snippet}
+
 {#snippet right()}
   {#if inspectorSettings}
     <Inspector {draw} {messages} settings={inspectorSettings} {sections} />
@@ -92,11 +127,13 @@
 {/snippet}
 
 <Shell
-  leftOpen={false}
+  bind:leftOpen
   bind:rightOpen={() => selected.get(), closeInspector}
+  leftLabel={m.layers}
   rightLabel={m.inspector}
-  shortcuts={keys}
+  shortcuts={[...keys, ...leftKeys]}
   {onescape}
+  left={side ? leftRegion : undefined}
   right={inspectorSettings ? right : undefined}
   bottom={bar ? bottom : undefined}
 />

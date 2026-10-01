@@ -46,6 +46,43 @@ export interface Messages {
   /** The handles that resize a dock and a sheet */
   dockHeight: string;
   sheetHeight: string;
+  /** The tab of the layer panel, and the name of its tree */
+  layers: string;
+  /** The tab of the legend */
+  legend: string;
+  /** The items of the add menu of the layer panel */
+  newLayer: string;
+  newGroup: string;
+  /** The mark of the layer that drawn features go into */
+  activeLayer: string;
+  /** In the list of the keyboard shortcuts: the heading of the panels, and the key of the left one */
+  panelsGroup: string;
+  toggleLayers: string;
+  /** The names of the types that have no tool, for a feature without a name */
+  multiPoint: string;
+  multiLine: string;
+  multiPolygon: string;
+  /**
+   * The labels of the legend that are not values of the data: every feature, the features the
+   * rule does not resolve, and the classes of a graduated rule, with `{lower}` and `{upper}` for
+   * their bounds
+   */
+  legendAll: string;
+  legendOther: string;
+  legendBelow: string;
+  legendAtLeast: string;
+  legendRange: string;
+  /** What the legend shows when no layer has a style rule */
+  noLegend: string;
+  /** In the layer tree of kata: the eye, the lock, the name's input, the add button and the chevron */
+  hide: string;
+  show: string;
+  lock: string;
+  unlock: string;
+  rename: string;
+  add: string;
+  expand: string;
+  collapse: string;
   /** The inspector: its name, read by assistive technology, and what it says with nothing selected */
   inspector: string;
   nothingSelected: string;
@@ -90,17 +127,10 @@ export interface Messages {
   measurePerimeter: string;
   measureRadius: string;
   measurePoints: string;
-  /** The names of the types that are not the names of tools, and of a layer and a group */
-  typeMultiPoint: string;
-  typeMultiLineString: string;
-  typeMultiPolygon: string;
+  /** The names of a layer and of a group */
   typeLayer: string;
   typeGroup: string;
-  /** The actions of the foot of the inspector, and what it says of a hidden feature */
-  lockAction: string;
-  unlockAction: string;
-  hideAction: string;
-  showAction: string;
+  /** What the inspector says of a feature this client hides */
   hiddenState: string;
   /** The title of a selection of several things; {count} is their number */
   selectedCount: string;
@@ -138,11 +168,10 @@ export interface Messages {
   ruleHint: string;
   deleteLayer: string;
   /**
-   * Words kata's components of the inspector show: the name input of the title, a field whose
+   * Words kata's components of the inspector show: the action of an empty name, a field whose
    * values differ, the list of attributes and the color picker. `removeAttribute` has {key} for
    * the name of the attribute, and `saturationValueText` {s} and {v} for the two percentages
    */
-  nameLabel: string;
   addName: string;
   mixed: string;
   cancelLabel: string;
@@ -185,6 +214,14 @@ const KATA_KEYS = [
   'closePanes',
   'dockHeight',
   'sheetHeight',
+  'hide',
+  'show',
+  'lock',
+  'unlock',
+  'rename',
+  'add',
+  'expand',
+  'collapse',
 ] as const satisfies readonly (keyof Messages)[];
 
 /** The full set of words for a locale */
@@ -220,10 +257,9 @@ export function applyKataMessages(messages: Messages): void {
 
 /**
  * The words of kata's components of the inspector, by kata's key: the key of the set that holds
- * each, where the two names differ
+ * each, where the two names differ (the words kata's layer tree shows too are in KATA_KEYS)
  */
 const INSPECTOR_KATA_WORDS = {
-  rename: 'nameLabel',
   addName: 'addName',
   mixed: 'mixed',
   cancel: 'cancelLabel',

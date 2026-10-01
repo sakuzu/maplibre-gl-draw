@@ -48,6 +48,14 @@ describe('the words', () => {
         'keyboardShortcuts',
         'more',
         'sheetHeight',
+        'hide',
+        'show',
+        'lock',
+        'unlock',
+        'rename',
+        'add',
+        'expand',
+        'collapse',
       ].sort(),
     );
     applyKataMessages(resolveMessages('ja'));

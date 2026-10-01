@@ -21,6 +21,7 @@ import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js';
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import { DrawStore } from '../../store/draw-store.js';
+import type { DrawEvents } from '../events.js';
 import type { Store } from '../extension/store.js';
 import type { FeatureStyle, FeatureStyleResolved } from '../model.js';
 import type {
@@ -712,12 +713,14 @@ export interface OptionsState extends OptionsResource {
  * @param options - The options the instance was created with
  * @param setExternalEntry - Replaces the function that tells the entries from outside the
  *   document
+ * @param onChanged - Receives the options after and before an update that changed them
  * @internal
  */
 export function createOptions(
   engine: Engine,
   options: DrawOptions,
   setExternalEntry: (fn: ((id: string) => boolean) | undefined) => void,
+  onChanged: (payload: DrawEvents['options.changed']) => void = () => {},
 ): OptionsState {
   const { context, map, customLayer } = engine;
   let current = runtimePart(options);
@@ -824,40 +827,45 @@ export function createOptions(
     else if (redraw) map.triggerRepaint();
   };
 
+  const get = (): Readonly<RuntimeOptions> => {
+    const { snapService, trace, topology, pixelRatioSource, renderingConfig } = context;
+    const snap = snapService.getOptions();
+    const values: RuntimeOptions = {
+      ...current,
+      scaleWithZoom: context.options.scaleWithZoom,
+      clickTolerance: context.options.clickTolerance,
+      dragThreshold: context.options.dragThreshold,
+      snapping: {
+        ...current.snapping,
+        enabled: snap.enabled,
+        tolerancePx: snap.tolerancePx,
+        disableKey: snap.disableKey,
+        kinds: { ...snap.kinds },
+        datasets: snap.datasets,
+        guideStepDegrees: snap.guideStepDegrees,
+      },
+      tracing: { enabled: trace.enabled },
+      topology: { sharedVertexDrag: topology.sharedVertexDrag },
+      rendering: {
+        ...current.rendering,
+        renderScale: pixelRatioSource.getScaleFactor(),
+        cacheGeometry: renderingConfig.storeRetained !== false,
+        timeSlicing: renderingConfig.timeSlicing !== false,
+      },
+    };
+    return structuredCloneOptions(values);
+  };
+
   return {
-    get(): Readonly<RuntimeOptions> {
-      const { snapService, trace, topology, pixelRatioSource, renderingConfig } = context;
-      const snap = snapService.getOptions();
-      const values: RuntimeOptions = {
-        ...current,
-        scaleWithZoom: context.options.scaleWithZoom,
-        clickTolerance: context.options.clickTolerance,
-        dragThreshold: context.options.dragThreshold,
-        snapping: {
-          ...current.snapping,
-          enabled: snap.enabled,
-          tolerancePx: snap.tolerancePx,
-          disableKey: snap.disableKey,
-          kinds: { ...snap.kinds },
-          datasets: snap.datasets,
-          guideStepDegrees: snap.guideStepDegrees,
-        },
-        tracing: { enabled: trace.enabled },
-        topology: { sharedVertexDrag: topology.sharedVertexDrag },
-        rendering: {
-          ...current.rendering,
-          renderScale: pixelRatioSource.getScaleFactor(),
-          cacheGeometry: renderingConfig.storeRetained !== false,
-          timeSlicing: renderingConfig.timeSlicing !== false,
-        },
-      };
-      return structuredCloneOptions(values);
-    },
+    get,
 
     update(patch: Partial<RuntimeOptions>): void {
       checkPatch(patch);
+      const previous = get();
       current = mergeOptions(current, patch);
       apply(patch);
+      const next = get();
+      if (!sameOptions(previous, next)) onChanged({ options: next, previous });
     },
 
     getStyle(): RuntimeOptions['style'] {
@@ -876,6 +884,29 @@ export function createOptions(
       }
     },
   };
+}
+
+/**
+ * Whether two copies of the options hold the same values: plain objects and arrays are
+ * compared item by item, a function by identity, and a key given as `undefined` is the same
+ * as a key left out
+ */
+function sameOptions(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((item, i) => sameOptions(item, b[i]))
+    );
+  }
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (!sameOptions(a[key], b[key])) return false;
+  }
+  return true;
 }
 
 /** A copy of the options that shares the functions and nothing else */

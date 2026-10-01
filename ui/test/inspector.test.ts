@@ -4,7 +4,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDrawUI, createInspector, type DrawUI, type InspectorHandle } from '../src/index.js';
-import { fakeDocument, feature } from './fake-draw.js';
+import { fakeDocument, makeFeature } from './fake-draw.js';
 
 let handle: InspectorHandle | DrawUI | undefined;
 afterEach(() => {
@@ -13,7 +13,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const park = feature({
+const park = makeFeature({
   id: 'a',
   type: 'Polygon',
   geometry: {
@@ -29,7 +29,7 @@ const park = feature({
   },
   properties: { name: 'Park', kind: 'green' },
 });
-const road = feature({
+const road = makeFeature({
   id: 'b',
   type: 'LineString',
   geometry: {
@@ -40,7 +40,11 @@ const road = feature({
     ],
   },
 });
-const stop = feature({ id: 'c', type: 'Point', geometry: { type: 'Point', coordinates: [1, 2] } });
+const stop = makeFeature({
+  id: 'c',
+  type: 'Point',
+  geometry: { type: 'Point', coordinates: [1, 2] },
+});
 
 function button(root: ParentNode, name: string): HTMLButtonElement {
   const found = [...root.querySelectorAll('button')].find(
@@ -110,7 +114,7 @@ describe('createInspector', () => {
   });
 
   it('writes a color into every feature selected', () => {
-    const red = feature({ ...park, style: { strokeColor: '#ff0000' } });
+    const red = makeFeature({ ...park, style: { strokeColor: '#ff0000' } });
     const fake = fakeDocument({
       features: [red, road],
       selection: { type: 'feature', ids: ['a', 'b'] },
@@ -208,7 +212,7 @@ describe('createInspector', () => {
   });
 
   it('offers the operations that apply to the selection', () => {
-    const other = feature({ ...park, id: 'd', properties: {} });
+    const other = makeFeature({ ...park, id: 'd', properties: {} });
     const fake = fakeDocument({
       features: [park, other],
       selection: { type: 'feature', ids: ['a', 'd'] },
@@ -311,11 +315,13 @@ describe('createInspector', () => {
 });
 
 describe('the inspector of createDrawUI', () => {
+  // The stand-in of fakeDocument has the members of the inspector only
+  const ALONE = { layers: false, legend: false } as const;
   const region = (ui: DrawUI) => ui.element.querySelector('[data-region="right"]');
 
   it('opens while something is selected and closes when the selection is empty', () => {
     const fake = fakeDocument({ features: [park] });
-    const ui = createDrawUI(fake.asDraw);
+    const ui = createDrawUI(fake.asDraw, ALONE);
     handle = ui;
     expect(ui.inspector).not.toBeNull();
     expect(region(ui)).toBeNull();
@@ -329,7 +335,7 @@ describe('the inspector of createDrawUI', () => {
 
   it('clears the selection with its close button', () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
-    const ui = createDrawUI(fake.asDraw);
+    const ui = createDrawUI(fake.asDraw, ALONE);
     handle = ui;
     flushSync();
     const inspector = ui.inspector?.element;
@@ -341,12 +347,12 @@ describe('the inspector of createDrawUI', () => {
 
   it('has no inspector with inspector: false, and can remove it', () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
-    const ui = createDrawUI(fake.asDraw, { inspector: false });
+    const ui = createDrawUI(fake.asDraw, { ...ALONE, inspector: false });
     handle = ui;
     expect(ui.inspector).toBeNull();
     expect(region(ui)).toBeNull();
     ui.destroy();
-    const again = createDrawUI(fake.asDraw);
+    const again = createDrawUI(fake.asDraw, ALONE);
     handle = again;
     flushSync();
     expect(region(again)).not.toBeNull();
@@ -358,7 +364,7 @@ describe('the inspector of createDrawUI', () => {
 
   it('takes the units of the interface', () => {
     const fake = fakeDocument({ features: [road], selection: { type: 'feature', ids: ['b'] } });
-    const ui = createDrawUI(fake.asDraw, { units: 'imperial' });
+    const ui = createDrawUI(fake.asDraw, { ...ALONE, units: 'imperial' });
     handle = ui;
     flushSync();
     expect(ui.inspector?.element.textContent).toMatch(/\d ft/);

@@ -39,6 +39,25 @@ ui.destroy();
 The interface is laid over the map's container. The toolbar alone goes
 into any positioned element with `createToolbar(draw, { target })`.
 
+On the left, the layer panel and the legend share a panel, in two tabs.
+The layer panel is the tree of the layers, their groups and their
+features, from the front, with the eye, the lock, renaming in place (F2
+or a double click), reordering by dragging and an add menu (a new layer,
+a new group from the selected features). A feature is named by its
+`properties.name`, or by its type when it has none. The legend shows
+the rows of the style rule (`styleRule`) of each layer that has one.
+Shift+L opens and closes the panel.
+
+```ts
+const ui = createDrawUI(draw, {
+  layers: { features: true, add: true, reorder: true }, // or false for none
+  legend: true,
+});
+```
+
+Each goes alone into an element with
+`createLayerPanel(draw, { target })` and `createLegend(draw, { target })`.
+
 A tool for a mode of your own (added with `draw.extensions.modes.add`):
 
 ```ts

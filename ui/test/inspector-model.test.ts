@@ -38,17 +38,17 @@ import {
   inspectorKataMessages,
   resolveMessages,
 } from '../src/messages.js';
-import { DEFAULT_STYLE, fakeDocument, feature } from './fake-draw.js';
+import { DEFAULT_STYLE, fakeDocument, makeFeature } from './fake-draw.js';
 
 const pt = (id: string, extra: Partial<Feature> = {}) =>
-  feature({
+  makeFeature({
     id,
     type: 'Point',
     geometry: { type: 'Point', coordinates: [139.7671, 35.6812] },
     ...extra,
   });
 const square = (id: string, type = 'Polygon', extra: Partial<Feature> = {}) =>
-  feature({
+  makeFeature({
     id,
     type,
     geometry: {
@@ -66,7 +66,7 @@ const square = (id: string, type = 'Polygon', extra: Partial<Feature> = {}) =>
     ...extra,
   });
 const line = (id: string, type = 'LineString') =>
-  feature({
+  makeFeature({
     id,
     type,
     geometry: {
@@ -78,7 +78,7 @@ const line = (id: string, type = 'LineString') =>
     },
   });
 const circle = (id: string, radius = 100) =>
-  feature({
+  makeFeature({
     id,
     type: 'Circle',
     geometry: { type: 'Point', coordinates: [0, 0] },
@@ -119,10 +119,14 @@ describe('the fields of the style', () => {
     ]);
     expect(keys(circle('a'))).toEqual(keys(square('a')));
     expect(
-      keys(feature({ id: 'i', type: 'Image', geometry: { type: 'Point', coordinates: [0, 0] } })),
+      keys(
+        makeFeature({ id: 'i', type: 'Image', geometry: { type: 'Point', coordinates: [0, 0] } }),
+      ),
     ).toEqual(['imageOpacity']);
     expect(
-      keys(feature({ id: 'c', type: 'Ring', geometry: { type: 'Point', coordinates: [0, 0] } })),
+      keys(
+        makeFeature({ id: 'c', type: 'Ring', geometry: { type: 'Point', coordinates: [0, 0] } }),
+      ),
     ).toEqual([]);
   });
 
@@ -225,7 +229,7 @@ describe('the measurements', () => {
       { key: 'perimeter', value: '628.3 m' },
       { key: 'radius', value: '100 m' },
     ]);
-    const multi = feature({
+    const multi = makeFeature({
       id: 'mp',
       type: 'MultiPoint',
       geometry: {
@@ -238,7 +242,7 @@ describe('the measurements', () => {
       },
     });
     expect(measure(multi, 'metric')).toEqual([{ key: 'points', value: '3' }]);
-    const image = feature({
+    const image = makeFeature({
       id: 'i',
       type: 'Image',
       geometry: { type: 'Point', coordinates: [0, 0] },
@@ -247,7 +251,7 @@ describe('the measurements', () => {
   });
 
   it('give the totals of a Multi geometry', () => {
-    const multi = feature({
+    const multi = makeFeature({
       id: 'ml',
       type: 'MultiLineString',
       geometry: {
@@ -269,7 +273,7 @@ describe('the measurements', () => {
 });
 
 describe('the attributes', () => {
-  const f = feature({
+  const f = makeFeature({
     id: 'a',
     type: 'Point',
     geometry: { type: 'Point', coordinates: [0, 0] },
