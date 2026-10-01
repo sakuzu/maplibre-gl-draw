@@ -113,8 +113,8 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 ## 関連する例
 
 - [terrain](../../examples/terrain/) では、公開されている DEM で
-  地形を有効にし、その上で描いたり選んだりして、
-  `draw.debug.terrain()` の結果を表示します
+  地形を有効にし、標準の UI でその上に描いたり直したりします。
+  `draw.debug.terrain()` の結果はブラウザーのコンソールに出します
 
 ## リファレンス
 

@@ -28,6 +28,11 @@ const PAGES = [
   'snapping-and-tracing',
   'geometry-operations',
   'images',
+  'save-and-load',
+  'globe',
+  '200000-features',
+  'datasets',
+  'columnar-data-in-a-worker',
 ];
 
 export default defineConfig({

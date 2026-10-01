@@ -179,6 +179,24 @@
     ],
     "docs/examples-pages/images.md": [
       "examples/images/**"
+    ],
+    "docs/examples-pages/save-and-load.md": [
+      "examples/save-and-load/**"
+    ],
+    "docs/examples-pages/terrain.md": [
+      "examples/terrain/**"
+    ],
+    "docs/examples-pages/globe.md": [
+      "examples/globe/**"
+    ],
+    "docs/examples-pages/200000-features.md": [
+      "examples/200000-features/**"
+    ],
+    "docs/examples-pages/datasets.md": [
+      "examples/datasets/**"
+    ],
+    "docs/examples-pages/columnar-data-in-a-worker.md": [
+      "examples/columnar-data-in-a-worker/**"
     ]
   }
 }
