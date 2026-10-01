@@ -468,8 +468,9 @@ export function createLayerPanel(
 }
 
 /**
- * Puts the legend alone in an element: the rows of the style rule of each layer that has one,
- * from the front. It only reads; the rules change with `draw.layers.update`.
+ * Puts the legend alone in an element: the rows of the style rule of each layer and each dataset
+ * that has one, in the order of the stack from the front. It only reads; the rules change with
+ * `draw.layers.update` and a dataset's `setStyleRule`.
  *
  * @param draw - The draw instance
  * @param options - The element to put it in, the words (`en` by default) and the theme (`auto` by

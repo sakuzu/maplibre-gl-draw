@@ -312,6 +312,7 @@ export function wrapDataset(dataset: EngineDataset): Dataset {
       if (rule !== undefined && !isRecord(rule)) throw invalidInput('The rule must be an object');
       dataset.setStyleRule(rule);
     },
+    getStyleRule: () => dataset.getStyleRule(),
     setZoomScale(zoomScale) {
       if (zoomScale !== null) checkFunction(zoomScale, 'zoomScale');
       dataset.setZoomScale(zoomScale ?? null);

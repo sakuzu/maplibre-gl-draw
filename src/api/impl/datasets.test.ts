@@ -15,6 +15,7 @@ import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
+import type { StyleRule } from '../model.js';
 import { createDatasets } from './datasets.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -284,6 +285,28 @@ describe('a dataset', () => {
     dataset.setStyleRule({ kind: 'single', color: 'orange' });
     dataset.setSelectedRowIds(['a', 'b', 'a']);
     expect(dataset.getSelectedRowIds()).toEqual(['a', 'b']);
+  });
+
+  it('gives back its style rule, the one given at creation until setStyleRule replaces it', () => {
+    const rule: StyleRule = { kind: 'single', color: 'orange' };
+    const dataset = datasets.add({ id: 'd', rows: ROWS, styleRule: rule });
+    expect(dataset.getStyleRule()).toEqual(rule);
+    expect(datasets.add({ id: 'e', rows: ROWS }).getStyleRule()).toBeUndefined();
+
+    const changes: DatasetEvents['changed'][] = [];
+    dataset.on('changed', (payload) => changes.push(payload));
+    const graduated: StyleRule = {
+      kind: 'graduated',
+      property: 'area',
+      breaks: [200, 500],
+      colors: ['#fde0dd', '#fa9fb5', '#7a0177'],
+      other: '#d9d9d9',
+    };
+    dataset.setStyleRule(graduated);
+    expect(dataset.getStyleRule()).toEqual(graduated);
+    expect(changes[changes.length - 1]).toEqual({ reason: 'style' });
+    dataset.setStyleRule(undefined);
+    expect(dataset.getStyleRule()).toBeUndefined();
   });
 
   it('thins out overlapping points', () => {

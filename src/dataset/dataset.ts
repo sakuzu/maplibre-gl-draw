@@ -318,6 +318,10 @@ export class DatasetImpl implements Dataset {
     return this.styler.base;
   }
 
+  getStyleRule(): StyleRule | undefined {
+    return this.styler.rule;
+  }
+
   getFeatures(): Feature[] {
     return this.source.features();
   }

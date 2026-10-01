@@ -433,6 +433,14 @@ describe('the examples', () => {
     const { page, close } = await openExample('style-rules-and-legend');
     await loaded(page);
     expect(await featureCount(page)).toBe(400);
+    // It opens on Positron, which the style of the address stands in for
+    expect(
+      (
+        await page
+          .locator('[data-role="layer-panel"] [role="treeitem"][data-role="basemap"]')
+          .innerText()
+      ).replace(/\s+/g, ' '),
+    ).toContain('OpenFreeMap Positron');
     const ruleKind = () =>
       page.evaluate(() => (window as unknown as E2EWindow).draw.layers.list()[0]?.styleRule?.kind);
     expect(await ruleKind()).toBe('graduated');
@@ -645,7 +653,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the sample data between and over two layers of the drawing, logs the rules and reports a click', {
+  it('datasets shows the sample data between and over two layers of the drawing, colors the buildings by area, lists the rules in the Legend tab and reports a click', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const count = (name: string): number =>
@@ -715,8 +723,61 @@ describe('the examples', () => {
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
-    expect(logs.join('\n')).toContain('Legend of the buildings by height (m):\n  #eff3ff Below 10');
-    expect(logs.join('\n')).toContain('Legend of the places by category:');
+    // It opens on Positron, which the style of the address stands in for
+    expect(
+      (
+        await page
+          .locator('[data-role="layer-panel"] [role="treeitem"][data-role="basemap"]')
+          .innerText()
+      ).replace(/\s+/g, ' '),
+    ).toContain('OpenFreeMap Positron');
+    // The buildings by the area of their footprint: each in the color of its class
+    const palette = ['#fbb4b9', '#f768a1', '#dd3497', '#ae017e', '#7a0177'];
+    // (the class of an area is the number of the breaks 50, 100, 200 and 500 m² it reaches)
+    const fills = await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.datasets
+        .get('buildings')
+        ?.listVisibleRows([-180, -85, 180, 85])
+        .map((row) => [row.properties?.area as number, row.style?.fillColor] as const),
+    );
+    const classOf = (area: number) => [50, 100, 200, 500].filter((at) => area >= at).length;
+    expect(fills?.length).toBe(buildings);
+    expect(fills?.filter(([area, fill]) => fill !== palette[classOf(area)])).toEqual([]);
+    expect(new Set(fills?.map(([, fill]) => fill)).size).toBe(palette.length);
+    // The Legend tab: the places in front, then the buildings, each with the rows of its rule
+    await page.getByRole('button', { name: 'Legend', exact: true }).click();
+    const legendList = (name: string) =>
+      page.locator(`[data-role="legend"] [role="list"][aria-label="${name}"]`);
+    await expect
+      .poll(
+        () =>
+          page
+            .locator('[data-role="legend"] [role="list"]')
+            .evaluateAll((lists) => lists.map((list) => list.getAttribute('aria-label'))),
+        { timeout: browserTimeout(5_000) },
+      )
+      .toEqual(['places', 'buildings']);
+    expect(
+      (await legendList('buildings').locator('[data-role="list-item"]').allInnerTexts()).map(
+        (text) => text.trim(),
+      ),
+    ).toEqual([
+      'Below 50',
+      '50 to below 100',
+      '100 to below 200',
+      '200 to below 500',
+      '500 or more',
+      'Other',
+    ]);
+    expect(
+      await legendList('buildings')
+        .locator('[data-role="mark"]')
+        .evaluateAll((marks) =>
+          marks.map((mark) => (mark as HTMLElement).style.getPropertyValue('--kata-swatch-color')),
+        ),
+    ).toEqual([...palette, '#d9d9d9']);
+    expect(await legendList('places').locator('[data-role="list-item"]').count()).toBe(7);
+    await page.getByRole('button', { name: 'Layers', exact: true }).click();
     expect(
       await page.evaluate(
         () => (window as unknown as E2EWindow).draw.datasets.get('buildings')?.listRows().length,
@@ -765,12 +826,53 @@ describe('the examples', () => {
         .num_rows,
     );
     const { page, close } = await openExample('columnar-data-in-a-worker');
+    // Opened again with the console followed, which the page writes once the rows are drawn
+    const infos: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'info') infos.push(message.text());
+    });
+    await page.reload();
+    await ready(page);
     const result = await page.evaluate(
       () =>
-        (window as unknown as { loaded: Promise<{ rows: number; firstFrameMs: number }> }).loaded,
+        (
+          window as unknown as {
+            loaded: Promise<{ rows: number; times: Record<string, number>; firstFrameMs: number }>;
+          }
+        ).loaded,
     );
     expect(result.rows).toBe(rows);
     expect(Number.isFinite(result.firstFrameMs)).toBe(true);
+    expect(Object.keys(result.times).sort()).toEqual(['fetch', 'prepare', 'read', 'table']);
+    expect(Object.values(result.times).every(Number.isFinite)).toBe(true);
+    // The console states the number of rows and the time of each step
+    expect(infos).toHaveLength(1);
+    expect(infos[0]).toMatch(
+      new RegExp(
+        `^${rows.toLocaleString('en')} building footprints read from a GeoParquet file in a Worker and drawn from its columns: \\d+ ms to fetch the file, \\d+ ms to read the columns, \\d+ ms to build the table, \\d+ ms to prepare it, and \\d+ ms from the request to the first frame that draws them$`,
+      ),
+    );
+    // It opens on Dark, which the style of the address stands in for
+    expect(
+      (
+        await page
+          .locator('[data-role="layer-panel"] [role="treeitem"][data-role="basemap"]')
+          .innerText()
+      ).replace(/\s+/g, ' '),
+    ).toContain('OpenFreeMap Dark');
+    // The footprints by their area: each in the color of its class
+    const palette = ['#cc4778', '#e66c5c', '#f89540', '#fdc328', '#f0f921'];
+    // (the class of an area is the number of the breaks 50, 100, 200 and 500 m² it reaches)
+    const fills = await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.datasets
+        .get('buildings')
+        ?.listVisibleRows([-180, -85, 180, 85])
+        .map((row) => [row.properties?.area as number, row.style?.fillColor] as const),
+    );
+    const classOf = (area: number) => [50, 100, 200, 500].filter((at) => area >= at).length;
+    expect(fills?.length).toBe(rows);
+    expect(fills?.filter(([area, fill]) => fill !== palette[classOf(area)])).toEqual([]);
+    expect(new Set(fills?.map(([, fill]) => fill)).size).toBe(palette.length);
     const total = await page.evaluate(() => {
       const dataset = (window as unknown as E2EWindow).draw.datasets.get('buildings');
       let count = 0;

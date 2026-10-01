@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { Layer } from '@sakuzu/maplibre-gl-draw';
+import type { Layer, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -422,7 +422,66 @@ describe('createLegend', () => {
       layers.set('l2', { ...(layers.get('l2') as Layer), styleRule: undefined });
     });
     flushSync();
-    expect(handle.element.textContent).toContain('No layer has a style rule.');
+    expect(handle.element.textContent).toContain('No layer or dataset has a style rule.');
+  });
+});
+
+describe('the datasets of the legend', () => {
+  const AREA: StyleRule = {
+    kind: 'graduated',
+    property: 'area',
+    breaks: [200],
+    colors: ['#fde0dd', '#7a0177'],
+    other: '#d9d9d9',
+  };
+  /** The titles of the blocks of the legend, from the top */
+  const titles = (root: ParentNode) =>
+    [...root.querySelectorAll('[data-role="legend"] [role="list"]')].map((list) =>
+      list.getAttribute('aria-label'),
+    );
+
+  it('shows a block for each dataset with a rule, in its place in the stack', () => {
+    const fake = fakeDraw({
+      doc: {
+        layers: [layer('l1', [], { name: 'Survey', styleRule: { kind: 'single', color: '#f00' } })],
+        datasets: [
+          { id: 'buildings', rows: 3, styleRule: AREA },
+          { id: 'places', order: 'above-store', rows: 2, rowType: 'Point' },
+        ],
+        order: ['buildings', 'l1'],
+      },
+    });
+    handle = createLegend(fake.asDraw, { target: fake.container });
+    expect(titles(fake.container)).toEqual(['Survey', 'buildings']);
+    const text = handle.element.textContent ?? '';
+    expect(text).toContain('Below 200');
+    expect(text).toContain('200 or more');
+  });
+
+  it('follows the datasets that come and go, and the rules they are given', () => {
+    const fake = fakeDraw({ doc: { layers: [layer('l1')] } });
+    handle = createLegend(fake.asDraw, { target: fake.container });
+    flushSync();
+    expect(handle.element.textContent).toContain('No layer or dataset has a style rule.');
+    const places = fake.addDataset({ id: 'places', order: 'above-store', rows: 2 });
+    flushSync();
+    expect(titles(fake.container)).toEqual([]);
+    places.setStyleRule(AREA);
+    flushSync();
+    expect(titles(fake.container)).toEqual(['places']);
+    places.setStyleRule({ kind: 'single', color: '#123456' });
+    flushSync();
+    expect(handle.element.textContent).toContain('All');
+    expect(handle.element.textContent).not.toContain('Below 200');
+    fake.addDataset({ id: 'water', order: 'below-store', rows: 1, styleRule: AREA });
+    flushSync();
+    expect(titles(fake.container)).toEqual(['places', 'water']);
+    fake.removeDataset('places');
+    flushSync();
+    expect(titles(fake.container)).toEqual(['water']);
+    handle.destroy();
+    handle = undefined;
+    expect(fake.datasets.every((d) => d.listening() === 0)).toBe(true);
   });
 });
 

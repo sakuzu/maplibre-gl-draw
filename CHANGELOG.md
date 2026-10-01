@@ -83,6 +83,9 @@ incompatibly.
   Imperial Palace, its East Gardens or Kitanomaru Park. Each page keeps
   its data in a `data.ts` of its own, and a test walks all of it and
   fails when anything reaches into that area.
+- Added: `Dataset.getStyleRule()`, the style rule of a dataset: the
+  one last given to `setStyleRule`, or the one given to `datasets.add`,
+  or `undefined` when there is none. A legend of the datasets reads it.
 
 ## [2.0.0] - 2026-09-30
 

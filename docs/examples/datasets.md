@@ -4,9 +4,11 @@ aside: false
 
 # Datasets
 
-Data that is only shown, under and over the user's own drawing: the
-10,477 buildings and the 17,558 places of central Tokyo from Overture
-Maps, between and in front of two layers of the drawing.
+The 10,477 buildings and the 17,558 places of central Tokyo from
+Overture Maps are drawn from two datasets, data that is only shown,
+while the survey area and the planned route are the user's own drawing,
+in two layers with the buildings between them; the Legend tab of the
+panel on the left shows the colors of the two datasets.
 
 ```example
 datasets
@@ -19,18 +21,21 @@ features of two layers of the drawing, and the buildings lie between
 them: in front of the survey area and behind the route. The places are
 in front of everything.
 
-The buildings are colored by their height, in classes cut at 10, 20, 40
-and 80 m. Overture gives a height to few buildings of this area (695,
-most of them from their number of floors), so the others take the grey
-the rule gives to a value it cannot read. The places are colored by
-their category, the six most common ones, and show from zoom 14.
+The map is the light grey Positron basemap, so that the colors read.
+The buildings are colored by the area of their footprint, from pink to
+deep purple, in classes cut at 50, 100, 200 and 500 m². Half the
+buildings of the sample are under 70 m², a quarter over 160 m² and one
+in twenty over 670 m², so each class holds a good share of them and the
+large blocks stand out. The places are small points colored by their
+category, the six most common ones, and show from zoom 14.
 
 Draw a line with the tools: it goes into the route layer, and it snaps
 to the edges and the corners of the buildings. Click a building or a
 place: the row is logged in the browser console with its name and
 attributes. The panel on the right shows drawn features only, so it
-closes. The Legend tab lists the rules of layers only, so the page logs
-the legends of the two rules there too. Move the map: the places are
+closes. Open the Legend tab: it lists the rules of the two datasets in
+the order of the stack, the places in front and then the buildings.
+Move the map: the places are
 handed over again for the new view, and those that overlap on the screen
 are thinned until zoom 18.
 
@@ -41,15 +46,16 @@ it) and makes its own layers (1). The survey area and the route are
 features of two layers, there from the first frame (2). The page fetches
 the two GeoJSON files of the sample data and gives their features to
 `draw.datasets.add` as rows. The buildings are given at once, colored by
-a graduated rule on `height` (3). With the order `layer-order`, the
+a graduated rule on `area` (3). With the order `layer-order`, the
 dataset has a place in the stacking order of the layers, and
 `draw.layers.reorder` puts it between the two (4). A `provider` is
 called with the extent in view and the zoom once the map rests (5); a
 real one fetches the rows from a server, and this one takes the places in
 the extent from the array the page already holds. The categorical rule of
 the places is made from the data, the six most common categories and
-grey for the others. `deriveLegend` turns each rule into the rows of a
-legend, which the page logs (6). `interactive: true` makes the rows take
+grey for the others. The Legend tab reads the rule of each dataset
+(`getStyleRule`) and turns it into the rows of a legend (6), so the page
+has nothing to add for it. `interactive: true` makes the rows take
 clicks, which `dataset.clicked` reports (7), and makes them candidates
 for the snapping.
 
@@ -69,7 +75,10 @@ for the snapping.
 - [`layers.reorder`](../api/maplibre-gl-draw/interfaces/LayersCollection.md#reorder)
   and [`SnappingOptions`](../api/maplibre-gl-draw/interfaces/SnappingOptions.md)
 - [The events](../reference/events.md), `dataset.clicked` among them
-- [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
+- [`Dataset`](../api/maplibre-gl-draw/interfaces/Dataset.md), with
+  `getStyleRule`, and
+  [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md),
+  which the Legend tab uses
 
 Data: [Overture Maps Foundation](https://overturemaps.org), ODbL / CDLA
 ([the sample data](../../examples/public/data/README.md))

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { TreeNode } from '@sakuzu/kata/svelte';
-import type { Layer } from '@sakuzu/maplibre-gl-draw';
+import type { Layer, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import { describe, expect, it } from 'vitest';
-import { legendBlocks, legendShape } from '../src/layers/legend.js';
+import { datasetShape, legendBlocks, legendShape } from '../src/layers/legend.js';
 import { coreIndex, planMove } from '../src/layers/move.js';
 import {
   buildNodes,
@@ -409,7 +409,8 @@ describe('the legend', () => {
     const blocks = legendBlocks(fake.draw, en);
     expect(blocks).toEqual([
       {
-        layerId: 'l2',
+        kind: 'layer',
+        id: 'l2',
         name: 'Places',
         entries: [
           { label: 'park', color: '#00aa00' },
@@ -419,7 +420,8 @@ describe('the legend', () => {
         shape: 'area',
       },
       {
-        layerId: 'l1',
+        kind: 'layer',
+        id: 'l1',
         name: 'Layer l1',
         entries: [{ label: 'All', color: '#123456' }],
         shape: 'box',
@@ -453,6 +455,62 @@ describe('the legend', () => {
       legendBlocks(fake.draw, resolveMessages(locale))[0].entries.map((e) => e.label);
     expect(labels('en')).toEqual(['Below 10', '10 to below 20', '20 or more', 'Other']);
     expect(labels('ja')).toEqual(['10 未満', '10 以上 20 未満', '20 以上', 'その他']);
+  });
+
+  it('has the rows of the rule of each dataset that has one, in the order of the stack', () => {
+    const area: StyleRule = {
+      kind: 'graduated',
+      property: 'area',
+      breaks: [200, 500],
+      colors: ['#fde0dd', '#fa9fb5', '#7a0177'],
+      other: '#d9d9d9',
+    };
+    const fake = fakeDraw({
+      doc: {
+        layers: [
+          layer('l1', [], { name: 'Survey', styleRule: { kind: 'single', color: '#fbbf24' } }),
+          layer('l2', [], { name: 'Route' }),
+        ],
+        datasets: [
+          {
+            id: 'water',
+            order: 'below-store',
+            rows: 3,
+            styleRule: { kind: 'single', color: '#00f' },
+          },
+          { id: 'buildings', rows: 12, styleRule: area },
+          { id: 'roads', rows: 5 },
+          { id: 'places', order: 'above-store', rows: 7, rowType: 'Point', styleRule: area },
+          // Not listed by the stacking order, so not drawn
+          { id: 'stray', rows: 1, styleRule: area },
+        ],
+        order: ['l1', 'buildings', 'roads', 'l2'],
+      },
+    });
+    const blocks = legendBlocks(fake.draw, en);
+    expect(blocks.map((b) => [b.kind, b.id, b.name, b.shape])).toEqual([
+      ['dataset', 'places', 'places', 'dot'],
+      ['dataset', 'buildings', 'buildings', 'area'],
+      ['layer', 'l1', 'Survey', 'box'],
+      ['dataset', 'water', 'water', 'area'],
+    ]);
+    expect(blocks[1].entries).toEqual([
+      { label: 'Below 200', color: '#fde0dd' },
+      { label: '200 to below 500', color: '#fa9fb5' },
+      { label: '500 or more', color: '#7a0177' },
+      { label: 'Other', color: '#d9d9d9' },
+    ]);
+  });
+
+  it('reads the shape of a dataset from its first thousand rows, a box when it has none', () => {
+    const fake = fakeDraw({
+      doc: { layers: [], datasets: [{ id: 'big', rows: 200_000, rowType: 'LineString' }] },
+    });
+    const big = fake.datasets[0];
+    expect(datasetShape(big as never)).toBe('line');
+    expect(big.getRowType).toHaveBeenCalledTimes(1000);
+    big.setRowCount(0);
+    expect(datasetShape(big as never)).toBe('box');
   });
 
   it('draws the swatches after what the features of the layer are', () => {

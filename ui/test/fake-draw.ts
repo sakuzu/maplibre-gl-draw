@@ -19,6 +19,7 @@ import type {
   MoveTarget,
   RuntimeOptions,
   SelectionType,
+  StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
 import { vi } from 'vitest';
 
@@ -61,12 +62,18 @@ export interface FakeDatasetSpec {
   rows?: number;
   /** True when left out */
   visible?: boolean;
+  /** Its style rule; none when left out */
+  styleRule?: StyleRule;
+  /** The type of every row; `Polygon` when left out */
+  rowType?: string;
 }
 
 /** A dataset of the stand-in: the members the interface reads, and its events */
 function fakeDataset(spec: FakeDatasetSpec) {
   let visible = spec.visible ?? true;
   let rows = spec.rows ?? 0;
+  let styleRule = spec.styleRule;
+  const rowType = spec.rowType ?? 'Polygon';
   const listeners = new Set<(payload: { reason: string }) => void>();
   const emit = (reason: string) => {
     for (const listener of [...listeners]) listener({ reason });
@@ -91,6 +98,12 @@ function fakeDataset(spec: FakeDatasetSpec) {
       band: null,
     }),
     listRows: () => Array.from({ length: rows }, () => ({}) as never),
+    getRowType: vi.fn((index: number) => (index >= 0 && index < rows ? rowType : null)),
+    getStyleRule: () => styleRule,
+    setStyleRule: vi.fn((rule: StyleRule | undefined) => {
+      styleRule = rule;
+      emit('style');
+    }),
     /** Changes the number of its rows, as `setRows` would */
     setRowCount(next: number) {
       rows = next;

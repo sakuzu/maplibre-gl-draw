@@ -55,16 +55,32 @@ export const BASEMAPS: Basemap[] = [
 ];
 
 /**
+ * The URL of the style of one of the basemaps, for `basemapStyle`
+ *
+ * @param id The ID of a basemap of `BASEMAPS` whose style is a URL
+ * @throws Error when there is no such basemap, or its style is not a URL
+ */
+export function basemapUrl(id: string): string {
+  const style = BASEMAPS.find((b) => b.id === id)?.style;
+  if (typeof style !== 'string') throw new Error(`No basemap "${id}" with the URL of a style`);
+  return style;
+}
+
+/**
  * The ID of the basemap the address names (`?basemap=<id>`), for the `basemap` option of the
  * standard UI
  *
- * @returns The ID when it is one of `BASEMAPS` and no `?style=` replaces the basemap, or
- *   undefined, and the UI then marks the basemap whose style the map has
+ * @param fallback The ID of the basemap the example opens on, the one whose URL it gives to
+ *   `basemapStyle`
+ * @returns The ID when it is one of `BASEMAPS` and no `?style=` replaces the basemap, else
+ *   `fallback`: a style given with `?style=` stands in for the basemap of the example (the
+ *   end-to-end tests give one that loads nothing). Without `fallback` it is undefined then, and
+ *   the UI marks the basemap whose style the map has
  */
-export function initialBasemapId(): string | undefined {
-  if (params.has('style')) return undefined;
+export function initialBasemapId(fallback?: string): string | undefined {
   const id = params.get('basemap');
-  return id !== null && BASEMAPS.some((b) => b.id === id) ? id : undefined;
+  if (params.has('style') || id === null || !BASEMAPS.some((b) => b.id === id)) return fallback;
+  return id;
 }
 
 /**

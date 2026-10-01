@@ -39,7 +39,7 @@ export const en: Readonly<Messages> = Object.freeze({
   legendBelow: 'Below {upper}',
   legendAtLeast: '{lower} or more',
   legendRange: '{lower} to below {upper}',
-  noLegend: 'No layer has a style rule.',
+  noLegend: 'No layer or dataset has a style rule.',
   hide: 'Hide',
   show: 'Show',
   lock: 'Lock',

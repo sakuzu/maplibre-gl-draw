@@ -3,19 +3,19 @@
 
 // datasets: data to show, under and over the user's own drawing.
 // The buildings and the places of central Tokyo from Overture Maps (examples/public/data/),
-// fetched as GeoJSON. A dataset draws rows that are not features of the drawing: they are shown,
-// not edited, and not saved with the drawing. The buildings are given at once, colored by their
-// height and placed between two layers of the drawing, a survey area behind them and a planned
-// route in front; the places are handed over for the part of the map in view as it moves,
-// colored by their category, in front of everything. A line drawn by the user snaps to the
-// edges of the buildings. A click on a row is reported by an event, logged in the browser
-// console.
+// fetched as GeoJSON, on the light grey Positron basemap. A dataset draws rows that are not
+// features of the drawing: they are shown, not edited, and not saved with the drawing. The
+// buildings are given at once, colored by the area of their footprint and placed between two
+// layers of the drawing, a survey area behind them and a planned route in front; the places are
+// handed over for the part of the map in view as it moves, small points colored by their
+// category, in front of everything. The Legend tab of the panel on the left shows the rules of
+// both. A line drawn by the user snaps to the edges of the buildings. A click on a row is
+// reported by an event, logged in the browser console.
 
 import {
   createDraw,
   type DatasetProvider,
   type DatasetRow,
-  deriveLegend,
   type StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -23,12 +23,15 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, basemapUrl, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
+// Positron, a light grey basemap, so that the colors of the data read; the basemap row of the
+// standard UI names it, and `?basemap=<id>` opens on another
+const BASEMAP = 'positron';
 const map = new maplibregl.Map({
   container: 'map',
-  style: basemapStyle(),
+  style: basemapStyle(basemapUrl(BASEMAP)),
   center: [139.7725, 35.6745],
   zoom: 14.5,
   attributionControl: {
@@ -39,7 +42,7 @@ const map = new maplibregl.Map({
 // show it), so a line drawn along a building follows its edges. The page makes its own layers
 const draw = createDraw(map, { initDefaultLayer: false, snapping: { datasets: true } });
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId(BASEMAP) });
 
 // 2. Two layers of the user's drawing, there from the first frame: a survey area, to lie behind
 // the buildings, and a planned route with its stops, in front of them. New drawings go to the
@@ -70,7 +73,7 @@ const STOPS: Array<[string, [number, number]]> = [
   ['Kyobashi', [139.7701, 35.6769]],
   ['Tsukiji', [139.7726, 35.6668]],
 ];
-const ROUTE_STYLE = { strokeColor: '#7c3aed', strokeWidth: 4, pointColor: '#7c3aed' };
+const ROUTE_STYLE = { strokeColor: '#2563eb', strokeWidth: 4, pointColor: '#2563eb' };
 draw.features.createMany([
   {
     type: 'LineString',
@@ -99,17 +102,21 @@ async function fetchRows(name: string): Promise<DatasetRow[]> {
   return ((await response.json()) as { features: DatasetRow[] }).features;
 }
 
-// 3. The buildings by height in metres: one more color than breaks, and grey for a building
-// whose height the data does not give
-const BY_HEIGHT: StyleRule = {
+// 3. The buildings by the area of their footprint in square metres: one more color than breaks,
+// from pink to deep purple. Half the buildings of the sample are under 70 m² and one in twenty
+// over 670 m², so the breaks give each class a good share of them
+const BY_AREA: StyleRule = {
   kind: 'graduated',
-  property: 'height',
-  breaks: [10, 20, 40, 80],
-  colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#3182bd', '#08519c'],
+  property: 'area',
+  breaks: [50, 100, 200, 500],
+  colors: ['#fbb4b9', '#f768a1', '#dd3497', '#ae017e', '#7a0177'],
   other: '#d9d9d9',
 };
 
-/** The places by category: the 6 most common categories of the rows, the rest grey */
+/**
+ * The places by category: the 6 most common categories of the rows, the rest grey, in colors
+ * apart from those of the buildings
+ */
 function byCategory(places: DatasetRow[]): StyleRule {
   const counts = new Map<string, number>();
   for (const place of places) {
@@ -117,7 +124,7 @@ function byCategory(places: DatasetRow[]): StyleRule {
     if (typeof category === 'string') counts.set(category, (counts.get(category) ?? 0) + 1);
   }
   const top = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const colors = ['#e15759', '#f28e2b', '#59a14f', '#b07aa1', '#edc948', '#ff9da7'];
+  const colors = ['#ff7f0e', '#2ca02c', '#17becf', '#d62728', '#bcbd22', '#8c564b'];
   return {
     kind: 'categorical',
     property: 'category',
@@ -149,7 +156,7 @@ const loaded = Promise.all([
   draw.datasets.add({
     id: 'buildings',
     rows: buildings,
-    styleRule: BY_HEIGHT,
+    styleRule: BY_AREA,
     baseStyle: { fill: { fillOpacity: 0.85, strokeColor: '#ffffff', strokeWidth: 0.5 } },
     order: 'layer-order',
     interactive: true,
@@ -158,28 +165,21 @@ const loaded = Promise.all([
 
   // 5. The places, fetched for the view, in front of every layer. Places that overlap on the
   // screen are thinned, and from zoom 18 every place is drawn
-  const placeRule = byCategory(places);
   draw.datasets.add({
     id: 'places',
     provider: placesInView(places),
-    styleRule: placeRule,
+    styleRule: byCategory(places),
     baseStyle: { point: { pointRadius: 4, pointStrokeColor: '#ffffff', pointStrokeWidth: 1 } },
     collisionThinning: { enabled: true, fullDisplayZoom: 18, marginPx: 8 },
     order: 'above-store',
     interactive: true,
   });
 
-  // 6. The Legend tab lists the rules of layers, not of datasets, so the page logs them
+  // 6. The Legend tab of the panel on the left lists the rules of the two datasets, in the order
+  // of the stack: the places, then the buildings
   console.log(
     `${buildings.length.toLocaleString('en')} buildings and ${places.length.toLocaleString('en')} places`,
   );
-  for (const [name, rule] of [
-    ['buildings by height (m)', BY_HEIGHT],
-    ['places by category', placeRule],
-  ] as const) {
-    const rows = deriveLegend(rule).map(({ label, color }) => `${color} ${label}`);
-    console.log(`Legend of the ${name}:\n  ${rows.join('\n  ')}`);
-  }
   return { buildings: buildings.length, places: places.length };
 });
 
