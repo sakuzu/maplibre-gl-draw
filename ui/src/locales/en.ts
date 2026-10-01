@@ -157,7 +157,6 @@ export const en: Readonly<Messages> = Object.freeze({
   sharedVertexDrag: 'Move shared vertices',
   snapPauseKey: 'Snapping pauses while {key} is held',
   datasets: 'Datasets',
-  rows: '{count} rows',
   manyFeatures: '{count} features. Select them on the map.',
   stack: 'Stack',
 });

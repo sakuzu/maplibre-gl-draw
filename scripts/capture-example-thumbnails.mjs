@@ -7,10 +7,10 @@
  * Builds the examples and the playground with their own vite configurations (in memory, as the
  * end-to-end tests do) and opens each example of docs/examples/catalog.json in headless
  * Chromium (the one `npx playwright-core install chromium-headless-shell` installs, with a
- * software WebGL2). Nothing goes to the network: the basemap is replaced through the address of
- * the page (`?style=`, examples/basemap.ts) by an empty style, and the elevation (`?dem=`) by
- * flat tiles, both served here. The playground is taken on the overview of its showcase
- * (`?showcase=overview`, playground/showcase/).
+ * software WebGL2). The pages are served from the build in memory; the basemap and the elevation
+ * come from the network, as the gallery shows them (each example opens on its own basemap), so
+ * this script runs on a developer's machine, not in CI. The playground is taken on the overview
+ * of its showcase (`?showcase=overview`, playground/showcase/).
  *
  * An example that opens on an empty map, for the user to draw on (get-started, custom-ui), is
  * taken with a few features drawn from code and one of them selected, as the user would have
@@ -20,10 +20,9 @@
  * Usage: npm run site:thumbnails [-- <name> ...]   (every example when none is named)
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { crc32, deflateSync } from 'node:zlib';
 import { chromium } from 'playwright-core';
 import { build } from 'vite';
 
@@ -37,44 +36,6 @@ const SCALE = 0.5;
 /** Opening a page compiles the shaders on the software WebGL2, and some pages load a lot */
 const TIMEOUT = 120_000;
 
-/** A PNG of one color (8-bit RGB), for the elevation tiles */
-function solidPng(size, rgb) {
-  const chunk = (type, data) => {
-    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-    const length = Buffer.alloc(4);
-    length.writeUInt32BE(data.length);
-    const crc = Buffer.alloc(4);
-    crc.writeUInt32BE(crc32(body));
-    return Buffer.concat([length, body, crc]);
-  };
-  const header = Buffer.alloc(13);
-  header.writeUInt32BE(size, 0);
-  header.writeUInt32BE(size, 4);
-  header.set([8, 2, 0, 0, 0], 8);
-  const row = Buffer.alloc(1 + size * 3);
-  for (let x = 0; x < size; x++) row.set(rgb, 1 + x * 3);
-  const pixels = Buffer.concat(Array.from({ length: size }, () => row));
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', header),
-    chunk('IDAT', deflateSync(pixels)),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
-}
-
-/** Flat ground at 500 m in the Mapbox encoding, as in the end-to-end tests */
-const DEM_TILE = solidPng(256, [1, 154, 40]);
-const EMPTY_STYLE = {
-  version: 8,
-  sources: {},
-  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eef0f2' } }],
-};
-const DEM_TILEJSON = {
-  tilejson: '2.2.0',
-  tiles: [`${ORIGIN}/thumbnails/dem/{z}/{x}/{y}.png`],
-  minzoom: 0,
-  maxzoom: 12,
-};
 const CONTENT_TYPES = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -82,6 +43,8 @@ const CONTENT_TYPES = {
   '.json': 'application/json',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.geojson': 'application/geo+json',
+  '.parquet': 'application/octet-stream',
 };
 
 /** Builds a vite project in memory: path (without the leading slash) to content */
@@ -138,18 +101,25 @@ async function capture(name) {
   });
   await context.route('**/*', (route) => {
     const url = new URL(route.request().url());
-    if (url.origin !== ORIGIN) return route.abort();
+    // The basemap, its tiles and the elevation come from the network
+    if (url.origin !== ORIGIN) return route.continue();
     let path = url.pathname.slice(1);
-    if (path === 'thumbnails/style.json') return route.fulfill({ json: EMPTY_STYLE });
-    if (path === 'thumbnails/dem.json') return route.fulfill({ json: DEM_TILEJSON });
-    if (path.startsWith('thumbnails/dem/')) {
-      return route.fulfill({ contentType: 'image/png', body: DEM_TILE });
-    }
     if (path === '' || path.endsWith('/')) path += 'index.html';
     const [project, ...rest] = path.split('/');
     const files = project === 'playground' ? playground : examples;
     const file = files.get(rest.join('/'));
-    if (file === undefined) return route.fulfill({ status: 404, body: 'not found' });
+    if (file === undefined) {
+      // The files of examples/public/ (the sample data), which vite copies to the build only
+      // when it writes it to disk
+      const onDisk = join(EXAMPLES, 'public', rest.join('/'));
+      if (existsSync(onDisk)) {
+        return route.fulfill({
+          contentType: CONTENT_TYPES[extname(path)] ?? 'application/octet-stream',
+          body: readFileSync(onDisk),
+        });
+      }
+      return route.fulfill({ status: 404, body: 'not found' });
+    }
     return route.fulfill({
       contentType: CONTENT_TYPES[extname(path)] ?? 'application/octet-stream',
       body: typeof file === 'string' ? file : Buffer.from(file),
@@ -158,10 +128,7 @@ async function capture(name) {
   const page = await context.newPage();
   page.on('pageerror', (error) => console.error(`${name}: page error: ${error}`));
 
-  const query = new URLSearchParams({
-    style: `${ORIGIN}/thumbnails/style.json`,
-    dem: `${ORIGIN}/thumbnails/dem.json`,
-  });
+  const query = new URLSearchParams();
   if (name === 'playground') query.set('showcase', 'overview');
   const path = name === 'playground' ? 'playground/' : `examples/${name}/`;
   await page.goto(`${ORIGIN}/${path}?${query}`);

@@ -309,12 +309,7 @@ describe('the datasets of the layer panel', () => {
   it('shows each dataset as a row of the stack, in its place among the layers', () => {
     const fake = stacked();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
-    expect(rowNames(fake.container)).toEqual([
-      'places 7 rows',
-      'Route',
-      'buildings 12,345 rows',
-      'Survey',
-    ]);
+    expect(rowNames(fake.container)).toEqual(['places', 'Route', 'buildings', 'Survey']);
     const buildings = row(fake.container, 'buildings');
     expect(buildings.querySelector('.lucide-database')).not.toBeNull();
     expect(buildings.querySelector('[aria-label="Datasets"]')).not.toBeNull();
@@ -375,10 +370,10 @@ describe('the datasets of the layer panel', () => {
     flushSync();
     fake.addDataset({ id: 'trees', order: 'below-store', rows: 2 });
     flushSync();
-    expect(rowNames(fake.container).at(-1)).toBe('trees 2 rows');
+    expect(rowNames(fake.container).at(-1)).toBe('trees');
     fake.datasets[0].setRowCount(10);
     flushSync();
-    expect(rowNames(fake.container)[2]).toBe('buildings 10 rows');
+    expect(rowNames(fake.container)[2]).toBe('buildings');
     fake.datasets[0].setVisible(false);
     flushSync();
     expect(row(fake.container, 'buildings').querySelector('[aria-label="Show"]')).not.toBeNull();
@@ -394,12 +389,6 @@ describe('the datasets of the layer panel', () => {
     const fake = stacked();
     handle = createLayerPanel(fake.asDraw, { target: fake.container, datasets: false });
     expect(rowNames(fake.container)).toEqual(['Route', 'Survey']);
-  });
-
-  it('counts the rows in the words of the locale', () => {
-    const fake = stacked();
-    handle = createLayerPanel(fake.asDraw, { target: fake.container, locale: 'ja' });
-    expect(rowNames(fake.container)[2]).toBe('buildings 12,345 行');
   });
 });
 

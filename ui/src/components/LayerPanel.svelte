@@ -28,7 +28,6 @@
     canDropInto,
     canGroup,
     DATASET_ICON,
-    formatCount,
     indexNodes,
     isSelectable,
     type LayerTreeNode,
@@ -36,7 +35,7 @@
     selectedIds,
     selectionOf,
   } from '../layers/tree.js';
-  import { fillWord, type Messages } from '../messages.js';
+  import type { Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
   import type { LayerPanelDraw } from '../types.js';
   import BasemapPanel from './BasemapPanel.svelte';
@@ -287,7 +286,6 @@
       <Markbox><Icon name={DATASET_ICON} /></Markbox>
     </span>
     <Text clamp>{own.name}</Text>
-    <span class="count"><Text muted tabular>{fillWord(m.rows, { count: formatCount(own.count ?? 0) })}</Text></span>
   {:else if own.kind === 'count'}
     <!-- The features a layer holds when it lists none: not pressed, not dragged -->
     <span class="many" data-fixed><Text muted clamp>{own.name}</Text></span>
@@ -376,8 +374,7 @@
     flex-direction: column;
     min-width: 0;
   }
-  .mark,
-  .count {
+  .mark {
     display: inline-flex;
     flex: none;
   }

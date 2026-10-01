@@ -221,7 +221,6 @@ export interface Messages {
   snapPauseKey: string;
   /** The mark of a dataset in the layer panel, and the number of its rows, with {count} */
   datasets: string;
-  rows: string;
   /** The row of a layer that holds more features than the panel lists, with {count} */
   manyFeatures: string;
   /** The section of the layer panel that holds the tree of the stack */

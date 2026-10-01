@@ -392,6 +392,7 @@ parcels.setBaseStyle({
 `baseStyle` に重ねたものを持ちます。
 
 `setStyleRule(undefined)` と `setBaseStyle(undefined)` で外せます。
+`getStyleRule()` と `getBaseStyle()` で読み返せるので、凡例はここから作れます。
 
 `zoomScale` は、大きさと不透明度に、ズームで変わる係数を掛けます。
 地図を描くたびに呼ばれ、返す値が変わっても何も作り直しません。
