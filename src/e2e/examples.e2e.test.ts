@@ -17,7 +17,7 @@
  * Svelte and kata inside it, so their pages load nothing else either.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
@@ -153,6 +153,10 @@ async function serve(context: BrowserContext): Promise<void> {
         body: typeof built === 'string' ? built : Buffer.from(built),
       });
     }
+    // The files of examples/public/ (the sample data), which vite copies to the root of the
+    // build only when it writes the build to disk
+    const file = join(EXAMPLES, 'public', path);
+    if (existsSync(file)) return route.fulfill({ contentType, body: readFileSync(file) });
     return route.fulfill({ status: 404, body: 'not found' });
   });
 }
@@ -593,18 +597,96 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the 50,000 cells and the points of the view, and reports a click', {
-    timeout: TIMEOUT,
+  it('datasets shows the sample data between and over two layers of the drawing, logs the rules and reports a click', {
+    timeout: browserTimeout(TIMEOUT),
   }, async () => {
+    const count = (name: string): number =>
+      (
+        JSON.parse(
+          readFileSync(join(EXAMPLES, 'public/data', name), 'utf8'),
+        ) as GeoJSON.FeatureCollection
+      ).features.length;
+    const [buildings, places] = [count('tokyo-buildings.geojson'), count('tokyo-places.geojson')];
     const { page, close } = await openExample('datasets');
-    const sizes = await page.evaluate(() => {
-      const { draw } = window as unknown as E2EWindow;
-      return [draw.datasets.count(), draw.datasets.get('cells')?.listRows().length];
+    // Opened again with the console followed, which the page writes as it loads
+    const logs: string[] = [];
+    page.on('console', (message) => logs.push(message.text()));
+    await page.reload();
+    await ready(page);
+    expect(
+      await page.evaluate(() => (window as unknown as { loaded: Promise<unknown> }).loaded),
+    ).toEqual({
+      buildings,
+      places,
     });
-    expect(sizes).toEqual([2, 50_000]);
+    // The two layers of the drawing, the buildings placed between them, and the snapping to
+    // the datasets on
+    const drawing = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const layers = Object.fromEntries(
+        draw.layers.list().map((layer) => [
+          layer.name,
+          draw.features
+            .list({ layerId: layer.id })
+            .map((feature) => feature.type)
+            .sort(),
+        ]),
+      );
+      return {
+        layers,
+        order: draw.layers.getOrder().map((id) => draw.layers.get(id)?.name ?? id),
+        snapToDatasets: draw.options.get().snapping?.datasets,
+      };
+    });
+    expect(drawing).toEqual({
+      layers: {
+        'Survey area': ['Polygon'],
+        'Planned route': ['LineString', 'Point', 'Point', 'Point'],
+      },
+      order: ['Survey area', 'buildings', 'Planned route'],
+      snapToDatasets: true,
+    });
+    expect(logs).toContain(
+      `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
+    );
+    expect(logs.join('\n')).toContain('Legend of the buildings by height (m):\n  #eff3ff Below 10');
+    expect(logs.join('\n')).toContain('Legend of the places by category:');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.datasets.get('buildings')?.listRows().length,
+      ),
+    ).toBe(buildings);
+    // The provider hands over the places in view, a part of them
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (window as unknown as E2EWindow).draw.datasets.get('places')?.listRows().length ?? 0,
+          ),
+        { timeout: browserTimeout(10_000) },
+      )
+      .toBeGreaterThan(0);
+
+    // The middle of a building of four corners, at zoom 18
+    const target = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const dataset = draw.datasets.get('buildings');
+      for (let i = 0; dataset?.getRowId(i) != null; i++) {
+        const geometry = dataset.getRow(i)?.geometry;
+        if (geometry?.type !== 'Polygon' || geometry.coordinates[0].length !== 5) continue;
+        const ring = geometry.coordinates[0].slice(0, 4);
+        const center = [0, 1].map((k) => ring.reduce((sum, p) => sum + p[k], 0) / 4);
+        map.jumpTo({ center: center as [number, number], zoom: 18 });
+        return center;
+      }
+      throw new Error('No building of four corners');
+    });
+    await settle(page);
     const clicked = await recordDatasetClick(page);
-    await click(page, at(10, 10));
-    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(cells|points)$/);
+    await click(page, await pageOf(page, target));
+    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(buildings|places)$/);
+    expect(logs.some((line) => /^(buildings|places): /.test(line))).toBe(true);
     await close();
   });
 
