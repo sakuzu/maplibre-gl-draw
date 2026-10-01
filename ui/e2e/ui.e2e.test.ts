@@ -278,3 +278,47 @@ describe('the overlay', () => {
     await until(() => page.evaluate(() => (window as unknown as { clicks: number }).clicks), 1);
   });
 });
+
+describe('the basemap menu', () => {
+  it('replaces the style with the one chosen, and the drawing comes back on top of it', async () => {
+    page = await openPage(browser, site);
+    // The interface again, with two basemaps: style objects, so nothing goes to the network
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow & {
+        e2e: { createDrawUI: typeof import('../src/index.ts').createDrawUI };
+      };
+      const style = (id: string, color: string) => ({
+        version: 8 as const,
+        sources: {},
+        layers: [{ id, type: 'background' as const, paint: { 'background-color': color } }],
+      });
+      w.ui.destroy();
+      w.ui = w.e2e.createDrawUI(w.draw, {
+        theme: 'dark',
+        basemaps: [
+          { id: 'paper', label: 'Paper', style: style('paper-background', '#f4f1e8') },
+          { id: 'night', label: 'Night', style: style('night-background', '#101820') },
+        ],
+        basemap: 'paper',
+      });
+    });
+    const layers = () => page.evaluate(() => (window as unknown as E2EWindow).map.getLayersOrder());
+    const drawLayers = await page.evaluate(() =>
+      (window as unknown as E2EWindow).map
+        .getLayersOrder()
+        .filter((id) => id.startsWith('maplibre-gl-draw')),
+    );
+    expect(drawLayers.length).toBeGreaterThan(0);
+
+    await page.getByRole('button', { name: 'Basemap', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Night' }).click();
+    // The new background, under the layers of the draw instance
+    await until(layers, ['night-background', ...drawLayers]);
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).ui.getBasemap()?.id)).toBe(
+      'night',
+    );
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.features.count())).toBe(
+      3,
+    );
+  });
+});

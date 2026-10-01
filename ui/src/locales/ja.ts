@@ -147,4 +147,5 @@ export const ja: Readonly<Messages> = Object.freeze({
   running: '実行中',
   toLight: 'ライトに切り替える',
   toDark: 'ダークに切り替える',
+  basemap: '背景地図',
 });

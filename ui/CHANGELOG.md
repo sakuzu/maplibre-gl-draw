@@ -7,6 +7,12 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Added: a basemap menu at the top right of `createDrawUI`, to the left
+  of the theme button, with two or more `basemaps` (`{ id, label,
+  style }`). Choosing one replaces the map's style and calls
+  `onbasemap`; `basemap` names the current one at the start, and
+  `ui.setBasemap(id)` and `ui.getBasemap()` change and read it. The
+  drawing is drawn again on top of the new style.
 - Changed: the inspector of a feature opens on the first tab of
   `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
   The default stays `['style', 'attributes']`, which opens on Style. Once

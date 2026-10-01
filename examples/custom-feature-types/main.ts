@@ -13,7 +13,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import { routeLook, routeType } from './route.ts';
 
@@ -58,7 +58,7 @@ const river = draw.features.create({
 
 // 3. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 const ja = locale === 'ja';
 
 // 4. A section for the route's style keys, shown when every selected feature is a route. The UI

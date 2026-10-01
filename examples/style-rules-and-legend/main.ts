@@ -12,7 +12,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import { BLOCKS } from './data.ts';
 
@@ -79,7 +79,12 @@ window.addEventListener('keydown', (event) => {
 
 // 4. The standard UI: the Legend tab beside the layers. `?locale=ja` shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, legend: true });
+const ui = createDrawUI(draw, {
+  locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
+  legend: true,
+});
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });

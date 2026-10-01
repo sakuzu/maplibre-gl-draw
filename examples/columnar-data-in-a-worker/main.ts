@@ -14,7 +14,7 @@ import type { DictionaryColumn, PreparedTable } from '@sakuzu/maplibre-gl-draw/t
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const CENTER: [number, number] = [139.767, 35.681];
@@ -26,7 +26,7 @@ const map = new maplibregl.Map({
 });
 const draw = createDraw(map);
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 1. The dataset, empty until the Worker hands over its table, colored by a column
 const places = draw.datasets.add({

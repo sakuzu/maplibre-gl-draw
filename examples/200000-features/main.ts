@@ -14,7 +14,7 @@ import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const CENTER: [number, number] = [139.767, 35.681];
@@ -29,7 +29,12 @@ const draw = createDraw(map);
 // 1. The standard UI, with the layer panel listing the layers without their features: the list
 // makes a row for each feature, which is too many here
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, layers: { features: false } });
+const ui = createDrawUI(draw, {
+  locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
+  layers: { features: false },
+});
 
 // 2. A random number generator with a seed, so the town is the same on every visit
 let seed = 42;

@@ -96,6 +96,9 @@ The options of `createDrawUI`, all optional:
 | `side` | The side panels `floating` over the map or `beside` it | `floating` |
 | `themeToggle` | The button that switches the look | `true` |
 | `mapControls` | maplibre-gl's globe, compass, zoom and scale | `true` |
+| `basemaps` | The basemaps of the menu at the top right | none |
+| `basemap` | The ID of the basemap current at the start | the map's |
+| `onbasemap` | Called with the basemap after it changed | none |
 
 Each part also goes alone into an element of the page, with its own
 options and `target`, `locale` and `theme`: `createToolbar`,
@@ -214,6 +217,34 @@ Beyond the look, the options above choose the parts and what each shows,
 `ui.tools.add` adds a tool for a mode of the application (see
 [Use](#use)), and `ui.inspector.sections.add` adds a section to the
 inspector (see [Inspector](#inspector)).
+
+## Basemaps
+
+With two or more `basemaps`, a menu at the top right of the map, to the
+left of the theme button, lists their labels with the current one
+marked. Choosing one replaces the map's style with its `style` (a URL or
+a style object) and calls `onbasemap`; `ui.setBasemap(id)` does the
+same, and `ui.getBasemap()` returns the current one. The current one at
+the start is `basemap`, or else the first whose `style` is the URL the
+map's style was loaded from. While the inspector is open, the menu moves
+with the theme button to the left of it.
+
+```ts
+const styles = 'https://tiles.openfreemap.org/styles';
+const ui = createDrawUI(draw, {
+  basemaps: [
+    { id: 'bright', label: 'Bright', style: `${styles}/bright` },
+    { id: 'dark', label: 'Dark', style: `${styles}/dark` },
+  ],
+  onbasemap: (basemap) => console.log(basemap.id),
+});
+```
+
+The drawing stays: the menu calls `map.setStyle(style, { diff: false })`,
+which replaces the style whole, and the draw instance adds its layers
+again on top of the new style once it has loaded. Sources, layers and
+the terrain that the application added to the map itself go with the old
+style, so it adds them again on the map's `style.load` event.
 
 ## Map controls
 

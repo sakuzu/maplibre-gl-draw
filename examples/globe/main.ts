@@ -14,7 +14,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const map = new maplibregl.Map({
@@ -101,7 +101,7 @@ draw.features.create({
 
 // 5. The standard UI; its map controls include maplibre-gl's globe button
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });

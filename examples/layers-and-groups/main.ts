@@ -12,7 +12,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const map = new maplibregl.Map({
@@ -86,7 +86,12 @@ draw.layers.setActive(paths.id);
 
 // 7. The standard UI: the layers on the left. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, layers: { features: true, add: true, reorder: true } });
+const ui = createDrawUI(draw, {
+  locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
+  layers: { features: true, add: true, reorder: true },
+});
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui, layerIds: { parcels: parcels.id, paths: paths.id } });

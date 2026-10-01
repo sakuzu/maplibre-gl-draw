@@ -78,6 +78,11 @@ example `terrain/?style=<style URL>&dem=<TileJSON URL>`; the end-to-end
 tests and the pictures of the gallery (`npm run site:thumbnails`) use
 this to run every example without the network.
 
+The examples with the standard UI offer four OpenFreeMap styles
+(`BASEMAPS` in basemap.ts) in its basemap menu at the top right of the
+map. The default is Bright, and `?basemap=<id>` (`liberty`, `bright`,
+`positron` or `dark`) opens a page on another one.
+
 ## Shared files
 
 - [maplibre-setup.ts](maplibre-setup.ts) sets the worker URL of

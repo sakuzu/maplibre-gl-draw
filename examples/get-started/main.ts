@@ -12,7 +12,7 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // 1. Set the worker URL of maplibre-gl once, before the first map is created
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 // 2. Create the map
@@ -29,7 +29,7 @@ const draw = createDraw(map);
 // 4. Lay the standard UI over the map: the tools at the bottom, the layers on the left and the
 // selected feature on the right. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 5. Follow the changes: one event per transaction, whether a tool, the panel or code made it
 draw.on('document.changed', ({ features, source }) => {

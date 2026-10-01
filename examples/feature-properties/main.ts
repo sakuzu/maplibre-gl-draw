@@ -13,7 +13,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import { PLACES } from './data.ts';
 
@@ -52,7 +52,12 @@ draw.features.update(market, {
 // 4. The standard UI, its inspector opening on the Attributes tab: the first of `tabs` is the
 // one that opens. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, inspector: { tabs: ['attributes', 'style'] } });
+const ui = createDrawUI(draw, {
+  locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
+  inspector: { tabs: ['attributes', 'style'] },
+});
 
 // 5. Select the market hall: the panel on the right shows its name and its description, and
 // its Attributes tab, open, lists the other properties

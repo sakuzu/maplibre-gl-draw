@@ -13,7 +13,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle, DEM_TILES } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, DEM_TILES, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import { terrainDocument } from './data.ts';
 
@@ -30,9 +30,9 @@ const map = new maplibregl.Map({
 });
 
 // 2. The elevation is a raster-dem source of the map; the terrain, a hillshade from the same
-// tiles and a sky are set once the style has loaded. `map.setTerrain(null)` turns the terrain
+// tiles and a sky are set whenever a style has loaded (the basemap menu replaces the style). `map.setTerrain(null)` turns the terrain
 // off, with no call to the library
-map.on('load', () => {
+map.on('style.load', () => {
   map.addSource('dem', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
   // A source of its own for the hillshade, as maplibre recommends
   map.addSource('hillshade', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
@@ -66,7 +66,7 @@ await draw.document.load(terrainDocument());
 
 // 4. The standard UI over the tilted map. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 5. How the last frame was drawn: whether the terrain was in use and whether the areas and the
 // lines were painted on the ground. For debugging; the fields may change in a minor release

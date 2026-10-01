@@ -747,4 +747,25 @@ describe('the examples', () => {
     expect(await button.getAttribute('aria-pressed')).toBe('true');
     await close();
   });
+
+  it('get-started has the basemap menu of the standard UI with the four basemaps', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('get-started');
+    const trigger = page.locator('[data-role="basemap"]').getByRole('button', { name: 'Basemap' });
+    await trigger.click();
+    // Opened only: an item chosen would load its style from the network
+    const items = page.getByRole('menu').getByRole('menuitem');
+    expect((await items.allInnerTexts()).map((text) => text.trim())).toEqual([
+      'OpenFreeMap Liberty',
+      'OpenFreeMap Bright',
+      'OpenFreeMap Positron',
+      'OpenFreeMap Dark',
+    ]);
+    // The style of the address replaced the basemap, so none of them is current
+    expect(await page.locator('[role="menuitem"][aria-current="true"]').count()).toBe(0);
+    await page.keyboard.press('Escape');
+    expect(await page.getByRole('menu').count()).toBe(0);
+    await close();
+  });
 });
