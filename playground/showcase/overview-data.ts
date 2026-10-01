@@ -125,7 +125,7 @@ const DRAFT_FOOTPRINT: SceneFeature = {
   style: {
     fillColor: '#FF9E00',
     fillOpacity: 1,
-    strokeColor: '#D00000',
+    strokeColor: '#1D4ED8',
     strokeWidth: 3,
     lineStyle: 'dashed',
   },
@@ -156,7 +156,8 @@ const FILL_OPACITY: SceneFeature[] = (
   },
 }));
 
-/** Three areas whose fill and outline differ in color: a solid, a dashed and a dotted outline */
+/** Three areas whose fill and outline are of different hues, which one style layer of the map
+ * cannot do: a solid, a dashed and a dotted outline */
 const OUTLINES: SceneFeature[] = [
   {
     id: 'outline-solid',
@@ -169,7 +170,7 @@ const OUTLINES: SceneFeature[] = [
     style: {
       fillColor: '#FFD166',
       fillOpacity: 0.55,
-      strokeColor: '#9A6700',
+      strokeColor: '#2A9D8F',
       strokeWidth: 1,
       lineStyle: 'solid',
     },
@@ -190,7 +191,7 @@ const OUTLINES: SceneFeature[] = [
     style: {
       fillColor: '#8ECAE6',
       fillOpacity: 0.5,
-      strokeColor: '#1D4ED8',
+      strokeColor: '#D00000',
       strokeWidth: 3,
       lineStyle: 'dashed',
     },
@@ -211,7 +212,7 @@ const OUTLINES: SceneFeature[] = [
     style: {
       fillColor: '#C77DFF',
       fillOpacity: 0.4,
-      strokeColor: '#5A189A',
+      strokeColor: '#1B7F3B',
       strokeWidth: 6,
       lineStyle: 'dotted',
     },
