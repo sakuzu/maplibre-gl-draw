@@ -14,8 +14,9 @@
 // - the places of the same area, handed over for the view, colored by their category, in front
 // The Legend tab of the panel on the left shows the rules of all four. A line drawn by the user
 // snaps to the edges of the buildings. A click on a building, a place or a point is reported by
-// an event, logged in the browser console. The T key turns the thinning of the points off and
-// on, and the console says how many are drawn.
+// an event, logged in the browser console. A switch in the card of actions at the bottom left,
+// with the key T, turns the thinning of the points off and on, and the console says how many are
+// drawn.
 
 import {
   createDraw,
@@ -194,22 +195,19 @@ const unsubscribe = points.on('changed', ({ reason }) => {
   logThinning();
 });
 
-// 5. The T key turns the thinning off and on, and the console says how many points are drawn.
-// The keys typed into a field are left alone
-console.info('Keys: T turns the thinning of the points off and on');
-window.addEventListener('keydown', (event) => {
-  const { target } = event;
-  if (
-    event.key.toLowerCase() !== 't' ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    (target instanceof Element && target.closest('input, textarea, [contenteditable]'))
-  ) {
-    return;
-  }
-  points.setCollisionThinning(points.getCollisionThinning() ? null : THINNING);
-  logThinning();
+// 5. A switch in the card of actions of the standard UI, with the key T (listed with ?, and left
+// alone while a field has the keyboard), turns the thinning off and on, and the console says how
+// many points are drawn
+ui.actions.add({
+  id: 'thinning',
+  label: locale === 'ja' ? '点の間引き' : 'Thin the points',
+  kind: 'toggle',
+  shortcut: 'T',
+  run: () => {
+    points.setCollisionThinning(points.getCollisionThinning() ? null : THINNING);
+    logThinning();
+  },
+  checked: () => points.getCollisionThinning() !== null,
 });
 
 /** The rows of a GeoJSON file of the sample data, each a feature with an ID */

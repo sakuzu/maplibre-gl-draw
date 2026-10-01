@@ -805,7 +805,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the generated cells and points and the sample data between and over two layers of the drawing, colors the buildings by area, thins the points until T, lists the rules in the Legend tab and reports a click', {
+  it('datasets shows the generated cells and points and the sample data between and over two layers of the drawing, colors the buildings by area, thins the points until T and again from the card of actions, lists the rules in the Legend tab and reports a click', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const count = (name: string): number =>
@@ -876,7 +876,6 @@ describe('the examples', () => {
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
-    expect(logs).toContain('Keys: T turns the thinning of the points off and on');
     expect(logs.some((line) => /^1,000,000 points made in \d+ ms/.test(line))).toBe(true);
     expect(
       logs.some((line) =>
@@ -886,7 +885,8 @@ describe('the examples', () => {
       ),
     ).toBe(true);
     // The cells, all given at once, and the points the provider handed over for the view: the
-    // thinning draws a part of them, and T draws them all
+    // thinning draws a part of them, and T draws them all; the switch in the card of actions
+    // thins them again
     const stats = (id: string) =>
       page.evaluate(
         (datasetId) =>
@@ -917,7 +917,9 @@ describe('the examples', () => {
         timeout: browserTimeout(5_000),
       })
       .toBe(true);
-    await page.keyboard.press('t');
+    expect(await actionChecked(page, 'Thin the points')).toBe(false);
+    await pressAction(page, 'Thin the points');
+    expect(await actionChecked(page, 'Thin the points')).toBe(true);
     await expect
       .poll(async () => (await stats('points'))?.visible, { timeout: browserTimeout(5_000) })
       .toBe(thinned?.visible);
