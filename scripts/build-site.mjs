@@ -49,7 +49,7 @@ const pages = [
   'examples/basic/index.html',
 ];
 for (const name of Object.keys(catalog)) {
-  pages.push(`examples/${name}.html`, `ja/examples/${name}.html`, `examples/${name}.png`);
+  pages.push(`examples/${name}.html`, `ja/examples/${name}.html`, `examples/${name}.jpg`);
   if (name !== 'playground') pages.push(`examples/${name}/index.html`);
 }
 const missing = pages.filter((page) => !existsSync(join(SITE_DIR, page)));
