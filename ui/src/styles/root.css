@@ -13,7 +13,8 @@
  * light, or auto while the system prefers light), or on any element around it, turns it light:
  * the build moves kata's light block onto the same selectors, so every color token switches
  * with color-scheme. An application changes the look by setting kata's tokens (--kata-*) on
- * .mgd-ui.
+ * .mgd-ui. The one exception to staying inside the root is the lift of maplibre-gl's bottom
+ * corners below.
  */
 
 .mgd-ui {
@@ -37,17 +38,31 @@
 /* Laid over the map: the root covers its container and lets the pointer through to the map. In
  * createDrawUI, kata's Shell (overlay) gives the pointer back to its regions: the side regions,
  * the toolbar, the scrim, the floating panes, the sheets and the list of shortcuts. The button
- * that opens the left region again lies outside the shell's regions, and the toolbar put alone
- * (createToolbar) has no shell, so they take the pointer themselves; the toolbar's menus are
- * inside it. The tooltips kata appends to the root let the pointer through */
+ * that opens the left region again and the button that switches the theme lie outside the
+ * shell's regions, and the toolbar put alone (createToolbar) has no shell, so they take the
+ * pointer themselves; the toolbar's menus are inside it. The tooltips kata appends to the root
+ * let the pointer through */
 .mgd-ui[data-overlay] {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 .mgd-ui[data-overlay] > [data-role="drawbar"],
-.mgd-ui[data-overlay] > [data-role="reopen"] {
+.mgd-ui[data-overlay] > [data-role="reopen"],
+.mgd-ui[data-overlay] > [data-role="theme"] {
   pointer-events: auto;
+}
+
+/* The one rule outside the root: the bottom corners of maplibre-gl's controls (the scale, the
+ * navigation, the attribution) in the map's container. While createDrawUI is on the map, the
+ * container has data-mgd-ui-lift, and a corner the toolbar reaches across (on a narrow map) is
+ * lifted above it by the height the interface measures (--mgd-ui-lift-left, --mgd-ui-lift-right).
+ * Only the look moves; maplibre-gl's placement is left as it is */
+[data-mgd-ui-lift] > .maplibregl-control-container > .maplibregl-ctrl-bottom-left {
+  transform: translateY(calc(-1 * var(--mgd-ui-lift-left, 0px)));
+}
+[data-mgd-ui-lift] > .maplibregl-control-container > .maplibregl-ctrl-bottom-right {
+  transform: translateY(calc(-1 * var(--mgd-ui-lift-right, 0px)));
 }
 
 /* A panel put alone in an element fills the element's height */

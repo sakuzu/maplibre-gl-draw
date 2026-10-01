@@ -46,11 +46,22 @@ export interface ThemeControl {
  * Keeps the theme of a root element. With `auto`, it follows the system's preference while it
  * lasts; without `window.matchMedia`, `auto` is dark.
  *
+ * `onlook` is called with the look applied (true for light) each time it is applied: at once,
+ * on each change of the theme and, with `auto`, on each change of the system's preference.
+ *
  * @throws Error when the theme is not `light`, `dark` or `auto`
  */
-export function themeControl(root: HTMLElement, theme: Theme | undefined): ThemeControl {
+export function themeControl(
+  root: HTMLElement,
+  theme: Theme | undefined,
+  onlook?: (light: boolean) => void,
+): ThemeControl {
   let query: MediaQueryList | null = null;
-  const onchange = (e: MediaQueryListEvent) => setLight(root, e.matches);
+  const look = (light: boolean) => {
+    setLight(root, light);
+    onlook?.(light);
+  };
+  const onchange = (e: MediaQueryListEvent) => look(e.matches);
   const stop = () => {
     query?.removeEventListener('change', onchange);
     query = null;
@@ -58,13 +69,13 @@ export function themeControl(root: HTMLElement, theme: Theme | undefined): Theme
   const apply = (next: Theme) => {
     stop();
     if (next !== 'auto') {
-      setLight(root, next === 'light');
+      look(next === 'light');
       return;
     }
     const media = typeof window !== 'undefined' ? window.matchMedia : undefined;
     query = typeof media === 'function' ? media.call(window, LIGHT_QUERY) : null;
     query?.addEventListener('change', onchange);
-    setLight(root, query?.matches ?? false);
+    look(query?.matches ?? false);
   };
   apply(checkTheme(theme));
   let destroyed = false;

@@ -146,4 +146,6 @@ export const en: Readonly<Messages> = Object.freeze({
   saturationValue: 'Saturation and value',
   saturationValueText: 'Saturation {s}%, value {v}%',
   running: 'Running',
+  toLight: 'Switch to light',
+  toDark: 'Switch to dark',
 });

@@ -145,4 +145,6 @@ export const ja: Readonly<Messages> = Object.freeze({
   saturationValue: '彩度と明度',
   saturationValueText: '彩度 {s}%、明度 {v}%',
   running: '実行中',
+  toLight: 'ライトに切り替える',
+  toDark: 'ダークに切り替える',
 });

@@ -29,6 +29,7 @@ import InspectorView from './components/Inspector.svelte';
 import LayerPanelView from './components/LayerPanel.svelte';
 import LegendView from './components/Legend.svelte';
 import ToolbarView from './components/Toolbar.svelte';
+import { cornerLift, mapControls } from './controls.js';
 import { inspectorSettings, sectionsHandle } from './inspector/sections.js';
 import type {
   InspectorHandle,
@@ -82,6 +83,7 @@ export type {
   LayerPanelHandle,
   LayerPanelOptions,
   LegendHandle,
+  MapControlsOptions,
   ToolbarHandle,
   ToolbarOptions,
   ToolEntry,
@@ -156,7 +158,9 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * inspector on the right while something is selected. The map's padding follows the interface:
  * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
- * its padding back.
+ * its padding back. A button at the top right switches between the light and the dark look, and
+ * maplibre-gl's own controls go to the bottom corners of the map (the globe, the compass and the
+ * zoom at the right, the scale at the left); `destroy()` removes them.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
@@ -182,12 +186,18 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   );
   const sections = new Box<InspectorSectionSpec[]>([]);
 
-  const root = createRoot(options.container ?? draw.getMap().getContainer(), true);
-  const theme = themeControl(root, themeName);
+  const map = draw.getMap();
+  const root = createRoot(options.container ?? map.getContainer(), true);
+  // The look the root shows, which the theme button follows
+  const light = new Box(false);
+  const theme = themeControl(root, themeName, (next) => light.set(next));
   applyLocale(root, messages, options.locale ?? 'en');
+  // maplibre-gl's own controls at the bottom corners, lifted above the toolbar where it reaches
+  // them
+  const controls = mapControls(map, options.mapControls);
+  const lift = cornerLift(map.getContainer(), root);
   // The map keeps its view clear of the panels beside the stage and of the toolbar
-  const padding: MapPadding | null =
-    options.padding === false ? null : mapPadding(draw.getMap(), root);
+  const padding: MapPadding | null = options.padding === false ? null : mapPadding(map, root);
   const view = mount(DrawUIView, {
     target: root,
     props: {
@@ -199,8 +209,14 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       shortcuts: options.shortcuts !== false,
       inspector,
       sections,
-      onbeside: padding ? (beside: Beside) => padding.update(beside) : undefined,
+      onbeside: (beside: Beside) => {
+        padding?.update(beside);
+        lift.update();
+      },
       side: options.side,
+      light,
+      themeToggle: options.themeToggle !== false,
+      ontheme: (next: Theme) => theme.set(next),
     },
   });
   // The shell opens the left region in an effect: run it now, so that the panels are there when
@@ -277,6 +293,8 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       destroyed = true;
       theme.destroy();
       padding?.destroy();
+      lift.destroy();
+      controls.destroy();
       unmount(view);
       root.remove();
     },

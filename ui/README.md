@@ -135,6 +135,36 @@ changes), and `ui.setTheme` changes it. kata's theme is dark;
 `data-color-mode="light"` on the root element, which `light` sets, or on
 any element around it, turns it light.
 
+A button at the top right of the map switches the look: a sun while it
+is dark, a moon while it is light. It sets the theme to the look that is
+not shown, so from `auto` it keeps the one the system does not prefer;
+`ui.setTheme('auto')` follows the system again. While the inspector is
+open over the map or beside it, the button stands to the left of it.
+`themeToggle: false` leaves it out.
+
+## Map controls
+
+`createDrawUI` adds maplibre-gl's own controls to the map, as
+maplibre-gl draws them: at the bottom right, from the top, the globe
+(`GlobeControl`), the compass (`NavigationControl` without zoom, which
+also resets the pitch) and the zoom; at the bottom left, the scale
+(`ScaleControl`). `destroy()` removes them. Their look comes from
+maplibre-gl's style sheet, which the page imports itself
+(`import 'maplibre-gl/dist/maplibre-gl.css'`).
+
+```ts
+const ui = createDrawUI(draw, {
+  mapControls: { globe: false, scale: true }, // or false for none
+});
+```
+
+A page that adds controls of its own passes `mapControls: false`. Where
+the toolbar reaches a bottom corner of the map across, as on a narrow
+map, that corner (its controls and the attribution) is lifted above the
+toolbar. This is the one rule of the style sheet outside the root
+element: it applies to the map's container while the interface is on
+it.
+
 ## Without a bundler
 
 `dist/maplibre-gl-draw-ui.js` is one module with Svelte and kata in it.

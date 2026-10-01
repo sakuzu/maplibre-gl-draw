@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { flushSync } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createDrawUI,
@@ -12,7 +13,7 @@ import {
   type Theme,
 } from '../src/index.js';
 import { LIGHT_QUERY } from '../src/theme.js';
-import { fakeDocument, fakeDraw } from './fake-draw.js';
+import { fakeDocument, fakeDraw, feature, layer } from './fake-draw.js';
 
 // The theme of the root element: light sets data-color-mode="light", dark removes it, and auto
 // follows the system's preference (a mocked matchMedia: jsdom has none).
@@ -161,5 +162,83 @@ describe('the theme', () => {
     for (const root of followed.out) expect(mode(root)).toBe('light');
     followed.done();
     expect(system.listeners.size).toBe(0);
+  });
+});
+
+describe('the theme button', () => {
+  const button = (root: HTMLElement) =>
+    root.querySelector<HTMLButtonElement>('[data-role="theme"] button');
+
+  it('shows by default at the top right, and not with themeToggle: false', () => {
+    mockSystem(false);
+    const fake = fakeDraw();
+    ui = createDrawUI(fake.asDraw);
+    const place = ui.element.querySelector<HTMLElement>(
+      '[data-role="theme"] [data-role="floating"]',
+    );
+    expect(place?.style.right).toBe('var(--kata-gap-md)');
+    expect(place?.style.top).toBe('var(--kata-gap-md)');
+    expect(button(ui.element)).not.toBeNull();
+    ui.destroy();
+    ui = createDrawUI(fake.asDraw, { themeToggle: false });
+    expect(ui.element.querySelector('[data-role="theme"]')).toBeNull();
+  });
+
+  it('switches to the look that is not shown, with its icon and its name', () => {
+    mockSystem(false);
+    const fake = fakeDraw();
+    ui = createDrawUI(fake.asDraw, { theme: 'dark' });
+    const root = ui.element;
+    // Dark: a sun, to switch to the light
+    expect(button(root)?.getAttribute('aria-label')).toBe('Switch to light');
+    expect(button(root)?.querySelector('.lucide-sun')).not.toBeNull();
+    button(root)?.click();
+    flushSync();
+    expect(mode(root)).toBe('light');
+    expect(button(root)?.getAttribute('aria-label')).toBe('Switch to dark');
+    expect(button(root)?.querySelector('.lucide-moon')).not.toBeNull();
+    button(root)?.click();
+    flushSync();
+    expect(root.hasAttribute('data-color-mode')).toBe(false);
+    expect(button(root)?.getAttribute('aria-label')).toBe('Switch to light');
+  });
+
+  it('pins the look the system does not prefer from auto, until setTheme("auto")', () => {
+    const system = mockSystem(true);
+    const fake = fakeDraw();
+    ui = createDrawUI(fake.asDraw, { locale: 'ja' });
+    const root = ui.element;
+    expect(mode(root)).toBe('light');
+    expect(button(root)?.getAttribute('aria-label')).toBe('ダークに切り替える');
+    button(root)?.click();
+    flushSync();
+    expect(root.hasAttribute('data-color-mode')).toBe(false);
+    // Pinned: the system no longer moves it
+    system.change(true);
+    expect(root.hasAttribute('data-color-mode')).toBe(false);
+    ui.setTheme('auto');
+    flushSync();
+    expect(mode(root)).toBe('light');
+    system.change(false);
+    flushSync();
+    expect(root.hasAttribute('data-color-mode')).toBe(false);
+    // The button follows the system's changes too
+    expect(button(root)?.getAttribute('aria-label')).toBe('ライトに切り替える');
+  });
+
+  it('moves to the left of the inspector while it is open over the map', () => {
+    mockSystem(false);
+    const fake = fakeDraw({
+      ids: ['a'],
+      doc: { layers: [layer('l1', ['a'])], features: [feature('a', 'l1')] },
+    });
+    ui = createDrawUI(fake.asDraw);
+    flushSync();
+    const place = () =>
+      ui?.element.querySelector<HTMLElement>('[data-role="theme"] [data-role="floating"]');
+    expect(place()?.style.right).toBe('calc(var(--kata-width-panel) + var(--kata-gap-md) * 2)');
+    fake.select([]);
+    flushSync();
+    expect(place()?.style.right).toBe('var(--kata-gap-md)');
   });
 });

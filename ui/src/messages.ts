@@ -200,6 +200,9 @@ export interface Messages {
   saturationValue: string;
   saturationValueText: string;
   running: string;
+  /** The button that switches the theme: what pressing it does, to the light and to the dark */
+  toLight: string;
+  toDark: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */
