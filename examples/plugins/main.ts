@@ -4,7 +4,8 @@
 // plugins: extending the drawing with a plugin, and the standard UI with its tool.
 // The plugin (stamp.ts) adds a mode that puts stars, listens to the creations and offers a
 // count. The page adds a tool for the mode to the toolbar, and a section to the panel on the
-// right for the stars: their state, planned or done, which also sets their color.
+// right for the stars: their state, planned or done, which also sets their color. The U key
+// removes the plugin with its tool and its section, and adds them again.
 
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -32,58 +33,74 @@ const map = new maplibregl.Map({
 });
 const draw = createDraw(map);
 
-// 1. Add the plugin: its mode `stamp` is registered from now on. The function it returns
-// removes the plugin with its mode and its listeners
-const removePlugin = draw.extensions.plugins.add(createStampPlugin());
-
-// 2. The standard UI. `?locale=ja` in the address shows it in Japanese
+// 1. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
-// 3. A tool for the mode, after the built-in tools: the button calls draw.setMode('stamp'), and
-// the key S does the same. The icon is SVG markup of the page, drawn with currentColor
-ui.tools.add({
-  id: 'stamp',
-  mode: 'stamp',
-  label: locale === 'ja' ? 'スタンプ' : 'Stamp',
-  icon: STAR_ICON,
-  shortcut: 'S',
-});
+function addStamp(): void {
+  // 2. Add the plugin: its mode `stamp` is registered from now on. It logs the count it keeps
+  // after each stamp; a plugin added again counts from zero
+  draw.extensions.plugins.add(
+    createStampPlugin((count) => console.info(`${count} stamps since the plugin was added`)),
+  );
 
-// 4. A section of the panel on the right, shown when every selected feature is a stamp. Its
-// field is drawn by the UI; a change comes to onchange, which writes it with features.updateMany
-ui.inspector?.sections.add({
-  id: 'stamp',
-  title: locale === 'ja' ? 'スタンプ' : 'Stamp',
-  appliesTo: (features) => features.every(isStamp),
-  fields: (features) => {
-    const states = new Set(features.map((f) => f.properties.stamp));
-    return [
-      {
-        key: 'stamp',
-        kind: 'segmented',
-        label: locale === 'ja' ? '状態' : 'State',
-        value: [...states][0],
-        mixed: states.size > 1,
-        options: [
-          { value: 'planned', label: locale === 'ja' ? '予定' : 'Planned' },
-          { value: 'done', label: locale === 'ja' ? '済み' : 'Done' },
-        ],
-      },
-    ];
-  },
-  onchange: (_key, value, features) => {
-    const state = value as StampState;
-    draw.features.updateMany(
-      features.map((f) => ({
-        id: f.id,
-        patch: { properties: { stamp: state }, style: stampStyle(state) },
-      })),
-    );
-  },
-});
+  // 3. A tool for the mode, after the built-in tools: the button calls draw.setMode('stamp'),
+  // and the key S does the same. The icon is SVG markup of the page, drawn with currentColor
+  ui.tools.add({
+    id: 'stamp',
+    mode: 'stamp',
+    label: locale === 'ja' ? 'スタンプ' : 'Stamp',
+    icon: STAR_ICON,
+    shortcut: 'S',
+  });
 
-// 5. One stamp placed from code (where, in data.ts), selected so the panel opens on its section
+  // 4. A section of the panel on the right, shown when every selected feature is a stamp. Its
+  // field is drawn by the UI; a change comes to onchange, which writes it with
+  // features.updateMany
+  ui.inspector?.sections.add({
+    id: 'stamp',
+    title: locale === 'ja' ? 'スタンプ' : 'Stamp',
+    appliesTo: (features) => features.every(isStamp),
+    fields: (features) => {
+      const states = new Set(features.map((f) => f.properties.stamp));
+      return [
+        {
+          key: 'stamp',
+          kind: 'segmented',
+          label: locale === 'ja' ? '状態' : 'State',
+          value: [...states][0],
+          mixed: states.size > 1,
+          options: [
+            { value: 'planned', label: locale === 'ja' ? '予定' : 'Planned' },
+            { value: 'done', label: locale === 'ja' ? '済み' : 'Done' },
+          ],
+        },
+      ];
+    },
+    onchange: (_key, value, features) => {
+      const state = value as StampState;
+      draw.features.updateMany(
+        features.map((f) => ({
+          id: f.id,
+          patch: { properties: { stamp: state }, style: stampStyle(state) },
+        })),
+      );
+    },
+  });
+}
+
+// 5. Removing the plugin removes its mode and its listeners; the page removes the tool and the
+// section it added for the plugin, since the UI does not know where they came from. The stars
+// stay: they are features of the drawing, with their state and their color
+function removeStamp(): void {
+  ui.inspector?.sections.remove('stamp');
+  ui.tools.remove('stamp');
+  draw.extensions.plugins.remove('stamp');
+}
+
+addStamp();
+
+// 6. One stamp placed from code (where, in data.ts), selected so the panel opens on its section
 const first = draw.features.create({
   type: 'Point',
   geometry: { type: 'Point', coordinates: MEETING_POINT },
@@ -92,11 +109,27 @@ const first = draw.features.create({
 });
 if (first !== null) draw.selection.set('feature', [first.id]);
 
-// 6. The api of the plugin, asked by its name: how many stamps were made, after each tool
+// 7. The api of the plugin, asked by its name: how many stamps were made, after each tool
 draw.on('mode.changed', ({ mode }) => {
   const count = draw.extensions.plugins.getApi<StampApi>('stamp')?.count() ?? 0;
   console.log(`Mode ${mode}; ${count} stamps so far`);
 });
 
+// 8. The key of the page, listed in the console as it opens. A key typed into a field of the
+// panels is left alone, and so is one held with a modifier
+console.info(
+  'The keys of this page:\n  U  Remove the plugin with its tool and its section, or add them',
+);
+window.addEventListener('keydown', (event) => {
+  const typing =
+    event.target instanceof Element &&
+    event.target.closest('input, textarea, select, [contenteditable]') !== null;
+  if (typing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key.toLowerCase() !== 'u') return;
+  if (draw.extensions.plugins.has('stamp')) removeStamp();
+  else addStamp();
+  console.info(`Stamp plugin: ${draw.extensions.plugins.has('stamp') ? 'added' : 'removed'}`);
+});
+
 // For the browser console and the end-to-end tests
-Object.assign(window, { map, draw, ui, removePlugin });
+Object.assign(window, { map, draw, ui });

@@ -1091,6 +1091,65 @@ describe('the examples', () => {
     await close();
   });
 
+  it('plugins removes the plugin with its mode, its tool and its section with U, and adds them back', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('plugins');
+    const press = async (key: string) => {
+      await page.keyboard.press(key);
+      await settle(page);
+    };
+    const stampTool = page.getByRole('button', { name: 'Stamp', exact: true });
+    const section = page.locator('[data-role="inspector"]').getByText('Planned', { exact: true });
+    const extension = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        let error: string | undefined;
+        try {
+          draw.setMode('stamp');
+        } catch (e) {
+          error = (e as { code?: string }).code;
+        }
+        draw.setMode('select');
+        return {
+          plugin: draw.extensions.plugins.has('stamp'),
+          mode: draw.extensions.modes.has('stamp'),
+          error,
+        };
+      });
+    // The page opens with the meeting point selected, on the section of the plugin
+    await section.waitFor();
+    expect(await stampTool.count()).toBe(1);
+    expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
+
+    await press('u');
+    expect(await extension()).toEqual({ plugin: false, mode: false, error: 'not-found' });
+    expect(await stampTool.count()).toBe(0);
+    expect(await section.count()).toBe(0);
+    // The stars stay in the drawing
+    expect(await featureCount(page)).toBe(1);
+
+    await press('u');
+    expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
+    expect(await stampTool.count()).toBe(1);
+    await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.set('feature', [draw.features.list()[0].id]);
+    });
+    await section.waitFor();
+    // The plugin added again stamps and counts from zero
+    await stampTool.click();
+    await click(page, at(-100, 60));
+    expect(
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.extensions.plugins
+          .getApi<{ count(): number }>('stamp')
+          ?.count(),
+      ),
+    ).toBe(1);
+    await close();
+  });
+
   it('custom-feature-types draws a route with its own style keys and hits it', {
     timeout: TIMEOUT,
   }, async () => {

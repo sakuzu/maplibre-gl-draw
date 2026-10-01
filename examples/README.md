@@ -33,7 +33,7 @@ them in this order.
 | [datasets](datasets/) | Datasets given at once and fetched for the view, clicks on their rows | [Large data](../docs/guides/large-data.md) |
 | [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns | [Large data](../docs/guides/large-data.md) |
 | [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, keys that switch read-only, the interaction lock, a locked layer and local hiding apart | [Read-only](../docs/guides/read-only.md) |
-| [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector | [Plugins](../docs/guides/plugins.md) |
+| [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector, all removed and added again with a key | [Plugins](../docs/guides/plugins.md) |
 | [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, and a section of the inspector for them | [Custom types](../docs/guides/custom-types.md) |
 | [custom-ui](custom-ui/) | A toolbar and a panel of your own on the public API, without the standard UI | [Drawing and editing](../docs/guides/drawing.md) |
 

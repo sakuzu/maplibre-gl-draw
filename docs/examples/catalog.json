@@ -114,8 +114,8 @@
   "plugins": {
     "title": "Plugins",
     "titleJa": "Plugins",
-    "description": "A plugin adds a mode of its own to the drawing, and the page adds a tool for that mode to the toolbar and a section for its features to the panel on the right.",
-    "descriptionJa": "プラグインで描画に独自のモードを足し、ページはそのモードの道具を道具のバーに、その地物のための節を右のパネルに足します。",
+    "description": "A plugin adds a mode of its own to the drawing, and the page adds a tool for that mode to the toolbar and a section for its features to the panel on the right. A key removes the plugin with all it brought, and adds it again.",
+    "descriptionJa": "プラグインで描画に独自のモードを足し、ページはそのモードの道具を道具のバーに、その地物のための節を右のパネルに足します。キーで、プラグインを持ち込んだものごと取り除き、また足します。",
     "order": 16
   },
   "custom-feature-types": {
