@@ -122,14 +122,28 @@ function pageHtml(): string {
   );
 }
 
+/** The options of a test page */
+export interface PageOptions {
+  /** The device pixel ratio of the page (1 when omitted) */
+  deviceScaleFactor?: number;
+}
+
 /**
  * Opens a page with a map at the given camera and a draw instance on it
  *
  * The page exposes `window.map` and `window.draw`. The map is shifted from the top left of the
  * viewport, so a point that forgets the offset of the canvas lands in the wrong place.
  */
-export async function openMapPage(browser: Browser, bundle: Bundle, camera: Camera): Promise<Page> {
-  const page = await browser.newPage({ viewport: { width: 720, height: 560 } });
+export async function openMapPage(
+  browser: Browser,
+  bundle: Bundle,
+  camera: Camera,
+  options: PageOptions = {},
+): Promise<Page> {
+  const page = await browser.newPage({
+    viewport: { width: 720, height: 560 },
+    deviceScaleFactor: options.deviceScaleFactor ?? 1,
+  });
   page.setDefaultTimeout(browserTimeout(30_000));
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(String(error)));

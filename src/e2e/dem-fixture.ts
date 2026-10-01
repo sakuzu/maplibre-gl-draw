@@ -7,7 +7,8 @@
  * The elevation tiles are made in the page: a `raster-dem` source reads them through a
  * protocol registered with maplibre, and each tile is drawn with the terrarium encoding into an
  * OffscreenCanvas and handed over as a PNG. The surface is a steep peak on a tilted plane, so
- * reading the DEM half a pixel off moves the elevation by meters, not by rounding.
+ * reading the DEM half a pixel off moves the elevation by meters, not by rounding. A flat
+ * surface at 0 m is there too, for what must look the same with the terrain as without it.
  *
  * It runs in the page (it is bundled into `page-entry.ts`).
  */
@@ -57,15 +58,19 @@ function tilePointToLngLat(z: number, x: number, y: number, fx: number, fy: numb
   return [lng, lat];
 }
 
-/** One elevation tile as a terrarium PNG */
-async function renderTile(z: number, x: number, y: number): Promise<ArrayBuffer> {
+/**
+ * One elevation tile as a terrarium PNG
+ *
+ * @param flat Whether the tile is of the flat terrain (0 m everywhere) instead of the peak
+ */
+async function renderTile(z: number, x: number, y: number, flat: boolean): Promise<ArrayBuffer> {
   const size = DEM_TILE_SIZE;
   const pixels = new Uint8ClampedArray(size * size * 4);
   for (let j = 0; j < size; j++) {
     for (let i = 0; i < size; i++) {
       // A DEM pixel describes the cell centred on it
       const [lng, lat] = tilePointToLngLat(z, x, y, (i + 0.5) / size, (j + 0.5) / size);
-      const v = testElevation(lng, lat) + 32768;
+      const v = (flat ? 0 : testElevation(lng, lat)) + 32768;
       const o = (j * size + i) * 4;
       pixels[o] = Math.floor(v / 256);
       pixels[o + 1] = Math.floor(v) % 256;
@@ -84,11 +89,20 @@ async function renderTile(z: number, x: number, y: number): Promise<ArrayBuffer>
 /** Registers the protocol of the elevation tiles (once per page) */
 export function installTestDem(maplibregl: typeof MapLibre): void {
   maplibregl.addProtocol(PROTOCOL, async (params) => {
-    const match = /^e2e-dem:\/\/(\d+)\/(\d+)\/(\d+)$/.exec(params.url);
+    const match = /^e2e-dem:\/\/(flat\/)?(\d+)\/(\d+)\/(\d+)$/.exec(params.url);
     if (!match) throw new Error(`unexpected elevation tile ${params.url}`);
-    const [z, x, y] = match.slice(1).map(Number);
-    return { data: await renderTile(z, x, y) };
+    const [z, x, y] = match.slice(2).map(Number);
+    return { data: await renderTile(z, x, y, match[1] !== undefined) };
   });
+}
+
+/** The options of the test terrain */
+export interface TestTerrainOptions {
+  /**
+   * A flat terrain at 0 m instead of the peak, for what must look the same as without the
+   * terrain (the widths of the lines)
+   */
+  flat?: boolean;
 }
 
 /**
@@ -96,10 +110,14 @@ export function installTestDem(maplibregl: typeof MapLibre): void {
  *
  * @param exaggeration The vertical exaggeration of the terrain
  */
-export async function addTestTerrain(map: MapLibre.Map, exaggeration: number): Promise<void> {
+export async function addTestTerrain(
+  map: MapLibre.Map,
+  exaggeration: number,
+  options: TestTerrainOptions = {},
+): Promise<void> {
   map.addSource(TEST_DEM_SOURCE, {
     type: 'raster-dem',
-    tiles: [`${PROTOCOL}://{z}/{x}/{y}`],
+    tiles: [`${PROTOCOL}://${options.flat ? 'flat/' : ''}{z}/{x}/{y}`],
     tileSize: DEM_TILE_SIZE,
     maxzoom: DEM_MAX_ZOOM,
     encoding: 'terrarium',
