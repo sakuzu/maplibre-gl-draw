@@ -10,7 +10,7 @@
  * bucket of Overture, without credentials. It writes:
  *
  * - tokyo-buildings.geojson: the buildings whose center is in the box (`height`, `floors`,
- *   `subtype`, `class` and `name`)
+ *   `subtype`, `class`, `name` and `area`, the area of the footprint in square metres)
  * - tokyo-places.geojson: the places in the box (`name`, `category` and `confidence`)
  * - tokyo-buildings.parquet: the same buildings as GeoParquet (WKB geometry, ZSTD)
  * - README.md: the source, the release, the licenses, the box and the counts
@@ -18,8 +18,9 @@
  * The coordinates are rounded to 6 decimals (about 0.1 m) and the rings follow the right-hand
  * rule of RFC 7946. Overture gives a height to few buildings of this part of Tokyo and the
  * number of floors to more, so a building with floors and no height takes 3 m per floor; the
- * README says how many. When the files exceed 8 MB, the south edge of the box moves north
- * until they fit.
+ * README says how many. The area is computed on the spheroid of WGS 84 (`ST_Area_Spheroid`)
+ * from the geometry Overture gives, and rounded to whole square metres. When the files exceed
+ * 8 MB, the south edge of the box moves north until they fit.
  *
  * Usage: npm run data:overture [-- --release <id>]   (the latest release when none is given)
  *
@@ -188,12 +189,14 @@ COPY (
     const buildingsJson = join(tmp, 'buildings.json');
     const placesJson = join(tmp, 'places.json');
     const sourcesJson = join(tmp, 'sources.json');
-    duckdb(`
+    // The area on the spheroid reads the coordinates as longitude and latitude
+    duckdb(`SET geometry_always_xy = true;
 CREATE TABLE b AS SELECT * FROM read_parquet(${sqlString(rawBuildings)})
   WHERE ${inBox('ST_Centroid(geometry)')};
 CREATE TABLE p AS SELECT * FROM read_parquet(${sqlString(rawPlaces)}) WHERE ${inBox('geometry')};
 COPY (
-  SELECT id, ST_AsGeoJSON(geometry) AS geometry, height, num_floors AS floors, subtype, class, name
+  SELECT id, ST_AsGeoJSON(geometry) AS geometry, height, num_floors AS floors, subtype, class, name,
+    round(ST_Area_Spheroid(geometry))::INTEGER AS area
   FROM b ORDER BY ST_Hilbert(ST_Centroid(geometry), ${box}), id
 ) TO ${sqlString(buildingsJson)} (FORMAT JSON);
 COPY (
@@ -230,6 +233,7 @@ COPY (
           subtype: row.subtype ?? null,
           class: row.class ?? null,
           name: row.name ?? null,
+          area: row.area ?? null,
         },
       });
     }
@@ -258,7 +262,7 @@ COPY (
   SELECT f.id::VARCHAR AS id, ST_GeomFromGeoJSON(f.geometry::JSON) AS geometry,
     f.properties.height::DOUBLE AS height, f.properties.floors::INTEGER AS floors,
     f.properties.subtype::VARCHAR AS subtype, f.properties.class::VARCHAR AS class,
-    f.properties.name::VARCHAR AS name
+    f.properties.name::VARCHAR AS name, f.properties.area::INTEGER AS area
   FROM (
     SELECT unnest(features) AS f
     FROM read_json(${sqlString(join(OUT, 'tokyo-buildings.geojson'))}, maximum_object_size = 268435456)
@@ -315,6 +319,11 @@ function readme({
   estimated,
   sources,
 }) {
+  const areas = buildings
+    .map((b) => b.properties.area)
+    .filter((a) => a !== null)
+    .sort((a, b) => a - b);
+  const quantile = (q) => areas[Math.min(areas.length - 1, Math.floor(q * areas.length))] ?? 0;
   const kb = (name) => `${Math.round(sizeOf(name) / 1024).toLocaleString('en')} KB`;
   const n = (value) => value.toLocaleString('en');
   const sourceRows = (theme) =>
@@ -376,6 +385,10 @@ The properties of a building:
 - \`floors\`: the number of floors above ground (\`num_floors\`)
 - \`subtype\` and \`class\`: the kind of building (${n(withClass)} have a class)
 - \`name\`: the primary name
+- \`area\`: the area of the footprint in square metres, rounded to whole
+  square metres, computed on the spheroid of WGS 84 (\`ST_Area_Spheroid\`
+  of DuckDB) from the geometry Overture gives. Its quartiles are
+  ${n(quantile(0.25))}, ${n(quantile(0.5))} and ${n(quantile(0.75))} m²; the largest is ${n(quantile(1))} m²
 
 The properties of a place:
 

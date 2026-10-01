@@ -19,9 +19,9 @@ under 8 MB.
 
 | File | Rows | Size |
 | --- | --- | --- |
-| `tokyo-buildings.geojson` | 10,477 buildings | 3,363 KB |
+| `tokyo-buildings.geojson` | 10,477 buildings | 3,469 KB |
 | `tokyo-places.geojson` | 17,558 places | 3,861 KB |
-| `tokyo-buildings.parquet` | 10,477 buildings | 683 KB |
+| `tokyo-buildings.parquet` | 10,477 buildings | 700 KB |
 
 The buildings are those whose center is in the box, from the theme
 `buildings` (type `building`), and the places those in the box, from
@@ -40,6 +40,10 @@ The properties of a building:
 - `floors`: the number of floors above ground (`num_floors`)
 - `subtype` and `class`: the kind of building (562 have a class)
 - `name`: the primary name
+- `area`: the area of the footprint in square metres, rounded to whole
+  square metres, computed on the spheroid of WGS 84 (`ST_Area_Spheroid`
+  of DuckDB) from the geometry Overture gives. Its quartiles are
+  38, 70 and 160 m²; the largest is 17,533 m²
 
 The properties of a place:
 
