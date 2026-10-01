@@ -13,6 +13,10 @@ the project follows semantic versioning.
   `document.changed`.
 - Fixed: the site keeps the 1.0 API page URLs working through redirects
   to the current pages.
+- Added: two examples with the standard UI, `get-started` and
+  `style-features`, and their pages on the site. The examples' dev server
+  (`npm run dev`) moves to port 3200, and it and `npm run test:e2e` need
+  the standard UI built first (`npm run ui:build`).
 
 ## [2.0.0] - 2026-09-30
 

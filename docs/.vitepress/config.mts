@@ -9,20 +9,28 @@
  * document `X.ja.md` is served under /ja/. A link to a file that the site does not serve (the
  * internals, the sources, the examples, the generated API reference) is rewritten to the page
  * that shows it: GitHub, the live example, or the API reference.
+ *
+ * The pages of the examples (docs/examples-pages/) show each example live, in a frame: a fence
+ * of the language `example` names it, and the theme's ExampleFrame renders it. The build puts
+ * the built examples under /examples/ of the site, where the frames find them.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { posix } from 'node:path';
+import { join, posix } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type MarkdownIt from 'markdown-it';
 import { type DefaultTheme, defineConfig } from 'vitepress';
 
 const REPO = 'https://github.com/sakuzu/maplibre-gl-draw';
 const LIVE = 'https://sakuzu.github.io/maplibre-gl-draw';
 const BASE = '/maplibre-gl-draw/';
+/** The root of the repository */
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /** The documents the site serves, relative to docs/ */
 const SITE_PAGE =
-  /^(index|getting-started|guides\/[a-z-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
+  /^(index|getting-started|guides\/[a-z-]+|examples-pages\/[a-z-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
 
 /** The source path (relative to docs/) of a page, from the path VitePress gives the renderer */
 function sourceOf(relativePath: string): string {
@@ -85,6 +93,32 @@ function cjkBreaks(md: MarkdownIt): void {
       });
     }
   });
+}
+
+/**
+ * Renders a fence of the language `example` as the live example it names, in a frame:
+ *
+ *     ```example
+ *     get-started
+ *     ```
+ *
+ * A fence, not an HTML tag, so that the page stays plain Markdown for markdownlint and GitHub.
+ * A name that is not a folder of examples/ with a page fails the build.
+ */
+function exampleFrames(md: MarkdownIt): void {
+  const fence = md.renderer.rules.fence;
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    if (token.info.trim() !== 'example') {
+      if (fence) return fence(tokens, idx, options, env, self);
+      return self.renderToken(tokens, idx, options);
+    }
+    const name = token.content.trim();
+    if (!/^[a-z-]+$/.test(name) || !existsSync(join(ROOT, 'examples', name, 'index.html'))) {
+      throw new Error(`No example named "${name}" in examples/`);
+    }
+    return `<ExampleFrame name="${name}" />\n`;
+  };
 }
 
 function linkRewrite(md: MarkdownIt): void {
@@ -200,14 +234,25 @@ export default defineConfig({
     'getting-started.ja.md': 'ja/getting-started.md',
     'guides/:page.ja.md': 'ja/guides/:page.md',
     'reference/README.md': 'reference/index.md',
+    'examples-pages/:page.ja.md': 'ja/examples-pages/:page.md',
   },
   markdown: {
     config: (md) => {
       linkRewrite(md);
       cjkBreaks(md);
+      exampleFrames(md);
     },
   },
   head: [['meta', { name: 'theme-color', content: '#3451b2' }]],
+  // The examples the pages show in a frame, built under /examples/ of the site. They take the
+  // standard UI from its build (npm run ui:build, which `npm run site:build` checks for)
+  buildEnd: ({ outDir }) => {
+    execFileSync(
+      join(ROOT, 'node_modules/.bin/vite'),
+      ['build', '--outDir', join(outDir, 'examples'), '--emptyOutDir', '--logLevel', 'warn'],
+      { cwd: join(ROOT, 'examples'), stdio: 'inherit' },
+    );
+  },
   themeConfig: {
     search: { provider: 'local' },
     socialLinks: [{ icon: 'github', link: REPO }],

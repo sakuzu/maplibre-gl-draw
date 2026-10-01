@@ -12,6 +12,9 @@
  *
  * Each test opens its page in a new browser context, so localStorage starts empty, and does
  * one drawing or one operation the way the user would, with the real pointer.
+ *
+ * The examples with the standard UI take it from its build, ui/dist/ (`npm run ui:build`), with
+ * Svelte and kata inside it, so their pages load nothing else either.
  */
 
 import { readFileSync } from 'node:fs';
@@ -247,9 +250,11 @@ async function clickRing(page: Page, points: PagePoint[]): Promise<void> {
 }
 
 describe('the examples', () => {
-  it('lists the ten examples on its index page', async () => {
+  it('lists the twelve examples on its index page', async () => {
     const index = String(site.get('index.html'));
     for (const name of [
+      'get-started',
+      'style-features',
       'basic',
       'save-load',
       'style-rules',
@@ -264,6 +269,55 @@ describe('the examples', () => {
       expect(index).toContain(`./${name}/`);
       expect(site.has(`${name}/index.html`)).toBe(true);
     }
+  });
+
+  it('get-started draws a polygon with the tool of the toolbar and shows it in the inspector', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('get-started');
+    const inspector = page.locator('[data-role="inspector"]');
+    expect(await inspector.count()).toBe(0);
+
+    await page.getByRole('button', { name: 'Polygon', exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
+      'draw_polygon',
+    );
+    await clickRing(page, [at(-80, -60), at(80, -60), at(80, 60), at(-80, 60)]);
+    expect(await featureCount(page)).toBe(1);
+
+    // Selected with a click, it opens the inspector on its style
+    await page.keyboard.press('Escape');
+    await click(page, at(0, 0));
+    await inspector.getByRole('button', { name: 'Fill color' }).waitFor();
+    await close();
+  });
+
+  it('style-features opens on the style of the block, and the inspector restyles it', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('style-features');
+    const block = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return draw.features.list().find((f) => f.properties.name === 'Block');
+      });
+    const fill = page
+      .locator('[data-role="inspector"]')
+      .getByRole('button', { name: 'Fill color' });
+    await fill.waitFor();
+    expect((await fill.innerText()).trim().toLowerCase()).toBe('#edae49');
+    // The width the page set from code after the style it was created with
+    expect((await block())?.style).toMatchObject({ fillColor: '#edae49', strokeWidth: 4 });
+
+    // The color field opens kata's ColorPicker, whose code input commits a hex
+    await fill.click();
+    const code = page.getByRole('textbox', { name: 'Color code' });
+    await code.fill('#1a2b3c');
+    await code.press('Enter');
+    await expect
+      .poll(async () => (await block())?.style?.fillColor, { timeout: browserTimeout(5_000) })
+      .toBe('#1A2B3C');
+    await close();
   });
 
   it('basic draws a polygon, saves it and restores it on the next visit', {

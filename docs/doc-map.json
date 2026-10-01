@@ -155,6 +155,12 @@
     "docs/internals/test-design.md": [
       "src/e2e/**",
       "vitest.config.ts"
+    ],
+    "docs/examples-pages/get-started.md": [
+      "examples/get-started/**"
+    ],
+    "docs/examples-pages/style-features.md": [
+      "examples/style-features/**"
     ]
   }
 }

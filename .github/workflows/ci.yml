@@ -80,4 +80,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - run: npx playwright-core install --with-deps chromium-headless-shell
+      # Some examples take the standard UI from its build, which takes core from its build
+      - run: npm run build
+      - run: npm run ui:build
       - run: npm run test:e2e
