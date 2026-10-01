@@ -28,6 +28,7 @@ map. `draw.debug.terrain` tells how the last frame was drawn (5).
 
 ::: code-group
 <<< @/../examples/terrain/main.ts
+<<< @/../examples/terrain/data.ts
 <<< @/../examples/terrain/index.html
 :::
 

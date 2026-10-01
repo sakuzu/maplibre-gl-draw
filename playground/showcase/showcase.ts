@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The showcase: the scenes the README images are taken from
+ * The showcase: the scenes the playground opens on, which the README images are taken from
  *
- * Opening the playground with `?showcase` opens the overview, and `?showcase=<scene>` opens
- * one of the other scenes: `tilted` (pitch and bearing), `terrain` (3D terrain), `globe`
- * (the globe projection) and `large-data` (a city of editable features). `scripts/capture-readme-image.mjs` opens each scene and takes the
- * picture once `<html data-showcase="ready">` is set.
+ * The playground opens on the overview, `?plain` opens it empty, and `?showcase=<scene>` opens
+ * one of the other scenes: `tilted` (pitch and bearing), `terrain` (3D terrain), `globe` (the
+ * globe projection) and `large-data` (a city of editable features).
+ * `scripts/capture-readme-image.mjs` opens each scene and takes the picture once
+ * `<html data-showcase="ready">` is set.
  */
 
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
@@ -21,24 +22,24 @@ import { tiltedScene } from './tilted';
 
 export type { ShowcaseScene } from './scene';
 
-const SCENES: Record<string, ShowcaseScene> = {
-  overview: overviewScene,
-  tilted: tiltedScene,
-  terrain: terrainScene,
-  globe: globeScene,
-  'large-data': largeDataScene,
-};
+const SCENES = new Map<string, ShowcaseScene>([
+  ['overview', overviewScene],
+  ['tilted', tiltedScene],
+  ['terrain', terrainScene],
+  ['globe', globeScene],
+  ['large-data', largeDataScene],
+]);
 
 /**
- * The scene the page opens, or `null` for the plain playground
+ * The scene the page opens, or `null` for the empty playground (`?plain`)
  *
- * The playground opens plain, and `?showcase` opens the showcase. An unknown scene name opens
- * the overview.
+ * Without `?plain`, the page opens the scene named by `?showcase=<scene>`, or the overview
+ * when none is named or the name is unknown.
  */
 export function getShowcaseScene(): ShowcaseScene | null {
-  const name = new URLSearchParams(window.location.search).get('showcase');
-  if (name === null) return null;
-  return SCENES[name] ?? overviewScene;
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('plain')) return null;
+  return SCENES.get(params.get('showcase') ?? '') ?? overviewScene;
 }
 
 /**

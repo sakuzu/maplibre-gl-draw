@@ -15,11 +15,12 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
+import { IMAGE_CENTER } from './data.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.7671, 35.6812],
+  center: IMAGE_CENTER,
   zoom: 15.5,
 });
 const draw = createDraw(map);
@@ -43,8 +44,8 @@ const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 3. An image from code: any image Blob or File (PNG, JPEG, WebP, SVG...). It is centered on
-// `coordinate` and drawn at its size in pixels at `zoom`, then follows the map. The library
-// stores it once in the files of the document, as WebP, and selects the new feature
+// `coordinate` (from data.ts) and drawn at its size in pixels at `zoom`, then follows the map.
+// The library stores it once in the files of the document, as WebP, and selects the new feature
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
   <rect x="4" y="4" width="232" height="152" rx="12"
     fill="#fff8e7" stroke="#30638e" stroke-width="8"/>
@@ -52,7 +53,7 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" vi
   <circle cx="180" cy="45" r="16" fill="#edae49"/>
 </svg>`;
 const placed = await draw.document.load(new Blob([SVG], { type: 'image/svg+xml' }), {
-  coordinate: [139.7671, 35.6812],
+  coordinate: IMAGE_CENTER,
   zoom: 15.5,
 });
 if (placed === null) throw new Error('The drawing is read-only');

@@ -8,7 +8,7 @@
  * the page, and the playground creates its map from the scene's basemap and camera.
  */
 
-import type { Draw, DrawDocument, Feature, FileData } from '@sakuzu/maplibre-gl-draw';
+import type { Draw, DrawDocument, Feature, FileData, StyleRule } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
 /** The camera a scene opens with */
@@ -45,11 +45,22 @@ export interface ShowcaseScene {
 /** A feature of a scene's document: the fields a scene sets */
 export type SceneFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
 
+/** A group of a scene's layer: its features, from the back */
+export interface SceneGroup {
+  id: string;
+  name: string;
+  featureIds: string[];
+}
+
 /** A layer of a scene's document, with its features from the back */
 export interface SceneLayer {
   id: string;
   name: string;
   features: SceneFeature[];
+  /** The rule that colors its features from their attributes */
+  styleRule?: StyleRule;
+  /** Its groups. A group stands in the layer where its first feature is */
+  groups?: SceneGroup[];
 }
 
 /**
@@ -61,6 +72,17 @@ export function buildDocument(
   layers: SceneLayer[],
   files: FileData[] = [],
 ): DrawDocument {
+  /** The group of each feature that is in one */
+  const groupOf = new Map<string, string>();
+  for (const layer of layers) {
+    for (const group of layer.groups ?? []) {
+      for (const id of group.featureIds) groupOf.set(id, group.id);
+    }
+  }
+  /** The items of a layer: its features, with each group in the place of its first feature */
+  const items = (layer: SceneLayer): string[] => [
+    ...new Set(layer.features.map((feature) => groupOf.get(feature.id) ?? feature.id)),
+  ];
   return {
     version: '3.0.0',
     metadata: { title },
@@ -71,15 +93,23 @@ export function buildDocument(
       visible: true,
       locked: false,
       opacity: 1,
-      items: layer.features.map((feature) => feature.id),
-      styleRule: undefined,
+      items: items(layer),
+      styleRule: layer.styleRule,
       metadata: undefined,
     })),
+    groups: layers.flatMap((layer) =>
+      (layer.groups ?? []).map((group) => ({
+        ...group,
+        layerId: layer.id,
+        visible: true,
+        locked: false,
+      })),
+    ),
     features: layers.flatMap((layer) =>
       layer.features.map((feature) => ({
         ...feature,
         layerId: layer.id,
-        groupId: undefined,
+        groupId: groupOf.get(feature.id),
         visible: true,
         locked: false,
       })),

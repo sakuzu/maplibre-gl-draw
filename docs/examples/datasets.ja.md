@@ -30,6 +30,7 @@ datasets
 
 ::: code-group
 <<< @/../examples/datasets/main.ts
+<<< @/../examples/datasets/data.ts
 <<< @/../examples/datasets/index.html
 :::
 

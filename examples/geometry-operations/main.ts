@@ -7,7 +7,7 @@
 // buffer. Each is one call of draw.features. The length and the area of the selection, from
 // the geometry entry, are logged as it changes.
 
-import { createDraw, type FeatureInput } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { area, length } from '@sakuzu/maplibre-gl-draw/geometry';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
@@ -16,49 +16,19 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
+import { SHAPES } from './data.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.7635, 35.681],
+  center: [139.774, 35.681],
   zoom: 15.2,
 });
 const draw = createDraw(map);
 
-/** A square area of `size` degrees with its south-west corner at [lng, lat] */
-function square(name: string, lng: number, lat: number, size: number): FeatureInput {
-  const ring = [
-    [lng, lat],
-    [lng + size, lat],
-    [lng + size, lat + size],
-    [lng, lat + size],
-    [lng, lat],
-  ];
-  return {
-    type: 'Polygon',
-    geometry: { type: 'Polygon', coordinates: [ring] },
-    properties: { name },
-  };
-}
-
 // 1. Two squares that share an edge, a third that overlaps them, and a line across the first
-// (createMany returns null only while read-only)
-const created = draw.features.createMany([
-  square('West', 139.758, 35.679, 0.004),
-  square('East', 139.762, 35.679, 0.004),
-  square('Overlap', 139.765, 35.682, 0.003),
-  {
-    type: 'LineString',
-    geometry: {
-      type: 'LineString',
-      coordinates: [
-        [139.757, 35.6805],
-        [139.763, 35.6815],
-      ],
-    },
-    properties: { name: 'Cut line' },
-  },
-]);
+// (data.ts; createMany returns null only while read-only)
+const created = draw.features.createMany(SHAPES);
 if (created === null) throw new Error('The drawing is read-only');
 const [west, east, , line] = created;
 

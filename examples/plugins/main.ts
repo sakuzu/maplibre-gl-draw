@@ -14,6 +14,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
+import { MEETING_POINT } from './data.ts';
 import {
   createStampPlugin,
   isStamp,
@@ -82,10 +83,10 @@ ui.inspector?.sections.add({
   },
 });
 
-// 5. One stamp placed from code, selected so the panel opens on its section
+// 5. One stamp placed from code (where, in data.ts), selected so the panel opens on its section
 const first = draw.features.create({
   type: 'Point',
-  geometry: { type: 'Point', coordinates: [139.767, 35.6835] },
+  geometry: { type: 'Point', coordinates: MEETING_POINT },
   properties: { name: 'Meeting point', stamp: 'done' },
   style: stampStyle('done'),
 });

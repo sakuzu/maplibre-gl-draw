@@ -29,6 +29,7 @@ globe
 
 ::: code-group
 <<< @/../examples/globe/main.ts
+<<< @/../examples/globe/data.ts
 <<< @/../examples/globe/index.html
 :::
 

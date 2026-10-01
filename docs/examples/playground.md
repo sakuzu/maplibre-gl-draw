@@ -13,6 +13,26 @@ in the browser, and 200,000 features.
 playground
 ```
 
+The page opens on a drawing east of Tokyo Station that shows what one
+layer of this library holds and a style layer of the map cannot: every
+feature has a look of its own. The layer Drawing has three areas whose
+fill and outline differ in color, with a solid, a dashed and a dotted
+outline 1, 3 and 6 px wide; three lines 1, 4 and 10 px wide; points of
+the four shapes with an outline, in a group; a circle with a radius in
+meters; a freehand stroke; and an image. The layer Land use colors its
+parcels by a categorical style rule, which the Legend tab lists.
+
+The address of the page chooses what it opens:
+
+| Address | Opens |
+| --- | --- |
+| (nothing) | The drawing above |
+| `?plain` | An empty drawing with one layer |
+| `?showcase=<scene>` | Another scene of the README images |
+| `?locale=ja` | The standard UI in Japanese, with any of the above |
+
+The scenes are `tilted`, `terrain`, `globe` and `large-data`.
+
 The tools at the bottom draw points, lines, areas, circles, freehand
 strokes and images (the image tool asks for a file). The star stamps a
 point with the mode of a plugin (`S`), and the route tool places a

@@ -15,8 +15,8 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
+import { CENTER, createCells } from './data.ts';
 
-const CENTER: [number, number] = [139.767, 35.681];
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
@@ -27,30 +27,8 @@ const draw = createDraw(map);
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
-// 1. 250 x 200 square cells around the center, each with a value from 0 to 100
-const SIZE = 0.0006;
-const cells: DatasetRow[] = [];
-for (let row = 0; row < 200; row++) {
-  for (let col = 0; col < 250; col++) {
-    const [x, y] = [CENTER[0] + (col - 125) * SIZE, CENTER[1] + (row - 100) * SIZE * 0.8];
-    const value = Math.round(
-      50 + 30 * Math.sin(col / 17) * Math.cos(row / 13) + 20 * Math.sin((col + row) / 40),
-    );
-    const ring = [
-      [x, y],
-      [x + SIZE, y],
-      [x + SIZE, y + SIZE * 0.8],
-      [x, y + SIZE * 0.8],
-      [x, y],
-    ];
-    cells.push({
-      type: 'Feature',
-      id: `cell-${row}-${col}`,
-      geometry: { type: 'Polygon', coordinates: [ring] },
-      properties: { value },
-    });
-  }
-}
+// 1. 250 x 200 square cells around the center, each with a value from 0 to 100 (data.ts)
+const cells = createCells();
 
 // 2. The rows given at once, colored by their value, behind the features drawn by hand
 draw.datasets.add({

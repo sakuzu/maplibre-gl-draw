@@ -11,6 +11,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './maplibre-setup.ts';
 import { createDrawUI } from '../src/main.ts';
 import { basemapStyle } from './basemap.ts';
+import { CENTER, FEATURES, PLACES } from './data.ts';
 import './dev.css';
 
 const params = new URLSearchParams(location.search);
@@ -18,53 +19,13 @@ const params = new URLSearchParams(location.search);
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.767, 35.681],
+  center: CENTER,
   zoom: 13,
 });
 
 const draw = createDraw(map);
 
-/** A feature of each type, around Tokyo Station */
-const FEATURES: FeatureInput[] = [
-  {
-    type: 'Point',
-    geometry: { type: 'Point', coordinates: [139.7671, 35.6812] },
-    properties: { name: 'Tokyo Station', kind: 'station', platforms: 30 },
-  },
-  {
-    type: 'LineString',
-    geometry: {
-      type: 'LineString',
-      coordinates: [
-        [139.755, 35.676],
-        [139.762, 35.684],
-        [139.773, 35.686],
-      ],
-    },
-    properties: { name: 'Walk', surface: 'paved' },
-  },
-  {
-    type: 'Polygon',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [
-        [
-          [139.772, 35.672],
-          [139.784, 35.672],
-          [139.784, 35.68],
-          [139.772, 35.68],
-          [139.772, 35.672],
-        ],
-      ],
-    },
-    properties: { kind: 'block', owner: 'city', description: 'A block east of the station.' },
-  },
-  {
-    type: 'Circle',
-    geometry: { type: 'Point', coordinates: [139.757, 35.688] },
-    properties: { 'maplibre-gl-draw:radiusMeters': 400, name: 'Within 400 m', zone: 'A' },
-  },
-];
+// A feature of each type, around Tokyo Station (data.ts)
 draw.features.createMany(FEATURES);
 
 /** A second layer of places colored by their kind, two of them in a group */
@@ -84,12 +45,7 @@ if (places) {
     layerId: places.id,
     properties: { name, kind },
   });
-  const created = draw.features.createMany([
-    point('Hibiya Park', 'park', [139.7559, 35.6736]),
-    point('Kitanomaru Park', 'park', [139.7514, 35.6918]),
-    point('Yurakucho', 'station', [139.7631, 35.675]),
-    point('Bridge', 'landmark', [139.7745, 35.6838]),
-  ]);
+  const created = draw.features.createMany(PLACES.map((place) => point(...place)));
   if (created) {
     draw.groups.create({ name: 'Parks', featureIds: [created[0].id, created[1].id] });
   }

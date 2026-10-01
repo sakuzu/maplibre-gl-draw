@@ -30,6 +30,7 @@ snapping-and-tracing
 
 ::: code-group
 <<< @/../examples/snapping-and-tracing/main.ts
+<<< @/../examples/snapping-and-tracing/data.ts
 <<< @/../examples/snapping-and-tracing/index.html
 :::
 

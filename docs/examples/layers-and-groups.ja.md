@@ -35,6 +35,7 @@ layers-and-groups
 
 ::: code-group
 <<< @/../examples/layers-and-groups/main.ts
+<<< @/../examples/layers-and-groups/data.ts
 <<< @/../examples/layers-and-groups/index.html
 :::
 

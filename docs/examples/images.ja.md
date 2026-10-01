@@ -28,6 +28,7 @@ images
 
 ::: code-group
 <<< @/../examples/images/main.ts
+<<< @/../examples/images/data.ts
 <<< @/../examples/images/index.html
 :::
 

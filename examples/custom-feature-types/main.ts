@@ -15,6 +15,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
+import { HILL_ROUTE, RIVER_ROUTE } from './data.ts';
 import { routeLook, routeType } from './route.ts';
 
 const map = new maplibregl.Map({
@@ -29,29 +30,15 @@ const draw = createDraw(map);
 // neither drawn nor hit until the type is registered again
 const unregister = draw.extensions.featureTypes.add(routeType);
 
-// 2. Two routes, one with style keys of its own
+// 2. Two routes (their lines are in data.ts), one with style keys of its own
 draw.features.create({
   type: 'Route',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.7, 35.68],
-      [139.72, 35.69],
-      [139.74, 35.68],
-    ],
-  },
+  geometry: { type: 'LineString', coordinates: HILL_ROUTE },
   properties: { name: 'Hill route' },
 });
 const river = draw.features.create({
   type: 'Route',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.705, 35.672],
-      [139.722, 35.676],
-      [139.738, 35.671],
-    ],
-  },
+  geometry: { type: 'LineString', coordinates: RIVER_ROUTE },
   properties: { name: 'River route' },
   style: { routeColor: '#1f6feb', routeWidth: 5, routeDashed: false },
 });

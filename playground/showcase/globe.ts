@@ -14,7 +14,13 @@
 
 import type * as maplibregl from 'maplibre-gl';
 
-import { buildDocument, drawImage, greatCircle, type ShowcaseScene } from './scene';
+import {
+  buildDocument,
+  drawImage,
+  greatCircle,
+  type SceneLayer,
+  type ShowcaseScene,
+} from './scene';
 
 const PLACES = {
   tokyo: [139.69, 35.69],
@@ -41,85 +47,86 @@ function setUpGlobe(map: maplibregl.Map): void {
   map.getContainer().classList.add('showcase-space');
 }
 
-function createDocument() {
-  return buildDocument(
-    'Globe',
-    [
+/** The layers of the scene, from the back */
+export const GLOBE_LAYERS: SceneLayer[] = [
+  {
+    id: 'layer-areas',
+    name: 'Areas',
+    features: [
       {
-        id: 'layer-areas',
-        name: 'Areas',
-        features: [
-          {
-            id: 'monsoon-box',
-            type: 'Polygon',
-            geometry: { type: 'Polygon', coordinates: [lngLatBox(50, 5, 100, 38)] },
-            properties: { name: 'Box from 50°E to 100°E, 5°N to 38°N' },
-            style: {
-              fillColor: '#FF7B00',
-              fillOpacity: 0.55,
-              strokeColor: '#FF7B00',
-              strokeWidth: 3,
-              strokeOpacity: 1,
-            },
-          },
-          {
-            id: 'tokyo-range',
-            type: 'Circle',
-            geometry: { type: 'Point', coordinates: PLACES.tokyo },
-            properties: { name: '2,500 km from Tokyo', 'maplibre-gl-draw:radiusMeters': 2_500_000 },
-            style: {
-              fillColor: '#3A86FF',
-              fillOpacity: 0.35,
-              strokeColor: '#3A86FF',
-              strokeWidth: 2.5,
-              strokeOpacity: 1,
-            },
-          },
-          {
-            id: 'storm',
-            type: 'Image',
-            geometry: { type: 'Point', coordinates: [131, 16] },
-            properties: {
-              name: 'Storm',
-              'maplibre-gl-draw:createdZoom': 3,
-              'maplibre-gl-draw:imageFileId': 'file-storm',
-              'maplibre-gl-draw:imageWidth': 150,
-              'maplibre-gl-draw:imageHeight': 150,
-            },
-            style: { imageOpacity: 0.95 },
-          },
-        ],
+        id: 'monsoon-box',
+        type: 'Polygon',
+        geometry: { type: 'Polygon', coordinates: [lngLatBox(50, 5, 100, 38)] },
+        properties: { name: 'Box from 50°E to 100°E, 5°N to 38°N' },
+        style: {
+          fillColor: '#FF7B00',
+          fillOpacity: 0.55,
+          strokeColor: '#FF7B00',
+          strokeWidth: 3,
+          strokeOpacity: 1,
+        },
       },
       {
-        id: 'layer-routes',
-        name: 'Routes',
-        features: [
-          route('tokyo-london', PLACES.tokyo, PLACES.london, '#FF006E', 'solid'),
-          route('singapore-new-york', PLACES.singapore, PLACES.dubai, '#8338EC', 'solid', [
-            PLACES.london,
-            PLACES.newYork,
-          ]),
-          route('tokyo-perth', PLACES.tokyo, PLACES.perth, '#FF006E', 'dashed'),
-          route('dubai-perth', PLACES.dubai, PLACES.perth, '#8338EC', 'dotted'),
-        ],
+        id: 'tokyo-range',
+        type: 'Circle',
+        geometry: { type: 'Point', coordinates: PLACES.tokyo },
+        properties: { name: '2,500 km from Tokyo', 'maplibre-gl-draw:radiusMeters': 2_500_000 },
+        style: {
+          fillColor: '#3A86FF',
+          fillOpacity: 0.35,
+          strokeColor: '#3A86FF',
+          strokeWidth: 2.5,
+          strokeOpacity: 1,
+        },
       },
       {
-        id: 'layer-places',
-        name: 'Places',
-        features: Object.entries(PLACES).map(([name, coordinates]) => ({
-          id: `place-${name}`,
-          type: 'Point' as const,
-          geometry: { type: 'Point' as const, coordinates },
-          properties: { name },
-          style:
-            name === 'tokyo'
-              ? { pointShape: 'star' as const, pointColor: '#FFD000', pointRadius: 13 }
-              : { pointColor: '#FF006E', pointRadius: 7 },
-        })),
+        id: 'storm',
+        type: 'Image',
+        geometry: { type: 'Point', coordinates: [131, 16] },
+        properties: {
+          name: 'Storm',
+          'maplibre-gl-draw:createdZoom': 3,
+          'maplibre-gl-draw:imageFileId': 'file-storm',
+          'maplibre-gl-draw:imageWidth': 150,
+          'maplibre-gl-draw:imageHeight': 150,
+        },
+        style: { imageOpacity: 0.95 },
       },
     ],
-    [{ id: 'file-storm', mimeType: 'image/png', dataURL: storm() }],
-  );
+  },
+  {
+    id: 'layer-routes',
+    name: 'Routes',
+    features: [
+      route('tokyo-london', PLACES.tokyo, PLACES.london, '#FF006E', 'solid'),
+      route('singapore-new-york', PLACES.singapore, PLACES.dubai, '#8338EC', 'solid', [
+        PLACES.london,
+        PLACES.newYork,
+      ]),
+      route('tokyo-perth', PLACES.tokyo, PLACES.perth, '#FF006E', 'dashed'),
+      route('dubai-perth', PLACES.dubai, PLACES.perth, '#8338EC', 'dotted'),
+    ],
+  },
+  {
+    id: 'layer-places',
+    name: 'Places',
+    features: Object.entries(PLACES).map(([name, coordinates]) => ({
+      id: `place-${name}`,
+      type: 'Point' as const,
+      geometry: { type: 'Point' as const, coordinates },
+      properties: { name },
+      style:
+        name === 'tokyo'
+          ? { pointShape: 'star' as const, pointColor: '#FFD000', pointRadius: 13 }
+          : { pointColor: '#FF006E', pointRadius: 7 },
+    })),
+  },
+];
+
+function createDocument() {
+  return buildDocument('Globe', GLOBE_LAYERS, [
+    { id: 'file-storm', mimeType: 'image/png', dataURL: storm() },
+  ]);
 }
 
 /** The ring of a box between two meridians and two parallels: its four corners */

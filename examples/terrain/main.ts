@@ -15,7 +15,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, DEM_TILES, initialBasemapId } from '../basemap.ts';
 import '../example.css';
-import { terrainDocument } from './data.ts';
+import { buildDocument, SURVEY_FILE_ID, TERRAIN_LAYERS } from './data.ts';
 
 // 1. The Nordkette range above Innsbruck, seen from the south and tilted: the public elevation
 // tiles are coarse, so the relief shows best where it is high
@@ -62,7 +62,11 @@ const draw = createDraw(map, { initDefaultLayer: false });
 // 3. The drawing (data.ts): an area and an image on the slope, a trail to the ridge with markers
 // on its stations, a straight dashed line across the valley. Each follows the ground, and the
 // parts behind the ridge are hidden by it
-await draw.document.load(terrainDocument());
+await draw.document.load(
+  buildDocument('Terrain', TERRAIN_LAYERS, [
+    { id: SURVEY_FILE_ID, mimeType: 'image/png', dataURL: surveyMap() },
+  ]),
+);
 
 // 4. The standard UI over the tilted map. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
@@ -77,3 +81,36 @@ map.once('idle', () => {
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });
+
+/** A made-up survey sheet: a colored field under a grid, so that the drape shows in its lines */
+function surveyMap(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 400;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('No 2D canvas');
+  const field = context.createLinearGradient(0, 0, 512, 400);
+  field.addColorStop(0, '#ffe066');
+  field.addColorStop(0.5, '#f4a261');
+  field.addColorStop(1, '#e63946');
+  context.fillStyle = field;
+  context.fillRect(0, 0, 512, 400);
+  context.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+  context.lineWidth = 3;
+  for (let x = 32; x < 512; x += 64) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, 400);
+    context.stroke();
+  }
+  for (let y = 40; y < 400; y += 64) {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(512, y);
+    context.stroke();
+  }
+  context.strokeStyle = '#3d1f00';
+  context.lineWidth = 10;
+  context.strokeRect(5, 5, 502, 390);
+  return canvas.toDataURL('image/png');
+}

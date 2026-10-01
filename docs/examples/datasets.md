@@ -31,6 +31,7 @@ drawing (2, 4). `interactive: true` makes the rows take clicks, which
 
 ::: code-group
 <<< @/../examples/datasets/main.ts
+<<< @/../examples/datasets/data.ts
 <<< @/../examples/datasets/index.html
 :::
 

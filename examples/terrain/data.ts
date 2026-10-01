@@ -9,113 +9,110 @@ import type { DrawDocument, Feature, FileData } from '@sakuzu/maplibre-gl-draw';
 
 type SceneFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
 
-interface SceneLayer {
+export interface SceneLayer {
   id: string;
   name: string;
   features: SceneFeature[];
 }
 
-/** The document, built from the layers listed from the back */
-export function terrainDocument(): DrawDocument {
-  return buildDocument(
-    'Terrain',
-    [
+/** The id of the image file the survey map refers to */
+export const SURVEY_FILE_ID = 'file-survey';
+
+/** The layers of the drawing, listed from the back */
+export const TERRAIN_LAYERS: SceneLayer[] = [
+  {
+    id: 'layer-areas',
+    name: 'Areas',
+    features: [
       {
-        id: 'layer-areas',
-        name: 'Areas',
-        features: [
-          {
-            id: 'survey-map',
-            type: 'Image',
-            geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
-            properties: {
-              name: 'Survey map',
-              'maplibre-gl-draw:createdZoom': 13,
-              'maplibre-gl-draw:imageFileId': 'file-survey',
-              'maplibre-gl-draw:imageWidth': 480,
-              'maplibre-gl-draw:imageHeight': 375,
-            },
-            style: { imageOpacity: 0.9 },
-          },
-          {
-            id: 'forest-plot',
-            type: 'Polygon',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [
-                [
-                  [11.333, 47.2835],
-                  [11.3615, 47.2825],
-                  [11.3745, 47.2925],
-                  [11.371, 47.3035],
-                  [11.3455, 47.3075],
-                  [11.33, 47.2975],
-                  [11.333, 47.2835],
-                ],
-              ],
-            },
-            properties: { name: 'Forest plot' },
-            style: {
-              fillColor: '#FF006E',
-              fillOpacity: 0.45,
-              strokeColor: '#C9004F',
-              strokeWidth: 3,
-              strokeOpacity: 1,
-            },
-          },
-        ],
+        id: 'survey-map',
+        type: 'Image',
+        geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
+        properties: {
+          name: 'Survey map',
+          'maplibre-gl-draw:createdZoom': 13,
+          'maplibre-gl-draw:imageFileId': SURVEY_FILE_ID,
+          'maplibre-gl-draw:imageWidth': 480,
+          'maplibre-gl-draw:imageHeight': 375,
+        },
+        style: { imageOpacity: 0.9 },
       },
       {
-        id: 'layer-routes',
-        name: 'Routes',
-        features: [
-          {
-            id: 'meridian',
-            type: 'LineString',
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [11.358, 47.255],
-                [11.358, 47.328],
-              ],
-            },
-            properties: { name: 'Straight line north' },
-            style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
-          },
-          {
-            id: 'trail',
-            type: 'LineString',
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [11.3995, 47.2862],
-                [11.3925, 47.2905],
-                [11.3985, 47.2945],
-                [11.3885, 47.2985],
-                [11.3945, 47.3018],
-                [11.3835, 47.3045],
-                [11.3862, 47.3122],
-                [11.3905, 47.3262],
-              ],
-            },
-            properties: { name: 'Trail' },
-            style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
-          },
-        ],
-      },
-      {
-        id: 'layer-places',
-        name: 'Places',
-        features: [
-          point('Hungerburg', [11.3995, 47.2862], 'square', '#1D4ED8', 9),
-          point('Seegrube', [11.3835, 47.3045], 'circle', '#FF7B00', 10),
-          point('Hafelekar', [11.3862, 47.3122], 'star', '#FFD000', 16),
-        ],
+        id: 'forest-plot',
+        type: 'Polygon',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [11.333, 47.2835],
+              [11.3615, 47.2825],
+              [11.3745, 47.2925],
+              [11.371, 47.3035],
+              [11.3455, 47.3075],
+              [11.33, 47.2975],
+              [11.333, 47.2835],
+            ],
+          ],
+        },
+        properties: { name: 'Forest plot' },
+        style: {
+          fillColor: '#FF006E',
+          fillOpacity: 0.45,
+          strokeColor: '#C9004F',
+          strokeWidth: 3,
+          strokeOpacity: 1,
+        },
       },
     ],
-    [{ id: 'file-survey', mimeType: 'image/png', dataURL: surveyMap() }],
-  );
-}
+  },
+  {
+    id: 'layer-routes',
+    name: 'Routes',
+    features: [
+      {
+        id: 'meridian',
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [11.358, 47.255],
+            [11.358, 47.328],
+          ],
+        },
+        properties: { name: 'Straight line north' },
+        style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
+      },
+      {
+        id: 'trail',
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [11.3995, 47.2862],
+            [11.3925, 47.2905],
+            [11.3985, 47.2945],
+            [11.3885, 47.2985],
+            [11.3945, 47.3018],
+            [11.3835, 47.3045],
+            [11.3862, 47.3122],
+            [11.3905, 47.3262],
+          ],
+        },
+        properties: { name: 'Trail' },
+        style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
+      },
+    ],
+  },
+  {
+    id: 'layer-places',
+    name: 'Places',
+    features: [
+      point('Hungerburg', [11.3995, 47.2862], 'square', '#1D4ED8', 9),
+      point('Seegrube', [11.3835, 47.3045], 'circle', '#FF7B00', 10),
+      point('Hafelekar', [11.3862, 47.3122], 'star', '#FFD000', 16),
+    ],
+  },
+];
 
 function point(
   name: string,
@@ -133,7 +130,12 @@ function point(
   };
 }
 
-function buildDocument(title: string, layers: SceneLayer[], files: FileData[]): DrawDocument {
+/** Builds a document in the native format from layers listed from the back */
+export function buildDocument(
+  title: string,
+  layers: SceneLayer[],
+  files: FileData[],
+): DrawDocument {
   return {
     version: '3.0.0',
     metadata: { title },
@@ -159,37 +161,4 @@ function buildDocument(title: string, layers: SceneLayer[], files: FileData[]): 
     ),
     files: Object.fromEntries(files.map((file) => [file.id, file])),
   };
-}
-
-/** A made-up survey sheet: a colored field under a grid, so that the drape shows in its lines */
-function surveyMap(): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 400;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('No 2D canvas');
-  const field = context.createLinearGradient(0, 0, 512, 400);
-  field.addColorStop(0, '#ffe066');
-  field.addColorStop(0.5, '#f4a261');
-  field.addColorStop(1, '#e63946');
-  context.fillStyle = field;
-  context.fillRect(0, 0, 512, 400);
-  context.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-  context.lineWidth = 3;
-  for (let x = 32; x < 512; x += 64) {
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, 400);
-    context.stroke();
-  }
-  for (let y = 40; y < 400; y += 64) {
-    context.beginPath();
-    context.moveTo(0, y);
-    context.lineTo(512, y);
-    context.stroke();
-  }
-  context.strokeStyle = '#3d1f00';
-  context.lineWidth = 10;
-  context.strokeRect(5, 5, 502, 390);
-  return canvas.toDataURL('image/png');
 }

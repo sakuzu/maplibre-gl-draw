@@ -21,13 +21,14 @@ aside: false
 
 標準の UI のレイヤーのパネルは、地物を並べずにレイヤーだけを
 並べます (1)。パネルの一覧は地物ごとに行を作るためです。町は、
-種を決めた乱数でコードから作るので、いつ開いても同じです (2、3)。
-`draw.document.load` は 20 万の地物を 1 つのトランザクションで
-書き込みます (4)。変更もイベントも描き直しも 1 回です。
+種を決めた乱数でコード (`data.ts`) から作るので、いつ開いても同じです
+(2)。`draw.document.load` は 20 万の地物を 1 つのトランザクションで
+書き込みます (3)。変更もイベントも描き直しも 1 回です。
 `draw.features.createMany` も 1 つのトランザクションです。
 
 ::: code-group
 <<< @/../examples/200000-features/main.ts
+<<< @/../examples/200000-features/data.ts
 <<< @/../examples/200000-features/index.html
 :::
 

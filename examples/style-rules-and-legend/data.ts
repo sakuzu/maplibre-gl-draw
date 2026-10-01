@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The sample data of style-rules-and-legend: a grid of 5 by 4 blocks, each with a land use
-// (`use`) and a population (`population`). One block has no population, to show the color a
-// rule gives to a value it cannot read.
+// The sample data of style-rules-and-legend: a grid of 5 by 4 blocks east of Tokyo Station,
+// each with a land use (`use`) and a population (`population`). One block has no population, to
+// show the color a rule gives to a value it cannot read.
 
 import type { FeatureInput } from '@sakuzu/maplibre-gl-draw';
 
 const USES = ['commercial', 'residential', 'residential', 'industrial', 'park'];
-const [WEST, SOUTH, SIZE, GAP] = [139.758, 35.674, 0.0034, 0.0004];
+const [WEST, SOUTH, SIZE, GAP] = [139.768, 35.674, 0.0034, 0.0004];
 
 export const BLOCKS: FeatureInput[] = Array.from({ length: 20 }, (_, i) => {
   const [col, row] = [i % 5, Math.floor(i / 5)];
