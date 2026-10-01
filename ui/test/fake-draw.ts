@@ -16,11 +16,24 @@ import type {
   LayerPatch,
   Mode,
   MoveTarget,
+  RuntimeOptions,
   SelectionType,
 } from '@sakuzu/maplibre-gl-draw';
 import { vi } from 'vitest';
 
 type Listener = (payload: unknown) => void;
+
+/** The options with a patch merged in: plain objects key by key, other values replaced */
+function mergeOptions<T extends object>(base: T, patch: Partial<T>): T {
+  const out = { ...base } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    const before = out[key];
+    const nested = (v: unknown): v is object =>
+      typeof v === 'object' && v !== null && !Array.isArray(v);
+    out[key] = nested(value) && nested(before) ? mergeOptions(before, value) : value;
+  }
+  return out as T;
+}
 
 /** A document for the stand-in: the layers from the back, and their groups and features */
 export interface FakeDocument {
@@ -100,7 +113,17 @@ export function fakeDraw(
   let active: string | null = doc.active ?? order[order.length - 1] ?? null;
   const hidden = new Set<string>();
   let created = 0;
-  let snapping = options.snapping ?? true;
+  // The options: nested as core gives them, every value filled in
+  let runtime: RuntimeOptions = {
+    snapping: {
+      enabled: options.snapping ?? true,
+      disableKey: 'alt',
+      kinds: { vertex: true, edge: true, intersection: true, guide: true },
+      datasets: true,
+    },
+    tracing: { enabled: true },
+    topology: { sharedVertexDrag: false },
+  };
   const container = document.createElement('div');
   const canvas = document.createElement('canvas');
   canvas.tabIndex = 0;
@@ -297,9 +320,12 @@ export function fakeDraw(
       }),
     },
     options: {
-      get: () => ({ snapping: { enabled: snapping } }),
-      update: vi.fn((patch: { snapping?: { enabled?: boolean } }) => {
-        if (patch.snapping?.enabled !== undefined) snapping = patch.snapping.enabled;
+      get: () => structuredClone(runtime),
+      // Merges the patch key by key and fires options.changed, as core does
+      update: vi.fn((patch: Partial<RuntimeOptions>) => {
+        const previous = runtime;
+        runtime = mergeOptions(runtime, patch);
+        emit('options.changed', { options: runtime, previous });
       }),
     },
     getMap: () => map,

@@ -205,6 +205,19 @@ export interface Messages {
   toDark: string;
   /** The menu of the basemaps */
   basemap: string;
+  /**
+   * The snapping settings the magnet of the toolbar opens (`snapping` is the switch of snapping
+   * itself): the kinds of target, the rows of datasets, tracing, moving shared vertices together,
+   * and the line below them, with {key} for the key that pauses snapping while it is held
+   */
+  snapVertex: string;
+  snapEdge: string;
+  snapIntersection: string;
+  snapGuide: string;
+  snapDatasets: string;
+  traceEdges: string;
+  sharedVertexDrag: string;
+  snapPauseKey: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */

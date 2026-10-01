@@ -40,8 +40,9 @@
  * the toolbar, the scrim, the floating panes, the sheets and the list of shortcuts. The button
  * that opens the left region again, the button that switches the theme and the basemap menu lie
  * outside the shell's regions, and the toolbar put alone (createToolbar) has no shell, so they
- * take the pointer themselves; the menus of the toolbar and of the basemaps are inside them. The tooltips kata appends to the root
- * let the pointer through */
+ * take the pointer themselves; the menus of the toolbar and of the basemaps are inside them, and
+ * the snapping settings beside the toolbar take the pointer on their popover themselves. The
+ * tooltips kata appends to the root let the pointer through */
 .mgd-ui[data-overlay] {
   position: absolute;
   inset: 0;

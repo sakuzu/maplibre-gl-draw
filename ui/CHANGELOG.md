@@ -30,6 +30,15 @@ follows semantic versioning.
   the fields. In the same way, the shared fields of a selection, the
   fields of a group and the fields of a layer have no title repeating
   what the head says; the style rule of a layer keeps its title.
+- Changed: the magnet of the toolbar opens the snapping settings above
+  the toolbar instead of switching snapping: snapping, the kinds of
+  target under it (vertices, edges, intersections and guides, off while
+  snapping is off), snapping to datasets, tracing edges and moving shared
+  vertices together, and the key that pauses snapping. Each switch writes
+  `draw.options.update` and follows `options.changed`. The magnet stays
+  pressed while snapping is on. New words: `snapVertex`, `snapEdge`,
+  `snapIntersection`, `snapGuide`, `snapDatasets`, `traceEdges`,
+  `sharedVertexDrag` and `snapPauseKey` (with `{key}`).
 
 ## [1.0.0] - 2026-10-01
 

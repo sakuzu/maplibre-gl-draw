@@ -13,13 +13,17 @@
   import { type Box, follow } from '../store.js';
   import { BUILTIN_ICONS, DELETE_ID, drawbarTools, SNAPPING_ID, toSpec } from '../tools.js';
   import type { ToolbarDraw, ToolEntry } from '../types.js';
+  import SnappingSettings from './SnappingSettings.svelte';
 
-  // Toolbar: kata's Drawbar with the tools, the delete button and the snapping switch.
+  // Toolbar: kata's Drawbar with the tools, the delete button and the magnet of snapping.
   //
   // It keeps nothing of the drawing: the current tool is the one whose mode is draw.getMode(),
   // read again on mode.changed; the delete button is off while draw.selection.get() is empty,
-  // read again on selection.changed; the switch shows draw.options.get(). Pressing a tool calls
-  // draw.setMode, delete calls draw.selection.delete and the switch draw.options.update.
+  // read again on selection.changed; the magnet is on while snapping is, read again on
+  // options.changed. Pressing a tool calls draw.setMode and delete calls draw.selection.delete.
+  // The magnet is one of the Drawbar's switches, so that it looks like one, but pressing it opens
+  // the snapping settings rather than switching snapping (SnappingSettings, which writes through
+  // draw.options.update).
   let {
     draw,
     tools,
@@ -34,7 +38,7 @@
     messages: Box<Messages>;
     /** Whether the delete button shows */
     deletable?: boolean;
-    /** Whether the snapping switch shows */
+    /** Whether the magnet of snapping shows */
     snapping?: boolean;
     /** Whether the tooltips show the keys (when the keyboard shortcuts are on) */
     keys?: boolean;
@@ -44,9 +48,10 @@
   const selected = $derived(
     follow(draw, ['selection.changed'], () => draw.selection.get().ids.length),
   );
-  // Core has no event for a change of the options: the switch reads them again after its own
-  // change
-  const snapOn = $derived(follow(draw, [], () => draw.options.get().snapping?.enabled !== false));
+  const snapOn = $derived(
+    follow(draw, ['options.changed'], () => draw.options.get().snapping?.enabled !== false),
+  );
+  let settings = $state<SnappingSettings>();
 
   const m = $derived(messages.get());
   const specs = $derived(tools.get().map((entry) => toSpec(entry, m)));
@@ -78,10 +83,7 @@
             label: m.snapping,
             icon: BUILTIN_ICONS[SNAPPING_ID],
             on: snapOn.get(),
-            onchange: (on: boolean) => {
-              draw.options.update({ snapping: { enabled: on } });
-              snapOn.refresh();
-            },
+            onchange: () => settings?.toggle(),
           },
         ]
       : [],
@@ -98,3 +100,6 @@
 </script>
 
 <Drawbar label={m.toolbar} tools={barTools} {toggles} {current} {onselect} />
+{#if snapping}
+  <SnappingSettings bind:this={settings} {draw} messages={m} label={m.snapping} />
+{/if}

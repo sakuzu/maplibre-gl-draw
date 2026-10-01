@@ -148,4 +148,12 @@ export const ja: Readonly<Messages> = Object.freeze({
   toLight: 'ライトに切り替える',
   toDark: 'ダークに切り替える',
   basemap: '背景地図',
+  snapVertex: '頂点',
+  snapEdge: '辺',
+  snapIntersection: '交点',
+  snapGuide: 'ガイド',
+  snapDatasets: 'データに吸着',
+  traceEdges: '辺をなぞる',
+  sharedVertexDrag: '共有頂点の同時移動',
+  snapPauseKey: '{key} を押している間は吸着を止めます',
 });

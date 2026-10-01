@@ -320,8 +320,8 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
 }
 
 /**
- * Puts the toolbar alone in an element: the tools, the delete button and the snapping switch,
- * without the keyboard shortcuts. The bar floats at the bottom centre of `target`, which must be
+ * Puts the toolbar alone in an element: the tools, the delete button and the magnet that opens
+ * the snapping settings, without the keyboard shortcuts. The bar floats at the bottom centre of `target`, which must be
  * positioned (the map's container, or a positioned box over the map).
  *
  * @param draw - The draw instance
