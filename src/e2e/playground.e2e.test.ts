@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end test of the playground: the page opens with the standard UI and its added tools,
- * without an error
+ * End-to-end test of the playground: the page opens on the overview scene with the standard UI
+ * and its added tools, `?plain` opens it empty, and neither throws an error
  *
  * The playground is built with its own vite configuration (in memory, the library from its
  * sources and the standard UI from ui/dist/) and served to headless Chromium from that build.
@@ -13,7 +13,7 @@
 
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Browser } from 'playwright-core';
+import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
@@ -59,36 +59,85 @@ afterAll(async () => {
   await browser?.close();
 });
 
+/** Opens the playground at the given query (after the replaced basemap) and waits for its map */
+async function open(
+  query = '',
+): Promise<{ page: Page; context: BrowserContext; errors: string[] }> {
+  const context = await browser.newContext({ viewport: { width: 1024, height: 720 } });
+  await context.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin !== ORIGIN) return route.abort();
+    const path = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+    if (path === 'e2e/style.json') return route.fulfill({ json: EMPTY_STYLE });
+    const built = files.get(path);
+    if (built === undefined) return route.fulfill({ status: 404, body: 'not found' });
+    return route.fulfill({
+      contentType: CONTENT_TYPES[extname(path)] ?? 'application/octet-stream',
+      body: typeof built === 'string' ? built : Buffer.from(built),
+    });
+  });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.goto(`${ORIGIN}/?style=${encodeURIComponent(`${ORIGIN}/e2e/style.json`)}${query}`);
+  await page.waitForFunction(
+    () => (window as unknown as Partial<E2EWindow>).map?.isStyleLoaded() === true,
+    undefined,
+    { timeout: browserTimeout(30_000) },
+  );
+  await settle(page);
+  return { page, context, errors };
+}
+
 describe('the playground', () => {
-  it('opens with the standard UI and the tools of the plugin and the custom type', {
+  it('opens on the overview by default, with the tools of the plugin and the custom type', {
     timeout: 60_000,
   }, async () => {
-    const context = await browser.newContext({ viewport: { width: 1024, height: 720 } });
-    await context.route('**/*', (route) => {
-      const url = new URL(route.request().url());
-      if (url.origin !== ORIGIN) return route.abort();
-      const path = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-      if (path === 'e2e/style.json') return route.fulfill({ json: EMPTY_STYLE });
-      const built = files.get(path);
-      if (built === undefined) return route.fulfill({ status: 404, body: 'not found' });
-      return route.fulfill({
-        contentType: CONTENT_TYPES[extname(path)] ?? 'application/octet-stream',
-        body: typeof built === 'string' ? built : Buffer.from(built),
-      });
-    });
-    const page = await context.newPage();
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(String(error)));
-    await page.goto(`${ORIGIN}/?style=${encodeURIComponent(`${ORIGIN}/e2e/style.json`)}`);
+    const { page, context, errors } = await open();
     await page.waitForFunction(
-      () => (window as unknown as Partial<E2EWindow>).map?.isStyleLoaded() === true,
+      () => document.documentElement.dataset.showcase === 'ready',
       undefined,
-      { timeout: browserTimeout(30_000) },
+      {
+        timeout: browserTimeout(30_000),
+      },
     );
-    await settle(page);
+    const drawing = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return {
+        layers: draw.layers.list().map((layer) => layer.name),
+        groups: draw.groups.list().map((group) => group.name),
+        types: [...new Set(draw.features.list().map((feature) => feature.type))].sort(),
+        active: draw.layers.getActive()?.name,
+      };
+    });
+    expect(drawing).toEqual({
+      layers: ['Land use', 'Drawing'],
+      groups: ['Point shapes'],
+      types: ['Circle', 'Freehand', 'Image', 'LineString', 'Point', 'Polygon'],
+      active: 'Drawing',
+    });
 
     await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Route', exact: true }).waitFor();
+    // The categorical rule of the second layer is listed in the Legend tab
+    await page.getByRole('button', { name: 'Legend', exact: true }).click();
+    await page.getByText('Commercial', { exact: true }).waitFor();
+    await context.close();
+    expect(errors).toEqual([]);
+  });
+
+  it('?plain is empty', { timeout: 60_000 }, async () => {
+    const { page, context, errors } = await open('&plain');
+    const drawing = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return {
+        features: draw.features.count(),
+        layers: draw.layers.list().length,
+        showcase: document.documentElement.dataset.showcase ?? null,
+      };
+    });
+    expect(drawing).toEqual({ features: 0, layers: 1, showcase: null });
+    await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
     await context.close();
     expect(errors).toEqual([]);
   });

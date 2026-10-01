@@ -255,7 +255,7 @@ VitePress (ポート 5173) の開発サーバーを起動し、3 つが応答し
 ギャラリーの画像 (`docs/public/examples/<name>.png`) は、
 `npm run site:thumbnails` が例と playground からネットワークを使わずに
 撮り、コミットします。`npm run docs:image` は、playground の見本の場面
-(`?showcase`、`?showcase=tilted`、`?showcase=terrain`、
+(playground が開く overview、`?showcase=tilted`、`?showcase=terrain`、
 `?showcase=globe`、`?showcase=large-data`、`playground/showcase/`) から
 README の画像を撮り直します。
 

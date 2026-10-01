@@ -8,7 +8,9 @@
 // read-only, the interaction lock, saving and opening in this browser, and 200,000 features.
 // The globe is the globe button of the map's controls.
 //
-// `?showcase=<scene>` opens one of the scenes the README images are taken from (showcase/).
+// The page opens on the overview scene (showcase/overview.ts): a drawing of every kind of
+// feature and look. `?plain` opens it empty, and `?showcase=<scene>` opens another scene of
+// those the README images are taken from (showcase/).
 
 import { createDraw, type ModeFactory } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI, type DrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -43,7 +45,8 @@ const map = new maplibregl.Map({
   ...(scene?.maxPitch !== undefined && { maxPitch: scene.maxPitch }),
 });
 
-// 1. The draw instance, with snapping on; a scene brings its own layers
+// 1. The draw instance, with snapping on; a scene brings its own layers, and the empty page
+// (`?plain`) starts with one
 const draw = createDraw(map, {
   initDefaultLayer: scene === null,
   snapping: { enabled: true, disableKey: 'alt' },
