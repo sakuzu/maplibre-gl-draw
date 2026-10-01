@@ -19,8 +19,9 @@ the outline of the top row grow and shrink with the map, as if they were
 painted on the ground, and those of the bottom row stay as wide on the
 screen. The point keeps its size in both rows, as every point does. The
 thin line beside the wide one is 2 px at its reference zoom of 13, so at
-zoom 15 it is as wide as the 8 px line. Press `Z` to switch the option
-`scaleWithZoom` and draw a line with the tools before and after: the
+zoom 15 it is as wide as the 8 px line. The switch Scale with zoom, in
+the card of actions at the bottom left (or its key `Z`), switches the
+option `scaleWithZoom`: draw a line with the tools before and after. The
 arrow in the panel on the left shows the layer the tools draw into, and
 the browser console logs the state.
 
@@ -32,7 +33,8 @@ it (2). The reference zoom belongs to each feature, so
 `draw.features.update` changes it for one (3). The option
 `scaleWithZoom` decides whether the drawing tools write the zoom they
 draw at into what they draw, and it changes with
-`draw.options.update` (4).
+`draw.options.update`, from a switch the page adds to the standard UI
+with `ui.actions.add` (5).
 
 ::: code-group
 <<< @/../examples/zoom-and-scale/main.ts

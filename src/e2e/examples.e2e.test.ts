@@ -1533,7 +1533,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('zoom-and-scale keeps the reference zoom of each feature, and Z switches scaleWithZoom', {
+  it('zoom-and-scale keeps the reference zoom of each feature, and Z and the card of actions switch scaleWithZoom', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('zoom-and-scale');
@@ -1576,6 +1576,7 @@ describe('the examples', () => {
     const after = await state();
     expect(after).toMatchObject({ option: false, active: 'fixed' });
     expect(after.names).toContain('→ Fixed on screen');
+    expect(await actionChecked(page, 'Scale with zoom')).toBe(false);
 
     // The tools then write no reference zoom: a line drawn goes into the second layer without one
     await page.getByRole('button', { name: 'Line', exact: true }).click();
@@ -1586,10 +1587,11 @@ describe('the examples', () => {
     expect(Object.keys(drawn.fixed)).toHaveLength(4);
     expect(Object.values(drawn.fixed)).toEqual([undefined, undefined, undefined, undefined]);
 
-    // And Z turns it back on
+    // And the switch in the card turns it back on
     await page.keyboard.press('Escape');
-    await page.keyboard.press('z');
+    await pressAction(page, 'Scale with zoom');
     expect(await state()).toMatchObject({ option: true, active: 'scaled' });
+    expect(await actionChecked(page, 'Scale with zoom')).toBe(true);
     await close();
   });
   it('editing-shapes moves a shared vertex in both parcels, then in one after T', {

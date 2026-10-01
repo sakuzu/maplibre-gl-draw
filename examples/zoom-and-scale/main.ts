@@ -6,8 +6,9 @@
 // `maplibre-gl-draw:createdZoom`): from there it grows and shrinks with the map, like a line
 // painted on the ground. A feature without a reference zoom keeps its widths on the screen at
 // every zoom. The same three features are loaded twice, with and without one, in two layers;
-// zoom in and out to see them part. The Z key switches the option `scaleWithZoom`, which decides
-// whether the tools write a reference zoom into the features they draw.
+// zoom in and out to see them part. A switch in the card of actions at the bottom left, with the
+// key Z, switches the option `scaleWithZoom`, which decides whether the tools write a reference
+// zoom into the features they draw.
 
 import { createDraw, type FeatureInput } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -113,13 +114,18 @@ const thin = draw.features.create({
 if (thin === null) throw new Error('The drawing is read-only');
 draw.features.update(thin.id, { properties: { [CREATED_ZOOM]: 13 } });
 
-// 4. The option `scaleWithZoom` (true when left out) decides whether the tools write the zoom
-// of the drawing into what they draw. The Z key switches it, and makes the layer of the same
-// behavior the active one, so what the tools draw next goes where it belongs; an arrow before
-// the name of that layer says so (the keys typed into a field are left alone)
-let scaleWithZoom = draw.options.get().scaleWithZoom ?? true;
+// 4. The standard UI. `?locale=ja` in the address shows it in Japanese
+const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
+const ui = createDrawUI(draw, { locale });
+
+// 5. The option `scaleWithZoom` (true when left out) decides whether the tools write the zoom
+// of the drawing into what they draw. A switch in the card of actions of the standard UI, with
+// the key Z (listed with ?, and left alone while a field has the keyboard), switches it, and
+// makes the layer of the same behavior the active one, so what the tools draw next goes where it
+// belongs; an arrow before the name of that layer says so
+const scaleWithZoom = () => draw.options.get().scaleWithZoom ?? true;
 function showState(): void {
-  const active = scaleWithZoom ? layerIds.scaled : layerIds.fixed;
+  const active = scaleWithZoom() ? layerIds.scaled : layerIds.fixed;
   draw.transact(() => {
     draw.layers.setActive(active);
     for (const [id, name] of [
@@ -129,28 +135,20 @@ function showState(): void {
       draw.layers.update(id, { name: id === active ? `→ ${name}` : name });
     }
   });
-  console.info(`scaleWithZoom: ${scaleWithZoom}`);
+  console.info(`scaleWithZoom: ${scaleWithZoom()}`);
 }
 showState();
-window.addEventListener('keydown', (event) => {
-  const { target } = event;
-  if (
-    event.key.toLowerCase() !== 'z' ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    (target instanceof Element && target.closest('input, textarea, [contenteditable]'))
-  ) {
-    return;
-  }
-  scaleWithZoom = !scaleWithZoom;
-  draw.options.update({ scaleWithZoom });
-  showState();
+ui.actions.add({
+  id: 'scale-with-zoom',
+  label: locale === 'ja' ? 'ズームで太さを変える' : 'Scale with zoom',
+  kind: 'toggle',
+  shortcut: 'Z',
+  run: () => {
+    draw.options.update({ scaleWithZoom: !scaleWithZoom() });
+    showState();
+  },
+  checked: scaleWithZoom,
 });
-
-// 5. The standard UI. `?locale=ja` in the address shows it in Japanese
-const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui, layerIds });
