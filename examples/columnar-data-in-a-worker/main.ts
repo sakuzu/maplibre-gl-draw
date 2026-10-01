@@ -9,10 +9,10 @@
 // copy, and a dataset draws the rows from them, colored by the area of each footprint on the
 // Dark basemap. The console says how many rows came and how long each step took. A click logs
 // the row, read from the same columns.
-// The same path carries a million rows: the M key asks the Worker for 1,000,000 points, which
-// it makes straight into the typed arrays of a table, prepares and sends without a copy, and a
-// second dataset draws them, colored by kind; the console says how long each step took. M again
-// removes them. This is the path for the readers of Arrow and GeoParquet: columns, no objects.
+// The same path carries a million rows: a switch in the card of actions at the bottom left, with
+// the key M, asks the Worker for 1,000,000 points, which it makes straight into the typed arrays
+// of a table, prepares and sends without a copy, and a second dataset draws them, colored by
+// kind; the console says how long each step took. Turned off, it removes them. This is the path for the readers of Arrow and GeoParquet: columns, no objects.
 
 import { createDraw, type Dataset } from '@sakuzu/maplibre-gl-draw';
 import { transferList } from '@sakuzu/maplibre-gl-draw/table';
@@ -119,12 +119,14 @@ buildings.on('clicked', ({ row, rowIndex }) => {
   );
 });
 
-// 5. The M key asks the Worker for 1,000,000 points over the wider Tokyo area. The Worker
-// makes them straight into typed arrays in the layout of GeoArrow (data.ts), prepares them and
-// moves them to the page without a copy, and a second dataset draws them, colored by the `kind`
-// column, in front of the buildings. The console says how long each step took, how large the
-// arrays are, and how large the heap of JavaScript is where the browser tells it: the rows add
-// no object to it. M again removes the dataset. The keys typed into a field are left alone
+// 5. A switch in the card of actions asks the Worker for 1,000,000 points over the wider Tokyo
+// area. The Worker makes them straight into typed arrays in the layout of GeoArrow (data.ts),
+// prepares them and moves them to the page without a copy, and a second dataset draws them,
+// colored by the `kind` column, in front of the buildings. The console says how long each step
+// took, how large the arrays are, and how large the heap of JavaScript is where the browser tells
+// it: the rows add no object to it. Turned off, the switch removes the dataset. It has the key M
+// (listed with ?, and left alone while a field has the keyboard), and shows on while the points
+// come
 type Memory = { usedJSHeapSize: number };
 const heapMb = (): number | null => {
   const memory = (performance as Performance & { memory?: Memory }).memory;
@@ -180,20 +182,16 @@ async function toggleMillion(): Promise<void> {
     `the dataset to the first frame that draws them; the arrays hold ${Math.round(arrays)} MB${heap}`,
   );
   busy = false;
+  ui.actions.refresh();
 }
-console.info('Keys: M loads 1,000,000 points from the Worker, and removes them');
-window.addEventListener('keydown', (event) => {
-  const { target } = event;
-  if (
-    event.key.toLowerCase() !== 'm' ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    (target instanceof Element && target.closest('input, textarea, [contenteditable]'))
-  ) {
-    return;
-  }
-  toggleMillion();
+ui.actions.add({
+  id: 'million',
+  label: locale === 'ja' ? '100 万の点' : 'A million points',
+  kind: 'toggle',
+  shortcut: 'M',
+  run: () => void toggleMillion(),
+  checked: () => million !== null || busy,
+  disabled: () => busy,
 });
 
 // For the browser console and the end-to-end tests
