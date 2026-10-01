@@ -1291,7 +1291,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('plugins removes the plugin with its mode, its tool and its section with U, and adds them back', {
+  it('plugins removes the plugin with its mode, its tool and its section from the card of actions, and adds them back with U', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('plugins');
@@ -1322,15 +1322,19 @@ describe('the examples', () => {
     expect(await stampTool.count()).toBe(1);
     expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
 
-    await press('u');
+    expect(await actionChecked(page, 'Stamp plugin')).toBe(true);
+    await pressAction(page, 'Stamp plugin');
     expect(await extension()).toEqual({ plugin: false, mode: false, error: 'not-found' });
+    expect(await actionChecked(page, 'Stamp plugin')).toBe(false);
     expect(await stampTool.count()).toBe(0);
     expect(await section.count()).toBe(0);
     // The stars stay in the drawing
     expect(await featureCount(page)).toBe(1);
 
+    await page.mouse.move(CENTER.x, CENTER.y);
     await press('u');
     expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
+    expect(await actionChecked(page, 'Stamp plugin')).toBe(true);
     expect(await stampTool.count()).toBe(1);
     await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
