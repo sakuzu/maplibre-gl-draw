@@ -267,6 +267,11 @@ export type DrawUIDraw = ToolbarDraw &
 export interface LayerPanelOptions extends BasemapOptions {
   /** Whether the features show under the layers and the groups; true when left out */
   features?: boolean;
+  /**
+   * Whether the datasets (`draw.datasets`) show as rows of the stack, in their place among the
+   * layers, with the eye; true when left out
+   */
+  datasets?: boolean;
   /** Whether the add menu (a new layer, a new group) shows; true when left out */
   add?: boolean;
   /** Whether the rows can be dragged to reorder them; true when left out */
@@ -310,6 +315,7 @@ export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
   readonly features: Pick<Draw['features'], 'get' | 'update' | 'move' | 'getAppliedStyle'>;
   readonly selection: Pick<Draw['selection'], 'get' | 'set' | 'clear' | 'group'>;
   readonly hidden: Pick<Draw['hidden'], 'has' | 'remove'>;
+  readonly datasets: Pick<Draw['datasets'], 'get' | 'list'>;
 };
 
 /** The members of a draw instance that the legend uses */

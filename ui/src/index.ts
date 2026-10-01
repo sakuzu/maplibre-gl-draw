@@ -382,6 +382,7 @@ function basemapsOf(draw: Draw, options: BasemapOptions): BasemapControl {
 function layerSettings(options: Omit<LayerPanelOptions, keyof BasemapOptions> = {}): LayerSettings {
   return {
     features: options.features !== false,
+    datasets: options.datasets !== false,
     add: options.add !== false,
     reorder: options.reorder !== false,
   };

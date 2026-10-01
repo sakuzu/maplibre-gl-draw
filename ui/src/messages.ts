@@ -218,6 +218,9 @@ export interface Messages {
   traceEdges: string;
   sharedVertexDrag: string;
   snapPauseKey: string;
+  /** The mark of a dataset in the layer panel, and the number of its rows, with {count} */
+  datasets: string;
+  rows: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */

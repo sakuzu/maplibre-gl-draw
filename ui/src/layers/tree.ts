@@ -7,15 +7,23 @@
 // stacking order of the layers, the items of a layer, the features of a group), so every list is
 // reversed here, and a move in the tree is converted back (move.ts).
 //
-// A node is one of three kinds: a layer, a group or a feature. Its `data` is the entity of core as
-// it was read, so the handlers of the panel know what was pressed without reading it again.
+// A node is a layer, a group or a feature, which are selected, or a dataset, which is a row of the
+// stack and is not. Its `data` is the entity of core as it was read, so the handlers of the panel
+// know what was pressed without reading it again.
+//
+// The datasets are rows at the root in their place in the stack: those of `above-store` in front
+// of every layer, those of `layer-order` where `layers.getOrder()` places them among the layers,
+// and those of `below-store` behind every layer, each division from the front. A `layer-order`
+// dataset that the stacking order does not list is not drawn, and is left out.
 
 import Circle from '@lucide/svelte/icons/circle';
+import Database from '@lucide/svelte/icons/database';
 import Group from '@lucide/svelte/icons/group';
 import Layers from '@lucide/svelte/icons/layers';
 import Shapes from '@lucide/svelte/icons/shapes';
 import type { IconComponent, IconSource, TreeNode } from '@sakuzu/kata/svelte';
 import {
+  type Dataset,
   type Group as DrawGroup,
   type Feature,
   type FeatureStyleResolved,
@@ -26,17 +34,38 @@ import {
 } from '@sakuzu/maplibre-gl-draw';
 import type { Messages } from '../messages.js';
 
-/** The kinds of the nodes, which are the types of the selection of core */
+/** The kinds of the nodes that are selected, which are the types of the selection of core */
 export type NodeKind = SelectionType;
 
+/** The kinds of every node: those that are selected, and a dataset */
+export type RowKind = NodeKind | 'dataset';
+
+/** What the tree reads of a dataset */
+export type TreeDataset = Pick<Dataset, 'id' | 'order' | 'visible' | 'getThinningStats'>;
+
 /** A node of the tree, with the entity of core it was built from */
-export type LayerTreeNode = TreeNode & { kind: NodeKind; data: Layer | DrawGroup | Feature };
+export type LayerTreeNode = TreeNode & {
+  kind: RowKind;
+  data: Layer | DrawGroup | Feature | TreeDataset;
+  /** The number of the rows of a dataset */
+  count?: number;
+};
+
+/** Whether a node is of a kind that is selected */
+export function isSelectable(kind: string | undefined): kind is NodeKind {
+  return kind === 'layer' || kind === 'group' || kind === 'feature';
+}
 
 /** What building the nodes reads from the draw instance */
 export interface TreeSource {
   readonly layers: {
     get(id: string): Layer | undefined;
     getOrder(): readonly string[];
+  };
+  /** The datasets, which are rows of the stack */
+  readonly datasets?: {
+    get(id: string): TreeDataset | undefined;
+    list(): readonly TreeDataset[];
   };
   readonly groups: { get(id: string): DrawGroup | undefined };
   readonly features: {
@@ -56,6 +85,8 @@ function shown(source: TreeSource, entity: { id: string; visible: boolean }): bo
 export interface TreeOptions {
   /** Whether the features show under the layers and the groups */
   features: boolean;
+  /** Whether the datasets show as rows of the stack; true when left out */
+  datasets?: boolean;
 }
 
 /** The icons of the built-in feature types: kata's drawing glyphs where it has them */
@@ -71,9 +102,10 @@ const TYPE_ICONS: Readonly<Record<string, IconSource>> = Object.freeze({
   Image: 'image',
 });
 
-/** The icon of a layer and of a group */
+/** The icon of a layer, of a group and of a dataset */
 export const LAYER_ICON = Layers as unknown as IconComponent;
 export const GROUP_ICON = Group as unknown as IconComponent;
+export const DATASET_ICON = Database as unknown as IconComponent;
 /** The icon of a feature of a custom type */
 const CUSTOM_ICON = Shapes as unknown as IconComponent;
 
@@ -150,12 +182,38 @@ function featureNode(source: TreeSource, feature: Feature, m: Messages): LayerTr
 }
 
 /**
- * The nodes of the tree: the layers from the front, each with its groups and features from the
- * front, and the features of each group from the front.
+ * The node of a dataset: named by its ID (core gives a dataset no name), with the number of its
+ * rows (`getThinningStats().total`, which counts them without building them)
+ */
+function datasetNode(dataset: TreeDataset): LayerTreeNode {
+  return {
+    id: dataset.id,
+    kind: 'dataset',
+    name: dataset.id,
+    icon: DATASET_ICON,
+    visible: dataset.visible,
+    locked: false,
+    count: dataset.getThinningStats().total,
+    data: dataset,
+  };
+}
+
+/** Whether a node is an entry of `layers.getOrder()`: a layer, or a dataset placed among them */
+export function inLayerOrder(node: LayerTreeNode): boolean {
+  return (
+    node.kind === 'layer' ||
+    (node.kind === 'dataset' && (node.data as TreeDataset).order === 'layer-order')
+  );
+}
+
+/**
+ * The nodes of the tree: the stack from the front, the layers and the datasets at the root, each
+ * layer with its groups and features from the front, and the features of each group from the
+ * front.
  *
- * An ID of the stacking order that is not a layer (a dataset placed among the layers) is left
- * out, and so is an item of a layer that is neither a group nor a feature. A feature shows once,
- * under its group when it is in one.
+ * An ID of the stacking order that is neither a layer nor a dataset (an entry of the application)
+ * is left out, and so is an item of a layer that is neither a group nor a feature. A feature shows
+ * once, under its group when it is in one.
  */
 export function buildNodes(
   source: TreeSource,
@@ -164,9 +222,26 @@ export function buildNodes(
 ): LayerTreeNode[] {
   const seen = new Set<string>();
   const nodes: LayerTreeNode[] = [];
+  const datasets = options.datasets !== false ? source.datasets : undefined;
+  // From the back, as core lists them
+  const all = datasets?.list() ?? [];
+  const division = (order: TreeDataset['order']) =>
+    all
+      .filter((dataset) => dataset.order === order)
+      .reverse()
+      .map(datasetNode);
+  nodes.push(...division('above-store'));
   for (const layerId of [...source.layers.getOrder()].reverse()) {
     const layer = source.layers.get(layerId);
-    if (!layer || seen.has(layer.id)) continue;
+    if (!layer) {
+      const dataset = datasets?.get(layerId);
+      if (dataset?.order === 'layer-order' && !seen.has(dataset.id)) {
+        seen.add(dataset.id);
+        nodes.push(datasetNode(dataset));
+      }
+      continue;
+    }
+    if (seen.has(layer.id)) continue;
     seen.add(layer.id);
     const children: LayerTreeNode[] = [];
     for (const itemId of [...layer.items].reverse()) {
@@ -215,6 +290,7 @@ export function buildNodes(
       data: layer,
     });
   }
+  nodes.push(...division('below-store'));
   return nodes;
 }
 
@@ -259,10 +335,12 @@ export function selectionOf(
 
 /**
  * Whether a node may be dropped into a parent (null for the root): a layer only at the root, a
- * group only into a layer, a feature into a layer or a group
+ * group only into a layer, a feature into a layer or a group, and a dataset only at the root when
+ * it is placed among the layers (`layer-order`); the others stay in front of or behind every layer
  */
 export function canDropInto(node: TreeNode, parent: TreeNode | null): boolean {
   if (node.kind === 'layer') return parent === null;
+  if (node.kind === 'dataset') return parent === null && inLayerOrder(node as LayerTreeNode);
   if (node.kind === 'group') return parent?.kind === 'layer';
   if (node.kind === 'feature') return parent?.kind === 'layer' || parent?.kind === 'group';
   return false;

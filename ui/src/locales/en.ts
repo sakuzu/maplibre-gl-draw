@@ -157,4 +157,6 @@ export const en: Readonly<Messages> = Object.freeze({
   traceEdges: 'Trace edges',
   sharedVertexDrag: 'Move shared vertices',
   snapPauseKey: 'Snapping pauses while {key} is held',
+  datasets: 'Datasets',
+  rows: '{count} rows',
 });

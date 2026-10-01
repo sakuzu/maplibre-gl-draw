@@ -5,20 +5,22 @@
 //
 // The tree reports the node, its new parent and its index among the parent's children after the
 // move, counted from the front (the top of the tree). Core counts from the back, and its lists
-// can hold IDs the tree does not show (a dataset in the stacking order; the features of a layer
-// when the tree shows only the groups). So the index is not mirrored by arithmetic: the node is
+// can hold IDs the tree does not show (an entry of the application in the stacking order; the
+// features of a layer when the tree shows only the groups). So the index is not mirrored by arithmetic: the node is
 // placed just in front of the node that is behind it in the tree (the one below it after the
 // move), at that node's position in core's list plus one, or at the back (0) when nothing in the
 // tree is behind it.
 //
-// - a layer: `layers.reorder` with the layers in their new order from the back. The entries of
-//   the stacking order that are not layers are left out of it, and core keeps their positions
+// - a layer, or a dataset placed among the layers (`layer-order`): `layers.reorder` with the
+//   layers and those datasets in their new order from the back. The rows of the root that are
+//   not entries of the stacking order (the datasets in front of or behind every layer) are left
+//   out, and so are the entries the tree does not show, whose positions core keeps
 // - a group: `groups.move` to `{ layerId, index }`
 // - a feature: `features.move` to `{ layerId, index }`, or to `{ groupId, index }` in a group
 
 import type { TreeMove } from '@sakuzu/kata/svelte';
 import type { Group, Layer, MoveTarget } from '@sakuzu/maplibre-gl-draw';
-import { canDropInto, indexNodes, type LayerTreeNode } from './tree.js';
+import { canDropInto, indexNodes, inLayerOrder, type LayerTreeNode } from './tree.js';
 
 /** The call of core a drop makes */
 export type MovePlan =
@@ -63,16 +65,15 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
   if (move.parentId !== null && !parent) return null;
   if (!canDropInto(at.node, parent)) return null;
 
-  if (at.node.kind === 'layer') {
+  if (parent === null) {
+    const ordered = new Set(nodes.filter(inLayerOrder).map((n) => n.id));
     const front = placed(
       nodes.map((n) => n.id),
       move.id,
       move.index,
-    );
+    ).filter((id) => ordered.has(id));
     return { kind: 'layers', order: front.reverse() };
   }
-  if (!parent) return null;
-
   // The children of the new parent from the front, after the move; the one after the node is
   // the one behind it
   const shown = placed(

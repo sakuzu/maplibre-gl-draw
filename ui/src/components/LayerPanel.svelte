@@ -6,6 +6,7 @@
   import MapIcon from '@lucide/svelte/icons/map';
   import PenLine from '@lucide/svelte/icons/pen-line';
   import {
+    Button,
     Divider,
     Dropdown,
     Icon,
@@ -28,24 +29,35 @@
     buildNodes,
     canDropInto,
     canGroup,
+    DATASET_ICON,
     indexNodes,
-    type NodeKind,
+    isSelectable,
+    type LayerTreeNode,
+    type RowKind,
     selectedIds,
     selectionOf,
   } from '../layers/tree.js';
-  import type { Messages } from '../messages.js';
+  import { fillWord, type Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
   import type { LayerPanelDraw } from '../types.js';
 
-  // LayerPanel: kata's LayerTree of the layers, their groups and their features, from the front.
+  // LayerPanel: kata's LayerTree of the stack from the front: the layers, their groups and their
+  // features, and the datasets in their place among the layers.
   //
   // It keeps nothing of the drawing. The nodes are built from draw again on document.changed,
-  // hidden.changed and options.changed, the selected rows are draw.selection.get(), read again on selection.changed,
-  // and the active layer is draw.layers.getActive(). Every action calls the public API of draw:
-  // the eye `update({ visible })` (and shows again what this client hid), the lock
-  // `update({ locked })`, renaming the name (`properties.name` for a feature), a drop
-  // `layers.reorder`, `groups.move` or `features.move`, a press `selection.set` (and
-  // `layers.setActive` for a layer), the add menu `layers.create` and `selection.group`.
+  // hidden.changed, options.changed, dataset.added, dataset.removed, dataset.reordered and the
+  // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.get(),
+  // read again on selection.changed, and the active layer is draw.layers.getActive(). Every action
+  // calls the public API of draw: the eye `update({ visible })` (and shows again what this client
+  // hid) or a dataset's `setVisible`, the lock `update({ locked })`, renaming the name
+  // (`properties.name` for a feature), a drop `layers.reorder`, `groups.move` or `features.move`,
+  // a press `selection.set` (and `layers.setActive` for a layer), the add menu `layers.create` and
+  // `selection.group`.
+  //
+  // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, it
+  // is not renamed, and a press on it does nothing (the selection stays). It is dragged among the
+  // layers when it is placed among them (`layer-order`); in front of or behind every layer it
+  // stays. The eye and the lock are drawn here (LayerTree's `actions`), for each kind its own.
   //
   // The panel lists the stack from the front, and the basemap is its back: the last row, under the
   // tree, apart from it (a line between them), as it is no layer: it is not dragged, hidden, locked
@@ -56,6 +68,7 @@
     draw,
     messages,
     features = true,
+    datasets = true,
     add = true,
     reorder = true,
     basemaps = null,
@@ -64,6 +77,8 @@
     messages: Box<Messages>;
     /** Whether the features show under the layers and the groups */
     features?: boolean;
+    /** Whether the datasets show as rows of the stack */
+    datasets?: boolean;
     /** Whether the add menu shows */
     add?: boolean;
     /** Whether the rows can be dragged */
@@ -75,10 +90,36 @@
   const m = $derived(messages.get());
   const tree = $derived(
     // options.changed: the default look of each type gives the color of the marks
-    follow(draw, ['document.changed', 'hidden.changed', 'options.changed'], () =>
-      buildNodes(draw, messages.get(), { features }),
+    follow(
+      draw,
+      [
+        'document.changed',
+        'hidden.changed',
+        'options.changed',
+        'dataset.added',
+        'dataset.removed',
+        'dataset.reordered',
+      ],
+      () => buildNodes(draw, messages.get(), { features, datasets }),
     ),
   );
+  // A dataset tells of a change of its visibility and of its rows on itself
+  const datasetList = $derived(
+    follow(draw, ['dataset.added', 'dataset.removed'], () =>
+      datasets ? draw.datasets.list() : [],
+    ),
+  );
+  $effect(() => {
+    const refresh = tree.refresh;
+    const offs = datasetList.get().map((dataset) =>
+      dataset.on('changed', ({ reason }) => {
+        if (reason === 'visibility' || reason === 'rows') refresh();
+      }),
+    );
+    return () => {
+      for (const off of offs) off();
+    };
+  });
   const selection = $derived(follow(draw, ['selection.changed'], () => draw.selection.get()));
   // Core has no event for a change of the active layer alone: it is read again on a change of the
   // document, and after the panel changes it
@@ -130,21 +171,28 @@
       : undefined,
   );
 
-  const kindOf = (id: string) => index.get(id)?.node.kind as NodeKind | undefined;
+  const rowKind = (id: string) => index.get(id)?.node.kind as RowKind | undefined;
+  /** The kind of a row that is selected, or undefined */
+  const kindOf = (id: string) => {
+    const kind = rowKind(id);
+    return isSelectable(kind) ? kind : undefined;
+  };
 
   // The kind of the row pressed last, read before the tree reports the new selection
-  let pressed: { id: string; kind: NodeKind } | undefined;
+  let pressed: { id: string; kind: RowKind } | undefined;
   function onclickcapture(e: MouseEvent) {
     const item = (e.target as Element | null)?.closest?.('[data-sortable-item]');
     const id = item?.getAttribute('data-id');
-    const kind = id ? kindOf(id) : undefined;
+    const kind = id ? rowKind(id) : undefined;
     pressed = id && kind ? { id, kind } : undefined;
   }
 
   function onselect(ids: string[]) {
     const last = pressed;
     pressed = undefined;
-    const next = selectionOf(ids, kindOf, last?.kind);
+    // A row that is not selected (a dataset) leaves the selection as it is
+    if (last && !isSelectable(last.kind)) return;
+    const next = selectionOf(ids, kindOf, isSelectable(last?.kind) ? last.kind : undefined);
     if (!next) {
       draw.selection.clear();
       return;
@@ -158,8 +206,13 @@
   }
 
   function onvisible(id: string, visible: boolean) {
-    const kind = kindOf(id);
+    const kind = rowKind(id);
     if (!kind) return;
+    if (kind === 'dataset') {
+      const dataset = draw.datasets.get(id);
+      if (dataset && dataset.visible !== visible) dataset.setVisible(visible);
+      return;
+    }
     if (visible && draw.hidden.has(id)) draw.hidden.remove(id);
     const entity = index.get(id)?.node.data as { visible: boolean } | undefined;
     if (entity?.visible === visible) return;
@@ -212,6 +265,9 @@
 
   const ACTIVE_ICON = PenLine as unknown as IconComponent;
 
+  /** A number of rows, with the separators of thousands */
+  const formatCount = (count: number) => count.toLocaleString('en-US');
+
   const MAP_ICON = MapIcon as unknown as IconComponent;
   const basemapName = $derived(basemaps?.name() ?? null);
   const currentBasemap = $derived(basemaps?.current.get() ?? null);
@@ -241,20 +297,64 @@
 {/snippet}
 
 {#snippet row(node: TreeNode, name: Snippet<[TreeNode]>)}
-  {#if node.icon}
-    <Markbox>
-      {#if node.iconColor}
-        <Swatch shape="icon" icon={node.icon} color={node.iconColor} />
-      {:else}
-        <Icon name={node.icon} />
-      {/if}
-    </Markbox>
-  {/if}
-  {@render name(node)}
-  {#if node.kind === 'layer' && node.id === activeId}
-    <span class="active" role="img" aria-label={m.activeLayer} title={m.activeLayer}>
-      <Icon name={ACTIVE_ICON} tone="blue" />
+  {@const own = node as LayerTreeNode}
+  {#if own.kind === 'dataset'}
+    <!-- Not renamed: the name is plain text. Placed in front of or behind every layer, it is not
+         dragged, and shows no grip -->
+    <span
+      class="mark"
+      role="img"
+      aria-label={m.datasets}
+      title={m.datasets}
+      data-fixed={canDropInto(own, null) ? undefined : ''}
+    >
+      <Markbox><Icon name={DATASET_ICON} /></Markbox>
     </span>
+    <Text clamp>{own.name}</Text>
+    <span class="count"><Text muted tabular>{fillWord(m.rows, { count: formatCount(own.count ?? 0) })}</Text></span>
+  {:else}
+    {#if own.icon}
+      <Markbox>
+        {#if own.iconColor}
+          <Swatch shape="icon" icon={own.icon} color={own.iconColor} />
+        {:else}
+          <Icon name={own.icon} />
+        {/if}
+      </Markbox>
+    {/if}
+    {@render name(own)}
+    {#if own.kind === 'layer' && own.id === activeId}
+      <span class="active" role="img" aria-label={m.activeLayer} title={m.activeLayer}>
+        <Icon name={ACTIVE_ICON} tone="blue" />
+      </span>
+    {/if}
+  {/if}
+{/snippet}
+
+<!-- The eye and the lock of a row, as LayerTree draws them: an action in a state other than its
+     default (hidden, locked) keeps showing. A dataset has the eye alone -->
+{#snippet actions(node: TreeNode)}
+  <Button
+    variant="ghost"
+    icon
+    aria-label={node.visible ? m.hide : m.show}
+    data-keep={node.visible ? undefined : ''}
+    onclick={(e: MouseEvent) => {
+      e.stopPropagation();
+      onvisible(node.id, !node.visible);
+    }}><Icon name={node.visible ? 'eye' : 'eye-off'} /></Button
+  >
+  {#if isSelectable(node.kind)}
+    <Button
+      variant="ghost"
+      icon
+      aria-label={node.locked ? m.unlock : m.lock}
+      data-keep={node.locked ? '' : undefined}
+      onclick={(e: MouseEvent) => {
+        e.stopPropagation();
+        onlock(node.id, !node.locked);
+      }}><Icon name={node.locked ? 'lock' : 'lock-open'} /></Button
+    >
   {/if}
 {/snippet}
 
@@ -266,8 +366,6 @@
     bind:expanded={() => expanded, setExpanded}
     bind:selected={() => selected, () => {}}
     {onselect}
-    {onvisible}
-    {onlock}
     {onrename}
     onmove={reorder ? onmove : undefined}
     canDrop={canDropInto}
@@ -275,6 +373,7 @@
     {onadd}
     addLabel={m.add}
     {row}
+    {actions}
   />
   {#if basemaps}
     <Divider />
@@ -322,9 +421,16 @@
     flex-direction: column;
     min-width: 0;
   }
-  .active {
+  .active,
+  .mark,
+  .count {
     display: inline-flex;
     flex: none;
+  }
+  /* A row that is not dragged shows no grip (kata's TreeRow shows it on every row of a tree that
+     is reordered) */
+  .layer-panel :global([role='treeitem']:has([data-fixed]) [data-grip]) {
+    display: none;
   }
   .basemap {
     display: flex;

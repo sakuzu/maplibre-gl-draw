@@ -86,7 +86,7 @@ The options of `createDrawUI`, all optional:
 | `container` | The positioned element it lies over | the map's container |
 | `toolbar` | `false`, or the `tools`, `delete` and `snapping` | `true` |
 | `inspector` | `false`, or `tabs` (the first opens) and `operations` | `true` |
-| `layers` | `false`, or the `features`, `add` and `reorder` | `true` |
+| `layers` | `false`, or `features`, `datasets`, `add`, `reorder` | `true` |
 | `legend` | The legend beside the layer panel | `true` |
 | `locale` | `en`, `ja`, or words laid over English | `en` |
 | `theme` | `light`, `dark` or `auto` (follows the system) | `auto` |
@@ -125,16 +125,24 @@ The layer panel is the tree of the layers, their groups and their
 features, from the front, with the eye, the lock, renaming in place (F2
 or a double click), reordering by dragging and an add menu (a new layer,
 a new group from the selected features). A feature is named by its
-`properties.name`, or by its type when it has none. Under the tree, the
-last row is the basemap, the back of the stack (see
-[Basemaps](#basemaps)). The legend shows
-the rows of the style rule (`styleRule`) of each layer that has one.
+`properties.name`, or by its type when it has none. The datasets
+(`draw.datasets`) are rows of the stack too, in their place among the
+layers: those of `above-store` in front of every layer, those of
+`layer-order` where `layers.getOrder()` places them, and those of
+`below-store` behind every layer. A dataset row shows its ID (core gives
+a dataset no name) and the number of its rows, with the eye
+(`setVisible`) and no lock; a press on it selects nothing, and it is
+dragged among the layers only when its order is `layer-order`. Under
+the tree, the last row is the basemap, the back of the stack (see
+[Basemaps](#basemaps)). The legend shows the rows of the style rule
+(`styleRule`) of each layer that has one.
 Shift+L opens and closes the panel, and while it is closed a button at
 the top left of the map opens it again.
 
 ```ts
 const ui = createDrawUI(draw, {
-  layers: { features: true, add: true, reorder: true }, // or false for none
+  // or false for none
+  layers: { features: true, datasets: true, add: true, reorder: true },
   legend: true,
 });
 ```

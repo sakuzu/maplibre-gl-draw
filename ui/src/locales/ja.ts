@@ -156,4 +156,6 @@ export const ja: Readonly<Messages> = Object.freeze({
   traceEdges: '辺をなぞる',
   sharedVertexDrag: '共有頂点の同時移動',
   snapPauseKey: '{key} を押している間は吸着を止めます',
+  datasets: 'データセット',
+  rows: '{count} 行',
 });

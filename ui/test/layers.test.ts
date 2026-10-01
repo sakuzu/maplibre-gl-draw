@@ -10,6 +10,7 @@ import {
   buildNodes,
   canDropInto,
   canGroup,
+  DATASET_ICON,
   GROUP_ICON,
   LAYER_ICON,
   type LayerTreeNode,
@@ -130,10 +131,69 @@ describe('the nodes of the layer tree', () => {
     expect(nodes[1].children?.[2].visible).toBe(false);
   });
 
-  it('leave out the entries of the stacking order that are not layers', () => {
+  it('leave out the entries of the stacking order that are neither layers nor datasets', () => {
     const fake = sample();
     const draw = { ...fake.draw, layers: { ...fake.draw.layers, getOrder: () => ['l1', 'ds'] } };
     expect(buildNodes(draw, en).map((n) => n.id)).toEqual(['l1']);
+  });
+});
+
+describe('the datasets in the layer tree', () => {
+  /** Two layers with a dataset between them, one in front of them all and one behind them all */
+  function stacked() {
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1'), layer('l2')],
+        datasets: [
+          { id: 'buildings', rows: 12_345 },
+          { id: 'places', order: 'above-store', rows: 7 },
+          { id: 'roads', order: 'below-store', rows: 3, visible: false },
+          { id: 'unplaced' },
+        ],
+        order: ['l1', 'buildings', 'l2'],
+      },
+    });
+  }
+
+  it('are rows at the root in their place in the stack, from the front', () => {
+    const nodes = buildNodes(stacked().draw, en);
+    expect(shape(nodes)).toEqual(['places', ['l2', []], 'buildings', ['l1', []], 'roads']);
+    const [places, , buildings, , roads] = nodes;
+    expect(buildings).toMatchObject({
+      kind: 'dataset',
+      name: 'buildings',
+      icon: DATASET_ICON,
+      visible: true,
+      locked: false,
+      count: 12_345,
+    });
+    expect(places.count).toBe(7);
+    expect(roads.visible).toBe(false);
+  });
+
+  it('are left out with datasets: false', () => {
+    const nodes = buildNodes(stacked().draw, en, { features: true, datasets: false });
+    expect(nodes.map((n) => n.id)).toEqual(['l2', 'l1']);
+  });
+
+  it('move among the layers when they are placed among them, and stay otherwise', () => {
+    const nodes = buildNodes(stacked().draw, en);
+    const [places, l2, buildings] = nodes;
+    expect(canDropInto(buildings, null)).toBe(true);
+    expect(canDropInto(buildings, l2)).toBe(false);
+    expect(canDropInto(places, null)).toBe(false);
+    // The dataset to the front of the layers: the datasets in front of every layer are not
+    // entries of the stacking order
+    expect(planMove({ id: 'buildings', parentId: null, index: 0 }, nodes)).toEqual({
+      kind: 'layers',
+      order: ['l1', 'l2', 'buildings'],
+    });
+    // A layer behind the dataset
+    expect(planMove({ id: 'l2', parentId: null, index: 2 }, nodes)).toEqual({
+      kind: 'layers',
+      order: ['l1', 'l2', 'buildings'],
+    });
+    expect(planMove({ id: 'places', parentId: null, index: 4 }, nodes)).toBeNull();
   });
 });
 

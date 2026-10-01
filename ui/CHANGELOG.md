@@ -7,6 +7,18 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Added: the datasets are rows of the layer panel, in their place in
+  the stack: those of `above-store` in front of every layer, those of
+  `layer-order` where `layers.getOrder()` places them among the layers,
+  and those of `below-store` behind every layer. A row shows the ID of
+  the dataset with a database mark and the number of its rows, and the
+  eye shows and hides it with `setVisible`. It has no lock, is not
+  renamed, and a press on it leaves the selection as it is. A
+  `layer-order` dataset is dragged among the layers (`layers.reorder`
+  with its ID); the others stay. The rows follow `dataset.added`,
+  `dataset.removed`, `dataset.reordered` and the `changed` event of each
+  dataset. The option `datasets: false` (`LayerPanelOptions`) leaves
+  them out. New words: `datasets` and `rows` (with `{count}`).
 - Added: the basemaps of the layer panel, `basemaps` (`{ id, label,
   style }`), `basemap` and `onbasemap`, in the options of
   `createDrawUI` and of `createLayerPanel` (`LayerPanelOptions`). With
