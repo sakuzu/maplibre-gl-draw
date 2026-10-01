@@ -21,3 +21,11 @@ follows semantic versioning.
 - The words come in English and Japanese, and any of them can be
   replaced (`locale`, `ui.setLocale`).
 - `style.css` keeps kata's tokens on the root element `.mgd-ui`.
+- The left region of `createDrawUI` holds the layer panel and the
+  legend in two tabs (`layers`, `legend`), and Shift+L opens and closes
+  it. `ui.layers` and `ui.legend` remove them.
+- `createLayerPanel(draw, { target })` puts the tree of the layers,
+  groups and features alone in an element: the eye, the lock, renaming,
+  reordering by dragging, and the add menu.
+- `createLegend(draw, { target })` puts the legend of the style rules of
+  the layers alone in an element.
