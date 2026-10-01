@@ -43,7 +43,8 @@ export const globeScene: ShowcaseScene = {
 
 function setUpGlobe(map: maplibregl.Map): void {
   map.setProjection({ type: 'globe' });
-  map.setSky({ 'atmosphere-blend': 1 });
+  // No atmosphere, as in the globe example: its glow blurs the edge of the globe
+  map.setSky({ 'atmosphere-blend': 0 });
   map.getContainer().classList.add('showcase-space');
 }
 
