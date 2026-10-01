@@ -4,12 +4,12 @@
 -->
 <script lang="ts">
   import {
+    Block,
     Button,
     FieldList,
     type FieldSpec,
     Footer,
     InspectorFrame,
-    InspectorSection,
   } from '@sakuzu/kata/svelte';
   import type { Group, Layer } from '@sakuzu/maplibre-gl-draw';
   import type { InspectorDraw } from '../inspector/types.js';
@@ -17,7 +17,8 @@
 
   // GroupInspector: a group in kata's InspectorFrame: its name, changed where it stands, whether
   // it is visible and whether it is locked. The foot takes its features out of it (the group
-  // goes) or deletes it with its features.
+  // goes) or deletes it with its features. The fields have no title: the subtitle of the head
+  // already says it is a group.
   let {
     draw,
     group,
@@ -90,7 +91,5 @@
   {onclose}
   end={foot}
 >
-  <InspectorSection title={m.typeGroup}>
-    <FieldList {fields} {onchange} />
-  </InspectorSection>
+  <Block><FieldList {fields} {onchange} /></Block>
 </InspectorFrame>

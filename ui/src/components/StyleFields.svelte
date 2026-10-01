@@ -3,7 +3,7 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
-  import { Button, FieldList, Icon, InspectorSection } from '@sakuzu/kata/svelte';
+  import { Block, FieldList, LinkAction, Stack } from '@sakuzu/kata/svelte';
   import type { Feature, FeatureStyleResolved } from '@sakuzu/maplibre-gl-draw';
   import {
     applyStyle,
@@ -16,10 +16,13 @@
   import type { Messages } from '../messages.js';
   import CustomSection from './CustomSection.svelte';
 
-  // StyleFields: the section of the style of features, and the sections the application added
-  // that apply to them. The fields are those the features share, with the values they are drawn
-  // with; a change is written into the style of every feature in one transaction, and the reset
-  // removes the keys the features set themselves.
+  // StyleFields: the fields of the style of features, and the sections the application added that
+  // apply to them. The fields are those the features share, with the values they are drawn with; a
+  // change is written into the style of every feature in one transaction, and the reset removes the
+  // keys the features set themselves. The fields have no title of their own: they come first, under
+  // the Style tab or the head that already names them, in a Block (the content of a panel has no
+  // padding), and the reset is a text action after them. The sections of the application follow
+  // with their titles.
   let {
     draw,
     features,
@@ -55,19 +58,15 @@
   }
 </script>
 
-{#snippet resetButton()}
-  <Button variant="ghost" icon aria-label={m.resetStyle} onclick={reset}>
-    <Icon name="undo-2" />
-  </Button>
-{/snippet}
-
 {#if fields.length > 0}
-  <InspectorSection
-    title={m.styleTab}
-    end={editable && own.length > 0 ? resetButton : undefined}
-  >
-    <FieldList {fields} {onchange} />
-  </InspectorSection>
+  <Block>
+    <Stack gap="sm">
+      <FieldList {fields} {onchange} />
+      {#if editable && own.length > 0}
+        <LinkAction icon="undo-2" onclick={reset}>{m.resetStyle}</LinkAction>
+      {/if}
+    </Stack>
+  </Block>
 {/if}
 {#each sections as spec (spec.id)}
   <CustomSection {spec} {features} {editable} />

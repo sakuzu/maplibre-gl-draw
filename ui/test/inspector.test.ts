@@ -60,6 +60,13 @@ function hasButton(root: ParentNode, name: string): boolean {
   );
 }
 
+/** The titles of the sections of an inspector, in order */
+function headings(root: ParentNode): string[] {
+  return [...root.querySelectorAll('[data-role="section-head"]')].map(
+    (h) => h.textContent?.trim() ?? '',
+  );
+}
+
 function click(el: HTMLElement) {
   el.click();
   flushSync();
@@ -216,6 +223,60 @@ describe('createInspector', () => {
     expect(hasButton(el, 'Buffer')).toBe(false);
     expect(el.textContent).toContain('Area');
     expect(el.textContent).toContain('Gate');
+  });
+
+  it('puts the fields of the Style tab straight under the tabs, with no title', () => {
+    const red = makeFeature({ ...park, style: { fillColor: '#ff0000' } });
+    const fake = fakeDocument({ features: [red], selection: { type: 'feature', ids: ['a'] } });
+    const inspector = mountAlone(fake);
+    inspector.sections.add({
+      id: 'extra',
+      title: 'Extra',
+      appliesTo: () => true,
+      fields: () => [{ key: 'size', kind: 'toggle', label: 'Big', value: false }],
+    });
+    flushSync();
+    const el = inspector.element;
+    // The panel of the tab follows the tabs as a Stack, whose first child holds the fields
+    const panel = el.querySelector('[data-role="tabs"]')?.nextElementSibling;
+    expect(panel?.getAttribute('data-role')).toBe('stack');
+    const first = panel?.firstElementChild;
+    expect(first?.getAttribute('data-role')).toBe('block');
+    expect(first?.contains(button(el, 'Fill color'))).toBe(true);
+    // Only the sections after the fields have titles
+    expect(headings(el)).toEqual(['Extra', 'Operations']);
+    // The reset of the style is a text action after the fields
+    expect(first?.contains(button(el, 'Reset the style'))).toBe(true);
+    click(button(el, 'Reset the style'));
+    expect(fake.mocks.features.updateMany).toHaveBeenCalledWith([
+      { id: 'a', patch: { style: { fillColor: undefined } } },
+    ]);
+    // The Attributes tab has no title either
+    click(button(el, 'Attributes'));
+    expect(headings(el)).toEqual([]);
+  });
+
+  it('gives the shared fields of a selection, a group and a layer no title', () => {
+    const other = makeFeature({ ...park, id: 'd', properties: {} });
+    const fake = fakeDocument({
+      features: [park, other],
+      groups: [
+        { id: 'g', layerId: 'l1', name: 'Block', featureIds: ['a'], visible: true, locked: false },
+      ],
+      selection: { type: 'feature', ids: ['a', 'd'] },
+    });
+    const inspector = mountAlone(fake);
+    const el = inspector.element;
+    expect(hasButton(el, 'Fill color')).toBe(true);
+    expect(headings(el)).toEqual([]);
+    fake.selectItems('group', ['g']);
+    flushSync();
+    expect(el.querySelector('[aria-label="Visible"]')).not.toBeNull();
+    expect(headings(el)).toEqual([]);
+    fake.selectItems('layer', ['l1']);
+    flushSync();
+    expect(el.querySelector('[aria-label="Visible"]')).not.toBeNull();
+    expect(headings(el)).toEqual(['Style rule']);
   });
 
   it('opens on the first tab of the options, and keeps the tab chosen', () => {

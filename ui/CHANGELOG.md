@@ -17,6 +17,19 @@ follows semantic versioning.
   `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
   The default stays `['style', 'attributes']`, which opens on Style. Once
   a tab is chosen, it is kept from one feature to the next as before.
+- Fixed: in the inspector of a feature, what a tab shows first is spaced
+  from the line of the tabs as the content of a panel is from its head
+  (pad-md to the first field, pad-lg to a section title). The panel of
+  the tab is now a Stack of its own under the tabs, so kata's spacing of
+  a first group applies; before, the title of the first section touched
+  the line.
+- Fixed: the fields of the style have no "Style" title any more: they
+  sit straight under the Style tab, and the sections of the application
+  and Operations keep their titles. The reset of the style, which was an
+  icon button in that title, is a "Reset the style" text action after
+  the fields. In the same way, the shared fields of a selection, the
+  fields of a group and the fields of a layer have no title repeating
+  what the head says; the style rule of a layer keeps its title.
 
 ## [1.0.0] - 2026-10-01
 
