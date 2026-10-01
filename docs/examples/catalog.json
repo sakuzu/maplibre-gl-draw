@@ -79,8 +79,8 @@
   "globe": {
     "title": "Globe",
     "titleJa": "Globe",
-    "description": "The globe, a great circle and an area across the antimeridian.",
-    "descriptionJa": "地球儀、大円、日付変更線をまたぐ面を描きます。",
+    "description": "Routes between the continents along great circles, a box between meridians and parallels, a circle of 2,500 km, a picture and six cities on the globe, and an area across the antimeridian.",
+    "descriptionJa": "大陸の間を大円で結ぶ経路、経線と緯線に挟まれた四角形、半径 2,500 km の円、画像、6 つの都市を地球儀の上に描き、日付変更線をまたぐ面も置きます。",
     "order": 11
   },
   "200000-features": {

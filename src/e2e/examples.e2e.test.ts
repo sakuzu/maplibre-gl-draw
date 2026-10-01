@@ -609,14 +609,48 @@ describe('the examples', () => {
     await close();
   });
 
-  it('globe opens on the globe, and the globe button of the map controls turns it flat', {
+  it('globe opens on the globe with its routes, areas, image and cities, and the globe button of the map controls turns it flat', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('globe');
     const projection = () =>
       page.evaluate(() => (window as unknown as E2EWindow).map.getProjection()?.type);
     await expect.poll(projection, { timeout: browserTimeout(5_000) }).toBe('globe');
-    expect(await featureCount(page)).toBe(3);
+    await loaded(page);
+    // The features by layer and by type: the box, the circle, the area across the antimeridian
+    // and the storm; the four routes and the line of two vertices; the six cities
+    const byLayer = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return draw.layers.getOrder().map((id) => ({
+        name: draw.layers.get(id)?.name,
+        types: draw.features
+          .list({ layerId: id })
+          .map((feature) => feature.type)
+          .sort(),
+      }));
+    });
+    expect(byLayer).toEqual([
+      { name: 'Areas', types: ['Circle', 'Image', 'Polygon', 'Polygon'] },
+      { name: 'Routes', types: Array(5).fill('LineString') },
+      { name: 'Cities', types: Array(6).fill('Point') },
+    ]);
+    // A great circle has many vertices, the comparison line two
+    const vertices = await page.evaluate(() =>
+      Object.fromEntries(
+        (window as unknown as E2EWindow).draw.features
+          .list()
+          .filter((feature) => feature.type === 'LineString')
+          .map((feature) => [
+            feature.properties.name,
+            (feature.geometry as GeoJSON.LineString).coordinates.length,
+          ]),
+      ),
+    );
+    expect(vertices['Two vertices']).toBe(2);
+    expect(vertices['Tokyo to London']).toBeGreaterThan(30);
+    expect(
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+    ).toEqual([]);
 
     await page.locator('.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled').click();
     await expect.poll(projection, { timeout: browserTimeout(5_000) }).toBe('mercator');

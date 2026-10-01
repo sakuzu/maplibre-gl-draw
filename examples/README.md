@@ -28,7 +28,7 @@ them in this order.
 | [images](images/) | The Image tool, `image.requested`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
 | [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save and load, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
-| [globe](globe/) | The globe projection, a great circle, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
+| [globe](globe/) | The globe projection, routes along great circles, a box, a circle, an image and cities on the sphere, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
 | [200000-features](200000-features/) | 200,000 editable features loaded in one transaction | [Performance](../docs/guides/performance.md) |
 | [datasets](datasets/) | Datasets given at once and fetched for the view, clicks on their rows | [Large data](../docs/guides/large-data.md) |
 | [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns | [Large data](../docs/guides/large-data.md) |
