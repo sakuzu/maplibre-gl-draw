@@ -154,10 +154,12 @@ export interface Draw {
 /**
  * Puts a draw instance on a map and returns it.
  *
- * It can be called before, while or after the map loads. The layers are added as soon as the
- * style accepts them, and added again after `setStyle`. Unless `initDefaultLayer: false` is
- * given, the document starts with one empty layer. Several instances can share a page, each on
- * its own map.
+ * It can be called before, while or after the map loads. The layers are added on top of the map
+ * as soon as the style accepts them. After `setStyle`, with or without `diff`, they are on top
+ * again: added again after a full replacement, and moved above the layers of the new style after
+ * a diff. A layer added to the map later goes above them and stays there until the style changes.
+ * Unless `initDefaultLayer: false` is given, the document starts with one empty layer. Several
+ * instances can share a page, each on its own map.
  *
  * @param map - The map to draw on
  * @param options - The options; every one can be omitted

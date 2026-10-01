@@ -6,6 +6,12 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+- Fixed: after `map.setStyle` in its default diff mode, the drawing is
+  on top of the map again. maplibre leaves custom layers out of the
+  style it diffs, so the layers of the new style were added above the
+  drawing and hid it. The layers of the instance now move back on top on
+  every `style.load`, in their order, with the map layers placed between
+  them; a full `setStyle` (`diff: false`) works as before.
 - Added: the event `options.changed`, with `{ options, previous }`: what
   `draw.options.get()` returns after and before a `draw.options.update`
   that changed a value. An update that changes nothing fires nothing,

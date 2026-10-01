@@ -2074,6 +2074,13 @@ sequence into segments and draws each with its own custom layer, a slot
   frames, and the `layerStack.changed` event announces changes. The host moves each
   native layer to just after the slot of the preceding segment; placing
   native layers is the host's job
+- After a style change (`style.load`), the slots go back on top of the
+  map in their order (`attachSlotLayers`, `view/layer/attach.ts`). A
+  diffed `setStyle` leaves custom layers in place and adds the new
+  style's layers above them, so the block from the first slot to the last
+  is moved to the top, each slot with the native layers just above it.
+  A native layer that sat above the last slot stays below the block
+  ([maplibre coupling](./maplibre-coupling.md), item 22)
 - Retained batches stay per layer. A change of segments, or of the segment
   a layer belongs to, touches no batch
 

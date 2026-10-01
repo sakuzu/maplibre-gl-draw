@@ -711,3 +711,71 @@ describe('a replaced Store that held its features before the instance, with null
     expect((await selectedIds(page)).sort()).toEqual(['g', 'l', 'p']);
   });
 });
+
+describe('a diffed setStyle on a real map', () => {
+  afterAll(async () => {
+    // Back to the empty style the other tests were written against
+    await page.evaluate(() => {
+      const { map } = window as unknown as E2EWindow;
+      map.setStyle({ version: 8, sources: {}, layers: [] });
+    });
+    await clearAll(page);
+  });
+
+  it('keeps the drawing on top of the layers the new style adds, and draws it', async () => {
+    await clearAll(page);
+    const ring = [
+      await lngLatOf(page, at(-60, -60)),
+      await lngLatOf(page, at(60, -60)),
+      await lngLatOf(page, at(60, 60)),
+      await lngLatOf(page, at(-60, 60)),
+      await lngLatOf(page, at(-60, -60)),
+    ];
+    const result = await page.evaluate(async (coordinates) => {
+      const { map, draw } = window as unknown as E2EWindow;
+      draw.features.create({
+        type: 'Polygon',
+        geometry: { type: 'Polygon', coordinates: [coordinates] },
+        style: { fillColor: '#ff0000', fillOpacity: 1 },
+      });
+      // The default diff mode: the custom layers are not in the serialized style, so the diff
+      // leaves them where they are and adds the new layers above them
+      map.setStyle({
+        version: 8,
+        sources: {},
+        layers: [
+          { id: 'a-bg', type: 'background', paint: { 'background-color': '#00ff00' } },
+          { id: 'a-top', type: 'background', paint: { 'background-color': '#0000ff' } },
+        ],
+      });
+      // Two frames for the style to settle, then the pixels of the next one
+      const frame = (): Promise<void> =>
+        new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      await frame();
+      await frame();
+      const pixels = await new Promise<{ inside: number[]; outside: number[] }>((resolve) => {
+        map.once('render', () => {
+          const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+          const ratio = gl.drawingBufferWidth / map.getCanvas().clientWidth;
+          const read = (x: number, y: number): number[] => {
+            const pixel = new Uint8Array(4);
+            const column = Math.round(x * ratio);
+            const row = gl.drawingBufferHeight - 1 - Math.round(y * ratio);
+            gl.readPixels(column, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return Array.from(pixel);
+          };
+          const width = map.getCanvas().clientWidth;
+          const height = map.getCanvas().clientHeight;
+          resolve({ inside: read(width / 2, height / 2), outside: read(10, 10) });
+        });
+        map.triggerRepaint();
+      });
+      return { order: map.getLayersOrder(), ...pixels };
+    }, ring);
+
+    // map.getStyle().layers leaves the custom layers out, so the order is read from the map
+    expect(result.order).toEqual(['a-bg', 'a-top', 'maplibre-gl-draw-layer']);
+    expect(result.outside.slice(0, 3)).toEqual([0, 0, 255]);
+    expect(result.inside.slice(0, 3)).toEqual([255, 0, 0]);
+  });
+});

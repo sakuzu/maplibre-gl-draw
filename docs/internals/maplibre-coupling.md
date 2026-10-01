@@ -638,36 +638,67 @@ Each item has the same five parts.
 - Conditions for removal — if upstream constrains terrain mesh edges to
   their neighbors without skirts, this item goes away.
 
-## 22. Whether the Style Accepts Layers (`style._loaded`)
+## 22. Whether the Style Accepts Layers, and Where the Slots Go
 
 - Upstream behavior — `Map.addLayer` (`ui/map.ts:3520`) calls
   `Style.addLayer`, which calls `Style._checkLoaded()`
   (`style/style.ts:706`) and throws `Style is not done loading.` while
   `Style._loaded` is false. `Style._load` (`style/style.ts:485`) sets
   `_loaded` as soon as the stylesheet is parsed, before sprites, glyphs and
-  tiles. `styledata` fires when the style finishes loading and again after
-  every style change, including a diffed `setStyle`. The public
+  tiles, then fires `styledata` and `style.load`. The public
   `map.loaded()` and `map.isStyleLoaded()` are also false while tiles or
   images load, which happens after every pan, so neither answers "can a
   layer be added now". maplibre has no public API for that.
+  A diffed `setStyle` (the default) goes through `Style.setState`
+  (`style/style.ts:856`), which diffs `Style.serialize()` against the new
+  stylesheet. `serialize()` skips custom layers (`_serializeByIds`,
+  `style/style.ts:636`), so the diff neither removes nor adds them, and
+  `diffLayers` of the style specification inserts each new layer before
+  the next layer of the new stylesheet, or at the top when there is none:
+  the layers of the new style end up above the custom layers. When the
+  diff changed something, `setState` fires `style.load`
+  (`style/style.ts:887`) at once, and `styledata` follows with the next
+  frame (`Style.update`). A diff that changes nothing fires neither. A
+  layer added or moved by the host fires `styledata` alone, never
+  `style.load`.
 - What we rely on — assumption. `styleAcceptsLayers()` in
   `src/view/layer/attach.ts` reads `map.style?._loaded === true`, the same
   condition `_checkLoaded` checks, and is the only reader.
   `attachSlotLayers()` checks it when Draw is created and on every
-  `styledata`, and adds the frames missing from the map. The field is
-  in the type definitions but its leading `_` marks it internal; the timing
-  of `styledata` is part of the reliance.
+  `styledata` and `style.load`, and adds the frames missing from the map
+  (a missing frame goes just behind the next frame on the map, so the
+  frames stay in order). On `style.load` only, it also puts the frames
+  back on top of the map with the public `map.getLayersOrder()` and
+  `map.moveLayer()`: the block from the backmost frame to the frontmost
+  one moves to the top, each frame with the native layers that sat just
+  above it (the separators of the host), and the layers that were above
+  the frontmost frame stay below the block. Nothing moves when the block
+  is already on top, so the `styledata` that follows a move finds nothing
+  to do. Since a host's own `addLayer` fires no `style.load`, a layer the
+  host puts above the drawing stays there until the style changes. The
+  field `_loaded` is in the type definitions but its leading `_` marks it
+  internal; the timing of `styledata` and `style.load` is part of the
+  reliance.
 - Symptoms when it breaks — if the field is renamed, the check is always
   false and the frames are never added. Nothing throws and nothing
   is logged: features exist in the Store but nothing is drawn. If
   `styledata` stops firing after a style change, the slots are not
-  restored after `setStyle`, with the same silent result.
+  restored after a full `setStyle`, with the same silent result. If a
+  diffed `setStyle` stops firing `style.load`, the frames stay under the
+  layers of the new style and the drawing is hidden under the basemap.
+  If `serialize()` starts to include custom layers, the diff removes the
+  frames and `styledata` adds them back on top, which also works.
 - Check when upgrading — `src/view/layer/attach.test.ts` uses a stand-in
-  map. By hand with the real version, create Draw before the style is
-  parsed, after `load`, and during a pan with tiles loading; call
-  `setStyle` with and without `diff`; features must be drawn every time.
+  map. The E2E case "a diffed setStyle on a real map" in
+  `src/e2e/draw.e2e.test.ts` diffs to a style with layers on a real map
+  and checks the order of the layers and a pixel of a feature. By hand
+  with the real version, create Draw before the style is parsed, after
+  `load`, and during a pan with tiles loading; call `setStyle` with and
+  without `diff`; features must be drawn above the style every time.
 - Conditions for removal — a public method or event that says the style
-  accepts layers would replace `styleAcceptsLayers()`.
+  accepts layers would replace `styleAcceptsLayers()`. The move on
+  `style.load` can go if a diffed `setStyle` keeps the custom layers on
+  top by itself.
 
 ## 23. WebGL Context Loss Removes Every Custom Layer
 
