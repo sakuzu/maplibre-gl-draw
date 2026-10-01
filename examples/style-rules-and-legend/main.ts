@@ -5,8 +5,8 @@
 // A style rule belongs to a layer and colors its features from one attribute, in one of four
 // kinds. The features are 400 buildings of central Tokyo from Overture Maps
 // (examples/public/data/), loaded into the drawing, so they can be edited. The Legend tab of the
-// panel on the left shows the rows of the rule, and the R key switches the layer to the next
-// kind. The rule reads the attribute: change the height of a building in the Attributes tab and
+// panel on the left shows the rows of the rule, and a button in the card of actions at the
+// bottom left, with the key R, switches the layer to the next kind. The rule reads the attribute: change the height of a building in the Attributes tab and
 // its color follows at once.
 
 import { createDraw, type StyleRule } from '@sakuzu/maplibre-gl-draw';
@@ -117,17 +117,13 @@ const loaded = nearestBuildings(400).then(async (features) => {
   return result.layerId;
 });
 
-// 4. layers.update changes the rule; the map and the legend follow. The R key goes to the next
-// kind (a page of your own would offer a menu; the keys typed into a field are left alone)
+// 4. layers.update changes the rule; the map and the legend follow. A button in the card of
+// actions goes to the next kind (7)
 let current = 0;
-window.addEventListener('keydown', async (event) => {
-  const target = event.target as HTMLElement;
-  if (event.key.toLowerCase() !== 'r' || target.closest('input, textarea, [contenteditable]')) {
-    return;
-  }
+async function nextRule(): Promise<void> {
   current = (current + 1) % RULES.length;
   draw.layers.update(await loaded, { styleRule: RULES[current] });
-});
+}
 
 // 5. The Attributes tab keeps what is typed as text ("45"), and graduated and continuous rules
 // read numbers only, so the page turns a number typed into `height` or `floors` into a number
@@ -154,6 +150,16 @@ const ui = createDrawUI(draw, {
   locale,
   legend: true,
   inspector: { tabs: ['attributes', 'style'] },
+});
+
+// 7. The button in the card of actions of the standard UI, with the key R (listed with ?, and
+// left alone while a field has the keyboard). A page of your own might offer a menu of the kinds
+ui.actions.add({
+  id: 'next-rule',
+  label: locale === 'ja' ? '次の規則' : 'Next rule',
+  kind: 'action',
+  shortcut: 'R',
+  run: () => void nextRule(),
 });
 
 // For the browser console and the end-to-end tests

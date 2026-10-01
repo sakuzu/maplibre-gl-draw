@@ -443,7 +443,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('style-rules-and-legend opens on the graduated rule, R switches it, and a height typed in the Attributes tab recolors the building', {
+  it('style-rules-and-legend opens on the graduated rule, R and the card of actions switch it, and a height typed in the Attributes tab recolors the building', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('style-rules-and-legend');
@@ -500,6 +500,8 @@ describe('the examples', () => {
     await expect
       .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
       .toContain('commercial');
+    await pressAction(page, 'Next rule');
+    await expect.poll(ruleKind, { timeout: browserTimeout(5_000) }).toBe('continuous');
     await close();
   });
 
