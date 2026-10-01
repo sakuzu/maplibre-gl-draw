@@ -61,7 +61,8 @@
       "src/messages.ts",
       "src/api/options.ts",
       "examples/style-features/**",
-      "examples/style-rules-and-legend/**"
+      "examples/style-rules-and-legend/**",
+      "examples/zoom-and-scale/**"
     ],
     "docs/guides/snapping-geometry.md": [
       "src/snapping/**",
@@ -215,6 +216,9 @@
     ],
     "docs/examples/custom-ui.md": [
       "examples/custom-ui/**"
+    ],
+    "docs/examples/zoom-and-scale.md": [
+      "examples/zoom-and-scale/**"
     ],
     "docs/examples/playground.md": [
       "playground/**"

@@ -751,4 +751,63 @@ describe('the examples', () => {
     expect(await button.getAttribute('aria-pressed')).toBe('true');
     await close();
   });
+  it('zoom-and-scale keeps the reference zoom of each feature, and Z switches scaleWithZoom', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('zoom-and-scale');
+    const state = () =>
+      page.evaluate(() => {
+        const w = window as unknown as E2EWindow & { layerIds: { scaled: string; fixed: string } };
+        const zoomOf = (layerId: string) =>
+          Object.fromEntries(
+            w.draw.features
+              .list({ layerId })
+              .map((f) => [f.properties.name, f.properties['maplibre-gl-draw:createdZoom']]),
+          );
+        return {
+          option: w.draw.options.get().scaleWithZoom,
+          active: w.draw.layers.getActive()?.id === w.layerIds.fixed ? 'fixed' : 'scaled',
+          names: w.draw.layers.list().map((layer) => layer.name),
+          scaled: zoomOf(w.layerIds.scaled),
+          fixed: zoomOf(w.layerIds.fixed),
+        };
+      });
+    const before = await state();
+    // The same three features in both layers, with a reference zoom in the first only, and the
+    // one the page set from code
+    expect(before.scaled).toEqual({
+      'Wide line': 15,
+      'Thick outline': 15,
+      'Big point': 15,
+      '2 px at zoom 13': 13,
+    });
+    expect(before.fixed).toEqual({
+      'Wide line': undefined,
+      'Thick outline': undefined,
+      'Big point': undefined,
+    });
+    expect(before).toMatchObject({ option: true, active: 'scaled' });
+    expect(before.names).toContain('→ Scaled with zoom');
+
+    // Z turns the option off and makes the second layer the active one
+    await page.keyboard.press('z');
+    const after = await state();
+    expect(after).toMatchObject({ option: false, active: 'fixed' });
+    expect(after.names).toContain('→ Fixed on screen');
+
+    // The tools then write no reference zoom: a line drawn goes into the second layer without one
+    await page.getByRole('button', { name: 'Line', exact: true }).click();
+    await click(page, at(-60, 160));
+    await click(page, at(60, 180));
+    await click(page, at(60, 180));
+    const drawn = await state();
+    expect(Object.keys(drawn.fixed)).toHaveLength(4);
+    expect(Object.values(drawn.fixed)).toEqual([undefined, undefined, undefined, undefined]);
+
+    // And Z turns it back on
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('z');
+    expect(await state()).toMatchObject({ option: true, active: 'scaled' });
+    await close();
+  });
 });

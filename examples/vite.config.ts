@@ -30,6 +30,7 @@ const PAGES = [
   'plugins',
   'custom-feature-types',
   'custom-ui',
+  'zoom-and-scale',
 ];
 
 export default defineConfig({

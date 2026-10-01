@@ -320,6 +320,9 @@ The words of the names the library gives new features, layers and groups
 - [Style rules and legend](../examples/style-rules-and-legend.md) gives
   a layer each kind of rule and shows its rows in the legend of the
   standard UI
+- [Zoom and scale](../examples/zoom-and-scale.md) sets the reference
+  zoom of features, compares widths that follow the zoom with widths
+  fixed on the screen, and switches `scaleWithZoom`
 
 ## Reference
 

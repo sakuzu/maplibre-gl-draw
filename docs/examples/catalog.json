@@ -131,5 +131,12 @@
     "description": "No standard UI: a toolbar and a panel of the selected feature built with the public API of the library alone, in plain TypeScript and a few rules of CSS. Everything the standard UI does is reachable this way.",
     "descriptionJa": "標準の UI を使いません。道具のバーと、選んだ地物のパネルを、ライブラリーの公開 API だけで作ります。素の TypeScript と数行の CSS で書きます。標準の UI ができることは、すべてこの方法で作れます。",
     "order": 18
+  },
+  "zoom-and-scale": {
+    "title": "Zoom and scale",
+    "titleJa": "Zoom and scale",
+    "description": "Widths in pixels at the reference zoom of each feature grow and shrink with the map like paint on the ground; without a reference zoom they stay the same on the screen.",
+    "descriptionJa": "地物ごとの基準のズームでのピクセルの太さは、地面に塗った線のように地図とともに太くも細くもなります。基準のズームを持たない地物は、画面の上で同じ太さのままです。",
+    "order": 3
   }
 }

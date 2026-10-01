@@ -34,6 +34,7 @@ them in this order.
 | [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector | [Plugins](../docs/guides/plugins.md) |
 | [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, and a section of the inspector for them | [Custom types](../docs/guides/custom-types.md) |
 | [custom-ui](custom-ui/) | A toolbar and a panel of your own on the public API, without the standard UI | [Drawing and editing](../docs/guides/drawing.md) |
+| [zoom-and-scale](zoom-and-scale/) | Widths at the reference zoom of each feature that grow and shrink with the map, widths fixed on the screen, `scaleWithZoom` switched with a key | [Styles](../docs/guides/styles.md) |
 
 ## Running them
 
