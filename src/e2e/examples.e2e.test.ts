@@ -249,6 +249,24 @@ async function clickRing(page: Page, points: PagePoint[]): Promise<void> {
   for (const point of [...points, points[0]]) await click(page, point);
 }
 
+/** Waits for the promise a page exposes as `loaded` (the data it reads as it opens) */
+async function loaded(page: Page): Promise<void> {
+  await page.evaluate(() => (window as unknown as { loaded: Promise<unknown> }).loaded);
+}
+
+/** Records the next `dataset.clicked` of the page in `window.clickedDataset` */
+async function recordDatasetClick(page: Page): Promise<() => Promise<string | null>> {
+  await page.evaluate(() => {
+    const w = window as unknown as E2EWindow & { clickedDataset: string | null };
+    w.clickedDataset = null;
+    w.draw.on('dataset.clicked', ({ datasetId }) => {
+      w.clickedDataset = datasetId;
+    });
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as { clickedDataset: string | null }).clickedDataset);
+}
+
 describe('the examples', () => {
   it('lists the twelve examples on its index page', async () => {
     const index = String(site.get('index.html'));
@@ -267,6 +285,18 @@ describe('the examples', () => {
       'table-worker',
     ]) {
       expect(index).toContain(`./${name}/`);
+      expect(site.has(`${name}/index.html`)).toBe(true);
+    }
+  });
+
+  it('builds the pages of the examples of saving, the globe and the large data', () => {
+    for (const name of [
+      'save-and-load',
+      'globe',
+      '200000-features',
+      'datasets',
+      'columnar-data-in-a-worker',
+    ]) {
       expect(site.has(`${name}/index.html`)).toBe(true);
     }
   });
@@ -394,17 +424,24 @@ describe('the examples', () => {
     await close();
   });
 
-  it('terrain draws a line on the terrain', { timeout: TIMEOUT }, async () => {
+  it('terrain draws a line with the tool of the toolbar on the terrain', {
+    timeout: TIMEOUT,
+  }, async () => {
     const { page, close } = await openExample('terrain');
     await page.waitForFunction(() => (window as unknown as E2EWindow).map.getTerrain() !== null);
-    await page.click('#draw-line');
+    expect(await featureCount(page)).toBe(2);
+    await page.getByRole('button', { name: 'Line', exact: true }).click();
     await click(page, at(-60, 120));
     await click(page, at(60, 160));
     await click(page, at(60, 160));
     expect(await featureCount(page)).toBe(3);
-
-    await page.click('#diagnostics');
-    expect(await output(page)).toContain('Terrain active: true');
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => (window as unknown as E2EWindow).draw.debug.terrain().render.active),
+        { timeout: browserTimeout(10_000) },
+      )
+      .toBe(true);
     await close();
   });
 
@@ -541,6 +578,113 @@ describe('the examples', () => {
     await settle(page);
     await click(page, await pageOf(page, lngLat));
     expect(await output(page)).toMatch(/^row \d+: (shop|school|station|park), value \d+$/);
+    await close();
+  });
+
+  it('save-and-load leaves out the unusable feature, saves with S and loads it back with O', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('save-and-load');
+    await loaded(page);
+    // The file has five features, one of them a line of a single position
+    expect(await featureCount(page)).toBe(4);
+    await page.getByRole('button', { name: 'Polygon', exact: true }).click();
+    await clickRing(page, [at(-60, -40), at(60, -40), at(60, 40), at(-60, 40)]);
+    expect(await featureCount(page)).toBe(5);
+    // A click on empty ground gives the map the keyboard, with nothing selected
+    await click(page, at(-300, -250));
+    await page.keyboard.press('s');
+
+    // The next visit opens with the saved document
+    await page.reload();
+    await ready(page);
+    await loaded(page);
+    expect(await featureCount(page)).toBe(5);
+
+    // O loads it back in place of the drawing
+    await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.features.deleteMany(draw.features.list().map((f) => f.id));
+    });
+    expect(await featureCount(page)).toBe(0);
+    await page.keyboard.press('o');
+    await expect.poll(() => featureCount(page), { timeout: browserTimeout(5_000) }).toBe(5);
+    await close();
+  });
+
+  it('globe opens on the globe, and the globe button of the map controls turns it flat', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('globe');
+    const projection = () =>
+      page.evaluate(() => (window as unknown as E2EWindow).map.getProjection()?.type);
+    await expect.poll(projection, { timeout: browserTimeout(5_000) }).toBe('globe');
+    expect(await featureCount(page)).toBe(3);
+
+    await page.locator('.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled').click();
+    await expect.poll(projection, { timeout: browserTimeout(5_000) }).toBe('mercator');
+    await close();
+  });
+
+  it('200000-features loads 200,000 features and selects one with a click', {
+    timeout: browserTimeout(TIMEOUT),
+  }, async () => {
+    const { page, close } = await openExample('200000-features');
+    await loaded(page);
+    expect(await featureCount(page)).toBe(200_000);
+
+    // The middle of one building, in the middle of the view
+    const target = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const feature = draw.features.list()[123_456];
+      const [ring] = (feature.geometry as GeoJSON.Polygon).coordinates;
+      const center = [(ring[0][0] + ring[2][0]) / 2, (ring[0][1] + ring[2][1]) / 2];
+      map.jumpTo({ center: center as [number, number], zoom: 18 });
+      return { id: feature.id, center };
+    });
+    await settle(page);
+    await click(page, await pageOf(page, target.center));
+    expect(
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+    ).toEqual([target.id]);
+    await close();
+  });
+
+  it('datasets shows the 50,000 cells and the points of the view, and reports a click', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('datasets');
+    const sizes = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return [draw.datasets.count(), draw.datasets.get('cells')?.listRows().length];
+    });
+    expect(sizes).toEqual([2, 50_000]);
+    const clicked = await recordDatasetClick(page);
+    await click(page, at(10, 10));
+    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(cells|points)$/);
+    await close();
+  });
+
+  it('columnar-data-in-a-worker shows the 200,000 rows of the Worker and reports a click', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('columnar-data-in-a-worker');
+    await loaded(page);
+    const total = await page.evaluate(
+      () => (window as unknown as E2EWindow).draw.datasets.get('places')?.getThinningStats().total,
+    );
+    expect(total).toBe(200_000);
+    // Row 0, where it is drawn
+    const lngLat = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const point = draw.datasets.get('places')?.getRowPoint(0) as [number, number];
+      map.jumpTo({ center: point, zoom: 18 });
+      return point;
+    });
+    await settle(page);
+    const clicked = await recordDatasetClick(page);
+    await click(page, await pageOf(page, lngLat));
+    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('places');
     await close();
   });
 });

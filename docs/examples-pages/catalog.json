@@ -1,0 +1,44 @@
+{
+  "save-and-load": {
+    "title": "Save and load",
+    "titleJa": "Save and load",
+    "description": "GeoJSON and the format of the library, files dropped on the map, and the features a load leaves out.",
+    "descriptionJa": "GeoJSON とライブラリーの形式、地図に落としたファイル、読み込みで外された地物を扱います。",
+    "order": 9
+  },
+  "terrain": {
+    "title": "Terrain",
+    "titleJa": "Terrain",
+    "description": "Drawing and editing on the 3D terrain of the map.",
+    "descriptionJa": "地図の 3D の地形の上で描き、直します。",
+    "order": 10
+  },
+  "globe": {
+    "title": "Globe",
+    "titleJa": "Globe",
+    "description": "The globe, a great circle and an area across the antimeridian.",
+    "descriptionJa": "地球儀、大円、日付変更線をまたぐ面を描きます。",
+    "order": 11
+  },
+  "200000-features": {
+    "title": "200,000 features",
+    "titleJa": "200,000 features",
+    "description": "200,000 features loaded in one step, every one of them editable.",
+    "descriptionJa": "20 万の地物を 1 度で読み込み、どれも編集できるまま描きます。",
+    "order": 12
+  },
+  "datasets": {
+    "title": "Datasets",
+    "titleJa": "Datasets",
+    "description": "Data that is only shown, given at once or fetched for the part of the map in view.",
+    "descriptionJa": "見せるだけのデータを、一度に渡すか、見えている範囲の分だけ取り寄せます。",
+    "order": 13
+  },
+  "columnar-data-in-a-worker": {
+    "title": "Columnar data in a Worker",
+    "titleJa": "Columnar data in a Worker",
+    "description": "A table read in a Worker and handed to a dataset as its columns.",
+    "descriptionJa": "Worker で表を読み、列のままデータセットに渡します。",
+    "order": 14
+  }
+}

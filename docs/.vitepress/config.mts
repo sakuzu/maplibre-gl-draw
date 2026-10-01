@@ -30,7 +30,7 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /** The documents the site serves, relative to docs/ */
 const SITE_PAGE =
-  /^(index|getting-started|guides\/[a-z-]+|examples-pages\/[a-z-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
+  /^(index|getting-started|guides\/[a-z-]+|examples-pages\/[a-z0-9-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
 
 /** The source path (relative to docs/) of a page, from the path VitePress gives the renderer */
 function sourceOf(relativePath: string): string {
@@ -53,7 +53,7 @@ function siteHref(href: string, sourcePath: string): string {
   const media = target.match(/^docs\/api\/_media\/(.+)$/);
   if (media) target = `docs/${media[1]}`;
 
-  const example = target.match(/^examples\/([a-z-]+)\/?$/);
+  const example = target.match(/^examples\/([a-z0-9-]+)\/?$/);
   if (example) return `${LIVE}/examples/${example[1]}/${hash}`;
   if (target === 'examples' || target === 'examples/README.md') return `${LIVE}/examples/`;
 
@@ -114,7 +114,7 @@ function exampleFrames(md: MarkdownIt): void {
       return self.renderToken(tokens, idx, options);
     }
     const name = token.content.trim();
-    if (!/^[a-z-]+$/.test(name) || !existsSync(join(ROOT, 'examples', name, 'index.html'))) {
+    if (!/^[a-z0-9-]+$/.test(name) || !existsSync(join(ROOT, 'examples', name, 'index.html'))) {
       throw new Error(`No example named "${name}" in examples/`);
     }
     return `<ExampleFrame name="${name}" />\n`;

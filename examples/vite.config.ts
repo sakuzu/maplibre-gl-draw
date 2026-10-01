@@ -22,6 +22,11 @@ const PAGES = [
   'custom-feature-type',
   'large-data',
   'table-worker',
+  'save-and-load',
+  'globe',
+  '200000-features',
+  'datasets',
+  'columnar-data-in-a-worker',
 ];
 
 export default defineConfig({
