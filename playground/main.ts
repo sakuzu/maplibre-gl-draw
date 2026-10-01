@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The playground: every feature of the library on one page, under the standard UI with all its
-// parts. What the standard UI does not cover is added through its two openings (a tool for a
-// mode, a section of the inspector) or put on a key (switches.ts): the stamps of the plugin of
-// the plugins example, the routes of the custom-feature-types example, terrain, a dataset,
-// read-only, the interaction lock, saving and opening in this browser, and 200,000 features.
+// parts. What the standard UI does not cover is added through its openings (a tool for a mode,
+// a section of the inspector, an action in the card at the bottom left, switches.ts): the stamps
+// of the plugin of the plugins example, the routes of the custom-feature-types example, terrain,
+// a dataset, read-only, the interaction lock, saving and opening in this browser, and 200,000
+// features.
 // The globe is the globe button of the map's controls.
 //
 // The page opens on the overview scene (showcase/overview.ts): a drawing of every kind of
@@ -29,7 +30,7 @@ import {
 } from '../examples/plugins/stamp.ts';
 import { getShowcaseScene, runShowcase } from './showcase/showcase.ts';
 import './showcase/showcase.css';
-import { createSwitches, listenToSwitches } from './switches.ts';
+import { addSwitches } from './switches.ts';
 import './style.css';
 
 const scene = getShowcaseScene();
@@ -70,9 +71,9 @@ const routeMode: ModeFactory = (ctx) => ({
 });
 draw.extensions.modes.add('route', routeMode);
 
-// 3. The standard UI, every part on (the defaults), with the tools and the sections below. The
-// layer panel lists up to 1,000 features in a layer, and only their number beyond that, so the
-// 200,000 points (Shift+B) need nothing of the page
+// 3. The standard UI, every part on (the defaults), with the tools, the sections and the
+// switches below. The layer panel lists up to 1,000 features in a layer, and only their number
+// beyond that, so the 200,000 points (Shift+B) need nothing of the page
 function mountUI(): DrawUI {
   const ui = createDrawUI(draw, {
     locale: ja ? 'ja' : 'en',
@@ -186,8 +187,10 @@ container.addEventListener('drop', async (e) => {
   }
 });
 
-// 7. The switches on keys: terrain, a dataset, read-only, the lock, save, open, 200,000 points
-listenToSwitches(createSwitches(draw, map));
+// 7. The switches in the card of actions, each with Shift and a letter: terrain, a dataset,
+// read-only, the lock, 200,000 points, save and open. A scene that shows the map alone has no
+// interface, so no switches
+if (ui) addSwitches(ui, draw, map, ja);
 
 // A scene of the showcase loads its drawing once the style is in
 if (scene) map.on('load', () => void runShowcase(scene, draw, map));

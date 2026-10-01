@@ -49,18 +49,22 @@ feature of a custom type (`R`); each has a section of its own in the
 panel on the right. The globe button at the bottom right switches the
 projection. A file dropped on the map is loaded there.
 
-The switches that are not tools are keys with Shift, also listed in the
-browser console when the page opens:
+The switches that are not tools are actions in the card at the bottom
+left of the map, each with a key with Shift, which `?` lists. A switch
+shows its state, also when another control or code changes it:
 
-| Keys | Switch |
-| --- | --- |
-| Shift+T | Terrain on and off |
-| Shift+D | A dataset of 10,000 cells on and off |
-| Shift+R | Read-only on and off |
-| Shift+K | The interaction lock on and off |
-| Shift+S | Save the drawing in this browser (localStorage) |
-| Shift+O | Open the drawing saved in this browser |
-| Shift+B | Load 200,000 points as features, or remove them |
+| Action | Key | What it does |
+| --- | --- | --- |
+| Terrain | Shift+T | Shows the terrain, or removes it |
+| 10,000 cells | Shift+D | Adds a dataset of 10,000 cells, or removes it |
+| Read-only | Shift+R | Makes the drawing read-only, or writable again |
+| Interaction lock | Shift+K | Locks the gestures of the user, or unlocks them |
+| 200,000 points | Shift+B | Loads 200,000 points as features, or removes them |
+| Save | Shift+S | Saves the drawing in this browser (localStorage) |
+| Open | Shift+O | Opens the drawing saved in this browser |
+
+A scene that shows the map alone (`tilted`, `terrain`, `globe` and
+`large-data`) has no interface, and so no switches.
 
 The layer of the 200,000 points lists no features in the layer panel,
 only their number, as any layer of more than 1,000 features does.
@@ -72,7 +76,9 @@ The page is in `playground/` and runs on its own with
 [Plugins](plugins.md) example and the type from the
 [Custom feature types](custom-feature-types.md) example, and adds their
 tools and sections through `ui.tools.add` and
-`ui.inspector.sections.add`.
+`ui.inspector.sections.add`. The switches (`switches.ts`) are added
+through `ui.actions.add`, and the page calls `ui.actions.refresh()` on
+the events of core and of the map that change what they show.
 
 ::: code-group
 <<< @/../playground/main.ts
