@@ -79,6 +79,7 @@
     "docs:api": "typedoc --options typedoc.site.json",
     "docs:check": "node scripts/docs-check.mjs",
     "docs:image": "node scripts/capture-readme-image.mjs",
+    "data:overture": "node scripts/fetch-overture-sample.mjs",
     "site:thumbnails": "node scripts/need-ui.mjs && node scripts/capture-example-thumbnails.mjs",
     "build:site": "npm run build && npm run ui:build && node scripts/build-site.mjs",
     "deploy:pages": "node scripts/deploy-pages.mjs",
