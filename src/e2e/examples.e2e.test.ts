@@ -623,33 +623,89 @@ describe('the examples', () => {
     await close();
   });
 
-  it('200000-features loads 200,000 features and selects one with a click', {
+  it('200000-features loads its city of 208,073 features in one step, selects the park at open and a building with a click', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const { page, close } = await openExample('200000-features');
-    await loaded(page);
-    expect(await featureCount(page)).toBe(200_000);
-    // The layer panel lists none of them: the one row under the layer counts them
+    // The numbers the page logs, as it hands them to the tests
+    const city = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            loaded: Promise<{ polygons: number; lines: number; points: number; total: number }>;
+          }
+        ).loaded,
+    );
+    expect(city.total).toBeGreaterThan(200_000);
+    expect(city.polygons + city.lines + city.points).toBe(city.total);
+    expect(await featureCount(page)).toBe(city.total);
+    const byType = await page.evaluate(() => {
+      const types: Record<string, number> = {};
+      for (const feature of (window as unknown as E2EWindow).draw.features.list()) {
+        types[feature.type] = (types[feature.type] ?? 0) + 1;
+      }
+      return types;
+    });
+    expect(byType).toEqual({ Polygon: city.polygons, LineString: city.lines, Point: city.points });
+
+    // The layer panel lists none of them: one row under each layer counts its features
     const counts = page.locator('[data-role="layer-panel"] [data-kind="count"]');
+    const rows = [city.polygons, city.lines, city.points]
+      .map((n) => `${n.toLocaleString('en')} features. Select them on the map.`)
+      .sort();
     await expect
-      .poll(() => counts.allInnerTexts(), { timeout: browserTimeout(5_000) })
-      .toEqual(['200,000 features. Select them on the map.']);
+      .poll(async () => (await counts.allInnerTexts()).sort(), {
+        timeout: browserTimeout(5_000),
+      })
+      .toEqual(rows);
     expect(await page.locator('[data-role="layer-panel"] [data-kind="feature"]').count()).toBe(0);
 
-    // The middle of one building, in the middle of the view
+    // The park in front is selected at open, with a white handle on its first vertex
+    const selected = () =>
+      page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]);
+    expect(await selected()).toEqual(['park-selected']);
+    const parkVertex = await page.evaluate(() => {
+      const park = (window as unknown as E2EWindow).draw.features.get('park-selected');
+      if (park === undefined) throw new Error('No park');
+      return (park.geometry as GeoJSON.Polygon).coordinates[0][0];
+    });
+    await expect
+      .poll(async () => (await colorsAround(page, parkVertex)).some(isWhite), {
+        timeout: browserTimeout(10_000),
+      })
+      .toBe(true);
+
+    // A house near the middle of the tilted view, with no place drawn over it, is selected by
+    // a click on its middle
     const target = await page.evaluate(() => {
       const { draw, map } = window as unknown as E2EWindow;
-      const feature = draw.features.list()[123_456];
-      const [ring] = (feature.geometry as GeoJSON.Polygon).coordinates;
-      const center = [(ring[0][0] + ring[2][0]) / 2, (ring[0][1] + ring[2][1]) / 2];
-      map.jumpTo({ center: center as [number, number], zoom: 18 });
-      return { id: feature.id, center };
+      const middle = { x: map.getCanvas().clientWidth / 2, y: map.getCanvas().clientHeight / 2 };
+      const places = draw.features
+        .list()
+        .filter((feature) => feature.type === 'Point')
+        .map((feature) =>
+          map.project((feature.geometry as GeoJSON.Point).coordinates as [number, number]),
+        );
+      let best: { id: string; center: [number, number]; distance: number } | null = null;
+      for (const feature of draw.features.list()) {
+        if (feature.properties?.use !== 'House') continue;
+        const [ring] = (feature.geometry as GeoJSON.Polygon).coordinates;
+        const center: [number, number] = [
+          (ring[0][0] + ring[2][0]) / 2,
+          (ring[0][1] + ring[2][1]) / 2,
+        ];
+        const p = map.project(center);
+        const distance = Math.hypot(p.x - middle.x, p.y - middle.y);
+        if (best !== null && distance >= best.distance) continue;
+        if (places.some((place) => Math.hypot(place.x - p.x, place.y - p.y) < 20)) continue;
+        best = { id: feature.id, center, distance };
+      }
+      return best;
     });
-    await settle(page);
+    expect(target).not.toBeNull();
+    if (target === null) return;
     await click(page, await pageOf(page, target.center));
-    expect(
-      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
-    ).toEqual([target.id]);
+    expect(await selected()).toEqual([target.id]);
     await close();
   });
 
