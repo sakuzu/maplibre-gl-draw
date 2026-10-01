@@ -766,6 +766,9 @@ describe('the examples', () => {
     await expect
       .poll(async () => (await images()).length, { timeout: browserTimeout(5_000) })
       .toBe(2);
+    await close();
+  });
+
   it('save-and-load leaves out the unusable feature, saves with S and loads it back with O', {
     timeout: TIMEOUT,
   }, async () => {
