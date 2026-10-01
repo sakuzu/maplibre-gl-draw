@@ -3,10 +3,11 @@
 
 // save-and-load: getting the drawing out and back in.
 // The page opens with a GeoJSON file, which adds its features and reports the one it left out.
-// S saves the whole document in the browser, in the format of the library; O loads the saved
-// document back in place of the drawing; D and G download the drawing in the format of the
-// library and as GeoJSON; B opens a file from the disk; and a file dropped on the map is loaded
-// there. The next visit opens with what was saved.
+// The buttons in the card of actions at the bottom left, each with a key: Save (S) keeps the whole
+// document in the browser, in the format of the library; Load (O) loads the saved document back in
+// place of the drawing; Download (D) and Download GeoJSON (G) download the drawing in the format
+// of the library and as GeoJSON; Open a file (B) opens a file from the disk. A file dropped on the
+// map is loaded there. The next visit opens with what was saved.
 
 import { createDraw, type LoadResult } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -58,7 +59,7 @@ function save(): void {
 async function restore(): Promise<void> {
   const text = localStorage.getItem(STORAGE_KEY);
   if (text === null) {
-    console.log('Nothing has been saved yet: press S');
+    console.log('Nothing has been saved yet: press Save (S)');
     return;
   }
   report(await draw.document.load(text));
@@ -106,27 +107,43 @@ function openFile(): void {
   console.info('Opening a file');
 }
 
-// 7. The keys of the page, listed in the console as it opens. A key typed into a field of the
-// panels is left alone, and so is one held with a modifier
-const KEYS: Record<string, { label: string; run: () => void }> = {
-  s: { label: 'Save the drawing in this browser', run: save },
-  o: { label: 'Load the drawing saved in this browser', run: () => void restore() },
-  d: { label: 'Download the drawing in the format of the library', run: () => download('native') },
-  g: { label: 'Download the drawing as GeoJSON', run: () => download('geojson') },
-  b: { label: 'Open a file from the disk', run: openFile },
-};
-console.info(
-  [
-    'The keys of this page:',
-    ...Object.entries(KEYS).map(([k, { label }]) => `  ${k.toUpperCase()}  ${label}`),
-  ].join('\n'),
-);
-window.addEventListener('keydown', (event) => {
-  const typing =
-    event.target instanceof Element &&
-    event.target.closest('input, textarea, select, [contenteditable]') !== null;
-  if (typing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-  KEYS[event.key.toLowerCase()]?.run();
+// 7. The buttons in the card of actions of the standard UI, each with its key (listed with ?, and
+// left alone while a field of the panels has the keyboard)
+const ja = locale === 'ja';
+ui.actions.add({
+  id: 'save',
+  label: ja ? '保存' : 'Save',
+  kind: 'action',
+  shortcut: 'S',
+  run: save,
+});
+ui.actions.add({
+  id: 'load',
+  label: ja ? '読み込む' : 'Load',
+  kind: 'action',
+  shortcut: 'O',
+  run: () => void restore(),
+});
+ui.actions.add({
+  id: 'download',
+  label: ja ? 'ダウンロード' : 'Download',
+  kind: 'action',
+  shortcut: 'D',
+  run: () => download('native'),
+});
+ui.actions.add({
+  id: 'download-geojson',
+  label: ja ? 'GeoJSON でダウンロード' : 'Download GeoJSON',
+  kind: 'action',
+  shortcut: 'G',
+  run: () => download('geojson'),
+});
+ui.actions.add({
+  id: 'open',
+  label: ja ? 'ファイルを開く' : 'Open a file',
+  kind: 'action',
+  shortcut: 'B',
+  run: openFile,
 });
 
 // 8. Files dropped on the map: the library leaves drops to the page. An image is placed where it

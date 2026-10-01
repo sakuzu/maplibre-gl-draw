@@ -594,7 +594,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('save-and-load leaves out the unusable feature, saves with S and loads it back with O', {
+  it('save-and-load leaves out the unusable feature, saves with S and loads it back from the card of actions', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('save-and-load');
@@ -620,25 +620,25 @@ describe('the examples', () => {
       draw.features.deleteMany(draw.features.list().map((f) => f.id));
     });
     expect(await featureCount(page)).toBe(0);
-    await page.keyboard.press('o');
+    await pressAction(page, 'Load');
     await expect.poll(() => featureCount(page), { timeout: browserTimeout(5_000) }).toBe(5);
     await close();
   });
 
-  it('save-and-load downloads both formats with D and G, and opens a file with B', {
+  it('save-and-load downloads both formats and opens a file from the card of actions', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('save-and-load');
     await loaded(page);
     await click(page, at(-300, -250));
 
-    // D offers the document in the format of the library, G its features as GeoJSON
-    for (const [key, name] of [
-      ['d', 'drawing.maplibre-gl-draw.json'],
-      ['g', 'drawing.geojson'],
+    // Download offers the document in the format of the library, Download GeoJSON its features
+    for (const [label, name] of [
+      ['Download', 'drawing.maplibre-gl-draw.json'],
+      ['Download GeoJSON', 'drawing.geojson'],
     ] as const) {
       const download = page.waitForEvent('download');
-      await page.keyboard.press(key);
+      await pressAction(page, label);
       const file = await download;
       expect(file.suggestedFilename()).toBe(name);
       const json = JSON.parse(readFileSync((await file.path()) as string, 'utf8')) as {
@@ -647,13 +647,13 @@ describe('the examples', () => {
         features: unknown[];
       };
       expect(json.features).toHaveLength(4);
-      if (key === 'd') expect(json.version).toBe('3.0.0');
+      if (label === 'Download') expect(json.version).toBe('3.0.0');
       else expect(json.type).toBe('FeatureCollection');
     }
 
-    // B opens the chooser of the browser, and the file chosen is loaded into the drawing
+    // Open a file opens the chooser of the browser, and the file chosen is loaded into the drawing
     const chooser = page.waitForEvent('filechooser');
-    await page.keyboard.press('b');
+    await pressAction(page, 'Open a file');
     const point = { type: 'Point', coordinates: [139.774, 35.675] };
     await (await chooser).setFiles({
       name: 'one.geojson',
