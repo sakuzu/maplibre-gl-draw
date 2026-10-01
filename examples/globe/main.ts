@@ -30,12 +30,13 @@ const map = new maplibregl.Map({
 });
 
 // 1. The globe, set once the style has loaded (a style can name a projection of its own), and
-// no atmosphere (its glow paints a light fringe inside the globe's edge). The map leaves the
+// no atmosphere and no fog (both paint a light fringe inside the globe's edge). The map leaves the
 // space around the globe transparent, so the container's background is the space, dark blue
 map.getContainer().style.background = '#0b1026';
 map.on('style.load', () => {
   map.setProjection({ type: 'globe' });
-  map.setSky({ 'atmosphere-blend': 0 });
+  // No atmosphere and no fog at the horizon: both soften the edge of the globe
+  map.setSky({ 'atmosphere-blend': 0, 'fog-ground-blend': 0, 'horizon-fog-blend': 0 });
 });
 
 // 2. Three layers, from the back: the areas, the routes and the cities (the features are in
