@@ -6,15 +6,15 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
-### Fixed
+These changes will be released as 2.1.1.
 
-- With the terrain on, a solid line or the outline of a polygon was
-  drawn half as thick on a high-DPI display (a device pixel ratio of 2)
-  as without the terrain, when its width follows the zoom. It is now as
-  thick with the terrain as without it.
-- With the terrain on and the camera pitched, a solid line looked like
-  a string of beads: it was thinner between its vertices than at them,
-  and the outline of a polygon was thinner along its edges. Its
+- Fixed: with the terrain on, a solid line or the outline of a polygon
+  was drawn half as thick on a high-DPI display (a device pixel ratio
+  of 2) as without the terrain, when its width follows the zoom. It is
+  now as thick with the terrain as without it.
+- Fixed: with the terrain on and the camera pitched, a solid line looked
+  like a string of beads: it was thinner between its vertices than at
+  them, and the outline of a polygon was thinner along its edges. Its
   thickness is now the same all along.
 
 ## [2.1.0] - 2026-10-01
