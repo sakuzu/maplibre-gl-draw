@@ -37,8 +37,8 @@
   "style-rules-and-legend": {
     "title": "Style rules and legend",
     "titleJa": "Style rules and legend",
-    "description": "The four kinds of style rule color a layer from an attribute, and the legend shows what each color means.",
-    "descriptionJa": "4 種類のスタイル規則で属性からレイヤーを塗り分け、凡例に色の意味を出します。",
+    "description": "The four kinds of style rule color 400 buildings of central Tokyo from an attribute, the legend shows what each color means, and a height edited in the panel changes the color at once.",
+    "descriptionJa": "4 種類のスタイル規則で東京都心の建物 400 件を属性から塗り分け、凡例に色の意味を出します。パネルで高さを直すと、色もすぐに変わります。",
     "order": 5
   },
   "snapping-and-tracing": {

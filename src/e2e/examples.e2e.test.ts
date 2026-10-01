@@ -421,24 +421,55 @@ describe('the examples', () => {
     await close();
   });
 
-  it('style-rules-and-legend shows the rule in the legend and R switches its kind', {
+  it('style-rules-and-legend opens on the graduated rule, R switches it, and a height typed in the Attributes tab recolors the building', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('style-rules-and-legend');
+    await loaded(page);
+    expect(await featureCount(page)).toBe(400);
     const ruleKind = () =>
       page.evaluate(() => (window as unknown as E2EWindow).draw.layers.list()[0]?.styleRule?.kind);
-    expect(await ruleKind()).toBe('categorical');
+    expect(await ruleKind()).toBe('graduated');
     await page.getByRole('button', { name: 'Legend', exact: true }).click();
     const legend = page.locator('[data-role="legend"]');
     await expect
       .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
-      .toContain('commercial');
+      .toContain('80 or more');
+
+    // A building lower than 10 m, selected: the inspector opens on its Attributes tab, where
+    // its height becomes 120, which the rule puts in its last class
+    const building = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const feature = draw.features
+        .list()
+        .find((f) => typeof f.properties.height === 'number' && f.properties.height < 10);
+      if (!feature) throw new Error('No building lower than 10 m');
+      draw.selection.set('feature', [feature.id]);
+      return { id: feature.id, fill: draw.features.getAppliedStyle(feature.id)?.fillColor };
+    });
+    expect(building.fill).toBe('#ffffb2');
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.getByRole('button', { name: 'height', exact: true }).click();
+    await inspector.getByRole('textbox', { name: 'height', exact: true }).fill('120');
+    await page.keyboard.press('Enter');
+    const applied = () =>
+      page.evaluate((id) => {
+        const { draw } = window as unknown as E2EWindow;
+        return {
+          height: draw.features.get(id)?.properties.height,
+          fill: draw.features.getAppliedStyle(id)?.fillColor,
+        };
+      }, building.id);
+    // The page turns the text typed into a number, and the rule reads it
+    await expect
+      .poll(applied, { timeout: browserTimeout(5_000) })
+      .toEqual({ height: 120, fill: '#bd0026' });
 
     await page.locator('body').press('r');
-    expect(await ruleKind()).toBe('graduated');
+    await expect.poll(ruleKind, { timeout: browserTimeout(5_000) }).toBe('categorical');
     await expect
       .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
-      .toContain('or more');
+      .toContain('commercial');
     await close();
   });
 
