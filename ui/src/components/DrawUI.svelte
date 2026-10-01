@@ -75,6 +75,7 @@
     basemaps,
     actions,
     actionsTitle,
+    actionsOpen = true,
     corner,
   }: {
     draw: DrawUIDraw & LayerPanelDraw & LegendDraw & InspectorDraw;
@@ -105,6 +106,8 @@
     actions: ActionsState;
     /** The title of the card of the actions; the word for actions when left out */
     actionsTitle?: string;
+    /** Whether the card of the actions starts unfolded */
+    actionsOpen?: boolean;
     /** The element whose bottom left corner holds maplibre-gl's controls (the map's container) */
     corner?: HTMLElement | null;
   } = $props();
@@ -298,6 +301,7 @@
     title={cardTitle}
     keys={shortcuts}
     narrow={layout?.width === 'narrow'}
+    startOpen={actionsOpen}
     {corner}
     beside={!!side && leftOpen && layout?.leftMode === 'beside'}
   />

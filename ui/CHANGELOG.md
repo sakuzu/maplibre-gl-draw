@@ -121,6 +121,7 @@ layer panel and the inspector.
   button from its head, starts folded on a map narrower than 48rem, and
   stands above the toolbar where it would reach it across; the layer
   panel floating at the left ends above it. New word: `actions`.
+  `actionsOpen: false` starts the card folded.
 
 ## [1.0.0] - 2026-10-01
 

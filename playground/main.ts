@@ -79,6 +79,8 @@ function mountUI(): DrawUI {
     locale: ja ? 'ja' : 'en',
     basemaps: BASEMAPS,
     basemap: initialBasemapId(),
+    // The scenes of the showcase are pictures of the drawing: the card starts folded there
+    actionsOpen: scene === null,
   });
 
   // 4. Tools for the two modes, and sections of the inspector for their features

@@ -137,6 +137,11 @@ export interface DrawUIOptions extends BasemapOptions {
   actions?: ActionSpec[];
   /** The title of the card of the actions; the word for actions (`actions`) when left out */
   actionsTitle?: string;
+  /**
+   * Whether the card of the actions opens unfolded; true when left out. Below 48rem it starts
+   * folded whatever this says. A press on its title folds and unfolds it
+   */
+  actionsOpen?: boolean;
 }
 
 /**

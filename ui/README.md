@@ -230,6 +230,7 @@ The options of `createDrawUI`, all optional:
 | `onbasemap` | Called with the basemap after it changed | none |
 | `actions` | The actions of the application, in a card at the left | none |
 | `actionsTitle` | The title of the card of the actions | `Actions` |
+| `actionsOpen` | Whether the card of the actions starts unfolded | `true` |
 
 Each part also goes alone into an element of the page, with its own
 options and `target`, `locale` and `theme`: `createToolbar`,

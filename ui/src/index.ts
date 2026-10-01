@@ -242,6 +242,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       basemaps,
       actions,
       actionsTitle: options.actionsTitle,
+      actionsOpen: options.actionsOpen,
       corner: map.getContainer(),
     },
   });

@@ -37,6 +37,7 @@
     title,
     keys = true,
     narrow = false,
+    startOpen = true,
     corner,
     beside = false,
   }: {
@@ -48,6 +49,8 @@
     keys?: boolean;
     /** Whether the map is in the shell's narrow band (below 48rem) */
     narrow?: boolean;
+    /** Whether the card starts unfolded where the band allows it */
+    startOpen?: boolean;
     /** The element whose bottom left corner holds maplibre-gl's controls (the map's container) */
     corner?: HTMLElement | null;
     /** Whether the left region stands beside the map, open: the card goes to its right */
@@ -60,10 +63,11 @@
   const list = $derived(actions.list.get());
   const version = $derived(actions.version.get());
 
-  // Folded below 48rem, open above; a press changes it until the band changes
+  // Folded below 48rem, open above unless the application asks for it folded; a press changes
+  // it until the band changes
   let open = $state(true);
   $effect(() => {
-    open = !narrow;
+    open = !narrow && startOpen;
   });
 
   const read = (spec: ActionSpec, what: 'checked' | 'disabled'): boolean => {
