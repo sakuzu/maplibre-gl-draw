@@ -273,3 +273,32 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ```
+
+---
+
+## Sample data of the examples (Overture Maps)
+
+The examples of the repository (`examples/`, not part of the package)
+show buildings and places of central Tokyo from Overture Maps, in
+`examples/public/data/`. `scripts/fetch-overture-sample.mjs` extracts
+them, and `examples/public/data/README.md` records the release, the
+extent, the counts and the sources of the rows.
+
+Attribution: © OpenStreetMap contributors, Overture Maps Foundation.
+
+- The buildings (`tokyo-buildings.geojson` and `tokyo-buildings.parquet`)
+  are a database derived from Overture's buildings theme, under the Open
+  Database License 1.0 (ODbL): <https://opendatacommons.org/licenses/odbl/1-0/>.
+  Its rows come from OpenStreetMap and Microsoft's Global ML Building
+  Footprints (ODbL), and from Qian Shi, et al., A First High-quality
+  Vector Data of Buildings in East Asian Countries Based on a
+  Comprehensive Large-scale Mapping Framework, Zenodo,
+  doi:10.5281/zenodo.8174931 (CC BY 4.0)
+- The places (`tokyo-places.geojson`) come from Overture's places theme,
+  under the Community Data License Agreement Permissive 2.0:
+  <https://cdla.dev/permissive-2-0/>. Rows from Foursquare are under the
+  Apache License 2.0 (Copyright 2024 Foursquare Labs, Inc.), and rows from
+  AllThePlaces under CC0 1.0
+
+The terms of every source are on
+<https://docs.overturemaps.org/attribution/>.

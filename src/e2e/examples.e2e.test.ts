@@ -17,10 +17,11 @@
  * Svelte and kata inside it, so their pages load nothing else either.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
+import { parquetMetadata } from 'hyparquet';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -153,6 +154,10 @@ async function serve(context: BrowserContext): Promise<void> {
         body: typeof built === 'string' ? built : Buffer.from(built),
       });
     }
+    // The files of examples/public/ (the sample data), which vite copies to the root of the
+    // build only when it writes the build to disk
+    const file = join(EXAMPLES, 'public', path);
+    if (existsSync(file)) return route.fulfill({ contentType, body: readFileSync(file) });
     return route.fulfill({ status: 404, body: 'not found' });
   });
 }
@@ -422,24 +427,55 @@ describe('the examples', () => {
     await close();
   });
 
-  it('style-rules-and-legend shows the rule in the legend and R switches its kind', {
+  it('style-rules-and-legend opens on the graduated rule, R switches it, and a height typed in the Attributes tab recolors the building', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('style-rules-and-legend');
+    await loaded(page);
+    expect(await featureCount(page)).toBe(400);
     const ruleKind = () =>
       page.evaluate(() => (window as unknown as E2EWindow).draw.layers.list()[0]?.styleRule?.kind);
-    expect(await ruleKind()).toBe('categorical');
+    expect(await ruleKind()).toBe('graduated');
     await page.getByRole('button', { name: 'Legend', exact: true }).click();
     const legend = page.locator('[data-role="legend"]');
     await expect
       .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
-      .toContain('commercial');
+      .toContain('80 or more');
+
+    // A building lower than 10 m, selected: the inspector opens on its Attributes tab, where
+    // its height becomes 120, which the rule puts in its last class
+    const building = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const feature = draw.features
+        .list()
+        .find((f) => typeof f.properties.height === 'number' && f.properties.height < 10);
+      if (!feature) throw new Error('No building lower than 10 m');
+      draw.selection.set('feature', [feature.id]);
+      return { id: feature.id, fill: draw.features.getAppliedStyle(feature.id)?.fillColor };
+    });
+    expect(building.fill).toBe('#ffffb2');
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.getByRole('button', { name: 'height', exact: true }).click();
+    await inspector.getByRole('textbox', { name: 'height', exact: true }).fill('120');
+    await page.keyboard.press('Enter');
+    const applied = () =>
+      page.evaluate((id) => {
+        const { draw } = window as unknown as E2EWindow;
+        return {
+          height: draw.features.get(id)?.properties.height,
+          fill: draw.features.getAppliedStyle(id)?.fillColor,
+        };
+      }, building.id);
+    // The page turns the text typed into a number, and the rule reads it
+    await expect
+      .poll(applied, { timeout: browserTimeout(5_000) })
+      .toEqual({ height: 120, fill: '#bd0026' });
 
     await page.locator('body').press('r');
-    expect(await ruleKind()).toBe('graduated');
+    await expect.poll(ruleKind, { timeout: browserTimeout(5_000) }).toBe('categorical');
     await expect
       .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
-      .toContain('or more');
+      .toContain('commercial');
     await close();
   });
 
@@ -599,41 +635,140 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the 50,000 cells and the points of the view, and reports a click', {
-    timeout: TIMEOUT,
+  it('datasets shows the sample data between and over two layers of the drawing, logs the rules and reports a click', {
+    timeout: browserTimeout(TIMEOUT),
   }, async () => {
+    const count = (name: string): number =>
+      (
+        JSON.parse(
+          readFileSync(join(EXAMPLES, 'public/data', name), 'utf8'),
+        ) as GeoJSON.FeatureCollection
+      ).features.length;
+    const [buildings, places] = [count('tokyo-buildings.geojson'), count('tokyo-places.geojson')];
     const { page, close } = await openExample('datasets');
-    const sizes = await page.evaluate(() => {
-      const { draw } = window as unknown as E2EWindow;
-      return [draw.datasets.count(), draw.datasets.get('cells')?.listRows().length];
+    // Opened again with the console followed, which the page writes as it loads
+    const logs: string[] = [];
+    page.on('console', (message) => logs.push(message.text()));
+    await page.reload();
+    await ready(page);
+    expect(
+      await page.evaluate(() => (window as unknown as { loaded: Promise<unknown> }).loaded),
+    ).toEqual({
+      buildings,
+      places,
     });
-    expect(sizes).toEqual([2, 50_000]);
-    const clicked = await recordDatasetClick(page);
-    await click(page, at(10, 10));
-    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(cells|points)$/);
-    await close();
-  });
-
-  it('columnar-data-in-a-worker shows the 200,000 rows of the Worker and reports a click', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('columnar-data-in-a-worker');
-    await loaded(page);
-    const total = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.datasets.get('places')?.getThinningStats().total,
+    // The two layers of the drawing, the buildings placed between them, and the snapping to
+    // the datasets on
+    const drawing = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const layers = Object.fromEntries(
+        draw.layers.list().map((layer) => [
+          layer.name,
+          draw.features
+            .list({ layerId: layer.id })
+            .map((feature) => feature.type)
+            .sort(),
+        ]),
+      );
+      return {
+        layers,
+        order: draw.layers.getOrder().map((id) => draw.layers.get(id)?.name ?? id),
+        snapToDatasets: draw.options.get().snapping?.datasets,
+      };
+    });
+    expect(drawing).toEqual({
+      layers: {
+        'Survey area': ['Polygon'],
+        'Planned route': ['LineString', 'Point', 'Point', 'Point'],
+      },
+      order: ['Survey area', 'buildings', 'Planned route'],
+      snapToDatasets: true,
+    });
+    expect(logs).toContain(
+      `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
-    expect(total).toBe(200_000);
-    // Row 0, where it is drawn
-    const lngLat = await page.evaluate(() => {
+    expect(logs.join('\n')).toContain('Legend of the buildings by height (m):\n  #eff3ff Below 10');
+    expect(logs.join('\n')).toContain('Legend of the places by category:');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.datasets.get('buildings')?.listRows().length,
+      ),
+    ).toBe(buildings);
+    // The provider hands over the places in view, a part of them
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (window as unknown as E2EWindow).draw.datasets.get('places')?.listRows().length ?? 0,
+          ),
+        { timeout: browserTimeout(10_000) },
+      )
+      .toBeGreaterThan(0);
+
+    // The middle of a building of four corners, at zoom 18
+    const target = await page.evaluate(() => {
       const { draw, map } = window as unknown as E2EWindow;
-      const point = draw.datasets.get('places')?.getRowPoint(0) as [number, number];
-      map.jumpTo({ center: point, zoom: 18 });
-      return point;
+      const dataset = draw.datasets.get('buildings');
+      for (let i = 0; dataset?.getRowId(i) != null; i++) {
+        const geometry = dataset.getRow(i)?.geometry;
+        if (geometry?.type !== 'Polygon' || geometry.coordinates[0].length !== 5) continue;
+        const ring = geometry.coordinates[0].slice(0, 4);
+        const center = [0, 1].map((k) => ring.reduce((sum, p) => sum + p[k], 0) / 4);
+        map.jumpTo({ center: center as [number, number], zoom: 18 });
+        return center;
+      }
+      throw new Error('No building of four corners');
     });
     await settle(page);
     const clicked = await recordDatasetClick(page);
-    await click(page, await pageOf(page, lngLat));
-    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('places');
+    await click(page, await pageOf(page, target));
+    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(buildings|places)$/);
+    expect(logs.some((line) => /^(buildings|places): /.test(line))).toBe(true);
+    await close();
+  });
+
+  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click', {
+    timeout: browserTimeout(TIMEOUT),
+  }, async () => {
+    const file = readFileSync(join(EXAMPLES, 'public/data/tokyo-buildings.parquet'));
+    const rows = Number(
+      parquetMetadata(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength))
+        .num_rows,
+    );
+    const { page, close } = await openExample('columnar-data-in-a-worker');
+    const result = await page.evaluate(
+      () =>
+        (window as unknown as { loaded: Promise<{ rows: number; firstFrameMs: number }> }).loaded,
+    );
+    expect(result.rows).toBe(rows);
+    expect(Number.isFinite(result.firstFrameMs)).toBe(true);
+    const total = await page.evaluate(() => {
+      const dataset = (window as unknown as E2EWindow).draw.datasets.get('buildings');
+      let count = 0;
+      while (dataset?.getRowId(count) != null) count++;
+      return count;
+    });
+    expect(total).toBe(rows);
+
+    // The middle of a building of four corners, at zoom 18
+    const target = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const dataset = draw.datasets.get('buildings');
+      for (let i = 0; dataset?.getRowId(i) != null; i++) {
+        const geometry = dataset.getRow(i)?.geometry;
+        if (geometry?.type !== 'MultiPolygon' || geometry.coordinates[0][0].length !== 5) continue;
+        const ring = geometry.coordinates[0][0].slice(0, 4);
+        const center = [0, 1].map((k) => ring.reduce((sum, p) => sum + p[k], 0) / 4);
+        map.jumpTo({ center: center as [number, number], zoom: 18 });
+        return center;
+      }
+      throw new Error('No building of four corners');
+    });
+    await settle(page);
+    const clicked = await recordDatasetClick(page);
+    await click(page, await pageOf(page, target));
+    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('buildings');
     await close();
   });
 

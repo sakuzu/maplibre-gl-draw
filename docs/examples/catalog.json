@@ -37,8 +37,8 @@
   "style-rules-and-legend": {
     "title": "Style rules and legend",
     "titleJa": "Style rules and legend",
-    "description": "The four kinds of style rule color a layer from an attribute, and the legend shows what each color means.",
-    "descriptionJa": "4 種類のスタイル規則で属性からレイヤーを塗り分け、凡例に色の意味を出します。",
+    "description": "The four kinds of style rule color 400 buildings of central Tokyo from an attribute, the legend shows what each color means, and a height edited in the panel changes the color at once.",
+    "descriptionJa": "4 種類のスタイル規則で東京都心の建物 400 件を属性から塗り分け、凡例に色の意味を出します。パネルで高さを直すと、色もすぐに変わります。",
     "order": 5
   },
   "snapping-and-tracing": {
@@ -93,15 +93,15 @@
   "datasets": {
     "title": "Datasets",
     "titleJa": "Datasets",
-    "description": "Data that is only shown, given at once or fetched for the part of the map in view.",
-    "descriptionJa": "見せるだけのデータを、一度に渡すか、見えている範囲の分だけ取り寄せます。",
+    "description": "Data that is only shown, under and over the user's own drawing: the buildings and the places of central Tokyo from Overture Maps, between two layers of the drawing and in front of them, with the drawing snapping to the buildings.",
+    "descriptionJa": "見せるだけのデータを、利用者が描いたものの下や上に表示します。Overture Maps の東京都心の建物と場所を、描いたものの 2 つのレイヤーの間と手前に置き、描く線は建物に吸着します。",
     "order": 13
   },
   "columnar-data-in-a-worker": {
     "title": "Columnar data in a Worker",
     "titleJa": "Columnar data in a Worker",
-    "description": "A table read in a Worker and handed to a dataset as its columns.",
-    "descriptionJa": "Worker で表を読み、列のままデータセットに渡します。",
+    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns: no GeoJSON, no object per row, and no copy on the way to the page.",
+    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読み、列のままデータセットに渡します。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
     "order": 14
   },
   "read-only-viewer": {

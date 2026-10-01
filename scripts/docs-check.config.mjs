@@ -116,6 +116,8 @@ declare const nextRows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
   termAllow: [
     // maplibre's own rename, which the coupling record needs to name
     { file: 'docs/internals/maplibre-coupling.md', pattern: /formerly `SourceCache`/ },
+    // The release the sample data comes from and the day it was fetched: a record of the data
+    { file: 'examples/public/data/README.md', pattern: /^- (Release|Fetched): / },
   ],
 
   translations: {
