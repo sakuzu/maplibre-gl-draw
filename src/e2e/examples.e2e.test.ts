@@ -543,4 +543,78 @@ describe('the examples', () => {
     expect(await output(page)).toMatch(/^row \d+: (shop|school|station|park), value \d+$/);
     await close();
   });
+
+  it('read-only-viewer loads its drawing and refuses an update', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('read-only-viewer');
+    await page.evaluate(() => (window as unknown as { loaded: Promise<void> }).loaded);
+    const after = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const [first] = draw.features.list();
+      const updated = draw.features.update(first.id, { properties: { name: 'Changed' } });
+      return {
+        count: draw.features.count(),
+        updated,
+        name: draw.features.get(first.id)?.properties.name,
+      };
+    });
+    expect(after).toEqual({ count: 8, updated: null, name: 'North tower' });
+    await close();
+  });
+
+  it('plugins adds the tool of the mode of the plugin, which stamps a point', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('plugins');
+    expect(await featureCount(page)).toBe(1);
+    await page.getByRole('button', { name: 'Stamp', exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
+      'stamp',
+    );
+    await click(page, at(-100, 60));
+    const stamped = await page.evaluate(() => {
+      const all = (window as unknown as E2EWindow).draw.features.list();
+      return all.map((f) => f.properties.stamp);
+    });
+    expect(stamped).toEqual(['done', 'planned']);
+    await close();
+  });
+
+  it('custom-feature-types draws a route with its own style keys and hits it', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-types');
+    const [hill, river] = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      return draw.features.list();
+    });
+    expect(river.type).toBe('Route');
+    // The river route is drawn solid in its own blue (#1f6feb)
+    const [r0, r1] = (river.geometry as GeoJSON.LineString).coordinates;
+    const middle = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2];
+    expect((await colorsAround(page, middle)).some(([r, , b]) => b > 180 && r < 120)).toBe(true);
+
+    // A click on the hill route selects it, through the hit test of the type
+    const [h0, h1] = (hill.geometry as GeoJSON.LineString).coordinates;
+    await click(page, await pageOf(page, [(h0[0] + h1[0]) / 2, (h0[1] + h1[1]) / 2]));
+    expect(
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+    ).toEqual([hill.id]);
+    await close();
+  });
+
+  it('custom-ui switches the mode with a button of its own toolbar', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-ui');
+    const button = page.locator('[data-mode="draw_polygon"]');
+    await button.click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
+      'draw_polygon',
+    );
+    expect(await button.getAttribute('aria-pressed')).toBe('true');
+    await close();
+  });
 });

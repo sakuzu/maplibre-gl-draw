@@ -1,0 +1,7 @@
+[
+  { "name": "playground", "title": "Playground", "order": 0 },
+  { "name": "read-only-viewer", "title": "Read-only viewer", "order": 15 },
+  { "name": "plugins", "title": "Plugins", "order": 16 },
+  { "name": "custom-feature-types", "title": "Custom feature types", "order": 17 },
+  { "name": "custom-ui", "title": "Build your own UI", "order": 18 }
+]

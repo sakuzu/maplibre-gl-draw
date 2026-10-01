@@ -6,8 +6,8 @@
  *
  * Loads `showcase.json` (a document in the native format: layers, groups, styles, a style
  * rule and an embedded image), adds a dataset of fine cells colored by a
- * graduated rule, shows a legend of both rules, selects a feature so that its frame and
- * handles show, and arranges the tree of the Layers panel.
+ * graduated rule, shows a legend of both rules, and selects a feature so that its frame and
+ * handles show.
  *
  * The four point shapes of the document are plain Points that name their shape in
  * `style.pointShape`, so nothing needs to be registered on the draw instance.
@@ -21,7 +21,7 @@ import {
 } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
-import { nextFrame, type ShowcaseContext, type ShowcaseScene } from './scene';
+import type { ShowcaseContext, ShowcaseScene } from './scene';
 
 /** A quiet basemap, so the colors of the drawing stand out */
 export const QUIET_BASEMAP = 'https://tiles.openfreemap.org/styles/positron';
@@ -31,12 +31,6 @@ export const SELECTED_FEATURE = 'courtyard';
 
 /** The layer new drawings go into */
 const ACTIVE_LAYER = 'layer-notes';
-
-/** Tree items of the Layers panel to collapse (layers start expanded, groups collapsed) */
-const COLLAPSE = ['layer-landuse', 'layer-draft', 'layer-routes'];
-
-/** Tree items to expand */
-const EXPAND = ['group-markers'];
 
 /** The dataset of fine cells */
 const GRID = {
@@ -62,16 +56,8 @@ export const overviewScene: ShowcaseScene = {
   basemap: QUIET_BASEMAP,
   camera: { center: [139.766, 35.6822], zoom: 15 },
   load: loadDocument,
-  async finish({ draw, map, layerPanel }) {
+  async finish({ draw, map }) {
     draw.selection.set('feature', [SELECTED_FEATURE]);
-
-    for (const id of [...COLLAPSE, ...EXPAND]) {
-      await nextFrame();
-      layerPanel
-        .querySelector<HTMLButtonElement>(`[data-action="toggle-expand"][data-id="${id}"]`)
-        ?.click();
-    }
-
     addLegend(draw, map);
   },
 };
@@ -81,18 +67,18 @@ export const overviewScene: ShowcaseScene = {
  *
  * The tilted scene loads the same drawing.
  */
-export async function loadDocument({ draw, underlays }: ShowcaseContext): Promise<void> {
+export async function loadDocument({ draw }: ShowcaseContext): Promise<void> {
   const { default: document } = await import('./showcase.json');
   // A JSON module is typed from its values, looser than the document it holds
   await draw.document.load(document as unknown as DrawDocument);
   draw.layers.setActive(ACTIVE_LAYER);
 
-  underlays.add({
+  draw.datasets.add({
     id: GRID.id,
-    name: GRID.name,
-    features: createGrid(),
+    rows: createGrid(),
     styleRule: GRID_RULE,
     baseStyle: { fill: { fillOpacity: 0.8, strokeWidth: 0, strokeOpacity: 0 } },
+    order: 'below-store',
   });
 }
 

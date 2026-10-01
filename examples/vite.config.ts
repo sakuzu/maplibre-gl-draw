@@ -22,6 +22,10 @@ const PAGES = [
   'custom-feature-type',
   'large-data',
   'table-worker',
+  'read-only-viewer',
+  'plugins',
+  'custom-feature-types',
+  'custom-ui',
 ];
 
 export default defineConfig({

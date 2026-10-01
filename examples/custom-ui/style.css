@@ -1,0 +1,89 @@
+/*
+ * SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The look of custom-ui: a full-page map, a bar of buttons at the bottom, a panel on the right */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font:
+    14px / 1.5 system-ui,
+    sans-serif;
+  color: #1f2328;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+.toolbar,
+.panel {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+}
+
+.toolbar {
+  bottom: 40px;
+  left: 50%;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+}
+
+.toolbar button {
+  padding: 4px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  background: #f6f8fa;
+  font: inherit;
+  cursor: pointer;
+}
+
+.toolbar button[aria-pressed="true"] {
+  border-color: #0969da;
+  background: #ddf4ff;
+}
+
+.toolbar button.danger {
+  color: #cf222e;
+}
+
+.toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.panel {
+  top: 10px;
+  right: 10px;
+  flex-direction: column;
+  width: 200px;
+}
+
+.panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #59636e;
+}
+
+.panel input {
+  font: inherit;
+  color: #1f2328;
+}
+
+.panel[hidden] {
+  display: none;
+}
