@@ -3,19 +3,26 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
+  import MapIcon from '@lucide/svelte/icons/map';
   import PenLine from '@lucide/svelte/icons/pen-line';
   import {
+    Divider,
+    Dropdown,
     Icon,
     type IconComponent,
     LayerTree,
+    ListItem,
     Markbox,
+    MenuItem,
     type MenuModel,
     Swatch,
+    Text,
     type TreeMove,
     type TreeNode,
   } from '@sakuzu/kata/svelte';
   import type { Feature } from '@sakuzu/maplibre-gl-draw';
   import type { Snippet } from 'svelte';
+  import type { BasemapControl } from '../basemaps.js';
   import { planMove } from '../layers/move.js';
   import {
     buildNodes,
@@ -39,12 +46,19 @@
   // `update({ locked })`, renaming the name (`properties.name` for a feature), a drop
   // `layers.reorder`, `groups.move` or `features.move`, a press `selection.set` (and
   // `layers.setActive` for a layer), the add menu `layers.create` and `selection.group`.
+  //
+  // The panel lists the stack from the front, and the basemap is its back: the last row, under the
+  // tree, apart from it (a line between them), as it is no layer: it is not dragged, hidden, locked
+  // or selected. It is laid out as a row of the tree at the root (the place of the chevron kept,
+  // then the mark), so its mark and its label line up with those of the layers. It shows the name
+  // of the basemap the map shows, and with two or more basemaps it opens their menu.
   let {
     draw,
     messages,
     features = true,
     add = true,
     reorder = true,
+    basemaps = null,
   }: {
     draw: LayerPanelDraw;
     messages: Box<Messages>;
@@ -54,6 +68,8 @@
     add?: boolean;
     /** Whether the rows can be dragged */
     reorder?: boolean;
+    /** The basemaps of the last row, or null for no row */
+    basemaps?: BasemapControl | null;
   } = $props();
 
   const m = $derived(messages.get());
@@ -195,7 +211,34 @@
   }
 
   const ACTIVE_ICON = PenLine as unknown as IconComponent;
+
+  const MAP_ICON = MapIcon as unknown as IconComponent;
+  const basemapName = $derived(basemaps?.name() ?? null);
+  const currentBasemap = $derived(basemaps?.current.get() ?? null);
+  const basemapMenu = $derived(!!basemaps && basemaps.list.length >= 2);
+  // The place of the chevron, the mark, the label, the name and, with the menu, its chevron
+  const basemapColumns = $derived(
+    [
+      'auto auto',
+      basemapName === null ? 'minmax(0, 1fr)' : 'auto minmax(0, 1fr)',
+      basemapMenu ? 'auto' : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
 </script>
+
+{#snippet basemapCells()}
+  <span class="seat" aria-hidden="true"></span>
+  <Markbox><Icon name={MAP_ICON} /></Markbox>
+  <Text clamp>{m.basemap}</Text>
+  {#if basemapName !== null}
+    <Text clamp muted>{basemapName}</Text>
+  {/if}
+  {#if basemapMenu}
+    <Icon name="chevron-down" />
+  {/if}
+{/snippet}
 
 {#snippet row(node: TreeNode, name: Snippet<[TreeNode]>)}
   {#if node.icon}
@@ -233,6 +276,44 @@
     addLabel={m.add}
     {row}
   />
+  {#if basemaps}
+    <Divider />
+    <div class="basemap" data-role="basemap">
+      {#if basemapMenu}
+        <Dropdown menu block>
+          {#snippet trigger(toggle, open)}
+            <ListItem
+              columns={basemapColumns}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onclick={toggle}
+            >
+              {@render basemapCells()}
+            </ListItem>
+          {/snippet}
+          {#snippet panel(close)}
+            {#each basemaps.list as item (item.id)}
+              <MenuItem
+                checked={item.id === currentBasemap}
+                aria-current={item.id === currentBasemap ? 'true' : undefined}
+                data-id={item.id}
+                onclick={() => {
+                  close();
+                  basemaps.set(item.id);
+                }}
+              >
+                {item.label}
+              </MenuItem>
+            {/each}
+          {/snippet}
+        </Dropdown>
+      {:else}
+        <ListItem columns={basemapColumns} plain>
+          {@render basemapCells()}
+        </ListItem>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -244,5 +325,18 @@
   .active {
     display: inline-flex;
     flex: none;
+  }
+  .basemap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  /* The place of the chevron of a row of the tree that does not open (TreeRow's seat) */
+  .seat {
+    width: var(--kata-height-icon-button);
+  }
+  /* The name of the basemap, after the label, stands at the end of the row */
+  .basemap :global([data-role='list-item'] > .kata-text + .kata-text) {
+    text-align: end;
   }
 </style>

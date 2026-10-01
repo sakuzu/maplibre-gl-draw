@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import { Button, Icon, Panel, Tabs, Toolbar } from '@sakuzu/kata/svelte';
+  import type { BasemapControl } from '../basemaps.js';
   import type { Messages } from '../messages.js';
   import type { Box } from '../store.js';
   import type { LayerPanelDraw, LeftSettings, LegendDraw } from '../types.js';
@@ -12,15 +13,19 @@
 
   // LeftPanel: the left region of the interface, a Panel with the layer panel and the legend in
   // two tabs (Tabs in the Toolbar of its head). With one of them only, the head is its title.
+  // The basemap is the last row of the layer panel.
   let {
     draw,
     messages,
     settings,
+    basemaps = null,
     onclose,
   }: {
     draw: LayerPanelDraw & LegendDraw;
     messages: Box<Messages>;
     settings: LeftSettings;
+    /** The basemaps of the last row of the layer panel */
+    basemaps?: BasemapControl | null;
     /** Shows a close button at the end of the head; called when it is pressed */
     onclose?: () => void;
   } = $props();
@@ -62,7 +67,7 @@
 
 <Panel label={tabs.length === 1 ? tabs[0].label : both} head={titled ? head : undefined}>
   {#if current === 'layers' && settings.layers}
-    <LayerPanel {draw} {messages} {...settings.layers} />
+    <LayerPanel {draw} {messages} {...settings.layers} {basemaps} />
   {:else if current === 'legend'}
     <Legend {draw} {messages} />
   {/if}

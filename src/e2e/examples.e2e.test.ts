@@ -753,19 +753,23 @@ describe('the examples', () => {
     await close();
   });
 
-  it('get-started has the basemap menu of the standard UI with the four basemaps', {
+  it('get-started has the basemap row of the standard UI with the five basemaps', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('get-started');
-    const trigger = page.locator('[data-role="basemap"]').getByRole('button', { name: 'Basemap' });
+    // The last row of the layer panel, under the tree
+    const trigger = page
+      .locator('[data-role="layer-panel"] > [data-role="basemap"]')
+      .getByRole('button', { name: 'Basemap' });
     await trigger.click();
-    // Opened only: an item chosen would load its style from the network
+    // Opened only: an item of OpenFreeMap chosen would load its style from the network
     const items = page.getByRole('menu').getByRole('menuitem');
     expect((await items.allInnerTexts()).map((text) => text.trim())).toEqual([
       'OpenFreeMap Liberty',
       'OpenFreeMap Bright',
       'OpenFreeMap Positron',
       'OpenFreeMap Dark',
+      'Blank',
     ]);
     // The style of the address replaced the basemap, so none of them is current
     expect(await page.locator('[role="menuitem"][aria-current="true"]').count()).toBe(0);

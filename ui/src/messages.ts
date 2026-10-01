@@ -203,7 +203,7 @@ export interface Messages {
   /** The button that switches the theme: what pressing it does, to the light and to the dark */
   toLight: string;
   toDark: string;
-  /** The menu of the basemaps */
+  /** The basemap row of the layer panel, the back of the stack */
   basemap: string;
   /**
    * The snapping settings the magnet of the toolbar opens (`snapping` is the switch of snapping

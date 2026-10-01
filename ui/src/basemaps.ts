@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The basemaps of createDrawUI: the list its menu offers, the current one, and the change of the
-// map's style.
+// The basemaps of the layer panel: the list its basemap row offers, the current one, its name, and
+// the change of the map's style.
 //
 // A change replaces the style whole (diff: false). A diffed setStyle keeps the layers it did not
 // serialize, the draw instance's custom layers among them, and adds the layers of the new style
@@ -17,6 +17,11 @@ export interface BasemapMap {
   setStyle(style: Basemap['style'], options?: { diff?: boolean }): unknown;
   /** The URL the style was loaded from (maplibre-gl 6), to find the current basemap */
   getStyleUrl?(): string | null;
+  /** The style as it is now, whose name names a basemap that is none of the list */
+  getStyle?(): { name?: string } | undefined;
+  /** Follows the load of each new style, to read its name again */
+  on?(type: 'style.load', listener: () => void): unknown;
+  off?(type: 'style.load', listener: () => void): unknown;
 }
 
 /** The basemaps of the options, checked, and the ID of the current one */
@@ -56,12 +61,17 @@ export function basemapSettings(
   return { list, current: found?.id ?? null };
 }
 
-/** The basemaps on a map: the list, the current one, and the change */
+/** The basemaps on a map: the list, the current one, its name, and the change */
 export interface BasemapControl {
   /** The basemaps, in the order of the menu */
   readonly list: readonly Basemap[];
   /** The ID of the current basemap, which the menu follows */
   readonly current: Box<string | null>;
+  /**
+   * The name of the basemap the map shows: the label of the current basemap, else the `name` of
+   * the map's style, else null. Read inside a component, it is followed
+   */
+  name(): string | null;
   /**
    * Replaces the map's style with the style of a basemap and calls `onchange` with it; nothing
    * happens when it is current already
@@ -71,19 +81,38 @@ export interface BasemapControl {
   set(id: string): void;
   /** The current basemap, or null */
   get(): Basemap | null;
+  /** Stops following the map's style */
+  destroy(): void;
 }
 
-/** Keeps the current basemap of a map and changes its style */
+/** The name of a style, or null when it has none */
+function styleName(map: BasemapMap): string | null {
+  const name = map.getStyle?.()?.name;
+  return typeof name === 'string' && name.trim() !== '' ? name : null;
+}
+
+/**
+ * Keeps the current basemap of a map and changes its style. The name of the map's style is read
+ * now and again on each `style.load`
+ */
 export function basemapControl(
   map: BasemapMap,
   settings: BasemapSettings,
   onchange?: (basemap: Basemap) => void,
 ): BasemapControl {
   const current = new Box<string | null>(settings.current);
+  const style = new Box<string | null>(styleName(map));
+  const reread = () => style.set(styleName(map));
+  map.on?.('style.load', reread);
   const find = (id: string | null) => settings.list.find((b) => b.id === id);
+  let destroyed = false;
   return {
     list: settings.list,
     current,
+    name() {
+      const label = find(current.get())?.label;
+      return label !== undefined && label.trim() !== '' ? label : style.get();
+    },
     set(id) {
       const next = find(id);
       if (!next) throw new Error(`There is no basemap "${id}"`);
@@ -95,6 +124,11 @@ export function basemapControl(
     get() {
       const b = find(current.get());
       return b ? { ...b } : null;
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      map.off?.('style.load', reread);
     },
   };
 }

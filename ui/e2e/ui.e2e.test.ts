@@ -354,8 +354,8 @@ describe('the overlay', () => {
   });
 });
 
-describe('the basemap menu', () => {
-  it('replaces the style with the one chosen, and the drawing comes back on top of it', async () => {
+describe('the basemap row', () => {
+  it('opens the menu in the layer panel, and the drawing comes back on top of the one chosen', async () => {
     page = await openPage(browser, site);
     // The interface again, with two basemaps: style objects, so nothing goes to the network
     await page.evaluate(() => {
@@ -385,13 +385,20 @@ describe('the basemap menu', () => {
     );
     expect(drawLayers.length).toBeGreaterThan(0);
 
-    await page.getByRole('button', { name: 'Basemap', exact: true }).click();
+    // The last row of the layer panel, under the tree, named by the current basemap
+    const row = page
+      .locator('[data-role="layer-panel"] > [data-role="basemap"]')
+      .getByRole('button');
+    expect((await row.innerText()).replace(/\s+/g, ' ').trim()).toBe('Basemap Paper');
+    expect(await row.evaluate((el) => el.closest('[role="tree"]'))).toBeNull();
+    await row.click();
     await page.getByRole('menuitem', { name: 'Night' }).click();
     // The new background, under the layers of the draw instance
     await until(layers, ['night-background', ...drawLayers]);
     expect(await page.evaluate(() => (window as unknown as E2EWindow).ui.getBasemap()?.id)).toBe(
       'night',
     );
+    expect((await row.innerText()).replace(/\s+/g, ' ').trim()).toBe('Basemap Night');
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.features.count())).toBe(
       3,
     );

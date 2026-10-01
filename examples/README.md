@@ -80,10 +80,12 @@ example `terrain/?style=<style URL>&dem=<TileJSON URL>`; the end-to-end
 tests and the pictures of the gallery (`npm run site:thumbnails`) use
 this to run every example without the network.
 
-The examples with the standard UI offer four OpenFreeMap styles
-(`BASEMAPS` in basemap.ts) in its basemap menu at the top right of the
-map. The default is Bright, and `?basemap=<id>` (`liberty`, `bright`,
-`positron` or `dark`) opens a page on another one.
+The examples with the standard UI offer four OpenFreeMap styles and a
+white sheet (`BASEMAPS` in basemap.ts) in the menu of the basemap row,
+the last row of the layer panel. The white sheet is a style of one
+background layer written in basemap.ts, so it loads nothing. The default
+is Bright, and `?basemap=<id>` (`liberty`, `bright`, `positron`, `dark`
+or `blank`) opens a page on another one.
 
 ## Shared files
 
