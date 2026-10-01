@@ -200,13 +200,15 @@ npm run check:terms   # no word that names a particular extension
 npm run docs:api   # generate the API reference (Markdown) into docs/api/
 npm run docs:check # the documentation gate (docs/internals/releasing.md)
 npm run build:site # build the GitHub Pages site into site-dist/
+npm run site:dev   # serve the site with the examples and the playground (localhost:5173)
 npm run lint:fix   # biome auto-fix
-npm run dev        # serve examples in the browser (localhost:3200)
+npm run dev        # serve the examples in the browser (localhost:3200)
 ```
 
-Some examples lay the standard UI of `ui/` over the map and take it from
-its build, `ui/dist/`, as an application takes it from npm. `npm run dev`
-and `npm run test:e2e` stop with a message while it is missing: run
+The examples and the playground lay the standard UI of `ui/` over the
+map and take it from its build, `ui/dist/`, as an application takes it
+from npm. `npm run dev`, `npm run site:dev`, `npm run site:build` and
+`npm run test:e2e` stop with a message while it is missing: run
 `npm run build` and then `npm run ui:build` first, and `npm run ui:build`
 again after a change to `ui/`.
 
@@ -234,34 +236,55 @@ are green. Development and the published package need Node 22 or later
 Versions, tags, the changelog and the publishing steps are described in
 `docs/internals/releasing.md`.
 
-### The live demo on GitHub Pages
+### The site on GitHub Pages
 
-The live demo (<https://sakuzu.github.io/maplibre-gl-draw/>) is the
-playground opening the showcase of the first README image (`?plain` opens
-it without the showcase, and `?showcase=tilted`, `?showcase=terrain` and
-`?showcase=globe` open the scenes of the other images), the examples under
-`/examples/`, and the generated API reference under `/api/`. The bench is
-not part of it. `npm run docs:image` takes the README images again from
-these scenes (`playground/showcase/`).
+The site (<https://sakuzu.github.io/maplibre-gl-draw/>) is the
+documentation site of `docs/`, built with VitePress
+(`docs/.vitepress/`): getting started and the guides in English and
+Japanese, the gallery of the examples under `/examples/` with a page for
+each example that runs it beside its code, the playground under
+`/playground/`, and the API reference under `/api/`. The build also
+writes redirects from the URLs the site published before, the HTML
+pages of the old API reference and the examples that were replaced
+(`scripts/site-redirects.mjs`). The bench is not part of it.
 
 ```bash
+npm run site:dev       # serve the site, the examples and the playground together
+npm run site:thumbnails  # take the pictures of the gallery again
 npm run build:site     # build the site into site-dist/ (not committed)
+npm run site:preview   # serve site-dist/ under the address it is built for
 npm run deploy:pages -- --dry-run  # everything but the push
 npm run deploy:pages   # build and push site-dist/ to the gh-pages branch of origin
 npm run deploy:pages -- --remote upstream  # push to another remote
 ```
 
+`npm run site:dev` starts the dev server of the examples (port 3200), of
+the playground (port 3300) and of VitePress (port 5173), prints
+<http://localhost:5173/maplibre-gl-draw/> once all three answer, and
+stops them all on Ctrl-C. The pages frame the examples and the playground
+from their dev servers, so a change to an example, to the library or to
+a page shows on reload. `npm run dev` still serves the examples alone.
+
+The pictures of the gallery (`docs/public/examples/<name>.png`) are taken
+by `npm run site:thumbnails` from the examples and the playground, offline,
+and committed. `npm run docs:image` takes the README images again from
+the scenes of the playground's showcase (`?showcase`,
+`?showcase=tilted`, `?showcase=terrain`, `?showcase=globe` and
+`?showcase=large-data`, `playground/showcase/`).
+
 The site is published from a local clone. GitHub Actions is not used.
 `deploy:pages` commits the site on top of the remote's `gh-pages` with a
 temporary index (with `.nojekyll`), so the working tree is not touched.
-Every page uses relative paths, so `site-dist/` also works when served
-from a subdirectory. The repository's Pages source is the `gh-pages`
-branch, root directory.
+The pages are built for the address `/maplibre-gl-draw/` of the
+repository's Pages (the `base` of the VitePress configuration), which
+`npm run site:preview` serves too. The repository's Pages source is the
+`gh-pages` branch, root directory.
 
 ### Repository layout
 
 - `src/` — the library
-- `examples/` — small examples, one per guide, served by `npm run dev`
+- `examples/` — the examples, served by `npm run dev`; their pages and
+  the gallery are in `docs/examples/`
 - `playground/` — one page to try every feature
 - `bench/` — pages that measure frame times, for contributors
 - `docs/` — getting started, the guides, the reference and the internals

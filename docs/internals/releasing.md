@@ -160,17 +160,26 @@ published files to the tagged commit.
    npm view @sakuzu/maplibre-gl-draw version
    ```
 
-7. Publish the live demo and the API reference again, so that the
-   reference on the site describes the released version.
+7. Publish the site again, so that the guides, the examples and the API
+   reference on it describe the released version.
 
    ```sh
    npm run deploy:pages
    ```
 
-   The build also writes a redirect for every page URL of the 1.0 API
-   reference (`scripts/site-redirects-1.0.json`) that the current
-   reference no longer has, to the same symbol under its current module
-   and name or else to the module page (`scripts/site-redirects.mjs`).
+   The site is the VitePress build of `docs/` (`npm run site:build`,
+   which `npm run build:site` runs into `site-dist/` after building core
+   and the standard UI): the guides, the gallery of the examples and
+   their pages, the built examples under `/examples/<name>/`, the
+   playground under `/playground/` and the API reference under `/api/`.
+   The build also writes the redirects of the URLs the site published
+   before (`scripts/site-redirects.mjs`): every HTML page of the old API
+   reference of 1.0 and 2.0 (`scripts/site-redirects-api.json`) goes to
+   the page of the same symbol under its current module and name, or
+   else to the page of the module, and every replaced example
+   (`scripts/site-redirects-examples.json`) to the page of the example
+   that took its place. Check the build with `npm run site:preview`
+   before the push.
 
 When the workflow fails before the publish step, nothing was published:
 fix the cause on `main`, move the tag to the fixed commit

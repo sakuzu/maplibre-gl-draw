@@ -188,13 +188,15 @@ npm run check:terms   # 特定の拡張を指す語が無いこと
 npm run docs:api   # API リファレンスを docs/api/ に生成 (サイト用の Markdown)
 npm run docs:check # ドキュメントの門 (docs/internals/releasing.md)
 npm run build:site # GitHub Pages のサイトを site-dist/ に組み立てる
+npm run site:dev   # 例と playground を含めてサイトを起動 (localhost:5173)
 npm run lint:fix   # biome auto-fix
 npm run dev        # examples をブラウザで起動 (localhost:3200)
 ```
 
-いくつかの例は `ui/` の標準の UI を地図に重ねていて、アプリが npm から
-取るのと同じように、そのビルド `ui/dist/` から取ります。これが無いと
-`npm run dev` と `npm run test:e2e` はメッセージを出して止まります。
+例と playground は `ui/` の標準の UI を地図に重ねていて、アプリが npm
+から取るのと同じように、そのビルド `ui/dist/` から取ります。これが無いと
+`npm run dev`、`npm run site:dev`、`npm run site:build`、
+`npm run test:e2e` はメッセージを出して止まります。
 先に `npm run build` と `npm run ui:build` を実行し、`ui/` を直したら
 もう一度 `npm run ui:build` を実行してください。
 
@@ -222,33 +224,54 @@ import は既知の逸脱として一覧に出すだけで、失敗にはしま�
 版、タグ、変更履歴、公開の手順は `docs/internals/releasing.md` に書いて
 あります。
 
-### GitHub Pages のデモ
+### GitHub Pages のサイト
 
-デモ (<https://sakuzu.github.io/maplibre-gl-draw/>) は、README の最初の
-画像の見本を開いた playground (`?plain` を付けると見本なしで開き、
-`?showcase=tilted`、`?showcase=terrain`、`?showcase=globe` でほかの画像の
-場面を開きます)、`/examples/` の例、`/api/` の生成した API リファレンスで
-できています。bench は載せていません。`npm run docs:image` はこれらの場面
-(`playground/showcase/`) から README の画像を撮り直します。
+サイト (<https://sakuzu.github.io/maplibre-gl-draw/>) は、VitePress
+(`docs/.vitepress/`) で組み立てる `docs/` のドキュメントのサイトです。
+英語と日本語のはじめかたと手引き、`/examples/` の例のギャラリーと、
+例をコードと一緒に動かす例ごとのページ、`/playground/` の playground、
+`/api/` の API リファレンスでできています。ビルドは、サイトが以前に
+公開していた URL からのリダイレクトも書きます。古い API リファレンスの
+HTML のページと、置き換えた例の URL です (`scripts/site-redirects.mjs`)。
+bench は載せていません。
 
 ```bash
+npm run site:dev       # サイト、例、playground をまとめて起動
+npm run site:thumbnails  # ギャラリーの画像を撮り直す
 npm run build:site     # サイトを site-dist/ に組み立てる (コミットしない)
+npm run site:preview   # site-dist/ を組み立てたときのアドレスで配信
 npm run deploy:pages -- --dry-run  # push 以外のすべて
 npm run deploy:pages   # 組み立てて site-dist/ を origin の gh-pages ブランチへ push
 npm run deploy:pages -- --remote upstream  # 別の remote へ push
 ```
 
+`npm run site:dev` は、例 (ポート 3200)、playground (ポート 3300)、
+VitePress (ポート 5173) の開発サーバーを起動し、3 つが応答したら
+<http://localhost:5173/maplibre-gl-draw/> を表示します。Ctrl-C で 3 つとも
+止まります。ページは例と playground をそれぞれの開発サーバーから枠に
+出すので、例、ライブラリー、ページを直すと、読み込み直すだけで反映
+されます。例だけを開くときは、これまでどおり `npm run dev` を使います。
+
+ギャラリーの画像 (`docs/public/examples/<name>.png`) は、
+`npm run site:thumbnails` が例と playground からネットワークを使わずに
+撮り、コミットします。`npm run docs:image` は、playground の見本の場面
+(`?showcase`、`?showcase=tilted`、`?showcase=terrain`、
+`?showcase=globe`、`?showcase=large-data`、`playground/showcase/`) から
+README の画像を撮り直します。
+
 公開は手元のクローンから行います。GitHub Actions は使いません。
 `deploy:pages` は一時的な index を使って remote の `gh-pages` の上に
 サイトをコミットする (`.nojekyll` を含みます) ので、作業ツリーには
-触れません。どのページも相対パスで書いているので、`site-dist/` は
-サブディレクトリーから配信しても動きます。リポジトリーの Pages の公開元は
-`gh-pages` ブランチのルートです。
+触れません。ページはリポジトリーの Pages のアドレス `/maplibre-gl-draw/`
+(VitePress の設定の `base`) に合わせて組み立てます。
+`npm run site:preview` も同じアドレスで配信します。リポジトリーの Pages の
+公開元は `gh-pages` ブランチのルートです。
 
 ### リポジトリーの構成
 
 - `src/` はライブラリー本体です
-- `examples/` は手引きごとの小さな例です。`npm run dev` で開きます
+- `examples/` は例です。`npm run dev` で開きます。例のページとギャラリーは
+  `docs/examples/` にあります
 - `playground/` はすべての機能を試せる 1 枚のページです
 - `bench/` はフレーム時間を測るページです (貢献する人向け)
 - `docs/` にははじめかた、手引き、リファレンス、内部の文書があります
