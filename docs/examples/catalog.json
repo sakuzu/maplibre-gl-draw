@@ -79,8 +79,8 @@
   "globe": {
     "title": "Globe",
     "titleJa": "Globe",
-    "description": "The globe, a great circle and an area across the antimeridian.",
-    "descriptionJa": "地球儀、大円、日付変更線をまたぐ面を描きます。",
+    "description": "Routes between the continents along great circles, a box between meridians and parallels, a circle of 2,500 km, a picture and six cities on the globe, and an area across the antimeridian.",
+    "descriptionJa": "大陸の間を大円で結ぶ経路、経線と緯線に挟まれた四角形、半径 2,500 km の円、画像、6 つの都市を地球儀の上に描き、日付変更線をまたぐ面も置きます。",
     "order": 11
   },
   "200000-features": {
@@ -93,15 +93,15 @@
   "datasets": {
     "title": "Datasets",
     "titleJa": "Datasets",
-    "description": "Data that is only shown, under and over the user's own drawing: the buildings and the places of central Tokyo from Overture Maps, between two layers of the drawing and in front of them, with the drawing snapping to the buildings.",
-    "descriptionJa": "見せるだけのデータを、利用者が描いたものの下や上に表示します。Overture Maps の東京都心の建物と場所を、描いたものの 2 つのレイヤーの間と手前に置き、描く線は建物に吸着します。",
+    "description": "Over a million rows beside an editable drawing: 1,000,000 points fetched for the view and thinned, 250,000 cells given at once, and the buildings and the places of central Tokyo from Overture Maps, with the drawing snapping to the buildings.",
+    "descriptionJa": "100 万を超える行を、編集できる描いたものと並べて表示します。見えている範囲ごとに取り寄せて間引く 100 万の点、一度に渡す 25 万のセル、Overture Maps の東京都心の建物と場所を置き、描く線は建物に吸着します。",
     "order": 13
   },
   "columnar-data-in-a-worker": {
     "title": "Columnar data in a Worker",
     "titleJa": "Columnar data in a Worker",
-    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns: no GeoJSON, no object per row, and no copy on the way to the page.",
-    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読み、列のままデータセットに渡します。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
+    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns, and a million points made there on a key: no GeoJSON, no object per row, and no copy on the way to the page.",
+    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読んで列のままデータセットに渡し、キーで 100 万の点もそこで作ります。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
     "order": 14
   },
   "read-only-viewer": {

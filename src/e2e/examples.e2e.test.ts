@@ -653,14 +653,48 @@ describe('the examples', () => {
     await close();
   });
 
-  it('globe opens on the globe, and the globe button of the map controls turns it flat', {
+  it('globe opens on the globe with its routes, areas, image and cities, and the globe button of the map controls turns it flat', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('globe');
     const projection = () =>
       page.evaluate(() => (window as unknown as E2EWindow).map.getProjection()?.type);
     await expect.poll(projection, { timeout: browserTimeout(5_000) }).toBe('globe');
-    expect(await featureCount(page)).toBe(3);
+    await loaded(page);
+    // The features by layer and by type: the box, the circle, the area across the antimeridian
+    // and the storm; the four routes and the line of two vertices; the six cities
+    const byLayer = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return draw.layers.getOrder().map((id) => ({
+        name: draw.layers.get(id)?.name,
+        types: draw.features
+          .list({ layerId: id })
+          .map((feature) => feature.type)
+          .sort(),
+      }));
+    });
+    expect(byLayer).toEqual([
+      { name: 'Areas', types: ['Circle', 'Image', 'Polygon', 'Polygon'] },
+      { name: 'Routes', types: Array(5).fill('LineString') },
+      { name: 'Cities', types: Array(6).fill('Point') },
+    ]);
+    // A great circle has many vertices, the comparison line two
+    const vertices = await page.evaluate(() =>
+      Object.fromEntries(
+        (window as unknown as E2EWindow).draw.features
+          .list()
+          .filter((feature) => feature.type === 'LineString')
+          .map((feature) => [
+            feature.properties.name,
+            (feature.geometry as GeoJSON.LineString).coordinates.length,
+          ]),
+      ),
+    );
+    expect(vertices['Two vertices']).toBe(2);
+    expect(vertices['Tokyo to London']).toBeGreaterThan(30);
+    expect(
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+    ).toEqual([]);
 
     await page.locator('.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled').click();
     await expect.poll(projection, { timeout: browserTimeout(5_000) }).toBe('mercator');
@@ -753,7 +787,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the sample data between and over two layers of the drawing, colors the buildings by area, lists the rules in the Legend tab and reports a click', {
+  it('datasets shows the generated cells and points and the sample data between and over two layers of the drawing, colors the buildings by area, thins the points until T, lists the rules in the Legend tab and reports a click', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const count = (name: string): number =>
@@ -774,9 +808,10 @@ describe('the examples', () => {
     ).toEqual({
       buildings,
       places,
+      cells: 250_000,
     });
-    // The two layers of the drawing, the buildings placed between them, and the snapping to
-    // the datasets on
+    // The two layers of the drawing, the cells behind them, the buildings placed between them,
+    // and the snapping to the datasets on
     const drawing = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       const layers = Object.fromEntries(
@@ -799,11 +834,11 @@ describe('the examples', () => {
         'Survey area': ['Polygon'],
         'Planned route': ['LineString', 'Point', 'Point', 'Point'],
       },
-      order: ['Survey area', 'buildings', 'Planned route'],
+      order: ['cells', 'Survey area', 'buildings', 'Planned route'],
       snapToDatasets: true,
     });
-    // The layer panel lists the stack from the front: the places over every layer, and the
-    // buildings between the two layers with the number of their rows
+    // The layer panel lists the stack from the front: the places and the points over every
+    // layer, the buildings between the two layers and the cells behind them
     const rows = page.locator(
       '[data-role="layer-panel"] [data-container="root"] > [data-sortable-item]',
     );
@@ -812,7 +847,7 @@ describe('the examples', () => {
     ).toEqual(
       await page.evaluate(() => {
         const { draw } = window as unknown as E2EWindow;
-        return ['places', ...[...draw.layers.getOrder()].reverse()];
+        return ['places', 'points', ...[...draw.layers.getOrder()].reverse()];
       }),
     );
     expect(
@@ -823,6 +858,51 @@ describe('the examples', () => {
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
+    expect(logs).toContain('Keys: T turns the thinning of the points off and on');
+    expect(logs.some((line) => /^1,000,000 points made in \d+ ms/.test(line))).toBe(true);
+    expect(
+      logs.some((line) =>
+        /^250,000 cells: [\d,]+ ms to make the rows, [\d,]+ ms to give them to the dataset, and the first frame [\d,]+ ms after$/.test(
+          line,
+        ),
+      ),
+    ).toBe(true);
+    // The cells, all given at once, and the points the provider handed over for the view: the
+    // thinning draws a part of them, and T draws them all
+    const stats = (id: string) =>
+      page.evaluate(
+        (datasetId) =>
+          (window as unknown as E2EWindow).draw.datasets.get(datasetId)?.getThinningStats(),
+        id,
+      );
+    expect((await stats('cells'))?.total).toBe(250_000);
+    await expect
+      .poll(async () => (await stats('points'))?.total ?? 0, { timeout: browserTimeout(10_000) })
+      .toBeGreaterThan(0);
+    await expect
+      .poll(async () => (await stats('points'))?.visible ?? 0, { timeout: browserTimeout(5_000) })
+      .toBeGreaterThan(0);
+    const thinned = await stats('points');
+    expect(thinned?.enabled).toBe(true);
+    expect(thinned?.visible).toBeLessThan(thinned?.total ?? 0);
+    await expect
+      .poll(() => logs.some((line) => /^points: thinning on, [\d,]+ of [\d,]+ drawn$/.test(line)), {
+        timeout: browserTimeout(5_000),
+      })
+      .toBe(true);
+    await page.keyboard.press('t');
+    await expect
+      .poll(async () => (await stats('points'))?.visible, { timeout: browserTimeout(5_000) })
+      .toBe(thinned?.total);
+    await expect
+      .poll(() => logs.some((line) => /^points: thinning off, /.test(line)), {
+        timeout: browserTimeout(5_000),
+      })
+      .toBe(true);
+    await page.keyboard.press('t');
+    await expect
+      .poll(async () => (await stats('points'))?.visible, { timeout: browserTimeout(5_000) })
+      .toBe(thinned?.visible);
     // It opens on Positron, which the style of the address stands in for
     expect(
       (
@@ -856,7 +936,7 @@ describe('the examples', () => {
             .evaluateAll((lists) => lists.map((list) => list.getAttribute('aria-label'))),
         { timeout: browserTimeout(5_000) },
       )
-      .toEqual(['places', 'buildings']);
+      .toEqual(['places', 'points', 'buildings', 'cells']);
     expect(
       (await legendList('buildings').locator('[data-role="list-item"]').allInnerTexts()).map(
         (text) => text.trim(),
@@ -877,13 +957,19 @@ describe('the examples', () => {
         ),
     ).toEqual([...palette, '#d9d9d9']);
     expect(await legendList('places').locator('[data-role="list-item"]').count()).toBe(7);
+    expect(
+      (await legendList('points').locator('[data-role="list-item"]').allInnerTexts()).map((text) =>
+        text.trim(),
+      ),
+    ).toEqual(['walk', 'bicycle', 'car', 'train', 'Other']);
+    expect(await legendList('cells').locator('[data-role="list-item"]').count()).toBe(6);
     await page.getByRole('button', { name: 'Layers', exact: true }).click();
     expect(
       await page.evaluate(
         () => (window as unknown as E2EWindow).draw.datasets.get('buildings')?.listRows().length,
       ),
     ).toBe(buildings);
-    // The provider hands over the places in view, a part of them
+    // The provider of the places hands over those in view, a part of them
     await expect
       .poll(
         () =>
@@ -912,12 +998,14 @@ describe('the examples', () => {
     await settle(page);
     const clicked = await recordDatasetClick(page);
     await click(page, await pageOf(page, target));
-    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(buildings|places)$/);
-    expect(logs.some((line) => /^(buildings|places): /.test(line))).toBe(true);
+    await expect
+      .poll(clicked, { timeout: browserTimeout(5_000) })
+      .toMatch(/^(buildings|places|points)$/);
+    expect(logs.some((line) => /^(buildings|places|points): /.test(line))).toBe(true);
     await close();
   });
 
-  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click', {
+  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click, and M adds and removes a million points', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const file = readFileSync(join(EXAMPLES, 'public/data/tokyo-buildings.parquet'));
@@ -945,9 +1033,10 @@ describe('the examples', () => {
     expect(Number.isFinite(result.firstFrameMs)).toBe(true);
     expect(Object.keys(result.times).sort()).toEqual(['fetch', 'prepare', 'read', 'table']);
     expect(Object.values(result.times).every(Number.isFinite)).toBe(true);
-    // The console states the number of rows and the time of each step
-    expect(infos).toHaveLength(1);
-    expect(infos[0]).toMatch(
+    // The console states the keys, then the number of rows and the time of each step
+    expect(infos).toHaveLength(2);
+    expect(infos[0]).toBe('Keys: M loads 1,000,000 points from the Worker, and removes them');
+    expect(infos[1]).toMatch(
       new RegExp(
         `^${rows.toLocaleString('en')} building footprints read from a GeoParquet file in a Worker and drawn from its columns: \\d+ ms to fetch the file, \\d+ ms to read the columns, \\d+ ms to build the table, \\d+ ms to prepare it, and \\d+ ms from the request to the first frame that draws them$`,
       ),
@@ -999,6 +1088,35 @@ describe('the examples', () => {
     const clicked = await recordDatasetClick(page);
     await click(page, await pageOf(page, target));
     await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('buildings');
+
+    // M asks the Worker for the million points, which a second dataset draws from the table
+    await page.keyboard.press('m');
+    const million = () =>
+      page.evaluate(
+        () =>
+          (window as unknown as E2EWindow).draw.datasets.get('million')?.getThinningStats().total ??
+          null,
+      );
+    await expect.poll(million, { timeout: browserTimeout(30_000) }).toBe(1_000_000);
+    await expect.poll(() => infos.length, { timeout: browserTimeout(10_000) }).toBe(3);
+    expect(infos[2]).toMatch(
+      /^1,000,000 points made in a Worker as typed arrays: [\d,]+ ms to build the table, [\d,]+ ms to prepare it, [\d,]+ ms to transfer it without a copy, and [\d,]+ ms from handing it to the dataset to the first frame that draws them; the arrays hold \d+ MB( \(JavaScript heap \d+ MB before, \d+ MB after\))?$/,
+    );
+    // A click on one of them, alone at zoom 18, reports its row
+    const point = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const position = draw.datasets.get('million')?.getRowPoint(123_456);
+      if (!position) throw new Error('No point at row 123456');
+      map.jumpTo({ center: position as [number, number], zoom: 18 });
+      return position;
+    });
+    await settle(page);
+    const clickedPoint = await recordDatasetClick(page);
+    await click(page, await pageOf(page, point));
+    await expect.poll(clickedPoint, { timeout: browserTimeout(5_000) }).toBe('million');
+    // M again removes them
+    await page.keyboard.press('m');
+    await expect.poll(million, { timeout: browserTimeout(5_000) }).toBeNull();
     await close();
   });
 
