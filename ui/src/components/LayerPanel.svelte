@@ -4,7 +4,6 @@
 -->
 <script lang="ts">
   import Globe from '@lucide/svelte/icons/globe';
-  import PenLine from '@lucide/svelte/icons/pen-line';
   import {
     Button,
     Icon,
@@ -49,7 +48,7 @@
   // It keeps nothing of the drawing. The nodes are built from draw again on document.changed,
   // hidden.changed, options.changed, dataset.added, dataset.removed, dataset.reordered and the
   // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.get(),
-  // read again on selection.changed, and the active layer is draw.layers.getActive(). Every action
+  // read again on selection.changed. Every action
   // calls the public API of draw: the eye `update({ visible })` (and shows again what this client
   // hid) or a dataset's `setVisible`, the lock `update({ locked })`, renaming the name
   // (`properties.name` for a feature), a drop `layers.reorder`, `groups.move` or `features.move`,
@@ -143,16 +142,10 @@
     };
   });
   const selection = $derived(follow(draw, ['selection.changed'], () => draw.selection.get()));
-  // Core has no event for a change of the active layer alone: it is read again on a change of the
-  // document, and after the panel changes it
-  const active = $derived(
-    follow(draw, ['document.changed'], () => draw.layers.getActive()?.id ?? null),
-  );
 
   const nodes = $derived(tree.get());
   const index = $derived(indexNodes(nodes));
   const selected = $derived(selectedIds(selection.get()));
-  const activeId = $derived(active.get());
 
   // The groups that are closed; every other group is open, so a new layer opens
   let collapsed = $state<string[]>([]);
@@ -223,7 +216,6 @@
     if (next.type === 'layer') {
       const layerId = last?.kind === 'layer' ? last.id : next.ids[next.ids.length - 1];
       draw.layers.setActive(layerId);
-      active.refresh();
     }
   }
 
@@ -278,14 +270,11 @@
       const layer = draw.layers.create({});
       if (layer) {
         draw.layers.setActive(layer.id);
-        active.refresh();
       }
     } else if (id === 'group') {
       draw.selection.group();
     }
   }
-
-  const ACTIVE_ICON = PenLine as unknown as IconComponent;
 
   const GLOBE_ICON = Globe as unknown as IconComponent;
   // The name of the basemap the map shows, else the word for it
@@ -331,11 +320,6 @@
       </Markbox>
     {/if}
     {@render name(own)}
-    {#if own.kind === 'layer' && own.id === activeId}
-      <span class="active" role="img" aria-label={m.activeLayer} title={m.activeLayer}>
-        <Icon name={ACTIVE_ICON} tone="blue" />
-      </span>
-    {/if}
   {/if}
 {/snippet}
 
@@ -411,7 +395,6 @@
     flex-direction: column;
     min-width: 0;
   }
-  .active,
   .mark,
   .count {
     display: inline-flex;

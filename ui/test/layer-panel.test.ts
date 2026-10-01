@@ -92,11 +92,11 @@ describe('createLayerPanel', () => {
     expect(target.querySelector(':scope > .mgd-ui')).not.toBeNull();
   });
 
-  it('marks the active layer', () => {
+  it('marks no layer as the one drawn features go into', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
-    expect(row(fake.container, 'l1').querySelector('[aria-label="Active layer"]')).not.toBeNull();
-    expect(row(fake.container, 'l2').querySelector('[aria-label="Active layer"]')).toBeNull();
+    expect(row(fake.container, 'l1').querySelectorAll('[role="img"]')).toHaveLength(0);
+    expect(row(fake.container, 'l1').textContent?.trim()).toBe('Sketch');
   });
 
   it('shows and hides through update({ visible })', () => {
@@ -150,8 +150,6 @@ describe('createLayerPanel', () => {
     );
     expect(fake.draw.selection.set).toHaveBeenLastCalledWith('layer', ['l2']);
     expect(fake.draw.layers.setActive).toHaveBeenLastCalledWith('l2');
-    flushSync();
-    expect(row(fake.container, 'l2').querySelector('[aria-label="Active layer"]')).not.toBeNull();
   });
 
   it('follows the selection made elsewhere', () => {

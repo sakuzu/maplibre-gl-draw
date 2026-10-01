@@ -323,7 +323,7 @@ export interface LeftSettings {
 export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
   readonly layers: Pick<
     Draw['layers'],
-    'get' | 'getOrder' | 'reorder' | 'create' | 'update' | 'getActive' | 'setActive'
+    'get' | 'getOrder' | 'reorder' | 'create' | 'update' | 'setActive'
   >;
   readonly groups: Pick<Draw['groups'], 'get' | 'update' | 'move'>;
   readonly features: Pick<Draw['features'], 'get' | 'update' | 'move' | 'getAppliedStyle'>;

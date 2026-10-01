@@ -29,7 +29,6 @@ export const en: Readonly<Messages> = Object.freeze({
   legend: 'Legend',
   newLayer: 'New layer',
   newGroup: 'New group from selection',
-  activeLayer: 'Active layer',
   panelsGroup: 'Panels',
   toggleLayers: 'Show or hide the layers',
   multiPoint: 'Points',

@@ -7,6 +7,12 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Removed: the pencil that marked the active layer (the layer drawn
+  features go into) in the layer panel, as in the reference layout: the
+  row of a layer looks the same whether it is active or not. Pressing a
+  layer still makes it active (`layers.setActive`). The word
+  `activeLayer` is gone with it; at run time a locale that still gives
+  it is accepted and the word is ignored.
 - Changed: the layer panel lists up to 1,000 features in a layer, those
   of its groups included. A layer that holds more lists none of them and
   none of its groups: its one child is a row with their number and a

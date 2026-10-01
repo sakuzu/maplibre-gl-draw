@@ -53,8 +53,6 @@ export interface Messages {
   /** The items of the add menu of the layer panel */
   newLayer: string;
   newGroup: string;
-  /** The mark of the layer that drawn features go into */
-  activeLayer: string;
   /** In the list of the keyboard shortcuts: the heading of the panels, and the key of the left one */
   panelsGroup: string;
   toggleLayers: string;

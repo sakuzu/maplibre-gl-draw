@@ -29,7 +29,6 @@ export const ja: Readonly<Messages> = Object.freeze({
   legend: '凡例',
   newLayer: '新しいレイヤー',
   newGroup: '選んだものからグループを作る',
-  activeLayer: '描き込むレイヤー',
   panelsGroup: 'パネル',
   toggleLayers: 'レイヤーのパネルを開く、閉じる',
   multiPoint: '複数の点',
