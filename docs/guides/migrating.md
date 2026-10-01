@@ -647,6 +647,15 @@ change log maps every 1.0 name to 2.0: the instance methods, the
 events, the options, the model, the extensions, the exports of the main
 entry, `/geometry` and `/table`.
 
+## From 2.0 to 2.1
+
+Nothing to change. 2.1 adds the event `options.changed`,
+`Dataset.getStyleRule()` and the standard UI package
+`@sakuzu/maplibre-gl-draw-ui`, and fixes the order of the layers after a
+diffed `map.setStyle` (the drawing stays on top of the new style, as the
+documentation always said). An app that called `setStyle` with
+`{ diff: false }` to work around that can keep doing so or drop it.
+
 ## From mapbox-gl-draw or terra-draw
 
 The concepts carry over: modes, a store of features, events and custom

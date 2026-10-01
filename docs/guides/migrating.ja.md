@@ -658,6 +658,15 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 メソッド、イベント、設定、モデル、拡張、main の入口の記号、
 `/geometry`、`/table` の表があります。
 
+## 2.0 から 2.1 へ
+
+変えるところはありません。2.1 ではイベント `options.changed` と
+`Dataset.getStyleRule()` と標準の UI のパッケージ
+`@sakuzu/maplibre-gl-draw-ui` が加わり、差分の `map.setStyle` の後の
+レイヤーの順が直りました (描画は新しいスタイルの上に残ります。文書に
+書いてあったとおりの振る舞いです)。回避のために `{ diff: false }` で
+`setStyle` を呼んでいたアプリは、そのままでも外しても構いません。
+
 ## mapbox-gl-draw や terra-draw から
 
 モード、地物の store、イベント、独自のモードといった考え方は、
