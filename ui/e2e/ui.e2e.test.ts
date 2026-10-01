@@ -149,6 +149,41 @@ describe('the inspector', () => {
   });
 });
 
+describe('the inspector of a point', () => {
+  it('starts the fields of the Style tab pad-md under the line of the tabs, with no title', async () => {
+    page = await openPage(browser, site);
+    const { point } = await ids();
+    await page.evaluate((id) => {
+      (window as unknown as E2EWindow).draw.selection.set('feature', [id]);
+    }, point);
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.locator('[data-role="tabs"]').waitFor();
+    await settle(page);
+    const measured = await inspector.evaluate((el) => {
+      const tabs = el.querySelector('[data-role="tabs"]');
+      const color = el.querySelector('[aria-label="Color"]');
+      if (!tabs?.parentElement || !color) throw new Error('no tabs or no color field');
+      // The step of the token, in the font of the content the tabs are in
+      const probe = document.createElement('div');
+      probe.style.height = 'var(--kata-pad-md)';
+      tabs.parentElement.append(probe);
+      const step = probe.getBoundingClientRect().height;
+      probe.remove();
+      return {
+        // From the line along the bottom of the tabs to the outline of the first field
+        gap: color.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom,
+        step,
+        headings: [...el.querySelectorAll('[data-role="section-head"]')].map((h) =>
+          h.textContent?.trim(),
+        ),
+      };
+    });
+    expect(measured.step).toBeGreaterThan(0);
+    expect(measured.gap).toBeCloseTo(measured.step, 1);
+    expect(measured.headings).toEqual(['Operations']);
+  });
+});
+
 describe('the layer panel', () => {
   it('lists the layer and its features, hides a feature and reorders by dragging', async () => {
     page = await openPage(browser, site);

@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
   import {
+    Block,
     Button,
     FieldList,
     type FieldSpec,
@@ -20,7 +21,8 @@
   // LayerInspector: a layer in kata's InspectorFrame: its name, changed where it stands, its
   // opacity, whether it is visible and whether it is locked. Its style rule is shown and not
   // edited here (an application sets it with draw.layers.update). The foot deletes it, unless it
-  // is the only layer.
+  // is the only layer. Its own fields have no title (the subtitle of the head already says it is
+  // a layer); the style rule follows as a titled section.
   let {
     draw,
     layer,
@@ -108,9 +110,7 @@
   {onclose}
   end={foot}
 >
-  <InspectorSection title={m.typeLayer}>
-    <FieldList {fields} {onchange} />
-  </InspectorSection>
+  <Block><FieldList {fields} {onchange} /></Block>
   <InspectorSection title={m.styleRule}>
     <InspectorRow label={m.ruleKind} hint={m.ruleHint}>
       <ReadValue value={rule ? m[RULES[rule.kind]] : m.ruleNone} muted={!rule} />

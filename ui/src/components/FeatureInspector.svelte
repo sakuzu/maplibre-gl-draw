@@ -43,9 +43,9 @@
   // featureLayout gives it. The head is its name (properties.name), changed where it stands, and
   // a subtitle (its type, its layer and whether this client hides it). Under the head, with no
   // tab, are its measurements and its description (properties.description), changed where it
-  // stands. Then the tabs: Style has the fields of its style, the sections of the application and
-  // the buffer; Attributes the list of its other attributes. The foot deletes it, locks or
-  // unlocks it, and hides or shows it in this client.
+  // stands. Then the tabs: Style has the fields of its style (with no title: the tab names them),
+  // the sections of the application and the buffer; Attributes the list of its other attributes.
+  // The foot deletes it, locks or unlocks it, and hides or shows it in this client.
   let {
     draw,
     view,
@@ -109,6 +109,34 @@
   }
 </script>
 
+{#snippet panel()}
+  {#if current === 'style'}
+    <StyleFields
+      {draw}
+      features={[feature]}
+      applied={[view.applied]}
+      {editable}
+      {m}
+      {sections}
+    />
+    {#if layout.buffer}
+      <InspectorSection title={m.operations}>
+        <Row wrap>
+          <Button disabled={!editable} onclick={() => (bufferOpen = true)}>{m.opBuffer}</Button>
+        </Row>
+      </InspectorSection>
+    {/if}
+  {:else if current === 'attributes'}
+    <AttributeList
+      items={attributes}
+      readonly={!editable}
+      onchange={(index, item) => update(attributePatch(feature, index, item))}
+      onadd={editable ? (item) => update(attributeAdd(feature, item)) : undefined}
+      onremove={editable ? (index) => update(attributeRemove(feature, index)) : undefined}
+    />
+  {/if}
+{/snippet}
+
 {#snippet foot()}
   <Footer>
     {#snippet lead()}
@@ -158,31 +186,11 @@
   {/if}
   {#if tabs.length > 1 && current}
     <Tabs {tabs} {current} label={both} onselect={(id) => (tab = id as InspectorTab)} />
-  {/if}
-  {#if current === 'style'}
-    <StyleFields
-      {draw}
-      features={[feature]}
-      applied={[view.applied]}
-      {editable}
-      {m}
-      {sections}
-    />
-    {#if layout.buffer}
-      <InspectorSection title={m.operations}>
-        <Row wrap>
-          <Button disabled={!editable} onclick={() => (bufferOpen = true)}>{m.opBuffer}</Button>
-        </Row>
-      </InspectorSection>
-    {/if}
-  {:else if current === 'attributes'}
-    <AttributeList
-      items={attributes}
-      readonly={!editable}
-      onchange={(index, item) => update(attributePatch(feature, index, item))}
-      onadd={editable ? (item) => update(attributeAdd(feature, item)) : undefined}
-      onremove={editable ? (index) => update(attributeRemove(feature, index)) : undefined}
-    />
+    <!-- The panel of the tab starts after the line of the tabs, as the content of a panel starts
+         after the line of its head: its first group is the first child of a Stack -->
+    <Stack gap={0}>{@render panel()}</Stack>
+  {:else}
+    {@render panel()}
   {/if}
 </InspectorFrame>
 
