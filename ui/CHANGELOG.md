@@ -7,12 +7,19 @@ follows semantic versioning.
 
 ## [Unreleased]
 
-These changes will be released as 1.1.0: they add the basemaps, the
-datasets in the layer panel, the limit on the features it lists, the
-snapping settings and the actions of the application, and change the
-layer panel and the inspector.
+## [1.1.0] - 2026-10-01
 
-- Added: the datasets are rows of the layer panel, in their place in
+The basemaps as the back of the stack in the layer panel, the datasets
+as rows of the stack, a limit on the features the panel lists, the
+snapping settings on the magnet, the actions of the application in a
+card, the inspector on the first tab of its options, and the layer panel
+without a pencil, in-place renaming and row counts. The word
+`activeLayer` leaves the `Messages` type (a locale that still sets it is
+ignored at runtime).
+
+### Added in 1.1.0
+
+- The datasets are rows of the layer panel, in their place in
   the stack: those of `above-store` in front of every layer, those of
   `layer-order` where `layers.getOrder()` places them among the layers,
   and those of `below-store` behind every layer. A row shows the ID of
@@ -24,7 +31,7 @@ layer panel and the inspector.
   `dataset.removed`, `dataset.reordered` and the `changed` event of each
   dataset. The option `datasets: false` (`LayerPanelOptions`) leaves
   them out. New word: `datasets`.
-- Added: the basemaps of the layer panel, `basemaps` (`{ id, label,
+- The basemaps of the layer panel, `basemaps` (`{ id, label,
   style, preview }`), `basemap` and `onbasemap`, in the options of
   `createDrawUI` and of `createLayerPanel` (`LayerPanelOptions`). With
   two or more, the basemap row opens them on the right, in the place of
@@ -37,68 +44,7 @@ layer panel and the inspector.
   `ui.setBasemap(id)` and `ui.getBasemap()` change and read it. The
   drawing is drawn again on top of the new style. The layer panel put
   alone opens the list in the place of its sections.
-- Changed: the layer panel lists up to 1,000 features in a layer, those
-  of its groups included. A layer that holds more lists none of them and
-  none of its groups: its one child is a row with their number and a
-  hint, "12,345 features. Select them on the map.", which is not
-  pressed, hidden, locked or dragged. The row of the layer works as
-  before. Each row of the panel costs about a third of a millisecond to
-  draw, so a layer of 20,000 features took seconds. `features`
-  (`LayerPanelOptions`) is now `boolean | number`: `true` (the default)
-  for the limit of 1,000, a number for another limit, `false` for no
-  features; a number less than 0 throws. New word: `manyFeatures` (with
-  `{count}`).
-- Changed: the layer panel is a stack of two sections, as in the
-  reference layout. The first, Stack (the new word `stack`), is the
-  tree with the add menu in its head; the second, Basemap, holds one
-  row with a globe mark and the name of the basemap the map shows: the
-  label of the current one of `basemaps`, else the `name` of the map's
-  style, else the word `basemap`. The panel lists the stack from the
-  front, and the basemap is its back. The row is not a node of the tree:
-  it is not dragged, hidden, locked or selected. Before the release, the
-  menu of the basemaps was a button at the top right of the map, beside
-  the theme button, and then a menu under the tree; both are gone.
-- Changed: the inspector of a feature opens on the first tab of
-  `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
-  The default stays `['style', 'attributes']`, which opens on Style. Once
-  a tab is chosen, it is kept from one feature to the next as before.
-- Changed: the magnet of the toolbar opens the snapping settings above
-  the toolbar instead of switching snapping: snapping, the kinds of
-  target under it (vertices, edges, intersections and guides, off while
-  snapping is off), snapping to datasets, tracing edges and moving shared
-  vertices together, and the key that pauses snapping. Each switch writes
-  `draw.options.update` and follows `options.changed`. The magnet stays
-  pressed while snapping is on. New words: `snapVertex`, `snapEdge`,
-  `snapIntersection`, `snapGuide`, `snapDatasets`, `traceEdges`,
-  `sharedVertexDrag` and `snapPauseKey` (with `{key}`).
-- Removed: renaming in place in the layer panel (F2 or a double click on
-  a row), as in the reference layout. The names of layers, groups and
-  features are changed in the head of the inspector, which also ends a
-  defect: a locked row could still be renamed in the tree.
-- Removed: the pencil that marked the active layer (the layer drawn
-  features go into) in the layer panel, as in the reference layout: the
-  row of a layer looks the same whether it is active or not. Pressing a
-  layer still makes it active (`layers.setActive`). The word
-  `activeLayer` is gone with it; at run time a locale that still gives
-  it is accepted and the word is ignored.
-- Fixed: in the inspector of a feature, what a tab shows first is spaced
-  from the line of the tabs as the content of a panel is from its head
-  (pad-md to the first field, pad-lg to a section title). The panel of
-  the tab is now a Stack of its own under the tabs, so kata's spacing of
-  a first group applies; before, the title of the first section touched
-  the line.
-- Fixed: the fields of the style have no "Style" title any more: they
-  sit straight under the Style tab, and the sections of the application
-  and Operations keep their titles. The reset of the style, which was an
-  icon button in that title, is a "Reset the style" text action after
-  the fields. In the same way, the shared fields of a selection, the
-  fields of a group and the fields of a layer have no title repeating
-  what the head says; the style rule of a layer keeps its title.
-- Fixed: the page without a bundler in the README names
-  `@sakuzu/maplibre-gl-draw/geometry` in its import map, which the
-  single-file build imports. The README also shows the package from
-  React and from Vue, and a page that loads it from a CDN.
-- Added: the legend lists the style rules of the datasets as well as
+- The legend lists the style rules of the datasets as well as
   those of the layers, in the order of the stack: a block for each
   dataset with a rule (`Dataset.getStyleRule()` of core), titled with
   its ID, with the rows `deriveLegend` gives and swatches shaped after
@@ -107,7 +53,7 @@ layer panel and the inspector.
   dataset (the reasons `style` and `rows`). The word `noLegend` now says
   that no layer or dataset has a style rule. It needs core with
   `Dataset.getStyleRule()`.
-- Added: the actions of the application, rows of a card at the bottom
+- The actions of the application, rows of a card at the bottom
   left of the map, above maplibre-gl's scale: `ui.actions` (`add`,
   `remove`, `list`, `refresh`) and the options `actions` and
   `actionsTitle` of `createDrawUI`. An action (`ActionSpec`) is a switch
@@ -122,6 +68,76 @@ layer panel and the inspector.
   stands above the toolbar where it would reach it across; the layer
   panel floating at the left ends above it. New word: `actions`.
   `actionsOpen: false` starts the card folded.
+
+### Changed in 1.1.0
+
+- The layer panel lists up to 1,000 features in a layer, those
+  of its groups included. A layer that holds more lists none of them and
+  none of its groups: its one child is a row with their number and a
+  hint, "12,345 features. Select them on the map.", which is not
+  pressed, hidden, locked or dragged. The row of the layer works as
+  before. Each row of the panel costs about a third of a millisecond to
+  draw, so a layer of 20,000 features took seconds. `features`
+  (`LayerPanelOptions`) is now `boolean | number`: `true` (the default)
+  for the limit of 1,000, a number for another limit, `false` for no
+  features; a number less than 0 throws. New word: `manyFeatures` (with
+  `{count}`).
+- The layer panel is a stack of two sections, as in the
+  reference layout. The first, Stack (the new word `stack`), is the
+  tree with the add menu in its head; the second, Basemap, holds one
+  row with a globe mark and the name of the basemap the map shows: the
+  label of the current one of `basemaps`, else the `name` of the map's
+  style, else the word `basemap`. The panel lists the stack from the
+  front, and the basemap is its back. The row is not a node of the tree:
+  it is not dragged, hidden, locked or selected. Before the release, the
+  menu of the basemaps was a button at the top right of the map, beside
+  the theme button, and then a menu under the tree; both are gone.
+- The inspector of a feature opens on the first tab of
+  `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
+  The default stays `['style', 'attributes']`, which opens on Style. Once
+  a tab is chosen, it is kept from one feature to the next as before.
+- The magnet of the toolbar opens the snapping settings above
+  the toolbar instead of switching snapping: snapping, the kinds of
+  target under it (vertices, edges, intersections and guides, off while
+  snapping is off), snapping to datasets, tracing edges and moving shared
+  vertices together, and the key that pauses snapping. Each switch writes
+  `draw.options.update` and follows `options.changed`. The magnet stays
+  pressed while snapping is on. New words: `snapVertex`, `snapEdge`,
+  `snapIntersection`, `snapGuide`, `snapDatasets`, `traceEdges`,
+  `sharedVertexDrag` and `snapPauseKey` (with `{key}`).
+
+### Removed in 1.1.0
+
+- Renaming in place in the layer panel (F2 or a double click on
+  a row), as in the reference layout. The names of layers, groups and
+  features are changed in the head of the inspector, which also ends a
+  defect: a locked row could still be renamed in the tree.
+- The pencil that marked the active layer (the layer drawn
+  features go into) in the layer panel, as in the reference layout: the
+  row of a layer looks the same whether it is active or not. Pressing a
+  layer still makes it active (`layers.setActive`). The word
+  `activeLayer` is gone with it; at run time a locale that still gives
+  it is accepted and the word is ignored.
+
+### Fixed in 1.1.0
+
+- In the inspector of a feature, what a tab shows first is spaced
+  from the line of the tabs as the content of a panel is from its head
+  (pad-md to the first field, pad-lg to a section title). The panel of
+  the tab is now a Stack of its own under the tabs, so kata's spacing of
+  a first group applies; before, the title of the first section touched
+  the line.
+- The fields of the style have no "Style" title any more: they
+  sit straight under the Style tab, and the sections of the application
+  and Operations keep their titles. The reset of the style, which was an
+  icon button in that title, is a "Reset the style" text action after
+  the fields. In the same way, the shared fields of a selection, the
+  fields of a group and the fields of a layer have no title repeating
+  what the head says; the style rule of a layer keeps its title.
+- The page without a bundler in the README names
+  `@sakuzu/maplibre-gl-draw/geometry` in its import map, which the
+  single-file build imports. The README also shows the package from
+  React and from Vue, and a page that loads it from a CDN.
 
 ## [1.0.0] - 2026-10-01
 
