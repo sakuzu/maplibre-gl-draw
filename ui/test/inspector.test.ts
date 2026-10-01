@@ -218,6 +218,36 @@ describe('createInspector', () => {
     expect(el.textContent).toContain('Gate');
   });
 
+  it('opens on the first tab of the options, and keeps the tab chosen', () => {
+    const current = (el: ParentNode) =>
+      el.querySelector('[data-role="tabs"] [aria-current="page"]')?.textContent?.trim();
+    // Style first by default
+    const first = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
+    const byDefault = mountAlone(first);
+    expect(current(byDefault.element)).toBe('Style');
+    expect(hasButton(byDefault.element, 'Fill color')).toBe(true);
+    byDefault.destroy();
+    document.body.innerHTML = '';
+    // Attributes first: it opens on Attributes, and Style is still a tab
+    const other = makeFeature({ ...park, id: 'd', properties: { name: 'Pond', depth: '3' } });
+    const fake = fakeDocument({
+      features: [park, other],
+      selection: { type: 'feature', ids: ['a'] },
+    });
+    const inspector = mountAlone(fake, { tabs: ['attributes', 'style'] });
+    const el = inspector.element;
+    expect(current(el)).toBe('Attributes');
+    expect(el.textContent).toContain('kind');
+    expect(hasButton(el, 'Fill color')).toBe(false);
+    // The tab chosen is kept for the next feature
+    click(button(el, 'Style'));
+    expect(hasButton(el, 'Fill color')).toBe(true);
+    fake.selectItems('feature', ['d']);
+    flushSync();
+    expect(current(el)).toBe('Style');
+    expect(hasButton(el, 'Fill color')).toBe(true);
+  });
+
   it('shows the measurements in the units of the options', () => {
     const fake = fakeDocument({ features: [stop], selection: { type: 'feature', ids: ['c'] } });
     const inspector = mountAlone(fake);

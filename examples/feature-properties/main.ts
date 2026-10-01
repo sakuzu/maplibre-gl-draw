@@ -3,8 +3,8 @@
 
 // feature-properties: the attributes of features.
 // The features come from GeoJSON, whose properties become their attributes. The page opens
-// with the market hall selected; the Attributes tab of the panel on the right lists its
-// attributes, where a value is changed, added and removed. Code changes them with
+// with the market hall selected, and the panel on the right opens on its Attributes tab, which
+// lists its attributes, where a value is changed, added and removed. Code changes them with
 // features.update, and feature.updated tells the page of every change, wherever it was made.
 
 import { createDraw, isDrawProperty } from '@sakuzu/maplibre-gl-draw';
@@ -49,12 +49,13 @@ draw.features.update(market, {
   properties: { floors: 4, renovated: 2024, stalls: undefined },
 });
 
-// 4. The standard UI. `?locale=ja` in the address shows it in Japanese
+// 4. The standard UI, its inspector opening on the Attributes tab: the first of `tabs` is the
+// one that opens. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, inspector: { tabs: ['attributes', 'style'] } });
 
 // 5. Select the market hall: the panel on the right shows its name and its description, and
-// its Attributes tab lists the other properties
+// its Attributes tab, open, lists the other properties
 draw.selection.set('feature', [market]);
 
 // For the browser console and the end-to-end tests

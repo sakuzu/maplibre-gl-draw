@@ -52,7 +52,7 @@
     m,
     settings,
     sections = [],
-    tab = $bindable('style'),
+    tab = $bindable(),
     onclose,
   }: {
     draw: InspectorDraw;
@@ -61,7 +61,10 @@
     settings: InspectorSettings;
     /** The sections of the application that apply to the feature */
     sections?: InspectorSectionSpec[];
-    /** The tab chosen last, kept while the selection changes */
+    /**
+     * The tab chosen last, kept while the selection changes; the first tab opens while none is
+     * chosen or the chosen one is not shown
+     */
     tab?: InspectorTab;
     onclose?: () => void;
   } = $props();

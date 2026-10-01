@@ -44,8 +44,9 @@
   const view = $derived(follow(draw, INSPECTOR_EVENTS, () => readView(draw)));
   const v = $derived(view.get());
   const m = $derived(messages.get());
-  // The tab chosen last, kept from one feature to the next
-  let tab = $state<InspectorTab>('style');
+  // The tab chosen last, kept from one feature to the next; none until one is chosen, so the
+  // first tab of the options opens
+  let tab = $state<InspectorTab | undefined>();
 
   const close = () => (onclose ? onclose() : draw.selection.clear());
   const applying = (features: Feature[]) => applicableSections(sections.get(), features);

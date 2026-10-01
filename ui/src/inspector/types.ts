@@ -13,7 +13,10 @@ export type Units = 'metric' | 'imperial';
 
 /** What the inspector shows */
 export interface InspectorOptions {
-  /** The tabs of a feature, in order; both when left out */
+  /**
+   * The tabs of a feature, in order; the first is the one that opens. `['style', 'attributes']`
+   * when left out
+   */
   tabs?: InspectorTab[];
   /**
    * Whether the measurements of a feature show under its name, before the tabs; true when left

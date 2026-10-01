@@ -7,6 +7,11 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Changed: the inspector of a feature opens on the first tab of
+  `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
+  The default stays `['style', 'attributes']`, which opens on Style. Once
+  a tab is chosen, it is kept from one feature to the next as before.
+
 ## [1.0.0] - 2026-10-01
 
 The first release of the standard user interface of
