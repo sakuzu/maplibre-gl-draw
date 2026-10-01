@@ -501,8 +501,12 @@ describe('the examples', () => {
     // Snapped at both ends, and the vertices between them traced along the boundary
     expect(line).toEqual(stream);
 
-    // The switch of the toolbar turns snapping off
+    // The magnet of the toolbar opens the snapping settings, whose first switch turns it off
     await page.getByRole('button', { name: 'Snapping', exact: true }).click();
+    await page
+      .locator('[data-role="snapping"] [data-role="popover"]')
+      .getByRole('switch', { name: 'Snapping', exact: true })
+      .click();
     expect(
       await page.evaluate(
         () => (window as unknown as E2EWindow).draw.options.get().snapping?.enabled,
