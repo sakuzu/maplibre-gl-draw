@@ -25,9 +25,17 @@
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import { flushSync, mount, unmount } from 'svelte';
 import DrawUIView from './components/DrawUI.svelte';
+import InspectorView from './components/Inspector.svelte';
 import LayerPanelView from './components/LayerPanel.svelte';
 import LegendView from './components/Legend.svelte';
 import ToolbarView from './components/Toolbar.svelte';
+import { inspectorSettings, sectionsHandle } from './inspector/sections.js';
+import type {
+  InspectorHandle,
+  InspectorOptions,
+  InspectorSectionSpec,
+  InspectorSettings,
+} from './inspector/types.js';
 import {
   applyKataMessages,
   type Locale,
@@ -52,6 +60,16 @@ import type {
   ToolsHandle,
 } from './types.js';
 
+export type {
+  InspectorField,
+  InspectorFieldKind,
+  InspectorHandle,
+  InspectorOptions,
+  InspectorSectionSpec,
+  InspectorSectionsHandle,
+  InspectorTab,
+  Units,
+} from './inspector/types.js';
 export type { Locale, Messages } from './messages.js';
 export type {
   DrawUI,
@@ -124,13 +142,14 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * Lays the interface over the map of a draw instance: kata's Shell with the toolbar at the
  * bottom and the keyboard shortcuts.
  *
- * In this version the toolbar, the shortcuts, and the layer panel and the legend on the left are
- * drawn; `inspector` and `units` are accepted and have no effect yet.
+ * It draws the toolbar, the shortcuts, the layer panel and the legend on the left, and the
+ * inspector on the right while something is selected.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
  * @returns The interface, to change and to remove
- * @throws Error when a tool of `options.toolbar.tools` is not valid
+ * @throws Error when a tool of `options.toolbar.tools` is not valid, or a tab of
+ *   `options.inspector.tabs` is not `style` or `attributes`
  */
 export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const bar: ToolbarOptions | null =
@@ -141,12 +160,27 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
     bar ? { deletable: bar.delete !== false, snapping: bar.snapping !== false } : null,
   );
   const left = new Box<LeftSettings | null>(leftSettings(options));
+  const inspector = new Box<InspectorSettings | null>(
+    options.inspector === false
+      ? null
+      : inspectorSettings(options.inspector === true ? {} : options.inspector, options.units),
+  );
+  const sections = new Box<InspectorSectionSpec[]>([]);
 
   const root = createRoot(options.container ?? draw.getMap().getContainer(), true);
   applyLocale(root, messages, options.locale ?? 'en');
   const view = mount(DrawUIView, {
     target: root,
-    props: { draw, tools, messages, toolbar, left, shortcuts: options.shortcuts !== false },
+    props: {
+      draw,
+      tools,
+      messages,
+      toolbar,
+      left,
+      shortcuts: options.shortcuts !== false,
+      inspector,
+      sections,
+    },
   });
   // The shell opens the left region in an effect: run it now, so that the panels are there when
   // this returns
@@ -184,10 +218,23 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
     },
   };
 
+  const inspectorHandle: InspectorHandle = {
+    get element() {
+      return root.querySelector<HTMLElement>('[data-role="inspector"]') ?? root;
+    },
+    sections: sectionsHandle(sections),
+    destroy() {
+      inspector.set(null);
+    },
+  };
+
   return {
     element: root,
     get toolbar() {
       return !destroyed && toolbar.get() ? toolbarHandle : null;
+    },
+    get inspector() {
+      return !destroyed && inspector.get() ? inspectorHandle : null;
     },
     tools: toolsHandle(tools, messages),
     get layers() {
@@ -334,4 +381,44 @@ export function createLegend(
   options: { target: HTMLElement; locale?: Locale },
 ): LegendHandle {
   return mountAlone(options.target, options.locale, LegendView, { draw }, 'legend');
+}
+
+/**
+ * Puts the inspector alone in an element: the panel of what is selected (a feature, several
+ * features, a layer or a group), with an empty state while nothing is. The panel fills the height
+ * of `target`.
+ *
+ * @param draw - The draw instance
+ * @param options - The element to put it in, the tabs, the measurements, the operations, the
+ *   units and the words (`en` by default)
+ * @returns The inspector, to add sections to and to remove
+ * @throws Error when a tab of `options.tabs` is not `style` or `attributes`
+ */
+export function createInspector(
+  draw: Draw,
+  options: InspectorOptions & { target: HTMLElement; locale?: Locale },
+): InspectorHandle {
+  const settings = inspectorSettings(options);
+  const messages = new Box(resolveMessages(options.locale));
+  const sections = new Box<InspectorSectionSpec[]>([]);
+  const root = createRoot(options.target, false);
+  root.dataset.panel = '';
+  applyLocale(root, messages, options.locale ?? 'en');
+  const view = mount(InspectorView, {
+    target: root,
+    props: { draw, messages, settings, sections },
+  });
+  let destroyed = false;
+  return {
+    get element() {
+      return root.querySelector<HTMLElement>('[data-role="inspector"]') ?? root;
+    },
+    sections: sectionsHandle(sections),
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      unmount(view);
+      root.remove();
+    },
+  };
 }

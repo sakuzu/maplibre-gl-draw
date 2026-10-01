@@ -29,3 +29,9 @@ follows semantic versioning.
   reordering by dragging, and the add menu.
 - `createLegend(draw, { target })` puts the legend of the style rules of
   the layers alone in an element.
+- The inspector on the right of `createDrawUI` (`inspector`, `units`):
+  the name, the style, the measurements and the attributes of a
+  feature; the shared fields and the operations of several features;
+  the settings of a layer and of a group. `createInspector(draw,
+  { target })` puts it alone in an element, and
+  `ui.inspector.sections.add` adds a section of the application.

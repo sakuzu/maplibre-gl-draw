@@ -4,9 +4,14 @@
 -->
 <script lang="ts">
   import { Shell, type Shortcut } from '@sakuzu/kata/svelte';
+  import type {
+    InspectorDraw,
+    InspectorSectionSpec,
+    InspectorSettings,
+  } from '../inspector/types.js';
   import type { Messages } from '../messages.js';
   import { fromMapCanvas, toolbarShortcuts } from '../shortcuts.js';
-  import type { Box } from '../store.js';
+  import { type Box, follow } from '../store.js';
   import { toSpec } from '../tools.js';
   import type {
     DrawUIDraw,
@@ -16,6 +21,7 @@
     ToolbarSettings,
     ToolEntry,
   } from '../types.js';
+  import Inspector from './Inspector.svelte';
   import LeftPanel from './LeftPanel.svelte';
   import Toolbar from './Toolbar.svelte';
 
@@ -29,8 +35,10 @@
     toolbar,
     left,
     shortcuts = true,
+    inspector,
+    sections,
   }: {
-    draw: DrawUIDraw & LayerPanelDraw & LegendDraw;
+    draw: DrawUIDraw & LayerPanelDraw & LegendDraw & InspectorDraw;
     tools: Box<ToolEntry[]>;
     messages: Box<Messages>;
     toolbar: Box<ToolbarSettings | null>;
@@ -38,7 +46,21 @@
     left: Box<LeftSettings | null>;
     /** Whether the keyboard shortcuts are on */
     shortcuts?: boolean;
+    /** The inspector on the right, or null when there is none */
+    inspector: Box<InspectorSettings | null>;
+    /** The sections the application added to the inspector */
+    sections: Box<InspectorSectionSpec[]>;
   } = $props();
+
+  // The inspector is open while something is selected; closing it clears the selection
+  const inspectorSettings = $derived(inspector.get());
+  const selected = $derived(
+    follow(draw, ['selection.changed'], () => draw.selection.get().ids.length > 0),
+  );
+
+  function closeInspector(open: boolean) {
+    if (!open) draw.selection.clear();
+  }
 
   const m = $derived(messages.get());
   const bar = $derived(toolbar.get());
@@ -98,11 +120,20 @@
   {/if}
 {/snippet}
 
+{#snippet right()}
+  {#if inspectorSettings}
+    <Inspector {draw} {messages} settings={inspectorSettings} {sections} />
+  {/if}
+{/snippet}
+
 <Shell
   bind:leftOpen
+  bind:rightOpen={() => selected.get(), closeInspector}
   leftLabel={m.layers}
+  rightLabel={m.inspector}
   shortcuts={[...keys, ...leftKeys]}
   {onescape}
   left={side ? leftRegion : undefined}
+  right={inspectorSettings ? right : undefined}
   bottom={bar ? bottom : undefined}
 />

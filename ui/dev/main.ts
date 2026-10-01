@@ -26,7 +26,11 @@ const draw = createDraw(map);
 
 /** A feature of each type, around Tokyo Station */
 const FEATURES: FeatureInput[] = [
-  { type: 'Point', geometry: { type: 'Point', coordinates: [139.7671, 35.6812] } },
+  {
+    type: 'Point',
+    geometry: { type: 'Point', coordinates: [139.7671, 35.6812] },
+    properties: { name: 'Tokyo Station', kind: 'station', platforms: 30 },
+  },
   {
     type: 'LineString',
     geometry: {
@@ -37,6 +41,7 @@ const FEATURES: FeatureInput[] = [
         [139.773, 35.686],
       ],
     },
+    properties: { name: 'Walk', surface: 'paved' },
   },
   {
     type: 'Polygon',
@@ -52,11 +57,12 @@ const FEATURES: FeatureInput[] = [
         ],
       ],
     },
+    properties: { kind: 'block', owner: 'city', description: 'A block east of the station.' },
   },
   {
     type: 'Circle',
     geometry: { type: 'Point', coordinates: [139.757, 35.688] },
-    properties: { 'maplibre-gl-draw:radiusMeters': 400 },
+    properties: { 'maplibre-gl-draw:radiusMeters': 400, name: 'Within 400 m', zone: 'A' },
   },
 ];
 draw.features.createMany(FEATURES);

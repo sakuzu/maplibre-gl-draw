@@ -70,6 +70,51 @@ ui.tools.add({
 });
 ```
 
+## Inspector
+
+The inspector is the panel on the right of `createDrawUI`. It opens
+while something is selected and closes, clearing the selection, with its
+close button. For one feature it shows its name (`properties.name`,
+changed where it stands), a Style tab with the fields its type reads and
+its measurements, and an Attributes tab with its description
+(`properties.description`) and its other attributes. Several features
+show the fields they share, a field whose values differ being mixed, and
+the operations that apply to them (union, intersection, difference,
+split and buffer). A layer and a group show their name, whether they are
+visible and whether they are locked.
+
+```ts
+const ui = createDrawUI(draw, {
+  inspector: { tabs: ['style', 'attributes'], operations: true },
+  units: 'imperial', // ft, mi, ac; metric by default
+});
+```
+
+A value typed into an attribute is kept as the string typed. The
+inspector alone goes into any element with
+`createInspector(draw, { target })`, and an application adds a section
+of its own for the features it applies to:
+
+```ts
+ui.inspector?.sections.add({
+  id: 'survey',
+  title: 'Survey',
+  appliesTo: (features) => features.every((f) => f.type === 'Point'),
+  fields: ([first]) => [
+    {
+      key: 'checked',
+      kind: 'toggle',
+      label: 'Checked',
+      value: first.properties.checked === true,
+    },
+  ],
+  onchange: (key, value, features) => {
+    const patch = { properties: { [key]: value } };
+    draw.features.updateMany(features.map((f) => ({ id: f.id, patch })));
+  },
+});
+```
+
 ## Look
 
 Everything the interface draws is inside its root element, which has the
