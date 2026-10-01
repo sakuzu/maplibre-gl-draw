@@ -4,19 +4,24 @@ aside: false
 
 # Columnar data in a Worker
 
-The 10,477 buildings of a GeoParquet file read in a Worker and handed to
-a dataset as columns: no GeoJSON, no object per row, and no copy on the
-way to the page.
+10,477 building footprints read from a GeoParquet file in a Worker and
+drawn from its columns: no GeoJSON, no object per row, and no copy on
+the way to the page. On a laptop the Worker reads the columns in about
+45 ms, builds the table in 5 ms and prepares it in 12 ms, about 60 ms in
+all, none of it on the thread of the page.
 
 ```example
 columnar-data-in-a-worker
 ```
 
-The buildings arrive from the Worker shortly after the page opens,
-colored by their height. The browser console says how long each step
-took: fetching the file, reading its columns, building the table and
-preparing it, and the time from the request to the first frame that
-draws the rows. The page stays responsive meanwhile. Click a building:
+The footprints arrive from the Worker shortly after the page opens, on
+the Dark basemap, colored by their area from magenta for the small to
+yellow for the large, in classes cut at 50, 100, 200 and 500 m² (half
+the buildings are under 70 m²). The browser console says how many rows
+came and how long each step took: fetching the file (700 KB), reading
+its columns, building the table and preparing it, and the time from the
+request to the first frame that draws the rows. The page stays
+responsive meanwhile. Click a building:
 its row is logged, with values read from the columns. As in
 [Datasets](datasets.md), the rows are shown, not edited, so the panel on
 the right stays closed.

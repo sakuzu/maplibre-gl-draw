@@ -25,8 +25,8 @@ export interface Reply {
   times: { fetch: number; read: number; table: number; prepare: number };
 }
 
-/** The columns the page reads: the rule reads `height`, a click the others */
-const COLUMNS = ['id', 'geometry', 'height', 'floors', 'class', 'name'];
+/** The columns the page reads: the rule reads `area`, a click the others */
+const COLUMNS = ['id', 'geometry', 'area', 'height', 'floors', 'class', 'name'];
 
 /** Reads the columns of a Parquet file, each as one array (the chunks of its row groups joined) */
 async function readColumns(file: ArrayBuffer): Promise<Record<string, unknown[]>> {
@@ -171,6 +171,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
     geometry: multiPolygonsFromWkb(columns.geometry),
     ids: columns.id,
     columns: {
+      area: numbers(columns.area),
       height: numbers(columns.height),
       floors: numbers(columns.floors),
       class: dictionary(columns.class),
