@@ -336,4 +336,5 @@ export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
 export type LegendDraw = Pick<Draw, 'on' | 'off'> & {
   readonly layers: Pick<Draw['layers'], 'get' | 'getOrder'>;
   readonly features: Pick<Draw['features'], 'list'>;
+  readonly datasets: Pick<Draw['datasets'], 'get' | 'list'>;
 };

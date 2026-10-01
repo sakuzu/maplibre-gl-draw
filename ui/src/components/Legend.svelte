@@ -9,9 +9,12 @@
   import { type Box, follow } from '../store.js';
   import type { LegendDraw } from '../types.js';
 
-  // Legend: for each layer with a style rule, from the front, its name and the rows core derives
-  // from the rule (deriveLegend), each a Swatch and a label. It only reads: the rules are changed
-  // with draw.layers.update. It is built again on document.changed.
+  // Legend: for each layer and each dataset with a style rule, in the order of the stack from the
+  // front, its name and the rows core derives from the rule (deriveLegend), each a Swatch and a
+  // label. It only reads: the rules are changed with draw.layers.update and a dataset's
+  // setStyleRule. It is built again on document.changed (a rule of a layer, the stacking order),
+  // dataset.added, dataset.removed and dataset.reordered, and on the `changed` of a dataset with
+  // the reason `style` (its rule) or `rows` (the shape of its swatches follows its rows).
   let {
     draw,
     messages,
@@ -22,8 +25,27 @@
 
   const m = $derived(messages.get());
   const legend = $derived(
-    follow(draw, ['document.changed'], () => legendBlocks(draw, messages.get())),
+    follow(
+      draw,
+      ['document.changed', 'dataset.added', 'dataset.removed', 'dataset.reordered'],
+      () => legendBlocks(draw, messages.get()),
+    ),
   );
+  // A dataset tells of a change of its rule and of its rows on itself
+  const datasetList = $derived(
+    follow(draw, ['dataset.added', 'dataset.removed'], () => draw.datasets.list()),
+  );
+  $effect(() => {
+    const refresh = legend.refresh;
+    const offs = datasetList.get().map((dataset) =>
+      dataset.on('changed', ({ reason }) => {
+        if (reason === 'style' || reason === 'rows') refresh();
+      }),
+    );
+    return () => {
+      for (const off of offs) off();
+    };
+  });
   const blocks = $derived(legend.get());
 </script>
 
@@ -32,7 +54,7 @@
     <State text={m.noLegend} />
   {:else}
     <Stack gap={0}>
-      {#each blocks as block (block.layerId)}
+      {#each blocks as block (`${block.kind}:${block.id}`)}
         <SectionHeader label={block.name} flush>
           <List label={block.name}>
             {#each block.entries as entry, i (i)}

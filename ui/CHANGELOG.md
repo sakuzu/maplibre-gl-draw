@@ -89,6 +89,15 @@ follows semantic versioning.
   pressed while snapping is on. New words: `snapVertex`, `snapEdge`,
   `snapIntersection`, `snapGuide`, `snapDatasets`, `traceEdges`,
   `sharedVertexDrag` and `snapPauseKey` (with `{key}`).
+- Added: the legend lists the style rules of the datasets as well as
+  those of the layers, in the order of the stack: a block for each
+  dataset with a rule (`Dataset.getStyleRule()` of core), titled with
+  its ID, with the rows `deriveLegend` gives and swatches shaped after
+  the types of its first rows. It follows `dataset.added`,
+  `dataset.removed`, `dataset.reordered` and the `changed` event of each
+  dataset (the reasons `style` and `rows`). The word `noLegend` now says
+  that no layer or dataset has a style rule. It needs core with
+  `Dataset.getStyleRule()`.
 
 ## [1.0.0] - 2026-10-01
 

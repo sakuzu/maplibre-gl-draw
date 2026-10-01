@@ -39,7 +39,7 @@ export const ja: Readonly<Messages> = Object.freeze({
   legendBelow: '{upper} 未満',
   legendAtLeast: '{lower} 以上',
   legendRange: '{lower} 以上 {upper} 未満',
-  noLegend: 'スタイルの規則を持つレイヤーはありません。',
+  noLegend: 'スタイルの規則を持つレイヤーもデータセットもありません。',
   hide: '隠す',
   show: '表示する',
   lock: 'ロックする',

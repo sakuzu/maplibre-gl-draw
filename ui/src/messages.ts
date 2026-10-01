@@ -70,7 +70,7 @@ export interface Messages {
   legendBelow: string;
   legendAtLeast: string;
   legendRange: string;
-  /** What the legend shows when no layer has a style rule */
+  /** What the legend shows when no layer and no dataset has a style rule */
   noLegend: string;
   /** In the layer tree of kata: the eye, the lock, the name's input, the add button and the chevron */
   hide: string;
