@@ -543,4 +543,192 @@ describe('the examples', () => {
     expect(await output(page)).toMatch(/^row \d+: (shop|school|station|park), value \d+$/);
     await close();
   });
+
+  it('builds a page for each example with the standard UI', () => {
+    for (const name of [
+      'feature-properties',
+      'layers-and-groups',
+      'style-rules-and-legend',
+      'snapping-and-tracing',
+      'geometry-operations',
+      'images',
+    ]) {
+      expect(site.has(`${name}/index.html`)).toBe(true);
+    }
+  });
+
+  it('feature-properties opens on the attributes, and the tab adds one', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('feature-properties');
+    const market = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return draw.features.list().find((f) => f.properties.name === 'Market hall')?.properties;
+      });
+    // Loaded from GeoJSON, then changed from code: a value set, one added and one removed
+    const loaded = await market();
+    expect(loaded).toMatchObject({ use: 'commercial', floors: 4, renovated: 2024 });
+    expect(loaded).not.toHaveProperty('stalls');
+
+    // The Attributes tab of the selected feature; a value added there is kept as typed
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.getByRole('button', { name: 'Attributes', exact: true }).click();
+    expect(await inspector.innerText()).toContain('commercial');
+    await inspector.getByRole('button', { name: 'Add an attribute' }).click();
+    await page.keyboard.type('height');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('12');
+    await page.keyboard.press('Enter');
+    await expect
+      .poll(async () => (await market())?.height, { timeout: browserTimeout(5_000) })
+      .toBe('12');
+    await close();
+  });
+
+  it('layers-and-groups lists the layers and the locked group, and the eye hides a layer', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('layers-and-groups');
+    const state = () =>
+      page.evaluate(() => {
+        const w = window as unknown as E2EWindow & {
+          layerIds: { parcels: string; paths: string };
+        };
+        const [group] = w.draw.groups.list();
+        return {
+          ids: w.layerIds,
+          order: [...w.draw.layers.getOrder()],
+          active: w.draw.layers.getActive()?.id,
+          parcelsVisible: w.draw.layers.get(w.layerIds.parcels)?.visible,
+          paths: w.draw.layers.get(w.layerIds.paths)?.opacity,
+          group: { id: group?.id, size: group?.featureIds.length, locked: group?.locked },
+        };
+      });
+    const before = await state();
+    expect(before.order).toEqual([before.ids.parcels, before.ids.paths]);
+    expect(before.active).toBe(before.ids.paths);
+    expect(before.paths).toBe(0.6);
+    expect(before.group).toMatchObject({ size: 3, locked: true });
+
+    // The panel on the left shows the group, and the eye of the parcels hides the layer
+    const panel = page.locator('[data-role="layer-panel"]');
+    await panel.locator(`[role="treeitem"][data-node="${before.group.id}"]`).waitFor();
+    await panel
+      .locator(`[role="treeitem"][data-node="${before.ids.parcels}"]`)
+      .getByRole('button', { name: 'Hide', exact: true })
+      .click();
+    await expect
+      .poll(async () => (await state()).parcelsVisible, { timeout: browserTimeout(5_000) })
+      .toBe(false);
+    await close();
+  });
+
+  it('style-rules-and-legend shows the rule in the legend and R switches its kind', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('style-rules-and-legend');
+    const ruleKind = () =>
+      page.evaluate(() => (window as unknown as E2EWindow).draw.layers.list()[0]?.styleRule?.kind);
+    expect(await ruleKind()).toBe('categorical');
+    await page.getByRole('button', { name: 'Legend', exact: true }).click();
+    const legend = page.locator('[data-role="legend"]');
+    await expect
+      .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
+      .toContain('commercial');
+
+    await page.locator('body').press('r');
+    expect(await ruleKind()).toBe('graduated');
+    await expect
+      .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
+      .toContain('or more');
+    await close();
+  });
+
+  it('snapping-and-tracing snaps to a vertex and traces the boundary between two clicks', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('snapping-and-tracing');
+    const stream = await page.evaluate(() => (window as unknown as { STREAM: number[][] }).STREAM);
+    const first = stream[0];
+    const last = stream[stream.length - 1];
+    await page.getByRole('button', { name: 'Line', exact: true }).click();
+    // A few pixels off each end of the boundary: both snap to the vertex
+    const start = await pageOf(page, first);
+    const end = await pageOf(page, last);
+    await click(page, { x: start.x + 5, y: start.y + 4 });
+    await click(page, { x: end.x + 5, y: end.y - 4 });
+    await click(page, { x: end.x + 5, y: end.y - 4 });
+    const line = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const lines = draw.features.list({ type: 'LineString' });
+      return (lines[lines.length - 1].geometry as GeoJSON.LineString).coordinates;
+    });
+    // Snapped at both ends, and the vertices between them traced along the boundary
+    expect(line).toEqual(stream);
+
+    // The switch of the toolbar turns snapping off
+    await page.getByRole('button', { name: 'Snapping', exact: true }).click();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.options.get().snapping?.enabled,
+      ),
+    ).toBe(false);
+    await close();
+  });
+
+  it('geometry-operations opens with two squares selected and unites them from the panel', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('geometry-operations');
+    // Three squares, the line and the buffer the page made around it
+    expect(await featureCount(page)).toBe(5);
+    const logs: string[] = [];
+    page.on('console', (message) => logs.push(message.text()));
+
+    await page
+      .locator('[data-role="inspector"]')
+      .getByRole('button', { name: 'Union', exact: true })
+      .click();
+    await expect.poll(() => featureCount(page), { timeout: browserTimeout(5_000) }).toBe(4);
+    const made = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const [feature] = draw.selection.features();
+      return feature?.type;
+    });
+    expect(made).toBe('Polygon');
+    // The result is selected, and its area logged: two squares of about 400 m by 445 m
+    await expect
+      .poll(() => logs.find((log) => log.startsWith('1 selected')), {
+        timeout: browserTimeout(5_000),
+      })
+      .toMatch(/^1 selected: [\d,]+ m², 0 m of line$/);
+    await close();
+  });
+
+  it('images places an image from code and loads the file the Image tool asks for', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('images');
+    const images = () =>
+      page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.features
+          .list({ type: 'Image' })
+          .map((f) => ({ name: f.properties.name, opacity: f.style.imageOpacity })),
+      );
+    expect(await images()).toEqual([{ name: 'Sketch map', opacity: 0.85 }]);
+
+    // The Image tool emits image.requested, and the page opens a file picker
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Image', exact: true }).click();
+    await (await chooser).setFiles({
+      name: 'red.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(solidPng(32, [200, 40, 40])),
+    });
+    await expect
+      .poll(async () => (await images()).length, { timeout: browserTimeout(5_000) })
+      .toBe(2);
+    await close();
+  });
 });

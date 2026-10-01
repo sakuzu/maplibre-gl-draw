@@ -161,6 +161,24 @@
     ],
     "docs/examples-pages/style-features.md": [
       "examples/style-features/**"
+    ],
+    "docs/examples-pages/feature-properties.md": [
+      "examples/feature-properties/**"
+    ],
+    "docs/examples-pages/layers-and-groups.md": [
+      "examples/layers-and-groups/**"
+    ],
+    "docs/examples-pages/style-rules-and-legend.md": [
+      "examples/style-rules-and-legend/**"
+    ],
+    "docs/examples-pages/snapping-and-tracing.md": [
+      "examples/snapping-and-tracing/**"
+    ],
+    "docs/examples-pages/geometry-operations.md": [
+      "examples/geometry-operations/**"
+    ],
+    "docs/examples-pages/images.md": [
+      "examples/images/**"
     ]
   }
 }

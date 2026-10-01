@@ -1,0 +1,58 @@
+{
+  "get-started": {
+    "title": "Get started",
+    "titleJa": "Get started",
+    "description": "The smallest page: a map with the standard UI over it, where the user draws, selects and changes features.",
+    "descriptionJa": "いちばん小さなページです。地図に標準の UI を重ね、利用者が地物を描き、選び、直せるようにします。",
+    "order": 1
+  },
+  "style-features": {
+    "title": "Style features",
+    "titleJa": "Style features",
+    "description": "The look of each feature: its colors, the width and the opacity of its lines, dashed and dotted lines, and the shape and the size of points.",
+    "descriptionJa": "地物ごとの見た目です。色、線の太さと透明度、破線と点線、点の形と大きさを決めます。",
+    "order": 2
+  },
+  "feature-properties": {
+    "title": "Feature properties",
+    "titleJa": "Feature properties",
+    "description": "The attributes of features, loaded from GeoJSON and changed in the panel and from code.",
+    "descriptionJa": "地物の属性です。GeoJSON から読み込み、パネルとコードで直します。",
+    "order": 3
+  },
+  "layers-and-groups": {
+    "title": "Layers and groups",
+    "titleJa": "Layers and groups",
+    "description": "Layers and groups made from code, with their order, visibility, locks and opacity in the layer panel.",
+    "descriptionJa": "コードで作ったレイヤーとグループです。重なりの順、表示、ロック、不透明度をレイヤーのパネルに出します。",
+    "order": 4
+  },
+  "style-rules-and-legend": {
+    "title": "Style rules and legend",
+    "titleJa": "Style rules and legend",
+    "description": "The four kinds of style rule color a layer from an attribute, and the legend shows what each color means.",
+    "descriptionJa": "4 種類のスタイル規則で属性からレイヤーを塗り分け、凡例に色の意味を出します。",
+    "order": 5
+  },
+  "snapping-and-tracing": {
+    "title": "Snapping and tracing",
+    "titleJa": "Snapping and tracing",
+    "description": "Snapping to vertices, edges and guide lines, and tracing the boundary of a feature that is already there.",
+    "descriptionJa": "頂点、辺、ガイド線への吸着と、すでにある地物の境界のなぞりです。",
+    "order": 6
+  },
+  "geometry-operations": {
+    "title": "Geometry operations",
+    "titleJa": "Geometry operations",
+    "description": "Union, intersection, difference, split and buffer from the panel, with the length and the area of the selection.",
+    "descriptionJa": "パネルから結合、交差、差、分割、バッファーを使い、選んだ地物の長さと面積を測ります。",
+    "order": 7
+  },
+  "images": {
+    "title": "Images",
+    "titleJa": "Images",
+    "description": "Images on the map: a file picked with the Image tool, and an image placed from code.",
+    "descriptionJa": "地図に置く画像です。画像の道具で選んだファイルと、コードで置く画像です。",
+    "order": 8
+  }
+}
