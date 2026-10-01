@@ -56,7 +56,7 @@ The drawing of the playground over central Tokyo, the same drawing on a
 tilted and rotated map, the globe, 3D terrain, and a city of 208,073
 editable features.
 
-![The playground over central Tokyo: circles, lines, a polygon with a hole selected with its vertex handles, markers, an image, parcels colored by a style rule, a legend and the Layers panel](images/overview.jpg)
+![The playground over central Tokyo: circles, lines, areas with a solid, a dashed and a dotted outline, a polygon with a hole selected with its vertex handles, markers, an image, parcels colored by a style rule, a hexagon grid colored by another, and the Layers panel with the layers, the groups and the dataset, whose rules its Legend tab lists](images/overview.jpg)
 
 ![The drawing of the first picture seen with the map tilted and rotated so that north is not at the top](images/tilted.jpg)
 

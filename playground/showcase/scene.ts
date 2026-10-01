@@ -57,6 +57,8 @@ export interface SceneLayer {
   id: string;
   name: string;
   features: SceneFeature[];
+  /** Its opacity, 1 when left out */
+  opacity?: number;
   /** The rule that colors its features from their attributes */
   styleRule?: StyleRule;
   /** Its groups. A group stands in the layer where its first feature is */
@@ -92,7 +94,7 @@ export function buildDocument(
       name: layer.name,
       visible: true,
       locked: false,
-      opacity: 1,
+      opacity: layer.opacity ?? 1,
       items: items(layer),
       styleRule: layer.styleRule,
       metadata: undefined,

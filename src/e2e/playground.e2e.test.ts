@@ -90,7 +90,7 @@ async function open(
 }
 
 describe('the playground', () => {
-  it('opens on the overview by default, with the tools of the plugin and the custom type', {
+  it('opens on the overview by default: five layers, the dataset under them, the area with a hole selected and both rules in the Legend tab', {
     timeout: 60_000,
   }, async () => {
     const { page, context, errors } = await open();
@@ -103,25 +103,83 @@ describe('the playground', () => {
     );
     const drawing = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
+      const selected = draw.selection.get().ids.map((id) => draw.features.get(id));
       return {
-        layers: draw.layers.list().map((layer) => layer.name),
+        layers: draw.layers
+          .list()
+          .map((layer) => [layer.name, layer.opacity, layer.styleRule?.kind]),
         groups: draw.groups.list().map((group) => group.name),
         types: [...new Set(draw.features.list().map((feature) => feature.type))].sort(),
         active: draw.layers.getActive()?.name,
+        selected: selected.map((feature) => [
+          feature?.properties.name,
+          feature?.geometry.type === 'Polygon' ? feature.geometry.coordinates.length : 0,
+        ]),
+        datasets: draw.datasets
+          .list()
+          .map((dataset) => [dataset.id, dataset.order, dataset.getStyleRule()?.kind]),
       };
     });
     expect(drawing).toEqual({
-      layers: ['Land use', 'Drawing'],
-      groups: ['Point shapes'],
-      types: ['Circle', 'Freehand', 'Image', 'LineString', 'Point', 'Polygon'],
-      active: 'Drawing',
+      layers: [
+        ['Land use', 1, 'categorical'],
+        ['Draft (50%)', 0.5, undefined],
+        ['Zones', 1, undefined],
+        ['Routes', 1, undefined],
+        ['Notes', 1, undefined],
+      ],
+      groups: ['Fill opacity', 'Outlines', 'Coverage', 'Trails', 'Markers'],
+      types: ['Circle', 'Freehand', 'Image', 'LineString', 'MultiPolygon', 'Point', 'Polygon'],
+      active: 'Notes',
+      // The area with a hole: its outer ring and the hole
+      selected: [['Courtyard block', 2]],
+      datasets: [['Density', 'below-store', 'graduated']],
     });
 
     await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Route', exact: true }).waitFor();
-    // The categorical rule of the second layer is listed in the Legend tab
+    // The stack lists the layers from the front, and the dataset under them
+    const rows = page.locator(
+      '[data-role="layer-panel"] [data-container="root"] > [data-sortable-item]',
+    );
+    expect(
+      await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-id'))),
+    ).toEqual([
+      'layer-notes',
+      'layer-routes',
+      'layer-zones',
+      'layer-draft',
+      'layer-landuse',
+      'Density',
+    ]);
+    // The Legend tab lists the categorical rule of Land use and the graduated rule of Density
     await page.getByRole('button', { name: 'Legend', exact: true }).click();
-    await page.getByText('Commercial', { exact: true }).waitFor();
+    const lists = page.locator('[data-role="legend"] [role="list"]');
+    await expect
+      .poll(
+        () => lists.evaluateAll((items) => items.map((item) => item.getAttribute('aria-label'))),
+        { timeout: browserTimeout(5_000) },
+      )
+      .toEqual(['Land use', 'Density']);
+    const entries = (name: string) =>
+      page
+        .locator(`[data-role="legend"] [role="list"][aria-label="${name}"] [data-role="list-item"]`)
+        .allInnerTexts();
+    expect((await entries('Land use')).map((text) => text.trim())).toEqual([
+      'Residential',
+      'Commercial',
+      'Park',
+      'Civic',
+      'Other',
+    ]);
+    expect((await entries('Density')).map((text) => text.trim())).toEqual([
+      'Below 20',
+      '20 to below 40',
+      '40 to below 60',
+      '60 to below 80',
+      '80 or more',
+      'Other',
+    ]);
     await context.close();
     expect(errors).toEqual([]);
   });

@@ -13,14 +13,23 @@ in the browser, and 200,000 features.
 playground
 ```
 
-The page opens on a drawing east of Tokyo Station that shows what one
-layer of this library holds and a style layer of the map cannot: every
-feature has a look of its own. The layer Drawing has three areas whose
-fill and outline differ in color, with a solid, a dashed and a dotted
-outline 1, 3 and 6 px wide; three lines 1, 4 and 10 px wide; points of
-the four shapes with an outline, in a group; a circle with a radius in
-meters; a freehand stroke; and an image. The layer Land use colors its
-parcels by a categorical style rule, which the Legend tab lists.
+The page opens on a drawing east of Tokyo Station in five layers, from
+the back:
+
+- Land use colors nine parcels by a categorical style rule
+- Draft (50%) is drawn at half opacity
+- Zones has an area with a hole, selected so that its vertex handles
+  show; a MultiPolygon; and three groups: three overlapping circles with
+  a radius in meters, five squares from a full to a faint fill, and three
+  areas with a solid, a dashed and a dotted outline 1, 3 and 6 px wide
+- Routes has five lines from 1.5 to 12 px wide and a group of a dashed
+  and a dotted trail
+- Notes has an image, a freehand stroke around it and a group of points
+  of the four shapes
+
+Under the layers, a dataset of fine hexagonal cells is colored by a
+graduated rule. The Legend tab lists the rules of Land use and of the
+dataset.
 
 The address of the page chooses what it opens:
 
