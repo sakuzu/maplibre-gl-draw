@@ -264,12 +264,12 @@ bool crosses(vec2 p, vec2 q, vec2 a, vec2 b) {
     return (d1 * d2 < 0.0) && (d3 * d4 < 0.0);
 }
 
-// The shortest vector from a point to a segment (in tile-local coordinates)
-vec2 closestVector(vec2 p, vec2 a, vec2 b) {
+// The shortest vector from the origin to a segment
+vec2 closestVector(vec2 a, vec2 b) {
     vec2 ab = b - a;
     float len2 = dot(ab, ab);
-    float t = len2 > 0.0 ? clamp(dot(p - a, ab) / len2, 0.0, 1.0) : 0.0;
-    return p - (a + ab * t);
+    float t = len2 > 0.0 ? clamp(-dot(a, ab) / len2, 0.0, 1.0) : 0.0;
+    return a + ab * t;
 }
 
 // Compose on top (premultiplied alpha)
@@ -341,8 +341,13 @@ void main() {
             vec2 a = seg.xy;
             vec2 b = seg.zw;
             if (crosses(origin, p, a, b)) inside = !inside;
-            vec2 offset = closestVector(p, a, b);
-            minDist = min(minDist, length(jacobianInverse * offset));
+            // The distance is taken on the screen: the segment is mapped to screen pixels
+            // around the pixel first. The closest point found on the ground and mapped
+            // afterwards is not the closest one on the screen where the ground is seen
+            // at a slant, and the line came out thinner between its vertices than at them
+            vec2 sa = jacobianInverse * (a - p);
+            vec2 sb = jacobianInverse * (b - p);
+            minDist = min(minDist, length(closestVector(sa, sb)));
         }
 
         int styleAt = elementIndex * ${DRAPE_STYLE_TEXELS};
