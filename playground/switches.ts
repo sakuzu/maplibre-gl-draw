@@ -22,16 +22,8 @@ const STORAGE_KEY = 'maplibre-gl-draw-playground';
 const DATASET_ID = 'cells';
 const BIG_LAYER = 'two-hundred-thousand';
 
-/**
- * The switches over a draw instance and its map
- *
- * @param onBig Called before the 200,000 points are loaded (true) and after they are removed
- */
-export function createSwitches(
-  draw: Draw,
-  map: maplibregl.Map,
-  onBig: (big: boolean) => void,
-): Switch[] {
+/** The switches over a draw instance and its map */
+export function createSwitches(draw: Draw, map: maplibregl.Map): Switch[] {
   return [
     { key: 'T', label: 'Terrain on and off', run: () => toggleTerrain(map) },
     { key: 'D', label: 'A dataset of 10,000 cells on and off', run: () => toggleCells(draw, map) },
@@ -80,7 +72,7 @@ export function createSwitches(
     {
       key: 'B',
       label: 'Load 200,000 points as features, or remove them',
-      run: () => toggleBig(draw, map, onBig),
+      run: () => toggleBig(draw, map),
     },
   ];
 }
@@ -164,15 +156,14 @@ function toggleCells(draw: Draw, map: maplibregl.Map): void {
   console.info('Dataset: 10,000 cells, below the drawing; a click logs a cell');
 }
 
-/** 200,000 points in a layer of their own, every one an editable feature */
-async function toggleBig(
-  draw: Draw,
-  map: maplibregl.Map,
-  onBig: (big: boolean) => void,
-): Promise<void> {
+/**
+ * 200,000 points in a layer of their own, every one an editable feature. The layer panel of the
+ * standard UI lists none of them, only their number under the layer, as for any layer of more
+ * than 1,000 features
+ */
+async function toggleBig(draw: Draw, map: maplibregl.Map): Promise<void> {
   if (draw.layers.get(BIG_LAYER)) {
     if (!draw.layers.delete(BIG_LAYER)) return;
-    onBig(false);
     console.info('200,000 points: removed');
     return;
   }
@@ -190,12 +181,10 @@ async function toggleBig(
       });
     }
   }
-  onBig(true);
   const started = performance.now();
   const result = await draw.document.load(points, {
     layer: { id: BIG_LAYER, name: '200,000 points' },
   });
   const ms = Math.round(performance.now() - started);
-  if (!result) onBig(false);
   console.info(result ? `200,000 points: loaded in ${ms} ms` : 'Read-only');
 }

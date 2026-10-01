@@ -732,12 +732,20 @@ it.
 
 ## Examples
 
-- [Datasets](../examples/datasets.md) adds 50,000 cells colored by a
-  value and points fetched for the part of the map in view, and reports
-  a click on a row
+- [Datasets](../examples/datasets.md) shows the buildings and the places
+  of central Tokyo from Overture Maps under and over the user's drawing:
+  the buildings, given at once and colored by their height, are
+  `layer-order` between two layers of the drawing; the places, handed
+  over by a provider for the part in view and thinned, are in front of
+  everything. A click on a row is reported, and the lines drawn snap to
+  the buildings
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.md)
-  builds 200,000 rows as a table in a Worker, prepares them there and
-  hands them over without a copy
+  reads the same buildings from a GeoParquet file in a Worker, straight
+  into a table, prepares it there with `prepareTable` and hands it over
+  without a copy
+- [200,000 features](../examples/200000-features.md) loads 200,000
+  buildings as features of the document instead, every one editable, for
+  comparison with a dataset
 
 For the size at which to choose a dataset over drawn features, see
 [performance](performance.md).

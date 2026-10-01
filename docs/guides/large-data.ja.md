@@ -724,12 +724,17 @@ async function whenPictureComplete(): Promise<void> {
 
 ## 例
 
-- [Datasets](../examples/datasets.ja.md) は、値で塗り分けた 5 万個の
-  マスと、見えている範囲の分を取り寄せる点を追加し、行のクリックを
-  知らせます
+- [Datasets](../examples/datasets.ja.md) は、Overture Maps の東京都心の
+  建物と場所を、利用者の描いたものの下と上に表示します。建物は一度に
+  渡して高さで塗り分け、`layer-order` で描いたものの 2 つのレイヤーの
+  間に置きます。場所は見えている範囲の分を `provider` が渡し、間引いて
+  すべての前に置きます。行のクリックを知らせ、描いた線は建物に
+  スナップします
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.ja.md)
-  は、20 万行の表を Worker で作り、そこで下ごしらえして、写さずに
-  渡します
+  は、同じ建物を GeoParquet のファイルから Worker で表に直接読み込み、
+  そこで `prepareTable` で下ごしらえして、写さずに渡します
+- [200,000 features](../examples/200000-features.ja.md) は、比べる
+  ために、20 万の建物を文書の地物として読み込みます。どれも編集できます
 
 描いた地物の代わりにデータセットを選ぶ規模の目安は、
 [性能](performance.ja.md) を参照してください。

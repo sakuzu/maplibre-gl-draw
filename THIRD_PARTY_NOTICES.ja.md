@@ -268,3 +268,32 @@ OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ```
+
+---
+
+## 例のサンプルデータ (Overture Maps)
+
+リポジトリーの例 (`examples/`、パッケージには含みません) は、Overture
+Maps の東京都心の建物と場所を `examples/public/data/` から表示します。
+`scripts/fetch-overture-sample.mjs` がそれらを取り出し、
+`examples/public/data/README.md` にリリース、範囲、件数、行の出典を
+記録しています。
+
+帰属表示は「© OpenStreetMap contributors, Overture Maps Foundation」です。
+
+- 建物 (`tokyo-buildings.geojson` と `tokyo-buildings.parquet`) は、
+  Overture の buildings テーマから派生したデータベースで、Open Database
+  License 1.0 (ODbL) に従います
+  (<https://opendatacommons.org/licenses/odbl/1-0/>)。その行は
+  OpenStreetMap と Microsoft の Global ML Building Footprints (ODbL)、
+  そして Qian Shi, et al., A First High-quality Vector Data of Buildings
+  in East Asian Countries Based on a Comprehensive Large-scale Mapping
+  Framework, Zenodo, doi:10.5281/zenodo.8174931 (CC BY 4.0) に由来します
+- 場所 (`tokyo-places.geojson`) は Overture の places テーマに由来し、
+  Community Data License Agreement Permissive 2.0 に従います
+  (<https://cdla.dev/permissive-2-0/>)。Foursquare に由来する行は Apache
+  License 2.0 (Copyright 2024 Foursquare Labs, Inc.) に、AllThePlaces
+  に由来する行は CC0 1.0 に従います
+
+すべての出典の条件は <https://docs.overturemaps.org/attribution/> に
+あります。

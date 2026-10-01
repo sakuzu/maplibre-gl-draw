@@ -8,6 +8,12 @@
 表す方法、サーバーサイドレンダリングからライブラリーを外す方法も
 説明します。
 
+標準の UI (`@sakuzu/maplibre-gl-draw-ui`) も同じ書き方で使えます。
+draw のインスタンスの後に作り、インスタンスより先に破棄します。
+UI を含めた書き方は、React、Vue、バンドラーを使わないページの
+それぞれについて、標準の UI の [README](../../ui/README.md#install)
+(英語) に載っています。
+
 ## 守ること
 
 1. draw のインスタンスは、地図ができた後に、マウントのフックの
@@ -73,6 +79,11 @@ export function DrawMap() {
 1 組目の地図とインスタンスは後始末で破棄されるので、問題は
 ありません。
 
+標準の UI を使うときは、エフェクトの中で `createDraw(map)` の後に
+`createDrawUI(draw)` を呼び、後始末では `draw.destroy()` の前に
+`ui.destroy()` を呼びます
+([From React](../../ui/README.md#from-react)、英語)。
+
 ## Svelte
 
 この例では Svelte 5 の書き方 (`onclick`) を使っています。
@@ -105,6 +116,10 @@ export function DrawMap() {
 <button onclick={() => draw?.setMode('draw_polygon')}>Polygon</button>
 <div bind:this={container} style="height: 400px"></div>
 ```
+
+標準の UI を使うときは、`onMount` の中で `createDraw(map)` の後に
+`createDrawUI(draw)` を呼び、`onMount` が返す関数では
+`draw.destroy()` の前に `ui.destroy()` を呼びます。
 
 ## Vue
 
@@ -143,6 +158,11 @@ onBeforeUnmount(() => {
 に入れると、必要のないプロキシで包まれてしまいます。テンプレート
 をこれらの変化に反応させたいときは、`shallowRef` を使って
 ください。
+
+標準の UI を使うときは、`onMounted` の中で `createDraw(map)` の後に
+`createDrawUI(draw)` を呼び、`onBeforeUnmount` では `draw.destroy()`
+の前に `ui.destroy()` を呼びます
+([From Vue](../../ui/README.md#from-vue)、英語)。
 
 ## 描いたものを状態に表す
 

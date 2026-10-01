@@ -128,7 +128,7 @@ Try them in the browser, with nothing to install.
 - [Playground][demo]
   - Every feature in one editor, with the standard UI
 - [Examples][examples]
-  - Eighteen examples, each on a page that runs it beside its code
+  - Twenty examples, each on a page that runs it beside its code
 
 Among the examples:
 
@@ -154,10 +154,11 @@ Among the examples:
 - [Custom feature types][ex-custom-feature-types]
   - A kind of feature with its own drawing, hit test and box selection
 - [Datasets][ex-datasets]
-  - 50,000 cells colored by a property, and points fetched for the part
-    of the map in view
+  - The buildings and places of central Tokyo from Overture Maps, under
+    and over the drawing, with places fetched for the part in view
 - [Columnar data in a Worker][ex-columnar-data-in-a-worker]
-  - 200,000 rows read in a Worker and drawn from their columns
+  - The same buildings read from GeoParquet in a Worker and drawn from
+    their columns
 - [Build your own UI][ex-custom-ui]
   - A toolbar and a panel of your own, without the standard UI
 

@@ -53,8 +53,8 @@ browser console when the page opens:
 | Shift+O | Open the drawing saved in this browser |
 | Shift+B | Load 200,000 points as features, or remove them |
 
-While the 200,000 points are loaded, the layer panel lists the layers
-without their features.
+The layer of the 200,000 points lists no features in the layer panel,
+only their number, as any layer of more than 1,000 features does.
 
 ## Code
 
