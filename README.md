@@ -8,7 +8,7 @@ it does on a flat map.
 [Demos][demo] | [Documentation](docs/README.md) | [API reference][api] |
 [日本語](README.ja.md)
 
-![The playground over central Tokyo: overlapping translucent circles, lines from thin to thick, dashed and dotted lines, a polygon with a hole selected with its frame and vertex handles, a multipolygon, circle, square, triangle and star markers, a freehand loop around an image, a faded layer, parcels colored by a categorical rule, a fine hexagon grid colored by a graduated rule, a legend, and the Layers panel showing layers and groups](docs/images/overview.jpg)
+![The playground over central Tokyo: overlapping translucent circles, lines from thin to thick, dashed and dotted lines, areas with a solid, a dashed and a dotted outline, a polygon with a hole selected with its frame and vertex handles, a multipolygon, circle, square, triangle and star markers, a freehand loop around an image, a faded layer, parcels colored by a categorical rule, a fine hexagon grid colored by a graduated rule, the Layers tab listing the layers, the groups and the hexagon dataset (the Legend tab beside it lists both rules), and the inspector of the selected polygon](docs/images/overview.jpg)
 
 ## Features
 

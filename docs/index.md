@@ -55,7 +55,7 @@ polygon.
 The drawing of the playground over central Tokyo, the same drawing on a
 tilted map, the globe, and 3D terrain.
 
-![The playground over central Tokyo: circles, lines, a polygon with a hole selected with its vertex handles, markers, an image, parcels colored by a style rule, a legend and the Layers panel](images/overview.jpg)
+![The playground over central Tokyo: circles, lines, areas with a solid, a dashed and a dotted outline, a polygon with a hole selected with its vertex handles, markers, an image, parcels colored by a style rule, a hexagon grid colored by another, and the Layers panel with the layers, the groups and the dataset, whose rules its Legend tab lists](images/overview.jpg)
 
 ![The globe with great-circle routes between continents, a box between two meridians and two parallels, and city markers](images/globe.jpg)
 
