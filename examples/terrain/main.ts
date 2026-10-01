@@ -15,57 +15,54 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle, DEM_TILES } from '../basemap.ts';
 import '../example.css';
+import { terrainDocument } from './data.ts';
 
-// 1. A tilted view over high mountains (the Alps near Innsbruck): the public elevation tiles are
-// coarse, so the relief shows best where it is high
+// 1. The Nordkette range above Innsbruck, seen from the south and tilted: the public elevation
+// tiles are coarse, so the relief shows best where it is high
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [11.39085, 47.27574],
-  zoom: 12,
-  pitch: 65,
+  center: [11.392, 47.2875],
+  zoom: 12.9,
+  pitch: 72,
+  bearing: -12,
   maxPitch: 85,
 });
 
-// 2. The elevation is a raster-dem source of the map, and the terrain is set once the style has
-// loaded. `map.setTerrain(null)` turns it off, with no call to the library
+// 2. The elevation is a raster-dem source of the map; the terrain, a hillshade from the same
+// tiles and a sky are set once the style has loaded. `map.setTerrain(null)` turns the terrain
+// off, with no call to the library
 map.on('load', () => {
   map.addSource('dem', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+  // A source of its own for the hillshade, as maplibre recommends
+  map.addSource('hillshade', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+  const firstSymbol = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
+  map.addLayer(
+    {
+      id: 'hillshade',
+      type: 'hillshade',
+      source: 'hillshade',
+      paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#473b24' },
+    },
+    firstSymbol,
+  );
   map.setTerrain({ source: 'dem', exaggeration: 1.5 });
+  map.setSky({
+    'sky-color': '#9cc8ee',
+    'horizon-color': '#e4eef7',
+    'sky-horizon-blend': 0.6,
+    'fog-color': '#e4eef7',
+    'fog-ground-blend': 0.8,
+    'horizon-fog-blend': 0.6,
+  });
 });
 
-const draw = createDraw(map);
+const draw = createDraw(map, { initDefaultLayer: false });
 
-// 3. A line across the valley and an area on the slope, to see them follow the ground
-draw.features.create({
-  type: 'LineString',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [11.36, 47.255],
-      [11.39, 47.275],
-      [11.42, 47.3],
-    ],
-  },
-  properties: { name: 'Across the valley' },
-});
-draw.features.create({
-  type: 'Polygon',
-  geometry: {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [11.4, 47.25],
-        [11.43, 47.25],
-        [11.43, 47.265],
-        [11.4, 47.265],
-        [11.4, 47.25],
-      ],
-    ],
-  },
-  properties: { name: 'On the slope' },
-  style: { fillColor: '#d1495b', fillOpacity: 0.35, strokeColor: '#a3283a' },
-});
+// 3. The drawing (data.ts): an area and an image on the slope, a trail to the ridge with markers
+// on its stations, a straight dashed line across the valley. Each follows the ground, and the
+// parts behind the ridge are hidden by it
+await draw.document.load(terrainDocument());
 
 // 4. The standard UI over the tilted map. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';

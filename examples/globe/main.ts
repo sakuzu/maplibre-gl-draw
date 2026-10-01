@@ -24,8 +24,21 @@ const map = new maplibregl.Map({
   zoom: 1.5,
 });
 
-// 1. The globe, set once the style has loaded (a style can name a projection of its own)
-map.on('style.load', () => map.setProjection({ type: 'globe' }));
+// 1. The globe, set once the style has loaded (a style can name a projection of its own), and
+// the sky: space behind the globe and a thin atmosphere at its edge. The basemap styles carry
+// no sky, so without it the page's background would show behind the globe
+map.on('style.load', () => {
+  map.setProjection({ type: 'globe' });
+  map.setSky({
+    'sky-color': '#0b1026',
+    'horizon-color': '#1e3a66',
+    'fog-color': '#0b1026',
+    'sky-horizon-blend': 0.6,
+    'horizon-fog-blend': 0.6,
+    'fog-ground-blend': 0.9,
+    'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 1, 12, 0],
+  });
+});
 
 const draw = createDraw(map);
 

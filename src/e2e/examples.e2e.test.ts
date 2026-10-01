@@ -327,12 +327,13 @@ describe('the examples', () => {
   }, async () => {
     const { page, close } = await openExample('terrain');
     await page.waitForFunction(() => (window as unknown as E2EWindow).map.getTerrain() !== null);
-    expect(await featureCount(page)).toBe(2);
+    // The drawing of data.ts: an image, an area, two lines and three points
+    await expect.poll(() => featureCount(page), { timeout: browserTimeout(10_000) }).toBe(7);
     await page.getByRole('button', { name: 'Line', exact: true }).click();
     await click(page, at(-60, 120));
     await click(page, at(60, 160));
     await click(page, at(60, 160));
-    expect(await featureCount(page)).toBe(3);
+    expect(await featureCount(page)).toBe(8);
     await expect
       .poll(
         () =>
