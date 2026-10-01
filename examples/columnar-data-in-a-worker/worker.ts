@@ -13,8 +13,8 @@ import {
   type Table,
   transferList,
 } from '@sakuzu/maplibre-gl-draw/table';
-import { decompress } from 'fzstd';
 import { type ColumnData, parquetRead } from 'hyparquet';
+import { compressors } from 'hyparquet-compressors';
 import { createMillion } from './data.ts';
 
 /** What the page asks for: the buildings of the file at an address, or the million points */
@@ -49,8 +49,8 @@ async function readColumns(file: ArrayBuffer): Promise<Record<string, unknown[]>
   await parquetRead({
     file,
     columns: COLUMNS,
-    // hyparquet decompresses Snappy itself; ZSTD comes from fzstd
-    compressors: { ZSTD: (input, length) => decompress(input, new Uint8Array(length)) },
+    // hyparquet decompresses Snappy itself; the other codecs (ZSTD here) come from its companion
+    compressors,
     // The geometry stays WKB: it is decoded below, into the arrays of the table
     parsers: { geometryFromBytes: (bytes: Uint8Array) => bytes },
     onChunk: (chunk) => chunks.push(chunk),

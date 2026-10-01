@@ -52,7 +52,9 @@ Dark の上に、面積で塗り分けて描かれます。小さいものは赤
 データセットは空で始めます (1)。Worker はファイルを取り寄せ、
 JavaScript だけで書かれた Parquet の読み手
 [hyparquet](https://github.com/hyparam/hyparquet) で列を読みます。
-ZSTD の圧縮は [fzstd](https://github.com/101arrowz/fzstd) でほどきます。
+ZSTD の圧縮は、その付属の
+[hyparquet-compressors](https://github.com/hyparam/hyparquet-compressors)
+でほどきます。
 形状は WKB のまま受け取り、Worker が GeoArrow の配置の表の型付き配列へ
 直接ほどきます。座標は 1 つの `Float64Array` に入れ、行、ポリゴン、
 リングの区切りは `Int32Array` に入れます。文字の列は Arrow と同じ

@@ -54,7 +54,8 @@ remove them.
 
 The dataset starts empty (1). The Worker fetches the file and reads its
 columns with [hyparquet](https://github.com/hyparam/hyparquet), a reader
-of Parquet in plain JavaScript, and [fzstd](https://github.com/101arrowz/fzstd)
+of Parquet in plain JavaScript, with its companion
+[hyparquet-compressors](https://github.com/hyparam/hyparquet-compressors)
 for the ZSTD compression. The geometry stays WKB, and the Worker decodes
 it straight into the typed arrays of a table in the layout of GeoArrow:
 the coordinates in one `Float64Array`, and the offsets of the rows, the
