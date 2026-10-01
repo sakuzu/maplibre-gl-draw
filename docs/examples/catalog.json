@@ -121,8 +121,8 @@
   "custom-feature-types": {
     "title": "Custom feature types",
     "titleJa": "Custom feature types",
-    "description": "A feature type the library does not have: a route, a line with style keys of its own, which its definition draws, hits and takes into a selection box, and a section of the panel on the right for its keys.",
-    "descriptionJa": "ライブラリーにない地物の型です。ルートは独自のスタイルのキーを持つ線で、その定義が描き方、当たり判定、範囲選択を決めます。右のパネルには、そのキーのための節を足します。",
+    "description": "A feature type the library does not have: a route, a line with style keys of its own, which its definition draws, hits and takes into a selection box, a section of the panel on the right for its keys, and a key that unregisters the type and registers it again.",
+    "descriptionJa": "ライブラリーにない地物の型です。ルートは独自のスタイルのキーを持つ線で、その定義が描き方、当たり判定、範囲選択を決めます。右のパネルには、そのキーのための節を足します。キーで型の登録を外し、また登録します。",
     "order": 17
   },
   "custom-ui": {

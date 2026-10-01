@@ -1174,6 +1174,67 @@ describe('the examples', () => {
     await close();
   });
 
+  it('custom-feature-types unregisters the type with U, and registers it again', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-types');
+    const press = async (key: string) => {
+      await page.keyboard.press(key);
+      await settle(page);
+    };
+    const [hill, river] = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      return draw.features.list();
+    });
+    const [r0, r1] = (river.geometry as GeoJSON.LineString).coordinates;
+    const riverMiddle = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2];
+    const [h0, h1] = (hill.geometry as GeoJSON.LineString).coordinates;
+    const hillMiddle = [(h0[0] + h1[0]) / 2, (h0[1] + h1[1]) / 2];
+    const blue = async () =>
+      (await colorsAround(page, riverMiddle)).some(([r, , b]) => b > 180 && r < 120);
+    const state = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return {
+          registered: draw.extensions.featureTypes.has('Route'),
+          count: draw.features.count(),
+          selected: [...draw.selection.get().ids],
+        };
+      });
+    expect(await blue()).toBe(true);
+    const clickHill = async () => {
+      await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+      await click(page, await pageOf(page, hillMiddle));
+      return (await state()).selected;
+    };
+
+    // Without the type the routes stay in the data, but they are not drawn and a click passes
+    // through them
+    await press('u');
+    expect(await state()).toMatchObject({ registered: false, count: 2 });
+    expect(await blue()).toBe(false);
+    expect(await clickHill()).toEqual([]);
+    // A selection box still takes one, by the fallback test of the library on its positions
+    await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+    const vertex = await pageOf(page, h0);
+    await page.keyboard.down('Shift');
+    await drag(
+      page,
+      { x: vertex.x - 20, y: vertex.y - 20 },
+      { x: vertex.x + 20, y: vertex.y + 20 },
+    );
+    await page.keyboard.up('Shift');
+    expect((await state()).selected).toEqual([hill.id]);
+
+    // Registered again, they come back as they were
+    await press('u');
+    expect(await state()).toMatchObject({ registered: true, count: 2 });
+    expect(await blue()).toBe(true);
+    expect(await clickHill()).toEqual([hill.id]);
+    await close();
+  });
+
   it('custom-feature-types shows the handles of its definition and drags one', {
     timeout: TIMEOUT,
   }, async () => {

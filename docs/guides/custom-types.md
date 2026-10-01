@@ -627,7 +627,8 @@ function pathOnTerrain(
 - [Custom feature types](../examples/custom-feature-types.md) adds a
   route, a type drawn with the shared line renderer, with a hit test, a
   box selection, handles and style keys of its own, and a section of the
-  standard UI for those keys
+  standard UI for those keys; a key unregisters the type and registers it
+  again
 
 ## Reference
 
