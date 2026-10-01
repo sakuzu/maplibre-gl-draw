@@ -19,22 +19,22 @@ them in this order.
 | [get-started](get-started/) | Drawing, selecting and changing a feature in the panel on the right, the change events | [Getting started](../docs/getting-started.md) |
 | [style-features](style-features/) | The style of each feature side by side (colors, widths, dashes, point shapes and sizes), the defaults of a type, a style set from code and in the panel | [Styles](../docs/guides/styles.md) |
 | [feature-properties](feature-properties/) | Attributes loaded from GeoJSON, changed in the Attributes tab and with `features.update` | [Data format](../docs/reference/data-format.md) |
-| [zoom-and-scale](zoom-and-scale/) | Widths at the reference zoom of each feature that grow and shrink with the map, widths fixed on the screen, `scaleWithZoom` switched with a key | [Styles](../docs/guides/styles.md) |
-| [editing-shapes](editing-shapes/) | The frame, the vertex and midpoint handles, an area with a hole, a `MultiPolygon`, shared vertices moved together and switched with a key | [Drawing and editing](../docs/guides/drawing.md#selecting-and-editing) |
+| [zoom-and-scale](zoom-and-scale/) | Widths at the reference zoom of each feature that grow and shrink with the map, widths fixed on the screen, `scaleWithZoom` switched from the card of actions | [Styles](../docs/guides/styles.md) |
+| [editing-shapes](editing-shapes/) | The frame, the vertex and midpoint handles, an area with a hole, a `MultiPolygon`, shared vertices moved together and switched from the card of actions | [Drawing and editing](../docs/guides/drawing.md#selecting-and-editing) |
 | [layers-and-groups](layers-and-groups/) | Two layers and a group made from code, the order, the active layer, visibility, locks and opacity in the layer panel | [Layers and groups](../docs/guides/layers.md) |
 | [style-rules-and-legend](style-rules-and-legend/) | The four kinds of style rule on a layer and the Legend tab | [Styles](../docs/guides/styles.md) |
 | [snapping-and-tracing](snapping-and-tracing/) | The snapping options, the guide lines, tracing a boundary, the snapping switch of the toolbar | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [geometry-operations](geometry-operations/) | Union, intersection, difference, split and buffer from the panel, length and area | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [images](images/) | The Image tool, `image.requested`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
-| [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save, load, download and open a file, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
+| [save-and-load](save-and-load/) | GeoJSON and the native format, buttons in the card of actions to save, load, download and open a file, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, routes along great circles, a box, a circle, an image and cities on the sphere, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
 | [200000-features](200000-features/) | A city of 208,073 editable features (buildings, parks, streets and places) loaded in one step | [Performance](../docs/guides/performance.md) |
 | [datasets](datasets/) | 1,000,000 points fetched for the view and thinned, 250,000 cells given at once, the buildings and places of Tokyo, clicks on their rows | [Large data](../docs/guides/large-data.md) |
-| [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns, and 1,000,000 points made there on a key | [Large data](../docs/guides/large-data.md) |
-| [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, keys that switch read-only, the interaction lock, a locked layer and local hiding apart | [Read-only](../docs/guides/read-only.md) |
-| [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector, all removed and added again with a key | [Plugins](../docs/guides/plugins.md) |
-| [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, a section of the inspector for them, and a key that unregisters it | [Custom types](../docs/guides/custom-types.md) |
+| [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns, and 1,000,000 points made there from a switch | [Large data](../docs/guides/large-data.md) |
+| [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, switches in the card of actions for read-only, the interaction lock, a locked layer and local hiding | [Read-only](../docs/guides/read-only.md) |
+| [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector, all removed and added again from a switch | [Plugins](../docs/guides/plugins.md) |
+| [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, a section of the inspector for them, and a switch that unregisters it | [Custom types](../docs/guides/custom-types.md) |
 | [custom-ui](custom-ui/) | A toolbar and a panel of your own on the public API, without the standard UI | [Drawing and editing](../docs/guides/drawing.md) |
 
 ## Running them

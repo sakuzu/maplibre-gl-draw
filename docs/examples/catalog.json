@@ -100,29 +100,29 @@
   "columnar-data-in-a-worker": {
     "title": "Columnar data in a Worker",
     "titleJa": "Columnar data in a Worker",
-    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns, and a million points made there on a key: no GeoJSON, no object per row, and no copy on the way to the page.",
-    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読んで列のままデータセットに渡し、キーで 100 万の点もそこで作ります。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
+    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns, and a million points made there from a switch: no GeoJSON, no object per row, and no copy on the way to the page.",
+    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読んで列のままデータセットに渡し、スイッチで 100 万の点もそこで作ります。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
     "order": 14
   },
   "read-only-viewer": {
     "title": "Read-only viewer",
     "titleJa": "Read-only viewer",
-    "description": "A page that shows a drawing to look at, not to edit, and four keys that switch apart read-only, the interaction lock, a locked layer and local hiding, to show what each of them stops.",
-    "descriptionJa": "描画を見るためのページです。4 つのキーで、読み取り専用、操作の錠、レイヤーのロック、ローカルの非表示を別々に切り替え、それぞれが何を止めるかを見せます。",
+    "description": "A page that shows a drawing to look at, not to edit, and four switches that turn read-only, the interaction lock, a locked layer and local hiding on and off apart, to show what each of them stops.",
+    "descriptionJa": "描画を見るためのページです。4 つのスイッチで、読み取り専用、操作の錠、レイヤーのロック、ローカルの非表示を別々に切り替え、それぞれが何を止めるかを見せます。",
     "order": 15
   },
   "plugins": {
     "title": "Plugins",
     "titleJa": "Plugins",
-    "description": "A plugin adds a mode of its own to the drawing, and the page adds a tool for that mode to the toolbar and a section for its features to the panel on the right. A key removes the plugin with all it brought, and adds it again.",
-    "descriptionJa": "プラグインで描画に独自のモードを足し、ページはそのモードの道具を道具のバーに、その地物のための節を右のパネルに足します。キーで、プラグインを持ち込んだものごと取り除き、また足します。",
+    "description": "A plugin adds a mode of its own to the drawing, and the page adds a tool for that mode to the toolbar and a section for its features to the panel on the right. A switch removes the plugin with all it brought, and adds it again.",
+    "descriptionJa": "プラグインで描画に独自のモードを足し、ページはそのモードの道具を道具のバーに、その地物のための節を右のパネルに足します。スイッチで、プラグインを持ち込んだものごと取り除き、また足します。",
     "order": 16
   },
   "custom-feature-types": {
     "title": "Custom feature types",
     "titleJa": "Custom feature types",
-    "description": "A feature type the library does not have: a route, a line with style keys of its own, which its definition draws, hits and takes into a selection box, a section of the panel on the right for its keys, and a key that unregisters the type and registers it again.",
-    "descriptionJa": "ライブラリーにない地物の型です。ルートは独自のスタイルのキーを持つ線で、その定義が描き方、当たり判定、範囲選択を決めます。右のパネルには、そのキーのための節を足します。キーで型の登録を外し、また登録します。",
+    "description": "A feature type the library does not have: a route, a line with style keys of its own, which its definition draws, hits and takes into a selection box, a section of the panel on the right for its keys, and a switch that unregisters the type and registers it again.",
+    "descriptionJa": "ライブラリーにない地物の型です。ルートは独自のスタイルのキーを持つ線で、その定義が描き方、当たり判定、範囲選択を決めます。右のパネルには、そのキーのための節を足します。スイッチで型の登録を外し、また登録します。",
     "order": 17
   },
   "custom-ui": {
