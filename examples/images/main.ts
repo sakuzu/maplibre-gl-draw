@@ -13,7 +13,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const map = new maplibregl.Map({
@@ -40,7 +40,7 @@ draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
 
 // 2. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 3. An image from code: any image Blob or File (PNG, JPEG, WebP, SVG...). It is centered on
 // `coordinate` and drawn at its size in pixels at `zoom`, then follows the map. The library

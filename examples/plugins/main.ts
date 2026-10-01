@@ -12,7 +12,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import {
   createStampPlugin,
@@ -37,7 +37,7 @@ const removePlugin = draw.extensions.plugins.add(createStampPlugin());
 
 // 2. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 3. A tool for the mode, after the built-in tools: the button calls draw.setMode('stamp'), and
 // the key S does the same. The icon is SVG markup of the page, drawn with currentColor

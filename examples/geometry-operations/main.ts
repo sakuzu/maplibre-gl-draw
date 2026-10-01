@@ -14,7 +14,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const map = new maplibregl.Map({
@@ -71,7 +71,12 @@ const [west, east, , line] = created;
 //   draw.features.buffer(ids, { distanceMeters }) the area around each, one per input
 // `?locale=ja` in the address shows the interface in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, inspector: { operations: true } });
+const ui = createDrawUI(draw, {
+  locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
+  inspector: { operations: true },
+});
 
 // 3. Measure the selection with the geometry entry: plain functions of GeoJSON geometries, in
 // meters and square meters on the ground (a circle is a point with a radius, left out here)

@@ -13,7 +13,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle, DEM_TILES } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, DEM_TILES, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 // 1. A tilted view over high mountains (the Alps near Innsbruck): the public elevation tiles are
@@ -27,9 +27,10 @@ const map = new maplibregl.Map({
   maxPitch: 85,
 });
 
-// 2. The elevation is a raster-dem source of the map, and the terrain is set once the style has
-// loaded. `map.setTerrain(null)` turns it off, with no call to the library
-map.on('load', () => {
+// 2. The elevation is a raster-dem source of the map, and the terrain is set each time a style
+// has loaded (a basemap chosen in the menu replaces the style and its sources).
+// `map.setTerrain(null)` turns it off, with no call to the library
+map.on('style.load', () => {
   map.addSource('dem', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
   map.setTerrain({ source: 'dem', exaggeration: 1.5 });
 });
@@ -69,7 +70,7 @@ draw.features.create({
 
 // 4. The standard UI over the tilted map. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale });
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 5. How the last frame was drawn: whether the terrain was in use and whether the areas and the
 // lines were painted on the ground. For debugging; the fields may change in a minor release

@@ -13,7 +13,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import { BLOCKS, STOPS } from './data.ts';
 
@@ -34,6 +34,8 @@ const draw = createDraw(map, { initDefaultLayer: false });
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, {
   locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
   toolbar: false,
   layers: { add: false, reorder: false },
   inspector: { tabs: ['attributes'], operations: false },

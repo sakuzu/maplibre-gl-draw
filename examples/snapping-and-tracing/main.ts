@@ -12,7 +12,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
-import { basemapStyle } from '../basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 
 const map = new maplibregl.Map({
@@ -69,7 +69,12 @@ draw.on('snap.changed', ({ result }) => {
 // 4. The standard UI. Its snapping switch writes `snapping.enabled` with options.update, and
 // follows the option when code changes it. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, { locale, toolbar: { snapping: true } });
+const ui = createDrawUI(draw, {
+  locale,
+  basemaps: BASEMAPS,
+  basemap: initialBasemapId(),
+  toolbar: { snapping: true },
+});
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui, STREAM });
