@@ -24,6 +24,7 @@
 
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import { flushSync, mount, unmount } from 'svelte';
+import { type ActionsState, actionsHandle, actionsState, checkToolKey } from './actions.js';
 import { type BasemapControl, basemapControl, basemapSettings } from './basemaps.js';
 import DrawUIView from './components/DrawUI.svelte';
 import InspectorView from './components/Inspector.svelte';
@@ -80,6 +81,8 @@ export type {
 export type { Locale, Messages } from './messages.js';
 export type { Theme } from './theme.js';
 export type {
+  ActionSpec,
+  ActionsHandle,
   AloneOptions,
   Basemap,
   BasemapOptions,
@@ -125,7 +128,11 @@ function applyLocale(root: HTMLElement, messages: Box<Messages>, locale: Locale)
 }
 
 /** The tools of a toolbar, to add to and to remove from */
-function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHandle {
+function toolsHandle(
+  tools: Box<ToolEntry[]>,
+  messages: Box<Messages>,
+  actions?: ActionsState,
+): ToolsHandle {
   const remove = (id: string): boolean => {
     const entries = tools.get();
     const next = entries.filter((entry) => entryId(entry) !== id);
@@ -139,6 +146,7 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
       if (tools.get().some((entry) => entryId(entry) === spec.id)) {
         throw new Error(`There is a tool with the ID "${spec.id}" already`);
       }
+      if (actions) checkToolKey(spec.id, spec.shortcut, actions.list.get());
       tools.set(insertTool(tools.get(), spec));
       let removed = false;
       return () => {
@@ -168,6 +176,8 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * there are two or more. A button at the top right switches between the
  * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
  * globe, the compass and the zoom at the right, the scale at the left); `destroy()` removes them.
+ * The actions of the application (`options.actions`, `ui.actions`) are rows of a card at the
+ * bottom left, above the scale, each with its key.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
@@ -175,8 +185,9 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * @throws Error when a tool of `options.toolbar.tools` is not valid, a tab of
  *   `options.inspector.tabs` is not `style` or `attributes`, the theme is not `light`, `dark` or
  *   `auto`, the limit of the features of `options.layers.features` is a number less than 0, a
- *   basemap of `options.basemaps` has no ID, no label or no style or shares its ID, or
- *   `options.basemap` is the ID of none of them
+ *   basemap of `options.basemaps` has no ID, no label or no style or shares its ID,
+ *   `options.basemap` is the ID of none of them, or an action of `options.actions` is not valid,
+ *   shares its ID, or has a key of the interface or of another action
  */
 export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const themeName = checkTheme(options.theme);
@@ -194,6 +205,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       : inspectorSettings(options.inspector === true ? {} : options.inspector, options.units),
   );
   const sections = new Box<InspectorSectionSpec[]>([]);
+  const actions = actionsState(options.actions, tools.get(), messages.get());
 
   const map = draw.getMap();
   const basemaps = basemapsOf(draw, options);
@@ -228,6 +240,9 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       themeToggle: options.themeToggle !== false,
       ontheme: (next: Theme) => theme.set(next),
       basemaps,
+      actions,
+      actionsTitle: options.actionsTitle,
+      corner: map.getContainer(),
     },
   });
   // The shell opens the left region in an effect: run it now, so that the panels are there when
@@ -284,7 +299,8 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
     get inspector() {
       return !destroyed && inspector.get() ? inspectorHandle : null;
     },
-    tools: toolsHandle(tools, messages),
+    tools: toolsHandle(tools, messages, actions),
+    actions: actionsHandle(actions, tools, messages),
     get layers() {
       return !destroyed && left.get()?.layers ? layersHandle : null;
     },

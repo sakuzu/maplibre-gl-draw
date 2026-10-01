@@ -410,3 +410,89 @@ describe('the basemap row', () => {
     );
   });
 });
+
+describe('the actions', () => {
+  /** The boxes of the card, the scale, the toolbar and the map, on the page */
+  function boxes() {
+    return page.evaluate(() => {
+      const w = window as unknown as E2EWindow;
+      const box = (el: Element | null | undefined) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      };
+      const root = w.ui.element;
+      return {
+        map: box(w.map.getContainer()),
+        card: box(root.querySelector('[data-role="actions"] [data-role="floating"]')),
+        scale: box(w.map.getContainer().querySelector('.maplibregl-ctrl-scale')),
+        bar: box(root.querySelector('[data-region="bottom"] [data-role="drawbar"]')),
+      };
+    });
+  }
+
+  it('show at the bottom left above the scale, run by a press and by a key, and fold on a narrow map', async () => {
+    page = await openPage(browser, site);
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow & { on: boolean; saved: number };
+      w.on = false;
+      w.saved = 0;
+      w.ui.actions.add({
+        id: 'switch',
+        label: 'Read-only',
+        kind: 'toggle',
+        shortcut: 'R',
+        run: () => {
+          w.on = !w.on;
+        },
+        checked: () => w.on,
+      });
+      w.ui.actions.add({
+        id: 'save',
+        label: 'Save',
+        kind: 'action',
+        shortcut: 'S',
+        run: () => {
+          w.saved += 1;
+        },
+      });
+    });
+    await settle(page);
+    const card = page.locator('.mgd-ui [data-role="actions"]');
+    const wide = await boxes();
+    if (!wide.card || !wide.scale || !wide.bar || !wide.map) throw new Error('missing boxes');
+    // Above the scale, apart from it, and clear of the toolbar
+    expect(wide.card.bottom).toBeLessThan(wide.scale.top);
+    expect(wide.card.right).toBeLessThan(wide.bar.left);
+    expect(wide.card.left - wide.map.left).toBeGreaterThan(0);
+
+    // A press on the switch's text, and the key
+    await card.getByText('Read-only').click();
+    await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), true);
+    expect(await card.locator('input[role="switch"]').isChecked()).toBe(true);
+    await card.getByRole('button', { name: /Save/ }).click();
+    await page.mouse.move(640, 300);
+    await page.keyboard.press('s');
+    await until(() => page.evaluate(() => (window as unknown as { saved: number }).saved), 2);
+    await page.keyboard.press('r');
+    await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), false);
+    expect(await card.locator('input[role="switch"]').isChecked()).toBe(false);
+
+    // Narrow: folded into one button, which opens the card clear of the toolbar
+    await page.setViewportSize({ width: 700, height: 800 });
+    await settle(page);
+    // The layer panel opens as a sheet over the bottom; Escape closes it
+    await page.keyboard.press('Escape');
+    await settle(page);
+    await expect.poll(() => card.locator('input[role="switch"]').count()).toBe(0);
+    await card.getByRole('button', { name: 'Actions' }).click();
+    await settle(page);
+    const narrow = await boxes();
+    if (!narrow.card || !narrow.bar || !narrow.scale) throw new Error('missing boxes');
+    const across = narrow.card.right > narrow.bar.left && narrow.card.left < narrow.bar.right;
+    if (across) expect(narrow.card.bottom).toBeLessThanOrEqual(narrow.bar.top);
+    expect(narrow.card.bottom).toBeLessThan(narrow.scale.top);
+    await card.getByText('Read-only').click();
+    await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), true);
+  });
+});

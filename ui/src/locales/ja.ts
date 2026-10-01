@@ -158,4 +158,5 @@ export const ja: Readonly<Messages> = Object.freeze({
   datasets: 'データセット',
   manyFeatures: '{count} 件の地物。地図の上で選んでください。',
   stack: 'スタック',
+  actions: '操作',
 });

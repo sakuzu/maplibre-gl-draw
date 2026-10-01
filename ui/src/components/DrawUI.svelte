@@ -17,6 +17,7 @@
     type Shortcut,
   } from '@sakuzu/kata/svelte';
   import { tick } from 'svelte';
+  import { type ActionsState, actionShortcuts } from '../actions.js';
   import type { BasemapControl } from '../basemaps.js';
   import type {
     InspectorDraw,
@@ -36,6 +37,7 @@
     ToolbarSettings,
     ToolEntry,
   } from '../types.js';
+  import Actions from './Actions.svelte';
   import BasemapPanel from './BasemapPanel.svelte';
   import Inspector from './Inspector.svelte';
   import LeftPanel from './LeftPanel.svelte';
@@ -53,6 +55,9 @@
   // from, which the basemap row of the layer panel opens (with two or more basemaps). Opening
   // them clears the selection, and a selection made anywhere closes them, so the two never show
   // at once; their close button and Escape close them.
+  //
+  // At the bottom left, above maplibre-gl's scale, the card of the actions of the application
+  // shows while there are any; their keys are shortcuts of the shell, listed under its title.
   let {
     draw,
     tools,
@@ -68,6 +73,9 @@
     themeToggle = true,
     ontheme,
     basemaps,
+    actions,
+    actionsTitle,
+    corner,
   }: {
     draw: DrawUIDraw & LayerPanelDraw & LegendDraw & InspectorDraw;
     tools: Box<ToolEntry[]>;
@@ -93,6 +101,12 @@
     ontheme?: (theme: 'light' | 'dark') => void;
     /** The basemaps of the basemap row of the layer panel */
     basemaps?: BasemapControl | null;
+    /** The actions of the application, in the card at the bottom left */
+    actions: ActionsState;
+    /** The title of the card of the actions; the word for actions when left out */
+    actionsTitle?: string;
+    /** The element whose bottom left corner holds maplibre-gl's controls (the map's container) */
+    corner?: HTMLElement | null;
   } = $props();
 
   // The inspector is open while something is selected; closing it clears the selection
@@ -153,6 +167,13 @@
           },
         ]
       : [],
+  );
+
+  // The card of the actions and their keys
+  const actionList = $derived(actions.list.get());
+  const cardTitle = $derived(actionsTitle ?? m.actions);
+  const actionKeys = $derived<Shortcut[]>(
+    shortcuts && actionList.length > 0 ? actionShortcuts(actions, cardTitle) : [],
   );
 
   // Where the shell puts the side regions (beside the stage, floating or sheets), by its width
@@ -241,7 +262,7 @@
   bind:rightOpen={() => rightShown, closeRight}
   leftLabel={m.layers}
   rightLabel={choosable && basemapOpen ? m.basemap : m.inspector}
-  shortcuts={[...keys, ...leftKeys]}
+  shortcuts={[...keys, ...leftKeys, ...actionKeys]}
   {onescape}
   onlayout={(next) => {
     layout = next;
@@ -268,6 +289,18 @@
       </Button>
     </Floating>
   </div>
+{/if}
+
+{#if actionList.length > 0}
+  <Actions
+    {actions}
+    messages={m}
+    title={cardTitle}
+    keys={shortcuts}
+    narrow={layout?.width === 'narrow'}
+    {corner}
+    beside={!!side && leftOpen && layout?.leftMode === 'beside'}
+  />
 {/if}
 
 {#if themeToggle}

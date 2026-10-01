@@ -225,6 +225,11 @@ export interface Messages {
   manyFeatures: string;
   /** The section of the layer panel that holds the tree of the stack */
   stack: string;
+  /**
+   * The title of the card of the actions of the application, the button that opens it while it
+   * is folded, and their heading in the list of the keyboard shortcuts
+   */
+  actions: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */
