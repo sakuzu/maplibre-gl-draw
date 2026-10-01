@@ -90,11 +90,13 @@ in [releasing](../internals/releasing.md).
 
 The generated reference is part of the documentation site, under
 [API reference](../api/index.md). It is not committed. To build it from a
-clone of the repository and read it with the rest of the site:
+clone of the repository and read it with the rest of the site, whose
+examples take the standard UI from its build:
 
 ```sh
 npm install
-npm run site:dev
+npm run build && npm run ui:build
+npm run site:dev   # then open http://localhost:5173/maplibre-gl-draw/
 ```
 
 `npm run docs:api` runs typedoc on the four entry points and writes

@@ -24,7 +24,7 @@
       "src/api/draw.ts",
       "src/api/events.ts",
       "src/api/document.ts",
-      "examples/basic/**"
+      "examples/maplibre-setup.ts"
     ],
     "docs/guides/drawing.md": [
       "src/modes/**",
@@ -52,7 +52,7 @@
       "src/store/types.ts",
       "src/store/memory.ts",
       "src/store/memory/**",
-      "examples/save-load/**"
+      "examples/save-and-load/**"
     ],
     "docs/guides/styles.md": [
       "src/view/style-rule.ts",
@@ -60,13 +60,15 @@
       "src/shared/config/**",
       "src/messages.ts",
       "src/api/options.ts",
-      "examples/style-rules/**"
+      "examples/style-features/**",
+      "examples/style-rules-and-legend/**"
     ],
     "docs/guides/snapping-geometry.md": [
       "src/snapping/**",
       "src/geometry/**",
       "src/api/impl/geometry/**",
-      "examples/snapping-and-geometry/**"
+      "examples/snapping-and-tracing/**",
+      "examples/geometry-operations/**"
     ],
     "docs/guides/terrain.md": [
       "src/view/terrain/**",
@@ -77,7 +79,7 @@
       "src/store/local-visibility.ts",
       "src/store/memory/ui-state.ts",
       "src/api/hidden.ts",
-      "examples/read-only/**"
+      "examples/read-only-viewer/**"
     ],
     "docs/guides/plugins.md": [
       "src/api/extensions.ts",
@@ -86,7 +88,7 @@
       "src/api/extension/mode.ts",
       "src/api/impl/extension-host.ts",
       "src/api/impl/input.ts",
-      "examples/plugin/**"
+      "examples/plugins/**"
     ],
     "docs/guides/custom-types.md": [
       "src/extension/**",
@@ -96,15 +98,15 @@
       "src/api/impl/adapters.ts",
       "src/api/impl/render-context.ts",
       "src/webgl/**",
-      "examples/custom-feature-type/**"
+      "examples/custom-feature-types/**"
     ],
     "docs/guides/large-data.md": [
       "src/dataset/**",
       "src/table/**",
       "src/api/datasets.ts",
       "src/api/impl/datasets.ts",
-      "examples/large-data/**",
-      "examples/table-worker/**"
+      "examples/datasets/**",
+      "examples/columnar-data-in-a-worker/**"
     ],
     "docs/guides/performance.md": [
       "src/shared/utils/pixel-ratio.ts",
@@ -156,61 +158,65 @@
       "src/e2e/**",
       "vitest.config.ts"
     ],
-    "docs/examples-pages/get-started.md": [
+    "docs/examples/index.md": [
+      "docs/examples/catalog.json",
+      "docs/.vitepress/theme/example-gallery.ts"
+    ],
+    "docs/examples/get-started.md": [
       "examples/get-started/**"
     ],
-    "docs/examples-pages/style-features.md": [
+    "docs/examples/style-features.md": [
       "examples/style-features/**"
     ],
-    "docs/examples-pages/feature-properties.md": [
+    "docs/examples/feature-properties.md": [
       "examples/feature-properties/**"
     ],
-    "docs/examples-pages/layers-and-groups.md": [
+    "docs/examples/layers-and-groups.md": [
       "examples/layers-and-groups/**"
     ],
-    "docs/examples-pages/style-rules-and-legend.md": [
+    "docs/examples/style-rules-and-legend.md": [
       "examples/style-rules-and-legend/**"
     ],
-    "docs/examples-pages/snapping-and-tracing.md": [
+    "docs/examples/snapping-and-tracing.md": [
       "examples/snapping-and-tracing/**"
     ],
-    "docs/examples-pages/geometry-operations.md": [
+    "docs/examples/geometry-operations.md": [
       "examples/geometry-operations/**"
     ],
-    "docs/examples-pages/images.md": [
+    "docs/examples/images.md": [
       "examples/images/**"
     ],
-    "docs/examples-pages/save-and-load.md": [
+    "docs/examples/save-and-load.md": [
       "examples/save-and-load/**"
     ],
-    "docs/examples-pages/terrain.md": [
+    "docs/examples/terrain.md": [
       "examples/terrain/**"
     ],
-    "docs/examples-pages/globe.md": [
+    "docs/examples/globe.md": [
       "examples/globe/**"
     ],
-    "docs/examples-pages/200000-features.md": [
+    "docs/examples/200000-features.md": [
       "examples/200000-features/**"
     ],
-    "docs/examples-pages/datasets.md": [
+    "docs/examples/datasets.md": [
       "examples/datasets/**"
     ],
-    "docs/examples-pages/columnar-data-in-a-worker.md": [
+    "docs/examples/columnar-data-in-a-worker.md": [
       "examples/columnar-data-in-a-worker/**"
     ],
-    "docs/examples-pages/read-only-viewer.md": [
+    "docs/examples/read-only-viewer.md": [
       "examples/read-only-viewer/**"
     ],
-    "docs/examples-pages/plugins.md": [
+    "docs/examples/plugins.md": [
       "examples/plugins/**"
     ],
-    "docs/examples-pages/custom-feature-types.md": [
+    "docs/examples/custom-feature-types.md": [
       "examples/custom-feature-types/**"
     ],
-    "docs/examples-pages/custom-ui.md": [
+    "docs/examples/custom-ui.md": [
       "examples/custom-ui/**"
     ],
-    "docs/examples-pages/playground.md": [
+    "docs/examples/playground.md": [
       "playground/**"
     ]
   }

@@ -501,9 +501,10 @@ ARIA のロールもラベルも付けません。キーボードでは、削除
 
 ## 関連する例
 
-- [basic](../../examples/basic/) では、多角形を描き、
-  `feature.created` と `document.changed` を受け取り、GeoJSON を
-  保存します
+- [Get started](../examples/get-started.ja.md) では、標準の UI の道具で
+  描き、`document.changed` を受け取ります
+- [Build your own UI](../examples/custom-ui.ja.md) では、自分のボタンから
+  `setMode` を呼び、`mode.changed` と選択を追います
 
 ## リファレンス
 

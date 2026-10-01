@@ -1,12 +1,18 @@
 # Examples
 
-Small pages, each showing one part of the library. Every example is
-an `index.html` and a `main.ts` of about a hundred lines, with a comment
-at the top saying what it shows. The guides quote their code from here.
+Pages that each show one part of the library. Every example lays the
+standard UI (`@sakuzu/maplibre-gl-draw-ui`, in [ui/](../ui/)) over the
+map: a layer panel on the left, the panel of the selected feature on the
+right and a toolbar at the bottom. Its code holds only the calls of its
+topic and the placing of the UI. The last one, custom-ui, builds a
+toolbar and a panel of its own on the public API instead, for an
+application that wants its own UI.
 
-The first two lay the standard UI (`@sakuzu/maplibre-gl-draw-ui`, in
-[ui/](../ui/)) over the map, and their code holds only the calls of their
-topic and the placing of the UI. The other ten have buttons of their own.
+Each example is an `index.html` and a `main.ts`, with a comment at the
+top saying what it shows. The documentation site shows each one live on
+a page of its own, beside its code: the
+[gallery](https://sakuzu.github.io/maplibre-gl-draw/examples/) lists
+them in this order.
 
 | Example | What it shows | Guide |
 | --- | --- | --- |
@@ -18,17 +24,8 @@ topic and the placing of the UI. The other ten have buttons of their own.
 | [snapping-and-tracing](snapping-and-tracing/) | The snapping options, the guide lines, tracing a boundary, the snapping switch of the toolbar | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [geometry-operations](geometry-operations/) | Union, intersection, difference, split and buffer from the panel, length and area | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [images](images/) | The Image tool, `image.requested`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
-| [basic](basic/) | Drawing polygons, the change events, saving and restoring | [Getting started](../docs/getting-started.md) |
-| [save-load](save-load/) | GeoJSON and the native format, files and drops on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
-| [style-rules](style-rules/) | Default styles, the four kinds of style rule, a legend | [Styles](../docs/guides/styles.md) |
-| [snapping-and-geometry](snapping-and-geometry/) | Snapping, tracing, shared vertices, union, subtract, buffer, split | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
-| [terrain](terrain/) | Drawing and editing on the 3D terrain of the map, with the standard UI | [Terrain](../docs/guides/terrain.md) |
-| [read-only](read-only/) | Read-only, the interaction lock, locked layers, local hiding | [Read-only](../docs/guides/read-only.md) |
-| [plugin](plugin/) | A plugin with an event, an api and a mode of its own | [Plugins](../docs/guides/plugins.md) |
-| [custom-feature-type](custom-feature-type/) | A feature type with its own renderer, hit test and box selection | [Custom types](../docs/guides/custom-types.md) |
-| [large-data](large-data/) | Datasets, static and fetched for the view | [Large data](../docs/guides/large-data.md) |
-| [table-worker](table-worker/) | A table of typed arrays read in a Worker and drawn from its columns | [Large data](../docs/guides/large-data.md) |
 | [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save and load, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
+| [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, a great circle, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
 | [200000-features](200000-features/) | 200,000 editable features loaded in one transaction | [Performance](../docs/guides/performance.md) |
 | [datasets](datasets/) | Datasets given at once and fetched for the view, clicks on their rows | [Large data](../docs/guides/large-data.md) |
@@ -47,9 +44,11 @@ npm install
 npm run dev
 ```
 
-The list of the examples opens at <http://localhost:3200>. The examples
-import `@sakuzu/maplibre-gl-draw` from the sources in `src/`, so a change
-to the library shows on reload without a build.
+The examples are served on port 3200, each under its folder:
+<http://localhost:3200/get-started/> opens first, and
+<http://localhost:3200/terrain/> is the terrain example. They import
+`@sakuzu/maplibre-gl-draw` from the sources in `src/`, so a change to the
+library shows on reload without a build.
 
 The standard UI is taken from its build in `ui/dist/`, the files that
 users install, so it is built first, and again after a change to it:
@@ -59,12 +58,15 @@ npm run build      # core, which the UI is built against
 npm run ui:build   # ui/dist
 ```
 
-To build them as static pages, which can be served from any directory
-(GitHub Pages, for example):
+To see them as the documentation site shows them, with the gallery, the
+pages and the playground, serve the whole site:
 
 ```sh
-npm run build -w examples   # writes examples/dist
+npm run site:dev   # then open http://localhost:5173/maplibre-gl-draw/
 ```
+
+It runs the dev servers of the examples (port 3200) and of the
+playground (port 3300) beside VitePress, and stops all three on Ctrl-C.
 
 ## Basemap and elevation data
 
@@ -73,16 +75,25 @@ The examples use public data that needs no key: the
 MapLibre demo tiles for the elevation of terrain. Both are set in
 [basemap.ts](basemap.ts). The address of a page can replace them, for
 example `terrain/?style=<style URL>&dem=<TileJSON URL>`; the end-to-end
-tests use this to run every example without the network.
+tests and the pictures of the gallery (`npm run site:thumbnails`) use
+this to run every example without the network.
 
 ## Shared files
 
 - [maplibre-setup.ts](maplibre-setup.ts) sets the worker URL of
   maplibre-gl v6 for Vite, once, before the first map is created
 - [basemap.ts](basemap.ts) holds the basemap and the elevation data
-- [example.css](example.css) lays out the map and the bar of buttons
-- [public/sample-gis.geojson](public/sample-gis.geojson) is the sample
-  data of 02 and 03
+- [example.css](example.css) lays out the full-page map
+
+## Adding an example
+
+An example is a folder with an `index.html` and a `main.ts`. Add its
+name to `PAGES` in [vite.config.ts](vite.config.ts), its entry (title,
+sentence and order, in English and Japanese) to
+[docs/examples/catalog.json](../docs/examples/catalog.json), its page
+to `docs/examples/` (`<name>.md` and `<name>.ja.md`), and its picture
+with `npm run site:thumbnails -- <name>`. The end-to-end tests check that
+the examples and the catalog list the same names.
 
 ## Other pages
 

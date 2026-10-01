@@ -23,6 +23,18 @@ the project follows semantic versioning.
   `style-features`, and their pages on the site. The examples' dev server
   (`npm run dev`) moves to port 3200, and it and `npm run test:e2e` need
   the standard UI built first (`npm run ui:build`).
+- Changed: the site (<https://sakuzu.github.io/maplibre-gl-draw/>) is
+  the documentation site: getting started and the guides in English and
+  Japanese, a gallery of eighteen examples with the standard UI, each on
+  a page that runs it beside its code, the playground under
+  `/playground/` and the API reference under `/api/`. The examples with
+  buttons of their own (`basic`, `save-load`, `style-rules`,
+  `snapping-and-geometry`, `read-only`, `plugin`, `custom-feature-type`,
+  `large-data` and `table-worker`) are replaced by the examples of the
+  gallery, and their addresses, like those of the HTML pages of the
+  earlier API reference, redirect to the pages that took their place.
+  `npm run site:dev` serves the site with the examples and the
+  playground for a local check.
 
 ## [2.0.0] - 2026-09-30
 

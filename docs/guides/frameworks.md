@@ -218,9 +218,9 @@ route.
 
 ## Related example
 
-- [examples/basic/](../../examples/basic/) creates the map and the
-  draw instance and subscribes to events, which is what each component
-  above does in its mount hook
+- [Get started](../examples/get-started.md) creates the map, the draw
+  instance and the standard UI and subscribes to events, which is what
+  each component above does in its mount hook
 
 ## Reference
 

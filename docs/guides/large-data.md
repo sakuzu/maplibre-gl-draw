@@ -732,12 +732,12 @@ it.
 
 ## Examples
 
-- [Datasets](../../examples/large-data/) adds 50,000 cells colored by a
-  property and points fetched for the part of the map in view, with
-  thinning, clicks and reordering
-- [A million points](../../examples/table-worker/) builds 200,000 or
-  1,000,000 points as a table in a Worker, prepares them there and hands
-  them over without a copy
+- [Datasets](../examples/datasets.md) adds 50,000 cells colored by a
+  value and points fetched for the part of the map in view, and reports
+  a click on a row
+- [Columnar data in a Worker](../examples/columnar-data-in-a-worker.md)
+  builds 200,000 rows as a table in a Worker, prepares them there and
+  hands them over without a copy
 
 For the size at which to choose a dataset over drawn features, see
 [performance](performance.md).

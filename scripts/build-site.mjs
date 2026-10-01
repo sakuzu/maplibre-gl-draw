@@ -4,61 +4,54 @@
 /**
  * Builds the GitHub Pages site into site-dist/
  *
- * - `/` — the playground, opening the showcase (the README image) by default; `?plain`
- *   opens it without the showcase
- * - `/examples/` — the list of examples and the ten examples
- * - `/api/` — the generated API reference (typedoc, the same as `npm run docs:api`), with
- *   redirects from the page URLs of 1.0 (scripts/site-redirects.mjs)
+ * The site is the documentation site, `npm run site:build` (VitePress, docs/.vitepress/), for
+ * the address https://sakuzu.github.io/maplibre-gl-draw/ (the `base` of its configuration):
  *
- * Every page uses relative paths (vite's `base: './'`), so the site works under any
- * subpath, such as https://<owner>.github.io/maplibre-gl-draw/. The bench is not part of
- * the site. `npm run deploy:pages` builds the site and pushes it to the gh-pages branch.
+ * - `/` — the top page; `/getting-started.html` and `/guides/` — the guides; `/ja/` — the
+ *   Japanese pages
+ * - `/examples/` — the gallery, `/examples/<name>.html` — the page of each example, and
+ *   `/examples/<name>/` — the example itself, which the page frames
+ * - `/playground/` — the playground
+ * - `/api/` — the API reference
+ * - the redirects of the URLs the site published before: the HTML pages of the API reference of
+ *   1.0 and 2.0, and the examples that were replaced (scripts/site-redirects.mjs)
  *
- * Usage: npm run build:site
+ * This removes site-dist/ first, builds the site and checks that each part is in it. The bench
+ * is not part of the site. `npm run deploy:pages` builds the site and pushes it to the gh-pages
+ * branch; `npm run site:preview` serves the build locally.
+ *
+ * Usage: npm run build:site   (which builds core and the standard UI first)
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'vite';
-import { writeRedirects } from './site-redirects.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE_DIR = join(root, 'site-dist');
 
 rmSync(SITE_DIR, { recursive: true, force: true });
+execFileSync('npm', ['run', 'site:build'], { cwd: root, stdio: 'inherit' });
 
-// The playground opens the showcase by default and shows the links to the site's pages
-process.env.VITE_SITE = '1';
-
-/** Builds one vite project into a directory of the site */
-async function buildPages(project, outDir) {
-  await build({
-    root: join(root, project),
-    configFile: join(root, project, 'vite.config.ts'),
-    logLevel: 'warn',
-    build: { outDir, emptyOutDir: true },
-  });
-  console.log(`Built ${project}/ into ${outDir}`);
+const catalog = JSON.parse(readFileSync(join(root, 'docs/examples/catalog.json'), 'utf8'));
+const pages = [
+  'index.html',
+  'ja/index.html',
+  'getting-started.html',
+  'examples/index.html',
+  'ja/examples/index.html',
+  'playground/index.html',
+  'api/index.html',
+  'api/maplibre-gl-draw/functions/createDraw.html',
+  // A redirect of each kind
+  'api/functions/maplibre-gl-draw.createDraw.html',
+  'examples/basic/index.html',
+];
+for (const name of Object.keys(catalog)) {
+  pages.push(`examples/${name}.html`, `ja/examples/${name}.html`, `examples/${name}.png`);
+  if (name !== 'playground') pages.push(`examples/${name}/index.html`);
 }
-
-await buildPages('playground', SITE_DIR);
-await buildPages('examples', join(SITE_DIR, 'examples'));
-
-// The API reference, written straight into the site (typedoc.json is the configuration)
-const typedoc = join(root, 'node_modules/.bin/typedoc');
-execFileSync(typedoc, ['--out', join(SITE_DIR, 'api'), '--logLevel', 'Warn'], {
-  cwd: root,
-  stdio: 'inherit',
-});
-console.log(`Built the API reference into ${join(SITE_DIR, 'api')}`);
-
-// The 1.0 URLs of the reference redirect to the current pages (scripts/site-redirects.mjs)
-const redirects = writeRedirects(join(SITE_DIR, 'api'));
-console.log(`Wrote ${redirects} redirects for the 1.0 pages of the API reference`);
-
-for (const page of ['index.html', 'examples/index.html', 'api/index.html']) {
-  if (!existsSync(join(SITE_DIR, page))) throw new Error(`site-dist/${page} is missing`);
-}
+const missing = pages.filter((page) => !existsSync(join(SITE_DIR, page)));
+if (missing.length > 0) throw new Error(`site-dist/ has no ${missing.join(', ')}`);
 console.log(`The site is in ${SITE_DIR}`);

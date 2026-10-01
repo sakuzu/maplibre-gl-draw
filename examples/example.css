@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-/* The layout shared by the examples: a full-page map and a bar of controls over it */
+/* The layout shared by the examples: a full-page map, with the UI laid over it */
 
 html,
 body {
@@ -18,66 +18,4 @@ body {
 #map {
   position: absolute;
   inset: 0;
-}
-
-.controls {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  max-width: calc(100% - 80px);
-  padding: 8px;
-  border-radius: 6px;
-  background: rgb(255 255 255 / 0.95);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
-}
-
-.controls button {
-  padding: 4px 10px;
-  border: 1px solid #d0d7de;
-  border-radius: 4px;
-  background: #f6f8fa;
-  font: inherit;
-  cursor: pointer;
-}
-
-.controls button:hover {
-  background: #eaeef2;
-}
-
-.controls button.active {
-  border-color: #0969da;
-  background: #ddf4ff;
-}
-
-.controls button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.output {
-  position: absolute;
-  bottom: 30px;
-  left: 10px;
-  z-index: 1;
-  max-width: min(480px, calc(100% - 20px));
-  max-height: 40%;
-  margin: 0;
-  padding: 8px;
-  overflow: auto;
-  border-radius: 6px;
-  background: rgb(255 255 255 / 0.95);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
-  font:
-    12px / 1.4 ui-monospace,
-    monospace;
-  white-space: pre-wrap;
-}
-
-.output:empty {
-  display: none;
 }

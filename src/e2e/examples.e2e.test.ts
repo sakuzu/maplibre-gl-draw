@@ -37,6 +37,8 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES = join(here, '../../examples');
+/** The examples of the gallery of the site, which lists every example */
+const CATALOG = join(here, '../../docs/examples/catalog.json');
 const ORIGIN = 'http://examples.e2e.test';
 const VIEWPORT = { width: 1024, height: 720 } as const;
 /** The center of the page, where the center of the map is */
@@ -67,8 +69,8 @@ async function buildExamples(): Promise<Site> {
       files.set(file.fileName, file.type === 'chunk' ? file.code : file.source);
     }
   }
-  if (!files.has('basic/index.html')) {
-    throw new Error(`The build has no basic page: ${[...files.keys()].join(', ')}`);
+  if (!files.has('get-started/index.html')) {
+    throw new Error(`The build has no get-started page: ${[...files.keys()].join(', ')}`);
   }
   return files;
 }
@@ -117,7 +119,6 @@ const CONTENT_TYPES: Record<string, string> = {
   '.js': 'text/javascript',
   '.css': 'text/css',
   '.json': 'application/json',
-  '.geojson': 'application/geo+json',
   '.png': 'image/png',
 };
 
@@ -132,7 +133,7 @@ afterAll(async () => {
   await browser?.close();
 });
 
-/** Serves the build, the test fixtures and the public files, and aborts everything else */
+/** Serves the build and the test fixtures, and aborts everything else */
 async function serve(context: BrowserContext): Promise<void> {
   await context.route('**/*', (route) => {
     const url = new URL(route.request().url());
@@ -152,11 +153,7 @@ async function serve(context: BrowserContext): Promise<void> {
         body: typeof built === 'string' ? built : Buffer.from(built),
       });
     }
-    try {
-      return route.fulfill({ contentType, body: readFileSync(join(EXAMPLES, 'public', path)) });
-    } catch {
-      return route.fulfill({ status: 404, body: 'not found' });
-    }
+    return route.fulfill({ status: 404, body: 'not found' });
   });
 }
 
@@ -201,10 +198,6 @@ async function openExample(name: string): Promise<{ page: Page; close: () => Pro
 
 function featureCount(page: Page): Promise<number> {
   return page.evaluate(() => (window as unknown as E2EWindow).draw.features.count());
-}
-
-function output(page: Page): Promise<string> {
-  return page.evaluate(() => document.getElementById('output')?.textContent ?? '');
 }
 
 /**
@@ -268,37 +261,16 @@ async function recordDatasetClick(page: Page): Promise<() => Promise<string | nu
 }
 
 describe('the examples', () => {
-  it('lists the twelve examples on its index page', async () => {
-    const index = String(site.get('index.html'));
-    for (const name of [
-      'get-started',
-      'style-features',
-      'basic',
-      'save-load',
-      'style-rules',
-      'snapping-and-geometry',
-      'terrain',
-      'read-only',
-      'plugin',
-      'custom-feature-type',
-      'large-data',
-      'table-worker',
-    ]) {
-      expect(index).toContain(`./${name}/`);
-      expect(site.has(`${name}/index.html`)).toBe(true);
-    }
-  });
-
-  it('builds the pages of the examples of saving, the globe and the large data', () => {
-    for (const name of [
-      'save-and-load',
-      'globe',
-      '200000-features',
-      'datasets',
-      'columnar-data-in-a-worker',
-    ]) {
-      expect(site.has(`${name}/index.html`)).toBe(true);
-    }
+  it('builds a page for every example of the gallery, and no page at its root', () => {
+    // The gallery of the site lists the examples (docs/examples/catalog.json) and owns
+    // /examples/index.html, so the build of the examples has no page there
+    const catalog = JSON.parse(readFileSync(CATALOG, 'utf8')) as Record<string, unknown>;
+    const names = Object.keys(catalog).filter((name) => name !== 'playground');
+    const built = [...site.keys()]
+      .filter((file) => file.endsWith('/index.html'))
+      .map((file) => file.slice(0, -'/index.html'.length));
+    expect(built.sort()).toEqual(names.sort());
+    expect(site.has('index.html')).toBe(false);
   });
 
   it('get-started draws a polygon with the tool of the toolbar and shows it in the inspector', {
@@ -350,80 +322,6 @@ describe('the examples', () => {
     await close();
   });
 
-  it('basic draws a polygon, saves it and restores it on the next visit', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('basic');
-    await page.click('#draw-polygon');
-    expect(await page.getAttribute('#draw-polygon', 'class')).toContain('active');
-    await clickRing(page, [at(-80, -60), at(80, -60), at(80, 60), at(-80, 60)]);
-    expect(await featureCount(page)).toBe(1);
-    expect(await page.getAttribute('#draw-polygon', 'class')).not.toContain('active');
-
-    await page.click('#save');
-    await page.reload();
-    await ready(page);
-    expect(await featureCount(page)).toBe(1);
-    await close();
-  });
-
-  it('save-load loads the sample, saves the native format and restores it', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('save-load');
-    await page.click('#load-sample');
-    await page.waitForFunction(() => document.getElementById('output')?.textContent !== '');
-    const loaded = await featureCount(page);
-    expect(loaded).toBeGreaterThan(10);
-    expect(await output(page)).toContain('(geojson)');
-
-    await page.click('#save');
-    await page.click('#restore');
-    await page.waitForFunction(() =>
-      document.getElementById('output')?.textContent?.includes('native'),
-    );
-    expect(await output(page)).toContain('replaced');
-    expect(await featureCount(page)).toBe(loaded);
-    await close();
-  });
-
-  it('style-rules colors the layer by a rule and shows its legend', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('style-rules');
-    const ruleKind = () =>
-      page.evaluate(() => {
-        const { draw } = window as unknown as E2EWindow;
-        return draw.layers.list().find((layer) => layer.name === 'Blocks')?.styleRule?.kind;
-      });
-    expect(await ruleKind()).toBe('categorical');
-    expect(await output(page)).toContain('commercial');
-
-    await page.click('[data-rule="graduated"]');
-    expect(await ruleKind()).toBe('graduated');
-    expect(await output(page)).toContain('No data');
-    await close();
-  });
-
-  it('snapping-and-geometry merges two polygons selected with the pointer', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('snapping-and-geometry');
-    expect(await featureCount(page)).toBe(4);
-    await click(page, await pageOf(page, [139.759, 35.6825]));
-    await page.keyboard.down('Shift');
-    await click(page, await pageOf(page, [139.764, 35.681]));
-    await page.keyboard.up('Shift');
-    expect(
-      await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.get().ids.length),
-    ).toBe(2);
-
-    await page.click('[data-op="union"]');
-    expect(await featureCount(page)).toBe(3);
-    expect(await output(page)).toContain('union: applied');
-    await close();
-  });
-
   it('terrain draws a line with the tool of the toolbar on the terrain', {
     timeout: TIMEOUT,
   }, async () => {
@@ -443,155 +341,6 @@ describe('the examples', () => {
       )
       .toBe(true);
     await close();
-  });
-
-  it('read-only refuses to draw under the interaction lock, and writes while read-only', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('read-only');
-    await page.click('#interaction-lock');
-    await page.click('#draw-polygon');
-    expect(await output(page)).toBe('Drawing is not possible now');
-    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
-      'select',
-    );
-    await page.click('#interaction-lock');
-
-    await page.click('#read-only');
-    await page.click('#lock-layer');
-    const locked = await page.evaluate(() => {
-      const { draw } = window as unknown as E2EWindow;
-      return draw.layers.list().find((layer) => layer.name === 'Parcels')?.locked;
-    });
-    expect(locked).toBe(false);
-    await close();
-  });
-
-  it('plugin stamps a point in the mode of the plugin, and removing it removes the mode', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('plugin');
-    await page.click('#stamp');
-    await click(page, at(0, 100));
-    expect(await featureCount(page)).toBe(1);
-    expect(await output(page)).toContain('seen 1');
-
-    await page.click('#install');
-    const registered = await page.evaluate(() =>
-      (window as unknown as E2EWindow).draw.extensions.modes.has('stamp'),
-    );
-    expect(registered).toBe(false);
-    await close();
-  });
-
-  it('custom-feature-type adds a route and selects it with a click', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('custom-feature-type');
-    await page.click('#add-route');
-    const route = await page.evaluate(() => {
-      const { draw } = window as unknown as E2EWindow;
-      draw.selection.clear();
-      const all = draw.features.list();
-      return all[all.length - 1];
-    });
-    expect(route.type).toBe('Route');
-    const [a, b] = (route.geometry as GeoJSON.LineString).coordinates;
-    const pt = await pageOf(page, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
-    await click(page, pt);
-    expect(
-      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
-    ).toEqual([route.id]);
-    await close();
-  });
-
-  it('custom-feature-type shows the handles of its definition and drags one', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('custom-feature-type');
-    await page.click('#add-route');
-    const route = await page.evaluate(() => {
-      const { draw } = window as unknown as E2EWindow;
-      draw.selection.clear();
-      const all = draw.features.list();
-      return all[all.length - 1];
-    });
-    const [first] = (route.geometry as GeoJSON.LineString).coordinates;
-    // Not selected: no handle, so nothing white where the first vertex is
-    expect((await colorsAround(page, first)).some(isWhite)).toBe(false);
-
-    await page.evaluate(
-      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
-      route.id,
-    );
-    await settle(page);
-    // Selected: the handle is drawn there with the look of a vertex handle
-    expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
-
-    // The handle takes the drag, and the definition moves the vertex
-    const from = await pageOf(page, first);
-    await drag(page, from, { x: from.x - 40, y: from.y + 30 });
-    const moved = await page.evaluate(
-      (id) => (window as unknown as E2EWindow).draw.features.get(id)?.geometry,
-      route.id,
-    );
-    const [movedFirst, movedSecond] = (moved as GeoJSON.LineString).coordinates;
-    expect(movedFirst[0]).toBeLessThan(first[0]);
-    expect(movedFirst[1]).toBeLessThan(first[1]);
-    expect(movedSecond).toEqual((route.geometry as GeoJSON.LineString).coordinates[1]);
-    await close();
-  });
-
-  it('large-data shows 50,000 cells and reports the one clicked', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('large-data');
-    const cells = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.datasets.get('grid')?.listRows().length,
-    );
-    expect(cells).toBe(50_000);
-    await click(page, at(10, 10));
-    expect(await output(page)).toMatch(/^(grid|points): /);
-    await close();
-  });
-
-  it('table-worker shows the 200,000 rows of the Worker and reports the one clicked', {
-    timeout: TIMEOUT,
-  }, async () => {
-    const { page, close } = await openExample('table-worker');
-    await page.evaluate(() => (window as unknown as { loaded: Promise<void> }).loaded);
-    const total = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.datasets.get('places')?.getThinningStats().total,
-    );
-    expect(total).toBe(200_000);
-    // Row 0, where it was drawn
-    const lngLat = await page.evaluate(() => {
-      const dataset = (window as unknown as E2EWindow).draw.datasets.get('places');
-      const [row] = dataset?.listVisibleRows([-180, -85, 180, 85]) ?? [];
-      // In the page: the helpers of the library are not loaded here
-      return (row.geometry as GeoJSON.Point).coordinates as [number, number];
-    });
-    await page.evaluate(
-      (center) => (window as unknown as E2EWindow).map.jumpTo({ center, zoom: 18 }),
-      lngLat,
-    );
-    await settle(page);
-    await click(page, await pageOf(page, lngLat));
-    expect(await output(page)).toMatch(/^row \d+: (shop|school|station|park), value \d+$/);
-    await close();
-  });
-
-  it('builds a page for each example with the standard UI', () => {
-    for (const name of [
-      'feature-properties',
-      'layers-and-groups',
-      'style-rules-and-legend',
-      'snapping-and-tracing',
-      'geometry-operations',
-      'images',
-    ]) {
-      expect(site.has(`${name}/index.html`)).toBe(true);
-    }
   });
 
   it('feature-properties opens on the Attributes tab, and the tab adds one', {
@@ -940,6 +689,48 @@ describe('the examples', () => {
     expect(
       await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
     ).toEqual([hill.id]);
+    await close();
+  });
+
+  it('custom-feature-types shows the handles of its definition and drags one', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-types');
+    const hill = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      return draw.features.list()[0];
+    });
+    const [first, second] = (hill.geometry as GeoJSON.LineString).coordinates;
+    // The first vertex in the middle of the map, clear of the panels
+    await page.evaluate(
+      (center) =>
+        (window as unknown as E2EWindow).map.jumpTo({ center: center as [number, number] }),
+      first,
+    );
+    await settle(page);
+    // Not selected: no handle, so nothing white where the first vertex is
+    expect((await colorsAround(page, first)).some(isWhite)).toBe(false);
+
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      hill.id,
+    );
+    await settle(page);
+    // Selected: the handle is drawn there with the look of a vertex handle
+    expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
+
+    // The handle takes the drag, and the definition moves the vertex
+    const from = await pageOf(page, first);
+    await drag(page, from, { x: from.x - 40, y: from.y + 30 });
+    const moved = await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.features.get(id)?.geometry,
+      hill.id,
+    );
+    const [movedFirst, movedSecond] = (moved as GeoJSON.LineString).coordinates;
+    expect(movedFirst[0]).toBeLessThan(first[0]);
+    expect(movedFirst[1]).toBeLessThan(first[1]);
+    expect(movedSecond).toEqual(second);
     await close();
   });
 

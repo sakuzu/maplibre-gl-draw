@@ -401,10 +401,11 @@ if (shrunk === null) {
 
 ## 関連する例
 
-- [snapping-and-geometry](../../examples/snapping-and-geometry/)
-  では、`snapping` の設定をし、`draw.options.update` で吸着、
-  なぞり、共有頂点を切り替え、`union`、`difference`、`buffer`、
-  `split` を実行し、`area` で面積を測ります
+- [Snapping and tracing](../examples/snapping-and-tracing.ja.md) では、
+  `snapping` の設定をし、頂点、辺、ガイド線に吸着し、境界をなぞります
+- [Geometry operations](../examples/geometry-operations.ja.md) では、
+  パネルから `union`、`intersection`、`difference`、`split`、`buffer` を
+  実行し、選んだ地物の長さと面積を測ります
 
 ## リファレンス
 

@@ -6,16 +6,10 @@ about ten minutes. You should know how to create a map with maplibre-gl;
 nothing about this library is assumed. A Japanese version is
 [getting-started.ja.md](getting-started.ja.md).
 
-Every step matches a part of [examples/basic/](../examples/basic/),
-a complete page you can run. The parts of `examples/basic/main.ts`
-are marked with the same step numbers as the headings below.
-
-To run the example, clone the repository and start the examples.
-
-```sh
-npm install
-npm run dev    # then open the basic page it lists
-```
+The code of every step is on this page, and together the steps make
+the complete page. The [Get started](examples/get-started.md) example is
+the same page with the standard UI over the map in place of your own
+buttons, running in the browser with its code.
 
 ## 1. Install
 
@@ -49,8 +43,8 @@ maplibre-gl, and only `?worker&url` bundles it with the worker in a
 production build. With another bundler, pass `setWorkerUrl` the URL at
 which your build serves `maplibre-gl-worker.mjs`.
 
-In `examples/basic/main.ts` this is the import of
-`../maplibre-setup.ts`, which all the examples share.
+The examples of the repository share this setting in
+`examples/maplibre-setup.ts`.
 
 ## 2. Create the map and draw
 
@@ -98,8 +92,6 @@ save and load the whole of it.
 When the page or component that owns the map goes away, call
 `draw.destroy()` before `map.remove()`. It removes everything the
 instance added to the map.
-
-In `examples/basic/main.ts` this is step 2.
 
 ## 3. Draw a polygon
 
@@ -158,8 +150,6 @@ draw.on('mode.changed', ({ mode }) => {
 the same way; `draw_image` also asks your application for the image. The
 [drawing guide](guides/drawing.md) has the actions of every mode.
 
-In `examples/basic/main.ts` this is step 3.
-
 ## 4. Subscribe to changes
 
 `feature.created` fires once per feature. To react to every change at
@@ -198,8 +188,7 @@ A few rules make the API easy to reason about.
 Update your UI from the events, not from the methods you called: the
 user changes the drawing too, and the events cover both.
 
-In `examples/basic/main.ts` this is step 4. The
-[event reference](reference/events.md) lists every event and its
+The [event reference](reference/events.md) lists every event and its
 payload.
 
 ## 5. Save and load
@@ -246,8 +235,6 @@ native format replaces the current document instead of adding to it.
 Both formats are specified in the
 [data format reference](reference/data-format.md).
 
-In `examples/basic/main.ts` this is step 5.
-
 ## 6. Next steps
 
 You now have a map on which features are drawn, observed, saved and
@@ -266,6 +253,7 @@ The [documentation index](README.md) lists all guides, the reference and
 the internals.
 
 To try every feature without installing anything, open the
-[live demo](https://sakuzu.github.io/maplibre-gl-draw/); the
+[playground](https://sakuzu.github.io/maplibre-gl-draw/playground/) or
+the [examples](https://sakuzu.github.io/maplibre-gl-draw/examples/); the
 [API reference](https://sakuzu.github.io/maplibre-gl-draw/api/) is
-published next to it.
+published next to them.

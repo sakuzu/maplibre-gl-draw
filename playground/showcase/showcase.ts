@@ -32,15 +32,13 @@ const SCENES: Record<string, ShowcaseScene> = {
 /**
  * The scene the page opens, or `null` for the plain playground
  *
- * The dev server opens the plain playground and `?showcase` opens the showcase. The
- * GitHub Pages build (`npm run build:site`, which sets `VITE_SITE`) opens the showcase by
- * default and the plain playground with `?plain`. An unknown scene name opens the overview.
+ * The playground opens plain, and `?showcase` opens the showcase. An unknown scene name opens
+ * the overview.
  */
 export function getShowcaseScene(): ShowcaseScene | null {
-  const params = new URLSearchParams(window.location.search);
-  const name = params.get('showcase');
-  if (name !== null) return SCENES[name] ?? overviewScene;
-  return import.meta.env.VITE_SITE === '1' && !params.has('plain') ? overviewScene : null;
+  const name = new URLSearchParams(window.location.search).get('showcase');
+  if (name === null) return null;
+  return SCENES[name] ?? overviewScene;
 }
 
 /**

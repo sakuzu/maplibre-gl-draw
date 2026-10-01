@@ -317,9 +317,11 @@ deriveLegend(rule, { legendOther: 'Autres' });
 
 ## 関連する例
 
-- [style-rules](../../examples/style-rules/) では、レイヤーに
-  各種類の規則を設定し、`deriveLegend` で凡例を組み立て、オプション
-  `style` と `messages` を設定します
+- [Style features](../examples/style-features.ja.md) では、地物ごとに
+  スタイルを付け、型の既定値を変えます
+- [Style rules and legend](../examples/style-rules-and-legend.ja.md)
+  では、レイヤーに各種類の規則を設定し、その行を標準の UI の凡例に
+  出します
 
 ## リファレンス
 

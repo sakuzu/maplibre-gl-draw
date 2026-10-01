@@ -1,0 +1,14 @@
+{
+  "description": "The examples the site published before the gallery, relative to the site, and the page of the example that took the place of each. scripts/site-redirects.mjs writes a redirect for every one of them.",
+  "redirects": {
+    "examples/basic/": "examples/get-started.html",
+    "examples/save-load/": "examples/save-and-load.html",
+    "examples/style-rules/": "examples/style-rules-and-legend.html",
+    "examples/snapping-and-geometry/": "examples/snapping-and-tracing.html",
+    "examples/read-only/": "examples/read-only-viewer.html",
+    "examples/plugin/": "examples/plugins.html",
+    "examples/custom-feature-type/": "examples/custom-feature-types.html",
+    "examples/large-data/": "examples/datasets.html",
+    "examples/table-worker/": "examples/columnar-data-in-a-worker.html"
+  }
+}

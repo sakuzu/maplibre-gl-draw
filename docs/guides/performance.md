@@ -223,10 +223,11 @@ URL parameters are in [bench/README.md](../../bench/README.md). Run them
 on the devices your users have; the numbers depend on the GPU and the
 browser.
 
-## Related example
+## Related examples
 
-- [examples/large-data/](../../examples/large-data/) shows 50,000
-  static polygons in a dataset with collision thinning
+- [200,000 features](../examples/200000-features.md) loads 200,000
+  editable features in one step
+- [Datasets](../examples/datasets.md) shows 50,000 cells in a dataset
 
 ## Reference
 

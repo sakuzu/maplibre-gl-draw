@@ -11,10 +11,11 @@ hero:
       link: /ja/getting-started
     - theme: alt
       text: Playground を試す
-      link: https://sakuzu.github.io/maplibre-gl-draw/
+      link: /playground/
+      target: _self
     - theme: alt
       text: 例
-      link: https://sakuzu.github.io/maplibre-gl-draw/examples/
+      link: /ja/examples/
 features:
   - title: 描いて直す
     details: 点、線、面、円、フリーハンドの線を描けます。選んで動かし、大きさを変え、回し、頂点を直せます。吸着となぞりも使えます。

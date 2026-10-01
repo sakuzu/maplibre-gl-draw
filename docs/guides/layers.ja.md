@@ -309,9 +309,11 @@ draw.on('layerStack.changed', placeMapLayers);
 
 ## 関連する例
 
-- [style-rules](../../examples/style-rules/) では、レイヤーを足して
-  スタイルの規則を付けます
-- [read-only](../../examples/read-only/) では、レイヤーをロックします
+- [Layers and groups](../examples/layers-and-groups.ja.md) では、
+  コードでレイヤーを重ね、薄め、アクティブにし、地物をグループにまとめて
+  ロックし、1 つを隠します。それを標準の UI のレイヤーのパネルに出します
+- [Style rules and legend](../examples/style-rules-and-legend.ja.md)
+  では、レイヤーにスタイルの規則を付けます
 
 ## リファレンス
 

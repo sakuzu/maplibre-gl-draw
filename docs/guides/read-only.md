@@ -150,9 +150,9 @@ keeps the hidden items and the lock itself.
 
 ## Examples
 
-- [read-only](../../examples/read-only/) switches read-only, the
-  interaction lock and local hiding, locks a layer, and tells whether the
-  selected feature can be edited
+- [Read-only viewer](../examples/read-only-viewer.md) loads a drawing,
+  makes it read-only and locks the interaction, and shows the attributes
+  of the feature clicked
 
 ## Reference
 

@@ -5,22 +5,16 @@
  * The live example of a page of the examples, in a frame, with a link that opens it alone
  *
  * A page writes a fence of the language `example` holding the name of the example (the folder
- * under examples/), and the configuration renders it as this component. The built site has the
- * examples under /examples/ (`npm run site:build` builds them there). While the site is served
- * by `npm run site:dev`, the frame shows the examples' own dev server, `npm run dev` on port
- * 3200, which runs beside it. A Japanese page shows the example in Japanese (`?locale=ja`).
+ * under examples/), and the configuration renders it as this component. The frame shows the
+ * build of the example in the built site, or its dev server under `vitepress dev`
+ * (dev-servers.ts). A Japanese page shows the example in Japanese (`?locale=ja`).
  *
- * The name `playground` is the playground (playground/, not an example): /playground/ of the
- * built site, and its own dev server (`npm run dev:playground`, port 3300) while served.
+ * The name `playground` is the playground (playground/, not an example).
  */
 
-import { useData, withBase } from 'vitepress';
+import { useData } from 'vitepress';
 import { computed, defineComponent, h } from 'vue';
-
-/** Where the examples are served while the site is served by `vitepress dev` */
-const DEV_EXAMPLES = 'http://localhost:3200/';
-/** Where the playground is served while the site is served by `vitepress dev` */
-const DEV_PLAYGROUND = 'http://localhost:3300/';
+import { liveUrl } from './dev-servers.ts';
 
 export const ExampleFrame = defineComponent({
   name: 'ExampleFrame',
@@ -31,14 +25,7 @@ export const ExampleFrame = defineComponent({
   setup(props) {
     const { lang, page } = useData();
     const ja = computed(() => lang.value === 'ja');
-    const src = computed(() => {
-      const query = ja.value ? '?locale=ja' : '';
-      if (props.name === 'playground') {
-        return `${import.meta.env.DEV ? DEV_PLAYGROUND : withBase('/playground/')}${query}`;
-      }
-      const root = import.meta.env.DEV ? DEV_EXAMPLES : withBase('/examples/');
-      return `${root}${props.name}/${query}`;
-    });
+    const src = computed(() => liveUrl(props.name, ja.value ? '?locale=ja' : ''));
     return () =>
       h('figure', { class: 'example-frame' }, [
         h('iframe', {
