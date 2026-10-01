@@ -15,7 +15,10 @@ export type Units = 'metric' | 'imperial';
 export interface InspectorOptions {
   /** The tabs of a feature, in order; both when left out */
   tabs?: InspectorTab[];
-  /** Whether the Style tab shows the measurements; true when left out */
+  /**
+   * Whether the measurements of a feature show under its name, before the tabs; true when left
+   * out
+   */
   measurements?: boolean;
   /** Whether the operations (union, intersection, difference, split, buffer) show; true when left out */
   operations?: boolean;

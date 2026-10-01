@@ -6,6 +6,7 @@
 import type { Draw, Mode } from '@sakuzu/maplibre-gl-draw';
 import type { InspectorHandle, InspectorOptions } from './inspector/types.js';
 import type { Locale } from './messages.js';
+import type { Theme } from './theme.js';
 
 /** The name of a built-in tool */
 export type ToolId = 'select' | 'point' | 'line' | 'polygon' | 'circle' | 'freehand' | 'image';
@@ -33,6 +34,19 @@ export interface ToolSpec {
 
 /** A tool as the options name it: a built-in tool by its ID, or a tool of the application */
 export type ToolEntry = ToolId | ToolSpec;
+
+/** Where a part of the interface put alone goes, its words and its theme */
+export interface AloneOptions {
+  /** The element to put it in */
+  target: HTMLElement;
+  /** The words: `en` (the default), `ja`, or words laid over English */
+  locale?: Locale;
+  /**
+   * The theme: `light`, `dark`, or `auto` (the default) to follow the system's preference
+   * (prefers-color-scheme), also when it changes
+   */
+  theme?: Theme;
+}
 
 /** What the toolbar shows */
 export interface ToolbarOptions {
@@ -70,6 +84,11 @@ export interface DrawUIOptions {
   legend?: boolean;
   /** The words: `en` (the default), `ja`, or words laid over English */
   locale?: Locale;
+  /**
+   * The theme: `light`, `dark`, or `auto` (the default) to follow the system's preference
+   * (prefers-color-scheme), also when it changes
+   */
+  theme?: Theme;
   /**
    * The units of the measurements of the inspector, unless its options name others; metric when
    * left out
@@ -132,6 +151,12 @@ export interface DrawUI {
   readonly inspector: InspectorHandle | null;
   /** Changes the words */
   setLocale(locale: Locale): void;
+  /**
+   * Changes the theme
+   *
+   * @throws Error when the theme is not `light`, `dark` or `auto`
+   */
+  setTheme(theme: Theme): void;
   /** Removes the interface and stops following the draw instance. A second call does nothing */
   destroy(): void;
 }

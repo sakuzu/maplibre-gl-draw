@@ -45,8 +45,10 @@ import {
 } from './messages.js';
 import { type Beside, type MapPadding, mapPadding } from './padding.js';
 import { Box } from './store.js';
+import { checkTheme, type Theme, themeControl } from './theme.js';
 import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.js';
 import type {
+  AloneOptions,
   DrawUI,
   DrawUIOptions,
   LayerPanelHandle,
@@ -72,7 +74,9 @@ export type {
   Units,
 } from './inspector/types.js';
 export type { Locale, Messages } from './messages.js';
+export type { Theme } from './theme.js';
 export type {
+  AloneOptions,
   DrawUI,
   DrawUIOptions,
   LayerPanelHandle,
@@ -157,10 +161,12 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
  * @returns The interface, to change and to remove
- * @throws Error when a tool of `options.toolbar.tools` is not valid, or a tab of
- *   `options.inspector.tabs` is not `style` or `attributes`
+ * @throws Error when a tool of `options.toolbar.tools` is not valid, a tab of
+ *   `options.inspector.tabs` is not `style` or `attributes`, or the theme is not `light`, `dark`
+ *   or `auto`
  */
 export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
+  const themeName = checkTheme(options.theme);
   const bar: ToolbarOptions | null =
     options.toolbar === false ? null : options.toolbar === true ? {} : (options.toolbar ?? {});
   const tools = new Box(normalizeTools(bar?.tools));
@@ -177,6 +183,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const sections = new Box<InspectorSectionSpec[]>([]);
 
   const root = createRoot(options.container ?? draw.getMap().getContainer(), true);
+  const theme = themeControl(root, themeName);
   applyLocale(root, messages, options.locale ?? 'en');
   // The map keeps its view clear of the panels beside the stage and of the toolbar
   const padding: MapPadding | null =
@@ -260,9 +267,14 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       if (destroyed) return;
       applyLocale(root, messages, locale);
     },
+    setTheme(next: Theme) {
+      if (destroyed) return;
+      theme.set(next);
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      theme.destroy();
       padding?.destroy();
       unmount(view);
       root.remove();
@@ -276,17 +288,18 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
  * positioned (the map's container, or a positioned box over the map).
  *
  * @param draw - The draw instance
- * @param options - The element to put it in, what it shows and the words (`en` by default)
+ * @param options - The element to put it in, what it shows, the words (`en` by default) and the
+ *   theme (`auto` by default)
  * @returns The toolbar, to remove
- * @throws Error when a tool of `options.tools` is not valid
+ * @throws Error when a tool of `options.tools` is not valid, or the theme is not `light`, `dark`
+ *   or `auto`
  */
-export function createToolbar(
-  draw: Draw,
-  options: ToolbarOptions & { target: HTMLElement; locale?: Locale },
-): ToolbarHandle {
+export function createToolbar(draw: Draw, options: ToolbarOptions & AloneOptions): ToolbarHandle {
   const tools = new Box(normalizeTools(options.tools));
+  const themeName = checkTheme(options.theme);
   const messages = new Box(resolveMessages(options.locale));
   const root = createRoot(options.target, true);
+  const theme = themeControl(root, themeName);
   applyLocale(root, messages, options.locale ?? 'en');
   const view = mount(ToolbarView, {
     target: root,
@@ -306,6 +319,7 @@ export function createToolbar(
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      theme.destroy();
       unmount(view);
       root.remove();
     },
@@ -333,14 +347,15 @@ function leftSettings(options: DrawUIOptions): LeftSettings | null {
 
 /** Puts a component alone in an element, in a root element of the interface */
 function mountAlone(
-  target: HTMLElement,
-  locale: Locale | undefined,
+  { target, locale, theme: themeOption }: AloneOptions,
   component: typeof LayerPanelView | typeof LegendView,
   props: Record<string, unknown>,
   role: string,
 ): { element: HTMLElement; destroy(): void } {
+  const themeName = checkTheme(themeOption);
   const messages = new Box(resolveMessages(locale));
   const root = createRoot(target, false);
+  const theme = themeControl(root, themeName);
   applyLocale(root, messages, locale ?? 'en');
   const view = mount(component as typeof LayerPanelView, {
     target: root,
@@ -354,6 +369,7 @@ function mountAlone(
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      theme.destroy();
       unmount(view);
       root.remove();
     },
@@ -366,20 +382,16 @@ function mountAlone(
  * `target`, which gives it its size and its scrolling.
  *
  * @param draw - The draw instance
- * @param options - The element to put it in, what it shows and the words (`en` by default)
+ * @param options - The element to put it in, what it shows, the words (`en` by default) and the
+ *   theme (`auto` by default)
  * @returns The layer panel, to remove
+ * @throws Error when the theme is not `light`, `dark` or `auto`
  */
 export function createLayerPanel(
   draw: Draw,
-  options: LayerPanelOptions & { target: HTMLElement; locale?: Locale },
+  options: LayerPanelOptions & AloneOptions,
 ): LayerPanelHandle {
-  return mountAlone(
-    options.target,
-    options.locale,
-    LayerPanelView,
-    { draw, ...layerSettings(options) },
-    'layer-panel',
-  );
+  return mountAlone(options, LayerPanelView, { draw, ...layerSettings(options) }, 'layer-panel');
 }
 
 /**
@@ -387,14 +399,13 @@ export function createLayerPanel(
  * from the front. It only reads; the rules change with `draw.layers.update`.
  *
  * @param draw - The draw instance
- * @param options - The element to put it in and the words (`en` by default)
+ * @param options - The element to put it in, the words (`en` by default) and the theme (`auto` by
+ *   default)
  * @returns The legend, to remove
+ * @throws Error when the theme is not `light`, `dark` or `auto`
  */
-export function createLegend(
-  draw: Draw,
-  options: { target: HTMLElement; locale?: Locale },
-): LegendHandle {
-  return mountAlone(options.target, options.locale, LegendView, { draw }, 'legend');
+export function createLegend(draw: Draw, options: AloneOptions): LegendHandle {
+  return mountAlone(options, LegendView, { draw }, 'legend');
 }
 
 /**
@@ -404,18 +415,21 @@ export function createLegend(
  *
  * @param draw - The draw instance
  * @param options - The element to put it in, the tabs, the measurements, the operations, the
- *   units and the words (`en` by default)
+ *   units, the words (`en` by default) and the theme (`auto` by default)
  * @returns The inspector, to add sections to and to remove
- * @throws Error when a tab of `options.tabs` is not `style` or `attributes`
+ * @throws Error when a tab of `options.tabs` is not `style` or `attributes`, or the theme is not
+ *   `light`, `dark` or `auto`
  */
 export function createInspector(
   draw: Draw,
-  options: InspectorOptions & { target: HTMLElement; locale?: Locale },
+  options: InspectorOptions & AloneOptions,
 ): InspectorHandle {
   const settings = inspectorSettings(options);
+  const themeName = checkTheme(options.theme);
   const messages = new Box(resolveMessages(options.locale));
   const sections = new Box<InspectorSectionSpec[]>([]);
   const root = createRoot(options.target, false);
+  const theme = themeControl(root, themeName);
   root.dataset.panel = '';
   applyLocale(root, messages, options.locale ?? 'en');
   const view = mount(InspectorView, {
@@ -431,6 +445,7 @@ export function createInspector(
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      theme.destroy();
       unmount(view);
       root.remove();
     },

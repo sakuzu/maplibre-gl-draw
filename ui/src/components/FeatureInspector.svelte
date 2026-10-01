@@ -5,14 +5,17 @@
 <script lang="ts">
   import {
     AttributeList,
+    Block,
     Button,
     Footer,
+    InlineEdit,
     InspectorFrame,
-    InspectorRow,
     InspectorSection,
-    ReadValue,
+    Kv,
+    Pair,
     Row,
-    Textarea,
+    Stack,
+    Tabs,
   } from '@sakuzu/kata/svelte';
   import type { FeaturePatch } from '@sakuzu/maplibre-gl-draw';
   import {
@@ -21,30 +24,28 @@
     attributeRemove,
     attributeRows,
     descriptionPatch,
-    featureDescription,
     featureName,
     namePatch,
   } from '../inspector/attributes.js';
-  import { type MeasureKey, measure } from '../inspector/measure.js';
-  import { applicableOperations } from '../inspector/operations.js';
-  import { sharedStyleKeys } from '../inspector/style.js';
+  import type { MeasureKey } from '../inspector/measure.js';
   import type {
     InspectorDraw,
     InspectorSectionSpec,
     InspectorSettings,
     InspectorTab,
   } from '../inspector/types.js';
-  import { type FeatureView, typeLabel } from '../inspector/view.js';
+  import { type FeatureView, featureLayout, typeLabel } from '../inspector/view.js';
   import type { Messages } from '../messages.js';
   import BufferDialog from './BufferDialog.svelte';
   import StyleFields from './StyleFields.svelte';
 
-  // FeatureInspector: the inspector of one feature in kata's InspectorFrame. The title is its
-  // name (properties.name), changed where it stands; the subtitle its type, its layer and whether
-  // this client hides it. The Style tab has the fields of its style, the sections of the
-  // application, its measurements and the buffer; the Attributes tab its description
-  // (properties.description) and its other attributes. The foot deletes it, locks or unlocks it,
-  // and hides or shows it in this client.
+  // FeatureInspector: the inspector of one feature in kata's InspectorFrame, laid out as
+  // featureLayout gives it. The head is its name (properties.name), changed where it stands, and
+  // a subtitle (its type, its layer and whether this client hides it). Under the head, with no
+  // tab, are its measurements and its description (properties.description), changed where it
+  // stands. Then the tabs: Style has the fields of its style, the sections of the application and
+  // the buffer; Attributes the list of its other attributes. The foot deletes it, locks or
+  // unlocks it, and hides or shows it in this client.
   let {
     draw,
     view,
@@ -65,22 +66,11 @@
     onclose?: () => void;
   } = $props();
 
-  const uid = $props.id();
   const feature = $derived(view.feature);
   const editable = $derived(view.editable);
-  const rows = $derived(
-    settings.measurements ? measure(feature, settings.units, m.numberLocale) : [],
-  );
-  const buffer = $derived(
-    settings.operations && applicableOperations([feature]).includes('buffer'),
-  );
-  const hasStyle = $derived(
-    sharedStyleKeys([feature]).length > 0 || sections.length > 0 || rows.length > 0 || buffer,
-  );
+  const layout = $derived(featureLayout(view, settings, sections.length, m.numberLocale));
   const tabs = $derived(
-    settings.tabs
-      .filter((t) => t !== 'style' || hasStyle)
-      .map((id) => ({ id, label: id === 'style' ? m.styleTab : m.attributesTab })),
+    layout.tabs.map((id) => ({ id, label: id === 'style' ? m.styleTab : m.attributesTab })),
   );
   const current = $derived(tabs.some((t) => t.id === tab) ? tab : tabs[0]?.id);
   const subtitle = $derived(
@@ -90,6 +80,7 @@
   );
   const name = $derived(featureName(feature));
   const attributes = $derived(attributeRows(feature));
+  const both = $derived(`${m.styleTab}, ${m.attributesTab}`);
   let bufferOpen = $state(false);
 
   const MEASURE_LABELS: Record<MeasureKey, keyof Messages> = {
@@ -101,6 +92,9 @@
     radius: 'measureRadius',
     points: 'measurePoints',
   };
+  const measurements = $derived(
+    layout.measurements.map((row) => ({ k: m[MEASURE_LABELS[row.key]], v: row.value, mono: true })),
+  );
 
   function update(patch: FeaturePatch | null) {
     if (patch) draw.features.update(feature.id, patch);
@@ -135,12 +129,33 @@
   title={editable ? name : name || typeLabel(feature.type, m)}
   ontitle={editable ? (next) => update(namePatch(next)) : undefined}
   {subtitle}
-  tabs={tabs.length > 1 ? tabs : []}
-  {current}
-  onselect={(id) => (tab = id as InspectorTab)}
   {onclose}
   end={foot}
 >
+  {#if measurements.length > 0 || layout.description}
+    <Block>
+      <Stack gap="sm">
+        {#if measurements.length > 0}
+          <Kv items={measurements} />
+        {/if}
+        {#if layout.description}
+          <Pair label={m.description} top>
+            <InlineEdit
+              value={layout.description.text}
+              placeholder={m.addDescription}
+              label={layout.description.text ? m.description : m.addDescription}
+              multiline
+              editable={layout.description.editable}
+              onCommit={(next) => update(descriptionPatch(next))}
+            />
+          </Pair>
+        {/if}
+      </Stack>
+    </Block>
+  {/if}
+  {#if tabs.length > 1 && current}
+    <Tabs {tabs} {current} label={both} onselect={(id) => (tab = id as InspectorTab)} />
+  {/if}
   {#if current === 'style'}
     <StyleFields
       {draw}
@@ -150,16 +165,7 @@
       {m}
       {sections}
     />
-    {#if rows.length > 0}
-      <InspectorSection title={m.measurements}>
-        {#each rows as row (row.key)}
-          <InspectorRow label={m[MEASURE_LABELS[row.key]]}>
-            <ReadValue value={row.value} mono />
-          </InspectorRow>
-        {/each}
-      </InspectorSection>
-    {/if}
-    {#if buffer}
+    {#if layout.buffer}
       <InspectorSection title={m.operations}>
         <Row wrap>
           <Button disabled={!editable} onclick={() => (bufferOpen = true)}>{m.opBuffer}</Button>
@@ -167,28 +173,16 @@
       </InspectorSection>
     {/if}
   {:else if current === 'attributes'}
-    <InspectorSection title={m.details}>
-      <InspectorRow label={m.description} for="{uid}-description">
-        <Textarea
-          id="{uid}-description"
-          value={featureDescription(feature)}
-          disabled={!editable}
-          onchange={(e) => update(descriptionPatch(e.currentTarget.value))}
-        />
-      </InspectorRow>
-    </InspectorSection>
-    <InspectorSection title={m.attributesTab} flush>
-      <AttributeList
-        items={attributes}
-        readonly={!editable}
-        onchange={(index, item) => update(attributePatch(feature, index, item))}
-        onadd={editable ? (item) => update(attributeAdd(feature, item)) : undefined}
-        onremove={editable ? (index) => update(attributeRemove(feature, index)) : undefined}
-      />
-    </InspectorSection>
+    <AttributeList
+      items={attributes}
+      readonly={!editable}
+      onchange={(index, item) => update(attributePatch(feature, index, item))}
+      onadd={editable ? (item) => update(attributeAdd(feature, item)) : undefined}
+      onremove={editable ? (index) => update(attributeRemove(feature, index)) : undefined}
+    />
   {/if}
 </InspectorFrame>
 
-{#if buffer}
+{#if layout.buffer}
   <BufferDialog bind:open={bufferOpen} {draw} features={[feature]} units={settings.units} {m} />
 {/if}

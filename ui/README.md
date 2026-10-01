@@ -50,7 +50,8 @@ or a double click), reordering by dragging and an add menu (a new layer,
 a new group from the selected features). A feature is named by its
 `properties.name`, or by its type when it has none. The legend shows
 the rows of the style rule (`styleRule`) of each layer that has one.
-Shift+L opens and closes the panel.
+Shift+L opens and closes the panel, and while it is closed a button at
+the top left of the map opens it again.
 
 ```ts
 const ui = createDrawUI(draw, {
@@ -79,9 +80,10 @@ ui.tools.add({
 The inspector is the panel on the right of `createDrawUI`. It opens
 while something is selected and closes, clearing the selection, with its
 close button. For one feature it shows its name (`properties.name`,
-changed where it stands), a Style tab with the fields its type reads and
-its measurements, and an Attributes tab with its description
-(`properties.description`) and its other attributes. Several features
+changed where it stands); under it, its measurements and its description
+(`properties.description`, changed where it stands); then a Style tab
+with the fields its type reads and an Attributes tab with its other
+attributes. Several features
 show the fields they share, a field whose values differ being mixed, and
 the operations that apply to them (union, intersection, difference,
 split and buffer). A layer and a group show their name, whether they are
@@ -124,9 +126,12 @@ ui.inspector?.sections.add({
 Everything the interface draws is inside its root element, which has the
 class `mgd-ui`, and its style sheet reaches nothing outside it. kata's
 tokens (the CSS custom properties `--kata-*`) are set on that element;
-set them on `.mgd-ui` to change the look. kata's theme is dark;
-`data-color-mode="light"` on the root element, or on any element around
-it, turns it light.
+set them on `.mgd-ui` to change the look. The `theme` option of
+`createDrawUI` and of each part put alone is `light`, `dark` or `auto`
+(the default, which follows the system's `prefers-color-scheme` as it
+changes), and `ui.setTheme` changes it. kata's theme is dark;
+`data-color-mode="light"` on the root element, which `light` sets, or on
+any element around it, turns it light.
 
 ## Without a bundler
 

@@ -279,4 +279,39 @@ describe('createDrawUI on the left', () => {
     press();
     expect(ui.element.querySelector('[data-region="left"]')).not.toBeNull();
   });
+
+  it('opens the closed left region again from a button over the map', () => {
+    const fake = sample();
+    const ui = createDrawUI(fake.asDraw);
+    handle = ui;
+    const reopen = () => ui.element.querySelector<HTMLElement>('[data-role="reopen"]');
+    // Open: no button
+    expect(reopen()).toBeNull();
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'L', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    flushSync();
+    expect(ui.element.querySelector('[data-region="left"]')).toBeNull();
+    // Closed: the button lies over the map, a child of the root, outside the shell's regions
+    const place = reopen();
+    expect(place?.parentElement).toBe(ui.element);
+    const button = place?.querySelector<HTMLButtonElement>('button[aria-label="Layers"]');
+    if (!button) throw new Error('no button');
+    expect(place?.querySelector('[data-role="floating"]')).not.toBeNull();
+    button.click();
+    flushSync();
+    expect(ui.element.querySelector('[data-region="left"]')).not.toBeNull();
+    expect(reopen()).toBeNull();
+  });
+
+  it('has no button to open a left region it does not have', () => {
+    const fake = sample();
+    const ui = createDrawUI(fake.asDraw, { layers: false, legend: false });
+    handle = ui;
+    document.body.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'L', shiftKey: true, bubbles: true, cancelable: true }),
+    );
+    flushSync();
+    expect(ui.element.querySelector('[data-role="reopen"]')).toBeNull();
+  });
 });

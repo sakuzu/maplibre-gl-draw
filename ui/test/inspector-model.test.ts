@@ -30,7 +30,7 @@ import {
   stylePatch,
 } from '../src/inspector/style.js';
 import type { InspectorDraw } from '../src/inspector/types.js';
-import { kindCounts, readView } from '../src/inspector/view.js';
+import { featureLayout, kindCounts, readView } from '../src/inspector/view.js';
 import { en } from '../src/locales/en.js';
 import {
   applyKataMessages,
@@ -134,12 +134,14 @@ describe('the fields of the style', () => {
     const [color, radius, shape, opacity] = fields([pt('a', { style: { pointOpacity: 0.456 } })]);
     expect(color).toMatchObject({ kind: 'color', value: '#3388ff', label: 'Color' });
     expect(radius).toMatchObject({ kind: 'slider', min: 1, max: 40, unit: 'px', value: 6 });
-    expect(shape.kind).toBe('segmented');
+    // A select: the choices do not fit across the panel side by side
+    expect(shape.kind).toBe('select');
     expect(shape.options?.map((o) => o.value)).toEqual(['circle', 'square', 'triangle', 'star']);
     expect(opacity).toMatchObject({ kind: 'slider', min: 0, max: 100, unit: '%', value: 46 });
     const width = fields([line('l')]).find((f) => f.key === 'strokeWidth');
     expect(width).toMatchObject({ min: 0.5, max: 20, step: 0.5 });
     const dash = fields([line('l')]).find((f) => f.key === 'lineStyle');
+    expect(dash?.kind).toBe('select');
     expect(dash?.options?.map((o) => o.value)).toEqual(['solid', 'dashed', 'dotted']);
   });
 
@@ -416,6 +418,49 @@ describe('what the inspector shows', () => {
     expect(readView(draw)).toMatchObject({ kind: 'group' });
     fake.selectItems('feature', ['gone']);
     expect(readView(draw).kind).toBe('empty');
+  });
+
+  it('lays out one feature: the measurements and the description, then the tabs', () => {
+    const settings = inspectorSettings();
+    const one = (feature: Feature, editable = true, sections = 0) =>
+      featureLayout({ feature, editable }, settings, sections);
+    expect(one(pt('p')).measurements.map((r) => r.key)).toEqual(['longitude', 'latitude']);
+    expect(one(line('l')).measurements.map((r) => r.key)).toEqual(['length']);
+    expect(one(square('a')).measurements.map((r) => r.key)).toEqual(['area', 'perimeter']);
+    expect(one(circle('c')).measurements.map((r) => r.key)).toEqual([
+      'area',
+      'perimeter',
+      'radius',
+    ]);
+    expect(one(pt('p'))).toMatchObject({
+      description: { text: '', editable: true },
+      tabs: ['style', 'attributes'],
+      style: true,
+      buffer: true,
+    });
+    // The description: its text, and nothing when it is empty and cannot be changed
+    const described = pt('d', { properties: { description: 'Gate' } });
+    expect(one(described, false).description).toEqual({ text: 'Gate', editable: false });
+    expect(one(pt('p'), false).description).toBeNull();
+    // The measurements are not on the Style tab: a type with no style, no section and no
+    // operation has the Attributes tab only
+    const ring = makeFeature({
+      id: 'r',
+      type: 'Ring',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    });
+    expect(one(ring).tabs).toEqual(['attributes']);
+    expect(one(ring, true, 1).tabs).toEqual(['style', 'attributes']);
+    const quiet = inspectorSettings({
+      measurements: false,
+      operations: false,
+      tabs: ['attributes'],
+    });
+    expect(featureLayout({ feature: pt('p'), editable: true }, quiet, 0)).toMatchObject({
+      measurements: [],
+      tabs: ['attributes'],
+      buffer: false,
+    });
   });
 
   it('counts the features of each type', () => {

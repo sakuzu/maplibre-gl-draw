@@ -9,10 +9,13 @@
 //   maplibre-gl (kata and the icons are compiled into both)
 // - dist/style.css reaches nothing outside the root element: no :root, html or body selector,
 //   and no rule for every element of the page
+// - data-color-mode="light" on the root element switches every token kata's light theme sets,
+//   not only color-scheme
 //
 // Usage: node scripts/check-dist.mjs
 
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,6 +57,36 @@ if (existsSync(cssPath)) {
   if (/(^|[{},;])\s*\*/.test(css)) problems.push('dist/style.css has a rule for every element');
   if (!css.includes('.mgd-ui{') && !css.includes('.mgd-ui {')) {
     problems.push('dist/style.css does not put the tokens on .mgd-ui');
+  }
+  checkLight(css);
+}
+
+/** The custom properties a block of declarations sets */
+function properties(block) {
+  return new Set([...block.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+}
+
+/** The tokens of kata's light theme are set on the root element with the attribute */
+function checkLight(css) {
+  const require = createRequire(import.meta.url);
+  const kata = dirname(require.resolve('@sakuzu/kata/package.json'));
+  const source = readFileSync(join(kata, 'dist/tokens.css'), 'utf8');
+  const light = /\[data-color-mode="light"\]\s*\{([^}]*)\}/.exec(source);
+  if (!light) {
+    problems.push("kata's tokens have no light theme");
+    return;
+  }
+  const want = properties(light[1]);
+  const root = /\.mgd-ui(?::is\()?\[data-color-mode=(?:"light"|light)\]/;
+  const have = new Set();
+  for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    if (m[1].split(',').some((s) => root.test(s.trim()))) {
+      for (const p of properties(m[2])) have.add(p);
+    }
+  }
+  const missing = [...want].filter((p) => !have.has(p));
+  if (missing.length > 0) {
+    problems.push(`the light theme of the root element leaves out ${missing.join(', ')}`);
   }
 }
 
