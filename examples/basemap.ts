@@ -4,7 +4,7 @@
 // The basemap and the elevation data of the examples. Both are public and need no key.
 // The address of a page can replace them (`?style=<url>` and `?dem=<url>`), which is how the
 // end-to-end tests run the examples without going to the network, and `?basemap=<id>` picks one
-// of the basemaps of the standard UI's menu.
+// of the basemaps of the standard UI's basemap row.
 
 import type { Basemap } from '@sakuzu/maplibre-gl-draw-ui';
 
@@ -12,12 +12,24 @@ const params = new URLSearchParams(location.search);
 
 const OPENFREEMAP = 'https://tiles.openfreemap.org/styles';
 
-/** The basemaps of the menu of the standard UI: the styles of OpenFreeMap */
+/**
+ * The basemaps of the basemap row of the standard UI: the styles of OpenFreeMap, and a white
+ * sheet, a style of one background layer that loads nothing
+ */
 export const BASEMAPS: Basemap[] = [
   { id: 'liberty', label: 'OpenFreeMap Liberty', style: `${OPENFREEMAP}/liberty` },
   { id: 'bright', label: 'OpenFreeMap Bright', style: `${OPENFREEMAP}/bright` },
   { id: 'positron', label: 'OpenFreeMap Positron', style: `${OPENFREEMAP}/positron` },
   { id: 'dark', label: 'OpenFreeMap Dark', style: `${OPENFREEMAP}/dark` },
+  {
+    id: 'blank',
+    label: 'Blank',
+    style: {
+      version: 8,
+      sources: {},
+      layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#ffffff' } }],
+    },
+  },
 ];
 
 /**
@@ -38,13 +50,13 @@ export function initialBasemapId(): string | undefined {
  *
  * @param url The style the example uses (OpenFreeMap Bright when omitted)
  * @returns The style given in the address of the page (`?style=`), else the style of the basemap
- *   it names (`?basemap=`), else `url`
+ *   it names (`?basemap=`: a URL, or the style object of the white sheet), else `url`
  */
-export function basemapStyle(url = `${OPENFREEMAP}/bright`): string {
+export function basemapStyle(url = `${OPENFREEMAP}/bright`): Basemap['style'] {
   const style = params.get('style');
   if (style !== null) return style;
   const named = BASEMAPS.find((b) => b.id === initialBasemapId());
-  return typeof named?.style === 'string' ? named.style : url;
+  return named?.style ?? url;
 }
 
 /** The TileJSON of the elevation tiles (the MapLibre demo tiles) */

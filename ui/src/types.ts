@@ -62,8 +62,11 @@ export interface ToolbarOptions {
   snapping?: boolean;
 }
 
-/** What `createDrawUI` puts on the map */
-export interface DrawUIOptions {
+/**
+ * What `createDrawUI` puts on the map. The basemaps (`basemaps`, `basemap`, `onbasemap`) are
+ * those of the basemap row at the bottom of its layer panel
+ */
+export interface DrawUIOptions extends BasemapOptions {
   /**
    * The element the interface is laid over, which must be positioned (relative, absolute or
    * fixed). The map's container when left out
@@ -80,7 +83,7 @@ export interface DrawUIOptions {
    * The layer panel on the left, in a tab beside the legend, or false for none; true when left
    * out
    */
-  layers?: boolean | LayerPanelOptions;
+  layers?: boolean | Omit<LayerPanelOptions, keyof BasemapOptions>;
   /** The legend, in a tab beside the layer panel, or false for none; true when left out */
   legend?: boolean;
   /** The words: `en` (the default), `ja`, or words laid over English */
@@ -126,11 +129,18 @@ export interface DrawUIOptions {
    * for some of them. `destroy()` removes them
    */
   mapControls?: boolean | MapControlsOptions;
+}
+
+/**
+ * The basemaps of the basemap row, the last row of the layer panel: the back of the stack, under
+ * the layers
+ */
+export interface BasemapOptions {
   /**
-   * The basemaps a menu at the top right of the map offers, beside the theme button. Choosing
-   * one replaces the map's style with its `style` (`map.setStyle(style, { diff: false })`), and
-   * the draw instance adds its layers again on top of the new style. The menu shows with two or
-   * more; none when left out
+   * The basemaps the row's menu offers. Choosing one replaces the map's style with its `style`
+   * (`map.setStyle(style, { diff: false })`), and the draw instance adds its layers again on top
+   * of the new style. The row opens the menu with two or more; with fewer, or none (the default),
+   * it only shows the name of the basemap
    */
   basemaps?: Basemap[];
   /**
@@ -142,11 +152,11 @@ export interface DrawUIOptions {
   onbasemap?: (basemap: Basemap) => void;
 }
 
-/** A basemap of the menu of `createDrawUI` */
+/** A basemap of the basemap row of the layer panel */
 export interface Basemap {
   /** The name of the basemap, unique in the list */
   id: string;
-  /** The name shown in the menu */
+  /** The name shown in the row and in its menu */
   label: string;
   /**
    * The style of the map, as `map.setStyle` takes it: the URL of a style or a style object
@@ -218,7 +228,7 @@ export interface DrawUI {
   setTheme(theme: Theme): void;
   /**
    * Changes the basemap: replaces the map's style with the style of the basemap of `basemaps`
-   * that has this ID, marks it current in the menu and calls `onbasemap`. Nothing happens when
+   * that has this ID, shows it in the basemap row and calls `onbasemap`. Nothing happens when
    * it is current already
    *
    * @throws Error when no basemap of `basemaps` has this ID
@@ -250,8 +260,11 @@ export type DrawUIDraw = ToolbarDraw &
     readonly selection: Pick<Draw['selection'], 'get' | 'delete' | 'clear'>;
   };
 
-/** What the layer panel shows */
-export interface LayerPanelOptions {
+/**
+ * What the layer panel shows. Its last row is the basemap: the label of the current one of
+ * `basemaps`, else the `name` of the map's style
+ */
+export interface LayerPanelOptions extends BasemapOptions {
   /** Whether the features show under the layers and the groups; true when left out */
   features?: boolean;
   /** Whether the add menu (a new layer, a new group) shows; true when left out */
@@ -259,6 +272,9 @@ export interface LayerPanelOptions {
   /** Whether the rows can be dragged to reorder them; true when left out */
   reorder?: boolean;
 }
+
+/** What the layer panel shows, with the options filled in; the basemaps are kept apart */
+export type LayerSettings = Required<Omit<LayerPanelOptions, keyof BasemapOptions>>;
 
 /** A layer panel on the page */
 export interface LayerPanelHandle {
@@ -279,7 +295,7 @@ export interface LegendHandle {
 /** What the left region of `createDrawUI` shows, or null when there is no left region */
 export interface LeftSettings {
   /** The layer panel, or null for none */
-  layers: Required<LayerPanelOptions> | null;
+  layers: LayerSettings | null;
   /** Whether the legend shows */
   legend: boolean;
 }

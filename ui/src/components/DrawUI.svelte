@@ -4,17 +4,14 @@
 -->
 <script lang="ts">
   import Layers from '@lucide/svelte/icons/layers';
-  import MapIcon from '@lucide/svelte/icons/map';
   import Moon from '@lucide/svelte/icons/moon';
   import Sun from '@lucide/svelte/icons/sun';
   import {
     Button,
-    Dropdown,
     Floating,
     formatShortcut,
     Icon,
     type IconComponent,
-    MenuItem,
     Shell,
     type ShellLayout,
     type Shortcut,
@@ -49,8 +46,8 @@
   // side regions stand beside the stage, open, once the shell has drawn them, so that the map's
   // padding can follow them. While the left region is closed, a small button floats at the top
   // left of the map to open it again. At the top right, a button switches the theme to the look
-  // that is not shown now (light reads the look the root shows, which the theme control keeps),
-  // and with two or more basemaps a menu to the left of it changes the map's style.
+  // that is not shown now (light reads the look the root shows, which the theme control keeps).
+  // The basemap is the last row of the layer panel.
   let {
     draw,
     tools,
@@ -89,7 +86,7 @@
     themeToggle?: boolean;
     /** Called with the theme the button switches to */
     ontheme?: (theme: 'light' | 'dark') => void;
-    /** The basemaps of the menu and the current one, or null for no menu */
+    /** The basemaps of the last row of the layer panel */
     basemaps?: BasemapControl | null;
   } = $props();
 
@@ -161,20 +158,6 @@
     !!inspectorSettings && selected.get() && !!layout && layout.rightMode !== 'sheet',
   );
 
-  // The basemap menu: to the left of the theme button, gap-sm from it (the button is an icon
-  // button in a floating box with a line around it), or in its place without it. It moves with it
-  const MAP_ICON = MapIcon as unknown as IconComponent;
-  const showBasemaps = $derived(!!basemaps && basemaps.list.length >= 2);
-  const currentBasemap = $derived(basemaps?.current.get() ?? null);
-  const cornerRight = $derived(
-    besideInspector ? 'var(--kata-width-panel) + var(--kata-gap-md) * 2' : 'var(--kata-gap-md)',
-  );
-  const basemapRight = $derived(
-    themeToggle
-      ? `calc(${cornerRight} + var(--kata-height-icon-button) + var(--kata-border-width) * 2 + var(--kata-gap-sm))`
-      : `calc(${cornerRight})`,
-  );
-
   // Escape on the canvas is core's (it cancels the drawing or clears the selection). Elsewhere,
   // with no pane to close, it clears the selection
   function onescape(e: KeyboardEvent) {
@@ -202,6 +185,7 @@
       {draw}
       {messages}
       settings={side}
+      {basemaps}
       onclose={() => {
         leftOpen = false;
       }}
@@ -247,43 +231,6 @@
       >
         <Icon name={LAYERS_ICON} />
       </Button>
-    </Floating>
-  </div>
-{/if}
-
-{#if basemaps && showBasemaps}
-  <!-- Outside the shell's regions: the root gives it the pointer (data-role="basemap") -->
-  <div data-role="basemap">
-    <Floating right={basemapRight} top="md">
-      <Dropdown menu role="icon-button">
-        {#snippet trigger(toggle, open)}
-          <Button
-            variant="ghost"
-            icon
-            aria-label={m.basemap}
-            aria-haspopup="menu"
-            aria-expanded={open}
-            onclick={toggle}
-          >
-            <Icon name={MAP_ICON} />
-          </Button>
-        {/snippet}
-        {#snippet panel(close)}
-          {#each basemaps.list as item (item.id)}
-            <MenuItem
-              checked={item.id === currentBasemap}
-              aria-current={item.id === currentBasemap ? 'true' : undefined}
-              data-id={item.id}
-              onclick={() => {
-                close();
-                basemaps.set(item.id);
-              }}
-            >
-              {item.label}
-            </MenuItem>
-          {/each}
-        {/snippet}
-      </Dropdown>
     </Floating>
   </div>
 {/if}

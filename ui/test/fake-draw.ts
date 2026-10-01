@@ -93,6 +93,8 @@ export function fakeDraw(
     doc?: FakeDocument;
     /** The URL of the map's style */
     styleUrl?: string;
+    /** The `name` of the map's style */
+    styleName?: string;
   } = {},
 ) {
   const listeners = new Map<string, Set<Listener>>();
@@ -132,6 +134,8 @@ export function fakeDraw(
   // The map: its container, its canvas, its padding, its controls and its style
   let padding = { top: 10, bottom: 20, left: 30, right: 40 };
   let styleUrl: string | null = options.styleUrl ?? null;
+  let styleName: string | undefined = options.styleName;
+  const mapListeners = new Map<string, Set<() => void>>();
   const map = {
     getContainer: () => container,
     getCanvas: () => canvas,
@@ -142,6 +146,16 @@ export function fakeDraw(
     addControl: vi.fn((_control: unknown, _position?: string) => map),
     removeControl: vi.fn((_control: unknown) => map),
     getStyleUrl: () => styleUrl,
+    getStyle: () => ({ name: styleName }),
+    on: vi.fn((type: string, listener: () => void) => {
+      if (!mapListeners.has(type)) mapListeners.set(type, new Set());
+      mapListeners.get(type)?.add(listener);
+      return map;
+    }),
+    off: vi.fn((type: string, listener: () => void) => {
+      mapListeners.get(type)?.delete(listener);
+      return map;
+    }),
     setStyle: vi.fn((style: unknown, _options?: unknown) => {
       styleUrl = typeof style === 'string' ? style : null;
       return map;
@@ -346,6 +360,13 @@ export function fakeDraw(
     container,
     canvas,
     map,
+    /** Loads a style with this name on the map: it fires the map's `style.load` */
+    loadStyle(name: string | undefined) {
+      styleName = name;
+      for (const listener of mapListeners.get('style.load') ?? []) listener();
+    },
+    /** The number of listeners of an event of the map */
+    mapListening: (type: string) => mapListeners.get(type)?.size ?? 0,
     /** Fires an event of the draw instance */
     emit,
     /** Changes the selection from outside the interface, as a click on the map would */

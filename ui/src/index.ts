@@ -51,10 +51,12 @@ import { checkTheme, type Theme, themeControl } from './theme.js';
 import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.js';
 import type {
   AloneOptions,
+  BasemapOptions,
   DrawUI,
   DrawUIOptions,
   LayerPanelHandle,
   LayerPanelOptions,
+  LayerSettings,
   LeftSettings,
   LegendHandle,
   ToolbarHandle,
@@ -80,6 +82,7 @@ export type { Theme } from './theme.js';
 export type {
   AloneOptions,
   Basemap,
+  BasemapOptions,
   DrawUI,
   DrawUIOptions,
   LayerPanelHandle,
@@ -160,10 +163,10 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * inspector on the right while something is selected. The map's padding follows the interface:
  * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
- * its padding back. A button at the top right switches between the light and the dark look, a
- * menu beside it changes the basemap when `options.basemaps` has two or more, and maplibre-gl's
- * own controls go to the bottom corners of the map (the globe, the compass and the
- * zoom at the right, the scale at the left); `destroy()` removes them.
+ * its padding back. The last row of the layer panel is the basemap, which opens a menu of
+ * `options.basemaps` when it has two or more. A button at the top right switches between the
+ * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
+ * globe, the compass and the zoom at the right, the scale at the left); `destroy()` removes them.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
@@ -191,12 +194,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const sections = new Box<InspectorSectionSpec[]>([]);
 
   const map = draw.getMap();
-  const basemapList = basemapSettings(
-    options.basemaps,
-    options.basemap,
-    typeof map.getStyleUrl === 'function' ? map.getStyleUrl() : null,
-  );
-  const basemaps: BasemapControl = basemapControl(map, basemapList, options.onbasemap);
+  const basemaps = basemapsOf(draw, options);
   const root = createRoot(options.container ?? map.getContainer(), true);
   // The look the root shows, which the theme button follows
   const light = new Box(false);
@@ -310,6 +308,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       if (destroyed) return;
       destroyed = true;
       theme.destroy();
+      basemaps.destroy();
       padding?.destroy();
       lift.destroy();
       controls.destroy();
@@ -363,8 +362,24 @@ export function createToolbar(draw: Draw, options: ToolbarOptions & AloneOptions
   };
 }
 
+/**
+ * The basemaps of the options on the map of a draw instance
+ *
+ * @throws Error when a basemap has no ID, no label or no style or shares its ID, or `basemap` is
+ *   the ID of none of them
+ */
+function basemapsOf(draw: Draw, options: BasemapOptions): BasemapControl {
+  const map = draw.getMap();
+  const settings = basemapSettings(
+    options.basemaps,
+    options.basemap,
+    typeof map.getStyleUrl === 'function' ? map.getStyleUrl() : null,
+  );
+  return basemapControl(map, settings, options.onbasemap);
+}
+
 /** The layer panel with the options filled in */
-function layerSettings(options: LayerPanelOptions = {}): Required<LayerPanelOptions> {
+function layerSettings(options: Omit<LayerPanelOptions, keyof BasemapOptions> = {}): LayerSettings {
   return {
     features: options.features !== false,
     add: options.add !== false,
@@ -382,12 +397,16 @@ function leftSettings(options: DrawUIOptions): LeftSettings | null {
   return layers || legend ? { layers, legend } : null;
 }
 
-/** Puts a component alone in an element, in a root element of the interface */
+/**
+ * Puts a component alone in an element, in a root element of the interface; `cleanup` runs once
+ * when it is removed
+ */
 function mountAlone(
   { target, locale, theme: themeOption }: AloneOptions,
   component: typeof LayerPanelView | typeof LegendView,
   props: Record<string, unknown>,
   role: string,
+  cleanup?: () => void,
 ): { element: HTMLElement; destroy(): void } {
   const themeName = checkTheme(themeOption);
   const messages = new Box(resolveMessages(locale));
@@ -409,26 +428,38 @@ function mountAlone(
       theme.destroy();
       unmount(view);
       root.remove();
+      cleanup?.();
     },
   };
 }
 
 /**
  * Puts the layer panel alone in an element: the tree of the layers, their groups and their
- * features, from the front, with the eye, the lock, renaming, dragging and the add menu. It fills
- * `target`, which gives it its size and its scrolling.
+ * features, from the front, with the eye, the lock, renaming, dragging and the add menu, and under
+ * it the basemap, the back of the stack, which opens a menu of `options.basemaps` when it has two
+ * or more. It fills `target`, which gives it its size and its scrolling.
  *
  * @param draw - The draw instance
- * @param options - The element to put it in, what it shows, the words (`en` by default) and the
- *   theme (`auto` by default)
+ * @param options - The element to put it in, what it shows, the basemaps, the words (`en` by
+ *   default) and the theme (`auto` by default)
  * @returns The layer panel, to remove
- * @throws Error when the theme is not `light`, `dark` or `auto`
+ * @throws Error when the theme is not `light`, `dark` or `auto`, a basemap of `options.basemaps`
+ *   has no ID, no label or no style or shares its ID, or `options.basemap` is the ID of none of
+ *   them
  */
 export function createLayerPanel(
   draw: Draw,
   options: LayerPanelOptions & AloneOptions,
 ): LayerPanelHandle {
-  return mountAlone(options, LayerPanelView, { draw, ...layerSettings(options) }, 'layer-panel');
+  checkTheme(options.theme);
+  const basemaps = basemapsOf(draw, options);
+  return mountAlone(
+    options,
+    LayerPanelView,
+    { draw, ...layerSettings(options), basemaps },
+    'layer-panel',
+    () => basemaps.destroy(),
+  );
 }
 
 /**
