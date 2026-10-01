@@ -326,6 +326,8 @@ export interface Dataset {
   setTable(table: Table | PreparedTable): void;
   /** Replaces the style rule (undefined clears it) */
   setStyleRule(rule: StyleRule | undefined): void;
+  /** The style rule in effect (undefined when not set) */
+  getStyleRule(): StyleRule | undefined;
   /**
    * Replaces the zoom-dependent drawing factors (null clears them)
    *

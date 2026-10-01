@@ -53,6 +53,9 @@ the project follows semantic versioning.
   earlier API reference, redirect to the pages that took their place.
   `npm run site:dev` serves the site with the examples and the
   playground for a local check.
+- Added: `Dataset.getStyleRule()`, the style rule of a dataset: the
+  one last given to `setStyleRule`, or the one given to `datasets.add`,
+  or `undefined` when there is none. A legend of the datasets reads it.
 
 ## [2.0.0] - 2026-09-30
 

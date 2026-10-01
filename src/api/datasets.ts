@@ -169,6 +169,11 @@ export interface Dataset {
   setTable(table: Table | PreparedTable): void;
   /** Replaces the style rule; `undefined` removes it. */
   setStyleRule(rule: StyleRule | undefined): void;
+  /**
+   * The style rule, or `undefined` when none is set: the rule last given to `setStyleRule`, or
+   * the one given to `datasets.add` when it was not replaced.
+   */
+  getStyleRule(): StyleRule | undefined;
   /** Replaces the scale factor and the opacity by zoom; `null` removes them. */
   setZoomScale(zoomScale: DatasetZoomScale | null): void;
   /** The scale factor and the opacity by zoom, or `null` when none is set. */
