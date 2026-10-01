@@ -6,6 +6,11 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+- Fixed: `draw.options.update({ scaleWithZoom })` reaches the drawing
+  modes at once. They kept the value given to `createDraw`, so a feature
+  drawn after the option was turned off still got a reference zoom
+  (`maplibre-gl-draw:createdZoom`), and one drawn after it was turned on
+  got none.
 - Added: the event `options.changed`, with `{ options, previous }`: what
   `draw.options.get()` returns after and before a `draw.options.update`
   that changed a value. An update that changes nothing fires nothing,

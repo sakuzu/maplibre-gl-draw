@@ -288,7 +288,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     },
     getWritableLayerId: context.getWritableLayerId,
     generateId: context.generateFeatureId,
-    scaleWithZoom: context.options.scaleWithZoom,
+    // Read when a feature is committed, so a change of the option applies at once
+    get scaleWithZoom() {
+      return context.options.scaleWithZoom;
+    },
     selectionStyle: context.selectionStyle,
     boxSelectionStyle: context.renderingConfig.boxSelectionStyle,
     notifyDrawCommit: (feature) => announceDrawCommit(feature),
