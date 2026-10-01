@@ -356,8 +356,8 @@ export interface CollectOptions {
    */
   isExternallyRenderedPoint?: (feature: Feature) => boolean;
   /**
-   * Do not push the solid polygons and lines (a frame where the analytic drape draws them as
-   * ground pixels)
+   * Do not push the polygons and lines, solid or dashed (a frame where the analytic drape draws
+   * them as ground pixels)
    */
   skipDrapedFills?: boolean;
   /** Collect only the points (the re-bake of the anchor elevations) */
@@ -443,8 +443,8 @@ export function isEmptyChunkBatches(batches: DisplayChunkBatches): boolean {
  * @param isExternallyRenderedPoint Predicate that returns whether a point is drawn by an external
  *   renderer (every point is pushed when omitted). A point for which it is true goes neither onto
  *   a batch nor into fallback
- * @param skipDrapedFills Do not push the solid polygons and lines (a frame where the analytic
- *   drape draws them as ground pixels)
+ * @param skipDrapedFills Do not push the polygons and lines, solid or dashed (a frame where the
+ *   analytic drape draws them as ground pixels)
  * @returns The batches that were built. When the GPU resources could not be created (the shaders
  *          are not initialized) null is returned and the caller rebuilds them on the next frame
  *
@@ -940,7 +940,7 @@ export function collectFeature(
   isExternallyRenderedPoint?: (feature: Feature) => boolean,
   skipDrapedFills = false,
 ): void {
-  const skipSolid = skipDrapedFills && isDrapedGeometry(feature);
+  const skipDraped = skipDrapedFills && isDrapedGeometry(feature);
   switch (feature.type) {
     case 'Point':
       collectPoint(
@@ -960,11 +960,11 @@ export function collectFeature(
       return;
     case 'LineString':
     case 'Freehand':
-      collectLine(feature, coordinatesOf(feature) as Coordinate[], draft, styles, skipSolid);
+      collectLine(feature, coordinatesOf(feature) as Coordinate[], draft, styles, skipDraped);
       return;
     case 'MultiLineString':
       for (const coords of coordinatesOf(feature) as Coordinate[][]) {
-        collectLine(feature, coords, draft, styles, skipSolid);
+        collectLine(feature, coords, draft, styles, skipDraped);
       }
       return;
     case 'Polygon':
@@ -974,13 +974,13 @@ export function collectFeature(
         draft,
         styles,
         0,
-        skipSolid,
+        skipDraped,
       );
       return;
     case 'MultiPolygon': {
       const parts = coordinatesOf(feature) as Coordinate[][][];
       for (let i = 0; i < parts.length; i++) {
-        collectPolygon(feature, parts[i], draft, styles, i, skipSolid);
+        collectPolygon(feature, parts[i], draft, styles, i, skipDraped);
       }
       return;
     }
@@ -1055,18 +1055,19 @@ function collectLine(
   coords: Coordinate[],
   draft: ChunkDraft,
   styles: RetainedStyleResolver,
-  skipSolid = false,
+  skipDraped = false,
 ): void {
   if (coords.length < 2) return;
 
   const strokeStyle = styles.getLineStringStrokeStyle(feature);
+  // A line, solid or dashed, is drawn by the analytic drape as ground pixels (in this frame
+  // only)
+  if (skipDraped && strokeStyle.opacity > 0 && strokeStyle.width > 0) return;
   if (strokeStyle.lineStyle !== 'solid') {
     // The path that goes to immediate mode is not multiplied by the factors of zoomScale
     pushFallback(draft, feature);
     return;
   }
-  // A solid line is drawn by the analytic drape as ground pixels (in this frame only)
-  if (skipSolid && strokeStyle.opacity > 0 && strokeStyle.width > 0) return;
 
   const createdZoom = getCreatedZoom(feature);
   const target = createdZoom === undefined ? draft.fixedLines : draft.scaledLines;
@@ -1096,7 +1097,7 @@ function collectPolygon(
   draft: ChunkDraft,
   styles: RetainedStyleResolver,
   partIndex = 0,
-  skipSolid = false,
+  skipDraped = false,
 ): void {
   const outerRing = rings[0];
   if (!outerRing || outerRing.length < 3) return;
@@ -1104,15 +1105,15 @@ function collectPolygon(
   const { fillColor, strokeStyle } = styles.getPolygonStyles(feature);
   const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
 
+  if (!hasStroke && fillColor[3] <= 0) return;
+  // The fill and the outline, solid or dashed, are drawn by the analytic drape as ground pixels
+  // (in this frame only)
+  if (skipDraped) return;
   if (hasStroke && strokeStyle.lineStyle !== 'solid') {
     // The path that goes to immediate mode is not multiplied by the factors of zoomScale
     pushFallback(draft, feature);
     return;
   }
-  if (!hasStroke && fillColor[3] <= 0) return;
-  // The solid fill and outline are drawn by the analytic drape as ground pixels (in this frame
-  // only)
-  if (skipSolid) return;
 
   const createdZoom = getCreatedZoom(feature);
   const target = createdZoom === undefined ? draft.fixedPolygons : draft.scaledPolygons;

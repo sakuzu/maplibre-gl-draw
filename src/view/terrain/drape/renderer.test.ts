@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { TERRAIN_ATLAS_TEXTURE_UNIT } from '../state.js';
-import { DRAPE_FRAGMENT_SOURCE, EDGE_UNITS } from './renderer.js';
+import { DRAPE_EDGE_START_UNIT, DRAPE_FRAGMENT_SOURCE, EDGE_UNITS } from './renderer.js';
 
 /** The starting position of the scan (the run loop) */
 const loopStart = DRAPE_FRAGMENT_SOURCE.indexOf('for (int r = 0');
@@ -79,5 +79,13 @@ describe('the texture units of the edge DEMs', () => {
   it('does not duplicate between the edges either', () => {
     const units = Object.values(EDGE_UNITS);
     expect(new Set(units).size).toBe(units.length);
+  });
+
+  it('leaves a unit of its own to the starts of the edges along their paths', () => {
+    // Units 0 to 4 hold the DEM of the tile and the tables of the index
+    const taken = [0, 1, 2, 3, 4, TERRAIN_ATLAS_TEXTURE_UNIT, ...Object.values(EDGE_UNITS)];
+    expect(taken).not.toContain(DRAPE_EDGE_START_UNIT);
+    // WebGL2 guarantees 16 units to a fragment shader
+    expect(DRAPE_EDGE_START_UNIT).toBeLessThan(16);
   });
 });

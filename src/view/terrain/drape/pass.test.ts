@@ -347,3 +347,71 @@ describe('the opacity of the Store layers on the drape', () => {
     expect(element.stroke[3]).toBe(0.5);
   });
 });
+
+describe('dashed outlines on the drape', () => {
+  /** Styles whose outlines are all of one line style */
+  function stylesOf(lineStyle: 'solid' | 'dashed' | 'dotted'): RetainedStyleResolver {
+    return {
+      getPolygonStyles: () => ({
+        fillColor: [1, 0, 0, 1] as [number, number, number, number],
+        strokeStyle: { color: [0, 0, 0, 1], width: 2, opacity: 1, lineStyle },
+      }),
+      getLineStringStrokeStyle: () => ({ color: [0, 0, 0, 1], width: 2, opacity: 1, lineStyle }),
+      getPointStyle: () => ({ shape: 'circle' }),
+    } as unknown as RetainedStyleResolver;
+  }
+
+  /** A line feature */
+  function line(id: string, layerId: string): Feature {
+    return {
+      id,
+      type: 'LineString',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+      properties: {},
+      layerId,
+      visible: true,
+    } as unknown as Feature;
+  }
+
+  it('puts a dashed line and a polygon with a dashed outline of the Store on', () => {
+    const store = fakeStore(
+      [polygon('p-1', 'layer-1'), line('l-1', 'layer-1')],
+      ['layer-1'],
+      new Set(['layer-1']),
+    );
+    const { elements, excluded } = collectDrapeElements(store, stylesOf('dashed'), 2, 3, []);
+
+    expect(elements).toHaveLength(2);
+    expect(excluded.size).toBe(0);
+    // A width fixed in screen pixels was resolved with the rendering pixel ratio
+    expect(elements[0].dash).toEqual({ a: 12, b: 4, c: 2, pixelRatio: 2 });
+    expect(elements[1].dash).toEqual({ a: 12, b: 4, c: 2, pixelRatio: 2 });
+  });
+
+  it('takes the pattern of a dotted line from the same table as the subdividing path', () => {
+    const store = fakeStore([line('l-1', 'layer-1')], ['layer-1'], new Set(['layer-1']));
+    const { elements } = collectDrapeElements(store, stylesOf('dotted'), 1, 1, []);
+    expect(elements[0].dash).toEqual({ a: 1, b: 0.5, c: 1.2, pixelRatio: 1 });
+  });
+
+  it('gives a solid outline no pattern', () => {
+    const store = fakeStore([line('l-1', 'layer-1')], ['layer-1'], new Set(['layer-1']));
+    const { elements } = collectDrapeElements(store, stylesOf('solid'), 1, 1, []);
+    expect(elements[0].dash).toBeNull();
+  });
+
+  it('puts the dashed features of a dataset on', () => {
+    const dataset = fakeDataset('d-1', 'above-store', [polygon('p-1', 'd-1'), line('l-1', 'd-1')]);
+    const store = fakeStore([], [], new Set());
+    const { elements } = collectDrapeElements(store, stylesOf('dashed'), 1, 1, [dataset]);
+
+    expect(elements).toHaveLength(2);
+    expect(elements.every((element) => element.dash !== null)).toBe(true);
+  });
+});

@@ -1056,6 +1056,32 @@ describe('the time-sliced build of the retained batches', () => {
       expect(batches?.points).toHaveLength(1);
     });
 
+    it('a frame that handed them over leaves the dashed ones to the drape too', () => {
+      const probe = createRetainedProbe();
+      const dashed = { lineStyle: 'dashed' as const };
+      const features = [
+        { ...polygonOf('a', 8), style: dashed },
+        { ...lineOf('b'), style: dashed },
+      ];
+
+      const handedOver = createChunkBuildJob(
+        collectFeatureArray(features, { skipDrapedFills: true }),
+        probe.renderers,
+        [139.5, 35.6],
+      );
+      expect(handedOver.step(Number.POSITIVE_INFINITY, () => 0)).toBe(true);
+      expect(handedOver.take()?.fallback).toEqual([]);
+
+      // Without the hand-over they go to immediate mode, which splits the dashes
+      const kept = createChunkBuildJob(
+        collectFeatureArray(features),
+        probe.renderers,
+        [139.5, 35.6],
+      );
+      expect(kept.step(Number.POSITIVE_INFINITY, () => 0)).toBe(true);
+      expect(kept.take()?.fallback.map((feature) => feature.id)).toEqual(['a', 'b']);
+    });
+
     it('a frame that did not hand them over pushes everything as before', () => {
       const probe = createRetainedProbe();
       const features = [polygonOf('a', 8), lineOf('b'), pointOf('c')];
@@ -1167,7 +1193,7 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
     ).toBe(true);
   });
 
-  it('even when handed over, a dashed outline is overpainted by immediate mode', () => {
+  it('when handed over, a dashed outline is highlighted by the drape, as a solid one is', () => {
     const probe = createRetainedProbe();
     const { manager } = createManager();
     const dataset = add(manager, {
@@ -1182,7 +1208,9 @@ describe('the selection highlight and the hand-over to the analytic drape', () =
 
     drawFrame(manager, probe);
 
-    expect(highlightedIds(probe)).toEqual(['poly', 'line']);
+    // The drape lays the dashes out along the path, so the dashed features are handed over
+    // with the rest and immediate mode leaves them alone
+    expect(highlightedIds(probe)).toEqual([]);
   });
 
   it('releasing the hand-over brings the overpaint back to immediate mode', () => {

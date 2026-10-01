@@ -192,12 +192,12 @@ describe('drawSelectionHighlight', () => {
 });
 
 describe('isHandedToDrape', () => {
-  it('solid polygons and lines go to the drape, points and dashed lines do not', () => {
+  it('polygons and lines, solid or dashed, go to the drape, points do not', () => {
     const styles = createStyles();
     expect(isHandedToDrape(POLYGON, styles)).toBe(true);
     expect(isHandedToDrape(LINE, styles)).toBe(true);
     expect(isHandedToDrape(POINT, styles)).toBe(false);
-    expect(isHandedToDrape({ ...LINE, style: { lineStyle: 'dashed' } }, styles)).toBe(false);
+    expect(isHandedToDrape({ ...LINE, style: { lineStyle: 'dashed' } }, styles)).toBe(true);
   });
 });
 

@@ -24,9 +24,11 @@ import { getDisplayFeatures, isLocallyHidden } from '../../../store/local-visibi
 import type { Store } from '../../../store/store.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { layerDrawFactors } from '../../renderers/draw-factors.js';
+import { dashCoefficientsOf } from '../../renderers/line/dash.js';
 import type { RetainedStyleResolver } from '../../renderers/retained.js';
 import {
   type DrapeColor,
+  type DrapeDash,
   type DrapeElement,
   type DrapeQuadBreak,
   drapeSelectionKey,
@@ -71,8 +73,8 @@ export const DRAPE_MAX_VERTICES = 4_000_000;
 export interface DrapeCollectResult {
   /** The elements in draw order */
   readonly elements: DrapeElement[];
-  /** The IDs of the Store features that cannot be put on the drape (points, images, dashed
-   * lines and so on) */
+  /** The IDs of the Store features that cannot be put on the drape (points, images and so
+   * on) */
   readonly excluded: Set<string>;
   /** The breaks in the stacking order (the positions of the images; dataset order =
    * ascending afterElements) */
@@ -281,14 +283,6 @@ function collectStoreFeature(
 
   if (feature.type === 'Polygon' || feature.type === 'MultiPolygon') {
     const { fillColor, strokeStyle } = context.styles.getPolygonStyles(feature, layer);
-    // Dashed lines are not put through the analytic evaluation (solving the accumulated
-    // distance along the outline from the pixel is not implemented). Drawing them as solid
-    // lines would change the appearance, so features with dashed lines are routed to the
-    // previous vertex displacement path.
-    if (strokeStyle.lineStyle !== 'solid') {
-      context.excluded.add(feature.id);
-      return;
-    }
     const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
     const rings = polygonRings(feature);
     if (rings.length === 0) return;
@@ -304,6 +298,7 @@ function collectStoreFeature(
         strokeStyle.color[3] * (hasStroke ? strokeStyle.opacity : 0) * bakedOpacity,
       ],
       strokeWidthPx: hasStroke ? polygonWidth.px : 0,
+      dash: dashOf(strokeStyle.lineStyle, polygonWidth),
       source,
       widthZoom: polygonWidth.zoom,
       // A Store selection is expressed by the selection UI (the box and the handles). The
@@ -314,10 +309,6 @@ function collectStoreFeature(
   }
 
   const strokeStyle = context.styles.getLineStringStrokeStyle(feature, layer);
-  if (strokeStyle.lineStyle !== 'solid') {
-    context.excluded.add(feature.id);
-    return;
-  }
   if (strokeStyle.opacity <= 0 || strokeStyle.width <= 0) return;
   const paths = linePaths(feature);
   if (paths.length === 0) return;
@@ -332,6 +323,7 @@ function collectStoreFeature(
       strokeStyle.color[3] * strokeStyle.opacity * bakedOpacity,
     ],
     strokeWidthPx: lineWidth.px,
+    dash: dashOf(strokeStyle.lineStyle, lineWidth),
     source,
     widthZoom: lineWidth.zoom,
     selectionKey: '',
@@ -360,9 +352,6 @@ function collectDataset(
     if (feature.type === 'Polygon' || feature.type === 'MultiPolygon') {
       const { fillColor, strokeStyle } = context.styles.getPolygonStyles(feature);
       const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
-      // A dashed outline is drawn by the immediate path on the retained batch side (the
-      // paired test)
-      if (hasStroke && strokeStyle.lineStyle !== 'solid') continue;
       if (!hasStroke && fillColor[3] <= 0) continue;
       const rings = polygonRings(feature);
       if (rings.length === 0) continue;
@@ -377,6 +366,7 @@ function collectDataset(
           hasStroke ? strokeStyle.color[3] : 0,
         ],
         strokeWidthPx: hasStroke ? width.px : 0,
+        dash: dashOf(strokeStyle.lineStyle, width),
         source,
         widthZoom: width.zoom,
         selectionKey: drapeSelectionKey(dataset.id, feature.id),
@@ -393,7 +383,6 @@ function collectDataset(
     }
 
     const strokeStyle = context.styles.getLineStringStrokeStyle(feature);
-    if (strokeStyle.lineStyle !== 'solid') continue;
     if (strokeStyle.opacity <= 0 || strokeStyle.width <= 0) continue;
     const paths = linePaths(feature);
     if (paths.length === 0) continue;
@@ -408,6 +397,7 @@ function collectDataset(
         strokeStyle.color[3] * strokeStyle.opacity,
       ],
       strokeWidthPx: width.px,
+      dash: dashOf(strokeStyle.lineStyle, width),
       source,
       widthZoom: width.zoom,
       selectionKey: drapeSelectionKey(dataset.id, feature.id),
@@ -427,12 +417,37 @@ function widthOf(
   feature: Feature,
   width: number,
   ratios: Pick<CollectContext, 'pixelRatio' | 'contentPixelRatio'>,
-): { px: number; zoom: number } {
+): ResolvedWidth {
   const createdZoom = getCreatedZoom(feature);
   if (createdZoom !== undefined && Number.isFinite(createdZoom)) {
-    return { px: width * ratios.contentPixelRatio, zoom: createdZoom };
+    const ratio = ratios.contentPixelRatio;
+    return { px: width * ratio, zoom: createdZoom, ratio };
   }
-  return { px: width * ratios.pixelRatio, zoom: -1 };
+  return { px: width * ratios.pixelRatio, zoom: -1, ratio: ratios.pixelRatio };
+}
+
+/** A line width resolved for the drape */
+interface ResolvedWidth {
+  /** The width in physical pixels (at the reference zoom when there is one) */
+  px: number;
+  /** The reference zoom of the width (-1 = fixed in screen pixels) */
+  zoom: number;
+  /** The physical pixels per CSS pixel the width was resolved with */
+  ratio: number;
+}
+
+/**
+ * The dash pattern of an outline, or null for a solid one
+ *
+ * The coefficients come from the table the subdividing path uses (`dash.ts`), and the
+ * shader turns them into the dash and the gap of the width the line has in the frame, in
+ * CSS pixels as the subdividing path measures them: the pixel ratio the width was resolved
+ * with goes along to take back out.
+ */
+function dashOf(lineStyle: 'solid' | 'dashed' | 'dotted', width: ResolvedWidth): DrapeDash | null {
+  const coefficients = dashCoefficientsOf(lineStyle);
+  if (!coefficients || width.ratio <= 0) return null;
+  return { ...coefficients, pixelRatio: width.ratio };
 }
 
 /** The rings of a polygon (with the closing point dropped) */
@@ -461,6 +476,7 @@ function pushElement(
     fill: DrapeColor;
     stroke: DrapeColor;
     strokeWidthPx: number;
+    dash: DrapeDash | null;
     source: number;
     widthZoom: number;
     selectionKey: string;
@@ -483,6 +499,8 @@ function pushElement(
     // is not converted)
     geometry: () => drapeGeometryOf(cacheKey, paths, kind === 0),
     ...style,
+    // An outline that is not drawn has no pattern to lay out
+    dash: style.strokeWidthPx > 0 ? style.dash : null,
   });
   context.edgeCount += edges;
 }

@@ -32,7 +32,12 @@ import {
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
 import type { TerrainTileData } from '../detect.js';
-import { DRAPE_SELECTION_TEXEL, DRAPE_STYLE_TEXELS, type DrapePackBuilder } from './bin-store.js';
+import {
+  DRAPE_DASH_TEXEL,
+  DRAPE_SELECTION_TEXEL,
+  DRAPE_STYLE_TEXELS,
+  type DrapePackBuilder,
+} from './bin-store.js';
 import {
   applyEdgeConstrainUniforms,
   EDGE_CONSTRAIN_GLSL,
@@ -72,6 +77,17 @@ const UNIT_EDGE = 1;
 const UNIT_RUN = 2;
 const UNIT_CELL = 3;
 const UNIT_STYLE = 4;
+
+/**
+ * The texture unit of the starts of the edges along their paths
+ *
+ * 5 and 7 to 9 hold the DEMs of the edges (`EDGE_UNITS`) and 6 the DEM atlas, so it comes after
+ * them (WebGL2 guarantees 16 units to a fragment shader).
+ */
+export const DRAPE_EDGE_START_UNIT = 10;
+
+/** The pixels of a 512-pixel tile, the size the dash patterns are measured in */
+const DASH_TILE_PX = 512;
 
 /**
  * Upper limit on the sources of the factors
@@ -152,6 +168,8 @@ export interface DrapeTileDraw {
   readonly grid: number;
   /** The ground size of this tile (meters). Used to compute the shading gradient */
   readonly groundMeters: number;
+  /** The zoom of this tile (it scales the lengths of the edges into dash pattern pixels) */
+  readonly tileZ: number;
   /**
    * The constraint for each edge (resolving T-junctions)
    *
@@ -209,6 +227,8 @@ uniform sampler2D u_edge_tex;
 uniform sampler2D u_run_tex;
 uniform sampler2D u_cell_tex;
 uniform sampler2D u_style_tex;
+// Where each edge starts along its path (Mercator units), in step with u_edge_tex
+uniform sampler2D u_edge_start_tex;
 uniform int u_data_width;
 uniform int u_cell_base;
 uniform float u_cells;
@@ -239,6 +259,11 @@ uniform vec2 u_paint_range;
 // Whether to compose the selection highlight in this draw (1 only for the final
 // segment)
 uniform float u_emit_selection;
+// The pixels of a dash pattern per unit of the Mercator world (512 * 2^zoom) and per
+// unit of this tile (512 * 2^(zoom - tile zoom)). A pattern is measured the way the
+// subdividing path measures it: in pixels of the flat map at the zoom of the frame
+uniform float u_dash_world_px;
+uniform float u_dash_tile_px;
 
 out vec4 fragColor;
 
@@ -270,6 +295,36 @@ vec2 closestVector(vec2 a, vec2 b) {
     float len2 = dot(ab, ab);
     float t = len2 > 0.0 ? clamp(-dot(a, ab) / len2, 0.0, 1.0) : 0.0;
     return a + ab * t;
+}
+
+// The screen distance from the pixel to the dashes of a pattern on one edge
+//
+// sa and sb are the ends of the edge on the screen, around the pixel. start and len are
+// where the edge starts along its path and how long it is, and dash and period those of
+// the pattern (all in pattern pixels). The place along the edge is taken where the pixel
+// is closest to it on the screen, so the dash picked is the one closest on the screen.
+// The dash there and the next one are measured: between them lies a gap, and the pixel
+// is closer to one of their ends. A dash is cut where the edge ends; the dash goes on
+// on the next edge, which draws its own part, and the two parts meet in a round joint
+// as a solid line does. Each part is a segment with round caps, so a dash gets the
+// round caps of the subdividing path at its ends.
+float dashDistance(vec2 sa, vec2 sb, float start, float len, float dash, float period) {
+    if (len <= 0.0) return 1.0e9;
+    vec2 ab = sb - sa;
+    float len2 = dot(ab, ab);
+    float u = len2 > 0.0 ? clamp(-dot(sa, ab) / len2, 0.0, 1.0) : 0.0;
+    float k = floor((start + u * len) / period);
+    float best = 1.0e9;
+    for (int i = 0; i < 2; i++) {
+        float from = (k + float(i)) * period;
+        float u0 = (from - start) / len;
+        float u1 = (from + dash - start) / len;
+        if (u1 <= 0.0 || u0 >= 1.0) continue;
+        u0 = clamp(u0, 0.0, 1.0);
+        u1 = clamp(u1, 0.0, 1.0);
+        best = min(best, length(closestVector(sa + ab * u0, sa + ab * u1)));
+    }
+    return best;
 }
 
 // Compose on top (premultiplied alpha)
@@ -335,7 +390,41 @@ void main() {
                 > 0.5;
         if (!paints && !selected) continue;
 
+        int styleAt = elementIndex * ${DRAPE_STYLE_TEXELS};
+        vec4 fill = fetchData(u_style_tex, styleAt);
+        vec4 stroke = fetchData(u_style_tex, styleAt + 1);
+        vec4 params = fetchData(u_style_tex, styleAt + 2);
+        // (a, b, c, the physical pixels of the width per CSS pixel; 0 for a solid outline)
+        vec4 dashSpec = fetchData(u_style_tex, styleAt + ${DRAPE_DASH_TEXEL});
+        int source = int(params.z);
+        vec2 factors = source >= 0 && source < ${DRAPE_MAX_SOURCES}
+            ? u_source_factors[source]
+            : vec2(1.0, 1.0);
+        // An element that has a reference zoom for its line width changes its
+        // thickness with the same formula as the retained batch path
+        float widthScale = params.w >= 0.0 ? exp2(u_zoom - params.w) : 1.0;
+        float halfWidth = params.x * 0.5 * factors.y * widthScale;
+        bool isPolygon = params.y < 0.5;
+
+        // A dashed outline: the dash and the gap follow from the width the line has in
+        // this frame (in CSS pixels), with the formulas of the subdividing path
+        // (dash.ts): dash = max(a, b * w), gap = max(w + 1, c * w)
+        bool dashed = dashSpec.w > 0.0;
+        float dashLength = 0.0;
+        float dashPeriod = 1.0;
+        if (dashed) {
+            float w = 2.0 * halfWidth / dashSpec.w;
+            dashLength = max(dashSpec.x, dashSpec.y * w);
+            dashPeriod = dashLength + max(w + 1.0, dashSpec.z * w);
+        }
+        // The distance to the whole outline is what the fill and the selection read. A
+        // dashed outline measures its dashes apart, and the whole outline only when
+        // something reads it
+        bool wantsEdges = !dashed || selected || (paints && isPolygon && fill.a > 0.0);
+        bool wantsDashes = dashed && paints;
+
         float minDist = 1.0e9;
+        float dashDist = 1.0e9;
         for (int e = 0; e < edgeCount; e++) {
             vec4 seg = fetchData(u_edge_tex, edgeStart + e);
             vec2 a = seg.xy;
@@ -347,22 +436,18 @@ void main() {
             // at a slant, and the line came out thinner between its vertices than at them
             vec2 sa = jacobianInverse * (a - p);
             vec2 sb = jacobianInverse * (b - p);
-            minDist = min(minDist, length(closestVector(sa, sb)));
+            if (wantsEdges) minDist = min(minDist, length(closestVector(sa, sb)));
+            if (wantsDashes) {
+                int at = edgeStart + e;
+                float start = texelFetch(
+                    u_edge_start_tex, ivec2(at % u_data_width, at / u_data_width), 0
+                ).r * u_dash_world_px;
+                float len = length(b - a) * u_dash_tile_px;
+                dashDist = min(dashDist, dashDistance(sa, sb, start, len, dashLength, dashPeriod));
+            }
         }
-
-        int styleAt = elementIndex * ${DRAPE_STYLE_TEXELS};
-        vec4 fill = fetchData(u_style_tex, styleAt);
-        vec4 stroke = fetchData(u_style_tex, styleAt + 1);
-        vec4 params = fetchData(u_style_tex, styleAt + 2);
-        int source = int(params.z);
-        vec2 factors = source >= 0 && source < ${DRAPE_MAX_SOURCES}
-            ? u_source_factors[source]
-            : vec2(1.0, 1.0);
-        // An element that has a reference zoom for its line width changes its
-        // thickness with the same formula as the retained batch path
-        float widthScale = params.w >= 0.0 ? exp2(u_zoom - params.w) : 1.0;
-        float halfWidth = params.x * 0.5 * factors.y * widthScale;
-        bool isPolygon = params.y < 0.5;
+        // The outline is drawn where its dashes are (the whole of it when it is solid)
+        float strokeDist = dashed ? dashDist : minDist;
 
         if (paints && isPolygon && fill.a > 0.0) {
             // A signed distance, negative inside and positive outside (screen pixels)
@@ -377,7 +462,7 @@ void main() {
         }
 
         if (paints && halfWidth > 0.0 && stroke.a > 0.0) {
-            float coverage = clamp(halfWidth + 0.5 - minDist, 0.0, 1.0);
+            float coverage = clamp(halfWidth + 0.5 - strokeDist, 0.0, 1.0);
             if (coverage > 0.0) acc = over(acc, stroke.rgb, stroke.a * coverage * factors.x);
         }
 
@@ -399,7 +484,8 @@ void main() {
             // The added thickness is kept constant in screen pixels (so that "an
             // outline one size thicker" always looks the same regardless of the
             // unit of the original thickness). The highlight outline is also drawn
-            // for features that have no outline (the same as the immediate mode)
+            // for features that have no outline (the same as the immediate mode), and
+            // it is solid under a dashed outline too
             float selHalf = halfWidth + u_selection_stroke_extra * 0.5;
             selStroke = max(selStroke, clamp(selHalf + 0.5 - minDist, 0.0, 1.0) * factors.x);
         }
@@ -425,6 +511,7 @@ void main() {
 interface UploadMark {
   builderId: number;
   edges: number;
+  edgeStarts: number;
   runs: number;
   cells: number;
   styles: number;
@@ -440,14 +527,16 @@ export class DrapeRenderer {
   private mesh: TerrainMeshBuffers | null = null;
 
   private edgeTex: WebGLTexture | null = null;
+  private edgeStartTex: WebGLTexture | null = null;
   private runTex: WebGLTexture | null = null;
   private cellTex: WebGLTexture | null = null;
   private styleTex: WebGLTexture | null = null;
   private edgeTexSize: [number, number] = [0, 0];
+  private edgeStartTexSize: [number, number] = [0, 0];
   private runTexSize: [number, number] = [0, 0];
   private cellTexSize: [number, number] = [0, 0];
   private styleTexSize: [number, number] = [0, 0];
-  private uploaded: UploadMark = { builderId: -1, edges: 0, runs: 0, cells: 0, styles: 0 };
+  private uploaded: UploadMark = emptyUploadMark();
   /** The selection version the transferred style table reflects (-1 = not transferred) */
   private uploadedSelection = -1;
 
@@ -499,6 +588,7 @@ export class DrapeRenderer {
       'u_run_tex',
       'u_cell_tex',
       'u_style_tex',
+      'u_edge_start_tex',
       'u_data_width',
       'u_cell_base',
       'u_cells',
@@ -513,6 +603,8 @@ export class DrapeRenderer {
       'u_selection_stroke_extra',
       'u_paint_range',
       'u_emit_selection',
+      'u_dash_world_px',
+      'u_dash_tile_px',
       ...EDGE_CONSTRAIN_UNIFORMS,
     ];
     this.locations = {};
@@ -535,12 +627,12 @@ export class DrapeRenderer {
    */
   upload(pack: DrapePackBuilder): boolean {
     if (this.uploaded.builderId !== pack.id) {
-      this.uploaded = { builderId: pack.id, edges: 0, runs: 0, cells: 0, styles: 0 };
+      this.uploaded = { ...emptyUploadMark(), builderId: pack.id };
       this.uploadedSelection = -1;
     }
     // The selection highlight rewrites rows that have already been sent (it is not
     // an append), so when the version moves only the style table is sent again from
-    // the beginning. The style table is 4 texels per element, orders of magnitude
+    // the beginning. The style table is a few texels per element, orders of magnitude
     // smaller than the edge table
     if (this.uploadedSelection !== pack.selectionVersion) {
       this.uploaded.styles = 0;
@@ -554,6 +646,16 @@ export class DrapeRenderer {
       DATA_TEX_WIDTH,
       pack.edges,
       pack.edgeCount,
+    );
+    // The starts along the paths go one per texel, in step with the edges
+    this.edgeStartTex = this.uploadTexture(
+      this.edgeStartTex,
+      'edgeStartTexSize',
+      'edgeStarts',
+      DATA_TEX_WIDTH,
+      pack.edgeStarts,
+      pack.edgeCount,
+      1,
     );
     this.runTex = this.uploadTexture(
       this.runTex,
@@ -571,8 +673,9 @@ export class DrapeRenderer {
       pack.cells,
       pack.cellCount,
     );
-    // The style table is laid out like the others (4 texels per element in rows of
-    // DATA_TEX_WIDTH, a multiple of 4), so its height grows with elements / 512, not elements
+    // The style table is laid out like the others (the texels of the elements one after
+    // another in rows of DATA_TEX_WIDTH; an element may run over into the next row), so its
+    // height grows with the elements / DATA_TEX_WIDTH, not with the elements
     this.styleTex = this.uploadTexture(
       this.styleTex,
       'styleTexSize',
@@ -583,6 +686,7 @@ export class DrapeRenderer {
     );
     return (
       this.edgeTex !== null &&
+      this.edgeStartTex !== null &&
       this.runTex !== null &&
       this.cellTex !== null &&
       this.styleTex !== null
@@ -613,7 +717,14 @@ export class DrapeRenderer {
     const gl = this.gl;
     const program = this.program;
     const mesh = this.mesh;
-    if (!program || !mesh || !this.edgeTex || !this.cellTex || !this.styleTex) {
+    if (
+      !program ||
+      !mesh ||
+      !this.edgeTex ||
+      !this.edgeStartTex ||
+      !this.cellTex ||
+      !this.styleTex
+    ) {
       this.lastError = 'draw: missing resources';
       return;
     }
@@ -628,12 +739,17 @@ export class DrapeRenderer {
     this.bindData(UNIT_RUN, this.runTex, set.u_run_tex);
     this.bindData(UNIT_CELL, this.cellTex, set.u_cell_tex);
     this.bindData(UNIT_STYLE, this.styleTex, set.u_style_tex);
+    this.bindData(DRAPE_EDGE_START_UNIT, this.edgeStartTex, set.u_edge_start_tex);
 
     if (set.u_data_width) gl.uniform1i(set.u_data_width, DATA_TEX_WIDTH);
     if (set.u_cell_base) gl.uniform1i(set.u_cell_base, draw.cellOffset);
     if (set.u_cells) gl.uniform1f(set.u_cells, draw.grid);
     if (set.u_opacity) gl.uniform1f(set.u_opacity, opacity);
     if (set.u_zoom) gl.uniform1f(set.u_zoom, zoom);
+    if (set.u_dash_world_px) gl.uniform1f(set.u_dash_world_px, DASH_TILE_PX * 2 ** zoom);
+    if (set.u_dash_tile_px) {
+      gl.uniform1f(set.u_dash_tile_px, DASH_TILE_PX * 2 ** (zoom - draw.tileZ));
+    }
     if (set['u_source_factors[0]']) {
       gl.uniform2fv(set['u_source_factors[0]'], sourceFactors);
     }
@@ -701,18 +817,26 @@ export class DrapeRenderer {
       disposeTerrainMeshBuffers(gl, this.mesh);
       this.mesh = null;
     }
-    for (const texture of [this.edgeTex, this.runTex, this.cellTex, this.styleTex]) {
+    for (const texture of [
+      this.edgeTex,
+      this.edgeStartTex,
+      this.runTex,
+      this.cellTex,
+      this.styleTex,
+    ]) {
       if (texture) gl.deleteTexture(texture);
     }
     this.edgeTex = null;
+    this.edgeStartTex = null;
     this.runTex = null;
     this.cellTex = null;
     this.styleTex = null;
     this.edgeTexSize = [0, 0];
+    this.edgeStartTexSize = [0, 0];
     this.runTexSize = [0, 0];
     this.cellTexSize = [0, 0];
     this.styleTexSize = [0, 0];
-    this.uploaded = { builderId: -1, edges: 0, runs: 0, cells: 0, styles: 0 };
+    this.uploaded = emptyUploadMark();
     this.uploadedSelection = -1;
   }
 
@@ -741,14 +865,17 @@ export class DrapeRenderer {
    *
    * texStorage2D is immutable, so the texture is recreated whenever the required
    * size changes (once recreated, everything is sent again).
+   *
+   * @param channels The numbers per texel: 4 (RGBA32F) or 1 (R32F)
    */
   private uploadTexture(
     texture: WebGLTexture | null,
-    sizeField: 'edgeTexSize' | 'runTexSize' | 'cellTexSize' | 'styleTexSize',
-    markField: 'edges' | 'runs' | 'cells' | 'styles',
+    sizeField: 'edgeTexSize' | 'edgeStartTexSize' | 'runTexSize' | 'cellTexSize' | 'styleTexSize',
+    markField: 'edges' | 'edgeStarts' | 'runs' | 'cells' | 'styles',
     width: number,
     data: Float32Array,
     texelCount: number,
+    channels: 1 | 4 = 4,
   ): WebGLTexture | null {
     const gl = this.gl;
     const size = this[sizeField];
@@ -771,7 +898,7 @@ export class DrapeRenderer {
       // Allocate a few extra rows (so it is not recreated on every increase)
       const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
       gl.bindTexture(gl.TEXTURE_2D, target);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, width, rows);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
       // Only the allocation is checked (it is rare; getError is a synchronous round trip)
       if (gl.getError() !== gl.NO_ERROR) {
         gl.deleteTexture(target);
@@ -796,16 +923,22 @@ export class DrapeRenderer {
     const fromRow = Math.floor(uploaded / width);
     const toRow = Math.ceil(texelCount / width);
     const rows = toRow - fromRow;
-    const needed = rows * width * 4;
-    const offset = fromRow * width * 4;
+    const needed = rows * width * channels;
+    const offset = fromRow * width * channels;
     const payload =
       data.length >= offset + needed
         ? data.subarray(offset, offset + needed)
         : padTo(data.subarray(offset), needed);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, fromRow, width, rows, gl.RGBA, gl.FLOAT, payload);
+    const format = channels === 4 ? gl.RGBA : gl.RED;
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, fromRow, width, rows, format, gl.FLOAT, payload);
     this.uploaded[markField] = texelCount;
     return target;
   }
+}
+
+/** Nothing transferred yet */
+function emptyUploadMark(): UploadMark {
+  return { builderId: -1, edges: 0, edgeStarts: 0, runs: 0, cells: 0, styles: 0 };
 }
 
 /** Pads with 0 up to the length required for the transfer */

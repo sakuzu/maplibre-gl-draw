@@ -25,17 +25,25 @@ import type { DrapeElement, DrapeQuadBreak, DrapeTile, TileBins } from './binnin
 import { binTile, drapeCellWorkBudget } from './binning.js';
 
 /** The number of style texels per element */
-export const DRAPE_STYLE_TEXELS = 4;
+export const DRAPE_STYLE_TEXELS = 5;
 
 /**
  * The index of the texel the selection highlight uses within the style table
  *
  * 0 = fill, 1 = stroke, 2 = specifications (width, kind, source, reference zoom), 3 =
- * selection. The selection alone is put in a separate texel so that the index (the binning)
+ * selection, 4 = the dash pattern (`DRAPE_DASH_TEXEL`). The selection alone is put in a separate texel so that the index (the binning)
  * need not be touched at all when the selection changes. Mixing it into the same texel as the
  * color or the width would mean rebuilding the other values too on every rewrite.
  */
 export const DRAPE_SELECTION_TEXEL = 3;
+
+/**
+ * The index of the texel of the dash pattern within the style table
+ *
+ * (a, b, c, pixel ratio): the coefficients of the pattern (`DrapeDash` in `binning.ts`) and the
+ * physical pixels of the width per CSS pixel. A pixel ratio of 0 marks a solid outline.
+ */
+export const DRAPE_DASH_TEXEL = 4;
 
 /** The upper bound on the tiles retained (beyond it, those outside the view are dropped and
  * the arrays are repacked) */
@@ -76,6 +84,8 @@ export class DrapePackBuilder {
   readonly id = DrapePackBuilder.nextId++;
 
   edges: Float32Array<ArrayBuffer> = new Float32Array(4 * 4096);
+  /** Where each edge starts along its path (one number per edge, in step with `edges`) */
+  edgeStarts: Float32Array<ArrayBuffer> = new Float32Array(4096);
   edgeCount = 0;
   runs: Float32Array<ArrayBuffer> = new Float32Array(4 * 2048);
   runCount = 0;
@@ -115,6 +125,14 @@ export class DrapePackBuilder {
       styles[at + 9] = element.kind;
       styles[at + 10] = element.source;
       styles[at + 11] = element.widthZoom;
+      const dash = element.dash;
+      if (dash) {
+        const dashAt = at + DRAPE_DASH_TEXEL * 4;
+        styles[dashAt] = dash.a;
+        styles[dashAt + 1] = dash.b;
+        styles[dashAt + 2] = dash.c;
+        styles[dashAt + 3] = dash.pixelRatio;
+      }
     }
     this.styles = styles;
     this.elementCount = elements.length;
@@ -157,6 +175,8 @@ export class DrapePackBuilder {
     const edgeTexels = bins.edges.length / 4;
     this.edges = ensureCapacity(this.edges, (this.edgeCount + edgeTexels) * 4);
     this.edges.set(bins.edges, edgeBase * 4);
+    this.edgeStarts = ensureCapacity(this.edgeStarts, this.edgeCount + edgeTexels);
+    this.edgeStarts.set(bins.edgeStarts, edgeBase);
     this.edgeCount += edgeTexels;
 
     const runTexels = bins.runs.length / 4;

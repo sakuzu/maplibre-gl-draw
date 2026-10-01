@@ -543,6 +543,7 @@ export class DrapePlanner {
               cellOffset: item.plan.cellOffset,
               grid: item.plan.grid,
               groundMeters: item.plan.groundMeters,
+              tileZ: item.plan.tile.z,
               edges,
             },
             projection: item.projection,

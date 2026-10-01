@@ -10,8 +10,14 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Coordinate } from '../../../store/types.js';
-import { DRAPE_SELECTION_TEXEL, DRAPE_STYLE_TEXELS, DrapeTileStore } from './bin-store.js';
-import { type DrapeElement, type DrapeTile, drapeSelectionKey } from './binning.js';
+import {
+  DRAPE_DASH_TEXEL,
+  DRAPE_SELECTION_TEXEL,
+  DRAPE_STYLE_TEXELS,
+  DrapePackBuilder,
+  DrapeTileStore,
+} from './bin-store.js';
+import { binTile, type DrapeElement, type DrapeTile, drapeSelectionKey } from './binning.js';
 import { buildDrapeGeometry } from './geometry.js';
 
 /** Derives the bounding box from a geometry (test helper) */
@@ -281,5 +287,46 @@ describe('selection highlight marks', () => {
     expect(drapeSelectionKey('c1', 'a')).not.toBe(drapeSelectionKey('c2', 'a'));
     // Without a separator, 'c1' + 'a' and 'c' + '1a' collide
     expect(drapeSelectionKey('c1', 'a')).not.toBe(drapeSelectionKey('c', '1a'));
+  });
+});
+
+describe('the dash pattern in the pack', () => {
+  it('writes the pattern of a dashed outline into its own texel and leaves a solid one at 0', () => {
+    const solid = element(10, 1);
+    const dashed: DrapeElement = {
+      ...element(20, 1),
+      dash: { a: 1, b: 0.5, c: 1.2, pixelRatio: 2 },
+    };
+    const builder = new DrapePackBuilder();
+    builder.setElements([solid, dashed]);
+
+    const texel = (index: number): number[] =>
+      Array.from(
+        builder.styles.subarray(
+          (index * DRAPE_STYLE_TEXELS + DRAPE_DASH_TEXEL) * 4,
+          (index * DRAPE_STYLE_TEXELS + DRAPE_DASH_TEXEL) * 4 + 4,
+        ),
+      );
+    expect(texel(0)).toEqual([0, 0, 0, 0]);
+    expect(texel(1).map((v) => Math.round(v * 100) / 100)).toEqual([1, 0.5, 1.2, 2]);
+    // The selection keeps its own texel
+    expect(DRAPE_DASH_TEXEL).not.toBe(DRAPE_SELECTION_TEXEL);
+  });
+
+  it('stacks the starts of the edges in step with the edges', () => {
+    const dashed: DrapeElement = { ...element(60, 1), dash: { a: 12, b: 4, c: 2, pixelRatio: 1 } };
+    const builder = new DrapePackBuilder();
+    builder.setElements([dashed]);
+    const first = binTile([dashed], tiles[0]);
+    const second = binTile([dashed], tiles[3]);
+    builder.addTile(first);
+    builder.addTile(second);
+
+    const edges = first.edgeStarts.length;
+    expect(builder.edgeCount).toBe(edges + second.edgeStarts.length);
+    expect(Array.from(builder.edgeStarts.subarray(0, edges))).toEqual(Array.from(first.edgeStarts));
+    expect(Array.from(builder.edgeStarts.subarray(edges, builder.edgeCount))).toEqual(
+      Array.from(second.edgeStarts),
+    );
   });
 });

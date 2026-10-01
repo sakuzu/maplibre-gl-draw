@@ -199,9 +199,8 @@ function drawDrapeSegment(deps: FrameRenderDeps, f: FrameState, index: number): 
 
   f.restoreBlendState();
 
-  // Back to the depth state of the layer rendering. What the drape could not paint (dashed
-  // lines, polygons with a dashed outline, the geometry being drawn, the features of
-  // extensions) is drawn next, by the vertex displacement path, and the terrain must hide it
+  // Back to the depth state of the layer rendering. What the drape could not paint (the
+  // geometry being drawn, the features of extensions) is drawn next, by the vertex displacement path, and the terrain must hide it
   // as it does in a frame without the drape. Symbols switch the depth test off themselves.
   applySegmentDepthState(gl, deps.terrainContext, f);
 }

@@ -245,15 +245,14 @@ export function sameFeatureIds(a: readonly Feature[], b: readonly Feature[]): bo
  * It is paired with `collectDataset` in `view/terrain/drape/pass.ts`. Changing only one of
  * them would show the selection highlight twice or in neither of them.
  *
- * A dashed outline does not go onto the drape (solving the accumulated distance along the outline
- * from the pixels is not implemented, so drawing it as a solid line would change the appearance).
- * For what does not go onto it, the immediate-mode path draws the highlight as before.
+ * Dashed lines and dashed outlines go onto the drape like solid ones (the drape lays the pattern
+ * out along the path). For what does not go onto it, the immediate-mode path draws the highlight
+ * as before.
  */
 export function isHandedToDrape(feature: Feature, styles: RetainedStyleResolver): boolean {
   if (feature.type === 'Polygon' || feature.type === 'MultiPolygon') {
     const { fillColor, strokeStyle } = styles.getPolygonStyles(feature);
     const hasStroke = strokeStyle.opacity > 0 && strokeStyle.width > 0;
-    if (hasStroke && strokeStyle.lineStyle !== 'solid') return false;
     return hasStroke || fillColor[3] > 0;
   }
 
@@ -263,7 +262,6 @@ export function isHandedToDrape(feature: Feature, styles: RetainedStyleResolver)
     feature.type === 'Freehand'
   ) {
     const strokeStyle = styles.getLineStringStrokeStyle(feature);
-    if (strokeStyle.lineStyle !== 'solid') return false;
     return strokeStyle.opacity > 0 && strokeStyle.width > 0;
   }
 

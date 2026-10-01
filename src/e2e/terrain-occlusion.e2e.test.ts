@@ -4,9 +4,9 @@
 /**
  * End-to-end tests: the terrain hides what is behind a mountain, whatever path draws it
  *
- * Solid lines and polygons are painted on the ground by the analytic drape, and dashed lines
- * and polygons with a dashed outline by the vertex displacement path, after the drape. Both
- * must be hidden by the terrain in front of them. The test terrain (`dem-fixture.ts`) has a
+ * Lines and polygons, solid or dashed, are painted on the ground by the analytic drape, and the
+ * symbols and the selection are drawn after it. Both must be hidden by the terrain in front of
+ * them. The test terrain (`dem-fixture.ts`) has a
  * peak far higher than the camera, and the camera looks at it from the south, so its north
  * side is out of sight.
  *
@@ -97,8 +97,8 @@ async function clear(): Promise<void> {
     const { draw } = window as unknown as TestWindow;
     draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
     draw.datasets.removeMany(draw.datasets.list().map((dataset) => dataset.id));
-    // A solid line on the plain keeps the drape in use: the dashed features are drawn after
-    // it, in the same frame
+    // A solid line on the plain keeps the drape in use whatever else is on the map, so every
+    // test runs on a frame the drape paints
     draw.features.create({
       type: 'LineString',
       geometry: {

@@ -315,7 +315,8 @@ export class TableSource implements DisplaySource {
 
   collector(rows: Int32Array, context: SourceCollectContext): ChunkCollector {
     const table = this.table;
-    // Whether the solid lines and polygons of each child are left to the analytic drape
+    // Whether the lines and polygons (solid or dashed) of each child are left to the analytic
+    // drape
     const skipDraped = table.children.map(
       (column) => context.skipDrapedFills === true && isDraped(column.type),
     );
@@ -496,17 +497,18 @@ class RowCollector {
     start: number,
     end: number,
     createdZoom: number | undefined,
-    skipSolid: boolean,
+    skipDraped: boolean,
   ): void {
     if (end - start < 2) return;
     const slot = this.slots.line(column.type, this.slots.ruleColorOf(row));
     const stroke = slot.stroke;
+    // A line, solid or dashed, is drawn by the analytic drape as ground pixels (in this frame
+    // only)
+    if (skipDraped && stroke.opacity > 0 && stroke.width > 0) return;
     if (stroke.lineStyle !== 'solid') {
       this.fallback(row);
       return;
     }
-    // A solid line is drawn by the analytic drape as ground pixels (in this frame only)
-    if (skipSolid && stroke.opacity > 0 && stroke.width > 0) return;
 
     const draft = this.draft;
     const fixed = createdZoom === undefined;
@@ -542,19 +544,19 @@ class RowCollector {
     ringOffsets: Int32Array,
     partIndex: number,
     createdZoom: number | undefined,
-    skipSolid: boolean,
+    skipDraped: boolean,
   ): void {
     if (ringEnd <= ringStart) return;
     if (ringOffsets[ringStart + 1] - ringOffsets[ringStart] < 3) return;
 
     const slot = this.slots.polygon(column.type, this.slots.ruleColorOf(row));
+    if (!slot.hasStroke && slot.fillColor[3] <= 0) return;
+    // The fill and the outline, solid or dashed, are drawn by the analytic drape as ground pixels
+    if (skipDraped) return;
     if (slot.hasStroke && slot.strokeStyle.lineStyle !== 'solid') {
       this.fallback(row);
       return;
     }
-    if (!slot.hasStroke && slot.fillColor[3] <= 0) return;
-    // The solid fill and outline are drawn by the analytic drape as ground pixels
-    if (skipSolid) return;
 
     const rings: Array<[number, number][]> = new Array(ringEnd - ringStart);
     for (let r = ringStart; r < ringEnd; r++) {

@@ -76,9 +76,8 @@ export function applySegmentGlState(
  * `applySegmentGlState` sets it at the start of a slot, and the drape of the segment, which
  * changes the depth function and the offset, hands it back with this before the layers are
  * drawn. The layers are therefore drawn in one depth state whether or not the drape was used.
- * What the drape cannot paint (dashed lines, polygons with a dashed outline, the geometry being
- * drawn, the features of extensions, the datasets not handed over to it) is
- * drawn after it by the vertex displacement path and must be hidden by the terrain in the same
+ * What the drape cannot paint (the geometry being drawn, the features of extensions, the datasets
+ * not handed over to it) is drawn after it by the vertex displacement path and must be hidden by the terrain in the same
  * way. Symbols switch the depth test off themselves (`drawBillboardsWithoutDepth`).
  */
 export function applySegmentDepthState(
