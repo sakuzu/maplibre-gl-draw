@@ -6,7 +6,7 @@
 // the winding boundary of the parcel traces the boundary between them, so the neighbor is drawn
 // without redrawing it. The switch at the end of the toolbar turns snapping off and on.
 
-import { createDraw, type Position } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
@@ -14,44 +14,19 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle } from '../basemap.ts';
 import '../example.css';
+import { FEATURES, STREAM } from './data.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.7652, 35.681],
+  center: [139.7757, 35.681],
   zoom: 15.3,
 });
 const draw = createDraw(map);
 
-// 1. A parcel whose east side follows a stream: the boundary to trace, from south to north
-const STREAM: Position[] = [
-  [139.764, 35.678],
-  [139.7648, 35.6795],
-  [139.7637, 35.681],
-  [139.7649, 35.6825],
-  [139.764, 35.684],
-];
-draw.features.createMany([
-  {
-    type: 'Polygon',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[[139.759, 35.678], ...STREAM, [139.759, 35.684], [139.759, 35.678]]],
-    },
-    properties: { name: 'West parcel' },
-  },
-  {
-    type: 'LineString',
-    geometry: {
-      type: 'LineString',
-      coordinates: [
-        [139.757, 35.677],
-        [139.77, 35.677],
-      ],
-    },
-    properties: { name: 'Road' },
-  },
-]);
+// 1. A parcel whose east side follows a stream (STREAM, the boundary to trace), and a road
+// (data.ts)
+draw.features.createMany(FEATURES);
 
 // 2. Snapping and tracing are on by default; options.update changes only the keys given.
 // Here: a wider reach, guide lines every 15 degrees from the last vertex, no snapping to

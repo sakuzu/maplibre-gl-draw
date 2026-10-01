@@ -38,6 +38,7 @@ with `plugins.getApi` (6).
 ::: code-group
 <<< @/../examples/plugins/main.ts
 <<< @/../examples/plugins/stamp.ts
+<<< @/../examples/plugins/data.ts
 <<< @/../examples/plugins/index.html
 :::
 

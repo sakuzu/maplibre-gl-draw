@@ -19,7 +19,7 @@ import { BLOCKS } from './data.ts';
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.7675, 35.6815],
+  center: [139.7775, 35.6815],
   zoom: 14.3,
 });
 // No empty first layer, as the page creates its own; and a stronger fill than the default, so

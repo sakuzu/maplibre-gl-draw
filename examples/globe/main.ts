@@ -16,6 +16,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle } from '../basemap.ts';
 import '../example.css';
+import { ACROSS_THE_ANTIMERIDIAN, GREAT_CIRCLE, LONDON, TOKYO } from './data.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -29,31 +30,11 @@ map.on('style.load', () => map.setProjection({ type: 'globe' }));
 
 const draw = createDraw(map);
 
-/** Points along the great circle from `a` to `b`, in degrees, by spherical interpolation */
-function greatCircle(a: [number, number], b: [number, number], steps: number): number[][] {
-  const rad = Math.PI / 180;
-  const toVector = ([lng, lat]: [number, number]) => [
-    Math.cos(lat * rad) * Math.cos(lng * rad),
-    Math.cos(lat * rad) * Math.sin(lng * rad),
-    Math.sin(lat * rad),
-  ];
-  const [p, q] = [toVector(a), toVector(b)];
-  const angle = Math.acos(p[0] * q[0] + p[1] * q[1] + p[2] * q[2]);
-  return Array.from({ length: steps + 1 }, (_, i) => {
-    const t = i / steps;
-    const [s, u] = [Math.sin((1 - t) * angle), Math.sin(t * angle)];
-    const [x, y, z] = p.map((v, k) => (s * v + u * q[k]) / Math.sin(angle));
-    return [Math.atan2(y, x) / rad, Math.asin(z) / rad];
-  });
-}
-
-const LONDON: [number, number] = [-0.1276, 51.5072];
-const TOKYO: [number, number] = [139.7671, 35.6812];
-
-// 2. The great circle from London to Tokyo, over the north of Siberia, with 64 edges
+// 2. The great circle from London to Tokyo, over the north of Siberia, with 64 edges (the places
+// and the lines are in data.ts)
 draw.features.create({
   type: 'LineString',
-  geometry: { type: 'LineString', coordinates: greatCircle(LONDON, TOKYO, 64) },
+  geometry: { type: 'LineString', coordinates: GREAT_CIRCLE },
   properties: { name: 'Great circle' },
   style: { strokeColor: '#d1495b', strokeWidth: 3 },
 });
@@ -70,18 +51,7 @@ draw.features.create({
 // -180, as a shape drawn across the line is kept; the GeoJSON written out wraps them
 draw.features.create({
   type: 'Polygon',
-  geometry: {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [174, -21],
-        [186, -21],
-        [186, -12],
-        [174, -12],
-        [174, -21],
-      ],
-    ],
-  },
+  geometry: { type: 'Polygon', coordinates: ACROSS_THE_ANTIMERIDIAN },
   properties: { name: 'Across the antimeridian' },
   style: { fillColor: '#edae49', fillOpacity: 0.4, strokeColor: '#a86a00' },
 });

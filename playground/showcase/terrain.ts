@@ -13,7 +13,7 @@
 
 import type * as maplibregl from 'maplibre-gl';
 
-import { buildDocument, drawImage, type ShowcaseScene } from './scene';
+import { buildDocument, drawImage, type SceneLayer, type ShowcaseScene } from './scene';
 
 /** The TileJSON of the elevation tiles, the same as the terrain example */
 const DEM_TILES = 'https://demotiles.maplibre.org/terrain-tiles/tiles.json';
@@ -57,105 +57,106 @@ function addTerrain(map: maplibregl.Map): void {
   });
 }
 
-function createDocument() {
-  return buildDocument(
-    'Terrain',
-    [
+/** The layers of the scene, from the back */
+export const TERRAIN_LAYERS: SceneLayer[] = [
+  {
+    id: 'layer-areas',
+    name: 'Areas',
+    features: [
       {
-        id: 'layer-areas',
-        name: 'Areas',
-        features: [
-          {
-            id: 'survey-map',
-            type: 'Image',
-            geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
-            properties: {
-              name: 'Survey map',
-              'maplibre-gl-draw:createdZoom': 13,
-              'maplibre-gl-draw:imageFileId': 'file-survey',
-              'maplibre-gl-draw:imageWidth': 480,
-              'maplibre-gl-draw:imageHeight': 375,
-            },
-            style: { imageOpacity: 0.9 },
-          },
-          {
-            id: 'forest-plot',
-            type: 'Polygon',
-            geometry: {
-              type: 'Polygon',
-              coordinates: [
-                [
-                  [11.333, 47.2835],
-                  [11.3615, 47.2825],
-                  [11.3745, 47.2925],
-                  [11.371, 47.3035],
-                  [11.3455, 47.3075],
-                  [11.33, 47.2975],
-                  [11.333, 47.2835],
-                ],
-              ],
-            },
-            properties: { name: 'Forest plot' },
-            style: {
-              fillColor: '#FF006E',
-              fillOpacity: 0.45,
-              strokeColor: '#C9004F',
-              strokeWidth: 3,
-              strokeOpacity: 1,
-            },
-          },
-        ],
+        id: 'survey-map',
+        type: 'Image',
+        geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
+        properties: {
+          name: 'Survey map',
+          'maplibre-gl-draw:createdZoom': 13,
+          'maplibre-gl-draw:imageFileId': 'file-survey',
+          'maplibre-gl-draw:imageWidth': 480,
+          'maplibre-gl-draw:imageHeight': 375,
+        },
+        style: { imageOpacity: 0.9 },
       },
       {
-        id: 'layer-routes',
-        name: 'Routes',
-        features: [
-          {
-            id: 'meridian',
-            type: 'LineString',
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [11.358, 47.255],
-                [11.358, 47.328],
-              ],
-            },
-            properties: { name: 'Straight line north' },
-            style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
-          },
-          {
-            id: 'trail',
-            type: 'LineString',
-            geometry: {
-              type: 'LineString',
-              coordinates: [
-                [11.3995, 47.2862],
-                [11.3925, 47.2905],
-                [11.3985, 47.2945],
-                [11.3885, 47.2985],
-                [11.3945, 47.3018],
-                [11.3835, 47.3045],
-                [11.3862, 47.3122],
-                [11.3905, 47.3262],
-              ],
-            },
-            properties: { name: 'Trail' },
-            style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
-          },
-        ],
-      },
-      {
-        id: 'layer-places',
-        name: 'Places',
-        features: [
-          point('hungerburg', [11.3995, 47.2862], 'square', '#1D4ED8', 9),
-          point('seegrube', [11.3835, 47.3045], 'circle', '#FF7B00', 10),
-          point('hafelekar', [11.3862, 47.3122], 'star', '#FFD000', 16),
-        ],
+        id: 'forest-plot',
+        type: 'Polygon',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [11.333, 47.2835],
+              [11.3615, 47.2825],
+              [11.3745, 47.2925],
+              [11.371, 47.3035],
+              [11.3455, 47.3075],
+              [11.33, 47.2975],
+              [11.333, 47.2835],
+            ],
+          ],
+        },
+        properties: { name: 'Forest plot' },
+        style: {
+          fillColor: '#FF006E',
+          fillOpacity: 0.45,
+          strokeColor: '#C9004F',
+          strokeWidth: 3,
+          strokeOpacity: 1,
+        },
       },
     ],
-    [{ id: 'file-survey', mimeType: 'image/png', dataURL: surveyMap() }],
-  );
+  },
+  {
+    id: 'layer-routes',
+    name: 'Routes',
+    features: [
+      {
+        id: 'meridian',
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [11.358, 47.255],
+            [11.358, 47.328],
+          ],
+        },
+        properties: { name: 'Straight line north' },
+        style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
+      },
+      {
+        id: 'trail',
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [11.3995, 47.2862],
+            [11.3925, 47.2905],
+            [11.3985, 47.2945],
+            [11.3885, 47.2985],
+            [11.3945, 47.3018],
+            [11.3835, 47.3045],
+            [11.3862, 47.3122],
+            [11.3905, 47.3262],
+          ],
+        },
+        properties: { name: 'Trail' },
+        style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
+      },
+    ],
+  },
+  {
+    id: 'layer-places',
+    name: 'Places',
+    features: [
+      point('hungerburg', [11.3995, 47.2862], 'square', '#1D4ED8', 9),
+      point('seegrube', [11.3835, 47.3045], 'circle', '#FF7B00', 10),
+      point('hafelekar', [11.3862, 47.3122], 'star', '#FFD000', 16),
+    ],
+  },
+];
+
+function createDocument() {
+  return buildDocument('Terrain', TERRAIN_LAYERS, [
+    { id: 'file-survey', mimeType: 'image/png', dataURL: surveyMap() },
+  ]);
 }
 
 function point(

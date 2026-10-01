@@ -20,7 +20,7 @@ import { SAMPLE } from './data.ts';
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.7545, 35.678],
+  center: [139.7735, 35.678],
   zoom: 14.3,
 });
 const draw = createDraw(map);

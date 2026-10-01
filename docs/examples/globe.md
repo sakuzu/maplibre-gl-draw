@@ -31,6 +31,7 @@ kept. The globe button is one of the map controls of the standard UI
 
 ::: code-group
 <<< @/../examples/globe/main.ts
+<<< @/../examples/globe/data.ts
 <<< @/../examples/globe/index.html
 :::
 

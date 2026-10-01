@@ -29,6 +29,7 @@ at its size in pixels at `zoom` (3). The look of an image is
 
 ::: code-group
 <<< @/../examples/images/main.ts
+<<< @/../examples/images/data.ts
 <<< @/../examples/images/index.html
 :::
 

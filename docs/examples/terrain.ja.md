@@ -27,6 +27,7 @@ Ctrl を押しながらのドラッグで地図を回し、右下のコンパス
 
 ::: code-group
 <<< @/../examples/terrain/main.ts
+<<< @/../examples/terrain/data.ts
 <<< @/../examples/terrain/index.html
 :::
 

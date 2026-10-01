@@ -212,6 +212,13 @@ from npm. `npm run dev`, `npm run site:dev`, `npm run site:build` and
 `npm run build` and then `npm run ui:build` first, and `npm run ui:build`
 again after a change to `ui/`.
 
+The sample features of the examples, the playground and the development
+page of `ui/` lie around Tokyo Station on its east side, or elsewhere,
+and never over the Imperial Palace. A page keeps the data it draws in a
+`data.ts` of its own, and `src/sample-geometry.test.ts` (part of
+`npm test`) fails when any of it reaches into the box of the palace, its
+East Gardens and Kitanomaru Park.
+
 The browser is needed once per machine: `src/view/shaders/compile.test.ts`
 compiles every shader program on the WebGL2 of headless Chromium, and
 `npm test` fails without it. The same browser runs the end-to-end tests

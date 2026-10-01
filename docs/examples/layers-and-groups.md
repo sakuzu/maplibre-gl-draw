@@ -34,6 +34,7 @@ tools draw (6).
 
 ::: code-group
 <<< @/../examples/layers-and-groups/main.ts
+<<< @/../examples/layers-and-groups/data.ts
 <<< @/../examples/layers-and-groups/index.html
 :::
 

@@ -15,6 +15,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle, DEM_TILES } from '../basemap.ts';
 import '../example.css';
+import { ACROSS_THE_VALLEY, ON_THE_SLOPE } from './data.ts';
 
 // 1. A tilted view over high mountains (the Alps near Innsbruck): the public elevation tiles are
 // coarse, so the relief shows best where it is high
@@ -36,33 +37,15 @@ map.on('load', () => {
 
 const draw = createDraw(map);
 
-// 3. A line across the valley and an area on the slope, to see them follow the ground
+// 3. A line across the valley and an area on the slope (data.ts), to see them follow the ground
 draw.features.create({
   type: 'LineString',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [11.36, 47.255],
-      [11.39, 47.275],
-      [11.42, 47.3],
-    ],
-  },
+  geometry: { type: 'LineString', coordinates: ACROSS_THE_VALLEY },
   properties: { name: 'Across the valley' },
 });
 draw.features.create({
   type: 'Polygon',
-  geometry: {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [11.4, 47.25],
-        [11.43, 47.25],
-        [11.43, 47.265],
-        [11.4, 47.265],
-        [11.4, 47.25],
-      ],
-    ],
-  },
+  geometry: { type: 'Polygon', coordinates: ON_THE_SLOPE },
   properties: { name: 'On the slope' },
   style: { fillColor: '#d1495b', fillOpacity: 0.35, strokeColor: '#a3283a' },
 });

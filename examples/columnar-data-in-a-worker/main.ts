@@ -16,8 +16,8 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle } from '../basemap.ts';
 import '../example.css';
+import { CENTER, COUNT } from './data.ts';
 
-const CENTER: [number, number] = [139.767, 35.681];
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
@@ -44,7 +44,6 @@ const places = draw.datasets.add({
 
 // 2. The Worker reads the table (here it makes one) and prepares it with `prepareTable` from
 // `@sakuzu/maplibre-gl-draw/table`, which imports neither maplibre nor WebGL
-const COUNT = 200_000;
 const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 const started = performance.now();
 const loaded = new Promise<PreparedTable>((resolve) => {

@@ -31,6 +31,7 @@ GeoJSON geometries in meters and square meters on the ground (3).
 
 ::: code-group
 <<< @/../examples/geometry-operations/main.ts
+<<< @/../examples/geometry-operations/data.ts
 <<< @/../examples/geometry-operations/index.html
 :::
 

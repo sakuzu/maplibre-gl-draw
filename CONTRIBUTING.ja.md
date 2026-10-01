@@ -200,6 +200,11 @@ npm run dev        # examples をブラウザで起動 (localhost:3200)
 先に `npm run build` と `npm run ui:build` を実行し、`ui/` を直したら
 もう一度 `npm run ui:build` を実行してください。
 
+例、playground、`ui/` の開発用のページの見本の地物は、東京駅の周りの
+東側か別の場所に置き、皇居の上には置きません。ページは描くデータを自分の
+`data.ts` に持ち、`src/sample-geometry.test.ts` (`npm test` に含まれます)
+は、そのどれかが皇居、東御苑、北の丸公園の範囲に入ると失敗します。
+
 ブラウザーはマシンごとに 1 度だけ入れます。
 `src/view/shaders/compile.test.ts` がすべてのシェーダープログラムを
 headless Chromium の WebGL2 でコンパイルするので、入っていないと

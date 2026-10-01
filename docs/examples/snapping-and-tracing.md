@@ -32,6 +32,7 @@ pointer snaps to as it moves (3). The switch of the toolbar writes
 
 ::: code-group
 <<< @/../examples/snapping-and-tracing/main.ts
+<<< @/../examples/snapping-and-tracing/data.ts
 <<< @/../examples/snapping-and-tracing/index.html
 :::
 

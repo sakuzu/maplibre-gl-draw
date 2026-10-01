@@ -32,6 +32,7 @@ columnar-data-in-a-worker
 ::: code-group
 <<< @/../examples/columnar-data-in-a-worker/main.ts
 <<< @/../examples/columnar-data-in-a-worker/worker.ts
+<<< @/../examples/columnar-data-in-a-worker/data.ts
 <<< @/../examples/columnar-data-in-a-worker/index.html
 :::
 

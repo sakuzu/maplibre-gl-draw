@@ -30,6 +30,7 @@ geometry-operations
 
 ::: code-group
 <<< @/../examples/geometry-operations/main.ts
+<<< @/../examples/geometry-operations/data.ts
 <<< @/../examples/geometry-operations/index.html
 :::
 

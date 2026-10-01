@@ -6,7 +6,7 @@
 // are gathered into a group and locked; a draft is hidden. The panel on the left shows it all:
 // the eye, the lock, renaming, dragging to reorder and the menu that adds a layer or a group.
 
-import { createDraw, type Position } from '@sakuzu/maplibre-gl-draw';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
@@ -14,28 +14,15 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle } from '../basemap.ts';
 import '../example.css';
+import { PARCELS, PATH } from './data.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: [139.7645, 35.6805],
+  center: [139.772, 35.6805],
   zoom: 15.2,
 });
 const draw = createDraw(map);
-
-/** A rectangle with its south-west corner at [lng, lat] */
-function parcel(lng: number, lat: number): Position[][] {
-  const [w, h] = [0.0026, 0.0018];
-  return [
-    [
-      [lng, lat],
-      [lng + w, lat],
-      [lng + w, lat + h],
-      [lng, lat + h],
-      [lng, lat],
-    ],
-  ];
-}
 
 // 1. The document starts with one empty layer: name it. A second layer goes behind it
 // (`index` 0 is the back). Methods that write return null only while read-only
@@ -44,23 +31,18 @@ const paths = draw.layers.create({ name: 'Paths', index: 0 });
 if (parcels === null || paths === null) throw new Error('The drawing is read-only');
 draw.layers.update(parcels.id, { name: 'Parcels' });
 
-// 2. Features go into the layer named by `layerId`, or else into the active layer
+// 2. Features go into the layer named by `layerId`, or else into the active layer (the
+// parcels and the path are in data.ts)
 const created = draw.features.createMany([
-  ...[0, 1, 2, 3].map((i) => ({
+  ...PARCELS.map((coordinates, i) => ({
     type: 'Polygon' as const,
-    geometry: { type: 'Polygon' as const, coordinates: parcel(139.7605 + i * 0.0028, 35.679) },
+    geometry: { type: 'Polygon' as const, coordinates },
     properties: { name: i === 3 ? 'Draft' : `Parcel ${i + 1}` },
   })),
   {
     type: 'LineString',
     layerId: paths.id,
-    geometry: {
-      type: 'LineString',
-      coordinates: [
-        [139.76, 35.6785],
-        [139.772, 35.682],
-      ],
-    },
+    geometry: { type: 'LineString', coordinates: PATH },
     properties: { name: 'Path' },
   },
 ]);

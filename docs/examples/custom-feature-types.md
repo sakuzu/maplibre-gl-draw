@@ -37,6 +37,7 @@ into the style of the selected routes.
 ::: code-group
 <<< @/../examples/custom-feature-types/main.ts
 <<< @/../examples/custom-feature-types/route.ts
+<<< @/../examples/custom-feature-types/data.ts
 <<< @/../examples/custom-feature-types/index.html
 :::
 
