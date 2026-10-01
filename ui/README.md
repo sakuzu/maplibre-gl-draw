@@ -265,8 +265,9 @@ The datasets (`draw.datasets`) are rows of the stack too, in their place
 among the layers: those of `above-store` in front of every layer, those
 of `layer-order` where `layers.getOrder()` places them, and those of
 `below-store` behind every layer. A dataset row shows its ID (core gives
-a dataset no name), with the eye (`setVisible`) and no lock; a press on it leaves the selection as it is,
-and it is dragged among the layers only when its order is
+a dataset no name), with the eye (`setVisible`) and no lock; a press on
+it leaves the selection as it is, and it is dragged among the layers
+only when its order is
 `layer-order`. Basemap, under it, is the back of the stack (see
 [Basemaps](#basemaps)). The legend shows the rows of the style rule
 (`styleRule`) of each layer and of each dataset that has one, in the
