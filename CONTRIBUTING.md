@@ -201,8 +201,14 @@ npm run docs:api   # generate the API reference (Markdown) into docs/api/
 npm run docs:check # the documentation gate (docs/internals/releasing.md)
 npm run build:site # build the GitHub Pages site into site-dist/
 npm run lint:fix   # biome auto-fix
-npm run dev        # serve examples in the browser (localhost:3000)
+npm run dev        # serve examples in the browser (localhost:3200)
 ```
+
+Some examples lay the standard UI of `ui/` over the map and take it from
+its build, `ui/dist/`, as an application takes it from npm. `npm run dev`
+and `npm run test:e2e` stop with a message while it is missing: run
+`npm run build` and then `npm run ui:build` first, and `npm run ui:build`
+again after a change to `ui/`.
 
 The browser is needed once per machine: `src/view/shaders/compile.test.ts`
 compiles every shader program on the WebGL2 of headless Chromium, and

@@ -189,8 +189,14 @@ npm run docs:api   # API リファレンスを docs/api/ に生成 (サイト用
 npm run docs:check # ドキュメントの門 (docs/internals/releasing.md)
 npm run build:site # GitHub Pages のサイトを site-dist/ に組み立てる
 npm run lint:fix   # biome auto-fix
-npm run dev        # examples をブラウザで起動 (localhost:3000)
+npm run dev        # examples をブラウザで起動 (localhost:3200)
 ```
+
+いくつかの例は `ui/` の標準の UI を地図に重ねていて、アプリが npm から
+取るのと同じように、そのビルド `ui/dist/` から取ります。これが無いと
+`npm run dev` と `npm run test:e2e` はメッセージを出して止まります。
+先に `npm run build` と `npm run ui:build` を実行し、`ui/` を直したら
+もう一度 `npm run ui:build` を実行してください。
 
 ブラウザーはマシンごとに 1 度だけ入れます。
 `src/view/shaders/compile.test.ts` がすべてのシェーダープログラムを

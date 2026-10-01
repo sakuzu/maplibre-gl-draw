@@ -1,11 +1,17 @@
 # Examples
 
-Ten small pages, each showing one part of the library. Every example is
+Small pages, each showing one part of the library. Every example is
 an `index.html` and a `main.ts` of about a hundred lines, with a comment
 at the top saying what it shows. The guides quote their code from here.
 
+The first two lay the standard UI (`@sakuzu/maplibre-gl-draw-ui`, in
+[ui/](../ui/)) over the map, and their code holds only the calls of their
+topic and the placing of the UI. The other ten have buttons of their own.
+
 | Example | What it shows | Guide |
 | --- | --- | --- |
+| [get-started](get-started/) | Drawing, selecting and changing a feature in the panel on the right, the change events | [Getting started](../docs/getting-started.md) |
+| [style-features](style-features/) | The style of each feature, the defaults of a type, a style set from code and in the panel | [Styles](../docs/guides/styles.md) |
 | [basic](basic/) | Drawing polygons, the change events, saving and restoring | [Getting started](../docs/getting-started.md) |
 | [save-load](save-load/) | GeoJSON and the native format, files and drops on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [style-rules](style-rules/) | Default styles, the four kinds of style rule, a legend | [Styles](../docs/guides/styles.md) |
@@ -26,9 +32,17 @@ npm install
 npm run dev
 ```
 
-The list of the examples opens at <http://localhost:3000>. The examples
+The list of the examples opens at <http://localhost:3200>. The examples
 import `@sakuzu/maplibre-gl-draw` from the sources in `src/`, so a change
 to the library shows on reload without a build.
+
+The standard UI is taken from its build in `ui/dist/`, the files that
+users install, so it is built first, and again after a change to it:
+
+```sh
+npm run build      # core, which the UI is built against
+npm run ui:build   # ui/dist
+```
 
 To build them as static pages, which can be served from any directory
 (GitHub Pages, for example):

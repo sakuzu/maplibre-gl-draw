@@ -1,0 +1,25 @@
+/*
+ * SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The frame of a live example: as wide as the text, tall enough for the panels of the UI */
+.example-frame {
+  margin: 24px 0;
+}
+
+.example-frame iframe {
+  display: block;
+  width: 100%;
+  height: min(75vh, 640px);
+  min-height: 420px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+}
+
+.example-frame figcaption {
+  margin-top: 8px;
+  font-size: 14px;
+  text-align: right;
+}

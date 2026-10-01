@@ -19,7 +19,8 @@
     "paths": {
       "@sakuzu/maplibre-gl-draw": ["../src/index.ts"],
       "@sakuzu/maplibre-gl-draw/geometry": ["../src/geometry/index.ts"],
-      "@sakuzu/maplibre-gl-draw/table": ["../src/table/index.ts"]
+      "@sakuzu/maplibre-gl-draw/table": ["../src/table/index.ts"],
+      "@sakuzu/maplibre-gl-draw-ui": ["../ui/dist/index.d.ts"]
     }
   },
   "include": ["."],

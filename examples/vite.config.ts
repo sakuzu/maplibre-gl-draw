@@ -7,9 +7,11 @@ import { defineConfig } from 'vite';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
-/** The pages: the list and the ten examples */
+/** The pages: the list, the examples with the standard UI and the ten examples */
 const PAGES = [
   'index',
+  'get-started',
+  'style-features',
   'basic',
   'save-load',
   'style-rules',
@@ -26,7 +28,9 @@ export default defineConfig({
   // Relative asset paths, so the build can be served from any directory (GitHub Pages)
   base: './',
   server: {
-    port: 3000,
+    // A port of its own, kept: a page that moved to another port would not be where the docs say
+    port: 3200,
+    strictPort: true,
     open: true,
   },
   build: {
@@ -53,6 +57,16 @@ export default defineConfig({
         replacement: resolve(root, '../src/table/index.ts'),
       },
       { find: /^@sakuzu\/maplibre-gl-draw$/, replacement: resolve(root, '../src/index.ts') },
+      // The standard UI is taken from its build (npm run ui:build), the files that users install.
+      // It imports core by its name, which the aliases above resolve to the same sources
+      {
+        find: /^@sakuzu\/maplibre-gl-draw-ui\/style\.css$/,
+        replacement: resolve(root, '../ui/dist/style.css'),
+      },
+      {
+        find: /^@sakuzu\/maplibre-gl-draw-ui$/,
+        replacement: resolve(root, '../ui/dist/index.js'),
+      },
     ],
   },
 });
