@@ -23,8 +23,7 @@ const map = new maplibregl.Map({
 map.on('load', () => {
   map.addSource('dem', {
     type: 'raster-dem',
-    url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
-    tileSize: 256,
+    url: 'https://tiles.mapterhorn.com/tiles.json',
   });
   map.setTerrain({ source: 'dem', exaggeration: 1.5 });
 });
@@ -36,6 +35,14 @@ draw.setMode('draw_polygon');
 The polygon is drawn on the slopes and stays there while the map is
 tilted and rotated. `map.setTerrain(null)` turns the terrain off, and the
 drawing goes back to flat without any call to the library.
+
+The elevation here is [Mapterhorn](https://mapterhorn.com/), a public
+DEM of the whole globe that needs no key. Its TileJSON gives the
+encoding and the tile size, so the source names neither; a `tileSize`
+written in the source would override the one of the TileJSON. The
+TileJSON also carries the attribution "© Mapterhorn", which the map
+shows, and the sources it is made from are listed at
+<https://mapterhorn.com/attribution>.
 
 ## What changes
 

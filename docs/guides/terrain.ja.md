@@ -23,8 +23,7 @@ const map = new maplibregl.Map({
 map.on('load', () => {
   map.addSource('dem', {
     type: 'raster-dem',
-    url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
-    tileSize: 256,
+    url: 'https://tiles.mapterhorn.com/tiles.json',
   });
   map.setTerrain({ source: 'dem', exaggeration: 1.5 });
 });
@@ -36,6 +35,13 @@ draw.setMode('draw_polygon');
 多角形は斜面の上に描かれ、地図を傾けても回転してもそこに留まります。
 `map.setTerrain(null)` で地形を切ると、ライブラリーを呼ばなくても、
 描いたものは平らな表示に戻ります。
+
+ここでの標高は [Mapterhorn](https://mapterhorn.com/) です。全球を覆う
+公開の DEM で、キーは要りません。符号化の方式とタイルの大きさは
+TileJSON が持つので、ソースにはどちらも書きません。ソースに
+`tileSize` を書くと、TileJSON の値を上書きしてしまいます。TileJSON は
+「© Mapterhorn」の帰属も運び、地図はそれを表示します。元になった
+データの一覧は <https://mapterhorn.com/attribution> にあります。
 
 ## 何が変わるか
 

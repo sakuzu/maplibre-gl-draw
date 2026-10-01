@@ -97,6 +97,8 @@ export function basemapStyle(url = `${OPENFREEMAP}/bright`): Basemap['style'] {
   return named?.style ?? url;
 }
 
-/** The TileJSON of the elevation tiles (the MapLibre demo tiles) */
-export const DEM_TILES =
-  params.get('dem') ?? 'https://demotiles.maplibre.org/terrain-tiles/tiles.json';
+/**
+ * The TileJSON of the elevation tiles: Mapterhorn, which covers the whole globe and carries its
+ * own encoding, tile size and attribution
+ */
+export const DEM_TILES = params.get('dem') ?? 'https://tiles.mapterhorn.com/tiles.json';

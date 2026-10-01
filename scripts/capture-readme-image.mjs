@@ -8,8 +8,8 @@
  * (`?showcase=<scene>`, playground/showcase/) in headless Chromium (the one
  * `npx playwright-core install chromium-headless-shell` installs, with a software WebGL2). It
  * waits until the scene is assembled and the basemap tiles (and the elevation tiles) are in,
- * and takes a screenshot. The basemaps come from OpenFreeMap and the elevation from the
- * MapLibre demo tiles, so this needs the network. The resizing to JPEG uses `sips`, which is
+ * and takes a screenshot. The basemaps come from OpenFreeMap and the elevation from
+ * Mapterhorn, so this needs the network. The resizing to JPEG uses `sips`, which is
  * on macOS.
  *
  * The large-data scene draws two hundred thousand features, which the software WebGL2 cannot

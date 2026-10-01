@@ -17,8 +17,7 @@ import { BASEMAPS, basemapStyle, DEM_TILES, initialBasemapId } from '../basemap.
 import '../example.css';
 import { buildDocument, SURVEY_FILE_ID, TERRAIN_LAYERS } from './data.ts';
 
-// 1. The Nordkette range above Innsbruck, seen from the south and tilted: the public elevation
-// tiles are coarse, so the relief shows best where it is high
+// 1. The Nordkette range above Innsbruck, seen from the south and tilted
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
@@ -33,9 +32,11 @@ const map = new maplibregl.Map({
 // tiles and a sky are set whenever a style has loaded (the basemap menu replaces the style). `map.setTerrain(null)` turns the terrain
 // off, with no call to the library
 map.on('style.load', () => {
-  map.addSource('dem', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+  // The TileJSON gives the encoding, the tile size and the attribution, so the source names
+  // nothing else
+  map.addSource('dem', { type: 'raster-dem', url: DEM_TILES });
   // A source of its own for the hillshade, as maplibre recommends
-  map.addSource('hillshade', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+  map.addSource('hillshade', { type: 'raster-dem', url: DEM_TILES });
   const firstSymbol = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
   map.addLayer(
     {

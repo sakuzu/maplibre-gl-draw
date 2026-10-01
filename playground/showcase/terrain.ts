@@ -7,16 +7,14 @@
  * The Nordkette range above Innsbruck, seen from the south with the map's terrain on. An
  * area and an image on the slope, a trail climbing to the ridge, a straight dashed line
  * across the valley and markers on the stations and the summit: each follows the relief,
- * and the parts behind the ridge are hidden by it. The elevation comes from the MapLibre
- * demo tiles (AW3D30, JAXA), which also shade the relief.
+ * and the parts behind the ridge are hidden by it. The elevation comes from the same
+ * Mapterhorn tiles as the terrain example, which also shade the relief.
  */
 
 import type * as maplibregl from 'maplibre-gl';
 
+import { DEM_TILES } from '../../examples/basemap.ts';
 import { buildDocument, drawImage, type SceneLayer, type ShowcaseScene } from './scene';
-
-/** The TileJSON of the elevation tiles, the same as the terrain example */
-const DEM_TILES = 'https://demotiles.maplibre.org/terrain-tiles/tiles.json';
 
 const EXAGGERATION = 1.5;
 
@@ -33,9 +31,9 @@ export const terrainScene: ShowcaseScene = {
 
 /** The elevation, the terrain made from it, a hillshade and a sky */
 function addTerrain(map: maplibregl.Map): void {
-  map.addSource('showcase-dem', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+  map.addSource('showcase-dem', { type: 'raster-dem', url: DEM_TILES });
   // A source of its own for the hillshade, as maplibre recommends
-  map.addSource('showcase-hillshade', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+  map.addSource('showcase-hillshade', { type: 'raster-dem', url: DEM_TILES });
   const firstSymbol = map.getStyle().layers.find((layer) => layer.type === 'symbol')?.id;
   map.addLayer(
     {

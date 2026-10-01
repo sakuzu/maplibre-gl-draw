@@ -74,7 +74,8 @@ playground (port 3300) beside VitePress, and stops all three on Ctrl-C.
 
 The examples use public data that needs no key: the
 [OpenFreeMap](https://openfreemap.org/) styles for the basemap, and the
-MapLibre demo tiles for the elevation of terrain. Both are set in
+[Mapterhorn](https://mapterhorn.com/) tiles, which cover the whole globe,
+for the elevation of terrain. Both are set in
 [basemap.ts](basemap.ts). The address of a page can replace them, for
 example `terrain/?style=<style URL>&dem=<TileJSON URL>`; the end-to-end
 tests and the pictures of the gallery (`npm run site:thumbnails`) use

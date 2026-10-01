@@ -123,7 +123,7 @@ export function addSwitches(ui: DrawUI, draw: Draw, map: maplibregl.Map, ja: boo
 /** The terrain of the map, from the elevation tiles of the examples, tilted to be seen */
 function toggleTerrain(map: maplibregl.Map): void {
   if (!map.getSource('dem')) {
-    map.addSource('dem', { type: 'raster-dem', url: DEM_TILES, tileSize: 256 });
+    map.addSource('dem', { type: 'raster-dem', url: DEM_TILES });
   }
   const on = map.getTerrain() === null;
   map.setTerrain(on ? { source: 'dem', exaggeration: 1.5 } : null);
