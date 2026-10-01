@@ -71,13 +71,10 @@ const routeMode: ModeFactory = (ctx) => ({
 draw.extensions.modes.add('route', routeMode);
 
 // 3. The standard UI, every part on (the defaults), with the tools and the sections below. The
-// layer panel lists the features under their layers, and too many rows there stop the page: it
-// is mounted again without them while the 200,000 points are loaded (Shift+B)
-function mountUI(featureRows: boolean): DrawUI {
-  const ui = createDrawUI(draw, {
-    locale: ja ? 'ja' : 'en',
-    layers: { features: featureRows },
-  });
+// layer panel lists up to 1,000 features in a layer, and only their number beyond that, so the
+// 200,000 points (Shift+B) need nothing of the page
+function mountUI(): DrawUI {
+  const ui = createDrawUI(draw, { locale: ja ? 'ja' : 'en' });
 
   // 4. Tools for the two modes, and sections of the inspector for their features
   ui.tools.add({
@@ -153,7 +150,7 @@ function mountUI(featureRows: boolean): DrawUI {
   return ui;
 }
 // None over a scene that shows the map alone
-let ui = scene?.mapOnly ? null : mountUI(true);
+const ui = scene?.mapOnly ? null : mountUI();
 
 // 5. The image tool asks the page for a file; the page places it where the user clicked
 draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
@@ -186,14 +183,7 @@ container.addEventListener('drop', async (e) => {
 });
 
 // 7. The switches on keys: terrain, a dataset, read-only, the lock, save, open, 200,000 points
-listenToSwitches(
-  createSwitches(draw, map, (big) => {
-    if (!ui) return;
-    ui.destroy();
-    ui = mountUI(!big);
-    Object.assign(window, { ui });
-  }),
-);
+listenToSwitches(createSwitches(draw, map));
 
 // A scene of the showcase loads its drawing once the style is in
 if (scene) map.on('load', () => void runShowcase(scene, draw, map));
