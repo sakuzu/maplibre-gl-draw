@@ -38,6 +38,10 @@ ui.destroy();
 
 The interface is laid over the map's container. The toolbar alone goes
 into any positioned element with `createToolbar(draw, { target })`.
+The map's padding follows the interface, the width of a panel that
+stands beside the map and the toolbar's height at the bottom, so that
+`fitBounds` and `easeTo` keep clear of them; `padding: false` leaves the
+map's padding alone.
 
 On the left, the layer panel and the legend share a panel, in two tabs.
 The layer panel is the tree of the layers, their groups and their

@@ -35,3 +35,16 @@ follows semantic versioning.
   the settings of a layer and of a group. `createInspector(draw,
   { target })` puts it alone in an element, and
   `ui.inspector.sections.add` adds a section of the application.
+- `createDrawUI` keeps the map's padding to the interface: the width of
+  a panel that stands beside the map on its side, and the toolbar's
+  height with its gap at the bottom, so that `fitBounds` and `easeTo`
+  keep clear of them. Floating panels and sheets leave the sides at 0,
+  and `destroy()` gives the map its padding back. `padding: false`
+  turns it off.
+- The root element of the interface is kata's root in the page
+  (`data-kata-root`): the tooltips and the probes kata appends go into
+  it, where kata's tokens, the language and the theme apply.
+- Built with kata 1.1.0. The Shell of `createDrawUI` lies over the map
+  with kata's `overlay`: the map takes the pointer everywhere but the
+  regions of the shell (the panels beside it, the toolbar, the scrim
+  and the floating panels, and the sheets).
