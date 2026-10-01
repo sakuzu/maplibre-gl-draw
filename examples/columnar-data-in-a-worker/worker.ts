@@ -3,7 +3,9 @@
 
 // The Worker of columnar-data-in-a-worker: it fetches a GeoParquet file, reads its columns with
 // hyparquet, decodes the WKB geometry straight into the arrays of a table in the layout of
-// GeoArrow, prepares the table for the dataset, and sends it to the page without a copy.
+// GeoArrow, prepares the table for the dataset, and sends it to the page without a copy. Asked
+// for the million, it makes 1,000,000 points straight into the arrays of a table (data.ts) and
+// prepares and sends them the same way.
 
 import {
   type DictionaryColumn,
@@ -13,17 +15,30 @@ import {
 } from '@sakuzu/maplibre-gl-draw/table';
 import { decompress } from 'fzstd';
 import { type ColumnData, parquetRead } from 'hyparquet';
+import { createMillion } from './data.ts';
 
-/** What the page asks for: the address of the file */
-export interface Request {
-  url: string;
-}
+/** What the page asks for: the buildings of the file at an address, or the million points */
+export type Request = { kind: 'buildings'; url: string } | { kind: 'million'; count: number };
 
-/** What the Worker answers: the prepared table and the time of each step (ms) */
-export interface Reply {
+/** The answer for the buildings: the prepared table and the time of each step (ms) */
+export interface BuildingsReply {
+  kind: 'buildings';
   prepared: ReturnType<typeof prepareTable>;
   times: { fetch: number; read: number; table: number; prepare: number };
 }
+
+/**
+ * The answer for the million: the prepared table, the time of each step (ms), and when it was
+ * sent (`performance.timeOrigin + performance.now()`), for the page to time the transfer
+ */
+export interface MillionReply {
+  kind: 'million';
+  prepared: ReturnType<typeof prepareTable>;
+  times: { build: number; prepare: number };
+  sentAt: number;
+}
+
+export type Reply = BuildingsReply | MillionReply;
 
 /** The columns the page reads: the rule reads `area`, a click the others */
 const COLUMNS = ['id', 'geometry', 'area', 'height', 'floors', 'class', 'name'];
@@ -158,10 +173,11 @@ function dictionary(values: unknown[]): DictionaryColumn {
   return { codes, dictionary: [...index.keys()] };
 }
 
-self.onmessage = async (event: MessageEvent<Request>) => {
+/** Reads the GeoParquet file into a prepared table */
+async function buildings(url: string): Promise<BuildingsReply> {
   const t0 = performance.now();
-  const response = await fetch(event.data.url);
-  if (!response.ok) throw new Error(`${event.data.url}: ${response.status}`);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
   const file = await response.arrayBuffer();
   const t1 = performance.now();
   const columns = await readColumns(file);
@@ -182,10 +198,32 @@ self.onmessage = async (event: MessageEvent<Request>) => {
   // The extents of the rows, the pieces and the index of the clicks, computed here
   const prepared = prepareTable(table);
   const t4 = performance.now();
-  const reply: Reply = {
+  return {
+    kind: 'buildings',
     prepared,
     times: { fetch: t1 - t0, read: t2 - t1, table: t3 - t2, prepare: t4 - t3 },
   };
+}
+
+/** Makes the million points into a table and prepares it */
+function million(count: number): MillionReply {
+  const t0 = performance.now();
+  const table = createMillion(count);
+  const t1 = performance.now();
+  const prepared = prepareTable(table);
+  const t2 = performance.now();
+  return {
+    kind: 'million',
+    prepared,
+    times: { build: t1 - t0, prepare: t2 - t1 },
+    sentAt: performance.timeOrigin + performance.now(),
+  };
+}
+
+self.onmessage = async (event: MessageEvent<Request>) => {
+  const request = event.data;
+  const reply =
+    request.kind === 'buildings' ? await buildings(request.url) : million(request.count);
   // The transfer list moves every array to the page instead of copying it
-  self.postMessage(reply, { transfer: transferList(prepared) });
+  self.postMessage(reply, { transfer: transferList(reply.prepared) });
 };

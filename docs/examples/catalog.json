@@ -100,8 +100,8 @@
   "columnar-data-in-a-worker": {
     "title": "Columnar data in a Worker",
     "titleJa": "Columnar data in a Worker",
-    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns: no GeoJSON, no object per row, and no copy on the way to the page.",
-    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読み、列のままデータセットに渡します。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
+    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns, and a million points made there on a key: no GeoJSON, no object per row, and no copy on the way to the page.",
+    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読んで列のままデータセットに渡し、キーで 100 万の点もそこで作ります。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
     "order": 14
   },
   "read-only-viewer": {

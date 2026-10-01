@@ -744,7 +744,8 @@ it.
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.md)
   reads the same buildings from a GeoParquet file in a Worker, straight
   into a table, prepares it there with `prepareTable` and hands it over
-  without a copy
+  without a copy. A key makes 1,000,000 points there the same way and
+  logs the time of each step
 - [200,000 features](../examples/200000-features.md) loads 200,000
   buildings as features of the document instead, every one editable, for
   comparison with a dataset

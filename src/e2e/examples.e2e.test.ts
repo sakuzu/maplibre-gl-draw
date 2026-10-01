@@ -905,7 +905,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click', {
+  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click, and M adds and removes a million points', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const file = readFileSync(join(EXAMPLES, 'public/data/tokyo-buildings.parquet'));
@@ -933,9 +933,10 @@ describe('the examples', () => {
     expect(Number.isFinite(result.firstFrameMs)).toBe(true);
     expect(Object.keys(result.times).sort()).toEqual(['fetch', 'prepare', 'read', 'table']);
     expect(Object.values(result.times).every(Number.isFinite)).toBe(true);
-    // The console states the number of rows and the time of each step
-    expect(infos).toHaveLength(1);
-    expect(infos[0]).toMatch(
+    // The console states the keys, then the number of rows and the time of each step
+    expect(infos).toHaveLength(2);
+    expect(infos[0]).toBe('Keys: M loads 1,000,000 points from the Worker, and removes them');
+    expect(infos[1]).toMatch(
       new RegExp(
         `^${rows.toLocaleString('en')} building footprints read from a GeoParquet file in a Worker and drawn from its columns: \\d+ ms to fetch the file, \\d+ ms to read the columns, \\d+ ms to build the table, \\d+ ms to prepare it, and \\d+ ms from the request to the first frame that draws them$`,
       ),
@@ -987,6 +988,35 @@ describe('the examples', () => {
     const clicked = await recordDatasetClick(page);
     await click(page, await pageOf(page, target));
     await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('buildings');
+
+    // M asks the Worker for the million points, which a second dataset draws from the table
+    await page.keyboard.press('m');
+    const million = () =>
+      page.evaluate(
+        () =>
+          (window as unknown as E2EWindow).draw.datasets.get('million')?.getThinningStats().total ??
+          null,
+      );
+    await expect.poll(million, { timeout: browserTimeout(30_000) }).toBe(1_000_000);
+    await expect.poll(() => infos.length, { timeout: browserTimeout(10_000) }).toBe(3);
+    expect(infos[2]).toMatch(
+      /^1,000,000 points made in a Worker as typed arrays: [\d,]+ ms to build the table, [\d,]+ ms to prepare it, [\d,]+ ms to transfer it without a copy, and [\d,]+ ms from handing it to the dataset to the first frame that draws them; the arrays hold \d+ MB( \(JavaScript heap \d+ MB before, \d+ MB after\))?$/,
+    );
+    // A click on one of them, alone at zoom 18, reports its row
+    const point = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      const position = draw.datasets.get('million')?.getRowPoint(123_456);
+      if (!position) throw new Error('No point at row 123456');
+      map.jumpTo({ center: position as [number, number], zoom: 18 });
+      return position;
+    });
+    await settle(page);
+    const clickedPoint = await recordDatasetClick(page);
+    await click(page, await pageOf(page, point));
+    await expect.poll(clickedPoint, { timeout: browserTimeout(5_000) }).toBe('million');
+    // M again removes them
+    await page.keyboard.press('m');
+    await expect.poll(million, { timeout: browserTimeout(5_000) }).toBeNull();
     await close();
   });
 

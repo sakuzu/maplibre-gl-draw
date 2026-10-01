@@ -734,7 +734,8 @@ async function whenPictureComplete(): Promise<void> {
   スナップします
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.ja.md)
   は、同じ建物を GeoParquet のファイルから Worker で表に直接読み込み、
-  そこで `prepareTable` で下ごしらえして、写さずに渡します
+  そこで `prepareTable` で下ごしらえして、写さずに渡します。キーを
+  押すと 100 万の点も同じように作り、それぞれの段階の時間をログに出します
 - [200,000 features](../examples/200000-features.ja.md) は、比べる
   ために、20 万の建物を文書の地物として読み込みます。どれも編集できます
 
