@@ -31,15 +31,7 @@ const map = new maplibregl.Map({
 map.getContainer().style.background = '#0b1026';
 map.on('style.load', () => {
   map.setProjection({ type: 'globe' });
-  map.setSky({
-    'sky-color': '#0b1026',
-    'horizon-color': '#1e3a66',
-    'fog-color': '#0b1026',
-    'sky-horizon-blend': 0.6,
-    'horizon-fog-blend': 0.6,
-    'fog-ground-blend': 0.9,
-    'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 1, 12, 0],
-  });
+  map.setSky({ 'atmosphere-blend': 1 });
 });
 
 const draw = createDraw(map);
