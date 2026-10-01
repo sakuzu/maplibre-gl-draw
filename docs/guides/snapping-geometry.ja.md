@@ -345,7 +345,9 @@ const band = buffer(road, 100, { segments: 32 });
 - 範囲と単位: `bbox`、`metersToDegrees`
 
 描いた地物は、そのまま入力にできます。関数は、GeoJSON の Feature と
-同じように、`geometry` の欄を持つものなら何でも使います。関数が
+同じように、`geometry` の欄を持つものなら何でも使います。読むのは
+地物の `type` でなく `geometry` なので、`Circle` はその幾何である
+`Polygon` として測ります。関数が
 受け取れない幾何の地物には `GeometryError` を投げるので、種類が
 混ざるときは先に確かめます。
 
