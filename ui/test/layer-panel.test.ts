@@ -12,6 +12,7 @@ import {
   type LayerPanelHandle,
   type LegendHandle,
 } from '../src/index.js';
+import { countId } from '../src/layers/tree.js';
 import { fakeDraw, feature, group, layer } from './fake-draw.js';
 
 let handle: LayerPanelHandle | LegendHandle | DrawUI | undefined;
@@ -199,6 +200,82 @@ describe('createLayerPanel', () => {
     await Promise.resolve();
     expect(fake.listenerCount()).toBe(0);
     expect(fake.container.querySelector('.mgd-ui')).toBeNull();
+  });
+});
+
+describe('the limit of the features of the layer panel', () => {
+  /** l1 holds 1,500 features, l2 holds 3 */
+  function crowded() {
+    const many = Array.from({ length: 1500 }, (_, i) => `f${i}`);
+    const few = ['x', 'y', 'z'];
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1', many, { name: 'Town' }), layer('l2', few, { name: 'Notes' })],
+        features: [...many.map((id) => feature(id, 'l1')), ...few.map((id) => feature(id, 'l2'))],
+        active: 'l2',
+      },
+    });
+  }
+
+  it('lists up to 1,000 features in a layer, and counts those of a layer that holds more', () => {
+    const fake = crowded();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    expect(rowNames(fake.container)).toEqual([
+      'Notes',
+      'Point',
+      'Point',
+      'Point',
+      'Town',
+      '1,500 features. Select them on the map.',
+    ]);
+    // The count is no item: no eye, no lock, no grip, and a press selects nothing
+    const count = row(fake.container, countId('l1'));
+    expect(count.querySelectorAll('button')).toHaveLength(0);
+    expect(count.querySelector('[data-fixed]')).not.toBeNull();
+    count.click();
+    expect(fake.draw.selection.set).not.toHaveBeenCalled();
+    expect(fake.draw.selection.clear).not.toHaveBeenCalled();
+  });
+
+  it('keeps the eye, the lock, renaming and the active layer of a layer that counts', () => {
+    const fake = crowded();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    rowButton(fake.container, 'l1', 'Hide').click();
+    expect(fake.draw.layers.update).toHaveBeenCalledWith('l1', { visible: false });
+    rowButton(fake.container, 'l1', 'Lock').click();
+    expect(fake.draw.layers.update).toHaveBeenCalledWith('l1', { locked: true });
+    row(fake.container, 'l1').click();
+    expect(fake.draw.selection.set).toHaveBeenLastCalledWith('layer', ['l1']);
+    expect(fake.draw.layers.setActive).toHaveBeenLastCalledWith('l1');
+  });
+
+  it('takes the limit as a number, and lists none with false', () => {
+    const fake = crowded();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, features: 2 });
+    expect(rowNames(fake.container)).toEqual([
+      'Notes',
+      '3 features. Select them on the map.',
+      'Town',
+      '1,500 features. Select them on the map.',
+    ]);
+    handle.destroy();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, features: 2000 });
+    expect(rowNames(fake.container)).toHaveLength(2 + 3 + 1500);
+    handle.destroy();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, features: false });
+    expect(rowNames(fake.container)).toEqual(['Notes', 'Town']);
+  });
+
+  it('refuses a limit less than 0', () => {
+    const fake = crowded();
+    expect(() => createLayerPanel(fake.asDraw, { target: fake.container, features: -1 })).toThrow(
+      /0 or more/,
+    );
+    expect(() => createDrawUI(fake.asDraw, { layers: { features: Number.NaN } })).toThrow(
+      /0 or more/,
+    );
+    expect(fake.container.querySelector('.mgd-ui')).toBeNull();
+    expect(fake.mapListening('style.load')).toBe(0);
   });
 });
 

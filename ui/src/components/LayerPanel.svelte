@@ -30,6 +30,7 @@
     canDropInto,
     canGroup,
     DATASET_ICON,
+    formatCount,
     indexNodes,
     isSelectable,
     type LayerTreeNode,
@@ -57,7 +58,9 @@
   // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, it
   // is not renamed, and a press on it does nothing (the selection stays). It is dragged among the
   // layers when it is placed among them (`layer-order`); in front of or behind every layer it
-  // stays. The eye and the lock are drawn here (LayerTree's `actions`), for each kind its own.
+  // stays. A layer of more features than the limit lists none: its one child counts them, and has
+  // no eye, no lock and no grip, and a press on it does nothing. The eye and the
+  // lock are drawn here (LayerTree's `actions`), for each kind its own.
   //
   // The panel lists the stack from the front, and the basemap is its back: the last row, under the
   // tree, apart from it (a line between them), as it is no layer: it is not dragged, hidden, locked
@@ -75,8 +78,11 @@
   }: {
     draw: LayerPanelDraw;
     messages: Box<Messages>;
-    /** Whether the features show under the layers and the groups */
-    features?: boolean;
+    /**
+     * The features under the layers and the groups: true for up to FEATURE_LIMIT in a layer, a
+     * number for that many, false for none
+     */
+    features?: boolean | number;
     /** Whether the datasets show as rows of the stack */
     datasets?: boolean;
     /** Whether the add menu shows */
@@ -88,6 +94,9 @@
   } = $props();
 
   const m = $derived(messages.get());
+  // The most features a layer lists by default: each row costs its drawing (about a
+  // third of a millisecond), so a thousand rows stay well under a second
+  const FEATURE_LIMIT = 1000;
   const tree = $derived(
     // options.changed: the default look of each type gives the color of the marks
     follow(
@@ -100,7 +109,12 @@
         'dataset.removed',
         'dataset.reordered',
       ],
-      () => buildNodes(draw, messages.get(), { features, datasets }),
+      () =>
+        buildNodes(draw, messages.get(), {
+          features: features !== false,
+          limit: features === true ? FEATURE_LIMIT : features === false ? 0 : features,
+          datasets,
+        }),
     ),
   );
   // A dataset tells of a change of its visibility and of its rows on itself
@@ -265,9 +279,6 @@
 
   const ACTIVE_ICON = PenLine as unknown as IconComponent;
 
-  /** A number of rows, with the separators of thousands */
-  const formatCount = (count: number) => count.toLocaleString('en-US');
-
   const MAP_ICON = MapIcon as unknown as IconComponent;
   const basemapName = $derived(basemaps?.name() ?? null);
   const currentBasemap = $derived(basemaps?.current.get() ?? null);
@@ -312,6 +323,9 @@
     </span>
     <Text clamp>{own.name}</Text>
     <span class="count"><Text muted tabular>{fillWord(m.rows, { count: formatCount(own.count ?? 0) })}</Text></span>
+  {:else if own.kind === 'count'}
+    <!-- The features a layer holds when it lists none: not pressed, not dragged -->
+    <span class="many" data-fixed><Text muted clamp>{own.name}</Text></span>
   {:else}
     {#if own.icon}
       <Markbox>
@@ -334,16 +348,18 @@
 <!-- The eye and the lock of a row, as LayerTree draws them: an action in a state other than its
      default (hidden, locked) keeps showing. A dataset has the eye alone -->
 {#snippet actions(node: TreeNode)}
-  <Button
-    variant="ghost"
-    icon
-    aria-label={node.visible ? m.hide : m.show}
-    data-keep={node.visible ? undefined : ''}
-    onclick={(e: MouseEvent) => {
-      e.stopPropagation();
-      onvisible(node.id, !node.visible);
-    }}><Icon name={node.visible ? 'eye' : 'eye-off'} /></Button
-  >
+  {#if node.kind !== 'count'}
+    <Button
+      variant="ghost"
+      icon
+      aria-label={node.visible ? m.hide : m.show}
+      data-keep={node.visible ? undefined : ''}
+      onclick={(e: MouseEvent) => {
+        e.stopPropagation();
+        onvisible(node.id, !node.visible);
+      }}><Icon name={node.visible ? 'eye' : 'eye-off'} /></Button
+    >
+  {/if}
   {#if isSelectable(node.kind)}
     <Button
       variant="ghost"
@@ -426,6 +442,10 @@
   .count {
     display: inline-flex;
     flex: none;
+  }
+  .many {
+    display: flex;
+    min-width: 0;
   }
   /* A row that is not dragged shows no grip (kata's TreeRow shows it on every row of a tree that
      is reordered) */

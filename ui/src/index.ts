@@ -173,7 +173,8 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * @returns The interface, to change and to remove
  * @throws Error when a tool of `options.toolbar.tools` is not valid, a tab of
  *   `options.inspector.tabs` is not `style` or `attributes`, the theme is not `light`, `dark` or
- *   `auto`, a basemap of `options.basemaps` has no ID, no label or no style or shares its ID, or
+ *   `auto`, the limit of the features of `options.layers.features` is a number less than 0, a
+ *   basemap of `options.basemaps` has no ID, no label or no style or shares its ID, or
  *   `options.basemap` is the ID of none of them
  */
 export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
@@ -380,8 +381,12 @@ function basemapsOf(draw: Draw, options: BasemapOptions): BasemapControl {
 
 /** The layer panel with the options filled in */
 function layerSettings(options: Omit<LayerPanelOptions, keyof BasemapOptions> = {}): LayerSettings {
+  const features = options.features ?? true;
+  if (typeof features === 'number' && !(features >= 0)) {
+    throw new Error('The limit of the features of the layer panel must be 0 or more');
+  }
   return {
-    features: options.features !== false,
+    features,
     datasets: options.datasets !== false,
     add: options.add !== false,
     reorder: options.reorder !== false,
@@ -444,22 +449,19 @@ function mountAlone(
  * @param options - The element to put it in, what it shows, the basemaps, the words (`en` by
  *   default) and the theme (`auto` by default)
  * @returns The layer panel, to remove
- * @throws Error when the theme is not `light`, `dark` or `auto`, a basemap of `options.basemaps`
- *   has no ID, no label or no style or shares its ID, or `options.basemap` is the ID of none of
- *   them
+ * @throws Error when the theme is not `light`, `dark` or `auto`, `options.features` is a number
+ *   less than 0, a basemap of `options.basemaps` has no ID, no label or no style or shares its ID,
+ *   or `options.basemap` is the ID of none of them
  */
 export function createLayerPanel(
   draw: Draw,
   options: LayerPanelOptions & AloneOptions,
 ): LayerPanelHandle {
   checkTheme(options.theme);
+  const settings = layerSettings(options);
   const basemaps = basemapsOf(draw, options);
-  return mountAlone(
-    options,
-    LayerPanelView,
-    { draw, ...layerSettings(options), basemaps },
-    'layer-panel',
-    () => basemaps.destroy(),
+  return mountAlone(options, LayerPanelView, { draw, ...settings, basemaps }, 'layer-panel', () =>
+    basemaps.destroy(),
   );
 }
 

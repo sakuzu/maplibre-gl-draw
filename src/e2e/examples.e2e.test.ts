@@ -617,6 +617,12 @@ describe('the examples', () => {
     const { page, close } = await openExample('200000-features');
     await loaded(page);
     expect(await featureCount(page)).toBe(200_000);
+    // The layer panel lists none of them: the one row under the layer counts them
+    const counts = page.locator('[data-role="layer-panel"] [data-kind="count"]');
+    await expect
+      .poll(() => counts.allInnerTexts(), { timeout: browserTimeout(5_000) })
+      .toEqual(['200,000 features. Select them on the map.']);
+    expect(await page.locator('[data-role="layer-panel"] [data-kind="feature"]').count()).toBe(0);
 
     // The middle of one building, in the middle of the view
     const target = await page.evaluate(() => {
@@ -684,6 +690,24 @@ describe('the examples', () => {
       order: ['Survey area', 'buildings', 'Planned route'],
       snapToDatasets: true,
     });
+    // The layer panel lists the stack from the front: the places over every layer, and the
+    // buildings between the two layers with the number of their rows
+    const rows = page.locator(
+      '[data-role="layer-panel"] [data-container="root"] > [data-sortable-item]',
+    );
+    expect(
+      await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-id'))),
+    ).toEqual(
+      await page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return ['places', ...[...draw.layers.getOrder()].reverse()];
+      }),
+    );
+    expect(
+      (await page.locator('[role="treeitem"][data-node="buildings"]').first().innerText())
+        .replace(/\s+/g, ' ')
+        .trim(),
+    ).toBe(`buildings ${buildings.toLocaleString('en')} rows`);
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );

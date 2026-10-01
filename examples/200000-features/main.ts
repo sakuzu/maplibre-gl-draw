@@ -25,15 +25,11 @@ const map = new maplibregl.Map({
 });
 const draw = createDraw(map);
 
-// 1. The standard UI, with the layer panel listing the layers without their features: the list
-// makes a row for each feature, which is too many here
+// 1. The standard UI. Its layer panel lists up to 1,000 features in a layer (the `features`
+// option of `layers` sets the limit); this layer holds more, so its row shows their number and
+// they are selected on the map
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
-const ui = createDrawUI(draw, {
-  locale,
-  basemaps: BASEMAPS,
-  basemap: initialBasemapId(),
-  layers: { features: false },
-});
+const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 2. The town: 500 x 400 plots, each with a building of its own size, place and number of
 // floors, the same on every visit (data.ts)

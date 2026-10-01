@@ -159,4 +159,5 @@ export const en: Readonly<Messages> = Object.freeze({
   snapPauseKey: 'Snapping pauses while {key} is held',
   datasets: 'Datasets',
   rows: '{count} rows',
+  manyFeatures: '{count} features. Select them on the map.',
 });

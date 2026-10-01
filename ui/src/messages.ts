@@ -221,6 +221,8 @@ export interface Messages {
   /** The mark of a dataset in the layer panel, and the number of its rows, with {count} */
   datasets: string;
   rows: string;
+  /** The row of a layer that holds more features than the panel lists, with {count} */
+  manyFeatures: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */

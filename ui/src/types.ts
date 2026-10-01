@@ -265,8 +265,14 @@ export type DrawUIDraw = ToolbarDraw &
  * `basemaps`, else the `name` of the map's style
  */
 export interface LayerPanelOptions extends BasemapOptions {
-  /** Whether the features show under the layers and the groups; true when left out */
-  features?: boolean;
+  /**
+   * The features under the layers and the groups: `true` (the default) lists up to 1,000 features
+   * in each layer, a number sets that limit, and `false` lists none (the groups alone). A layer
+   * that holds more, those of its groups included, lists none of them and none of its groups, and
+   * shows their number instead, with a hint to select them on the map: each row costs its
+   * drawing, and many thousands make the panel slow
+   */
+  features?: boolean | number;
   /**
    * Whether the datasets (`draw.datasets`) show as rows of the stack, in their place among the
    * layers, with the eye; true when left out

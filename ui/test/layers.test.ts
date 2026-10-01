@@ -10,6 +10,7 @@ import {
   buildNodes,
   canDropInto,
   canGroup,
+  countId,
   DATASET_ICON,
   GROUP_ICON,
   LAYER_ICON,
@@ -135,6 +136,67 @@ describe('the nodes of the layer tree', () => {
     const fake = sample();
     const draw = { ...fake.draw, layers: { ...fake.draw.layers, getOrder: () => ['l1', 'ds'] } };
     expect(buildNodes(draw, en).map((n) => n.id)).toEqual(['l1']);
+  });
+});
+
+describe('the limit of the features of the layer tree', () => {
+  /** l1 holds 5 features, two of them in a group; l2 holds 2 */
+  function counted() {
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1', ['a', 'g1', 'b', 'c']), layer('l2', ['d', 'e'])],
+        groups: [group('g1', 'l1', ['f', 'h'])],
+        features: [
+          ...['a', 'b', 'c', 'f', 'h'].map((id) =>
+            feature(id, 'l1', 'Point', id === 'f' || id === 'h' ? { groupId: 'g1' } : {}),
+          ),
+          feature('d', 'l2'),
+          feature('e', 'l2'),
+        ],
+      },
+    });
+  }
+
+  it('counts the features of a layer that holds more, those of its groups included', () => {
+    const nodes = buildNodes(counted().draw, en, { features: true, limit: 4 });
+    expect(shape(nodes)).toEqual([
+      ['l2', ['e', 'd']],
+      ['l1', [countId('l1')]],
+    ]);
+    expect(nodes[1].children?.[0]).toMatchObject({
+      kind: 'count',
+      name: '5 features. Select them on the map.',
+      count: 5,
+      data: null,
+    });
+    expect(canDropInto(nodes[1].children?.[0] as LayerTreeNode, nodes[1])).toBe(false);
+  });
+
+  it('lists the features of a layer that holds as many as the limit', () => {
+    const nodes = buildNodes(counted().draw, en, { features: true, limit: 5 });
+    expect(shape(nodes)[1]).toEqual(['l1', ['c', 'b', ['g1', ['h', 'f']], 'a']]);
+  });
+
+  it('counts with the separators of thousands, in the words of the locale', () => {
+    const many = Array.from({ length: 12_345 }, (_, i) => `f${i}`);
+    const fake = fakeDraw({
+      doc: { layers: [layer('l1', many)], features: many.map((id) => feature(id, 'l1')) },
+    });
+    expect(buildNodes(fake.draw, en, { features: true, limit: 1000 })[0].children?.[0].name).toBe(
+      '12,345 features. Select them on the map.',
+    );
+    expect(
+      buildNodes(fake.draw, resolveMessages('ja'), { features: true, limit: 1000 })[0].children?.[0]
+        .name,
+    ).toBe('12,345 件の地物。地図の上で選んでください。');
+  });
+
+  it('counts nothing without the features', () => {
+    const nodes = buildNodes(counted().draw, en, { features: false, limit: 0 });
+    expect(shape(nodes)).toEqual([
+      ['l2', []],
+      ['l1', ['g1']],
+    ]);
   });
 });
 

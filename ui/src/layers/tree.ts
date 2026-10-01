@@ -11,6 +11,12 @@
 // stack and is not. Its `data` is the entity of core as it was read, so the handlers of the panel
 // know what was pressed without reading it again.
 //
+// A layer that holds more features than the limit, those of its groups included, lists none of
+// them and none of its groups: its one child is a row that counts them (the kind `count`), which
+// is not selected, hidden, locked or dragged. Each row of the tree costs its drawing, and a layer
+// of many thousands of features would make the panel slow; such a feature is selected on the map.
+// A group is in a layer, so it never holds more than its layer.
+//
 // The datasets are rows at the root in their place in the stack: those of `above-store` in front
 // of every layer, those of `layer-order` where `layers.getOrder()` places them among the layers,
 // and those of `below-store` behind every layer, each division from the front. A `layer-order`
@@ -32,13 +38,13 @@ import {
   type Selection,
   type SelectionType,
 } from '@sakuzu/maplibre-gl-draw';
-import type { Messages } from '../messages.js';
+import { fillWord, type Messages } from '../messages.js';
 
 /** The kinds of the nodes that are selected, which are the types of the selection of core */
 export type NodeKind = SelectionType;
 
-/** The kinds of every node: those that are selected, and a dataset */
-export type RowKind = NodeKind | 'dataset';
+/** The kinds of every node: those that are selected, a dataset, and the count of many features */
+export type RowKind = NodeKind | 'dataset' | 'count';
 
 /** What the tree reads of a dataset */
 export type TreeDataset = Pick<Dataset, 'id' | 'order' | 'visible' | 'getThinningStats'>;
@@ -46,8 +52,9 @@ export type TreeDataset = Pick<Dataset, 'id' | 'order' | 'visible' | 'getThinnin
 /** A node of the tree, with the entity of core it was built from */
 export type LayerTreeNode = TreeNode & {
   kind: RowKind;
-  data: Layer | DrawGroup | Feature | TreeDataset;
-  /** The number of the rows of a dataset */
+  /** The entity, or null for the count of many features */
+  data: Layer | DrawGroup | Feature | TreeDataset | null;
+  /** The number of the rows of a dataset, or of the features a count stands for */
   count?: number;
 };
 
@@ -85,6 +92,11 @@ function shown(source: TreeSource, entity: { id: string; visible: boolean }): bo
 export interface TreeOptions {
   /** Whether the features show under the layers and the groups */
   features: boolean;
+  /**
+   * The most features a layer lists, those of its groups included; one that holds more lists
+   * none and counts them instead. No limit when left out
+   */
+  limit?: number;
   /** Whether the datasets show as rows of the stack; true when left out */
   datasets?: boolean;
 }
@@ -198,6 +210,29 @@ function datasetNode(dataset: TreeDataset): LayerTreeNode {
   };
 }
 
+/** A number with the separators of thousands, as the panel shows counts */
+export function formatCount(count: number): string {
+  return count.toLocaleString('en-US');
+}
+
+/** The ID of the row that counts the features of a layer */
+export function countId(layerId: string): string {
+  return `mgd-ui:count:${layerId}`;
+}
+
+/** The row that counts the features of a layer, which lists none of them */
+function countNode(layerId: string, count: number, m: Messages): LayerTreeNode {
+  return {
+    id: countId(layerId),
+    kind: 'count',
+    name: fillWord(m.manyFeatures, { count: formatCount(count) }),
+    visible: true,
+    locked: false,
+    count,
+    data: null,
+  };
+}
+
 /** Whether a node is an entry of `layers.getOrder()`: a layer, or a dataset placed among them */
 export function inLayerOrder(node: LayerTreeNode): boolean {
   return (
@@ -222,6 +257,7 @@ export function buildNodes(
 ): LayerTreeNode[] {
   const seen = new Set<string>();
   const nodes: LayerTreeNode[] = [];
+  const limit = options.limit ?? Number.POSITIVE_INFINITY;
   const datasets = options.datasets !== false ? source.datasets : undefined;
   // From the back, as core lists them
   const all = datasets?.list() ?? [];
@@ -244,7 +280,15 @@ export function buildNodes(
     if (seen.has(layer.id)) continue;
     seen.add(layer.id);
     const children: LayerTreeNode[] = [];
-    for (const itemId of [...layer.items].reverse()) {
+    // The features of the layer, counted from its items without reading them: those of a group
+    // are in the group, not among the items
+    let total = 0;
+    if (options.features) {
+      for (const itemId of layer.items) total += source.groups.get(itemId)?.featureIds.length ?? 1;
+    }
+    const many = total > limit;
+    if (many) children.push(countNode(layer.id, total, m));
+    for (const itemId of many ? [] : [...layer.items].reverse()) {
       if (seen.has(itemId)) continue;
       const group = source.groups.get(itemId);
       if (group) {

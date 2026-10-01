@@ -7,6 +7,17 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Changed: the layer panel lists up to 1,000 features in a layer, those
+  of its groups included. A layer that holds more lists none of them and
+  none of its groups: its one child is a row with their number and a
+  hint, "12,345 features. Select them on the map.", which is not
+  pressed, hidden, locked or dragged. The row of the layer works as
+  before. Each row of the panel costs about a third of a millisecond to
+  draw, so a layer of 20,000 features took seconds. `features`
+  (`LayerPanelOptions`) is now `boolean | number`: `true` (the default)
+  for the limit of 1,000, a number for another limit, `false` for no
+  features; a number less than 0 throws. New word: `manyFeatures` (with
+  `{count}`).
 - Added: the datasets are rows of the layer panel, in their place in
   the stack: those of `above-store` in front of every layer, those of
   `layer-order` where `layers.getOrder()` places them among the layers,

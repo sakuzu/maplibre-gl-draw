@@ -158,4 +158,5 @@ export const ja: Readonly<Messages> = Object.freeze({
   snapPauseKey: '{key} を押している間は吸着を止めます',
   datasets: 'データセット',
   rows: '{count} 行',
+  manyFeatures: '{count} 件の地物。地図の上で選んでください。',
 });
