@@ -60,3 +60,11 @@ follows semantic versioning.
   tabs; the Style tab has the fields of the style, the sections of the
   application and the operations, and the Attributes tab the list of
   the attributes. The line style and the shape of a point are selects.
+- A button at the top right of `createDrawUI` switches between the
+  light and the dark look (`themeToggle: false` leaves it out). It
+  stands to the left of the inspector while the inspector is open.
+- `createDrawUI` adds maplibre-gl's own controls to the map: the globe,
+  the compass and the zoom at the bottom right, the scale at the bottom
+  left (`mapControls`, true by default; false for none, or an object for
+  some of them). `destroy()` removes them. A bottom corner the toolbar
+  reaches across is lifted above the toolbar.

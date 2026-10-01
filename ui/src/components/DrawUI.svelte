@@ -4,6 +4,8 @@
 -->
 <script lang="ts">
   import Layers from '@lucide/svelte/icons/layers';
+  import Moon from '@lucide/svelte/icons/moon';
+  import Sun from '@lucide/svelte/icons/sun';
   import {
     Button,
     Floating,
@@ -42,7 +44,8 @@
   // they are. The keyboard shortcuts are those of the toolbar's buttons. onbeside reports which
   // side regions stand beside the stage, open, once the shell has drawn them, so that the map's
   // padding can follow them. While the left region is closed, a small button floats at the top
-  // left of the map to open it again.
+  // left of the map to open it again. At the top right, a button switches the theme to the look
+  // that is not shown now (light reads the look the root shows, which the theme control keeps).
   let {
     draw,
     tools,
@@ -54,6 +57,9 @@
     sections,
     onbeside,
     side: sideMode = 'floating',
+    light,
+    themeToggle = true,
+    ontheme,
   }: {
     draw: DrawUIDraw & LayerPanelDraw & LegendDraw & InspectorDraw;
     tools: Box<ToolEntry[]>;
@@ -71,6 +77,12 @@
     onbeside?: (beside: Beside) => void;
     /** Where the side regions go on a wide map: floating over it or beside it */
     side?: 'floating' | 'beside';
+    /** Whether the root shows the light look now */
+    light: Box<boolean>;
+    /** Whether the button that switches the theme shows */
+    themeToggle?: boolean;
+    /** Called with the theme the button switches to */
+    ontheme?: (theme: 'light' | 'dark') => void;
   } = $props();
 
   // The inspector is open while something is selected; closing it clears the selection
@@ -129,6 +141,17 @@
     // After the shell has drawn the regions
     tick().then(() => report(now));
   });
+
+  // The theme button: the look it switches to, and its place. While the inspector is open
+  // floating or beside the map, it sits to the left of the inspector's pane, gap-md from it (the
+  // pane is gap-md from the right and a panel wide, or a panel wide at the right edge); a sheet
+  // comes from the bottom and leaves it at the corner
+  const SUN_ICON = Sun as unknown as IconComponent;
+  const MOON_ICON = Moon as unknown as IconComponent;
+  const isLight = $derived(light.get());
+  const besideInspector = $derived(
+    !!inspectorSettings && selected.get() && !!layout && layout.rightMode !== 'sheet',
+  );
 
   // Escape on the canvas is core's (it cancels the drawing or clears the selection). Elsewhere,
   // with no pane to close, it clears the selection
@@ -194,6 +217,25 @@
         }}
       >
         <Icon name={LAYERS_ICON} />
+      </Button>
+    </Floating>
+  </div>
+{/if}
+
+{#if themeToggle}
+  <!-- Outside the shell's regions: the root gives it the pointer (data-role="theme") -->
+  <div data-role="theme">
+    <Floating
+      right={besideInspector ? 'calc(var(--kata-width-panel) + var(--kata-gap-md) * 2)' : 'md'}
+      top="md"
+    >
+      <Button
+        variant="ghost"
+        icon
+        aria-label={isLight ? m.toDark : m.toLight}
+        onclick={() => ontheme?.(isLight ? 'dark' : 'light')}
+      >
+        <Icon name={isLight ? MOON_ICON : SUN_ICON} />
       </Button>
     </Floating>
   </div>

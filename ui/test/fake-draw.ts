@@ -99,7 +99,7 @@ export function fakeDraw(
   canvas.tabIndex = 0;
   container.appendChild(canvas);
   document.body.appendChild(container);
-  // The map: its container, its canvas and its padding
+  // The map: its container, its canvas, its padding and its controls
   let padding = { top: 10, bottom: 20, left: 30, right: 40 };
   const map = {
     getContainer: () => container,
@@ -108,6 +108,8 @@ export function fakeDraw(
     setPadding: vi.fn((next: typeof padding) => {
       padding = { ...next };
     }),
+    addControl: vi.fn((_control: unknown, _position?: string) => map),
+    removeControl: vi.fn((_control: unknown) => map),
   };
 
   const emit = (event: string, payload: unknown) => {

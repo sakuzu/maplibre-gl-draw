@@ -112,6 +112,31 @@ export interface DrawUIOptions {
    * docks them beside the map from 64rem. Below 48rem both become sheets
    */
   side?: 'floating' | 'beside';
+  /**
+   * Whether a button at the top right of the map switches between the light and the dark look:
+   * it sets the theme to the look that is not shown now (from `auto`, the one the system does not
+   * prefer). True when left out
+   */
+  themeToggle?: boolean;
+  /**
+   * maplibre-gl's own controls, added to the map as maplibre-gl draws them: at the bottom right,
+   * from the top, the globe, the compass and the zoom; at the bottom left, the scale. True (all
+   * four) when left out; false for none, as for a page that adds controls of its own; an object
+   * for some of them. `destroy()` removes them
+   */
+  mapControls?: boolean | MapControlsOptions;
+}
+
+/** Which of maplibre-gl's own controls `createDrawUI` adds to the map; each is true when left out */
+export interface MapControlsOptions {
+  /** The globe control (GlobeControl), which switches between the globe and the flat map */
+  globe?: boolean;
+  /** The compass (a NavigationControl without zoom), which resets the bearing and the pitch */
+  compass?: boolean;
+  /** The zoom buttons (a NavigationControl without compass) */
+  zoom?: boolean;
+  /** The scale bar (ScaleControl) */
+  scale?: boolean;
 }
 
 /** A toolbar on the page */
