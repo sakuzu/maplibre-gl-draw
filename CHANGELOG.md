@@ -6,20 +6,26 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
-These changes will be released as 2.1.1.
+## [2.1.1] - 2026-10-02
 
-- Fixed: with the terrain on, a solid line or the outline of a polygon
-  was drawn half as thick on a high-DPI display (a device pixel ratio
-  of 2) as without the terrain, when its width follows the zoom. It is
-  now as thick with the terrain as without it.
-- Fixed: with the terrain on and the camera pitched, a solid line looked
-  like a string of beads: it was thinner between its vertices than at
-  them, and the outline of a polygon was thinner along its edges. Its
-  thickness is now the same all along.
-- Fixed: with the terrain on and the camera pitched, a dashed or dotted
-  line, and the dashed outline of a polygon, sank into the ground on the
-  side towards the camera and showed a jagged edge. They are now painted
-  on the ground like solid lines, with the same dashes as without the
+Three fixes to the lines drawn on the terrain: their thickness on a
+high-DPI display, their thickness between the vertices, and dashed lines
+that sank into the ground. Nothing else changes.
+
+### Fixed
+
+- With the terrain on, a solid line or the outline of a polygon was drawn
+  half as thick on a high-DPI display (a device pixel ratio of 2) as
+  without the terrain, when its width follows the zoom. It is now as
+  thick with the terrain as without it.
+- With the terrain on and the camera pitched, a solid line looked like a
+  string of beads: it was thinner between its vertices than at them, and
+  the outline of a polygon was thinner along its edges. Its thickness is
+  now the same all along.
+- With the terrain on and the camera pitched, a dashed or dotted line,
+  and the dashed outline of a polygon, sank into the ground on the side
+  towards the camera and showed a jagged edge. They are now painted on
+  the ground like solid lines, with the same dashes as without the
   terrain.
 
 ## [2.1.0] - 2026-10-01
@@ -1162,7 +1168,8 @@ available from Kasika, Inc.
 - A read-only mode and an interaction lock.
 - Plugins, custom modes and custom feature types.
 
-[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/sakuzu/maplibre-gl-draw/releases/tag/v1.0.0
