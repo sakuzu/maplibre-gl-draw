@@ -252,6 +252,22 @@ async function loaded(page: Page): Promise<void> {
   await page.evaluate(() => (window as unknown as { loaded: Promise<unknown> }).loaded);
 }
 
+/** The card of the actions of the standard UI, at the bottom left of the map */
+function actionCard(page: Page) {
+  return page.locator('.mgd-ui [data-role="actions"]');
+}
+
+/** Presses the action of the card with this label, a switch or a button, as the user would */
+async function pressAction(page: Page, label: string): Promise<void> {
+  await actionCard(page).getByText(label, { exact: true }).click();
+  await settle(page);
+}
+
+/** Whether the switch of the card with this label is on */
+function actionChecked(page: Page, label: string): Promise<boolean> {
+  return actionCard(page).getByRole('switch', { name: label, exact: true }).isChecked();
+}
+
 /** Records the next `dataset.clicked` of the page in `window.clickedDataset` */
 async function recordDatasetClick(page: Page): Promise<() => Promise<string | null>> {
   await page.evaluate(() => {
@@ -1139,7 +1155,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('read-only-viewer switches read-only with R, the interaction lock with K, the lock of the Blocks layer with B and local hiding with H', {
+  it('read-only-viewer switches read-only, the interaction lock, the lock of the Blocks layer and local hiding from the card of actions, and the interaction lock with K', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('read-only-viewer');
@@ -1196,18 +1212,25 @@ describe('the examples', () => {
     await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
     expect(await featureCount(page)).toBe(8);
     await page.getByRole('button', { name: 'Select', exact: true }).click();
-    // Locking a layer is a write, so read-only refuses it
-    await press('b');
+    // The switches of the card show the states
+    expect(await actionChecked(page, 'Read-only')).toBe(true);
+    expect(await actionChecked(page, 'Interaction lock')).toBe(false);
+    // Locking a layer is a write, so read-only refuses it, and its switch stays off
+    await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(false);
+    expect(await actionChecked(page, 'Lock Blocks')).toBe(false);
 
-    // R: writable again, by code too
-    await press('r');
+    // Read-only off: writable again, by code too
+    await pressAction(page, 'Read-only');
     expect((await state()).readOnly).toBe(false);
+    expect(await actionChecked(page, 'Read-only')).toBe(false);
     expect(await rename()).toBe(true);
 
-    // K: the lock stops the tools of the user; code still writes
+    // K, the key of the interaction lock: it stops the tools of the user; code still writes
+    await page.mouse.move(CENTER.x, CENTER.y);
     await press('k');
     expect((await state()).interactionLocked).toBe(true);
+    expect(await actionChecked(page, 'Interaction lock')).toBe(true);
     await page.getByRole('button', { name: 'Polygon', exact: true }).click();
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).not.toBe(
       'draw_polygon',
@@ -1215,7 +1238,7 @@ describe('the examples', () => {
     await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
     expect(await featureCount(page)).toBe(8);
     expect(await rename()).toBe(true);
-    await press('k');
+    await pressAction(page, 'Interaction lock');
     expect((await state()).interactionLocked).toBe(false);
 
     // B: the locked layer keeps its features where they are; unlocked, a drag moves them
@@ -1227,22 +1250,25 @@ describe('the examples', () => {
       inside,
     );
     await settle(page);
-    await press('b');
+    await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(true);
+    expect(await actionChecked(page, 'Lock Blocks')).toBe(true);
     await click(page, at(0, 0));
     await drag(page, at(0, 0), at(-50, 40));
     expect(await geometryOf(tower.id)).toEqual(tower.geometry);
-    await press('b');
+    await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(false);
     await click(page, at(0, 0));
     await drag(page, at(0, 0), at(-50, 40));
     expect(await geometryOf(tower.id)).not.toEqual(tower.geometry);
 
-    // H: hidden on this page only; the layer stays visible in the document, under read-only too
-    await press('r');
-    await press('h');
+    // Hide Blocks: hidden on this page only; the layer stays visible in the document, under
+    // read-only too
+    await pressAction(page, 'Read-only');
+    await pressAction(page, 'Hide Blocks');
     expect(await state()).toMatchObject({ readOnly: true, hidden: true, visible: true });
-    await press('h');
+    expect(await actionChecked(page, 'Hide Blocks')).toBe(true);
+    await pressAction(page, 'Hide Blocks');
     expect((await state()).hidden).toBe(false);
     await close();
   });
