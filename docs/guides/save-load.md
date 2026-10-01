@@ -389,7 +389,8 @@ your own, so that the listener can leave it out by that source.
 
 - [Save and load](../examples/save-and-load.md) loads a GeoJSON file
   and reports `skipped`, saves the native format in `localStorage` and
-  loads it back, and loads files dropped on the map
+  loads it back, downloads both formats as files, opens a file from the
+  disk, and loads files dropped on the map
 
 ## Reference
 

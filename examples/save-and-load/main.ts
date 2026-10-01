@@ -4,8 +4,9 @@
 // save-and-load: getting the drawing out and back in.
 // The page opens with a GeoJSON file, which adds its features and reports the one it left out.
 // S saves the whole document in the browser, in the format of the library; O loads the saved
-// document back in place of the drawing; and a file dropped on the map is loaded there. The next
-// visit opens with what was saved.
+// document back in place of the drawing; D and G download the drawing in the format of the
+// library and as GeoJSON; B opens a file from the disk; and a file dropped on the map is loaded
+// there. The next visit opens with what was saved.
 
 import { createDraw, type LoadResult } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -63,17 +64,72 @@ async function restore(): Promise<void> {
   report(await draw.document.load(text));
 }
 
-// 5. The two keys of the page, left alone while a field of the panels has the keyboard
+// 5. A file of the drawing, offered as a download: the page makes a Blob of the text and clicks
+// a link to it that names the file. The format of the library keeps the whole document, and
+// GeoJSON the features alone, for other tools
+function download(format: 'native' | 'geojson'): void {
+  const title = draw.metadata.get().title?.trim() || 'drawing';
+  const [data, extension, type] =
+    format === 'native'
+      ? [draw.document.toJSON(), '.maplibre-gl-draw.json', 'application/json']
+      : [draw.document.toGeoJSON(), '.geojson', 'application/geo+json'];
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type }));
+  link.download = `${title.replace(/[\\/:*?"<>|]/g, '_')}${extension}`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  console.info(`Downloaded ${link.download}`);
+}
+
+// 6. A file from the disk, through an input made for the moment: the browser opens its chooser,
+// and the file goes where a dropped one would go, its image at the center of the view
+async function loadFile(file: File, coordinate: [number, number]): Promise<void> {
+  try {
+    const layerId = draw.layers.getActive()?.id;
+    report(await draw.document.load(file, { coordinate, zoom: map.getZoom(), layerId }));
+  } catch (error) {
+    console.error(`${file.name} was not loaded`, error);
+  }
+}
+
+function openFile(): void {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,.geojson,image/*';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (file === undefined) return;
+    const { lng, lat } = map.getCenter();
+    void loadFile(file, [lng, lat]);
+  });
+  input.click();
+  console.info('Opening a file');
+}
+
+// 7. The keys of the page, listed in the console as it opens. A key typed into a field of the
+// panels is left alone, and so is one held with a modifier
+const KEYS: Record<string, { label: string; run: () => void }> = {
+  s: { label: 'Save the drawing in this browser', run: save },
+  o: { label: 'Load the drawing saved in this browser', run: () => void restore() },
+  d: { label: 'Download the drawing in the format of the library', run: () => download('native') },
+  g: { label: 'Download the drawing as GeoJSON', run: () => download('geojson') },
+  b: { label: 'Open a file from the disk', run: openFile },
+};
+console.info(
+  [
+    'The keys of this page:',
+    ...Object.entries(KEYS).map(([k, { label }]) => `  ${k.toUpperCase()}  ${label}`),
+  ].join('\n'),
+);
 window.addEventListener('keydown', (event) => {
   const typing =
     event.target instanceof Element &&
     event.target.closest('input, textarea, select, [contenteditable]') !== null;
   if (typing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key === 's' || event.key === 'S') save();
-  if (event.key === 'o' || event.key === 'O') void restore();
+  KEYS[event.key.toLowerCase()]?.run();
 });
 
-// 6. Files dropped on the map: the library leaves drops to the page. An image is placed where it
+// 8. Files dropped on the map: the library leaves drops to the page. An image is placed where it
 // was dropped, a data file keeps its own positions, and both go into the active layer
 const container = map.getContainer();
 container.addEventListener('dragover', (event) => event.preventDefault());
@@ -81,16 +137,7 @@ container.addEventListener('drop', async (event) => {
   event.preventDefault();
   const rect = container.getBoundingClientRect();
   const { lng, lat } = map.unproject([event.clientX - rect.left, event.clientY - rect.top]);
-  for (const file of event.dataTransfer?.files ?? []) {
-    try {
-      const layerId = draw.layers.getActive()?.id;
-      report(
-        await draw.document.load(file, { coordinate: [lng, lat], zoom: map.getZoom(), layerId }),
-      );
-    } catch (error) {
-      console.error(`${file.name} was not loaded`, error);
-    }
-  }
+  for (const file of event.dataTransfer?.files ?? []) await loadFile(file, [lng, lat]);
 });
 
 // For the browser console and the end-to-end tests

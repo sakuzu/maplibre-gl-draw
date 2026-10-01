@@ -609,6 +609,50 @@ describe('the examples', () => {
     await close();
   });
 
+  it('save-and-load downloads both formats with D and G, and opens a file with B', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('save-and-load');
+    await loaded(page);
+    await click(page, at(-300, -250));
+
+    // D offers the document in the format of the library, G its features as GeoJSON
+    for (const [key, name] of [
+      ['d', 'drawing.maplibre-gl-draw.json'],
+      ['g', 'drawing.geojson'],
+    ] as const) {
+      const download = page.waitForEvent('download');
+      await page.keyboard.press(key);
+      const file = await download;
+      expect(file.suggestedFilename()).toBe(name);
+      const json = JSON.parse(readFileSync((await file.path()) as string, 'utf8')) as {
+        type?: string;
+        version?: string;
+        features: unknown[];
+      };
+      expect(json.features).toHaveLength(4);
+      if (key === 'd') expect(json.version).toBe('3.0.0');
+      else expect(json.type).toBe('FeatureCollection');
+    }
+
+    // B opens the chooser of the browser, and the file chosen is loaded into the drawing
+    const chooser = page.waitForEvent('filechooser');
+    await page.keyboard.press('b');
+    const point = { type: 'Point', coordinates: [139.774, 35.675] };
+    await (await chooser).setFiles({
+      name: 'one.geojson',
+      mimeType: 'application/geo+json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: point, properties: { name: 'Chosen' } }],
+        }),
+      ),
+    });
+    await expect.poll(() => featureCount(page), { timeout: browserTimeout(5_000) }).toBe(5);
+    await close();
+  });
+
   it('globe opens on the globe, and the globe button of the map controls turns it flat', {
     timeout: TIMEOUT,
   }, async () => {

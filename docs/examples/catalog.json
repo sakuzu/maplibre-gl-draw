@@ -65,8 +65,8 @@
   "save-and-load": {
     "title": "Save and load",
     "titleJa": "Save and load",
-    "description": "GeoJSON and the format of the library, files dropped on the map, and the features a load leaves out.",
-    "descriptionJa": "GeoJSON とライブラリーの形式、地図に落としたファイル、読み込みで外された地物を扱います。",
+    "description": "GeoJSON and the format of the library, saved in the browser, downloaded as files and opened from the disk, files dropped on the map, and the features a load leaves out.",
+    "descriptionJa": "GeoJSON とライブラリーの形式を扱います。ブラウザーへの保存、ファイルのダウンロード、ディスクのファイルを開くこと、地図に落としたファイル、読み込みで外された地物です。",
     "order": 9
   },
   "terrain": {

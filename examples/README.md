@@ -26,7 +26,7 @@ them in this order.
 | [snapping-and-tracing](snapping-and-tracing/) | The snapping options, the guide lines, tracing a boundary, the snapping switch of the toolbar | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [geometry-operations](geometry-operations/) | Union, intersection, difference, split and buffer from the panel, length and area | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [images](images/) | The Image tool, `image.requested`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
-| [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save and load, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
+| [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save, load, download and open a file, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, a great circle, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
 | [200000-features](200000-features/) | 200,000 editable features loaded in one transaction | [Performance](../docs/guides/performance.md) |
