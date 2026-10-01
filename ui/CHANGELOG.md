@@ -7,6 +7,14 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-01
+
+The first release of the standard user interface of
+`@sakuzu/maplibre-gl-draw`: the toolbar, the layer panel and the legend,
+and the inspector, laid over the map with `createDrawUI` or put alone in
+an element, built with kata and driven through a plain JavaScript API.
+It works with `@sakuzu/maplibre-gl-draw` 2.x.
+
 ### Added
 
 - `createDrawUI(draw, options)` lays kata's Shell over the map, with the

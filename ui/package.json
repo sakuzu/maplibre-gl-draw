@@ -59,8 +59,10 @@
     "lint": "biome check . && node scripts/check-imports.mjs",
     "check:imports": "node scripts/check-imports.mjs",
     "test": "node scripts/need-core.mjs && vitest run",
+    "test:e2e": "node scripts/need-core.mjs && vitest run --config e2e/vitest.config.ts",
     "test:watch": "vitest",
-    "dev": "node scripts/need-core.mjs && vite --config vite.dev.config.ts"
+    "dev": "node scripts/need-core.mjs && vite --config vite.dev.config.ts",
+    "prepack": "npm run build"
   },
   "peerDependencies": {
     "@sakuzu/maplibre-gl-draw": "^2.0.0",
