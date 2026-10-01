@@ -1162,5 +1162,7 @@ available from Kasika, Inc.
 - A read-only mode and an interaction lock.
 - Plugins, custom modes and custom feature types.
 
+[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/sakuzu/maplibre-gl-draw/releases/tag/v1.0.0
