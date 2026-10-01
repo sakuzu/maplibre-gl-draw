@@ -6,6 +6,11 @@ destroys both when it unmounts. This guide shows that in each framework,
 how to show the drawing in the state of a component, and how to keep the
 library out of server-side rendering.
 
+The standard UI (`@sakuzu/maplibre-gl-draw-ui`) follows the same
+patterns: it is created after the draw instance and destroyed before
+it. Its [README](../../ui/README.md#install) shows them with the
+interface, for React, for Vue and for a page without a bundler.
+
 ## The rule
 
 1. Create the draw instance after the map exists, in the mount hook
@@ -68,6 +73,10 @@ export function DrawMap() {
 In development, Strict Mode runs the effect twice. The cleanup destroys
 the first pair, so this is safe.
 
+With the standard UI, the effect calls `createDrawUI(draw)` after
+`createDraw(map)`, and the cleanup calls `ui.destroy()` before
+`draw.destroy()` ([from React](../../ui/README.md#from-react)).
+
 ## Svelte
 
 The example uses the Svelte 5 syntax (`onclick`).
@@ -100,6 +109,10 @@ The example uses the Svelte 5 syntax (`onclick`).
 <button onclick={() => draw?.setMode('draw_polygon')}>Polygon</button>
 <div bind:this={container} style="height: 400px"></div>
 ```
+
+With the standard UI, `onMount` calls `createDrawUI(draw)` after
+`createDraw(map)`, and the function it returns calls `ui.destroy()`
+before `draw.destroy()`.
 
 ## Vue
 
@@ -137,6 +150,10 @@ onBeforeUnmount(() => {
 `map` and `draw` are plain variables. Putting them in `ref` or
 `reactive` would wrap them in proxies, which they do not need; use
 `shallowRef` if the template must react to them.
+
+With the standard UI, `onMounted` calls `createDrawUI(draw)` after
+`createDraw(map)`, and `onBeforeUnmount` calls `ui.destroy()` before
+`draw.destroy()` ([from Vue](../../ui/README.md#from-vue)).
 
 ## Showing the drawing in the state
 

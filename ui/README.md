@@ -23,8 +23,14 @@ npm install @sakuzu/maplibre-gl-draw @sakuzu/maplibre-gl-draw-ui maplibre-gl
 
 `@sakuzu/maplibre-gl-draw` (2.x) and `maplibre-gl` are peer
 dependencies: the application installs them, and the interface uses the
-same copies as the application. Svelte is a dependency, and kata is
-compiled into the package.
+same copies as the application.
+
+The package is used from any framework or none: React, Vue, Svelte,
+another framework, or a plain page. It ships compiled JavaScript, and
+the page needs no Svelte of its own. The interface is written in
+Svelte, but Svelte is inside the package: its components are compiled
+before they are published, the Svelte runtime they use comes as a
+dependency of the package, and kata is compiled into it.
 
 The package loads in two ways.
 
@@ -33,33 +39,156 @@ The package loads in two ways.
   `@sakuzu/maplibre-gl-draw-ui/style.css` is the style sheet.
 - Without a bundler: `dist/maplibre-gl-draw-ui.js` is one module with
   Svelte and kata in it. It loads with `<script type="module">` and an
-  import map that names `@sakuzu/maplibre-gl-draw` and `maplibre-gl`,
-  together with `dist/style.css`.
+  import map that names `@sakuzu/maplibre-gl-draw`,
+  `@sakuzu/maplibre-gl-draw/geometry` and `maplibre-gl`, together with
+  `dist/style.css`.
 
-```html
-<link rel="stylesheet" href="/vendor/maplibre-gl.css" />
-<link rel="stylesheet" href="/vendor/maplibre-gl-draw-ui/style.css" />
-<script type="importmap">
-  {
-    "imports": {
-      "maplibre-gl": "/vendor/maplibre-gl.mjs",
-      "@sakuzu/maplibre-gl-draw": "/vendor/maplibre-gl-draw.js"
-    }
-  }
-</script>
-<script type="module">
-  import { Map } from 'maplibre-gl';
-  import { createDraw } from '@sakuzu/maplibre-gl-draw';
-  import { createDrawUI } from '/vendor/maplibre-gl-draw-ui/maplibre-gl-draw-ui.js';
+In every case the interface is created after the draw instance and
+destroyed before it: `createDrawUI(draw)` after `createDraw(map)`, and
+`ui.destroy()`, then `draw.destroy()`, then `map.remove()`.
 
-  const map = new Map({ container: 'map', style: '/style.json' });
-  createDrawUI(createDraw(map));
-</script>
+### From React
+
+```tsx
+import { useEffect, useRef } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
+import '@sakuzu/maplibre-gl-draw-ui/style.css';
+
+const style = 'https://tiles.openfreemap.org/styles/liberty';
+
+export function DrawMap() {
+  const container = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!container.current) return;
+    const map = new maplibregl.Map({ container: container.current, style });
+    const draw = createDraw(map);
+    const ui = createDrawUI(draw);
+    return () => {
+      ui.destroy();
+      draw.destroy();
+      map.remove();
+    };
+  }, []);
+
+  return <div ref={container} style={{ height: 400 }} />;
+}
 ```
 
-The paths stand for where the page serves the files: maplibre-gl's
-`dist/maplibre-gl.mjs`, the `dist/` of this package, and a module of core
-with its own dependencies in it that imports `maplibre-gl` by that name.
+The interface lies over the map's container, so the component renders
+the container alone. In development, Strict Mode runs the effect twice;
+the cleanup destroys the first set, so this is safe.
+
+### From Vue
+
+```vue
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { createDraw, type Draw } from '@sakuzu/maplibre-gl-draw';
+import { createDrawUI, type DrawUI } from '@sakuzu/maplibre-gl-draw-ui';
+import '@sakuzu/maplibre-gl-draw-ui/style.css';
+
+const style = 'https://tiles.openfreemap.org/styles/liberty';
+const container = ref<HTMLDivElement>();
+let map: maplibregl.Map | undefined;
+let draw: Draw | undefined;
+let ui: DrawUI | undefined;
+
+onMounted(() => {
+  map = new maplibregl.Map({ container: container.value!, style });
+  draw = createDraw(map);
+  ui = createDrawUI(draw);
+});
+
+onBeforeUnmount(() => {
+  ui?.destroy();
+  draw?.destroy();
+  map?.remove();
+});
+</script>
+
+<template>
+  <div ref="container" style="height: 400px"></div>
+</template>
+```
+
+`map`, `draw` and `ui` are plain variables, not `ref`s, which would wrap
+them in proxies. The guide to
+[using core with a framework](https://sakuzu.github.io/maplibre-gl-draw/guides/frameworks.html)
+shows the same patterns for Svelte, and how to keep the map out of
+server-side rendering. Under some bundlers, maplibre-gl 6 needs its
+worker URL set once per page, as the
+[README of core](https://github.com/sakuzu/maplibre-gl-draw#usage) shows
+for Vite.
+
+### Without a bundler
+
+A plain HTML page loads every module from a CDN through an import map.
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Draw</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.11.1/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sakuzu/maplibre-gl-draw-ui@1/dist/style.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "maplibre-gl": "https://cdn.jsdelivr.net/npm/maplibre-gl@6.11.1/dist/maplibre-gl.mjs",
+          "@sakuzu/maplibre-gl-draw": "https://esm.sh/@sakuzu/maplibre-gl-draw@2?external=maplibre-gl",
+          "@sakuzu/maplibre-gl-draw/geometry": "https://esm.sh/@sakuzu/maplibre-gl-draw@2/geometry",
+          "@sakuzu/maplibre-gl-draw-ui": "https://cdn.jsdelivr.net/npm/@sakuzu/maplibre-gl-draw-ui@1/dist/maplibre-gl-draw-ui.js"
+        }
+      }
+    </script>
+    <style>
+      html, body, #map { height: 100%; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script type="module">
+      import * as maplibregl from 'maplibre-gl';
+      import { createDraw } from '@sakuzu/maplibre-gl-draw';
+      import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
+
+      const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/liberty',
+        center: [139.767, 35.681],
+        zoom: 14,
+      });
+      createDrawUI(createDraw(map));
+    </script>
+  </body>
+</html>
+```
+
+The import map names four modules.
+
+- `maplibre-gl` is maplibre-gl's own ES module build, at a version that
+  the peer of core accepts (`~6.11.1`). It starts its worker from the
+  same address by itself.
+- `@sakuzu/maplibre-gl-draw` comes from esm.sh, which puts core's own
+  dependencies in it. `?external=maplibre-gl` leaves maplibre-gl to the
+  import map, so the page and the library share one copy.
+- `@sakuzu/maplibre-gl-draw/geometry` is imported by the interface for
+  its measurements.
+- `@sakuzu/maplibre-gl-draw-ui` is the single-file build of this
+  package, with Svelte and kata in it.
+
+The same page works with files served by the application: put the
+addresses of its own copies (maplibre-gl's `dist/maplibre-gl.mjs`, this
+package's `dist/`, and a build of core with its dependencies in it that
+imports `maplibre-gl` by that name) in the import map and the two
+`<link>` elements. Pin exact versions in production.
 
 ## Use
 
