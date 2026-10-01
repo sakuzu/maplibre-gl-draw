@@ -1594,7 +1594,7 @@ describe('the examples', () => {
     expect(await actionChecked(page, 'Scale with zoom')).toBe(true);
     await close();
   });
-  it('editing-shapes moves a shared vertex in both parcels, then in one after T', {
+  it('editing-shapes moves a shared vertex in both parcels, then in one after T, and the card of actions switches it back', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('editing-shapes');
@@ -1641,6 +1641,15 @@ describe('the examples', () => {
     const after = await parcels();
     expect(has(after.west, shared.lower)).toBe(false);
     expect(after.east).toEqual(moved.east);
+
+    // The switch in the card of actions shows the option off, and turns it on again
+    expect(await actionChecked(page, 'Move shared vertices')).toBe(false);
+    await pressAction(page, 'Move shared vertices');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.options.get().topology?.sharedVertexDrag,
+      ),
+    ).toBe(true);
 
     // A click on the area with a hole selects it; its geometry has the outer ring and the hole,
     // and the hole gets vertex handles of its own (their white fill)
