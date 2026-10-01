@@ -18,7 +18,7 @@ import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './maplibre-setup.ts';
-import { basemapStyle } from '../examples/basemap.ts';
+import { BASEMAPS, basemapStyle, initialBasemapId } from '../examples/basemap.ts';
 import { routeLook, routeType } from '../examples/custom-feature-types/route.ts';
 import {
   createStampPlugin,
@@ -74,7 +74,11 @@ draw.extensions.modes.add('route', routeMode);
 // layer panel lists up to 1,000 features in a layer, and only their number beyond that, so the
 // 200,000 points (Shift+B) need nothing of the page
 function mountUI(): DrawUI {
-  const ui = createDrawUI(draw, { locale: ja ? 'ja' : 'en' });
+  const ui = createDrawUI(draw, {
+    locale: ja ? 'ja' : 'en',
+    basemaps: BASEMAPS,
+    basemap: initialBasemapId(),
+  });
 
   // 4. Tools for the two modes, and sections of the inspector for their features
   ui.tools.add({
