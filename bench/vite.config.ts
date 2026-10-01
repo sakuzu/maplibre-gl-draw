@@ -20,6 +20,7 @@ export default defineConfig({
       input: {
         perf: resolve(root, 'perf.html'),
         bench: resolve(root, 'bench.html'),
+        drape: resolve(root, 'drape.html'),
       },
     },
   },

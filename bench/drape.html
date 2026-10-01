@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drape Line Benchmark</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #fff; }
+      /* Only the parts of maplibre-gl.css needed to lay out the map (no CDN dependency). */
+      .maplibregl-map { position: relative; overflow: hidden; }
+      .maplibregl-canvas { position: absolute; left: 0; top: 0; }
+      /* Fix the map at 1280x800 so the measurement conditions stay constant. */
+      #map { width: 1280px; height: 800px; }
+      #status {
+        position: absolute; top: 0; left: 1280px; width: 320px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px; line-height: 1.6; color: #212529;
+        white-space: pre-wrap; padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="status">Starting...</div>
+    <script type="module" src="./drape-main.ts"></script>
+  </body>
+</html>

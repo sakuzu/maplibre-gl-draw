@@ -36,6 +36,28 @@ For automation, the page exposes `window.benchReady`, a Promise of the
 load, and `window.runBench()`, which runs one measurement and returns the
 statistics. Compare the same parameters on two branches.
 
+## drape.html
+
+Lines painted on the terrain by the analytic drape. Rows of zigzag lines
+cover the view of a camera pitched 60 degrees at zoom 15 over a flat
+terrain made in the page (no network), in a fixed 1280 x 800 map. The same
+frame is drawn again and again, each one waiting for the GPU, so the time
+of a frame is the time the drape takes to paint it.
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| `edges` | Number of edges of the lines | `20000` |
+| `style` | `solid`, `dashed` or `dotted` | `solid` |
+| `width` | Line width in CSS pixels | `3` |
+| `frames` | Number of frames measured | `60` |
+
+For automation, the page exposes `window.drapeReady`, a Promise that
+settles once the lines are on the drape, and `window.runDrapeBench()`,
+which returns the statistics of the frame times and the diagnostics of
+the drape. Compare `style=dashed` with `style=solid` at the same number of
+edges, with a few edges (`edges=100`) as the cost of the frame without
+lines.
+
 ## Test data
 
 `npm run generate -w bench` writes native files of 1,000 and 10,000

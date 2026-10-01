@@ -144,7 +144,8 @@
     "docs/internals/rendering.md": [
       "src/view/renderers/**",
       "src/view/shaders/**",
-      "src/view/coordinator.ts"
+      "src/view/coordinator.ts",
+      "src/view/terrain/drape/**"
     ],
     "docs/internals/hit-testing.md": [
       "src/dispatcher/hit-test/**"

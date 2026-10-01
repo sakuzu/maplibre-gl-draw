@@ -566,6 +566,26 @@ Because the conversion depends on the zoom, dashed and dotted lines cannot
 be retained and always take the immediate path (see
 [Runs and chunks](#runs-and-chunks)).
 
+#### On the terrain: laid out by the drape
+
+With the terrain on, the analytic drape paints dashed and dotted lines, and
+dashed outlines, on the ground like solid ones (see
+[Analytic drape](#analytic-drape)); the CPU split above is left to frames
+the drape does not paint. A ribbon widened on the screen around a line
+that lies on the ground has the depth of the middle of the line, so on a
+pitched view its side towards the camera sank into the nearer ground.
+
+The pattern comes from the same table as the CPU split
+(`DASH_COEFFICIENTS` in `dash.ts`: a dash is `max(a, b * w)` and a gap
+`max(w + 1, c * w)` for a width `w`), and it is measured the same way, in
+pixels of the 512-pixel world at the zoom of the frame. The binning keeps,
+next to each edge of a dashed element, where it starts along its path
+(`drapePathStarts`, worked out only for dashed elements); the shader turns
+the width of the frame into the dash and the gap, finds the dash closest
+to the pixel on the edge, and measures the distance to that piece of the
+edge. A dash cut by a vertex is drawn by both edges and meets in a round
+joint, as a solid line does.
+
 #### Helper lines: the dash branch of the shader
 
 The lines drawn by calling `SDFLineRenderer.draw()` directly (the
@@ -908,7 +928,8 @@ solid-outlined polygons.
 The `immediate` kind covers:
 
 - Dashed and dotted lines, and polygons with a dashed outline (the dash
-  cutting depends on the zoom)
+  cutting depends on the zoom). With the terrain on, the drape paints them
+  instead
 - The point shape `icon` (no instancing)
 - Kinds retained mode does not handle, such as Image
 - Feature types added with `draw.extensions.featureTypes`
@@ -1740,6 +1761,12 @@ pixel is inside a polygon or how far it is from a line.
   stop baking them into their chunk batches. The hand-over is released at
   once when the drape stops being usable for a lasting reason, and kept
   through transient ones, so batches are not re-baked back and forth
+- Dashed and dotted lines and outlines are elements too. Their style
+  carries the coefficients of the pattern (`DRAPE_DASH_TEXEL`), the
+  binning stacks the start of each edge along its path next to the edge
+  texture (`u_edge_start_tex`), and the shader draws the outline where
+  the dashes are. The fill and the selection highlight read the whole
+  outline (see [Dashes](#dashes))
 - Each element carries a factor source (`u_source_factors`, opacity and
   size, written every frame). Source 0 is neutral, the
   datasets come next (their `zoomScale`), and then each Store layer
@@ -1769,8 +1796,8 @@ records the reason in the diagnostic values (`getTerrainDrapeDebug`):
 
 ### Vertex displacement fallback
 
-Tiles over the budget, maps over the vertex budget, and dashed lines (which
-the analytic evaluation does not support) use vertex displacement instead:
+Tiles over the budget and maps over the vertex budget use vertex
+displacement instead:
 subdivision aligned with the nodes of the terrain mesh (`densifyPath`,
 `densifyRings`, `subdivideTriangles` in `tessellation.ts`) plus a
 slope-proportional `polygonOffset`. The step is bounded above by the ground
@@ -1778,8 +1805,7 @@ size of a DEM pixel and below by a fixed length on screen, and changes with
 the zoom.
 
 In a frame that uses the drape, what it cannot paint is drawn after it by
-this path: dashed lines, polygons with a dashed outline (fill included),
-the geometry being drawn, the features of extensions, and the
+this path: the geometry being drawn, the features of extensions, and the
 datasets not yet handed over to the drape. It is drawn in the same depth
 state as in a frame without the drape (`applySegmentDepthState`), so the
 terrain hides it behind a mountain in both. The end-to-end test

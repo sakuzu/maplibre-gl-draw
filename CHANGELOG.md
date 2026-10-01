@@ -16,6 +16,11 @@ These changes will be released as 2.1.1.
   like a string of beads: it was thinner between its vertices than at
   them, and the outline of a polygon was thinner along its edges. Its
   thickness is now the same all along.
+- Fixed: with the terrain on and the camera pitched, a dashed or dotted
+  line, and the dashed outline of a polygon, sank into the ground on the
+  side towards the camera and showed a jagged edge. They are now painted
+  on the ground like solid lines, with the same dashes as without the
+  terrain.
 
 ## [2.1.0] - 2026-10-01
 

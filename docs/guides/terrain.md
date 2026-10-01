@@ -102,8 +102,8 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
   features, and datasets, fall back to subdividing the
   shapes and lifting their vertices, which follows the relief less
   closely. At low zoom such a heavy map draws areas and lines flat, where
-  the relief is too small on screen to matter
-- Dashed lines always take the subdividing path
+  the relief is too small on screen to matter. Dashed and dotted lines
+  are painted on the ground like solid ones, and fall back the same way
 - A symbol takes the height of its anchor point only; a large marker on a
   steep slope is not bent to the ground
 - There are no 3D shapes: a feature has no height of its own and is always
