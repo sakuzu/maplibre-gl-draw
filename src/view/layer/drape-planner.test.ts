@@ -152,6 +152,7 @@ function createPlanner(options: { timeSlicing?: boolean } = {}) {
       resolveStyles: () => ({}) as RetainedStyleResolver,
       mapTerrain: (options.terrain === false ? null : {}) as MapTerrain,
       dpr: 1,
+      contentDpr: 1,
       zoom: options.rawZoom ?? 14,
       rawZoom: options.rawZoom ?? 14,
     });

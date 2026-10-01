@@ -46,7 +46,7 @@ import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
-import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -612,6 +612,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       zoom,
       rawZoom,
       dpr,
+      contentDpr: resolveContentPixelRatio(pixelRatio),
       terrainState,
       retainedAvailable: engine.storeRetainedCache !== null,
       overlayRenderers: dynamicOverlayRenderers,

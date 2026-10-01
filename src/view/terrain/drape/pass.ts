@@ -150,11 +150,17 @@ export interface DrapeDatasetSource {
  * It is not narrowed down by the view. Narrowing it down would change the element order every
  * time the view moves and require rebuilding the tile indices (the narrowing down within a
  * tile is done by `binTile` using the bounding boxes).
+ *
+ * @param pixelRatio The rendering pixel ratio, for widths fixed in screen pixels (the rendering
+ *   scale included; `resolvePixelRatio`)
+ * @param contentPixelRatio The rendering pixel ratio for widths that follow the zoom (the
+ *   rendering scale not applied; `resolveContentPixelRatio`)
  */
 export function collectDrapeElements(
   store: Store,
   styles: RetainedStyleResolver,
   pixelRatio: number,
+  contentPixelRatio: number,
   datasets: readonly DrapeDatasetSource[],
 ): DrapeCollectResult {
   const visible = getDisplayFeatures(store);
@@ -176,6 +182,7 @@ export function collectDrapeElements(
     drapedDatasets: new Set<string>(),
     styles,
     pixelRatio,
+    contentPixelRatio,
     layerSources: new Map<string, number>(),
   };
 
@@ -242,7 +249,10 @@ interface CollectContext {
   vertexCount: number;
   drapedDatasets: Set<string>;
   styles: RetainedStyleResolver;
+  /** The rendering pixel ratio for widths fixed in screen pixels */
   pixelRatio: number;
+  /** The rendering pixel ratio for widths that follow the zoom */
+  contentPixelRatio: number;
   layerSources: Map<string, number>;
 }
 
@@ -284,7 +294,7 @@ function collectStoreFeature(
     if (rings.length === 0) return;
     if (fillColor[3] <= 0 && !hasStroke) return;
 
-    const polygonWidth = widthOf(feature, strokeStyle.width, context.pixelRatio);
+    const polygonWidth = widthOf(feature, strokeStyle.width, context);
     pushElement(context, feature, 0, rings, {
       fill: [fillColor[0], fillColor[1], fillColor[2], fillColor[3] * bakedOpacity],
       stroke: [
@@ -312,7 +322,7 @@ function collectStoreFeature(
   const paths = linePaths(feature);
   if (paths.length === 0) return;
 
-  const lineWidth = widthOf(feature, strokeStyle.width, context.pixelRatio);
+  const lineWidth = widthOf(feature, strokeStyle.width, context);
   pushElement(context, feature, 1, paths, {
     fill: [0, 0, 0, 0],
     stroke: [
@@ -357,7 +367,7 @@ function collectDataset(
       const rings = polygonRings(feature);
       if (rings.length === 0) continue;
 
-      const width = widthOf(feature, strokeStyle.width, context.pixelRatio);
+      const width = widthOf(feature, strokeStyle.width, context);
       pushElement(context, coordinatesOf(feature) as object, 0, rings, {
         fill: fillColor,
         stroke: [
@@ -388,7 +398,7 @@ function collectDataset(
     const paths = linePaths(feature);
     if (paths.length === 0) continue;
 
-    const width = widthOf(feature, strokeStyle.width, context.pixelRatio);
+    const width = widthOf(feature, strokeStyle.width, context);
     pushElement(context, coordinatesOf(feature) as object, 1, paths, {
       fill: [0, 0, 0, 0],
       stroke: [
@@ -409,19 +419,20 @@ function collectDataset(
  * Resolves the line width with the same convention as the retained batch path
  *
  * A feature without a `createdZoom` is fixed in screen pixels (the rendering scale applies),
- * and a feature with one scales by `2^(zoom - createdZoom)`. So that the thickness does not
- * change with the presence of terrain, the drape follows the same convention.
+ * and a feature with one scales by `2^(zoom - createdZoom)` (the device pixel ratio applies,
+ * the rendering scale does not). So that the thickness does not change with the presence of
+ * terrain, the drape follows the same convention.
  */
 function widthOf(
   feature: Feature,
   width: number,
-  pixelRatio: number,
+  ratios: Pick<CollectContext, 'pixelRatio' | 'contentPixelRatio'>,
 ): { px: number; zoom: number } {
   const createdZoom = getCreatedZoom(feature);
   if (createdZoom !== undefined && Number.isFinite(createdZoom)) {
-    return { px: width, zoom: createdZoom };
+    return { px: width * ratios.contentPixelRatio, zoom: createdZoom };
   }
-  return { px: width * pixelRatio, zoom: -1 };
+  return { px: width * ratios.pixelRatio, zoom: -1 };
 }
 
 /** The rings of a polygon (with the closing point dropped) */

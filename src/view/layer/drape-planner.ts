@@ -203,7 +203,10 @@ export interface DrapeFrameInput {
   resolveStyles: () => RetainedStyleResolver;
   /** The terrain of the map (null when the terrain state of the frame is inactive) */
   mapTerrain: MapTerrain;
+  /** The rendering pixel ratio, for widths fixed in screen pixels (the rendering scale included) */
   dpr: number;
+  /** The rendering pixel ratio for widths that follow the zoom (the rendering scale not applied) */
+  contentDpr: number;
   /** The style zoom (what the rendering reads) */
   zoom: number;
   /** The real zoom of the camera (the band is decided with it) */
@@ -371,7 +374,7 @@ export class DrapePlanner {
    */
   planFrame(input: DrapeFrameInput): boolean {
     const { terrain } = this.deps;
-    const { mapTerrain, dpr, zoom, rawZoom } = input;
+    const { mapTerrain, dpr, contentDpr, zoom, rawZoom } = input;
     let drapeUsable = false;
     this.pendingWork = false;
     // The analytic drape is used even in a wide band when building the index is light. Cutting
@@ -386,10 +389,10 @@ export class DrapePlanner {
     // The elements are collected before the band is decided (the band is decided by cost, so the
     // cost has to be known first). The collected result is folded behind a key, so there is no
     // cost as long as the contents do not change
-    if (mapTerrain !== null) this.collect(input.resolveStyles, dpr, zoom);
+    if (mapTerrain !== null) this.collect(input.resolveStyles, dpr, contentDpr, zoom);
     const analyticBand = rawZoom > TERRAIN_ANALYTIC_MIN_ZOOM || this.lightEnough;
     if (mapTerrain !== null && analyticBand) {
-      drapeUsable = this.prepare(input.gl, mapTerrain, input.resolveStyles, dpr, zoom);
+      drapeUsable = this.prepare(input.gl, mapTerrain, input.resolveStyles, dpr, contentDpr, zoom);
     } else if (mapTerrain !== null) {
       // A wide band is handled by the vertex displacement path (no index is built either)
       this.plan = null;
@@ -598,6 +601,7 @@ export class DrapePlanner {
   private collect(
     resolveStyles: () => RetainedStyleResolver,
     dpr: number,
+    contentDpr: number,
     zoom: number,
   ): DrapeCollectResult {
     const { store, datasets: manager } = this.deps;
@@ -605,6 +609,7 @@ export class DrapePlanner {
     const key = [
       this.revision,
       dpr,
+      contentDpr,
       marginZoom(zoom),
       store.getLayerOrder().join('/'),
       datasets.map((c) => `${c.id}:${c.drapeRevision}:${c.visible ? 1 : 0}:${c.order}`).join(','),
@@ -613,7 +618,7 @@ export class DrapePlanner {
 
     let collected = this.collected;
     if (key !== this.collectKey || !collected) {
-      collected = collectDrapeElements(store, resolveStyles(), dpr, datasets);
+      collected = collectDrapeElements(store, resolveStyles(), dpr, contentDpr, datasets);
       this.collectKey = key;
       this.collected = collected;
       this.lightEnough = collected.edgeCount <= DRAPE_WIDE_EDGE_BUDGET;
@@ -641,6 +646,7 @@ export class DrapePlanner {
     terrain: NonNullable<MapTerrain>,
     resolveStyles: () => RetainedStyleResolver,
     dpr: number,
+    contentDpr: number,
     zoom: number,
   ): boolean {
     const { map, datasets: manager } = this.deps;
@@ -650,7 +656,7 @@ export class DrapePlanner {
     if (tiles.length === 0) return false;
 
     const datasets = manager?.listInternal() ?? [];
-    const collected = this.collect(resolveStyles, dpr, zoom);
+    const collected = this.collect(resolveStyles, dpr, contentDpr, zoom);
 
     // The factors per source (which follow the zoom) are rewritten every frame, because baking
     // them into the elements would mean rebuilding the index on every zoom movement

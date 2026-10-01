@@ -255,7 +255,10 @@ export interface FrameBuildInput {
   zoom: number;
   /** The real zoom of the camera */
   rawZoom: number;
+  /** The rendering pixel ratio, for sizes fixed in screen pixels (the rendering scale included) */
   dpr: number;
+  /** The rendering pixel ratio for sizes that follow the zoom (the rendering scale not applied) */
+  contentDpr: number;
   /** The terrain state of the frame (already set on the terrain context) */
   terrainState: TerrainRenderState;
   /** Whether the retained batches of the Store rendering exist */
@@ -272,7 +275,7 @@ export interface FrameBuildInput {
  */
 export function buildFrameState(input: FrameBuildInput): FrameState {
   const { gl, renderers: r, map, store, terrainContext, drape, renderOptions } = input;
-  const { zoom, rawZoom, dpr, terrainState } = input;
+  const { zoom, rawZoom, dpr, contentDpr, terrainState } = input;
   const { shaderData, defaultProjectionData } = renderOptions;
   const mapTerrain = terrainState.active ? getMapTerrain(map) : null;
 
@@ -329,6 +332,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     resolveStyles: () => r.batchManager.getRetainedRenderers()?.styles ?? r.featureDrawer,
     mapTerrain,
     dpr,
+    contentDpr,
     zoom,
     rawZoom,
   });
