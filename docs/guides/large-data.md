@@ -205,8 +205,8 @@ for one:
   [reading by row](#reading-by-row)). Snapping to datasets builds the
   rows too
 - `externalPointRender` is called with each point row
-- On a map with terrain, the lines and polygons draped over it are built
-  as features
+- On a map with terrain, the lines and polygons draped over it, with a
+  solid or a dashed outline alike, are built as features
 
 ### Building a table from GeoJSON
 

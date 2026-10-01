@@ -235,6 +235,18 @@ Store and in a dataset, points behind the peak (drawn
 faintly) and the handles of a selection at a hidden vertex (drawn in
 full).
 
+`src/e2e/terrain-line-width.e2e.test.ts` and `src/e2e/terrain-dash.e2e.test.ts`
+measure what the drape paints on a flat terrain (`addTestTerrain` with
+`flat: true` serves a DEM of 0 m everywhere) seen at a pitch of 60
+degrees. The first walks the normal of a slanted solid line and counts
+the covered pixels at a vertex and halfway along an edge, on a page at
+device pixel ratio 1 and on one at 2 (`openMapPage` takes a
+`deviceScaleFactor`), and compares the thickness with the same line
+drawn without terrain. The second measures the upper and the lower edge
+of each dash of a dashed line and of a dashed outline, so a dash that
+sinks into the ground on one side is caught, and checks that the dashes
+start and end where they do without terrain.
+
 `src/e2e/globe.e2e.test.ts` draws on maplibre's globe and holds the pixels
 to `map.project`, maplibre's own position of a coordinate. A line and a
 fill of two vertices along a parallel lie on the parallel, and so do the
