@@ -6,40 +6,47 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
-These changes will be released as 2.1.0: they add to the public API
-(the event `options.changed`) and fix defects, and change nothing
-incompatibly.
+## [2.1.0] - 2026-10-01
 
-- Added: the event `options.changed`, with `{ options, previous }`: what
+The standard UI package, the documentation site with twenty examples and
+the playground on it, the event `options.changed`,
+`Dataset.getStyleRule()`, and fixes to the order of the layers after a
+diffed `setStyle`, to a drag across the antimeridian on the globe, to the
+`/geometry` functions given a feature, and to `scaleWithZoom` changed at
+runtime. Nothing changes incompatibly.
+
+### Added in 2.1.0
+
+- The event `options.changed`, with `{ options, previous }`: what
   `draw.options.get()` returns after and before a `draw.options.update`
   that changed a value. An update that changes nothing fires nothing,
   and the event is not a change of the document, so it fires no
   `document.changed`.
-- Fixed: after `map.setStyle` in its default diff mode, the drawing is
-  on top of the map again. maplibre leaves custom layers out of the
-  style it diffs, so the layers of the new style were added above the
-  drawing and hid it. The layers of the instance now move back on top on
-  every `style.load`, in their order, with the map layers placed between
-  them; a full `setStyle` (`diff: false`) works as before.
-- Fixed: `draw.options.update({ scaleWithZoom })` reaches the drawing
-  modes at once. They kept the value given to `createDraw`, so a feature
-  drawn after the option was turned off still got a reference zoom
-  (`maplibre-gl-draw:createdZoom`), and one drawn after it was turned on
-  got none.
-- Fixed: the functions of `/geometry` take a feature of the drawing as it
-  is, as documented. A feature whose `type` names a geometry type
-  (`Polygon`, `LineString` and so on) was read as a geometry and threw a
-  `GeometryError` (`invalid-input`); an object with a `geometry` member
-  that is a geometry is now read as a feature first, whatever its own
-  `type`.
-- Fixed: on the globe, a freehand stroke drawn across the antimeridian is
-  drawn as the stroke alone. The globe gives the pointer longitudes in
-  [-180, 180], so where the pointer crossed the line (or slid along the
-  edge of the sphere past it) the next point of the stroke was 360
-  degrees from the one before, and a line went once round the globe
-  along the parallel. The coordinates of a press now run on past 180 as
-  they do on the flat map.
-- Changed: the site (<https://sakuzu.github.io/maplibre-gl-draw/>) is
+- Twenty examples built with the standard UI, each with its page
+  on the site: `get-started`, `style-features`, `feature-properties`,
+  `layers-and-groups`, `style-rules-and-legend`, `snapping-and-tracing`,
+  `geometry-operations`, `images`, `editing-shapes`, `zoom-and-scale`,
+  `save-and-load`, `terrain`, `globe`, `200000-features`, `datasets`,
+  `columnar-data-in-a-worker`, `read-only-viewer`, `plugins`,
+  `custom-feature-types` and `custom-ui`. Their basemap menu offers the
+  OpenFreeMap styles.
+- A sample of Overture Maps data for the examples, in
+  `examples/public/data/` (not in the package): the 10,477 buildings and
+  the 17,558 places of central Tokyo east of the station, as GeoJSON and
+  GeoParquet. `npm run data:overture` (`scripts/fetch-overture-sample.mjs`)
+  writes them again. The buildings are under the ODbL and the places
+  under the CDLA Permissive 2.0;
+  `THIRD_PARTY_NOTICES.md` and `examples/public/data/README.md` record
+  the attribution and the licenses of every source. The `datasets`,
+  `columnar-data-in-a-worker` and `style-rules-and-legend` examples show
+  them.
+- `Dataset.getStyleRule()`, the style rule of a dataset: the
+  one last given to `setStyleRule`, or the one given to `datasets.add`,
+  or `undefined` when there is none. A legend of the datasets reads it.
+
+### Changed in 2.1.0
+
+- The site (<https://sakuzu.github.io/maplibre-gl-draw/>) is
   the documentation site: getting started and the guides in English and
   Japanese, a gallery of the examples, each on a page that runs it
   beside its code, the playground under `/playground/` and the API
@@ -51,41 +58,47 @@ incompatibly.
   those of the HTML pages of the API reference of 1.0 and 2.0, redirect
   to the pages that took their place. `npm run site:dev` serves the site
   with the examples and the playground for a local check.
-- Added: twenty examples built with the standard UI, each with its page
-  on the site: `get-started`, `style-features`, `feature-properties`,
-  `layers-and-groups`, `style-rules-and-legend`, `snapping-and-tracing`,
-  `geometry-operations`, `images`, `editing-shapes`, `zoom-and-scale`,
-  `save-and-load`, `terrain`, `globe`, `200000-features`, `datasets`,
-  `columnar-data-in-a-worker`, `read-only-viewer`, `plugins`,
-  `custom-feature-types` and `custom-ui`. Their basemap menu offers the
-  OpenFreeMap styles.
-- Changed: the playground is built on the standard UI, with the tools
+- The playground is built on the standard UI, with the tools
   and the inspector sections of a plugin and of a custom feature type,
   and the switches that are not tools on Shift and a letter. It opens on
   an overview of every look one layer can hold; `?plain` opens it empty.
-- Changed: the dev server of the examples (`npm run dev`) moves from
+- The dev server of the examples (`npm run dev`) moves from
   port 3000 to 3200, and that of the playground
   (`npm run dev:playground`) from 3001 to 3300. They and
   `npm run test:e2e` need the standard UI built first
   (`npm run ui:build`).
-- Added: a sample of Overture Maps data for the examples, in
-  `examples/public/data/` (not in the package): the 10,477 buildings and
-  the 17,558 places of central Tokyo east of the station, as GeoJSON and
-  GeoParquet. `npm run data:overture` (`scripts/fetch-overture-sample.mjs`)
-  writes them again. The buildings are under the ODbL and the places
-  under the CDLA Permissive 2.0;
-  `THIRD_PARTY_NOTICES.md` and `examples/public/data/README.md` record
-  the attribution and the licenses of every source. The `datasets`,
-  `columnar-data-in-a-worker` and `style-rules-and-legend` examples show
-  them.
-- Changed: no sample geometry of the examples, the scenes of the
+- No sample geometry of the examples, the scenes of the
   playground or the development page of the standard UI lies over the
   Imperial Palace, its East Gardens or Kitanomaru Park. Each page keeps
   its data in a `data.ts` of its own, and a test walks all of it and
   fails when anything reaches into that area.
-- Added: `Dataset.getStyleRule()`, the style rule of a dataset: the
-  one last given to `setStyleRule`, or the one given to `datasets.add`,
-  or `undefined` when there is none. A legend of the datasets reads it.
+
+### Fixed in 2.1.0
+
+- After `map.setStyle` in its default diff mode, the drawing is
+  on top of the map again. maplibre leaves custom layers out of the
+  style it diffs, so the layers of the new style were added above the
+  drawing and hid it. The layers of the instance now move back on top on
+  every `style.load`, in their order, with the map layers placed between
+  them; a full `setStyle` (`diff: false`) works as before.
+- `draw.options.update({ scaleWithZoom })` reaches the drawing
+  modes at once. They kept the value given to `createDraw`, so a feature
+  drawn after the option was turned off still got a reference zoom
+  (`maplibre-gl-draw:createdZoom`), and one drawn after it was turned on
+  got none.
+- The functions of `/geometry` take a feature of the drawing as it
+  is, as documented. A feature whose `type` names a geometry type
+  (`Polygon`, `LineString` and so on) was read as a geometry and threw a
+  `GeometryError` (`invalid-input`); an object with a `geometry` member
+  that is a geometry is now read as a feature first, whatever its own
+  `type`.
+- On the globe, a freehand stroke drawn across the antimeridian is
+  drawn as the stroke alone. The globe gives the pointer longitudes in
+  [-180, 180], so where the pointer crossed the line (or slid along the
+  edge of the sphere past it) the next point of the stroke was 360
+  degrees from the one before, and a line went once round the globe
+  along the parallel. The coordinates of a press now run on past 180 as
+  they do on the flat map.
 
 ## [2.0.0] - 2026-09-30
 
@@ -1133,6 +1146,5 @@ available from Kasika, Inc.
 - A read-only mode and an interaction lock.
 - Plugins, custom modes and custom feature types.
 
-[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/sakuzu/maplibre-gl-draw/releases/tag/v1.0.0
