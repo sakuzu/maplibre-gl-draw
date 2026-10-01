@@ -32,8 +32,8 @@
 
   // LayerPanel: kata's LayerTree of the layers, their groups and their features, from the front.
   //
-  // It keeps nothing of the drawing. The nodes are built from draw again on document.changed and
-  // hidden.changed, the selected rows are draw.selection.get(), read again on selection.changed,
+  // It keeps nothing of the drawing. The nodes are built from draw again on document.changed,
+  // hidden.changed and options.changed, the selected rows are draw.selection.get(), read again on selection.changed,
   // and the active layer is draw.layers.getActive(). Every action calls the public API of draw:
   // the eye `update({ visible })` (and shows again what this client hid), the lock
   // `update({ locked })`, renaming the name (`properties.name` for a feature), a drop
@@ -58,7 +58,8 @@
 
   const m = $derived(messages.get());
   const tree = $derived(
-    follow(draw, ['document.changed', 'hidden.changed'], () =>
+    // options.changed: the default look of each type gives the color of the marks
+    follow(draw, ['document.changed', 'hidden.changed', 'options.changed'], () =>
       buildNodes(draw, messages.get(), { features }),
     ),
   );
