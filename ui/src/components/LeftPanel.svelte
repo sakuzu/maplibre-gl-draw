@@ -3,7 +3,7 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
-  import { Panel, Tabs, Toolbar } from '@sakuzu/kata/svelte';
+  import { Button, Icon, Panel, Tabs, Toolbar } from '@sakuzu/kata/svelte';
   import type { Messages } from '../messages.js';
   import type { Box } from '../store.js';
   import type { LayerPanelDraw, LeftSettings, LegendDraw } from '../types.js';
@@ -16,10 +16,13 @@
     draw,
     messages,
     settings,
+    onclose,
   }: {
     draw: LayerPanelDraw & LegendDraw;
     messages: Box<Messages>;
     settings: LeftSettings;
+    /** Shows a close button at the end of the head; called when it is pressed */
+    onclose?: () => void;
   } = $props();
 
   const m = $derived(messages.get());
@@ -33,16 +36,27 @@
   const both = $derived(`${m.layers}, ${m.legend}`);
   // The head: the tabs, or the title of the one view. The layer tree has a head of its own (its
   // title and the add menu), which then stands for the title
-  const titled = $derived(tabs.length > 1 || current !== 'layers' || !settings.layers?.add);
+  // title. A close button needs the head whatever the view
+  const titled = $derived(
+    !!onclose || tabs.length > 1 || current !== 'layers' || !settings.layers?.add,
+  );
 </script>
+
+{#snippet close()}
+  {#if onclose}
+    <Button variant="ghost" icon aria-label={m.close} onclick={onclose}>
+      <Icon name="x" />
+    </Button>
+  {/if}
+{/snippet}
 
 {#snippet head()}
   {#if tabs.length > 1}
-    <Toolbar rule>
+    <Toolbar rule tail={!!onclose} end={onclose ? close : undefined}>
       <Tabs {tabs} {current} label={both} onselect={(id) => (chosen = id)} />
     </Toolbar>
   {:else}
-    <Toolbar title={tabs[0]?.label} rule />
+    <Toolbar title={tabs[0]?.label} rule tail={!!onclose} end={onclose ? close : undefined} />
   {/if}
 {/snippet}
 

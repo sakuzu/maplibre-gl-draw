@@ -176,7 +176,14 @@
 
 {#snippet leftRegion()}
   {#if side}
-    <LeftPanel {draw} {messages} settings={side} />
+    <LeftPanel
+      {draw}
+      {messages}
+      settings={side}
+      onclose={() => {
+        leftOpen = false;
+      }}
+    />
   {/if}
 {/snippet}
 

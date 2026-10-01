@@ -95,7 +95,7 @@ The options of `createDrawUI`, all optional:
 | `padding` | Whether the map's padding follows the interface | `true` |
 | `side` | The side panels `floating` over the map or `beside` it | `floating` |
 | `themeToggle` | The button that switches the look | `true` |
-| `mapControls` | maplibre-gl's globe, compass, zoom and scale, or a subset | `true` |
+| `mapControls` | maplibre-gl's globe, compass, zoom and scale | `true` |
 
 Each part also goes alone into an element of the page, with its own
 options and `target`, `locale` and `theme`: `createToolbar`,
