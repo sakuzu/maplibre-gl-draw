@@ -12,11 +12,54 @@ The interface keeps nothing of the drawing. The current tool is
 button calls the public API of the draw instance, so the interface can be
 mixed with controls of your own.
 
+The documentation of core, its guides and its API reference, is at
+<https://sakuzu.github.io/maplibre-gl-draw/>.
+
 ## Install
 
 ```sh
 npm install @sakuzu/maplibre-gl-draw @sakuzu/maplibre-gl-draw-ui maplibre-gl
 ```
+
+`@sakuzu/maplibre-gl-draw` (2.x) and `maplibre-gl` are peer
+dependencies: the application installs them, and the interface uses the
+same copies as the application. Svelte is a dependency, and kata is
+compiled into the package.
+
+The package loads in two ways.
+
+- With a bundler, as ES modules: `dist/index.js` imports `svelte`, core
+  and `maplibre-gl`, which the bundler resolves, and
+  `@sakuzu/maplibre-gl-draw-ui/style.css` is the style sheet.
+- Without a bundler: `dist/maplibre-gl-draw-ui.js` is one module with
+  Svelte and kata in it. It loads with `<script type="module">` and an
+  import map that names `@sakuzu/maplibre-gl-draw` and `maplibre-gl`,
+  together with `dist/style.css`.
+
+```html
+<link rel="stylesheet" href="/vendor/maplibre-gl.css" />
+<link rel="stylesheet" href="/vendor/maplibre-gl-draw-ui/style.css" />
+<script type="importmap">
+  {
+    "imports": {
+      "maplibre-gl": "/vendor/maplibre-gl.mjs",
+      "@sakuzu/maplibre-gl-draw": "/vendor/maplibre-gl-draw.js"
+    }
+  }
+</script>
+<script type="module">
+  import { Map } from 'maplibre-gl';
+  import { createDraw } from '@sakuzu/maplibre-gl-draw';
+  import { createDrawUI } from '/vendor/maplibre-gl-draw-ui/maplibre-gl-draw-ui.js';
+
+  const map = new Map({ container: 'map', style: '/style.json' });
+  createDrawUI(createDraw(map));
+</script>
+```
+
+The paths stand for where the page serves the files: maplibre-gl's
+`dist/maplibre-gl.mjs`, the `dist/` of this package, and a module of core
+with its own dependencies in it that imports `maplibre-gl` by that name.
 
 ## Use
 
@@ -35,6 +78,26 @@ const ui = createDrawUI(draw, {
 ui.setLocale('en');
 ui.destroy();
 ```
+
+The options of `createDrawUI`, all optional:
+
+| Option | What it sets | Default |
+| --- | --- | --- |
+| `container` | The positioned element it lies over | the map's container |
+| `toolbar` | `false`, or the `tools`, `delete` and `snapping` | `true` |
+| `inspector` | `false`, or the `tabs` and `operations` | `true` |
+| `layers` | `false`, or the `features`, `add` and `reorder` | `true` |
+| `legend` | The legend beside the layer panel | `true` |
+| `locale` | `en`, `ja`, or words laid over English | `en` |
+| `theme` | `light`, `dark` or `auto` (follows the system) | `auto` |
+| `units` | The measurements in `metric` or `imperial` | `metric` |
+| `shortcuts` | The keyboard shortcuts | `true` |
+| `padding` | Whether the map's padding follows the interface | `true` |
+| `side` | The side panels `floating` over the map or `beside` it | `floating` |
+
+Each part also goes alone into an element of the page, with its own
+options and `target`, `locale` and `theme`: `createToolbar`,
+`createLayerPanel`, `createLegend` and `createInspector`.
 
 The interface is laid over the map's container. The toolbar alone goes
 into any positioned element with `createToolbar(draw, { target })`.
@@ -123,7 +186,7 @@ ui.inspector?.sections.add({
 });
 ```
 
-## Look
+## Customize
 
 Everything the interface draws is inside its root element, which has the
 class `mgd-ui`, and its style sheet reaches nothing outside it. kata's
@@ -135,12 +198,10 @@ changes), and `ui.setTheme` changes it. kata's theme is dark;
 `data-color-mode="light"` on the root element, which `light` sets, or on
 any element around it, turns it light.
 
-## Without a bundler
-
-`dist/maplibre-gl-draw-ui.js` is one module with Svelte and kata in it.
-It loads with `<script type="module">` and an import map that names
-`@sakuzu/maplibre-gl-draw` and `maplibre-gl`, together with
-`dist/style.css`.
+Beyond the look, the options above choose the parts and what each shows,
+`ui.tools.add` adds a tool for a mode of the application (see
+[Use](#use)), and `ui.inspector.sections.add` adds a section to the
+inspector (see [Inspector](#inspector)).
 
 ## Development
 
@@ -152,12 +213,23 @@ then work on the interface:
 npm run build          # core, at the root
 npm run ui:typecheck   # tsc and svelte-check
 npm run ui:test
+npm run ui:test:e2e    # on a real map in headless Chromium
 npm run ui:build       # dist/index.js, dist/maplibre-gl-draw-ui.js, dist/style.css
 npm run ui:dev         # the development page on http://localhost:3100
 ```
 
 ## License
 
-GNU Affero General Public License version 3 (AGPL-3.0-only). See
-`LICENSE`, and `THIRD_PARTY_NOTICES.md` for the software included in the
-build.
+Copyright (C) 2026 SAKAIDA Atsushi.
+
+Licensed under the GNU Affero General Public License version 3
+(`AGPL-3.0-only`), the same terms as `@sakuzu/maplibre-gl-draw`. See
+`LICENSE` in the package, the same text as the
+[LICENSE](https://github.com/sakuzu/maplibre-gl-draw/blob/main/LICENSE)
+of the repository.
+
+If the AGPL does not fit your product, a commercial license is available
+from Kasika, Inc. (可視化技研株式会社): <https://www.kasika.xyz/>.
+
+The notices of the software included in the build (Svelte, kata and its
+icons) are in `THIRD_PARTY_NOTICES.md`.

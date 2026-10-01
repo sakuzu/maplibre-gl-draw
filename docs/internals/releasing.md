@@ -1,8 +1,8 @@
 # Releasing
 
 This document fixes how `@sakuzu/maplibre-gl-draw` (core) is versioned,
-tagged and published, and how its documentation is kept in step with the
-code.
+tagged and published, how its documentation is kept in step with the
+code, and how the standard UI (`ui/`) is released beside it.
 
 ## Versions
 
@@ -180,6 +180,111 @@ cannot be published again; create the GitHub release by hand
 (`gh release create vX.Y.Z --verify-tag --notes-file <notes>`). A
 published version is never unpublished; a broken one is followed by a
 patch release and marked with `npm deprecate`.
+
+## Releasing the UI
+
+The standard UI, `@sakuzu/maplibre-gl-draw-ui` in `ui/`, is a package of
+its own. It follows the same rules of semantic versioning as core, with
+its own version in `ui/package.json`; its public API is what
+`ui/src/index.ts` exports, its options and `style.css` with the tokens it
+reads. Core is a peer dependency (`^2.0.0`): a release of core that the
+UI keeps working with needs no release of the UI, and a major release of
+core is followed by a release of the UI that moves its peer.
+
+Each release is tagged `ui-vX.Y.Z` (for example `ui-v1.0.0`). Pushing the
+tag starts `.github/workflows/release-ui.yml`, which runs the gates
+(`ci.yml`), publishes the package from the root with
+`npm publish --workspace ui --provenance` (the `prepack` of `ui/` builds
+`ui/dist` after core's build) and creates the GitHub release from the
+version's section of `ui/CHANGELOG.md`, without marking it as the latest
+release of the repository. A tag filter matches the whole name of the
+tag, so `ui-v` tags never start the release workflow of core.
+
+The tags and the environment are guarded for both packages: the tag
+ruleset of the repository lists `refs/tags/ui-v*` beside
+`refs/tags/v*`, and the `npm` environment accepts the tags `ui-v*.*.*`
+beside `v*.*.*`.
+
+`ui/CHANGELOG.md` follows the same rules as the changelog of core: the
+`## [Unreleased]` section during development, and
+`## [X.Y.Z] - YYYY-MM-DD` with a short paragraph on top at a release.
+Check the body of the release with:
+
+```sh
+node scripts/release-notes.mjs ui-vX.Y.Z --changelog ui/CHANGELOG.md --prefix ui-v
+```
+
+The script also fails when the tag does not match the version in
+`ui/package.json`.
+
+### The steps of a UI release
+
+Run the steps on an up-to-date `main` with a clean working tree.
+
+1. Install from the lock file, build core, and run every gate of the UI
+   and of the repository.
+
+   ```sh
+   npm ci
+   npm run build
+   npm run lint
+   npm run ui:check            # typecheck, test, end-to-end, build
+   npm run ui:check:package    # publint and attw on the packed package
+   ```
+
+2. Set the new version of the UI without committing yet.
+
+   ```sh
+   npm version minor --workspace ui --no-git-tag-version
+   ```
+
+3. Turn the `## [Unreleased]` section of `ui/CHANGELOG.md` into the new
+   version, put an empty `## [Unreleased]` back on top, and check the
+   body of the release with `scripts/release-notes.mjs` as above.
+
+4. Commit, tag and push. The tag starts the release workflow.
+
+   ```sh
+   git commit -am "Release ui-vX.Y.Z"
+   git tag -a ui-vX.Y.Z -m ui-vX.Y.Z
+   git push origin main ui-vX.Y.Z
+   ```
+
+5. Watch the workflow and check the published version.
+
+   ```sh
+   gh run watch
+   npm view @sakuzu/maplibre-gl-draw-ui version
+   ```
+
+A failure is handled as for core: before the publish step, fix the cause
+and move the tag; after it, create the GitHub release by hand.
+
+### The first release of the UI
+
+npm cannot create a package by trusted publishing, so the first release
+(`1.0.0`) is published by hand from a clean checkout of the release
+commit, with the maintainer's 2FA, before its tag is pushed. Then the
+trusted publisher is registered for `release-ui.yml` and the environment
+`npm`, and tokens are disallowed. The workflow started by the tag skips
+the publish step, because the version is already on npm, and creates the
+GitHub release.
+
+```sh
+npm ci
+npm run build
+npm run ui:check
+npm run ui:check:package
+npm publish --workspace ui --access public
+npm trust github @sakuzu/maplibre-gl-draw-ui --file release-ui.yml \
+  --repo sakuzu/maplibre-gl-draw --env npm --allow-publish --yes
+npm access set mfa=publish @sakuzu/maplibre-gl-draw-ui
+git tag -a ui-v1.0.0 -m ui-v1.0.0
+git push origin ui-v1.0.0
+```
+
+`1.0.0` of the UI carries no provenance statement; every later version
+does.
 
 ## Documentation
 
