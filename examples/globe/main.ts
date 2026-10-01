@@ -26,8 +26,9 @@ const map = new maplibregl.Map({
 });
 
 // 1. The globe, set once the style has loaded (a style can name a projection of its own), and
-// the sky: space behind the globe and a thin atmosphere at its edge. The basemap styles carry
-// no sky, so without it the page's background would show behind the globe
+// the sky: a thin atmosphere at the globe's edge. The map leaves the space around the globe
+// transparent, so the container's background is the space, dark blue
+map.getContainer().style.background = '#0b1026';
 map.on('style.load', () => {
   map.setProjection({ type: 'globe' });
   map.setSky({
