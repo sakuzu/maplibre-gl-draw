@@ -9,8 +9,9 @@
 //   // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 //   // SPDX-License-Identifier: AGPL-3.0-only
 //
-// A CSS file uses a block comment, and an HTML file an HTML comment after its doctype. A
-// file that starts with a shebang keeps it on the first line.
+// A CSS file uses a block comment, an HTML file an HTML comment after its doctype, and a Svelte
+// component an HTML comment on its first lines. A file that starts with a shebang keeps it on
+// the first line.
 //
 // Usage:
 //   node scripts/spdx.mjs          fails when a tracked file has no header
@@ -29,7 +30,7 @@ const LICENSE = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).lic
   : 'AGPL-3.0-only';
 
 const CODE = /\.(ts|mts|cts|js|mjs|cjs)$/;
-const EXT = /\.(ts|mts|cts|js|mjs|cjs|css|html)$/;
+const EXT = /\.(ts|mts|cts|js|mjs|cjs|css|html|svelte)$/;
 /**
  * Files that contain a port of third-party code keep the license of the original next to ours
  * (THIRD_PARTY_NOTICES.md names the originals)
@@ -54,7 +55,7 @@ function header(file) {
 
 function withHeader(file, text) {
   const h = header(file);
-  if (file.endsWith('.html')) {
+  if (file.endsWith('.html') || file.endsWith('.svelte')) {
     const m = text.match(/^<!doctype html>\r?\n/i);
     if (m) return `${m[0]}${h}\n${text.slice(m[0].length)}`;
     return `${h}\n${text}`;

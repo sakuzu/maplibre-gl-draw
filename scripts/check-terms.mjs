@@ -30,11 +30,12 @@ const SCAN = [
   'src',
   'examples',
   'scripts',
+  'ui',
 ];
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'public', '.pack']);
 /** Generated output that is not written by hand, and the local list of terms itself */
 const SKIP_PATHS = ['docs/reference/api', 'scripts/terms.local.json'];
-const EXT = /\.(md|ts|mts|mjs|js|html|css|json)$/;
+const EXT = /\.(md|ts|mts|mjs|js|html|css|json|svelte)$/;
 
 /**
  * Terms that name or describe an extension
