@@ -1,0 +1,15 @@
+/*
+ * SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The page around the map is a plain page, not a kata page: the interface brings its own look */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+#map {
+  position: absolute;
+  inset: 0;
+}

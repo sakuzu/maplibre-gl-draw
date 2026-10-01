@@ -6,10 +6,13 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
-### Fixed
-
-- The site keeps the 1.0 API page URLs working through redirects to
-  the current pages.
+- Added: the event `options.changed`, with `{ options, previous }`: what
+  `draw.options.get()` returns after and before a `draw.options.update`
+  that changed a value. An update that changes nothing fires nothing,
+  and the event is not a change of the document, so it fires no
+  `document.changed`.
+- Fixed: the site keeps the 1.0 API page URLs working through redirects
+  to the current pages.
 
 ## [2.0.0] - 2026-09-30
 

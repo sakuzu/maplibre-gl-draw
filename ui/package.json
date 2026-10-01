@@ -1,0 +1,88 @@
+{
+  "name": "@sakuzu/maplibre-gl-draw-ui",
+  "version": "1.0.0",
+  "description": "The standard user interface of @sakuzu/maplibre-gl-draw: a toolbar of drawing tools and keyboard shortcuts over the map, with a plain JavaScript API.",
+  "keywords": [
+    "maplibre",
+    "maplibre-gl",
+    "map",
+    "draw",
+    "drawing",
+    "editor",
+    "toolbar",
+    "ui"
+  ],
+  "license": "AGPL-3.0-only",
+  "author": "SAKAIDA Atsushi",
+  "homepage": "https://github.com/sakuzu/maplibre-gl-draw/tree/main/ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sakuzu/maplibre-gl-draw.git",
+    "directory": "ui"
+  },
+  "bugs": {
+    "url": "https://github.com/sakuzu/maplibre-gl-draw/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "style": "./dist/style.css",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/need-core.mjs && rm -rf dist && vite build && vite build --mode bundle && tsc -p tsconfig.build.json && node scripts/check-dist.mjs",
+    "typecheck": "node scripts/need-core.mjs && tsc --noEmit && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "lint": "biome check . && node scripts/check-imports.mjs",
+    "check:imports": "node scripts/check-imports.mjs",
+    "test": "node scripts/need-core.mjs && vitest run",
+    "test:e2e": "node scripts/need-core.mjs && vitest run --config e2e/vitest.config.ts",
+    "test:watch": "vitest",
+    "dev": "node scripts/need-core.mjs && vite --config vite.dev.config.ts",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@sakuzu/maplibre-gl-draw": "^2.0.0",
+    "maplibre-gl": ">=4"
+  },
+  "dependencies": {
+    "svelte": "5.57.1"
+  },
+  "devDependencies": {
+    "@lucide/svelte": "^1.49.0",
+    "@sakuzu/kata": "^1.2.0",
+    "@sakuzu/maplibre-gl-draw": "file:..",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@testing-library/svelte": "^5.4.2",
+    "jsdom": "^30.1.1",
+    "maplibre-gl": "6.11.1",
+    "postcss": "^8.5.28",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

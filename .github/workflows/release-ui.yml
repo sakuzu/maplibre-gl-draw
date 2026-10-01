@@ -1,0 +1,58 @@
+# Publishes a release of the standard UI (ui/, @sakuzu/maplibre-gl-draw-ui) when a tag
+# ui-vX.Y.Z is pushed. It runs the gates (ci.yml), publishes the package to npm with a
+# provenance statement, and creates the GitHub release from the version's section of
+# ui/CHANGELOG.md. Core is released by release.yml on tags vX.Y.Z, which ui-v tags do not match
+# (a tag filter matches the whole name of the tag). The steps a maintainer follows are in
+# docs/internals/releasing.md.
+name: Release UI
+on:
+  push:
+    tags: ['ui-v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ui
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: gates
+    runs-on: ubuntu-latest
+    # npm accepts trusted publishing only from this environment (see the package settings on npm)
+    environment: npm
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # npm trusted publishing and the provenance statement
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # Trusted publishing needs npm 11.5.1 or later, which Node 24 carries
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The UI takes core from its build: its build (prepack of ui/) type-checks against dist/
+      - run: npm run build
+      - name: Release notes (also checks the tag against ui/package.json)
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" --changelog ui/CHANGELOG.md --prefix ui-v > "$RUNNER_TEMP/notes.md"
+      # Authenticates by OIDC (trusted publishing); no token is stored. npm cannot create a
+      # package by trusted publishing, so the first release was published by hand before its tag
+      # was pushed, and a version that is already on npm is skipped. prepack builds ui/dist.
+      - name: Publish to npm
+        run: |
+          spec="$(node -p "const p = require('./ui/package.json'); p.name + '@' + p.version")"
+          if npm view "$spec" version >/dev/null 2>&1; then
+            echo "$spec is already on npm; skipping the publish step"
+          else
+            npm publish --workspace ui --provenance --access public
+          fi
+      # --latest=false keeps the latest release of the repository the latest release of core
+      - name: GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+        env:
+          GH_TOKEN: ${{ github.token }}

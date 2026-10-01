@@ -49,6 +49,14 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run check:package
+      # The standard UI (ui/) takes core from its build, so these come after npm run build.
+      # Its lint (biome and the import check) is part of npm run lint above
+      - run: npm run ui:typecheck
+      - run: npm run ui:test
+      # The UI on a real map in headless Chromium (the browser installed above)
+      - run: npm run ui:test:e2e
+      - run: npm run ui:build
+      - run: npm run ui:check:package
       - name: Documentation site (fails on a dead link)
         run: npm run site:build
       - name: docs:check (e2e runs in its own job)

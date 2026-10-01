@@ -4,6 +4,8 @@
 name: Release
 on:
   push:
+    # A tag filter matches the whole name of the tag, so the tags of the UI (ui-vX.Y.Z,
+    # release-ui.yml) do not start this workflow
     tags: ['v*.*.*']
 
 permissions:
