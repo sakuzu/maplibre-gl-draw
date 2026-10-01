@@ -621,6 +621,12 @@ describe('the examples', () => {
     const { page, close } = await openExample('200000-features');
     await loaded(page);
     expect(await featureCount(page)).toBe(200_000);
+    // The layer panel lists none of them: the one row under the layer counts them
+    const counts = page.locator('[data-role="layer-panel"] [data-kind="count"]');
+    await expect
+      .poll(() => counts.allInnerTexts(), { timeout: browserTimeout(5_000) })
+      .toEqual(['200,000 features. Select them on the map.']);
+    expect(await page.locator('[data-role="layer-panel"] [data-kind="feature"]').count()).toBe(0);
 
     // The middle of one building, in the middle of the view
     const target = await page.evaluate(() => {
@@ -688,6 +694,24 @@ describe('the examples', () => {
       order: ['Survey area', 'buildings', 'Planned route'],
       snapToDatasets: true,
     });
+    // The layer panel lists the stack from the front: the places over every layer, and the
+    // buildings between the two layers with the number of their rows
+    const rows = page.locator(
+      '[data-role="layer-panel"] [data-container="root"] > [data-sortable-item]',
+    );
+    expect(
+      await rows.evaluateAll((items) => items.map((item) => item.getAttribute('data-id'))),
+    ).toEqual(
+      await page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return ['places', ...[...draw.layers.getOrder()].reverse()];
+      }),
+    );
+    expect(
+      (await page.locator('[role="treeitem"][data-node="buildings"]').first().innerText())
+        .replace(/\s+/g, ' ')
+        .trim(),
+    ).toBe(`buildings ${buildings.toLocaleString('en')} rows`);
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
@@ -896,13 +920,14 @@ describe('the examples', () => {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('get-started');
-    // The last row of the layer panel, under the tree
-    const trigger = page
-      .locator('[data-role="layer-panel"] > [data-role="basemap"]')
-      .getByRole('button', { name: 'Basemap' });
-    await trigger.click();
+    // The one row of the last section of the layer panel; it opens the basemaps on the right
+    await page
+      .locator('[data-role="layer-panel"] [role="treeitem"][data-role="basemap"]')
+      .getByRole('button')
+      .click();
     // Opened only: an item of OpenFreeMap chosen would load its style from the network
-    const items = page.getByRole('menu').getByRole('menuitem');
+    const chooser = page.locator('[data-region="right"] [data-role="basemap-panel"]');
+    const items = chooser.locator('[data-role="list-item"]');
     expect((await items.allInnerTexts()).map((text) => text.trim())).toEqual([
       'OpenFreeMap Liberty',
       'OpenFreeMap Bright',
@@ -910,10 +935,20 @@ describe('the examples', () => {
       'OpenFreeMap Dark',
       'Blank',
     ]);
+    // Each with its preview
+    expect(
+      await items.evaluateAll((list) =>
+        list.map(
+          (item) =>
+            (item.querySelector('.preview') as HTMLElement).style.getPropertyValue('--preview') !==
+            '',
+        ),
+      ),
+    ).toEqual([true, true, true, true, true]);
     // The style of the address replaced the basemap, so none of them is current
-    expect(await page.locator('[role="menuitem"][aria-current="true"]').count()).toBe(0);
+    expect(await chooser.locator('[aria-current="true"]').count()).toBe(0);
     await page.keyboard.press('Escape');
-    expect(await page.getByRole('menu').count()).toBe(0);
+    expect(await chooser.count()).toBe(0);
     await close();
   });
 

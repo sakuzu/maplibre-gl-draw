@@ -12,6 +12,7 @@ import {
   type LayerPanelHandle,
   type LegendHandle,
 } from '../src/index.js';
+import { countId } from '../src/layers/tree.js';
 import { fakeDraw, feature, group, layer } from './fake-draw.js';
 
 let handle: LayerPanelHandle | LegendHandle | DrawUI | undefined;
@@ -48,11 +49,13 @@ function sample() {
   });
 }
 
-/** The names of the rows, from the top */
+/** The names of the rows of the tree of the stack, from the top (not the basemap) */
 const rowNames = (root: ParentNode) =>
-  [...root.querySelectorAll('[role="treeitem"] > [data-role="list-item"]')].map((row) =>
-    row.querySelector('.main')?.textContent?.trim(),
-  );
+  [
+    ...root.querySelectorAll(
+      '[role="treeitem"]:not([data-role="basemap"]) > [data-role="list-item"]',
+    ),
+  ].map((row) => row.querySelector('.main')?.textContent?.trim());
 
 function row(root: ParentNode, id: string): HTMLElement {
   const found = root.querySelector<HTMLElement>(
@@ -89,11 +92,11 @@ describe('createLayerPanel', () => {
     expect(target.querySelector(':scope > .mgd-ui')).not.toBeNull();
   });
 
-  it('marks the active layer', () => {
+  it('marks no layer as the one drawn features go into', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
-    expect(row(fake.container, 'l1').querySelector('[aria-label="Active layer"]')).not.toBeNull();
-    expect(row(fake.container, 'l2').querySelector('[aria-label="Active layer"]')).toBeNull();
+    expect(row(fake.container, 'l1').querySelectorAll('[role="img"]')).toHaveLength(0);
+    expect(row(fake.container, 'l1').textContent?.trim()).toBe('Sketch');
   });
 
   it('shows and hides through update({ visible })', () => {
@@ -127,6 +130,19 @@ describe('createLayerPanel', () => {
     expect(fake.draw.features.update).toHaveBeenCalledWith('c', { locked: true });
   });
 
+  it('changes no name in the tree: neither a double click nor F2 opens a field', () => {
+    const fake = sample();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    for (const id of ['l1', 'g1', 'b']) {
+      row(fake.container, id).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      row(fake.container, id).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true }),
+      );
+      flushSync();
+      expect(fake.container.querySelector('input')).toBeNull();
+    }
+  });
+
   it('selects through selection.set, one type at a time', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
@@ -147,8 +163,6 @@ describe('createLayerPanel', () => {
     );
     expect(fake.draw.selection.set).toHaveBeenLastCalledWith('layer', ['l2']);
     expect(fake.draw.layers.setActive).toHaveBeenLastCalledWith('l2');
-    flushSync();
-    expect(row(fake.container, 'l2').querySelector('[aria-label="Active layer"]')).not.toBeNull();
   });
 
   it('follows the selection made elsewhere', () => {
@@ -199,6 +213,193 @@ describe('createLayerPanel', () => {
     await Promise.resolve();
     expect(fake.listenerCount()).toBe(0);
     expect(fake.container.querySelector('.mgd-ui')).toBeNull();
+  });
+});
+
+describe('the limit of the features of the layer panel', () => {
+  /** l1 holds 1,500 features, l2 holds 3 */
+  function crowded() {
+    const many = Array.from({ length: 1500 }, (_, i) => `f${i}`);
+    const few = ['x', 'y', 'z'];
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1', many, { name: 'Town' }), layer('l2', few, { name: 'Notes' })],
+        features: [...many.map((id) => feature(id, 'l1')), ...few.map((id) => feature(id, 'l2'))],
+        active: 'l2',
+      },
+    });
+  }
+
+  it('lists up to 1,000 features in a layer, and counts those of a layer that holds more', () => {
+    const fake = crowded();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    expect(rowNames(fake.container)).toEqual([
+      'Notes',
+      'Point',
+      'Point',
+      'Point',
+      'Town',
+      '1,500 features. Select them on the map.',
+    ]);
+    // The count is no item: no eye, no lock, no grip, and a press selects nothing
+    const count = row(fake.container, countId('l1'));
+    expect(count.querySelectorAll('button')).toHaveLength(0);
+    expect(count.querySelector('[data-fixed]')).not.toBeNull();
+    count.click();
+    expect(fake.draw.selection.set).not.toHaveBeenCalled();
+    expect(fake.draw.selection.clear).not.toHaveBeenCalled();
+  });
+
+  it('keeps the eye, the lock and the active layer of a layer that counts', () => {
+    const fake = crowded();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    rowButton(fake.container, 'l1', 'Hide').click();
+    expect(fake.draw.layers.update).toHaveBeenCalledWith('l1', { visible: false });
+    rowButton(fake.container, 'l1', 'Lock').click();
+    expect(fake.draw.layers.update).toHaveBeenCalledWith('l1', { locked: true });
+    row(fake.container, 'l1').click();
+    expect(fake.draw.selection.set).toHaveBeenLastCalledWith('layer', ['l1']);
+    expect(fake.draw.layers.setActive).toHaveBeenLastCalledWith('l1');
+  });
+
+  it('takes the limit as a number, and lists none with false', () => {
+    const fake = crowded();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, features: 2 });
+    expect(rowNames(fake.container)).toEqual([
+      'Notes',
+      '3 features. Select them on the map.',
+      'Town',
+      '1,500 features. Select them on the map.',
+    ]);
+    handle.destroy();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, features: 2000 });
+    expect(rowNames(fake.container)).toHaveLength(2 + 3 + 1500);
+    handle.destroy();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, features: false });
+    expect(rowNames(fake.container)).toEqual(['Notes', 'Town']);
+  });
+
+  it('refuses a limit less than 0', () => {
+    const fake = crowded();
+    expect(() => createLayerPanel(fake.asDraw, { target: fake.container, features: -1 })).toThrow(
+      /0 or more/,
+    );
+    expect(() => createDrawUI(fake.asDraw, { layers: { features: Number.NaN } })).toThrow(
+      /0 or more/,
+    );
+    expect(fake.container.querySelector('.mgd-ui')).toBeNull();
+    expect(fake.mapListening('style.load')).toBe(0);
+  });
+});
+
+describe('the datasets of the layer panel', () => {
+  function stacked() {
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1', [], { name: 'Survey' }), layer('l2', [], { name: 'Route' })],
+        datasets: [
+          { id: 'buildings', rows: 12_345 },
+          { id: 'places', order: 'above-store', rows: 7 },
+        ],
+        order: ['l1', 'buildings', 'l2'],
+      },
+    });
+  }
+
+  it('shows each dataset as a row of the stack, in its place among the layers', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    expect(rowNames(fake.container)).toEqual([
+      'places 7 rows',
+      'Route',
+      'buildings 12,345 rows',
+      'Survey',
+    ]);
+    const buildings = row(fake.container, 'buildings');
+    expect(buildings.querySelector('.lucide-database')).not.toBeNull();
+    expect(buildings.querySelector('[aria-label="Datasets"]')).not.toBeNull();
+    // Not expandable
+    expect(buildings.closest('[role="treeitem"]')?.getAttribute('aria-expanded')).toBeNull();
+  });
+
+  it('has the eye, bound to setVisible, and no lock', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    // The panel follows the datasets once its effects have run
+    flushSync();
+    const buildings = fake.datasets[0];
+    expect(
+      [...row(fake.container, 'buildings').querySelectorAll('button')].map((b) =>
+        b.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Hide']);
+    rowButton(fake.container, 'buildings', 'Hide').click();
+    expect(buildings.setVisible).toHaveBeenCalledWith(false);
+    flushSync();
+    // The dataset told of the change: the row shows it hidden
+    rowButton(fake.container, 'buildings', 'Show').click();
+    expect(buildings.setVisible).toHaveBeenLastCalledWith(true);
+    expect(fake.draw.layers.update).not.toHaveBeenCalled();
+    // A layer keeps both, after its chevron
+    expect(
+      [...row(fake.container, 'l1').querySelectorAll('button')].map((b) =>
+        b.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Collapse', 'Hide', 'Lock']);
+  });
+
+  it('is not selected by a press, and is not renamed', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    fake.setSelection('layer', ['l1']);
+    flushSync();
+    row(fake.container, 'buildings').click();
+    row(fake.container, 'buildings').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    flushSync();
+    expect(fake.draw.selection.set).not.toHaveBeenCalled();
+    expect(fake.draw.selection.get()).toEqual({ type: 'layer', ids: ['l1'] });
+    expect(row(fake.container, 'buildings').querySelector('input')).toBeNull();
+  });
+
+  it('is dragged among the layers only when it is placed among them', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    // The one in front of every layer stays, and shows no grip
+    expect(row(fake.container, 'places').querySelector('[data-fixed]')).not.toBeNull();
+    expect(row(fake.container, 'buildings').querySelector('[data-fixed]')).toBeNull();
+  });
+
+  it('follows the datasets that come, go and change', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    flushSync();
+    fake.addDataset({ id: 'trees', order: 'below-store', rows: 2 });
+    flushSync();
+    expect(rowNames(fake.container).at(-1)).toBe('trees 2 rows');
+    fake.datasets[0].setRowCount(10);
+    flushSync();
+    expect(rowNames(fake.container)[2]).toBe('buildings 10 rows');
+    fake.datasets[0].setVisible(false);
+    flushSync();
+    expect(row(fake.container, 'buildings').querySelector('[aria-label="Show"]')).not.toBeNull();
+    fake.removeDataset('places');
+    flushSync();
+    expect(rowNames(fake.container)[0]).toBe('Route');
+    handle.destroy();
+    handle = undefined;
+    expect(fake.datasets.every((d) => d.listening() === 0)).toBe(true);
+  });
+
+  it('shows none with datasets: false', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, datasets: false });
+    expect(rowNames(fake.container)).toEqual(['Route', 'Survey']);
+  });
+
+  it('counts the rows in the words of the locale', () => {
+    const fake = stacked();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container, locale: 'ja' });
+    expect(rowNames(fake.container)[2]).toBe('buildings 12,345 行');
   });
 });
 

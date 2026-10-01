@@ -14,16 +14,38 @@ const OPENFREEMAP = 'https://tiles.openfreemap.org/styles';
 
 /**
  * The basemaps of the basemap row of the standard UI: the styles of OpenFreeMap, and a white
- * sheet, a style of one background layer that loads nothing
+ * sheet, a style of one background layer that loads nothing. Each preview is a gradient in the
+ * colors of its style
  */
 export const BASEMAPS: Basemap[] = [
-  { id: 'liberty', label: 'OpenFreeMap Liberty', style: `${OPENFREEMAP}/liberty` },
-  { id: 'bright', label: 'OpenFreeMap Bright', style: `${OPENFREEMAP}/bright` },
-  { id: 'positron', label: 'OpenFreeMap Positron', style: `${OPENFREEMAP}/positron` },
-  { id: 'dark', label: 'OpenFreeMap Dark', style: `${OPENFREEMAP}/dark` },
+  {
+    id: 'liberty',
+    label: 'OpenFreeMap Liberty',
+    style: `${OPENFREEMAP}/liberty`,
+    preview: 'linear-gradient(135deg, #e8efe3, #cfdcc6)',
+  },
+  {
+    id: 'bright',
+    label: 'OpenFreeMap Bright',
+    style: `${OPENFREEMAP}/bright`,
+    preview: 'linear-gradient(135deg, #f4f1ea, #dfe7d5)',
+  },
+  {
+    id: 'positron',
+    label: 'OpenFreeMap Positron',
+    style: `${OPENFREEMAP}/positron`,
+    preview: 'linear-gradient(135deg, #f7f7f5, #e3e3e0)',
+  },
+  {
+    id: 'dark',
+    label: 'OpenFreeMap Dark',
+    style: `${OPENFREEMAP}/dark`,
+    preview: 'linear-gradient(135deg, #2a2d33, #16181c)',
+  },
   {
     id: 'blank',
     label: 'Blank',
+    preview: '#ffffff',
     style: {
       version: 8,
       sources: {},

@@ -14,9 +14,9 @@ layers-and-groups
 
 The panel on the left lists the layers from the front, with their groups
 and features. Click an eye to hide a layer, a group or a feature, and a
-lock to lock it. Drag a row by its grip to reorder, double-click a name
-to rename it, and add a layer or a group from the selection with the add
-menu. Select a layer to see its opacity in the panel on the right. The
+lock to lock it. Drag a row by its grip to reorder, and add a layer or a
+group from the selection with the add menu. Select a layer to see its
+opacity in the panel on the right, where its name is changed too. The
 features of the locked group can be selected but not moved, and the
 paths fade at 60 percent. A line drawn with the tools goes into Paths,
 the active layer.

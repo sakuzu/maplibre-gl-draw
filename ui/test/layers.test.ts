@@ -10,6 +10,8 @@ import {
   buildNodes,
   canDropInto,
   canGroup,
+  countId,
+  DATASET_ICON,
   GROUP_ICON,
   LAYER_ICON,
   type LayerTreeNode,
@@ -130,10 +132,130 @@ describe('the nodes of the layer tree', () => {
     expect(nodes[1].children?.[2].visible).toBe(false);
   });
 
-  it('leave out the entries of the stacking order that are not layers', () => {
+  it('leave out the entries of the stacking order that are neither layers nor datasets', () => {
     const fake = sample();
     const draw = { ...fake.draw, layers: { ...fake.draw.layers, getOrder: () => ['l1', 'ds'] } };
     expect(buildNodes(draw, en).map((n) => n.id)).toEqual(['l1']);
+  });
+});
+
+describe('the limit of the features of the layer tree', () => {
+  /** l1 holds 5 features, two of them in a group; l2 holds 2 */
+  function counted() {
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1', ['a', 'g1', 'b', 'c']), layer('l2', ['d', 'e'])],
+        groups: [group('g1', 'l1', ['f', 'h'])],
+        features: [
+          ...['a', 'b', 'c', 'f', 'h'].map((id) =>
+            feature(id, 'l1', 'Point', id === 'f' || id === 'h' ? { groupId: 'g1' } : {}),
+          ),
+          feature('d', 'l2'),
+          feature('e', 'l2'),
+        ],
+      },
+    });
+  }
+
+  it('counts the features of a layer that holds more, those of its groups included', () => {
+    const nodes = buildNodes(counted().draw, en, { features: true, limit: 4 });
+    expect(shape(nodes)).toEqual([
+      ['l2', ['e', 'd']],
+      ['l1', [countId('l1')]],
+    ]);
+    expect(nodes[1].children?.[0]).toMatchObject({
+      kind: 'count',
+      name: '5 features. Select them on the map.',
+      count: 5,
+      data: null,
+    });
+    expect(canDropInto(nodes[1].children?.[0] as LayerTreeNode, nodes[1])).toBe(false);
+  });
+
+  it('lists the features of a layer that holds as many as the limit', () => {
+    const nodes = buildNodes(counted().draw, en, { features: true, limit: 5 });
+    expect(shape(nodes)[1]).toEqual(['l1', ['c', 'b', ['g1', ['h', 'f']], 'a']]);
+  });
+
+  it('counts with the separators of thousands, in the words of the locale', () => {
+    const many = Array.from({ length: 12_345 }, (_, i) => `f${i}`);
+    const fake = fakeDraw({
+      doc: { layers: [layer('l1', many)], features: many.map((id) => feature(id, 'l1')) },
+    });
+    expect(buildNodes(fake.draw, en, { features: true, limit: 1000 })[0].children?.[0].name).toBe(
+      '12,345 features. Select them on the map.',
+    );
+    expect(
+      buildNodes(fake.draw, resolveMessages('ja'), { features: true, limit: 1000 })[0].children?.[0]
+        .name,
+    ).toBe('12,345 件の地物。地図の上で選んでください。');
+  });
+
+  it('counts nothing without the features', () => {
+    const nodes = buildNodes(counted().draw, en, { features: false, limit: 0 });
+    expect(shape(nodes)).toEqual([
+      ['l2', []],
+      ['l1', ['g1']],
+    ]);
+  });
+});
+
+describe('the datasets in the layer tree', () => {
+  /** Two layers with a dataset between them, one in front of them all and one behind them all */
+  function stacked() {
+    return fakeDraw({
+      doc: {
+        layers: [layer('l1'), layer('l2')],
+        datasets: [
+          { id: 'buildings', rows: 12_345 },
+          { id: 'places', order: 'above-store', rows: 7 },
+          { id: 'roads', order: 'below-store', rows: 3, visible: false },
+          { id: 'unplaced' },
+        ],
+        order: ['l1', 'buildings', 'l2'],
+      },
+    });
+  }
+
+  it('are rows at the root in their place in the stack, from the front', () => {
+    const nodes = buildNodes(stacked().draw, en);
+    expect(shape(nodes)).toEqual(['places', ['l2', []], 'buildings', ['l1', []], 'roads']);
+    const [places, , buildings, , roads] = nodes;
+    expect(buildings).toMatchObject({
+      kind: 'dataset',
+      name: 'buildings',
+      icon: DATASET_ICON,
+      visible: true,
+      locked: false,
+      count: 12_345,
+    });
+    expect(places.count).toBe(7);
+    expect(roads.visible).toBe(false);
+  });
+
+  it('are left out with datasets: false', () => {
+    const nodes = buildNodes(stacked().draw, en, { features: true, datasets: false });
+    expect(nodes.map((n) => n.id)).toEqual(['l2', 'l1']);
+  });
+
+  it('move among the layers when they are placed among them, and stay otherwise', () => {
+    const nodes = buildNodes(stacked().draw, en);
+    const [places, l2, buildings] = nodes;
+    expect(canDropInto(buildings, null)).toBe(true);
+    expect(canDropInto(buildings, l2)).toBe(false);
+    expect(canDropInto(places, null)).toBe(false);
+    // The dataset to the front of the layers: the datasets in front of every layer are not
+    // entries of the stacking order
+    expect(planMove({ id: 'buildings', parentId: null, index: 0 }, nodes)).toEqual({
+      kind: 'layers',
+      order: ['l1', 'l2', 'buildings'],
+    });
+    // A layer behind the dataset
+    expect(planMove({ id: 'l2', parentId: null, index: 2 }, nodes)).toEqual({
+      kind: 'layers',
+      order: ['l1', 'l2', 'buildings'],
+    });
+    expect(planMove({ id: 'places', parentId: null, index: 4 }, nodes)).toBeNull();
   });
 });
 

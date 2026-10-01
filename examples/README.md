@@ -81,11 +81,12 @@ tests and the pictures of the gallery (`npm run site:thumbnails`) use
 this to run every example without the network.
 
 The examples with the standard UI offer four OpenFreeMap styles and a
-white sheet (`BASEMAPS` in basemap.ts) in the menu of the basemap row,
-the last row of the layer panel. The white sheet is a style of one
-background layer written in basemap.ts, so it loads nothing. The default
-is Bright, and `?basemap=<id>` (`liberty`, `bright`, `positron`, `dark`
-or `blank`) opens a page on another one.
+white sheet (`BASEMAPS` in basemap.ts), each with a preview: the
+basemap row, at the bottom of the layer panel, opens them on the right.
+The white sheet is a style of one background layer written in
+basemap.ts, so it loads nothing. The default is Bright, and
+`?basemap=<id>` (`liberty`, `bright`, `positron`, `dark` or `blank`)
+opens a page on another one.
 
 ## Shared files
 

@@ -29,7 +29,6 @@ export const ja: Readonly<Messages> = Object.freeze({
   legend: '凡例',
   newLayer: '新しいレイヤー',
   newGroup: '選んだものからグループを作る',
-  activeLayer: '描き込むレイヤー',
   panelsGroup: 'パネル',
   toggleLayers: 'レイヤーのパネルを開く、閉じる',
   multiPoint: '複数の点',
@@ -156,4 +155,8 @@ export const ja: Readonly<Messages> = Object.freeze({
   traceEdges: '辺をなぞる',
   sharedVertexDrag: '共有頂点の同時移動',
   snapPauseKey: '{key} を押している間は吸着を止めます',
+  datasets: 'データセット',
+  rows: '{count} 行',
+  manyFeatures: '{count} 件の地物。地図の上で選んでください。',
+  stack: 'スタック',
 });

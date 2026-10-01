@@ -19,11 +19,13 @@ town. The time the load took is logged in the browser console.
 
 ## Code
 
-The layer panel of the standard UI lists the layers without their
-features (1), since its list makes a row for each feature. The town is
-made in code (`data.ts`) with a seeded random number generator, so it is
-the same on every visit (2). `draw.document.load` writes the 200,000
-features in one transaction (3): one change, one event and one redraw.
+The layer panel of the standard UI lists up to 1,000 features in a layer
+(1). The town's layer holds more, so the panel shows their number under
+the layer instead of a row for each, and a building is selected on the
+map. The town is made in code (`data.ts`) with a seeded random number
+generator, so it is the same on every visit (2). `draw.document.load`
+writes the 200,000 features in one transaction (3): one change, one
+event and one redraw.
 `draw.features.createMany` is one transaction too.
 
 ::: code-group

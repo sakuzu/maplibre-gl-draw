@@ -163,8 +163,9 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * inspector on the right while something is selected. The map's padding follows the interface:
  * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
- * its padding back. The last row of the layer panel is the basemap, which opens a menu of
- * `options.basemaps` when it has two or more. A button at the top right switches between the
+ * its padding back. The last section of the layer panel is the basemap, whose row opens the
+ * basemaps of `options.basemaps` to choose from on the right, in the place of the inspector, when
+ * there are two or more. A button at the top right switches between the
  * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
  * globe, the compass and the zoom at the right, the scale at the left); `destroy()` removes them.
  *
@@ -173,7 +174,8 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * @returns The interface, to change and to remove
  * @throws Error when a tool of `options.toolbar.tools` is not valid, a tab of
  *   `options.inspector.tabs` is not `style` or `attributes`, the theme is not `light`, `dark` or
- *   `auto`, a basemap of `options.basemaps` has no ID, no label or no style or shares its ID, or
+ *   `auto`, the limit of the features of `options.layers.features` is a number less than 0, a
+ *   basemap of `options.basemaps` has no ID, no label or no style or shares its ID, or
  *   `options.basemap` is the ID of none of them
  */
 export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
@@ -380,8 +382,13 @@ function basemapsOf(draw: Draw, options: BasemapOptions): BasemapControl {
 
 /** The layer panel with the options filled in */
 function layerSettings(options: Omit<LayerPanelOptions, keyof BasemapOptions> = {}): LayerSettings {
+  const features = options.features ?? true;
+  if (typeof features === 'number' && !(features >= 0)) {
+    throw new Error('The limit of the features of the layer panel must be 0 or more');
+  }
   return {
-    features: options.features !== false,
+    features,
+    datasets: options.datasets !== false,
     add: options.add !== false,
     reorder: options.reorder !== false,
   };
@@ -434,31 +441,29 @@ function mountAlone(
 }
 
 /**
- * Puts the layer panel alone in an element: the tree of the layers, their groups and their
- * features, from the front, with the eye, the lock, renaming, dragging and the add menu, and under
- * it the basemap, the back of the stack, which opens a menu of `options.basemaps` when it has two
- * or more. It fills `target`, which gives it its size and its scrolling.
+ * Puts the layer panel alone in an element: the tree of the stack from the front (the layers,
+ * their groups and their features, and the datasets), with the eye, the lock, dragging and the
+ * add menu, and under it the basemap, the back of the stack, whose row opens the basemaps
+ * of `options.basemaps` to choose from in the place of the panel's sections when there are two or
+ * more. It fills `target`, which gives it its size and its scrolling.
  *
  * @param draw - The draw instance
  * @param options - The element to put it in, what it shows, the basemaps, the words (`en` by
  *   default) and the theme (`auto` by default)
  * @returns The layer panel, to remove
- * @throws Error when the theme is not `light`, `dark` or `auto`, a basemap of `options.basemaps`
- *   has no ID, no label or no style or shares its ID, or `options.basemap` is the ID of none of
- *   them
+ * @throws Error when the theme is not `light`, `dark` or `auto`, `options.features` is a number
+ *   less than 0, a basemap of `options.basemaps` has no ID, no label or no style or shares its ID,
+ *   or `options.basemap` is the ID of none of them
  */
 export function createLayerPanel(
   draw: Draw,
   options: LayerPanelOptions & AloneOptions,
 ): LayerPanelHandle {
   checkTheme(options.theme);
+  const settings = layerSettings(options);
   const basemaps = basemapsOf(draw, options);
-  return mountAlone(
-    options,
-    LayerPanelView,
-    { draw, ...layerSettings(options), basemaps },
-    'layer-panel',
-    () => basemaps.destroy(),
+  return mountAlone(options, LayerPanelView, { draw, ...settings, basemaps }, 'layer-panel', () =>
+    basemaps.destroy(),
   );
 }
 

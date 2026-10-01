@@ -29,7 +29,6 @@ export const en: Readonly<Messages> = Object.freeze({
   legend: 'Legend',
   newLayer: 'New layer',
   newGroup: 'New group from selection',
-  activeLayer: 'Active layer',
   panelsGroup: 'Panels',
   toggleLayers: 'Show or hide the layers',
   multiPoint: 'Points',
@@ -157,4 +156,8 @@ export const en: Readonly<Messages> = Object.freeze({
   traceEdges: 'Trace edges',
   sharedVertexDrag: 'Move shared vertices',
   snapPauseKey: 'Snapping pauses while {key} is held',
+  datasets: 'Datasets',
+  rows: '{count} rows',
+  manyFeatures: '{count} features. Select them on the map.',
+  stack: 'Stack',
 });

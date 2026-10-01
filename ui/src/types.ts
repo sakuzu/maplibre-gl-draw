@@ -64,7 +64,7 @@ export interface ToolbarOptions {
 
 /**
  * What `createDrawUI` puts on the map. The basemaps (`basemaps`, `basemap`, `onbasemap`) are
- * those of the basemap row at the bottom of its layer panel
+ * those of the basemap section at the bottom of its layer panel
  */
 export interface DrawUIOptions extends BasemapOptions {
   /**
@@ -132,15 +132,17 @@ export interface DrawUIOptions extends BasemapOptions {
 }
 
 /**
- * The basemaps of the basemap row, the last row of the layer panel: the back of the stack, under
- * the layers
+ * The basemaps of the basemap row, the one row of the last section of the layer panel: the back
+ * of the stack, under the layers
  */
 export interface BasemapOptions {
   /**
-   * The basemaps the row's menu offers. Choosing one replaces the map's style with its `style`
+   * The basemaps to choose from. With two or more, a press on the row opens them: on the right in
+   * the place of the inspector (`createDrawUI`), or in the place of the layer panel's sections
+   * (`createLayerPanel`). Choosing one replaces the map's style with its `style`
    * (`map.setStyle(style, { diff: false })`), and the draw instance adds its layers again on top
-   * of the new style. The row opens the menu with two or more; with fewer, or none (the default),
-   * it only shows the name of the basemap
+   * of the new style. With fewer, or none (the default), the row only shows the name of the
+   * basemap
    */
   basemaps?: Basemap[];
   /**
@@ -148,7 +150,7 @@ export interface BasemapOptions {
    * whose `style` is the URL of the map's style (`map.getStyleUrl()`), or none
    */
   basemap?: string;
-  /** Called with the basemap after it changed, from the menu or from `setBasemap` */
+  /** Called with the basemap after it changed, from the basemaps to choose from or `setBasemap` */
   onbasemap?: (basemap: Basemap) => void;
 }
 
@@ -156,8 +158,14 @@ export interface BasemapOptions {
 export interface Basemap {
   /** The name of the basemap, unique in the list */
   id: string;
-  /** The name shown in the row and in its menu */
+  /** The name shown in the row and among the basemaps to choose from */
   label: string;
+  /**
+   * The preview beside the label among the basemaps to choose from: a value of CSS `background`
+   * (an image, a gradient or a color), such as `linear-gradient(135deg, #e8efe3, #cfdcc6)`. A
+   * neutral square when left out
+   */
+  preview?: string;
   /**
    * The style of the map, as `map.setStyle` takes it: the URL of a style or a style object
    * (maplibre-gl's StyleSpecification)
@@ -261,12 +269,23 @@ export type DrawUIDraw = ToolbarDraw &
   };
 
 /**
- * What the layer panel shows. Its last row is the basemap: the label of the current one of
+ * What the layer panel shows. Its last section is the basemap: the label of the current one of
  * `basemaps`, else the `name` of the map's style
  */
 export interface LayerPanelOptions extends BasemapOptions {
-  /** Whether the features show under the layers and the groups; true when left out */
-  features?: boolean;
+  /**
+   * The features under the layers and the groups: `true` (the default) lists up to 1,000 features
+   * in each layer, a number sets that limit, and `false` lists none (the groups alone). A layer
+   * that holds more, those of its groups included, lists none of them and none of its groups, and
+   * shows their number instead, with a hint to select them on the map: each row costs its
+   * drawing, and many thousands make the panel slow
+   */
+  features?: boolean | number;
+  /**
+   * Whether the datasets (`draw.datasets`) show as rows of the stack, in their place among the
+   * layers, with the eye; true when left out
+   */
+  datasets?: boolean;
   /** Whether the add menu (a new layer, a new group) shows; true when left out */
   add?: boolean;
   /** Whether the rows can be dragged to reorder them; true when left out */
@@ -304,12 +323,13 @@ export interface LeftSettings {
 export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
   readonly layers: Pick<
     Draw['layers'],
-    'get' | 'getOrder' | 'reorder' | 'create' | 'update' | 'getActive' | 'setActive'
+    'get' | 'getOrder' | 'reorder' | 'create' | 'update' | 'setActive'
   >;
   readonly groups: Pick<Draw['groups'], 'get' | 'update' | 'move'>;
   readonly features: Pick<Draw['features'], 'get' | 'update' | 'move' | 'getAppliedStyle'>;
   readonly selection: Pick<Draw['selection'], 'get' | 'set' | 'clear' | 'group'>;
   readonly hidden: Pick<Draw['hidden'], 'has' | 'remove'>;
+  readonly datasets: Pick<Draw['datasets'], 'get' | 'list'>;
 };
 
 /** The members of a draw instance that the legend uses */

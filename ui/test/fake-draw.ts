@@ -5,6 +5,7 @@
 // container and canvas.
 
 import type {
+  DatasetOrder,
   Draw,
   Feature,
   FeatureInput,
@@ -42,7 +43,74 @@ export interface FakeDocument {
   features?: Feature[];
   /** The active layer; the front one when left out */
   active?: string;
+  /** The datasets on the map, from the back */
+  datasets?: FakeDatasetSpec[];
+  /**
+   * The stacking order from the back, with the IDs of the `layer-order` datasets placed among the
+   * layers; the layers in their order when left out
+   */
+  order?: string[];
 }
+
+/** A dataset of the stand-in */
+export interface FakeDatasetSpec {
+  id: string;
+  /** `layer-order` when left out */
+  order?: DatasetOrder;
+  /** The number of its rows; 0 when left out */
+  rows?: number;
+  /** True when left out */
+  visible?: boolean;
+}
+
+/** A dataset of the stand-in: the members the interface reads, and its events */
+function fakeDataset(spec: FakeDatasetSpec) {
+  let visible = spec.visible ?? true;
+  let rows = spec.rows ?? 0;
+  const listeners = new Set<(payload: { reason: string }) => void>();
+  const emit = (reason: string) => {
+    for (const listener of [...listeners]) listener({ reason });
+  };
+  return {
+    id: spec.id,
+    order: spec.order ?? 'layer-order',
+    interactive: true,
+    get visible() {
+      return visible;
+    },
+    setVisible: vi.fn((next: boolean) => {
+      if (next === visible) return;
+      visible = next;
+      emit('visibility');
+    }),
+    getThinningStats: () => ({
+      enabled: false,
+      active: false,
+      total: rows,
+      visible: rows,
+      band: null,
+    }),
+    listRows: () => Array.from({ length: rows }, () => ({}) as never),
+    /** Changes the number of its rows, as `setRows` would */
+    setRowCount(next: number) {
+      rows = next;
+      emit('rows');
+    },
+    on: vi.fn((event: string, listener: (payload: { reason: string }) => void) => {
+      if (event !== 'changed') return () => {};
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }),
+    off: vi.fn((_event: string, listener: (payload: { reason: string }) => void) => {
+      listeners.delete(listener);
+    }),
+    /** The number of listeners of its events */
+    listening: () => listeners.size,
+  };
+}
+
+/** A dataset of the stand-in, as `fakeDraw(...).datasets` holds them */
+export type FakeDataset = ReturnType<typeof fakeDataset>;
 
 /** A layer of a fake document */
 export function layer(id: string, items: string[] = [], extra: Partial<Layer> = {}): Layer {
@@ -110,9 +178,12 @@ export function fakeDraw(
     layers.set(l.id, l);
     order.push(l.id);
   }
+  if (doc.order) order = [...doc.order];
+  const datasets: FakeDataset[] = (doc.datasets ?? []).map(fakeDataset);
   for (const g of doc.groups ?? []) groups.set(g.id, g);
   for (const f of doc.features ?? []) features.set(f.id, f);
-  let active: string | null = doc.active ?? order[order.length - 1] ?? null;
+  let active: string | null =
+    doc.active ?? [...order].reverse().find((id) => layers.has(id)) ?? null;
   const hidden = new Set<string>();
   let created = 0;
   // The options: nested as core gives them, every value filled in
@@ -250,7 +321,7 @@ export function fakeDraw(
     },
     layers: {
       get: (id: string) => layers.get(id),
-      list: () => order.map((id) => layers.get(id) as Layer),
+      list: () => order.flatMap((id) => layers.get(id) ?? []),
       getOrder: () => [...order],
       reorder: vi.fn((next: readonly string[]) => {
         order = [...next];
@@ -342,6 +413,14 @@ export function fakeDraw(
         emit('options.changed', { options: runtime, previous });
       }),
     },
+    datasets: {
+      get: (id: string) => datasets.find((d) => d.id === id),
+      // From the back: below the layers, among them, above them
+      list: () =>
+        (['below-store', 'layer-order', 'above-store'] as const).flatMap((o) =>
+          datasets.filter((d) => d.order === o),
+        ),
+    },
     getMap: () => map,
     // What the inspector reads besides (fakeDocument has a stand-in with every member it uses)
     isReadOnly: () => false,
@@ -382,6 +461,21 @@ export function fakeDraw(
     change(fn: (doc: { layers: Map<string, Layer>; features: Map<string, Feature> }) => void) {
       fn({ layers, features });
       changed();
+    },
+    /** The datasets of the stand-in, from the order they were given */
+    datasets,
+    /** Adds a dataset, as `draw.datasets.add` would */
+    addDataset(spec: FakeDatasetSpec) {
+      const dataset = fakeDataset(spec);
+      datasets.push(dataset);
+      emit('dataset.added', { dataset });
+      return dataset;
+    },
+    /** Removes a dataset, as `draw.datasets.remove` would */
+    removeDataset(id: string) {
+      const at = datasets.findIndex((d) => d.id === id);
+      if (at !== -1) datasets.splice(at, 1);
+      emit('dataset.removed', { datasetId: id });
     },
     /** Changes the mode from outside the interface */
     setModeFromOutside(next: Mode) {

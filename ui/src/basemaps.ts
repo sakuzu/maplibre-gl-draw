@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The basemaps of the layer panel: the list its basemap row offers, the current one, its name, and
+// The basemaps of the layer panel: the list its basemap row opens, the current one, its name, and
 // the change of the map's style.
 //
 // A change replaces the style whole (diff: false). A diffed setStyle keeps the layers it did not
@@ -34,8 +34,8 @@ export interface BasemapSettings {
  * Checks the basemaps of the options and finds the current one: `initial` when given, else the
  * first whose style is the URL of the map's style, else none.
  *
- * @throws Error when a basemap has no ID, no label or no style, two share an ID, or `initial` is
- *   the ID of none of them
+ * @throws Error when a basemap has no ID, no label or no style, has a preview that is not a
+ *   string, two share an ID, or `initial` is the ID of none of them
  */
 export function basemapSettings(
   basemaps: readonly Basemap[] | undefined,
@@ -50,6 +50,9 @@ export function basemapSettings(
     if (typeof b.style !== 'string' && (typeof b.style !== 'object' || b.style === null)) {
       throw new Error(`The basemap "${b.id}" needs a style`);
     }
+    if (b.preview !== undefined && typeof b.preview !== 'string') {
+      throw new Error(`The preview of the basemap "${b.id}" must be a string`);
+    }
     if (ids.has(b.id)) throw new Error(`There are two basemaps with the ID "${b.id}"`);
     ids.add(b.id);
   }
@@ -63,9 +66,9 @@ export function basemapSettings(
 
 /** The basemaps on a map: the list, the current one, its name, and the change */
 export interface BasemapControl {
-  /** The basemaps, in the order of the menu */
+  /** The basemaps, in the order they are offered */
   readonly list: readonly Basemap[];
-  /** The ID of the current basemap, which the menu follows */
+  /** The ID of the current basemap, which the row and the basemaps to choose from follow */
   readonly current: Box<string | null>;
   /**
    * The name of the basemap the map shows: the label of the current basemap, else the `name` of

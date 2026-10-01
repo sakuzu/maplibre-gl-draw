@@ -7,22 +7,62 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Removed: renaming in place in the layer panel (F2 or a double click on
+  a row), as in the reference layout. The names of layers, groups and
+  features are changed in the head of the inspector, which also ends a
+  defect: a locked row could still be renamed in the tree.
+- Removed: the pencil that marked the active layer (the layer drawn
+  features go into) in the layer panel, as in the reference layout: the
+  row of a layer looks the same whether it is active or not. Pressing a
+  layer still makes it active (`layers.setActive`). The word
+  `activeLayer` is gone with it; at run time a locale that still gives
+  it is accepted and the word is ignored.
+- Changed: the layer panel lists up to 1,000 features in a layer, those
+  of its groups included. A layer that holds more lists none of them and
+  none of its groups: its one child is a row with their number and a
+  hint, "12,345 features. Select them on the map.", which is not
+  pressed, hidden, locked or dragged. The row of the layer works as
+  before. Each row of the panel costs about a third of a millisecond to
+  draw, so a layer of 20,000 features took seconds. `features`
+  (`LayerPanelOptions`) is now `boolean | number`: `true` (the default)
+  for the limit of 1,000, a number for another limit, `false` for no
+  features; a number less than 0 throws. New word: `manyFeatures` (with
+  `{count}`).
+- Added: the datasets are rows of the layer panel, in their place in
+  the stack: those of `above-store` in front of every layer, those of
+  `layer-order` where `layers.getOrder()` places them among the layers,
+  and those of `below-store` behind every layer. A row shows the ID of
+  the dataset with a database mark and the number of its rows, and the
+  eye shows and hides it with `setVisible`. It has no lock, and a press
+  on it leaves the selection as it is. A
+  `layer-order` dataset is dragged among the layers (`layers.reorder`
+  with its ID); the others stay. The rows follow `dataset.added`,
+  `dataset.removed`, `dataset.reordered` and the `changed` event of each
+  dataset. The option `datasets: false` (`LayerPanelOptions`) leaves
+  them out. New words: `datasets` and `rows` (with `{count}`).
 - Added: the basemaps of the layer panel, `basemaps` (`{ id, label,
-  style }`), `basemap` and `onbasemap`, in the options of
+  style, preview }`), `basemap` and `onbasemap`, in the options of
   `createDrawUI` and of `createLayerPanel` (`LayerPanelOptions`). With
-  two or more, the basemap row opens a menu of them. Choosing one
-  replaces the map's style and calls `onbasemap`; `basemap` names the
-  current one at the start, and `ui.setBasemap(id)` and
-  `ui.getBasemap()` change and read it. The drawing is drawn again on
-  top of the new style.
-- Changed: the layer panel ends with a basemap row, under the tree and
-  apart from it by a line. The panel lists the stack from the front,
-  and the basemap is its back. The row shows the name of the basemap the
-  map shows: the label of the current one of `basemaps`, else the `name`
-  of the map's style. It is not a node of the tree: it is not dragged,
-  hidden, locked or selected. Before the release, the menu of the
-  basemaps was a button at the top right of the map, beside the theme
-  button; that button is gone.
+  two or more, the basemap row opens them on the right, in the place of
+  the inspector: a list of their labels, each with its `preview` (a
+  value of CSS `background`; a neutral square without one) and a check
+  on the current one. Opening it clears the selection; a selection made
+  on the map or in the tree, its close button and Escape close it.
+  Choosing one replaces the map's style, calls `onbasemap` and leaves
+  the list open; `basemap` names the current one at the start, and
+  `ui.setBasemap(id)` and `ui.getBasemap()` change and read it. The
+  drawing is drawn again on top of the new style. The layer panel put
+  alone opens the list in the place of its sections.
+- Changed: the layer panel is a stack of two sections, as in the
+  reference layout. The first, Stack (the new word `stack`), is the
+  tree with the add menu in its head; the second, Basemap, holds one
+  row with a globe mark and the name of the basemap the map shows: the
+  label of the current one of `basemaps`, else the `name` of the map's
+  style, else the word `basemap`. The panel lists the stack from the
+  front, and the basemap is its back. The row is not a node of the tree:
+  it is not dragged, hidden, locked or selected. Before the release, the
+  menu of the basemaps was a button at the top right of the map, beside
+  the theme button, and then a menu under the tree; both are gone.
 - Changed: the inspector of a feature opens on the first tab of
   `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
   The default stays `['style', 'attributes']`, which opens on Style. Once

@@ -36,6 +36,7 @@
     ToolbarSettings,
     ToolEntry,
   } from '../types.js';
+  import BasemapPanel from './BasemapPanel.svelte';
   import Inspector from './Inspector.svelte';
   import LeftPanel from './LeftPanel.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -47,7 +48,11 @@
   // padding can follow them. While the left region is closed, a small button floats at the top
   // left of the map to open it again. At the top right, a button switches the theme to the look
   // that is not shown now (light reads the look the root shows, which the theme control keeps).
-  // The basemap is the last row of the layer panel.
+  //
+  // The right region shows the inspector while something is selected, or the basemaps to choose
+  // from, which the basemap row of the layer panel opens (with two or more basemaps). Opening
+  // them clears the selection, and a selection made anywhere closes them, so the two never show
+  // at once; their close button and Escape close them.
   let {
     draw,
     tools,
@@ -86,7 +91,7 @@
     themeToggle?: boolean;
     /** Called with the theme the button switches to */
     ontheme?: (theme: 'light' | 'dark') => void;
-    /** The basemaps of the last row of the layer panel */
+    /** The basemaps of the basemap row of the layer panel */
     basemaps?: BasemapControl | null;
   } = $props();
 
@@ -96,8 +101,26 @@
     follow(draw, ['selection.changed'], () => draw.selection.get().ids.length > 0),
   );
 
-  function closeInspector(open: boolean) {
-    if (!open) draw.selection.clear();
+  // The basemaps to choose from, on the right in the place of the inspector
+  const choosable = $derived(!!basemaps && basemaps.list.length >= 2);
+  let basemapOpen = $state(false);
+  function openBasemaps() {
+    draw.selection.clear();
+    basemapOpen = true;
+  }
+  $effect(() =>
+    draw.on('selection.changed', ({ selection }) => {
+      if (selection.ids.length > 0) basemapOpen = false;
+    }),
+  );
+  const rightShown = $derived(
+    (choosable && basemapOpen) || (!!inspectorSettings && selected.get()),
+  );
+
+  function closeRight(open: boolean) {
+    if (open) return;
+    basemapOpen = false;
+    draw.selection.clear();
   }
 
   const m = $derived(messages.get());
@@ -137,7 +160,7 @@
   $effect(() => {
     const now: Beside = {
       left: !!side && leftOpen && layout?.leftMode === 'beside',
-      right: !!inspectorSettings && selected.get() && layout?.rightMode === 'beside',
+      right: rightShown && layout?.rightMode === 'beside',
     };
     // Also when the toolbar comes or goes
     void bar;
@@ -154,13 +177,15 @@
   const SUN_ICON = Sun as unknown as IconComponent;
   const MOON_ICON = Moon as unknown as IconComponent;
   const isLight = $derived(light.get());
-  const besideInspector = $derived(
-    !!inspectorSettings && selected.get() && !!layout && layout.rightMode !== 'sheet',
-  );
+  const besideInspector = $derived(rightShown && !!layout && layout.rightMode !== 'sheet');
 
-  // Escape on the canvas is core's (it cancels the drawing or clears the selection). Elsewhere,
-  // with no pane to close, it clears the selection
+  // Escape closes the basemaps to choose from. On the canvas it is core's too (it cancels the
+  // drawing or clears the selection). Elsewhere, with no pane to close, it clears the selection
   function onescape(e: KeyboardEvent) {
+    if (choosable && basemapOpen) {
+      basemapOpen = false;
+      return fromMapCanvas(draw, e) ? false : undefined;
+    }
     if (fromMapCanvas(draw, e) || draw.selection.get().ids.length === 0) return false;
     draw.selection.clear();
   }
@@ -186,6 +211,8 @@
       {messages}
       settings={side}
       {basemaps}
+      basemapOpen={choosable && basemapOpen}
+      onopenbasemap={choosable ? openBasemaps : undefined}
       onclose={() => {
         leftOpen = false;
       }}
@@ -194,7 +221,15 @@
 {/snippet}
 
 {#snippet right()}
-  {#if inspectorSettings}
+  {#if basemaps && choosable && basemapOpen}
+    <BasemapPanel
+      {basemaps}
+      {messages}
+      onclose={() => {
+        basemapOpen = false;
+      }}
+    />
+  {:else if inspectorSettings}
     <Inspector {draw} {messages} settings={inspectorSettings} {sections} />
   {/if}
 {/snippet}
@@ -203,16 +238,16 @@
   overlay
   side={sideMode}
   bind:leftOpen
-  bind:rightOpen={() => selected.get(), closeInspector}
+  bind:rightOpen={() => rightShown, closeRight}
   leftLabel={m.layers}
-  rightLabel={m.inspector}
+  rightLabel={choosable && basemapOpen ? m.basemap : m.inspector}
   shortcuts={[...keys, ...leftKeys]}
   {onescape}
   onlayout={(next) => {
     layout = next;
   }}
   left={side ? leftRegion : undefined}
-  right={inspectorSettings ? right : undefined}
+  right={inspectorSettings || choosable ? right : undefined}
   bottom={bar ? bottom : undefined}
 />
 
