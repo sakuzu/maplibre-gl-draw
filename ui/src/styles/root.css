@@ -9,8 +9,10 @@
  * gives a whole kata page (the text, the box model, the reset of the form controls and the focus
  * ring), and nothing reaches outside it.
  *
- * kata's theme is dark; data-color-mode="light" on the root element, or on any element around
- * it, turns it light. An application changes the look by setting kata's tokens (--kata-*) on
+ * kata's theme is dark. data-color-mode="light" on the root element (the theme option sets it:
+ * light, or auto while the system prefers light), or on any element around it, turns it light:
+ * the build moves kata's light block onto the same selectors, so every color token switches
+ * with color-scheme. An application changes the look by setting kata's tokens (--kata-*) on
  * .mgd-ui.
  */
 
@@ -34,15 +36,17 @@
 
 /* Laid over the map: the root covers its container and lets the pointer through to the map. In
  * createDrawUI, kata's Shell (overlay) gives the pointer back to its regions: the side regions,
- * the toolbar, the scrim, the floating panes, the sheets and the list of shortcuts. The toolbar
- * put alone (createToolbar) has no shell, so it takes the pointer itself; its menus are inside
- * it. The tooltips kata appends to the root let the pointer through */
+ * the toolbar, the scrim, the floating panes, the sheets and the list of shortcuts. The button
+ * that opens the left region again lies outside the shell's regions, and the toolbar put alone
+ * (createToolbar) has no shell, so they take the pointer themselves; the toolbar's menus are
+ * inside it. The tooltips kata appends to the root let the pointer through */
 .mgd-ui[data-overlay] {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-.mgd-ui[data-overlay] > [data-role="drawbar"] {
+.mgd-ui[data-overlay] > [data-role="drawbar"],
+.mgd-ui[data-overlay] > [data-role="reopen"] {
   pointer-events: auto;
 }
 

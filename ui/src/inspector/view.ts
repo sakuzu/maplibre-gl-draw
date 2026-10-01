@@ -4,6 +4,11 @@
 // What the inspector shows, read from the draw instance: nothing, one feature, several, a layer,
 // a group, or several layers or groups. It is read again after each event the inspector follows,
 // so what it shows is always what the draw instance holds.
+//
+// The inspector of one feature is laid out from top to bottom as featureLayout gives it: the head
+// (the name and the subtitle), the rows under it with no tab (the measurements and the
+// description), then the tabs. The Style tab holds the fields of the style, the sections of the
+// application and the operations; the Attributes tab the list of the attributes.
 
 import type {
   Feature,
@@ -13,7 +18,11 @@ import type {
   Layer,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Messages } from '../messages.js';
-import type { InspectorDraw } from './types.js';
+import { featureDescription } from './attributes.js';
+import { type MeasureRow, measure } from './measure.js';
+import { applicableOperations } from './operations.js';
+import { sharedStyleKeys } from './style.js';
+import type { InspectorDraw, InspectorSettings, InspectorTab } from './types.js';
 
 /** The events after which the inspector reads the draw instance again */
 export const INSPECTOR_EVENTS = [
@@ -91,6 +100,52 @@ export function readView(draw: InspectorDraw): InspectorView {
     return { kind: 'group', group, layer: draw.layers.get(group.layerId), readOnly };
   }
   return { kind: 'empty' };
+}
+
+/** What the inspector of one feature shows under its head and in its tabs */
+export interface FeatureLayout {
+  /** The measurements under the head, before the tabs; none when the options leave them out */
+  measurements: MeasureRow[];
+  /**
+   * The description under the head, before the tabs: its text, and whether it can be changed
+   * (an empty one then shows the action that adds it). Null when it is empty and cannot be
+   * changed
+   */
+  description: { text: string; editable: boolean } | null;
+  /** The tabs, in the order of the options; the Style tab only when it has something to show */
+  tabs: InspectorTab[];
+  /** Whether the Style tab has the fields of the style */
+  style: boolean;
+  /** Whether the Style tab has the buffer, at its end */
+  buffer: boolean;
+}
+
+/**
+ * Lays out the inspector of one feature
+ *
+ * @param view - The feature, as readView gives it
+ * @param settings - The options of the inspector
+ * @param sections - The number of the sections of the application that apply to the feature
+ * @param locale - The language tag the numbers of the measurements are written in
+ */
+export function featureLayout(
+  view: Pick<FeatureView, 'feature' | 'editable'>,
+  settings: InspectorSettings,
+  sections: number,
+  locale = 'en',
+): FeatureLayout {
+  const { feature, editable } = view;
+  const text = featureDescription(feature);
+  const style = sharedStyleKeys([feature]).length > 0;
+  const buffer = settings.operations && applicableOperations([feature]).includes('buffer');
+  const styleTab = style || sections > 0 || buffer;
+  return {
+    measurements: settings.measurements ? measure(feature, settings.units, locale) : [],
+    description: editable || text !== '' ? { text, editable } : null,
+    tabs: settings.tabs.filter((tab) => tab !== 'style' || styleTab),
+    style,
+    buffer,
+  };
 }
 
 /** The name of a type: the words of the built-in types, and a custom type as it is named */

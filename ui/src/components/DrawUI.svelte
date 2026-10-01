@@ -3,7 +3,17 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
-  import { Shell, type ShellLayout, type Shortcut } from '@sakuzu/kata/svelte';
+  import Layers from '@lucide/svelte/icons/layers';
+  import {
+    Button,
+    Floating,
+    formatShortcut,
+    Icon,
+    type IconComponent,
+    Shell,
+    type ShellLayout,
+    type Shortcut,
+  } from '@sakuzu/kata/svelte';
   import { tick } from 'svelte';
   import type {
     InspectorDraw,
@@ -31,7 +41,8 @@
   // through and keeps its own pointer and keys; the regions of the shell take the pointer where
   // they are. The keyboard shortcuts are those of the toolbar's buttons. onbeside reports which
   // side regions stand beside the stage, open, once the shell has drawn them, so that the map's
-  // padding can follow them.
+  // padding can follow them. While the left region is closed, a small button floats at the top
+  // left of the map to open it again.
   let {
     draw,
     tools,
@@ -85,6 +96,7 @@
   // The left region is open at first; the shell closes it (Escape, the scrim, the sheet's close
   // button) and Shift+L opens and closes it
   let leftOpen = $state(true);
+  const LAYERS_ICON = Layers as unknown as IconComponent;
   const leftKeys = $derived<Shortcut[]>(
     shortcuts && side
       ? [
@@ -163,3 +175,22 @@
   right={inspectorSettings ? right : undefined}
   bottom={bar ? bottom : undefined}
 />
+
+{#if side && !leftOpen}
+  <!-- Outside the shell's regions: the root gives it the pointer (data-role="reopen") -->
+  <div data-role="reopen">
+    <Floating left="md" top="md">
+      <Button
+        variant="ghost"
+        icon
+        aria-label={m.layers}
+        shortcut={shortcuts ? formatShortcut('shift+l') : undefined}
+        onclick={() => {
+          leftOpen = true;
+        }}
+      >
+        <Icon name={LAYERS_ICON} />
+      </Button>
+    </Floating>
+  </div>
+{/if}

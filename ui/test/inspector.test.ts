@@ -164,17 +164,58 @@ describe('createInspector', () => {
     });
   });
 
-  it('writes the description', () => {
+  it('writes the description where it stands', () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
-    const inspector = mountAlone(fake, { tabs: ['attributes'] });
+    const inspector = mountAlone(fake);
+    expect(inspector.element.querySelector('textarea')).toBeNull();
+    click(button(inspector.element, 'Add a description'));
     const area = inspector.element.querySelector('textarea');
     if (!area) throw new Error('no textarea');
     typeInto(area, 'Open all day');
-    area.dispatchEvent(new Event('change', { bubbles: true }));
+    area.dispatchEvent(new FocusEvent('blur'));
     flushSync();
     expect(fake.mocks.features.update).toHaveBeenCalledWith('a', {
       properties: { description: 'Open all day' },
     });
+    expect(inspector.element.textContent).toContain('Open all day');
+    expect(hasButton(inspector.element, 'Description')).toBe(true);
+  });
+
+  it('shows the measurements and the description under the head, before the tabs', () => {
+    const described = makeFeature({
+      ...park,
+      properties: { ...park.properties, description: 'Gate' },
+    });
+    const fake = fakeDocument({
+      features: [described],
+      selection: { type: 'feature', ids: ['a'] },
+    });
+    const inspector = mountAlone(fake);
+    const el = inspector.element;
+    const tablist = el.querySelector('[data-role="tabs"]');
+    if (!tablist) throw new Error('no tabs');
+    const precedes = (a: Node, b: Node) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const text = (needle: string) =>
+      [...el.querySelectorAll('*')].find(
+        (n) => n.children.length === 0 && n.textContent?.trim() === needle,
+      );
+    for (const word of ['Area', 'Perimeter', 'Description', 'Gate']) {
+      const node = text(word);
+      if (!node) throw new Error(`no ${word}`);
+      expect(precedes(node, tablist)).toBe(true);
+    }
+    // The Style tab: the fields and the operations, no measurements
+    const fill = button(el, 'Fill color');
+    expect(precedes(tablist, fill)).toBe(true);
+    expect(hasButton(el, 'Buffer')).toBe(true);
+    // The Attributes tab: the list of the attributes only
+    click(button(tablist, 'Attributes'));
+    expect(el.textContent).toContain('kind');
+    expect(hasButton(el, 'Fill color')).toBe(false);
+    expect(hasButton(el, 'Buffer')).toBe(false);
+    expect(el.textContent).toContain('Area');
+    expect(el.textContent).toContain('Gate');
   });
 
   it('shows the measurements in the units of the options', () => {

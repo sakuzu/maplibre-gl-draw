@@ -89,12 +89,12 @@ export interface Messages {
   nothingSelectedNote: string;
   /** The language tag the numbers of the inspector are written in (Intl.NumberFormat) */
   numberLocale: string;
-  /** The tabs of the inspector of a feature, and the titles of their sections */
+  /** The tabs of the inspector of a feature; the first is also the title of the style's section */
   styleTab: string;
   attributesTab: string;
-  measurements: string;
-  details: string;
+  /** The row of the description of a feature, and its action while it is empty */
   description: string;
+  addDescription: string;
   /** The button that removes the style of the features, back to the layer rule and the defaults */
   resetStyle: string;
   /** The names of the fields of the style */

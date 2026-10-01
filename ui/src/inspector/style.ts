@@ -110,7 +110,7 @@ function shapes(m: Messages): Record<StyleKey, FieldShape> {
     strokeWidth: { kind: 'slider', min: 0.5, max: 20, step: 0.5, unit: 'px' },
     strokeOpacity: PERCENT_SLIDER,
     lineStyle: {
-      kind: 'segmented',
+      kind: 'select',
       options: [
         { value: 'solid', label: m.lineSolid },
         { value: 'dashed', label: m.lineDashed },
@@ -120,7 +120,7 @@ function shapes(m: Messages): Record<StyleKey, FieldShape> {
     pointColor: COLOR,
     pointRadius: { kind: 'slider', min: 1, max: 40, step: 1, unit: 'px' },
     pointShape: {
-      kind: 'segmented',
+      kind: 'select',
       options: [
         { value: 'circle', label: m.shapeCircle },
         { value: 'square', label: m.shapeSquare },

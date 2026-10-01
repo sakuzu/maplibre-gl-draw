@@ -48,3 +48,15 @@ follows semantic versioning.
   with kata's `overlay`: the map takes the pointer everywhere but the
   regions of the shell (the panels beside it, the toolbar, the scrim
   and the floating panels, and the sheets).
+- The `theme` option (`light`, `dark`, or `auto` to follow the system's
+  `prefers-color-scheme` as it changes; `auto` by default) of
+  `createDrawUI`, `createToolbar`, `createLayerPanel`, `createLegend`
+  and `createInspector`, and `ui.setTheme`. Light switches every token
+  of kata's light theme on the root element.
+- While the left region of `createDrawUI` is closed, a button at the top
+  left of the map opens it again.
+- The inspector of one feature shows its measurements and its
+  description (changed where it stands) under its name, before the
+  tabs; the Style tab has the fields of the style, the sections of the
+  application and the operations, and the Attributes tab the list of
+  the attributes. The line style and the shape of a point are selects.
