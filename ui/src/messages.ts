@@ -46,6 +46,43 @@ export interface Messages {
   /** The handles that resize a dock and a sheet */
   dockHeight: string;
   sheetHeight: string;
+  /** The tab of the layer panel, and the name of its tree */
+  layers: string;
+  /** The tab of the legend */
+  legend: string;
+  /** The items of the add menu of the layer panel */
+  newLayer: string;
+  newGroup: string;
+  /** The mark of the layer that drawn features go into */
+  activeLayer: string;
+  /** In the list of the keyboard shortcuts: the heading of the panels, and the key of the left one */
+  panelsGroup: string;
+  toggleLayers: string;
+  /** The names of the types that have no tool, for a feature without a name */
+  multiPoint: string;
+  multiLine: string;
+  multiPolygon: string;
+  /**
+   * The labels of the legend that are not values of the data: every feature, the features the
+   * rule does not resolve, and the classes of a graduated rule, with `{lower}` and `{upper}` for
+   * their bounds
+   */
+  legendAll: string;
+  legendOther: string;
+  legendBelow: string;
+  legendAtLeast: string;
+  legendRange: string;
+  /** What the legend shows when no layer has a style rule */
+  noLegend: string;
+  /** In the layer tree of kata: the eye, the lock, the name's input, the add button and the chevron */
+  hide: string;
+  show: string;
+  lock: string;
+  unlock: string;
+  rename: string;
+  add: string;
+  expand: string;
+  collapse: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */
@@ -60,6 +97,14 @@ const KATA_KEYS = [
   'closePanes',
   'dockHeight',
   'sheetHeight',
+  'hide',
+  'show',
+  'lock',
+  'unlock',
+  'rename',
+  'add',
+  'expand',
+  'collapse',
 ] as const satisfies readonly (keyof Messages)[];
 
 /** The full set of words for a locale */

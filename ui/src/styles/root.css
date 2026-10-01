@@ -42,6 +42,9 @@
 .mgd-ui[data-overlay] :is([data-role="drawbar"], dialog, [popover]) {
   pointer-events: auto;
 }
+.mgd-ui[data-overlay] [data-region="left"] {
+  pointer-events: auto;
+}
 
 :where(.mgd-ui),
 :where(.mgd-ui) *,

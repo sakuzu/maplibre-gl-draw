@@ -23,8 +23,10 @@
  */
 
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
-import { mount, unmount } from 'svelte';
+import { flushSync, mount, unmount } from 'svelte';
 import DrawUIView from './components/DrawUI.svelte';
+import LayerPanelView from './components/LayerPanel.svelte';
+import LegendView from './components/Legend.svelte';
 import ToolbarView from './components/Toolbar.svelte';
 import {
   applyKataMessages,
@@ -38,6 +40,10 @@ import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.
 import type {
   DrawUI,
   DrawUIOptions,
+  LayerPanelHandle,
+  LayerPanelOptions,
+  LeftSettings,
+  LegendHandle,
   ToolbarHandle,
   ToolbarOptions,
   ToolbarSettings,
@@ -50,6 +56,9 @@ export type { Locale, Messages } from './messages.js';
 export type {
   DrawUI,
   DrawUIOptions,
+  LayerPanelHandle,
+  LayerPanelOptions,
+  LegendHandle,
   ToolbarHandle,
   ToolbarOptions,
   ToolEntry,
@@ -115,8 +124,8 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * Lays the interface over the map of a draw instance: kata's Shell with the toolbar at the
  * bottom and the keyboard shortcuts.
  *
- * In this version the toolbar and the shortcuts are drawn; `inspector`, `layers`, `legend` and
- * `units` are accepted and have no effect yet.
+ * In this version the toolbar, the shortcuts, and the layer panel and the legend on the left are
+ * drawn; `inspector` and `units` are accepted and have no effect yet.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
@@ -131,15 +140,41 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const toolbar = new Box<ToolbarSettings | null>(
     bar ? { deletable: bar.delete !== false, snapping: bar.snapping !== false } : null,
   );
+  const left = new Box<LeftSettings | null>(leftSettings(options));
 
   const root = createRoot(options.container ?? draw.getMap().getContainer(), true);
   applyLocale(root, messages, options.locale ?? 'en');
   const view = mount(DrawUIView, {
     target: root,
-    props: { draw, tools, messages, toolbar, shortcuts: options.shortcuts !== false },
+    props: { draw, tools, messages, toolbar, left, shortcuts: options.shortcuts !== false },
   });
+  // The shell opens the left region in an effect: run it now, so that the panels are there when
+  // this returns
+  flushSync();
 
   let destroyed = false;
+  const dropLeft = (part: 'layers' | 'legend') => {
+    const now = left.get();
+    if (!now) return;
+    const next = { ...now, [part]: part === 'layers' ? null : false };
+    left.set(next.layers || next.legend ? next : null);
+  };
+  const layersHandle: LayerPanelHandle = {
+    get element() {
+      return root.querySelector<HTMLElement>('[data-role="layer-panel"]') ?? root;
+    },
+    destroy() {
+      dropLeft('layers');
+    },
+  };
+  const legendHandle: LegendHandle = {
+    get element() {
+      return root.querySelector<HTMLElement>('[data-role="legend"]') ?? root;
+    },
+    destroy() {
+      dropLeft('legend');
+    },
+  };
   const toolbarHandle: ToolbarHandle = {
     get element() {
       return root.querySelector<HTMLElement>('[data-role="drawbar"]') ?? root;
@@ -155,6 +190,12 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       return !destroyed && toolbar.get() ? toolbarHandle : null;
     },
     tools: toolsHandle(tools, messages),
+    get layers() {
+      return !destroyed && left.get()?.layers ? layersHandle : null;
+    },
+    get legend() {
+      return !destroyed && left.get()?.legend ? legendHandle : null;
+    },
     setLocale(locale: Locale) {
       if (destroyed) return;
       applyLocale(root, messages, locale);
@@ -208,4 +249,89 @@ export function createToolbar(
       root.remove();
     },
   };
+}
+
+/** The layer panel with the options filled in */
+function layerSettings(options: LayerPanelOptions = {}): Required<LayerPanelOptions> {
+  return {
+    features: options.features !== false,
+    add: options.add !== false,
+    reorder: options.reorder !== false,
+  };
+}
+
+/** What the left region of `createDrawUI` shows, or null for none */
+function leftSettings(options: DrawUIOptions): LeftSettings | null {
+  const layers =
+    options.layers === false
+      ? null
+      : layerSettings(options.layers === true ? {} : (options.layers ?? {}));
+  const legend = options.legend !== false;
+  return layers || legend ? { layers, legend } : null;
+}
+
+/** Puts a component alone in an element, in a root element of the interface */
+function mountAlone(
+  target: HTMLElement,
+  locale: Locale | undefined,
+  component: typeof LayerPanelView | typeof LegendView,
+  props: Record<string, unknown>,
+  role: string,
+): { element: HTMLElement; destroy(): void } {
+  const messages = new Box(resolveMessages(locale));
+  const root = createRoot(target, false);
+  applyLocale(root, messages, locale ?? 'en');
+  const view = mount(component as typeof LayerPanelView, {
+    target: root,
+    props: { ...props, messages } as never,
+  });
+  let destroyed = false;
+  return {
+    get element() {
+      return root.querySelector<HTMLElement>(`[data-role="${role}"]`) ?? root;
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      unmount(view);
+      root.remove();
+    },
+  };
+}
+
+/**
+ * Puts the layer panel alone in an element: the tree of the layers, their groups and their
+ * features, from the front, with the eye, the lock, renaming, dragging and the add menu. It fills
+ * `target`, which gives it its size and its scrolling.
+ *
+ * @param draw - The draw instance
+ * @param options - The element to put it in, what it shows and the words (`en` by default)
+ * @returns The layer panel, to remove
+ */
+export function createLayerPanel(
+  draw: Draw,
+  options: LayerPanelOptions & { target: HTMLElement; locale?: Locale },
+): LayerPanelHandle {
+  return mountAlone(
+    options.target,
+    options.locale,
+    LayerPanelView,
+    { draw, ...layerSettings(options) },
+    'layer-panel',
+  );
+}
+
+/**
+ * Puts the legend alone in an element: the rows of the style rule of each layer that has one,
+ * from the front. It only reads; the rules change with `draw.layers.update`.
+ *
+ * @param draw - The draw instance
+ * @param options - The element to put it in and the words (`en` by default)
+ * @returns The legend, to remove
+ */
+export function createLegend(
+  draw: Draw,
+  options: { target: HTMLElement; locale?: Locale },
+): LegendHandle {
+  return mountAlone(options.target, options.locale, LegendView, { draw }, 'legend');
 }
