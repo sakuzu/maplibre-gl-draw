@@ -477,8 +477,9 @@ draw.setMode('draw_rectangle');
 
 ## 関連する例
 
-- [examples/plugin/](../../examples/plugin/) では、独自のモード、
-  イベント、API を持つプラグインを足し、また外します
+- [Plugins](../examples/plugins.ja.md) では、独自のモード、受け取る
+  イベント、API を持つプラグインを足し、そのための道具と節を標準の UI に
+  足します
 
 ## リファレンス
 

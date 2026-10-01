@@ -309,9 +309,11 @@ draw.on('layerStack.changed', placeMapLayers);
 
 ## Examples
 
-- [style-rules](../../examples/style-rules/) adds layers and gives
-  them style rules
-- [read-only](../../examples/read-only/) locks a layer
+- [Layers and groups](../examples/layers-and-groups.md) stacks, fades
+  and activates layers, groups and locks features and hides one from
+  code, and shows it all in the layer panel of the standard UI
+- [Style rules and legend](../examples/style-rules-and-legend.md) gives
+  a layer a style rule
 
 ## Reference
 

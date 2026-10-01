@@ -480,8 +480,9 @@ again does nothing. `remove(name)` does the same by name.
 
 ## Related example
 
-- [examples/plugin/](../../examples/plugin/) adds a plugin with a
-  mode of its own, an event and an API, and removes it again
+- [Plugins](../examples/plugins.md) adds a plugin with a mode of its
+  own, an event it listens to and an API, and a tool and a section of
+  the standard UI for it
 
 ## Reference
 

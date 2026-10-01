@@ -112,7 +112,7 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 
 ## 関連する例
 
-- [terrain](../../examples/terrain/) では、公開されている DEM で
+- [Terrain](../examples/terrain.ja.md) では、公開されている DEM で
   地形を有効にし、標準の UI でその上に描いたり直したりします。
   `draw.debug.terrain()` の結果はブラウザーのコンソールに出します
 

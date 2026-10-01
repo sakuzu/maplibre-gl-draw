@@ -9,8 +9,10 @@
 - [getting-started.ja.md](getting-started.ja.md) — パッケージを
   インストールし、多角形を描き、変更を受け取り、描いたものを保存して
   読み込むまで
-- [../examples/README.md](../examples/README.md) — 手引きごとに 1 つずつ
-  ある、動かせる小さな例と、その起動の方法
+- [examples/index.ja.md](examples/index.ja.md) — 例のギャラリー。どの例も、
+  例を動かすページにコードを添えています。playground もここから開きます
+- [../examples/README.md](../examples/README.md) — 例のコードと、手元で
+  動かす方法 (英語)
 
 ## 手引き
 
@@ -48,8 +50,8 @@
 ## リファレンス (英語)
 
 - [API リファレンス](https://sakuzu.github.io/maplibre-gl-draw/api/) —
-  すべての公開記号の生成したリファレンス。
-  [デモ](https://sakuzu.github.io/maplibre-gl-draw/) と同じ場所で
+  すべての公開記号の生成したリファレンス。手引きや例と一緒に
+  [ドキュメントのサイト](https://sakuzu.github.io/maplibre-gl-draw/) で
   公開しています
 - [reference/README.md](reference/README.md) — 4 つの入口、公開 API の
   2 つの層、版の保証、生成する API リファレンスの作り方

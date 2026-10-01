@@ -126,31 +126,40 @@ returns ([plugins](docs/guides/plugins.md),
 Try them in the browser, with nothing to install.
 
 - [Playground][demo]
-  - Every feature in one editor, with layer and property panels
-- [Basic][ex-basic]
-  - Drawing polygons, the change events, saving and restoring
-- [Export and load][ex-save-load]
-  - Export as GeoJSON and in the native format, loading files dropped on
-    the map
-- [Style rules][ex-style-rules]
+  - Every feature in one editor, with the standard UI
+- [Examples][examples]
+  - Eighteen examples, each on a page that runs it beside its code
+
+Among the examples:
+
+- [Get started][ex-get-started]
+  - Drawing, selecting and changing features in the panel
+- [Save and load][ex-save-and-load]
+  - GeoJSON and the native format, files dropped on the map, the
+    features a load leaves out
+- [Style rules and legend][ex-style-rules-and-legend]
   - The four kinds of style rule that color features by a property, with
     a legend
-- [Snapping and geometry][ex-snapping-and-geometry]
-  - Snapping, tracing a boundary, moving shared vertices, union,
-    subtract, buffer and split
-- [3D terrain][ex-terrain]
-  - Drawing and selecting on 3D terrain
-- [Read-only][ex-read-only]
-  - The read-only mode, the interaction lock and locked layers
-- [Plugin][ex-plugin]
-  - A plugin with an event, an API and a mode of its own
-- [Custom feature type][ex-custom-feature-type]
+- [Snapping and tracing][ex-snapping-and-tracing] and
+  [geometry operations][ex-geometry-operations]
+  - Snapping, tracing a boundary, union, intersection, difference, split
+    and buffer
+- [Terrain][ex-terrain]
+  - Drawing and editing on 3D terrain
+- [Read-only viewer][ex-read-only-viewer]
+  - A drawing to look at: read-only, the interaction lock, the attributes
+    of the feature clicked
+- [Plugins][ex-plugins]
+  - A plugin with a mode of its own, and its tool in the standard UI
+- [Custom feature types][ex-custom-feature-types]
   - A kind of feature with its own drawing, hit test and box selection
-- [Datasets][ex-large-data]
+- [Datasets][ex-datasets]
   - 50,000 cells colored by a property, and points fetched for the part
     of the map in view
-- [A million points][ex-table-worker]
-  - A million points read in a Worker
+- [Columnar data in a Worker][ex-columnar-data-in-a-worker]
+  - 200,000 rows read in a Worker and drawn from their columns
+- [Build your own UI][ex-custom-ui]
+  - A toolbar and a panel of your own, without the standard UI
 
 ## Installation
 
@@ -198,8 +207,9 @@ document.querySelector('#save')?.addEventListener('click', () => {
 });
 ```
 
-The complete page is [examples/basic/](examples/basic/), and
-[getting started](docs/getting-started.md) walks through it step by step.
+[Getting started](docs/getting-started.md) builds this page step by
+step, and the [Get started][ex-get-started] example lays the standard UI
+over the map in place of your own buttons.
 
 ## Entry points
 
@@ -263,15 +273,18 @@ The notices of the third-party code this package contains are in
 
 [maplibre]: https://maplibre.org/maplibre-gl-js/docs/
 [custom-layer]: https://maplibre.org/maplibre-gl-js/docs/API/interfaces/CustomLayerInterface/
-[demo]: https://sakuzu.github.io/maplibre-gl-draw/
+[demo]: https://sakuzu.github.io/maplibre-gl-draw/playground/
 [api]: https://sakuzu.github.io/maplibre-gl-draw/api/
-[ex-basic]: https://sakuzu.github.io/maplibre-gl-draw/examples/basic/
-[ex-save-load]: https://sakuzu.github.io/maplibre-gl-draw/examples/save-load/
-[ex-style-rules]: https://sakuzu.github.io/maplibre-gl-draw/examples/style-rules/
-[ex-snapping-and-geometry]: https://sakuzu.github.io/maplibre-gl-draw/examples/snapping-and-geometry/
-[ex-terrain]: https://sakuzu.github.io/maplibre-gl-draw/examples/terrain/
-[ex-read-only]: https://sakuzu.github.io/maplibre-gl-draw/examples/read-only/
-[ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
-[ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
-[ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
-[ex-table-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/table-worker/
+[examples]: https://sakuzu.github.io/maplibre-gl-draw/examples/
+[ex-get-started]: https://sakuzu.github.io/maplibre-gl-draw/examples/get-started.html
+[ex-save-and-load]: https://sakuzu.github.io/maplibre-gl-draw/examples/save-and-load.html
+[ex-style-rules-and-legend]: https://sakuzu.github.io/maplibre-gl-draw/examples/style-rules-and-legend.html
+[ex-snapping-and-tracing]: https://sakuzu.github.io/maplibre-gl-draw/examples/snapping-and-tracing.html
+[ex-geometry-operations]: https://sakuzu.github.io/maplibre-gl-draw/examples/geometry-operations.html
+[ex-terrain]: https://sakuzu.github.io/maplibre-gl-draw/examples/terrain.html
+[ex-read-only-viewer]: https://sakuzu.github.io/maplibre-gl-draw/examples/read-only-viewer.html
+[ex-plugins]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugins.html
+[ex-custom-feature-types]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-types.html
+[ex-datasets]: https://sakuzu.github.io/maplibre-gl-draw/examples/datasets.html
+[ex-columnar-data-in-a-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/columnar-data-in-a-worker.html
+[ex-custom-ui]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-ui.html

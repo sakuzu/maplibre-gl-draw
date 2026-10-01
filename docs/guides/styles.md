@@ -315,9 +315,11 @@ The words of the names the library gives new features, layers and groups
 
 ## Examples
 
-- [style-rules](../../examples/style-rules/) gives a layer each kind
-  of rule, builds a legend with `deriveLegend`, and sets the options
-  `style` and `messages`
+- [Style features](../examples/style-features.md) gives each feature a
+  style of its own and changes the defaults of a type
+- [Style rules and legend](../examples/style-rules-and-legend.md) gives
+  a layer each kind of rule and shows its rows in the legend of the
+  standard UI
 
 ## Reference
 

@@ -113,7 +113,7 @@ console.log(render.active, render.stepMeters, drape.used, drape.reason);
 
 ## Examples
 
-- [terrain](../../examples/terrain/) turns on terrain with a public
+- [Terrain](../examples/terrain.md) turns on terrain with a public
   DEM, draws and edits on it with the standard UI, and logs
   `draw.debug.terrain()` in the browser console
 

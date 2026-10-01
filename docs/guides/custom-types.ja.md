@@ -597,9 +597,10 @@ function pathOnTerrain(
 
 ## 関連する例
 
-- [examples/custom-feature-type/](../../examples/custom-feature-type/)
-  では、共有の線の描画器で描き、当たり判定、矩形選択、枠、ハンドルを
-  持つ型を足します
+- [Custom feature types](../examples/custom-feature-types.ja.md) では、
+  共有の線の描画器で描き、当たり判定、矩形選択、ハンドル、独自の
+  スタイルのキーを持つルートの型を足し、そのキーのための節を標準の UI に
+  足します
 
 ## リファレンス
 

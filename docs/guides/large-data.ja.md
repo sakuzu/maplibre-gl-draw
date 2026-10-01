@@ -724,11 +724,11 @@ async function whenPictureComplete(): Promise<void> {
 
 ## 例
 
-- [データセット](../../examples/large-data/) は、属性で塗り分けた
-  5 万個のマスと、見えている範囲の分を取り寄せる点を追加します。
-  間引き、クリック、前後の入れ替えもあります
-- [100 万個の点](../../examples/table-worker/) は、20 万個か 100 万個
-  の点を Worker で表として作り、そこで下ごしらえして、写さずに
+- [Datasets](../examples/datasets.ja.md) は、値で塗り分けた 5 万個の
+  マスと、見えている範囲の分を取り寄せる点を追加し、行のクリックを
+  知らせます
+- [Columnar data in a Worker](../examples/columnar-data-in-a-worker.ja.md)
+  は、20 万行の表を Worker で作り、そこで下ごしらえして、写さずに
   渡します
 
 描いた地物の代わりにデータセットを選ぶ規模の目安は、

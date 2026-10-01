@@ -227,8 +227,8 @@ onDestroy(() => {
 
 ## 関連する例
 
-- [examples/basic/](../../examples/basic/) では、地図と draw
-  のインスタンスを作り、イベントを購読します。上の各コンポーネント
+- [Get started](../examples/get-started.ja.md) では、地図、draw の
+  インスタンス、標準の UI を作り、イベントを購読します。上の各コンポーネント
   がマウントのフックで行っていることと同じです
 
 ## リファレンス

@@ -122,28 +122,35 @@ GeoJSON の properties を持つので、ファイルはコードで読む地物
 ブラウザーですぐに試せます。インストールは要りません。
 
 - [プレイグラウンド][demo]
-  - すべての機能を 1 つの画面で。レイヤーとプロパティのパネル付き
-- [基本][ex-basic]
-  - 面の描画、変更のイベント、保存と復元
-- [書き出しと読み込み][ex-save-load]
-  - GeoJSON と独自形式の書き出し、地図に落としたファイルの読み込み
-- [スタイル規則][ex-style-rules]
+  - すべての機能を 1 つの画面で。標準の UI 付き
+- [例][examples]
+  - 18 の例。どれも、例を動かすページにそのコードを添えています
+
+例の一部を挙げます。
+
+- [Get started][ex-get-started]
+  - 地物を描き、選び、パネルで直す
+- [Save and load][ex-save-and-load]
+  - GeoJSON と独自形式、地図に落としたファイル、読み込みで外された地物
+- [Style rules and legend][ex-style-rules-and-legend]
   - 属性の値で色を分ける 4 種類の規則と凡例
-- [吸着と幾何演算][ex-snapping-and-geometry]
-  - 吸着、境界のなぞり、共有する頂点の同時移動、結合、切り抜き、
-    バッファ、分割
-- [3D 地形][ex-terrain]
-  - 3D 地形の上での描画と選択
-- [閲覧専用][ex-read-only]
-  - 閲覧専用モード、操作のロック、ロックしたレイヤー
-- [プラグイン][ex-plugin]
-  - イベント、API、独自のモードを持つプラグイン
-- [独自の地物型][ex-custom-feature-type]
+- [Snapping and tracing][ex-snapping-and-tracing] と
+  [Geometry operations][ex-geometry-operations]
+  - 吸着、境界のなぞり、結合、交差、差、分割、バッファー
+- [Terrain][ex-terrain]
+  - 3D 地形の上での描画と編集
+- [Read-only viewer][ex-read-only-viewer]
+  - 見るための描画。閲覧専用、操作のロック、クリックした地物の属性
+- [Plugins][ex-plugins]
+  - 独自のモードを持つプラグインと、標準の UI に足すその道具
+- [Custom feature types][ex-custom-feature-types]
   - 独自の描き方、当たり判定、範囲選択を持つ地物の型
-- [データセット][ex-large-data]
+- [Datasets][ex-datasets]
   - 5 万のマス目の色分けと、見えている範囲の点の取り寄せ
-- [100 万の点][ex-table-worker]
-  - Worker で読み込む 100 万の点
+- [Columnar data in a Worker][ex-columnar-data-in-a-worker]
+  - Worker で読み込み、列のまま描く 20 万行
+- [Build your own UI][ex-custom-ui]
+  - 標準の UI を使わない、自分の道具のバーとパネル
 
 ## インストール
 
@@ -191,8 +198,9 @@ document.querySelector('#save')?.addEventListener('click', () => {
 });
 ```
 
-ページ全体は [examples/basic/](examples/basic/) にあります。
-[はじめかた](docs/getting-started.ja.md) で順を追って説明しています。
+[はじめかた](docs/getting-started.ja.md) では、このページを順を追って
+作ります。[Get started][ex-get-started] の例は、自分のボタンの代わりに
+標準の UI を地図に重ねます。
 
 ## 入口
 
@@ -255,15 +263,18 @@ AGPL が製品に合わない場合は、Kasika, Inc. (可視化技研株式会�
 
 [maplibre]: https://maplibre.org/maplibre-gl-js/docs/
 [custom-layer]: https://maplibre.org/maplibre-gl-js/docs/API/interfaces/CustomLayerInterface/
-[demo]: https://sakuzu.github.io/maplibre-gl-draw/
+[demo]: https://sakuzu.github.io/maplibre-gl-draw/playground/
 [api]: https://sakuzu.github.io/maplibre-gl-draw/api/
-[ex-basic]: https://sakuzu.github.io/maplibre-gl-draw/examples/basic/
-[ex-save-load]: https://sakuzu.github.io/maplibre-gl-draw/examples/save-load/
-[ex-style-rules]: https://sakuzu.github.io/maplibre-gl-draw/examples/style-rules/
-[ex-snapping-and-geometry]: https://sakuzu.github.io/maplibre-gl-draw/examples/snapping-and-geometry/
-[ex-terrain]: https://sakuzu.github.io/maplibre-gl-draw/examples/terrain/
-[ex-read-only]: https://sakuzu.github.io/maplibre-gl-draw/examples/read-only/
-[ex-plugin]: https://sakuzu.github.io/maplibre-gl-draw/examples/plugin/
-[ex-custom-feature-type]: https://sakuzu.github.io/maplibre-gl-draw/examples/custom-feature-type/
-[ex-large-data]: https://sakuzu.github.io/maplibre-gl-draw/examples/large-data/
-[ex-table-worker]: https://sakuzu.github.io/maplibre-gl-draw/examples/table-worker/
+[examples]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/
+[ex-get-started]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/get-started.html
+[ex-save-and-load]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/save-and-load.html
+[ex-style-rules-and-legend]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/style-rules-and-legend.html
+[ex-snapping-and-tracing]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/snapping-and-tracing.html
+[ex-geometry-operations]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/geometry-operations.html
+[ex-terrain]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/terrain.html
+[ex-read-only-viewer]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/read-only-viewer.html
+[ex-plugins]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/plugins.html
+[ex-custom-feature-types]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/custom-feature-types.html
+[ex-datasets]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/datasets.html
+[ex-columnar-data-in-a-worker]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/columnar-data-in-a-worker.html
+[ex-custom-ui]: https://sakuzu.github.io/maplibre-gl-draw/ja/examples/custom-ui.html

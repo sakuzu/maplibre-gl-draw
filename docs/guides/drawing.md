@@ -504,8 +504,10 @@ application offer another way to enter coordinates, such as a form.
 
 ## Examples
 
-- [basic](../../examples/basic/) draws a polygon, listens to
-  `feature.created` and `document.changed`, and saves GeoJSON
+- [Get started](../examples/get-started.md) draws with the tools of the
+  standard UI and listens to `document.changed`
+- [Build your own UI](../examples/custom-ui.md) calls `setMode` from
+  buttons of its own and follows `mode.changed` and the selection
 
 ## Reference
 

@@ -397,10 +397,12 @@ if (shrunk === null) {
 
 ## Examples
 
-- [snapping-and-geometry](../../examples/snapping-and-geometry/)
-  sets the `snapping` option, switches snapping, tracing and shared
-  vertices with `draw.options.update`, runs `union`, `difference`,
-  `buffer` and `split`, and measures with `area`
+- [Snapping and tracing](../examples/snapping-and-tracing.md) sets the
+  `snapping` option, snaps to vertices, edges and guide lines, and traces
+  a boundary
+- [Geometry operations](../examples/geometry-operations.md) runs
+  `union`, `intersection`, `difference`, `split` and `buffer` from the
+  panel, and measures the length and the area of the selection
 
 ## Reference
 

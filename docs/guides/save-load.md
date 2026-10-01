@@ -387,9 +387,9 @@ your own, so that the listener can leave it out by that source.
 
 ## Examples
 
-- [save-load](../../examples/save-load/) writes out both formats,
-  loads a GeoJSON file and reports `skipped`, loads files dropped on the
-  map, and keeps the drawing in `localStorage`
+- [Save and load](../examples/save-and-load.md) loads a GeoJSON file
+  and reports `skipped`, saves the native format in `localStorage` and
+  loads it back, and loads files dropped on the map
 
 ## Reference
 

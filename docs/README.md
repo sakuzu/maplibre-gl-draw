@@ -9,8 +9,10 @@ reference and the internals are in English only.
 
 - [getting-started.md](getting-started.md) — install the package, draw a
   polygon, listen to changes, and save and load the drawing
-- [../examples/README.md](../examples/README.md) — small runnable
-  examples, one for each guide, and how to start them
+- [examples/index.md](examples/index.md) — the gallery of the examples,
+  each a page that runs it beside its code, and the playground
+- [../examples/README.md](../examples/README.md) — the code of the
+  examples, and how to run them on your machine
 
 ## Guides
 
@@ -46,8 +48,9 @@ Each guide covers one task. Read the ones you need, in any order.
 ## Reference
 
 - [API reference](https://sakuzu.github.io/maplibre-gl-draw/api/) — the
-  generated reference of every public symbol, published with the
-  [live demo](https://sakuzu.github.io/maplibre-gl-draw/)
+  generated reference of every public symbol, published on the
+  [documentation site](https://sakuzu.github.io/maplibre-gl-draw/) with
+  the guides and the examples
 - [reference/README.md](reference/README.md) — the four entry points,
   the two layers of the public API, the versioning guarantee, and how to
   build the generated API reference

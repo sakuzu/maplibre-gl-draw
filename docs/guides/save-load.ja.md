@@ -388,10 +388,9 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 
 ## 関連する例
 
-- [save-load](../../examples/save-load/) では、両方の形式で書き
-  出し、GeoJSON のファイルを読み込んで `skipped` を表示し、地図に
-  ドロップされたファイルを読み込み、描いたものを `localStorage` に
-  保ちます
+- [Save and load](../examples/save-and-load.ja.md) では、GeoJSON の
+  ファイルを読み込んで `skipped` を知らせ、独自の形式を `localStorage` に
+  保存して読み戻し、地図にドロップされたファイルを読み込みます
 
 ## リファレンス
 

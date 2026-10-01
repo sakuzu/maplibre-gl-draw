@@ -233,8 +233,9 @@ draw.extensions.overlays.add({
 
 ## 関連する例
 
-- [examples/large-data/](../../examples/large-data/) では、
-  衝突による間引きを付けたデータセットで、5 万件の静的な多角形を
+- [200,000 features](../examples/200000-features.ja.md) では、編集できる
+  20 万の地物を 1 度で読み込みます
+- [Datasets](../examples/datasets.ja.md) では、5 万個のマスをデータセットで
   表示します
 
 ## リファレンス

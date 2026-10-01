@@ -6,16 +6,10 @@ maplibre-gl で地図を作れることは前提としますが、このライ�
 知識は必要ありません。正は英語版 ([getting-started.md](getting-started.md))
 です。
 
-各手順は、そのまま動かせるページ [examples/basic/](../examples/basic/)
-の一部に対応しています。`examples/basic/main.ts` の各部分には、下の
-見出しと同じ手順の番号が付いています。
-
-例を動かすには、リポジトリーをクローンして examples を起動します。
-
-```sh
-npm install
-npm run dev    # 表示される一覧から basic のページを開く
-```
+各手順のコードはすべてこのページにあり、手順を合わせると完全なページに
+なります。[Get started](examples/get-started.ja.md) の例は、自分の
+ボタンの代わりに標準の UI を地図に重ねた同じページです。ブラウザーで
+動き、そのコードも読めます。
 
 ## 1. インストール
 
@@ -49,8 +43,8 @@ setWorkerUrl(workerUrl);
 まとめるのは `?worker&url` だけです。ほかのバンドラーでは、ビルドが
 `maplibre-gl-worker.mjs` を配信する URL を `setWorkerUrl` に渡します。
 
-`examples/basic/main.ts` では、すべての例が共有している
-`../maplibre-setup.ts` の import がこれに当たります。
+リポジトリーの例は、この設定を `examples/maplibre-setup.ts` で共有して
+います。
 
 ## 2. 地図とインスタンスを作る
 
@@ -98,8 +92,6 @@ const draw = createDraw(map);
 地図を持つページやコンポーネントを破棄するときは、`map.remove()` の前に
 `draw.destroy()` を呼んでください。インスタンスが地図に加えたものを
 すべて取り除きます。
-
-`examples/basic/main.ts` では手順 2 に当たります。
 
 ## 3. 多角形を描く
 
@@ -156,8 +148,6 @@ draw.on('mode.changed', ({ mode }) => {
 使います。`draw_image` では、さらにアプリケーションに画像を求めます。
 すべてのモードの操作は [描画の手引き](guides/drawing.ja.md) にあります。
 
-`examples/basic/main.ts` では手順 3 に当たります。
-
 ## 4. 変更を受け取る
 
 `feature.created` は地物 1 件ごとに発火します。すべての変更 (作成、
@@ -196,8 +186,7 @@ API は、次の規則を押さえておくと分かりやすくなります。
 UI は、呼んだメソッドからではなくイベントから更新してください。利用者も
 描いたものを変えるので、イベントを使えば両方を拾えます。
 
-`examples/basic/main.ts` では手順 4 に当たります。すべてのイベントと
-その payload は [イベントのリファレンス](reference/events.md) (英語) に
+すべてのイベントとその payload は [イベントのリファレンス](reference/events.md) (英語) に
 あります。
 
 ## 5. 保存と読み込み
@@ -243,8 +232,6 @@ GeoJSON は地物ごとの属性とスタイルを保ちますが、レイヤー
 ではなく置き換えます。両方の形式の仕様は
 [データ形式のリファレンス](reference/data-format.md) (英語) にあります。
 
-`examples/basic/main.ts` では手順 5 に当たります。
-
 ## 6. 次に読むもの
 
 これで、地物を描き、変更を受け取り、保存して元に戻せる地図ができました。
@@ -264,6 +251,7 @@ GeoJSON は地物ごとの属性とスタイルを保ちますが、レイヤー
 [ドキュメントの索引](README.ja.md) にあります。
 
 何もインストールせずにすべての機能を試すなら、
-[デモ](https://sakuzu.github.io/maplibre-gl-draw/) を開いてください。
+[playground](https://sakuzu.github.io/maplibre-gl-draw/playground/) か
+[例](https://sakuzu.github.io/maplibre-gl-draw/examples/) を開いてください。
 [API リファレンス](https://sakuzu.github.io/maplibre-gl-draw/api/) も
 同じ場所で公開しています。
