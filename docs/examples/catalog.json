@@ -86,8 +86,8 @@
   "200000-features": {
     "title": "200,000 features",
     "titleJa": "200,000 features",
-    "description": "200,000 features loaded in one step, every one of them editable.",
-    "descriptionJa": "20 万の地物を 1 度で読み込み、どれも編集できるまま描きます。",
+    "description": "A made-up city of 208,073 features (buildings, parks, streets and places) loaded in one step and seen from a tilted camera, every one of them editable.",
+    "descriptionJa": "建物、公園、街路、場所からなる 208,073 の地物の架空の町を 1 度で読み込み、傾けたカメラで見ます。どの地物も編集できます。",
     "order": 12
   },
   "datasets": {

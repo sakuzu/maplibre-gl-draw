@@ -4,29 +4,37 @@ aside: false
 
 # 200,000 features
 
-A made-up town of 200,000 buildings, loaded into the drawing in one step,
-every one of them a feature that can be edited.
+A city of 208,073 features, loaded into the drawing in one step, every
+one of them editable.
 
 ```example
 200000-features
 ```
 
-The buildings are features like those drawn by hand. Click one to select
-it: the panel on the right shows its name, and its number of floors in
-the attributes; a change there applies at once. Drag it, drag its
-vertices, or delete it with the Delete key. Zoom out to see the whole
-town. The time the load took is logged in the browser console.
+The city is made up, on a bent grid of streets west of central Tokyo,
+and seen from a tilted camera: near at hand in front, where the features
+can be told apart, and far into the distance behind. It holds 174,435
+polygons (buildings, and parks in green), 24,328 lines (streets, the
+avenues in red) and 9,310 points (cafes, clinics and bakeries). The park
+in front opens selected, with its vertex handles.
+
+The features are like those drawn by hand. Click a building to select
+it: the panel on the right shows its use in the attributes. Drag it,
+drag one of its vertices, or delete it with the Delete key. Zoom in to
+the buildings in front, or out to see the whole city. The numbers and
+the time the load took are logged in the browser console.
 
 ## Code
 
 The layer panel of the standard UI lists up to 1,000 features in a layer
-(1). The town's layer holds more, so the panel shows their number under
-the layer instead of a row for each, and a building is selected on the
-map. The town is made in code (`data.ts`) with a seeded random number
-generator, so it is the same on every visit (2). `draw.document.load`
-writes the 200,000 features in one transaction (3): one change, one
-event and one redraw.
-`draw.features.createMany` is one transaction too.
+(3). Each layer of the city holds more, so the panel shows the number of
+its features in a row under the layer instead of a row for each, and a
+building is selected on the map. The city is made in code (`data.ts`)
+with a seeded random number generator, so it is the same on every visit
+(4). `draw.document.load` writes the 208,073 features in one transaction
+(5): one change, one event and one redraw. `draw.features.createMany` is
+one transaction too. The park is selected from the code once the load is
+done.
 
 ::: code-group
 <<< @/../examples/200000-features/main.ts
