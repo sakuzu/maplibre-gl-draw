@@ -1,0 +1,71 @@
+/*
+ * SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * The root element of the interface (.mgd-ui). kata's tokens are moved onto it by the build, and
+ * the page around it keeps its own look: these rules give the inside of the root what kata's base
+ * gives a whole kata page (the text, the box model, the reset of the form controls and the focus
+ * ring), and nothing reaches outside it.
+ *
+ * kata's theme is dark; data-color-mode="light" on the root element, or on any element around
+ * it, turns it light. An application changes the look by setting kata's tokens (--kata-*) on
+ * .mgd-ui.
+ */
+
+.mgd-ui {
+  color-scheme: dark;
+  color: var(--kata-color-text);
+  font-family: var(--kata-font-sans);
+  font-size: var(--kata-text-size-body);
+  font-weight: normal;
+  font-style: normal;
+  line-height: var(--kata-text-leading-body);
+  letter-spacing: var(--kata-text-tracking-body);
+  text-align: start;
+  text-transform: none;
+  -webkit-font-smoothing: antialiased;
+}
+.mgd-ui[data-color-mode="light"],
+[data-color-mode="light"] .mgd-ui {
+  color-scheme: light;
+}
+
+/* Laid over the map: the root covers its container and lets the pointer through to the map, and
+ * the parts of the interface take the pointer where they are */
+.mgd-ui[data-overlay] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.mgd-ui[data-overlay] :is([data-role="drawbar"], dialog, [popover]) {
+  pointer-events: auto;
+}
+
+:where(.mgd-ui),
+:where(.mgd-ui) *,
+:where(.mgd-ui) *::before,
+:where(.mgd-ui) *::after {
+  box-sizing: border-box;
+}
+
+:where(.mgd-ui) :is(button, input, select, textarea) {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+:where(.mgd-ui) :focus {
+  outline: none;
+}
+:where(.mgd-ui) :focus-visible {
+  outline: 2px solid var(--kata-color-focus);
+  outline-offset: 2px;
+}
+:where(.mgd-ui) ::selection {
+  background: var(--kata-color-selection);
+}
