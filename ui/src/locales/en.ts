@@ -159,4 +159,5 @@ export const en: Readonly<Messages> = Object.freeze({
   datasets: 'Datasets',
   manyFeatures: '{count} features. Select them on the map.',
   stack: 'Stack',
+  actions: 'Actions',
 });

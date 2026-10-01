@@ -129,6 +129,66 @@ export interface DrawUIOptions extends BasemapOptions {
    * for some of them. `destroy()` removes them
    */
   mapControls?: boolean | MapControlsOptions;
+  /**
+   * The actions of the application at the start: rows of a card at the bottom left of the map,
+   * above maplibre-gl's scale, each a switch or a button with its key. `ui.actions` adds and
+   * removes them later. No card shows while there are none
+   */
+  actions?: ActionSpec[];
+  /** The title of the card of the actions; the word for actions (`actions`) when left out */
+  actionsTitle?: string;
+}
+
+/**
+ * An action of the application, a row of the card of the actions at the bottom left of the map:
+ * a switch (`toggle`) or a button (`action`), with its key
+ */
+export interface ActionSpec {
+  /** The name of the action, unique in the card */
+  id: string;
+  /** The text of the row, also its name in the list of the keyboard shortcuts */
+  label: string;
+  /** `toggle`: a switch that shows `checked()`; `action`: a button */
+  kind: 'action' | 'toggle';
+  /**
+   * The key that runs it, such as `R`, or with modifiers joined by `+` (`shift+r`). It is listed
+   * with `?` and must not be a key of the interface: the keys of the tools, Delete, Backspace,
+   * Escape, `?` or Shift+L
+   */
+  shortcut?: string;
+  /** What the action does; a switch's state is read again through `checked` after it runs */
+  run: () => void;
+  /** Whether the switch is on, read after each run and on `ui.actions.refresh()` */
+  checked?: () => boolean;
+  /** Whether the action cannot run now, read like `checked`; its row is dimmed and its key does nothing */
+  disabled?: () => boolean;
+  /** A few words on the row's tooltip */
+  hint?: string;
+}
+
+/** The actions of the card at the bottom left of the map, to add to and to remove from */
+export interface ActionsHandle {
+  /**
+   * Adds an action at the end of the card
+   *
+   * @returns The function that removes it again
+   * @throws Error when the action is not valid, its ID is taken, or its key is a key of the
+   *   interface or of another action
+   */
+  add(spec: ActionSpec): () => void;
+  /**
+   * Removes an action
+   *
+   * @returns Whether there was an action with this ID
+   */
+  remove(id: string): boolean;
+  /** The actions in the order of the card */
+  list(): ActionSpec[];
+  /**
+   * Reads `checked` and `disabled` of every action again, for a state that changed without one of
+   * the actions (by code, or by another control)
+   */
+  refresh(): void;
 }
 
 /**
@@ -220,6 +280,8 @@ export interface DrawUI {
   readonly toolbar: ToolbarHandle | null;
   /** The tools of the toolbar */
   readonly tools: ToolsHandle;
+  /** The actions of the application, in the card at the bottom left of the map */
+  readonly actions: ActionsHandle;
   /** The layer panel, or null when there is none */
   readonly layers: LayerPanelHandle | null;
   /** The legend, or null when there is none */

@@ -57,11 +57,14 @@ the order of the stack, the places, the points, the buildings and the
 cells. Move the map: the points and the places are handed over again for
 the new view.
 
-## Keys
+## Actions
 
-| Key | What it does |
-| --- | --- |
-| `T` | Turns the thinning of the points off and on, and logs the count drawn |
+The switch is in the card of actions at the bottom left of the map, with
+its key, which `?` lists:
+
+| Action | Key | What it does |
+| --- | --- | --- |
+| Thin the points | `T` | Turns thinning off and on, and logs the count drawn |
 
 ## Code
 
@@ -80,7 +83,8 @@ rests, and returns the rows of that extent, built there; a real one
 fetches them from a server. `collisionThinning` draws only the points in
 front where their markers overlap, and a categorical rule on `kind`
 colors them (4). `getThinningStats` says how many are drawn, and
-`setCollisionThinning` turns the thinning off with `null` (5). The page
+`setCollisionThinning` turns the thinning off with `null`, from a switch
+the page adds to the standard UI with `ui.actions.add` (5). The page
 fetches the two GeoJSON files of the sample data and gives their
 features to datasets as rows: the buildings at once, colored by a
 graduated rule on `area` (6), placed between the two layers (7), and the

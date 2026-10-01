@@ -5,7 +5,8 @@
 // A "Route" (route.ts) is a line with style keys of its own: a color, a width and whether it is
 // dashed. Its definition draws it, hits it and takes it into a selection box. The panel on the
 // right has no style fields for a type it does not know, so the page adds a section for the
-// route's keys. The U key unregisters the type and registers it again.
+// route's keys. A switch in the card of actions at the bottom left, with the key U, unregisters
+// the type and registers it again.
 
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -85,21 +86,22 @@ ui.inspector?.sections.add({
 // 5. Select the second route, so the panel opens on its section
 if (river !== null) draw.selection.set('feature', [river.id]);
 
-// 6. The key of the page, listed in the console as it opens: U unregisters the type and
+// 6. The switch in the card of actions of the standard UI, with its key U (listed with ?, and
+// left alone while a field of the panels has the keyboard): it unregisters the type and
 // registers it again. Without the type, the routes stay in the data, neither drawn nor hit by a
 // click (a selection box still takes them, by their positions), and come back as they were when
-// the type is registered again. A key typed into a field of the panels is left alone, and so is
-// one held with a modifier
-console.info('The keys of this page:\n  U  Unregister the type Route, or register it again');
-window.addEventListener('keydown', (event) => {
-  const typing =
-    event.target instanceof Element &&
-    event.target.closest('input, textarea, select, [contenteditable]') !== null;
-  if (typing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key.toLowerCase() !== 'u') return;
-  if (draw.extensions.featureTypes.has('Route')) draw.extensions.featureTypes.remove('Route');
-  else draw.extensions.featureTypes.add(routeType);
-  console.info(`Route type registered: ${draw.extensions.featureTypes.has('Route')}`);
+// the type is registered again
+ui.actions.add({
+  id: 'route-type',
+  label: ja ? 'ルートの型' : 'Route type',
+  kind: 'toggle',
+  shortcut: 'U',
+  run: () => {
+    if (draw.extensions.featureTypes.has('Route')) draw.extensions.featureTypes.remove('Route');
+    else draw.extensions.featureTypes.add(routeType);
+    console.info(`Route type registered: ${draw.extensions.featureTypes.has('Route')}`);
+  },
+  checked: () => draw.extensions.featureTypes.has('Route'),
 });
 
 // For the browser console and the end-to-end tests

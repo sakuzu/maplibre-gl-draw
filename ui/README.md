@@ -228,6 +228,8 @@ The options of `createDrawUI`, all optional:
 | `basemaps` | The basemaps the basemap row opens | none |
 | `basemap` | The ID of the basemap current at the start | the map's |
 | `onbasemap` | Called with the basemap after it changed | none |
+| `actions` | The actions of the application, in a card at the left | none |
+| `actionsTitle` | The title of the card of the actions | `Actions` |
 
 Each part also goes alone into an element of the page, with its own
 options and `target`, `locale` and `theme`: `createToolbar`,
@@ -369,8 +371,51 @@ open over the map or beside it, the button stands to the left of it.
 
 Beyond the look, the options above choose the parts and what each shows,
 `ui.tools.add` adds a tool for a mode of the application (see
-[Use](#use)), and `ui.inspector.sections.add` adds a section to the
-inspector (see [Inspector](#inspector)).
+[Use](#use)), `ui.inspector.sections.add` adds a section to the
+inspector (see [Inspector](#inspector)), and `ui.actions.add` adds an
+action of the application (see [Actions](#actions)).
+
+### Actions
+
+An action of the application, such as saving the drawing or turning a
+setting on and off, is a row of a card at the bottom left of the map,
+above maplibre-gl's scale: a switch (`kind: 'toggle'`) or a button
+(`kind: 'action'`), with its key at the end. A press on the row and its
+key both call `run`; a switch shows what `checked` returns, read again
+after each run and on `ui.actions.refresh()`, so the state stays with
+the application. `disabled` dims the row and turns its key off, and
+`hint` is a caption under it. The keys are listed with `?` under the
+title of the card, and do nothing while a field has the focus. A key the
+interface uses (the keys of the tools, Delete, Backspace, Escape, `?`
+and Shift+L) or another action uses is refused with an error. The card
+shows while there is an action, its head folds it into one button, and
+on a map narrower than 48rem it starts folded; where it would reach the
+toolbar across, it stands above the toolbar, and the layer panel
+floating at the left ends above it. Its title is `actionsTitle`, or the
+word for actions of the locale.
+
+```ts
+const ui = createDrawUI(draw, {
+  actions: [
+    {
+      id: 'read-only',
+      label: 'Read-only',
+      kind: 'toggle',
+      shortcut: 'R',
+      run: () => draw.setReadOnly(!draw.isReadOnly()),
+      checked: () => draw.isReadOnly(),
+    },
+  ],
+});
+
+const remove = ui.actions.add({
+  id: 'save',
+  label: 'Save',
+  kind: 'action',
+  shortcut: 'S',
+  run: () => localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON())),
+});
+```
 
 ## Basemaps
 

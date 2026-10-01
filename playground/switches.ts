@@ -1,51 +1,76 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The switches of the playground that are not tools: each is a letter with Shift, listed in the
-// console when the page opens. The modes are tools of the toolbar instead, and the globe is the
-// globe button of the map's controls.
+// The switches of the playground that are not tools: actions of the standard UI, in the card at
+// the bottom left of the map, each with a letter and Shift as its key (listed with ?). The modes
+// are tools of the toolbar instead, and the globe is the globe button of the map's controls.
 
 import type { DatasetRow, Draw } from '@sakuzu/maplibre-gl-draw';
+import type { ActionSpec, DrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import type { FeatureCollection } from 'geojson';
 import type * as maplibregl from 'maplibre-gl';
 import { DEM_TILES } from '../examples/basemap.ts';
 
-/** A switch: its letter (pressed with Shift), what it does, and the doing */
-export interface Switch {
-  key: string;
-  label: string;
-  run: () => void | Promise<void>;
-}
-
-/** Where Shift+S saves the drawing */
+/** Where Save keeps the drawing */
 const STORAGE_KEY = 'maplibre-gl-draw-playground';
 const DATASET_ID = 'cells';
 const BIG_LAYER = 'two-hundred-thousand';
 
-/** The switches over a draw instance and its map */
-export function createSwitches(draw: Draw, map: maplibregl.Map): Switch[] {
+/** The switches over a draw instance and its map, in English or in Japanese */
+export function createSwitches(draw: Draw, map: maplibregl.Map, ja: boolean): ActionSpec[] {
   return [
-    { key: 'T', label: 'Terrain on and off', run: () => toggleTerrain(map) },
-    { key: 'D', label: 'A dataset of 10,000 cells on and off', run: () => toggleCells(draw, map) },
     {
-      key: 'R',
-      label: 'Read-only on and off',
+      id: 'terrain',
+      label: ja ? '地形' : 'Terrain',
+      kind: 'toggle',
+      shortcut: 'shift+t',
+      run: () => toggleTerrain(map),
+      checked: () => map.getTerrain() !== null,
+    },
+    {
+      id: 'cells',
+      label: ja ? '1 万のセル' : '10,000 cells',
+      kind: 'toggle',
+      shortcut: 'shift+d',
+      run: () => toggleCells(draw, map),
+      checked: () => draw.datasets.get(DATASET_ID) !== undefined,
+    },
+    {
+      id: 'read-only',
+      label: ja ? '読み取り専用' : 'Read-only',
+      kind: 'toggle',
+      shortcut: 'shift+r',
       run: () => {
         draw.setReadOnly(!draw.isReadOnly());
         console.info(`Read-only: ${draw.isReadOnly()}`);
       },
+      checked: () => draw.isReadOnly(),
     },
     {
-      key: 'K',
-      label: 'Interaction lock on and off',
+      id: 'interaction-lock',
+      label: ja ? '操作の錠' : 'Interaction lock',
+      kind: 'toggle',
+      shortcut: 'shift+k',
       run: () => {
         draw.setInteractionLocked(!draw.isInteractionLocked());
         console.info(`Interaction lock: ${draw.isInteractionLocked()}`);
       },
+      checked: () => draw.isInteractionLocked(),
     },
     {
-      key: 'S',
-      label: 'Save the drawing in this browser (localStorage)',
+      id: 'big',
+      label: ja ? '20 万の点' : '200,000 points',
+      kind: 'toggle',
+      shortcut: 'shift+b',
+      run: () => void toggleBig(draw, map),
+      checked: () => draw.layers.get(BIG_LAYER) !== undefined,
+    },
+    {
+      id: 'save',
+      label: ja ? '保存' : 'Save',
+      kind: 'action',
+      shortcut: 'shift+s',
+      hint: ja ? 'このブラウザーに保存します' : 'In this browser (localStorage)',
       run: () => {
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(draw.document.toJSON()));
@@ -57,45 +82,42 @@ export function createSwitches(draw: Draw, map: maplibregl.Map): Switch[] {
       },
     },
     {
-      key: 'O',
-      label: 'Open the drawing saved in this browser',
+      id: 'open',
+      label: ja ? '開く' : 'Open',
+      kind: 'action',
+      shortcut: 'shift+o',
       run: async () => {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved === null) {
-          console.info('Nothing is saved yet (Shift+S saves)');
+          console.info('Nothing is saved yet (Save, Shift+S)');
           return;
         }
         const result = await draw.document.load(JSON.parse(saved));
         console.info(result ? `Opened ${result.featureIds.length} features` : 'Read-only');
       },
     },
-    {
-      key: 'B',
-      label: 'Load 200,000 points as features, or remove them',
-      run: () => toggleBig(draw, map),
-    },
   ];
 }
 
-/** Runs the switches on their keys, and lists them in the console */
-export function listenToSwitches(switches: readonly Switch[]): void {
-  document.addEventListener('keydown', (e) => {
-    if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-    const target = e.target as HTMLElement | null;
-    if (target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName ?? '')) {
-      return;
-    }
-    const found = switches.find((s) => s.key === e.key.toUpperCase());
-    if (!found) return;
-    e.preventDefault();
-    void found.run();
-  });
-  console.info(
-    [
-      'The switches of the playground:',
-      ...switches.map((s) => `  Shift+${s.key}  ${s.label}`),
-    ].join('\n'),
-  );
+/**
+ * Puts the switches in the card of actions of the standard UI. They show what they read from the
+ * draw instance and the map, which the card reads again after each press and on the events that
+ * change it, also when code or another control changes it
+ */
+export function addSwitches(ui: DrawUI, draw: Draw, map: maplibregl.Map, ja: boolean): void {
+  for (const action of createSwitches(draw, map, ja)) ui.actions.add(action);
+  const refresh = () => ui.actions.refresh();
+  for (const event of [
+    'readOnly.changed',
+    'interactionLock.changed',
+    'layer.created',
+    'layer.deleted',
+    'dataset.added',
+    'dataset.removed',
+  ] as const) {
+    draw.on(event, refresh);
+  }
+  map.on('terrain', refresh);
 }
 
 /** The terrain of the map, from the elevation tiles of the examples, tilted to be seen */

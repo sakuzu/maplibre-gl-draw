@@ -5,8 +5,9 @@ aside: false
 # Read-only viewer
 
 A page that shows a drawing to look at, not to edit: the user selects a
-feature and reads its attributes. Four keys switch apart the four ways
-of stopping edits, and show what each of them stops.
+feature and reads its attributes. Four switches, in the card of actions
+at the bottom left, switch apart the four ways of stopping edits, and
+show what each of them stops.
 
 ```example
 read-only-viewer
@@ -20,24 +21,29 @@ nothing. The legend tab on the left shows the colors of the uses of the
 blocks.
 
 The page opens read-only, with the three other states off. The switches
-are keys, listed in the browser console as the page opens and left alone
-while a field of the panels has the keyboard; each logs its new state.
+are in the card of actions at the bottom left of the map, each with its
+key: a press on the switch and its key both turn it on or off, `?` lists
+the keys, and a key is left alone while a field of the panels has the
+keyboard. Each logs its new state in the browser console, and the lock
+and the eye of the layer panel show in the switches too.
 
-| Keys | Switch | What it stops |
+| Action | Key | What it does |
 | --- | --- | --- |
-| `R` | Read-only | Every write, by the user or by code |
-| `K` | The interaction lock | The gestures of the user alone |
-| `B` | The lock of the Blocks layer | Every change to its features |
-| `H` | Hiding the blocks on this page | Nothing, and it saves nothing |
+| Read-only | `R` | Stops every write, by the user or by code |
+| Interaction lock | `K` | Stops the gestures of the user alone |
+| Lock Blocks | `B` | Stops every change to the features of Blocks |
+| Hide Blocks | `H` | Hides the blocks on this page, and saves nothing |
 
 Under read-only, the tools of the toolbar still start, but what they
-draw is not kept, and `B` is refused, since locking a layer is a write
-too. Press `R` to make the drawing writable, then `K`: the tools no
-longer start and nothing can be moved, while a click still selects and
-code can still write. Press `K` again and `B`: the blocks can be
-selected but not moved or changed, and the stops can. `H` hides the
-blocks on this page, under read-only too; the layer stays visible in the
-document, so the next visit, or another viewer, still sees them.
+draw is not kept, and Lock Blocks is refused, since locking a layer is a
+write too: the switch stays off. Turn Read-only off to make the drawing
+writable, then turn the interaction lock on: the tools no longer start
+and nothing can be moved, while a click still selects and code can still
+write. Turn the interaction lock off and Lock Blocks on: the blocks can
+be selected but not moved or changed, and the stops can. Hide Blocks
+hides the blocks on this page, under read-only too; the layer stays
+visible in the document, so the next visit, or another viewer, still
+sees them.
 
 ## Code
 
@@ -50,7 +56,10 @@ is read-only, the inspector disables every field it shows. The four
 switches (5) are `setReadOnly`, `setInteractionLocked`,
 `layers.update` with `locked`, which returns `null` when it is refused,
 and `draw.hidden`, which takes the ID of a layer, a group or a feature.
-The keys (6) belong to the page.
+They are actions of the standard UI (6), added with `ui.actions.add`:
+each names its key and a `checked` that the card reads again after each
+press, and on `ui.actions.refresh()`, which the page calls on the events
+of core.
 
 ::: code-group
 <<< @/../examples/read-only-viewer/main.ts

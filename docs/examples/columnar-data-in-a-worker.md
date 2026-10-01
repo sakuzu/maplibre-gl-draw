@@ -29,7 +29,9 @@ its row is logged, with values read from the columns. As in
 [Datasets](datasets.md), the rows are shown, not edited, so the panel on
 the right stays closed.
 
-Press `M`: the Worker makes 1,000,000 points over the wider Tokyo area,
+Turn on A million points, in the card of actions at the bottom left (or
+press its key `M`): the Worker makes 1,000,000 points over the wider
+Tokyo area,
 each a trip that starts there, straight into the typed arrays of a table
 in the layout of GeoArrow, prepares the table and moves its arrays to
 the page. A second dataset draws them, colored by how the trip is made:
@@ -41,14 +43,17 @@ the arrays are (88 MB). Where the browser tells the size of the heap of
 JavaScript, the console gives it before and after: it does not grow, as
 the rows add no object to it. Zoom out to see them all; the pieces of
 the dataset are sent to the GPU a few at a time, so they fill in like
-tiles arriving. Click a point: its row is logged. Press `M` again to
+tiles arriving. Click a point: its row is logged. Turn the switch off to
 remove them.
 
-## Keys
+## Actions
 
-| Key | What it does |
-| --- | --- |
-| `M` | Loads the 1,000,000 points from the Worker, and removes them |
+The switch is in the card of actions at the bottom left of the map, with
+its key, which `?` lists:
+
+| Action | Key | What it does |
+| --- | --- | --- |
+| A million points | `M` | Makes 1,000,000 points in the Worker, or drops them |
 
 ## Code
 
@@ -72,7 +77,8 @@ points (data.ts): their coordinates in one `Float64Array`, the kind as a
 dictionary of `Uint8Array` codes and the minutes in a `Uint8Array`, and
 prepares and sends it the same way. `draw.datasets.add` takes the
 prepared table as `table`, with a categorical rule on `kind`, and
-`draw.datasets.remove` removes it (5).
+`draw.datasets.remove` removes it, from a switch the page adds to the
+standard UI with `ui.actions.add` (5).
 
 ::: code-group
 <<< @/../examples/columnar-data-in-a-worker/main.ts

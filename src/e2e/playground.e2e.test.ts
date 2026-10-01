@@ -3,7 +3,8 @@
 
 /**
  * End-to-end test of the playground: the page opens on the overview scene with the standard UI
- * and its added tools, `?plain` opens it empty, and neither throws an error
+ * and its added tools, `?plain` opens it empty, the switches in the card of actions work by a
+ * press and by their keys, and nothing throws an error
  *
  * The playground is built with its own vite configuration (in memory, the library from its
  * sources and the standard UI from ui/dist/) and served to headless Chromium from that build.
@@ -196,6 +197,56 @@ describe('the playground', () => {
     });
     expect(drawing).toEqual({ features: 0, layers: 1, showcase: null });
     await page.getByRole('button', { name: 'Stamp', exact: true }).waitFor();
+    await context.close();
+    expect(errors).toEqual([]);
+  });
+
+  it('has its switches in the card of actions, which a press and Shift with a letter run, and which show changes made by code', {
+    timeout: 60_000,
+  }, async () => {
+    const { page, context, errors } = await open('&plain');
+    const card = page.locator('.mgd-ui [data-role="actions"]');
+    const checked = (label: string) =>
+      card.getByRole('switch', { name: label, exact: true }).isChecked();
+    const state = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return { readOnly: draw.isReadOnly(), locked: draw.isInteractionLocked() };
+      });
+    expect(
+      await card.locator('[data-action]').evaluateAll((rows) => rows.map((r) => r.dataset.action)),
+    ).toEqual(['terrain', 'cells', 'read-only', 'interaction-lock', 'big', 'save', 'open']);
+
+    // A press on the switch
+    await card.getByText('Read-only', { exact: true }).click();
+    await settle(page);
+    expect(await state()).toEqual({ readOnly: true, locked: false });
+    expect(await checked('Read-only')).toBe(true);
+
+    // Shift with its letter
+    await page.mouse.move(600, 300);
+    await page.keyboard.press('Shift+K');
+    await settle(page);
+    expect(await state()).toEqual({ readOnly: true, locked: true });
+    expect(await checked('Interaction lock')).toBe(true);
+
+    // A change made by code shows too
+    await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.setReadOnly(false);
+      draw.setInteractionLocked(false);
+    });
+    await settle(page);
+    expect(await checked('Read-only')).toBe(false);
+    expect(await checked('Interaction lock')).toBe(false);
+
+    // The dataset of 10,000 cells comes and goes
+    await card.getByText('10,000 cells', { exact: true }).click();
+    await settle(page);
+    expect(
+      await page.evaluate(() => !!(window as unknown as E2EWindow).draw.datasets.get('cells')),
+    ).toBe(true);
+    expect(await checked('10,000 cells')).toBe(true);
     await context.close();
     expect(errors).toEqual([]);
   });

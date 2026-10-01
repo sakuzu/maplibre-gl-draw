@@ -4,8 +4,9 @@
 // plugins: extending the drawing with a plugin, and the standard UI with its tool.
 // The plugin (stamp.ts) adds a mode that puts stars, listens to the creations and offers a
 // count. The page adds a tool for the mode to the toolbar, and a section to the panel on the
-// right for the stars: their state, planned or done, which also sets their color. The U key
-// removes the plugin with its tool and its section, and adds them again.
+// right for the stars: their state, planned or done, which also sets their color. A switch in the
+// card of actions at the bottom left, with the key U, removes the plugin with its tool and its
+// section, and adds them again.
 
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -115,20 +116,19 @@ draw.on('mode.changed', ({ mode }) => {
   console.log(`Mode ${mode}; ${count} stamps so far`);
 });
 
-// 8. The key of the page, listed in the console as it opens. A key typed into a field of the
-// panels is left alone, and so is one held with a modifier
-console.info(
-  'The keys of this page:\n  U  Remove the plugin with its tool and its section, or add them',
-);
-window.addEventListener('keydown', (event) => {
-  const typing =
-    event.target instanceof Element &&
-    event.target.closest('input, textarea, select, [contenteditable]') !== null;
-  if (typing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.key.toLowerCase() !== 'u') return;
-  if (draw.extensions.plugins.has('stamp')) removeStamp();
-  else addStamp();
-  console.info(`Stamp plugin: ${draw.extensions.plugins.has('stamp') ? 'added' : 'removed'}`);
+// 8. The switch in the card of actions of the standard UI, with its key U (listed with ?, and
+// left alone while a field of the panels has the keyboard). It shows whether the plugin is added
+ui.actions.add({
+  id: 'stamp-plugin',
+  label: locale === 'ja' ? 'スタンプのプラグイン' : 'Stamp plugin',
+  kind: 'toggle',
+  shortcut: 'U',
+  run: () => {
+    if (draw.extensions.plugins.has('stamp')) removeStamp();
+    else addStamp();
+    console.info(`Stamp plugin: ${draw.extensions.plugins.has('stamp') ? 'added' : 'removed'}`);
+  },
+  checked: () => draw.extensions.plugins.has('stamp'),
 });
 
 // For the browser console and the end-to-end tests

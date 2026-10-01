@@ -13,24 +13,24 @@ save-and-load
 
 The page opens with a GeoJSON file of five features. Four are added to
 the drawing; the fifth, a line of a single position, is left out, and the
-browser console says why. The page has no buttons of its own: its
-switches are keys, listed in the console as it opens and left alone while
-a field of the panels has the keyboard.
+browser console says why. Its buttons are in the card of actions at the
+bottom left of the map, each with its key: `?` lists the keys, and a key
+is left alone while a field of the panels has the keyboard.
 
-| Keys | Does |
-| --- | --- |
-| `S` | Save the whole document in this browser, in the format of the library |
-| `O` | Load the saved document in place of the drawing |
-| `D` | Download the document in the format of the library |
-| `G` | Download the features as GeoJSON |
-| `B` | Open a file from the disk |
+| Action | Key | What it does |
+| --- | --- | --- |
+| Save | `S` | Saves the document in this browser, in the library's format |
+| Load | `O` | Loads the saved document in place of the drawing |
+| Download | `D` | Downloads the document in the format of the library |
+| Download GeoJSON | `G` | Downloads the features as GeoJSON |
+| Open a file | `B` | Opens a file from the disk |
 
-Change the drawing and press `S`; then press `O` to load it back, or
-reload the page, which opens with it. `D` and `G` save the same drawing
-as files, named after its title. `B` opens the file chooser of the
-browser; a GeoJSON file, a saved document or an image chosen there is
-loaded as a dropped one would be. Drop such a file on the map to load it
-there; an image is placed where it is dropped.
+Change the drawing and press Save; then press Load to load it back, or
+reload the page, which opens with it. Download and Download GeoJSON save
+the same drawing as files, named after its title. Open a file opens the
+file chooser of the browser; a GeoJSON file, a saved document or an
+image chosen there is loaded as a dropped one would be. Drop such a file
+on the map to load it there; an image is placed where it is dropped.
 
 ## Code
 
@@ -40,9 +40,10 @@ there; an image is placed where it is dropped.
 groups and their order, and `draw.document.toGeoJSON` the features alone
 (3). A document of the library replaces the drawing as it loads (4). A
 download is a `Blob` of the text and a link that names the file (5), and
-a file from the disk comes through an input made when `B` is pressed (6).
-The keys (7) and the drop (8) belong to the page: the library leaves them
-to the application.
+a file from the disk comes through an input made when Open a file is
+pressed (6). The buttons are actions of the standard UI, added with
+`ui.actions.add` with their keys (7). The drop (8) belongs to the page:
+the library leaves it to the application.
 
 ::: code-group
 <<< @/../examples/save-and-load/main.ts

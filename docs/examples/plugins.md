@@ -19,17 +19,18 @@ whether it is planned or done, and a change there also changes its
 color. The console logs the count the plugin keeps after each stamp and
 after each change of tool.
 
-The page has one key of its own, listed in the browser console as the
-page opens and left alone while a field of the panels has the keyboard:
+The page has one action of its own, a switch in the card of actions at
+the bottom left of the map. Its key is listed with `?` and left alone
+while a field of the panels has the keyboard:
 
-| Keys | Switch |
-| --- | --- |
-| `U` | Remove the plugin with its tool and its section, or add them again |
+| Action | Key | What it does |
+| --- | --- | --- |
+| Stamp plugin | `U` | Removes or adds the plugin, its tool and its section |
 
-Press `U`: the star leaves the toolbar, the Stamp section leaves the
-panel, and the mode `stamp` is no longer registered, so
+Turn the switch off: the star leaves the toolbar, the Stamp section
+leaves the panel, and the mode `stamp` is no longer registered, so
 `draw.setMode('stamp')` throws `not-found`. The stars stay, as features
-of the drawing with their state and their color. Press `U` again: the
+of the drawing with their state and their color. Turn it on again: the
 plugin, its tool and its section come back, and the plugin counts from
 zero.
 
@@ -50,7 +51,9 @@ lists, and gives each change to `onchange`, which writes it with
 section belongs to, so the page removes them itself with
 `ui.tools.remove` and `ui.inspector.sections.remove` as it removes the
 plugin (5). The page asks the plugin for its count by name with
-`plugins.getApi` (7).
+`plugins.getApi` (7). The switch (8) is a third opening,
+`ui.actions.add`: a row of the card of actions with its key, whose state
+is `checked`, read again after each press.
 
 ::: code-group
 <<< @/../examples/plugins/main.ts

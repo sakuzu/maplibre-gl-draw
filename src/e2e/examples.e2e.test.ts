@@ -252,6 +252,22 @@ async function loaded(page: Page): Promise<void> {
   await page.evaluate(() => (window as unknown as { loaded: Promise<unknown> }).loaded);
 }
 
+/** The card of the actions of the standard UI, at the bottom left of the map */
+function actionCard(page: Page) {
+  return page.locator('.mgd-ui [data-role="actions"]');
+}
+
+/** Presses the action of the card with this label, a switch or a button, as the user would */
+async function pressAction(page: Page, label: string): Promise<void> {
+  await actionCard(page).getByText(label, { exact: true }).click();
+  await settle(page);
+}
+
+/** Whether the switch of the card with this label is on */
+function actionChecked(page: Page, label: string): Promise<boolean> {
+  return actionCard(page).getByRole('switch', { name: label, exact: true }).isChecked();
+}
+
 /** Records the next `dataset.clicked` of the page in `window.clickedDataset` */
 async function recordDatasetClick(page: Page): Promise<() => Promise<string | null>> {
   await page.evaluate(() => {
@@ -427,7 +443,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('style-rules-and-legend opens on the graduated rule, R switches it, and a height typed in the Attributes tab recolors the building', {
+  it('style-rules-and-legend opens on the graduated rule, R and the card of actions switch it, and a height typed in the Attributes tab recolors the building', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('style-rules-and-legend');
@@ -484,6 +500,8 @@ describe('the examples', () => {
     await expect
       .poll(() => legend.innerText(), { timeout: browserTimeout(5_000) })
       .toContain('commercial');
+    await pressAction(page, 'Next rule');
+    await expect.poll(ruleKind, { timeout: browserTimeout(5_000) }).toBe('continuous');
     await close();
   });
 
@@ -578,7 +596,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('save-and-load leaves out the unusable feature, saves with S and loads it back with O', {
+  it('save-and-load leaves out the unusable feature, saves with S and loads it back from the card of actions', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('save-and-load');
@@ -604,25 +622,25 @@ describe('the examples', () => {
       draw.features.deleteMany(draw.features.list().map((f) => f.id));
     });
     expect(await featureCount(page)).toBe(0);
-    await page.keyboard.press('o');
+    await pressAction(page, 'Load');
     await expect.poll(() => featureCount(page), { timeout: browserTimeout(5_000) }).toBe(5);
     await close();
   });
 
-  it('save-and-load downloads both formats with D and G, and opens a file with B', {
+  it('save-and-load downloads both formats and opens a file from the card of actions', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('save-and-load');
     await loaded(page);
     await click(page, at(-300, -250));
 
-    // D offers the document in the format of the library, G its features as GeoJSON
-    for (const [key, name] of [
-      ['d', 'drawing.maplibre-gl-draw.json'],
-      ['g', 'drawing.geojson'],
+    // Download offers the document in the format of the library, Download GeoJSON its features
+    for (const [label, name] of [
+      ['Download', 'drawing.maplibre-gl-draw.json'],
+      ['Download GeoJSON', 'drawing.geojson'],
     ] as const) {
       const download = page.waitForEvent('download');
-      await page.keyboard.press(key);
+      await pressAction(page, label);
       const file = await download;
       expect(file.suggestedFilename()).toBe(name);
       const json = JSON.parse(readFileSync((await file.path()) as string, 'utf8')) as {
@@ -631,13 +649,13 @@ describe('the examples', () => {
         features: unknown[];
       };
       expect(json.features).toHaveLength(4);
-      if (key === 'd') expect(json.version).toBe('3.0.0');
+      if (label === 'Download') expect(json.version).toBe('3.0.0');
       else expect(json.type).toBe('FeatureCollection');
     }
 
-    // B opens the chooser of the browser, and the file chosen is loaded into the drawing
+    // Open a file opens the chooser of the browser, and the file chosen is loaded into the drawing
     const chooser = page.waitForEvent('filechooser');
-    await page.keyboard.press('b');
+    await pressAction(page, 'Open a file');
     const point = { type: 'Point', coordinates: [139.774, 35.675] };
     await (await chooser).setFiles({
       name: 'one.geojson',
@@ -787,7 +805,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the generated cells and points and the sample data between and over two layers of the drawing, colors the buildings by area, thins the points until T, lists the rules in the Legend tab and reports a click', {
+  it('datasets shows the generated cells and points and the sample data between and over two layers of the drawing, colors the buildings by area, thins the points until T and again from the card of actions, lists the rules in the Legend tab and reports a click', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const count = (name: string): number =>
@@ -858,7 +876,6 @@ describe('the examples', () => {
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
-    expect(logs).toContain('Keys: T turns the thinning of the points off and on');
     expect(logs.some((line) => /^1,000,000 points made in \d+ ms/.test(line))).toBe(true);
     expect(
       logs.some((line) =>
@@ -868,7 +885,8 @@ describe('the examples', () => {
       ),
     ).toBe(true);
     // The cells, all given at once, and the points the provider handed over for the view: the
-    // thinning draws a part of them, and T draws them all
+    // thinning draws a part of them, and T draws them all; the switch in the card of actions
+    // thins them again
     const stats = (id: string) =>
       page.evaluate(
         (datasetId) =>
@@ -899,7 +917,9 @@ describe('the examples', () => {
         timeout: browserTimeout(5_000),
       })
       .toBe(true);
-    await page.keyboard.press('t');
+    expect(await actionChecked(page, 'Thin the points')).toBe(false);
+    await pressAction(page, 'Thin the points');
+    expect(await actionChecked(page, 'Thin the points')).toBe(true);
     await expect
       .poll(async () => (await stats('points'))?.visible, { timeout: browserTimeout(5_000) })
       .toBe(thinned?.visible);
@@ -1005,7 +1025,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click, and M adds and removes a million points', {
+  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click, and M and the card of actions add and remove a million points', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const file = readFileSync(join(EXAMPLES, 'public/data/tokyo-buildings.parquet'));
@@ -1033,10 +1053,9 @@ describe('the examples', () => {
     expect(Number.isFinite(result.firstFrameMs)).toBe(true);
     expect(Object.keys(result.times).sort()).toEqual(['fetch', 'prepare', 'read', 'table']);
     expect(Object.values(result.times).every(Number.isFinite)).toBe(true);
-    // The console states the keys, then the number of rows and the time of each step
-    expect(infos).toHaveLength(2);
-    expect(infos[0]).toBe('Keys: M loads 1,000,000 points from the Worker, and removes them');
-    expect(infos[1]).toMatch(
+    // The console states the number of rows and the time of each step
+    expect(infos).toHaveLength(1);
+    expect(infos[0]).toMatch(
       new RegExp(
         `^${rows.toLocaleString('en')} building footprints read from a GeoParquet file in a Worker and drawn from its columns: \\d+ ms to fetch the file, \\d+ ms to read the columns, \\d+ ms to build the table, \\d+ ms to prepare it, and \\d+ ms from the request to the first frame that draws them$`,
       ),
@@ -1098,8 +1117,8 @@ describe('the examples', () => {
           null,
       );
     await expect.poll(million, { timeout: browserTimeout(30_000) }).toBe(1_000_000);
-    await expect.poll(() => infos.length, { timeout: browserTimeout(10_000) }).toBe(3);
-    expect(infos[2]).toMatch(
+    await expect.poll(() => infos.length, { timeout: browserTimeout(10_000) }).toBe(2);
+    expect(infos[1]).toMatch(
       /^1,000,000 points made in a Worker as typed arrays: [\d,]+ ms to build the table, [\d,]+ ms to prepare it, [\d,]+ ms to transfer it without a copy, and [\d,]+ ms from handing it to the dataset to the first frame that draws them; the arrays hold \d+ MB( \(JavaScript heap \d+ MB before, \d+ MB after\))?$/,
     );
     // A click on one of them, alone at zoom 18, reports its row
@@ -1114,9 +1133,11 @@ describe('the examples', () => {
     const clickedPoint = await recordDatasetClick(page);
     await click(page, await pageOf(page, point));
     await expect.poll(clickedPoint, { timeout: browserTimeout(5_000) }).toBe('million');
-    // M again removes them
-    await page.keyboard.press('m');
+    // The switch in the card of actions shows them, and removes them
+    expect(await actionChecked(page, 'A million points')).toBe(true);
+    await pressAction(page, 'A million points');
     await expect.poll(million, { timeout: browserTimeout(5_000) }).toBeNull();
+    expect(await actionChecked(page, 'A million points')).toBe(false);
     await close();
   });
 
@@ -1139,7 +1160,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('read-only-viewer switches read-only with R, the interaction lock with K, the lock of the Blocks layer with B and local hiding with H', {
+  it('read-only-viewer switches read-only, the interaction lock, the lock of the Blocks layer and local hiding from the card of actions, and the interaction lock with K', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('read-only-viewer');
@@ -1196,18 +1217,25 @@ describe('the examples', () => {
     await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
     expect(await featureCount(page)).toBe(8);
     await page.getByRole('button', { name: 'Select', exact: true }).click();
-    // Locking a layer is a write, so read-only refuses it
-    await press('b');
+    // The switches of the card show the states
+    expect(await actionChecked(page, 'Read-only')).toBe(true);
+    expect(await actionChecked(page, 'Interaction lock')).toBe(false);
+    // Locking a layer is a write, so read-only refuses it, and its switch stays off
+    await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(false);
+    expect(await actionChecked(page, 'Lock Blocks')).toBe(false);
 
-    // R: writable again, by code too
-    await press('r');
+    // Read-only off: writable again, by code too
+    await pressAction(page, 'Read-only');
     expect((await state()).readOnly).toBe(false);
+    expect(await actionChecked(page, 'Read-only')).toBe(false);
     expect(await rename()).toBe(true);
 
-    // K: the lock stops the tools of the user; code still writes
+    // K, the key of the interaction lock: it stops the tools of the user; code still writes
+    await page.mouse.move(CENTER.x, CENTER.y);
     await press('k');
     expect((await state()).interactionLocked).toBe(true);
+    expect(await actionChecked(page, 'Interaction lock')).toBe(true);
     await page.getByRole('button', { name: 'Polygon', exact: true }).click();
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).not.toBe(
       'draw_polygon',
@@ -1215,7 +1243,7 @@ describe('the examples', () => {
     await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
     expect(await featureCount(page)).toBe(8);
     expect(await rename()).toBe(true);
-    await press('k');
+    await pressAction(page, 'Interaction lock');
     expect((await state()).interactionLocked).toBe(false);
 
     // B: the locked layer keeps its features where they are; unlocked, a drag moves them
@@ -1227,22 +1255,25 @@ describe('the examples', () => {
       inside,
     );
     await settle(page);
-    await press('b');
+    await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(true);
+    expect(await actionChecked(page, 'Lock Blocks')).toBe(true);
     await click(page, at(0, 0));
     await drag(page, at(0, 0), at(-50, 40));
     expect(await geometryOf(tower.id)).toEqual(tower.geometry);
-    await press('b');
+    await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(false);
     await click(page, at(0, 0));
     await drag(page, at(0, 0), at(-50, 40));
     expect(await geometryOf(tower.id)).not.toEqual(tower.geometry);
 
-    // H: hidden on this page only; the layer stays visible in the document, under read-only too
-    await press('r');
-    await press('h');
+    // Hide Blocks: hidden on this page only; the layer stays visible in the document, under
+    // read-only too
+    await pressAction(page, 'Read-only');
+    await pressAction(page, 'Hide Blocks');
     expect(await state()).toMatchObject({ readOnly: true, hidden: true, visible: true });
-    await press('h');
+    expect(await actionChecked(page, 'Hide Blocks')).toBe(true);
+    await pressAction(page, 'Hide Blocks');
     expect((await state()).hidden).toBe(false);
     await close();
   });
@@ -1265,7 +1296,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('plugins removes the plugin with its mode, its tool and its section with U, and adds them back', {
+  it('plugins removes the plugin with its mode, its tool and its section from the card of actions, and adds them back with U', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('plugins');
@@ -1296,15 +1327,19 @@ describe('the examples', () => {
     expect(await stampTool.count()).toBe(1);
     expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
 
-    await press('u');
+    expect(await actionChecked(page, 'Stamp plugin')).toBe(true);
+    await pressAction(page, 'Stamp plugin');
     expect(await extension()).toEqual({ plugin: false, mode: false, error: 'not-found' });
+    expect(await actionChecked(page, 'Stamp plugin')).toBe(false);
     expect(await stampTool.count()).toBe(0);
     expect(await section.count()).toBe(0);
     // The stars stay in the drawing
     expect(await featureCount(page)).toBe(1);
 
+    await page.mouse.move(CENTER.x, CENTER.y);
     await press('u');
     expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
+    expect(await actionChecked(page, 'Stamp plugin')).toBe(true);
     expect(await stampTool.count()).toBe(1);
     await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
@@ -1348,7 +1383,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('custom-feature-types unregisters the type with U, and registers it again', {
+  it('custom-feature-types unregisters the type from the card of actions, and registers it again with U', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('custom-feature-types');
@@ -1385,8 +1420,10 @@ describe('the examples', () => {
 
     // Without the type the routes stay in the data, but they are not drawn and a click passes
     // through them
-    await press('u');
+    expect(await actionChecked(page, 'Route type')).toBe(true);
+    await pressAction(page, 'Route type');
     expect(await state()).toMatchObject({ registered: false, count: 2 });
+    expect(await actionChecked(page, 'Route type')).toBe(false);
     expect(await blue()).toBe(false);
     expect(await clickHill()).toEqual([]);
     // A selection box still takes one, by the fallback test of the library on its positions
@@ -1401,8 +1438,9 @@ describe('the examples', () => {
     await page.keyboard.up('Shift');
     expect((await state()).selected).toEqual([hill.id]);
 
-    // Registered again, they come back as they were
+    // Registered again with the key, they come back as they were
     await press('u');
+    expect(await actionChecked(page, 'Route type')).toBe(true);
     expect(await state()).toMatchObject({ registered: true, count: 2 });
     expect(await blue()).toBe(true);
     expect(await clickHill()).toEqual([hill.id]);
@@ -1500,7 +1538,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('zoom-and-scale keeps the reference zoom of each feature, and Z switches scaleWithZoom', {
+  it('zoom-and-scale keeps the reference zoom of each feature, and Z and the card of actions switch scaleWithZoom', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('zoom-and-scale');
@@ -1543,6 +1581,7 @@ describe('the examples', () => {
     const after = await state();
     expect(after).toMatchObject({ option: false, active: 'fixed' });
     expect(after.names).toContain('→ Fixed on screen');
+    expect(await actionChecked(page, 'Scale with zoom')).toBe(false);
 
     // The tools then write no reference zoom: a line drawn goes into the second layer without one
     await page.getByRole('button', { name: 'Line', exact: true }).click();
@@ -1553,13 +1592,14 @@ describe('the examples', () => {
     expect(Object.keys(drawn.fixed)).toHaveLength(4);
     expect(Object.values(drawn.fixed)).toEqual([undefined, undefined, undefined, undefined]);
 
-    // And Z turns it back on
+    // And the switch in the card turns it back on
     await page.keyboard.press('Escape');
-    await page.keyboard.press('z');
+    await pressAction(page, 'Scale with zoom');
     expect(await state()).toMatchObject({ option: true, active: 'scaled' });
+    expect(await actionChecked(page, 'Scale with zoom')).toBe(true);
     await close();
   });
-  it('editing-shapes moves a shared vertex in both parcels, then in one after T', {
+  it('editing-shapes moves a shared vertex in both parcels, then in one after T, and the card of actions switches it back', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('editing-shapes');
@@ -1606,6 +1646,15 @@ describe('the examples', () => {
     const after = await parcels();
     expect(has(after.west, shared.lower)).toBe(false);
     expect(after.east).toEqual(moved.east);
+
+    // The switch in the card of actions shows the option off, and turns it on again
+    expect(await actionChecked(page, 'Move shared vertices')).toBe(false);
+    await pressAction(page, 'Move shared vertices');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.options.get().topology?.sharedVertexDrag,
+      ),
+    ).toBe(true);
 
     // A click on the area with a hole selects it; its geometry has the outer ring and the hole,
     // and the hole gets vertex handles of its own (their white fill)

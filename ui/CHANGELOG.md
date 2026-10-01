@@ -8,8 +8,9 @@ follows semantic versioning.
 ## [Unreleased]
 
 These changes will be released as 1.1.0: they add the basemaps, the
-datasets in the layer panel, the limit on the features it lists and the
-snapping settings, and change the layer panel and the inspector.
+datasets in the layer panel, the limit on the features it lists, the
+snapping settings and the actions of the application, and change the
+layer panel and the inspector.
 
 - Added: the datasets are rows of the layer panel, in their place in
   the stack: those of `above-store` in front of every layer, those of
@@ -106,6 +107,20 @@ snapping settings, and change the layer panel and the inspector.
   dataset (the reasons `style` and `rows`). The word `noLegend` now says
   that no layer or dataset has a style rule. It needs core with
   `Dataset.getStyleRule()`.
+- Added: the actions of the application, rows of a card at the bottom
+  left of the map, above maplibre-gl's scale: `ui.actions` (`add`,
+  `remove`, `list`, `refresh`) and the options `actions` and
+  `actionsTitle` of `createDrawUI`. An action (`ActionSpec`) is a switch
+  (`kind: 'toggle'`), which shows what `checked` returns, or a button
+  (`kind: 'action'`), and its `shortcut` is a key of the interface,
+  listed with `?` under the title of the card. `run` is called by a
+  press and by the key; `checked` and `disabled` are read again after
+  each run and on `refresh()`, and `hint` is a caption under the row. A
+  key the interface or another action uses is refused with an error, and
+  `tools.add` refuses the key of an action. The card folds into one
+  button from its head, starts folded on a map narrower than 48rem, and
+  stands above the toolbar where it would reach it across; the layer
+  panel floating at the left ends above it. New word: `actions`.
 
 ## [1.0.0] - 2026-10-01
 

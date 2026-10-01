@@ -3,10 +3,11 @@
 
 // read-only-viewer: a page that shows a drawing to look at, and the four ways to stop edits.
 // The drawing is loaded, then made read-only. A click on a feature selects it, and the panel on
-// the right shows its name, its measurements and its attributes, every field disabled. Four keys
-// switch the four states apart: R read-only, which refuses every write; K the interaction lock,
-// which stops only the gestures of the user; B the lock of the Blocks layer, which protects its
-// features; and H hides the blocks on this page only, writing nothing.
+// the right shows its name, its measurements and its attributes, every field disabled. Four
+// switches in the card of actions at the bottom left, each with a key, switch the four states
+// apart: R read-only, which refuses every write; K the interaction lock, which stops only the
+// gestures of the user; B the lock of the Blocks layer, which protects its features; and H hides
+// the blocks on this page only, writing nothing.
 
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -100,27 +101,57 @@ function toggleHidden(): void {
   console.info(`Blocks hidden on this page: ${draw.hidden.has(id)}`);
 }
 
-// 6. The keys of the page, listed in the console as it opens. A key typed into a field of the
-// panels is left alone, and so is one held with a modifier
-const KEYS: Record<string, { label: string; run: () => void }> = {
-  r: { label: 'Read-only on and off', run: toggleReadOnly },
-  k: { label: 'The interaction lock on and off', run: toggleInteractionLock },
-  b: { label: 'Lock the Blocks layer, or unlock it', run: toggleLayerLock },
-  h: { label: 'Hide the blocks on this page, or show them', run: toggleHidden },
+// 6. The switches in the card of actions of the standard UI, each with its key (listed with ?,
+// and left alone while a field of the panels has the keyboard). A switch shows what `checked`
+// returns: the card reads it again after each press and on `refresh()`, which follows the events
+// of core, so that the lock and the eye of the layer panel show here too
+const ja = locale === 'ja';
+const blocksLocked = () => draw.layers.get(blocksId() ?? '')?.locked === true;
+const blocksHidden = () => {
+  const id = blocksId();
+  return id !== undefined && draw.hidden.has(id);
 };
-console.info(
-  [
-    'The keys of this page:',
-    ...Object.entries(KEYS).map(([k, { label }]) => `  ${k.toUpperCase()}  ${label}`),
-  ].join('\n'),
-);
-window.addEventListener('keydown', (event) => {
-  const typing =
-    event.target instanceof Element &&
-    event.target.closest('input, textarea, select, [contenteditable]') !== null;
-  if (typing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-  KEYS[event.key.toLowerCase()]?.run();
+ui.actions.add({
+  id: 'read-only',
+  label: ja ? '読み取り専用' : 'Read-only',
+  kind: 'toggle',
+  shortcut: 'R',
+  run: toggleReadOnly,
+  checked: () => draw.isReadOnly(),
 });
+ui.actions.add({
+  id: 'interaction-lock',
+  label: ja ? '操作の錠' : 'Interaction lock',
+  kind: 'toggle',
+  shortcut: 'K',
+  run: toggleInteractionLock,
+  checked: () => draw.isInteractionLocked(),
+});
+ui.actions.add({
+  id: 'lock-blocks',
+  label: ja ? 'Blocks をロック' : 'Lock Blocks',
+  kind: 'toggle',
+  shortcut: 'B',
+  run: toggleLayerLock,
+  checked: blocksLocked,
+});
+ui.actions.add({
+  id: 'hide-blocks',
+  label: ja ? 'Blocks を隠す' : 'Hide Blocks',
+  kind: 'toggle',
+  shortcut: 'H',
+  run: toggleHidden,
+  checked: blocksHidden,
+});
+for (const event of [
+  'readOnly.changed',
+  'interactionLock.changed',
+  'layer.created',
+  'layer.updated',
+  'hidden.changed',
+] as const) {
+  draw.on(event, () => ui.actions.refresh());
+}
 
 // 7. The selection still changes: a click on a feature shows it in the inspector
 draw.on('selection.changed', () => {

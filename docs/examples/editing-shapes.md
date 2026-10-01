@@ -19,8 +19,9 @@ each vertex and a smaller one halfway along each edge: drag a vertex to
 move it, or a midpoint to add a vertex there. Click a vertex to select
 it, Shift + click to add another, and Delete removes them. The two
 parcels share an edge: drag one of its ends and the vertex of the east
-parcel follows. Press `T` to switch that off and drag again, and the
-west parcel moves alone; the browser console logs the state. Below,
+parcel follows. Turn off the switch Move shared vertices, in the card of
+actions at the bottom left (or press its key `T`), and drag again: the
+west parcel moves alone, and the browser console logs the state. Below,
 select the courtyard, an area with a hole, and the islands, one feature
 of two parts, to see handles on every ring and every part.
 
@@ -28,7 +29,8 @@ of two parts, to see handles on every ring and every part.
 
 The option `topology.sharedVertexDrag` turns the shared vertices on
 when the instance is created (1), and `draw.options.update` switches it
-while it runs (5). The parcels list the very same positions for the ends
+while it runs, from a switch the page adds to the standard UI with
+`ui.actions.add` (5). The parcels list the very same positions for the ends
 of their edge, as a shared vertex is an exact match (2). A hole is the
 second ring of a `Polygon`, and the parts of a `MultiPolygon` are
 polygons of their own, each created with its geometry (2).
