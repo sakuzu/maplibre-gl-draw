@@ -442,8 +442,8 @@ function mountAlone(
 
 /**
  * Puts the layer panel alone in an element: the tree of the stack from the front (the layers,
- * their groups and their features, and the datasets), with the eye, the lock, renaming, dragging
- * and the add menu, and under it the basemap, the back of the stack, whose row opens the basemaps
+ * their groups and their features, and the datasets), with the eye, the lock, dragging and the
+ * add menu, and under it the basemap, the back of the stack, whose row opens the basemaps
  * of `options.basemaps` to choose from in the place of the panel's sections when there are two or
  * more. It fills `target`, which gives it its size and its scrolling.
  *

@@ -130,6 +130,19 @@ describe('createLayerPanel', () => {
     expect(fake.draw.features.update).toHaveBeenCalledWith('c', { locked: true });
   });
 
+  it('changes no name in the tree: neither a double click nor F2 opens a field', () => {
+    const fake = sample();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    for (const id of ['l1', 'g1', 'b']) {
+      row(fake.container, id).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      row(fake.container, id).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true }),
+      );
+      flushSync();
+      expect(fake.container.querySelector('input')).toBeNull();
+    }
+  });
+
   it('selects through selection.set, one type at a time', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
@@ -237,7 +250,7 @@ describe('the limit of the features of the layer panel', () => {
     expect(fake.draw.selection.clear).not.toHaveBeenCalled();
   });
 
-  it('keeps the eye, the lock, renaming and the active layer of a layer that counts', () => {
+  it('keeps the eye, the lock and the active layer of a layer that counts', () => {
     const fake = crowded();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
     rowButton(fake.container, 'l1', 'Hide').click();

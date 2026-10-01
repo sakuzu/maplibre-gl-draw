@@ -7,6 +7,10 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+- Removed: renaming in place in the layer panel (F2 or a double click on
+  a row), as in the reference layout. The names of layers, groups and
+  features are changed in the head of the inspector, which also ends a
+  defect: a locked row could still be renamed in the tree.
 - Removed: the pencil that marked the active layer (the layer drawn
   features go into) in the layer panel, as in the reference layout: the
   row of a layer looks the same whether it is active or not. Pressing a
@@ -29,8 +33,8 @@ follows semantic versioning.
   `layer-order` where `layers.getOrder()` places them among the layers,
   and those of `below-store` behind every layer. A row shows the ID of
   the dataset with a database mark and the number of its rows, and the
-  eye shows and hides it with `setVisible`. It has no lock, is not
-  renamed, and a press on it leaves the selection as it is. A
+  eye shows and hides it with `setVisible`. It has no lock, and a press
+  on it leaves the selection as it is. A
   `layer-order` dataset is dragged among the layers (`layers.reorder`
   with its ID); the others stay. The rows follow `dataset.added`,
   `dataset.removed`, `dataset.reordered` and the `changed` event of each

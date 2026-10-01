@@ -20,7 +20,6 @@
     type TreeNode,
     TreeRow,
   } from '@sakuzu/kata/svelte';
-  import type { Feature } from '@sakuzu/maplibre-gl-draw';
   import type { Snippet } from 'svelte';
   import type { BasemapControl } from '../basemaps.js';
   import { planMove } from '../layers/move.js';
@@ -48,19 +47,18 @@
   // It keeps nothing of the drawing. The nodes are built from draw again on document.changed,
   // hidden.changed, options.changed, dataset.added, dataset.removed, dataset.reordered and the
   // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.get(),
-  // read again on selection.changed. Every action
-  // calls the public API of draw: the eye `update({ visible })` (and shows again what this client
-  // hid) or a dataset's `setVisible`, the lock `update({ locked })`, renaming the name
-  // (`properties.name` for a feature), a drop `layers.reorder`, `groups.move` or `features.move`,
-  // a press `selection.set` (and `layers.setActive` for a layer), the add menu `layers.create` and
-  // `selection.group`.
+  // read again on selection.changed. Every action calls the public API of draw: the eye
+  // `update({ visible })` (and shows again what this client hid) or a dataset's `setVisible`, the
+  // lock `update({ locked })`, a drop `layers.reorder`, `groups.move` or `features.move`, a press
+  // `selection.set` (and `layers.setActive` for a layer), the add menu `layers.create` and
+  // `selection.group`. A name is not changed in the tree: the head of the inspector changes it.
   //
-  // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, it
-  // is not renamed, and a press on it does nothing (the selection stays). It is dragged among the
-  // layers when it is placed among them (`layer-order`); in front of or behind every layer it
-  // stays. A layer of more features than the limit lists none: its one child counts them, and has
-  // no eye, no lock and no grip, and a press on it does nothing. The eye and the
-  // lock are drawn here (LayerTree's `actions`), for each kind its own.
+  // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, and
+  // a press on it does nothing (the selection stays). It is dragged among the layers when it is
+  // placed among them (`layer-order`); in front of or behind every layer it stays. A layer of more
+  // features than the limit lists none: its one child counts them, and has no eye, no lock and no
+  // grip, and a press on it does nothing. The eye and the lock are drawn here (LayerTree's
+  // `actions`), for each kind its own.
   //
   // The panel is a Stack of two sections. The first, Stack, is the tree, with the add menu in its
   // head. The second, Basemap, is the back of the stack: one row, apart from the tree as it is no
@@ -242,21 +240,6 @@
     else if (kind === 'feature') draw.features.update(id, { locked });
   }
 
-  function onrename(id: string, value: string) {
-    const kind = kindOf(id);
-    const name = value.trim();
-    if (kind === 'feature') {
-      // An empty name removes it: the feature is named by its type again
-      const feature = index.get(id)?.node.data as Feature;
-      if ((feature.properties?.name ?? '') === name) return;
-      draw.features.update(id, { properties: { name: name === '' ? undefined : name } });
-      return;
-    }
-    if (name === '') return;
-    if (kind === 'layer') draw.layers.update(id, { name });
-    else if (kind === 'group') draw.groups.update(id, { name });
-  }
-
   function onmove(move: TreeMove) {
     const plan = planMove(move, nodes);
     if (!plan) return;
@@ -293,8 +276,7 @@
 {#snippet row(node: TreeNode, name: Snippet<[TreeNode]>)}
   {@const own = node as LayerTreeNode}
   {#if own.kind === 'dataset'}
-    <!-- Not renamed: the name is plain text. Placed in front of or behind every layer, it is not
-         dragged, and shows no grip -->
+    <!-- Placed in front of or behind every layer, it is not dragged, and shows no grip -->
     <span
       class="mark"
       role="img"
@@ -363,7 +345,6 @@
         bind:expanded={() => expanded, setExpanded}
         bind:selected={() => selected, () => {}}
         {onselect}
-        {onrename}
         onmove={reorder ? onmove : undefined}
         canDrop={canDropInto}
         {addMenu}

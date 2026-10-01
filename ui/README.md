@@ -122,27 +122,26 @@ leaves the map's padding alone.
 
 On the left, the layer panel and the legend share a panel, in two tabs.
 The layer panel has two sections, Stack and Basemap. Stack is the tree
-of the layers, their groups and their
-features, from the front, with the eye, the lock, renaming in place (F2
-or a double click), reordering by dragging and an add menu (a new layer,
+of the layers, their groups and their features, from the front, with
+the eye, the lock, reordering by dragging and an add menu (a new layer,
 a new group from the selected features). A feature is named by its
-`properties.name`, or by its type when it has none. Each row costs its
+`properties.name`, or by its type when it has none; names are changed
+in the head of the inspector, not in the tree. Each row costs its
 drawing, so a layer lists up to 1,000 features, those of its groups
 included: a layer that holds more lists none of them and shows their
 number instead, with a hint to select them on the map, and its own row
-works as before (the eye, the lock, renaming, the active layer).
-`features` sets the limit as a number, and `false` lists no features,
-only the groups. The datasets
-(`draw.datasets`) are rows of the stack too, in their place among the
-layers: those of `above-store` in front of every layer, those of
-`layer-order` where `layers.getOrder()` places them, and those of
+works as before (the eye, the lock, the active layer). `features` sets
+the limit as a number, and `false` lists no features, only the groups.
+The datasets (`draw.datasets`) are rows of the stack too, in their place
+among the layers: those of `above-store` in front of every layer, those
+of `layer-order` where `layers.getOrder()` places them, and those of
 `below-store` behind every layer. A dataset row shows its ID (core gives
 a dataset no name) and the number of its rows, with the eye
-(`setVisible`) and no lock; a press on it selects nothing, and it is
-dragged among the layers only when its order is `layer-order`. Basemap,
-under it, is the back of the stack (see [Basemaps](#basemaps)). The
-legend shows the rows of the style rule (`styleRule`) of each layer that
-has one.
+(`setVisible`) and no lock; a press on it leaves the selection as it is,
+and it is dragged among the layers only when its order is
+`layer-order`. Basemap, under it, is the back of the stack (see
+[Basemaps](#basemaps)). The legend shows the rows of the style rule
+(`styleRule`) of each layer that has one.
 Shift+L opens and closes the panel, and while it is closed a button at
 the top left of the map opens it again.
 
