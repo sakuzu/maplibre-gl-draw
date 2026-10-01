@@ -235,8 +235,8 @@ describe('the layer panel', () => {
     });
     if (!layer) throw new Error('the layer is missing');
 
-    // The layer, then its features from the front
-    const rows = panel.locator('[role="treeitem"]');
+    // The layer, then its features from the front (the rows of the stack: not the basemap)
+    const rows = panel.locator('[role="treeitem"][data-node]');
     await until(
       () => rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-node'))),
       [layer.id, polygon, line, point],
@@ -355,7 +355,7 @@ describe('the overlay', () => {
 });
 
 describe('the basemap row', () => {
-  it('opens the menu in the layer panel, and the drawing comes back on top of the one chosen', async () => {
+  it('opens the basemaps on the right, and the drawing comes back on top of the one chosen', async () => {
     page = await openPage(browser, site);
     // The interface again, with two basemaps: style objects, so nothing goes to the network
     await page.evaluate(() => {
@@ -385,20 +385,26 @@ describe('the basemap row', () => {
     );
     expect(drawLayers.length).toBeGreaterThan(0);
 
-    // The last row of the layer panel, under the tree, named by the current basemap
-    const row = page
-      .locator('[data-role="layer-panel"] > [data-role="basemap"]')
-      .getByRole('button');
-    expect((await row.innerText()).replace(/\s+/g, ' ').trim()).toBe('Basemap Paper');
-    expect(await row.evaluate((el) => el.closest('[role="tree"]'))).toBeNull();
-    await row.click();
-    await page.getByRole('menuitem', { name: 'Night' }).click();
+    // The one row of the last section of the layer panel, named by the current basemap
+    const row = page.locator('[data-role="layer-panel"] [role="treeitem"][data-role="basemap"]');
+    expect((await row.innerText()).replace(/\s+/g, ' ').trim()).toBe('Paper');
+    expect(
+      await row.evaluate((el) => el.closest('[role="tree"]')?.getAttribute('aria-label')),
+    ).toBe('Basemap');
+    await row.getByRole('button').click();
+    // On the right, in the place of the inspector
+    const chooser = page.locator('[data-region="right"] [data-role="basemap-panel"]');
+    await chooser.getByRole('button', { name: 'Night' }).click();
     // The new background, under the layers of the draw instance
     await until(layers, ['night-background', ...drawLayers]);
     expect(await page.evaluate(() => (window as unknown as E2EWindow).ui.getBasemap()?.id)).toBe(
       'night',
     );
-    expect((await row.innerText()).replace(/\s+/g, ' ').trim()).toBe('Basemap Night');
+    expect((await row.innerText()).replace(/\s+/g, ' ').trim()).toBe('Night');
+    // It stays open, the current one marked, until Escape closes it
+    expect(await chooser.locator('[aria-current="true"]').getAttribute('data-id')).toBe('night');
+    await page.keyboard.press('Escape');
+    expect(await chooser.count()).toBe(0);
     expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.features.count())).toBe(
       3,
     );

@@ -3,23 +3,23 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
-  import MapIcon from '@lucide/svelte/icons/map';
+  import Globe from '@lucide/svelte/icons/globe';
   import PenLine from '@lucide/svelte/icons/pen-line';
   import {
     Button,
-    Divider,
-    Dropdown,
     Icon,
     type IconComponent,
     LayerTree,
-    ListItem,
     Markbox,
-    MenuItem,
     type MenuModel,
+    SectionHeader,
+    Stack,
     Swatch,
     Text,
+    Tree,
     type TreeMove,
     type TreeNode,
+    TreeRow,
   } from '@sakuzu/kata/svelte';
   import type { Feature } from '@sakuzu/maplibre-gl-draw';
   import type { Snippet } from 'svelte';
@@ -41,6 +41,7 @@
   import { fillWord, type Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
   import type { LayerPanelDraw } from '../types.js';
+  import BasemapPanel from './BasemapPanel.svelte';
 
   // LayerPanel: kata's LayerTree of the stack from the front: the layers, their groups and their
   // features, and the datasets in their place among the layers.
@@ -62,11 +63,12 @@
   // no eye, no lock and no grip, and a press on it does nothing. The eye and the
   // lock are drawn here (LayerTree's `actions`), for each kind its own.
   //
-  // The panel lists the stack from the front, and the basemap is its back: the last row, under the
-  // tree, apart from it (a line between them), as it is no layer: it is not dragged, hidden, locked
-  // or selected. It is laid out as a row of the tree at the root (the place of the chevron kept,
-  // then the mark), so its mark and its label line up with those of the layers. It shows the name
-  // of the basemap the map shows, and with two or more basemaps it opens their menu.
+  // The panel is a Stack of two sections. The first, Stack, is the tree, with the add menu in its
+  // head. The second, Basemap, is the back of the stack: one row, apart from the tree as it is no
+  // layer (it is not dragged, hidden, locked or selected), with the name of the basemap the map
+  // shows. With two or more basemaps, a press on it opens the basemaps to choose from: through
+  // `onopenbasemap` (the interface opens them on the right, in the place of the inspector), or,
+  // without it (the panel put alone), in the place of the sections until they are closed.
   let {
     draw,
     messages,
@@ -75,6 +77,8 @@
     add = true,
     reorder = true,
     basemaps = null,
+    basemapOpen = false,
+    onopenbasemap,
   }: {
     draw: LayerPanelDraw;
     messages: Box<Messages>;
@@ -89,8 +93,12 @@
     add?: boolean;
     /** Whether the rows can be dragged */
     reorder?: boolean;
-    /** The basemaps of the last row, or null for no row */
+    /** The basemaps of the basemap row */
     basemaps?: BasemapControl | null;
+    /** Whether the basemaps to choose from are open (with `onopenbasemap`) */
+    basemapOpen?: boolean;
+    /** Opens the basemaps to choose from; the panel opens them itself when left out */
+    onopenbasemap?: () => void;
   } = $props();
 
   const m = $derived(messages.get());
@@ -279,33 +287,19 @@
 
   const ACTIVE_ICON = PenLine as unknown as IconComponent;
 
-  const MAP_ICON = MapIcon as unknown as IconComponent;
-  const basemapName = $derived(basemaps?.name() ?? null);
-  const currentBasemap = $derived(basemaps?.current.get() ?? null);
-  const basemapMenu = $derived(!!basemaps && basemaps.list.length >= 2);
-  // The place of the chevron, the mark, the label, the name and, with the menu, its chevron
-  const basemapColumns = $derived(
-    [
-      'auto auto',
-      basemapName === null ? 'minmax(0, 1fr)' : 'auto minmax(0, 1fr)',
-      basemapMenu ? 'auto' : '',
-    ]
-      .filter(Boolean)
-      .join(' '),
-  );
+  const GLOBE_ICON = Globe as unknown as IconComponent;
+  // The name of the basemap the map shows, else the word for it
+  const basemapName = $derived(basemaps?.name() ?? m.basemap);
+  // A basemap to choose: two or more
+  const choosable = $derived(!!basemaps && basemaps.list.length >= 2);
+  // The basemaps opened by the panel itself, put alone
+  let ownOpen = $state(false);
+  const choosing = $derived(choosable && (onopenbasemap ? basemapOpen : ownOpen));
+  function openBasemaps() {
+    if (onopenbasemap) onopenbasemap();
+    else ownOpen = true;
+  }
 </script>
-
-{#snippet basemapCells()}
-  <span class="seat" aria-hidden="true"></span>
-  <Markbox><Icon name={MAP_ICON} /></Markbox>
-  <Text clamp>{m.basemap}</Text>
-  {#if basemapName !== null}
-    <Text clamp muted>{basemapName}</Text>
-  {/if}
-  {#if basemapMenu}
-    <Icon name="chevron-down" />
-  {/if}
-{/snippet}
 
 {#snippet row(node: TreeNode, name: Snippet<[TreeNode]>)}
   {@const own = node as LayerTreeNode}
@@ -375,59 +369,39 @@
 {/snippet}
 
 <div class="layer-panel" data-role="layer-panel" onclickcapture={onclickcapture}>
-  <LayerTree
-    label={m.layers}
-    {nodes}
-    head={add}
-    bind:expanded={() => expanded, setExpanded}
-    bind:selected={() => selected, () => {}}
-    {onselect}
-    {onrename}
-    onmove={reorder ? onmove : undefined}
-    canDrop={canDropInto}
-    {addMenu}
-    {onadd}
-    addLabel={m.add}
-    {row}
-    {actions}
-  />
-  {#if basemaps}
-    <Divider />
-    <div class="basemap" data-role="basemap">
-      {#if basemapMenu}
-        <Dropdown menu block>
-          {#snippet trigger(toggle, open)}
-            <ListItem
-              columns={basemapColumns}
-              aria-haspopup="menu"
-              aria-expanded={open}
-              onclick={toggle}
-            >
-              {@render basemapCells()}
-            </ListItem>
-          {/snippet}
-          {#snippet panel(close)}
-            {#each basemaps.list as item (item.id)}
-              <MenuItem
-                checked={item.id === currentBasemap}
-                aria-current={item.id === currentBasemap ? 'true' : undefined}
-                data-id={item.id}
-                onclick={() => {
-                  close();
-                  basemaps.set(item.id);
-                }}
-              >
-                {item.label}
-              </MenuItem>
-            {/each}
-          {/snippet}
-        </Dropdown>
-      {:else}
-        <ListItem columns={basemapColumns} plain>
-          {@render basemapCells()}
-        </ListItem>
-      {/if}
-    </div>
+  {#if basemaps && choosing && !onopenbasemap}
+    <BasemapPanel {basemaps} {messages} onclose={() => (ownOpen = false)} />
+  {:else}
+    <Stack gap={0}>
+      <LayerTree
+        label={m.stack}
+        {nodes}
+        bind:expanded={() => expanded, setExpanded}
+        bind:selected={() => selected, () => {}}
+        {onselect}
+        {onrename}
+        onmove={reorder ? onmove : undefined}
+        canDrop={canDropInto}
+        {addMenu}
+        {onadd}
+        addLabel={m.add}
+        {row}
+        {actions}
+      />
+      <SectionHeader label={m.basemap} flush>
+        <Tree label={m.basemap}>
+          <TreeRow
+            grip={false}
+            sel={choosing}
+            onclick={choosable ? openBasemaps : undefined}
+            data-role="basemap"
+          >
+            <Markbox><Icon name={GLOBE_ICON} /></Markbox>
+            <Text clamp>{basemapName}</Text>
+          </TreeRow>
+        </Tree>
+      </SectionHeader>
+    </Stack>
   {/if}
 </div>
 
@@ -451,18 +425,5 @@
      is reordered) */
   .layer-panel :global([role='treeitem']:has([data-fixed]) [data-grip]) {
     display: none;
-  }
-  .basemap {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  /* The place of the chevron of a row of the tree that does not open (TreeRow's seat) */
-  .seat {
-    width: var(--kata-height-icon-button);
-  }
-  /* The name of the basemap, after the label, stands at the end of the row */
-  .basemap :global([data-role='list-item'] > .kata-text + .kata-text) {
-    text-align: end;
   }
 </style>

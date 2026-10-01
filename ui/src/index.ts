@@ -163,8 +163,9 @@ function toolsHandle(tools: Box<ToolEntry[]>, messages: Box<Messages>): ToolsHan
  * inspector on the right while something is selected. The map's padding follows the interface:
  * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
- * its padding back. The last row of the layer panel is the basemap, which opens a menu of
- * `options.basemaps` when it has two or more. A button at the top right switches between the
+ * its padding back. The last section of the layer panel is the basemap, whose row opens the
+ * basemaps of `options.basemaps` to choose from on the right, in the place of the inspector, when
+ * there are two or more. A button at the top right switches between the
  * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
  * globe, the compass and the zoom at the right, the scale at the left); `destroy()` removes them.
  *
@@ -440,10 +441,11 @@ function mountAlone(
 }
 
 /**
- * Puts the layer panel alone in an element: the tree of the layers, their groups and their
- * features, from the front, with the eye, the lock, renaming, dragging and the add menu, and under
- * it the basemap, the back of the stack, which opens a menu of `options.basemaps` when it has two
- * or more. It fills `target`, which gives it its size and its scrolling.
+ * Puts the layer panel alone in an element: the tree of the stack from the front (the layers,
+ * their groups and their features, and the datasets), with the eye, the lock, renaming, dragging
+ * and the add menu, and under it the basemap, the back of the stack, whose row opens the basemaps
+ * of `options.basemaps` to choose from in the place of the panel's sections when there are two or
+ * more. It fills `target`, which gives it its size and its scrolling.
  *
  * @param draw - The draw instance
  * @param options - The element to put it in, what it shows, the basemaps, the words (`en` by

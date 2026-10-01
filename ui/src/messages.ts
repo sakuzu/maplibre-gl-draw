@@ -203,7 +203,10 @@ export interface Messages {
   /** The button that switches the theme: what pressing it does, to the light and to the dark */
   toLight: string;
   toDark: string;
-  /** The basemap row of the layer panel, the back of the stack */
+  /**
+   * The section of the layer panel that holds the basemap, the back of the stack, and the title
+   * of the basemaps to choose from
+   */
   basemap: string;
   /**
    * The snapping settings the magnet of the toolbar opens (`snapping` is the switch of snapping
@@ -223,6 +226,8 @@ export interface Messages {
   rows: string;
   /** The row of a layer that holds more features than the panel lists, with {count} */
   manyFeatures: string;
+  /** The section of the layer panel that holds the tree of the stack */
+  stack: string;
 }
 
 /** A locale: one of the sets that come with the interface, or words laid over English */

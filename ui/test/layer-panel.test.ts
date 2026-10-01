@@ -49,11 +49,13 @@ function sample() {
   });
 }
 
-/** The names of the rows, from the top */
+/** The names of the rows of the tree of the stack, from the top (not the basemap) */
 const rowNames = (root: ParentNode) =>
-  [...root.querySelectorAll('[role="treeitem"] > [data-role="list-item"]')].map((row) =>
-    row.querySelector('.main')?.textContent?.trim(),
-  );
+  [
+    ...root.querySelectorAll(
+      '[role="treeitem"]:not([data-role="basemap"]) > [data-role="list-item"]',
+    ),
+  ].map((row) => row.querySelector('.main')?.textContent?.trim());
 
 function row(root: ParentNode, id: string): HTMLElement {
   const found = root.querySelector<HTMLElement>(

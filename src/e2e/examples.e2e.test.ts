@@ -916,13 +916,14 @@ describe('the examples', () => {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('get-started');
-    // The last row of the layer panel, under the tree
-    const trigger = page
-      .locator('[data-role="layer-panel"] > [data-role="basemap"]')
-      .getByRole('button', { name: 'Basemap' });
-    await trigger.click();
+    // The one row of the last section of the layer panel; it opens the basemaps on the right
+    await page
+      .locator('[data-role="layer-panel"] [role="treeitem"][data-role="basemap"]')
+      .getByRole('button')
+      .click();
     // Opened only: an item of OpenFreeMap chosen would load its style from the network
-    const items = page.getByRole('menu').getByRole('menuitem');
+    const chooser = page.locator('[data-region="right"] [data-role="basemap-panel"]');
+    const items = chooser.locator('[data-role="list-item"]');
     expect((await items.allInnerTexts()).map((text) => text.trim())).toEqual([
       'OpenFreeMap Liberty',
       'OpenFreeMap Bright',
@@ -930,10 +931,20 @@ describe('the examples', () => {
       'OpenFreeMap Dark',
       'Blank',
     ]);
+    // Each with its preview
+    expect(
+      await items.evaluateAll((list) =>
+        list.map(
+          (item) =>
+            (item.querySelector('.preview') as HTMLElement).style.getPropertyValue('--preview') !==
+            '',
+        ),
+      ),
+    ).toEqual([true, true, true, true, true]);
     // The style of the address replaced the basemap, so none of them is current
-    expect(await page.locator('[role="menuitem"][aria-current="true"]').count()).toBe(0);
+    expect(await chooser.locator('[aria-current="true"]').count()).toBe(0);
     await page.keyboard.press('Escape');
-    expect(await page.getByRole('menu').count()).toBe(0);
+    expect(await chooser.count()).toBe(0);
     await close();
   });
 

@@ -96,7 +96,7 @@ The options of `createDrawUI`, all optional:
 | `side` | The side panels `floating` over the map or `beside` it | `floating` |
 | `themeToggle` | The button that switches the look | `true` |
 | `mapControls` | maplibre-gl's globe, compass, zoom and scale | `true` |
-| `basemaps` | The basemaps of the basemap row's menu | none |
+| `basemaps` | The basemaps the basemap row opens | none |
 | `basemap` | The ID of the basemap current at the start | the map's |
 | `onbasemap` | Called with the basemap after it changed | none |
 
@@ -121,7 +121,8 @@ so that `fitBounds` and `easeTo` keep clear of them; `padding: false`
 leaves the map's padding alone.
 
 On the left, the layer panel and the legend share a panel, in two tabs.
-The layer panel is the tree of the layers, their groups and their
+The layer panel has two sections, Stack and Basemap. Stack is the tree
+of the layers, their groups and their
 features, from the front, with the eye, the lock, renaming in place (F2
 or a double click), reordering by dragging and an add menu (a new layer,
 a new group from the selected features). A feature is named by its
@@ -138,10 +139,10 @@ layers: those of `above-store` in front of every layer, those of
 `below-store` behind every layer. A dataset row shows its ID (core gives
 a dataset no name) and the number of its rows, with the eye
 (`setVisible`) and no lock; a press on it selects nothing, and it is
-dragged among the layers only when its order is `layer-order`. Under
-the tree, the last row is the basemap, the back of the stack (see
-[Basemaps](#basemaps)). The legend shows the rows of the style rule
-(`styleRule`) of each layer that has one.
+dragged among the layers only when its order is `layer-order`. Basemap,
+under it, is the back of the stack (see [Basemaps](#basemaps)). The
+legend shows the rows of the style rule (`styleRule`) of each layer that
+has one.
 Shift+L opens and closes the panel, and while it is closed a button at
 the top left of the map opens it again.
 
@@ -244,17 +245,21 @@ inspector (see [Inspector](#inspector)).
 
 ## Basemaps
 
-The last row of the layer panel is the basemap. The panel lists the
-stack from the front, and the basemap is the back of the stack, so it
-comes under the layers, apart from the tree by a line. It is not a node
-of the tree: it is not dragged, hidden, locked or selected. The row
-shows the name of the basemap the map shows: the label of the current
-one of `basemaps`, else the `name` of the map's style, read again on
-each `style.load`.
+The last section of the layer panel, Basemap, is the back of the stack:
+one row under the tree of the layers, apart from it as the basemap is no
+layer, so it is not dragged, hidden, locked or selected. The row shows
+the name of the basemap the map shows: the label of the current one of
+`basemaps`, else the `name` of the map's style, read again on each
+`style.load`, else the word for a basemap.
 
-With two or more `basemaps`, pressing the row opens a menu of their
-labels with the current one marked. Choosing one replaces the map's
-style with its `style` (a URL or a style object) and calls `onbasemap`;
+With two or more `basemaps`, pressing the row opens them on the right,
+in the place of the inspector: a list of their labels, each with its
+`preview` (a value of CSS `background`, such as a gradient in the colors
+of the style; a neutral square without one), and a check on the current
+one. Opening it clears the selection, and selecting a feature on the map
+or in the tree closes it, as do its close button and Escape. Choosing a
+basemap replaces the map's style with its `style` (a URL or a style
+object) and calls `onbasemap`, and the list stays open.
 `ui.setBasemap(id)` does the same, and `ui.getBasemap()` returns the
 current one. The current one at the start is `basemap`, or else the
 first whose `style` is the URL the map's style was loaded from. With
@@ -264,7 +269,12 @@ fewer, the row only shows the name.
 const styles = 'https://tiles.openfreemap.org/styles';
 const ui = createDrawUI(draw, {
   basemaps: [
-    { id: 'bright', label: 'Bright', style: `${styles}/bright` },
+    {
+      id: 'bright',
+      label: 'Bright',
+      style: `${styles}/bright`,
+      preview: 'linear-gradient(135deg, #f4f1ea, #dfe7d5)',
+    },
     { id: 'dark', label: 'Dark', style: `${styles}/dark` },
   ],
   onbasemap: (basemap) => console.log(basemap.id),
@@ -274,12 +284,15 @@ const ui = createDrawUI(draw, {
 The layer panel put alone takes the same options
 (`LayerPanelOptions`):
 `createLayerPanel(draw, { target, basemaps, basemap, onbasemap })`.
+There, the row opens the list in the place of the panel's sections,
+until its close button or Escape closes it.
 
-The drawing stays: the menu calls `map.setStyle(style, { diff: false })`,
-which replaces the style whole, and the draw instance adds its layers
-again on top of the new style once it has loaded. Sources, layers and
-the terrain that the application added to the map itself go with the old
-style, so it adds them again on the map's `style.load` event.
+The drawing stays: choosing a basemap calls
+`map.setStyle(style, { diff: false })`, which replaces the style whole,
+and the draw instance adds its layers again on top of the new style once
+it has loaded. Sources, layers and the terrain that the application
+added to the map itself go with the old style, so it adds them again on
+the map's `style.load` event.
 
 ## Map controls
 
