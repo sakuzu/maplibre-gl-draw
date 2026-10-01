@@ -23,6 +23,24 @@ function button(name: string): HTMLButtonElement {
 
 const pressed = (name: string) => button(name).getAttribute('aria-pressed');
 
+/** The switches of the snapping settings, by their text */
+function switches(): Map<string, HTMLInputElement> {
+  const out = new Map<string, HTMLInputElement>();
+  for (const input of document.querySelectorAll<HTMLInputElement>('[role="switch"]')) {
+    out.set(input.closest('label')?.textContent?.trim() ?? '', input);
+  }
+  return out;
+}
+
+function toggle(name: string): HTMLInputElement {
+  const found = switches().get(name);
+  if (!found) throw new Error(`no switch "${name}"`);
+  return found;
+}
+
+/** The popover of the snapping settings, or null while it is closed */
+const popover = () => document.querySelector('[data-role="snapping"] [data-role="popover"]');
+
 describe('createToolbar', () => {
   it('puts the seven tools, delete and snapping in the target', () => {
     const fake = fakeDraw();
@@ -86,16 +104,6 @@ describe('createToolbar', () => {
     expect(button('Delete').disabled).toBe(true);
   });
 
-  it('switches snapping through the options of draw', () => {
-    const fake = fakeDraw({ snapping: true });
-    bar = createToolbar(fake.asDraw, { target: fake.container });
-    expect(pressed('Snapping')).toBe('true');
-    button('Snapping').click();
-    flushSync();
-    expect(fake.draw.options.update).toHaveBeenCalledWith({ snapping: { enabled: false } });
-    expect(pressed('Snapping')).toBe('false');
-  });
-
   it('leaves out delete and snapping when asked', () => {
     const fake = fakeDraw();
     bar = createToolbar(fake.asDraw, {
@@ -124,5 +132,134 @@ describe('createToolbar', () => {
     await Promise.resolve();
     expect(fake.listenerCount()).toBe(0);
     expect(fake.container.querySelector('.mgd-ui')).toBeNull();
+  });
+});
+
+describe('the snapping settings', () => {
+  // The toolbar holds the settings once its effects have run
+  it('open from the magnet, which stays pressed while snapping is on', () => {
+    const fake = fakeDraw({ snapping: true });
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    flushSync();
+    expect(pressed('Snapping')).toBe('true');
+    expect(popover()).toBeNull();
+    button('Snapping').click();
+    flushSync();
+    expect(popover()).not.toBeNull();
+    expect(fake.draw.options.update).not.toHaveBeenCalled();
+    expect([...switches().keys()]).toEqual([
+      'Snapping',
+      'Vertices',
+      'Edges',
+      'Intersections',
+      'Guides',
+      'Snap to datasets',
+      'Trace edges',
+      'Move shared vertices',
+    ]);
+    expect(popover()?.textContent).toContain('Snapping pauses while Alt is held');
+  });
+
+  it('close on Escape and on a second press of the magnet', () => {
+    const fake = fakeDraw();
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    flushSync();
+    button('Snapping').click();
+    flushSync();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flushSync();
+    expect(popover()).toBeNull();
+    button('Snapping').click();
+    flushSync();
+    expect(popover()).not.toBeNull();
+    button('Snapping').click();
+    flushSync();
+    expect(popover()).toBeNull();
+  });
+
+  it('write each switch through the options of draw', () => {
+    const fake = fakeDraw();
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    flushSync();
+    button('Snapping').click();
+    flushSync();
+    const cases: [string, unknown][] = [
+      ['Vertices', { snapping: { kinds: { vertex: false } } }],
+      ['Edges', { snapping: { kinds: { edge: false } } }],
+      ['Intersections', { snapping: { kinds: { intersection: false } } }],
+      ['Guides', { snapping: { kinds: { guide: false } } }],
+      ['Snap to datasets', { snapping: { datasets: false } }],
+      ['Trace edges', { tracing: { enabled: false } }],
+      ['Move shared vertices', { topology: { sharedVertexDrag: true } }],
+      ['Snapping', { snapping: { enabled: false } }],
+    ];
+    for (const [name, patch] of cases) {
+      toggle(name).click();
+      flushSync();
+      expect(fake.draw.options.update).toHaveBeenLastCalledWith(patch);
+    }
+    const now = fake.draw.options.get();
+    expect(now.snapping?.kinds).toEqual({
+      vertex: false,
+      edge: false,
+      intersection: false,
+      guide: false,
+    });
+    expect(now.topology?.sharedVertexDrag).toBe(true);
+    expect(pressed('Snapping')).toBe('false');
+  });
+
+  it('turn the kinds off while snapping is off', () => {
+    const fake = fakeDraw({ snapping: false });
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    flushSync();
+    expect(pressed('Snapping')).toBe('false');
+    button('Snapping').click();
+    flushSync();
+    for (const name of ['Vertices', 'Edges', 'Intersections', 'Guides']) {
+      expect(toggle(name).disabled).toBe(true);
+    }
+    for (const name of ['Snapping', 'Snap to datasets', 'Trace edges']) {
+      expect(toggle(name).disabled).toBe(false);
+    }
+    toggle('Snapping').click();
+    flushSync();
+    expect(toggle('Vertices').disabled).toBe(false);
+  });
+
+  it('follow a change of the options made by code', () => {
+    const fake = fakeDraw();
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    flushSync();
+    button('Snapping').click();
+    flushSync();
+    expect(toggle('Edges').checked).toBe(true);
+    fake.draw.options.update({
+      snapping: { enabled: false, kinds: { edge: false } },
+      tracing: { enabled: false },
+      topology: { sharedVertexDrag: true },
+    });
+    flushSync();
+    expect(toggle('Snapping').checked).toBe(false);
+    expect(toggle('Edges').checked).toBe(false);
+    expect(toggle('Vertices').checked).toBe(true);
+    expect(toggle('Trace edges').checked).toBe(false);
+    expect(toggle('Move shared vertices').checked).toBe(true);
+    expect(pressed('Snapping')).toBe('false');
+  });
+
+  it('name the key that pauses snapping, and nothing when there is none', () => {
+    const fake = fakeDraw();
+    bar = createToolbar(fake.asDraw, { target: fake.container, locale: 'ja' });
+    flushSync();
+    button('吸着').click();
+    flushSync();
+    expect(popover()?.textContent).toContain('Alt を押している間は吸着を止めます');
+    fake.draw.options.update({ snapping: { disableKey: 'shift' } });
+    flushSync();
+    expect(popover()?.textContent).toContain('Shift を押している間は吸着を止めます');
+    fake.draw.options.update({ snapping: { disableKey: 'none' } });
+    flushSync();
+    expect(popover()?.textContent).not.toContain('押している間');
   });
 });

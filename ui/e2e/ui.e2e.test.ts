@@ -89,6 +89,46 @@ describe('the toolbar', () => {
   });
 });
 
+describe('the snapping settings', () => {
+  it('open from the magnet above the toolbar, switch snapping, and close', async () => {
+    page = await openPage(browser, site);
+    const bar = page.locator('[data-role="drawbar"]');
+    const magnet = bar.getByRole('button', { name: 'Snapping', exact: true });
+    const settings = page.locator('[data-role="snapping"] [data-role="popover"]');
+    const enabled = () =>
+      page.evaluate(
+        () => (window as unknown as E2EWindow).draw.options.get().snapping?.enabled !== false,
+      );
+    expect(await enabled()).toBe(true);
+    expect(await magnet.getAttribute('aria-pressed')).toBe('true');
+
+    await magnet.click();
+    await settings.waitFor();
+    const popoverBox = await settings.boundingBox();
+    const barBox = await bar.boundingBox();
+    if (!popoverBox || !barBox) throw new Error('the settings or the bar are not on the page');
+    expect(popoverBox.y + popoverBox.height).toBeLessThanOrEqual(barBox.y);
+
+    // The overlay gives the pointer to the popover: the press reaches the switch
+    await settings.getByRole('switch', { name: 'Snapping', exact: true }).click();
+    await until(enabled, false);
+    expect(await magnet.getAttribute('aria-pressed')).toBe('false');
+    expect(await settings.getByRole('switch', { name: 'Vertices', exact: true }).isDisabled()).toBe(
+      true,
+    );
+
+    // A second press on the magnet closes it, and Escape too
+    const at = await centerOf(magnet);
+    await page.mouse.click(at.x, at.y);
+    await expect.poll(() => settings.count()).toBe(0);
+    await page.mouse.click(at.x, at.y);
+    await settings.waitFor();
+    await page.keyboard.press('Escape');
+    await expect.poll(() => settings.count()).toBe(0);
+    expect(await enabled()).toBe(false);
+  });
+});
+
 describe('the inspector', () => {
   it('follows the selection and writes the fill color, the name and an attribute', async () => {
     page = await openPage(browser, site);

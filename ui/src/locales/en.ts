@@ -148,4 +148,12 @@ export const en: Readonly<Messages> = Object.freeze({
   running: 'Running',
   toLight: 'Switch to light',
   toDark: 'Switch to dark',
+  snapVertex: 'Vertices',
+  snapEdge: 'Edges',
+  snapIntersection: 'Intersections',
+  snapGuide: 'Guides',
+  snapDatasets: 'Snap to datasets',
+  traceEdges: 'Trace edges',
+  sharedVertexDrag: 'Move shared vertices',
+  snapPauseKey: 'Snapping pauses while {key} is held',
 });

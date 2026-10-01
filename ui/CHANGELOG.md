@@ -11,6 +11,15 @@ follows semantic versioning.
   `inspector.tabs`, so `['attributes', 'style']` opens on Attributes.
   The default stays `['style', 'attributes']`, which opens on Style. Once
   a tab is chosen, it is kept from one feature to the next as before.
+- Changed: the magnet of the toolbar opens the snapping settings above
+  the toolbar instead of switching snapping: snapping, the kinds of
+  target under it (vertices, edges, intersections and guides, off while
+  snapping is off), snapping to datasets, tracing edges and moving shared
+  vertices together, and the key that pauses snapping. Each switch writes
+  `draw.options.update` and follows `options.changed`. The magnet stays
+  pressed while snapping is on. New words: `snapVertex`, `snapEdge`,
+  `snapIntersection`, `snapGuide`, `snapDatasets`, `traceEdges`,
+  `sharedVertexDrag` and `snapPauseKey` (with `{key}`).
 
 ## [1.0.0] - 2026-10-01
 
