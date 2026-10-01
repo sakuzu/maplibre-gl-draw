@@ -41,7 +41,9 @@ export function createDrawOnEngine(
   options: DrawOptions = {},
   setExternalEntry: (fn: ((id: string) => boolean) | undefined) => void = () => {},
 ): Draw {
-  const drawOptions = createOptions(engine, options, setExternalEntry);
+  const drawOptions = createOptions(engine, options, setExternalEntry, (payload) =>
+    engine.events.emit('options.changed', payload),
+  );
   drawOptions.applyCreation();
   const { context, modeManager, events, map } = engine;
   const { store } = context;

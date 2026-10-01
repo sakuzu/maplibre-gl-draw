@@ -50,6 +50,7 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'hidden.changed',
   'readOnly.changed',
   'interactionLock.changed',
+  'options.changed',
   'snap.changed',
   'preview.changed',
   'map.clicked',
@@ -344,6 +345,41 @@ describe('the events of the state of this client', () => {
       { locked: true },
       { locked: false },
     ]);
+  });
+
+  it('options.changed carries the options after and before an update that changed them', () => {
+    const before = draw.options.get();
+    draw.options.update({ snapping: { tolerancePx: 25 }, scaleWithZoom: false });
+    // A client state: it fires alone, with no document.changed
+    expect(names(events)).toEqual(['options.changed']);
+    const [payload] = payloadsOf(events, 'options.changed');
+    expect(payload.previous).toEqual(before);
+    expect(payload.options).toEqual(draw.options.get());
+    expect(payload.options.snapping?.tolerancePx).toBe(25);
+    expect(payload.options.scaleWithZoom).toBe(false);
+    expect(payload.previous.scaleWithZoom).toBe(true);
+  });
+
+  it('options.changed does not fire for an update that changes nothing', () => {
+    const formatter = (typeName: string, n: number) => `${typeName} ${n}`;
+    draw.options.update({ autoName: { formatter } });
+    events.length = 0;
+    const { snapping, clickTolerance } = draw.options.get();
+    draw.options.update({});
+    draw.options.update({ snapping: { enabled: snapping?.enabled }, clickTolerance });
+    draw.options.update({ autoName: { formatter } });
+    expect(() => draw.options.update({ clickTolerance: 'far' as never })).toThrow(DrawError);
+    expect(events).toEqual([]);
+  });
+
+  it('options.changed stops reaching a listener once the function on returned is called', () => {
+    const heard: Array<number | undefined> = [];
+    const stop = draw.on('options.changed', ({ options }) => heard.push(options.dragThreshold));
+    draw.options.update({ dragThreshold: 7 });
+    stop();
+    draw.options.update({ dragThreshold: 9 });
+    expect(heard).toEqual([7]);
+    expect(payloadsOf(events, 'options.changed')).toHaveLength(2);
   });
 
   it('mode.changed carries the mode and the one before it', () => {
