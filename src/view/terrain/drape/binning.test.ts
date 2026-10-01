@@ -28,7 +28,7 @@ import {
   type DrapeTile,
   type TileBins,
 } from './binning.js';
-import { buildDrapeGeometry, drapeMercatorX, drapeMercatorY } from './geometry.js';
+import { buildDrapeGeometry, drapeMercatorX, drapeMercatorY, drapePathStarts } from './geometry.js';
 
 /** Takes the bounding box out of a geometry (a small helper for the tests) */
 function geometryBounds(geometry: ReturnType<typeof buildDrapeGeometry>) {
@@ -482,5 +482,55 @@ describe('the order of the runs in a cell', () => {
       }
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe('the starts of the edges along their paths', () => {
+  const tile: DrapeTile = { x: 0, y: 0, z: 0 };
+  const path: Coordinate[] = [
+    [-150, 60],
+    [-30, -20],
+    [40, 30],
+    [150, -60],
+  ];
+
+  /** The edges of the bins, each with its start along the path */
+  function edgesWithStarts(bins: TileBins): Array<{ x0: number; y0: number; start: number }> {
+    const out: Array<{ x0: number; y0: number; start: number }> = [];
+    for (let i = 0; i < bins.edgeStarts.length; i++) {
+      out.push({ x0: bins.edges[i * 4], y0: bins.edges[i * 4 + 1], start: bins.edgeStarts[i] });
+    }
+    return out;
+  }
+
+  it('go along with the edges of a dashed line, one per edge', () => {
+    const element: DrapeElement = {
+      ...lineElement([path]),
+      dash: { a: 12, b: 4, c: 2, pixelRatio: 1 },
+    };
+    const bins = binTile([element], tile);
+    const starts = drapePathStarts(element.geometry().paths[0]);
+
+    expect(bins.edgeStarts.length).toBe(bins.edges.length / 4);
+    expect(bins.edgeStarts.length).toBeGreaterThan(0);
+    // Each edge carries the start of the vertex it begins at (found again by its first point)
+    const xy = element.geometry().paths[0].xy;
+    for (const edge of edgesWithStarts(bins)) {
+      let vertex = -1;
+      for (let v = 0; v < xy.length / 2; v++) {
+        if (Math.abs(xy[v * 2] - edge.x0) < 1e-6 && Math.abs(xy[v * 2 + 1] - edge.y0) < 1e-6) {
+          vertex = v;
+        }
+      }
+      expect(vertex).toBeGreaterThanOrEqual(0);
+      expect(edge.start).toBeCloseTo(starts[vertex], 6);
+    }
+    expect(Math.max(...bins.edgeStarts)).toBeGreaterThan(0);
+  });
+
+  it('are 0 for a solid line, which has no pattern to lay out', () => {
+    const bins = binTile([lineElement([path])], tile);
+    expect(bins.edgeStarts.length).toBe(bins.edges.length / 4);
+    expect(bins.edgeStarts.every((start) => start === 0)).toBe(true);
   });
 });

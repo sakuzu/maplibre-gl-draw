@@ -35,6 +35,21 @@ export interface DrapeGeometryPath {
   readonly closed: boolean;
   /** The bounding box of each block (minX, minY, maxX, maxY) */
   readonly blocks: Float64Array;
+  /**
+   * Where the vertices of a quantized path came from (absent on a path of the original
+   * geometry)
+   *
+   * A dashed line keeps the pattern of the original path on a coarse tile: the length along
+   * the path at a vertex is that of the original vertex it was rounded from
+   * ({@link drapePathStarts}).
+   */
+  readonly origin?: DrapePathOrigin;
+}
+
+/** The original path of a quantized path, and the original vertex of each of its vertices */
+export interface DrapePathOrigin {
+  readonly path: DrapeGeometryPath;
+  readonly vertices: Int32Array;
 }
 
 /** The geometry of a single feature */
@@ -170,8 +185,14 @@ export function buildDrapeGeometry(
 
 /**
  * Assembles the geometry from paths in Mercator coordinates
+ *
+ * @param origins The origin of each path, for quantized geometry (null for a path that has none)
  */
-function buildFromMercatorPaths(paths: readonly Float64Array[], closed: boolean): DrapeGeometry {
+function buildFromMercatorPaths(
+  paths: readonly Float64Array[],
+  closed: boolean,
+  origins?: ReadonlyArray<DrapePathOrigin | null>,
+): DrapeGeometry {
   const out: DrapeGeometryPath[] = [];
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -179,7 +200,8 @@ function buildFromMercatorPaths(paths: readonly Float64Array[], closed: boolean)
   let maxY = Number.NEGATIVE_INFINITY;
   let edgeCount = 0;
 
-  for (const xy of paths) {
+  for (let p = 0; p < paths.length; p++) {
+    const xy = paths[p];
     const count = xy.length / 2;
     if (count < 2) continue;
 
@@ -218,7 +240,12 @@ function buildFromMercatorPaths(paths: readonly Float64Array[], closed: boolean)
       blocks[b * 4 + 3] = by1;
     }
 
-    out.push({ xy, edgeCount: edges, closed, blocks });
+    const origin = origins?.[p];
+    out.push(
+      origin
+        ? { xy, edgeCount: edges, closed, blocks, origin }
+        : { xy, edgeCount: edges, closed, blocks },
+    );
     edgeCount += edges;
   }
 
@@ -257,10 +284,13 @@ export function drapeQuantizedGeometry(geometry: DrapeGeometry, level: number): 
 
   const step = 2 ** -level;
   const paths: Float64Array[] = [];
+  const origins: Array<DrapePathOrigin | null> = [];
   for (const path of geometry.paths) {
     const source = path.xy;
     const count = source.length / 2;
     const out: number[] = [];
+    /** The original vertex of each vertex kept */
+    const kept: number[] = [];
     let lastX = Number.NaN;
     let lastY = Number.NaN;
     for (let i = 0; i < count; i++) {
@@ -268,6 +298,7 @@ export function drapeQuantizedGeometry(geometry: DrapeGeometry, level: number): 
       const qy = Math.round(source[i * 2 + 1] / step) * step;
       if (qx === lastX && qy === lastY) continue;
       out.push(qx, qy);
+      kept.push(i);
       lastX = qx;
       lastY = qy;
     }
@@ -276,24 +307,30 @@ export function drapeQuantizedGeometry(geometry: DrapeGeometry, level: number): 
       // dropped
       while (out.length >= 6 && out[out.length - 2] === out[0] && out[out.length - 1] === out[1]) {
         out.length -= 2;
+        kept.length -= 1;
       }
       if (out.length / 2 < 3) {
         // A polygon collapsed by the rounding is replaced with a square of one grid cell.
         // Dropping it would leave the fill missing just there and produce spotty white
         // blotches (confirmed hands-on, the city center at z8.7; it was pronounced in areas
         // where small polygons at the chome level line up).
-        // The error stays within one grid cell (1/256 of a tile = about 2 pixels on screen)
+        // The error stays within one grid cell (1/256 of a tile = about 2 pixels on screen).
+        // It has no origin: a dash pattern on it would be smaller than a pixel anyway
         const box = squareAt(source, step);
-        if (box) paths.push(box);
+        if (box) {
+          paths.push(box);
+          origins.push(null);
+        }
         continue;
       }
     } else if (out.length / 2 < 2) {
       continue;
     }
     paths.push(new Float64Array(out));
+    origins.push({ path, vertices: new Int32Array(kept) });
   }
 
-  const built = buildFromMercatorPaths(paths, geometry.paths[0]?.closed ?? true);
+  const built = buildFromMercatorPaths(paths, geometry.paths[0]?.closed ?? true, origins);
   cache.set(level, built);
   return built;
 }
@@ -320,4 +357,40 @@ function squareAt(source: Float64Array, step: number): Float64Array | null {
   const cx = Math.round(sx / count / step) * step;
   const cy = Math.round(sy / count / step) * step;
   return new Float64Array([cx, cy, cx + step, cy, cx + step, cy + step, cx, cy + step]);
+}
+
+/** The lengths along the paths (path -> the length at each vertex) */
+const startsCache = new WeakMap<DrapeGeometryPath, Float64Array>();
+
+/**
+ * The length along a path from its first vertex to each of its vertices (Mercator units)
+ *
+ * Entry `e` is where edge `e` starts on the path, so a dashed line can place its pattern on
+ * every edge on its own (on a closed path the last edge, back to the first vertex, starts at
+ * the last vertex). It is built only for dashed lines and polygons with a dashed outline, the
+ * first time a tile needs it, so a solid line pays nothing for it.
+ *
+ * A quantized path takes the lengths of the original vertices it was rounded from, so the
+ * pattern on a coarse tile stays in step with the pattern on the fine tiles next to it. A
+ * square standing in for a collapsed polygon has no original and measures itself.
+ */
+export function drapePathStarts(path: DrapeGeometryPath): Float64Array {
+  const hit = startsCache.get(path);
+  if (hit) return hit;
+
+  const count = path.xy.length / 2;
+  const starts = new Float64Array(count);
+  if (path.origin) {
+    const original = drapePathStarts(path.origin.path);
+    for (let i = 0; i < count; i++) starts[i] = original[path.origin.vertices[i]];
+  } else {
+    const xy = path.xy;
+    let total = 0;
+    for (let i = 1; i < count; i++) {
+      total += Math.hypot(xy[i * 2] - xy[i * 2 - 2], xy[i * 2 + 1] - xy[i * 2 - 1]);
+      starts[i] = total;
+    }
+  }
+  startsCache.set(path, starts);
+  return starts;
 }

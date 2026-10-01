@@ -164,6 +164,43 @@ export function splitIntoDashes(
 }
 
 /**
+ * The coefficients of a dash pattern
+ *
+ * The dash is `max(a, b * w)` and the gap `max(w + 1, c * w)` for a line `w` pixels wide (the
+ * smallest gap, `w + 1`, keeps the round caps of two dashes apart). This table is the one
+ * source of the patterns: the subdividing path computes them here on the CPU, and the analytic
+ * drape hands the same coefficients to its shader, which evaluates the same two formulas.
+ */
+export interface DashCoefficients {
+  /** The shortest dash (px) */
+  readonly a: number;
+  /** The dash per pixel of width */
+  readonly b: number;
+  /** The gap per pixel of width */
+  readonly c: number;
+}
+
+/**
+ * The coefficients of each line style that is not solid
+ *
+ * Dashed: dashes 4 times the width (12 px at least) and gaps twice the width. Dotted: short,
+ * nearly round dots and gaps about the width.
+ */
+export const DASH_COEFFICIENTS: Readonly<Record<'dashed' | 'dotted', DashCoefficients>> = {
+  dashed: { a: 12, b: 4, c: 2 },
+  dotted: { a: 1, b: 0.5, c: 1.2 },
+};
+
+/**
+ * The coefficients of a line style, or null for a solid line
+ */
+export function dashCoefficientsOf(
+  lineStyle: 'solid' | 'dashed' | 'dotted',
+): DashCoefficients | null {
+  return lineStyle === 'dashed' || lineStyle === 'dotted' ? DASH_COEFFICIENTS[lineStyle] : null;
+}
+
+/**
  * Returns the dash and gap lengths in px that suit a line style at a line width.
  *
  * Unlike getDashPattern (preset) in shared/math, this computes dynamically from the stroke
@@ -177,17 +214,10 @@ export function getStrokeDashPattern(
   lineStyle: 'solid' | 'dashed' | 'dotted',
   strokeWidth = 2,
 ): [number, number] | null {
-  // The minimum gap at which round caps do not overlap
-  const minGap = strokeWidth + 1;
-
-  switch (lineStyle) {
-    case 'dashed':
-      // Dashed: longer dashes (4x the line width), moderate gaps (2x the line width)
-      return [Math.max(12, strokeWidth * 4), Math.max(minGap, strokeWidth * 2)];
-    case 'dotted':
-      // Dotted: short dots (nearly round), short gaps (about the line width)
-      return [Math.max(1, strokeWidth * 0.5), Math.max(minGap, strokeWidth * 1.2)];
-    default:
-      return null;
-  }
+  const coefficients = dashCoefficientsOf(lineStyle);
+  if (!coefficients) return null;
+  return [
+    Math.max(coefficients.a, coefficients.b * strokeWidth),
+    Math.max(strokeWidth + 1, coefficients.c * strokeWidth),
+  ];
 }

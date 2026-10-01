@@ -34,7 +34,7 @@
  */
 
 import type { DrapeBounds, DrapeGeometry, DrapeGeometryPath } from './geometry.js';
-import { DRAPE_BLOCK_EDGES, drapeQuantizedGeometry } from './geometry.js';
+import { DRAPE_BLOCK_EDGES, drapePathStarts, drapeQuantizedGeometry } from './geometry.js';
 
 /** The minimum number of divisions of the grid (per side) */
 export const DRAPE_MIN_CELLS = 8;
@@ -168,6 +168,27 @@ const MAX_MARGIN = 1 / DRAPE_MIN_CELLS;
 export type DrapeColor = readonly [number, number, number, number];
 
 /**
+ * The dash pattern of an outline that is not solid
+ *
+ * The coefficients are those of `DASH_COEFFICIENTS` in `view/renderers/line/dash.ts`: the shader
+ * works the dash and the gap out of the width the line has in the frame, with the same formulas
+ * as the subdividing path.
+ */
+export interface DrapeDash {
+  /** The shortest dash (CSS px) */
+  readonly a: number;
+  /** The dash per pixel of width */
+  readonly b: number;
+  /** The gap per pixel of width */
+  readonly c: number;
+  /**
+   * The physical pixels of `strokeWidthPx` per CSS pixel (the pixel ratio the width was
+   * resolved with). The pattern is measured in CSS pixels, so the shader divides it back out
+   */
+  readonly pixelRatio: number;
+}
+
+/**
  * An element handed to the analytic drape (a feature of the Store and a feature of a
  * dataset have the same shape)
  */
@@ -189,6 +210,13 @@ export interface DrapeElement {
   readonly stroke: DrapeColor;
   /** The width of the outline (physical pixels). 0 means the outline is not drawn */
   readonly strokeWidthPx: number;
+  /**
+   * The dash pattern of the outline (absent or null for a solid outline)
+   *
+   * Only an element with a pattern has the lengths along its paths worked out and binned next
+   * to its edges (`TileBins.edgeStarts`).
+   */
+  readonly dash?: DrapeDash | null;
   /**
    * The origin of the coefficients (0 = the Store, 1 and above = datasets)
    *
@@ -264,6 +292,11 @@ export interface TileBins {
   readonly runs: Float32Array;
   /** (x0, y0, x1, y1) per edge. In-tile 0..1 coordinates */
   readonly edges: Float32Array;
+  /**
+   * Where each edge starts along its path, one per edge (Mercator units, the 0..1 world; not
+   * in-tile). 0 for an edge of an element without a dash pattern
+   */
+  readonly edgeStarts: Float32Array;
   /** Whether a limit was exceeded (if it was, the caller degrades) */
   readonly overflow: boolean;
   /** The number of cells truncated for exceeding the budget (a local degradation. Diagnostic) */
@@ -417,6 +450,7 @@ function emptyBins(grid: number, edgeEstimate: number, overflow: boolean): TileB
     cells: new Int32Array(grid * grid * 2),
     runs: new Float32Array(0),
     edges: new Float32Array(0),
+    edgeStarts: new Float32Array(0),
     overflow,
     truncatedCells: 0,
     cellWork: 0,
@@ -445,6 +479,8 @@ function assembleBins(
 
   /** The edges in in-tile coordinates (four numbers per edge). Stacked across elements */
   const edgeXY: number[] = [];
+  /** Where each edge starts along its path (one number per edge) */
+  const edgeS: number[] = [];
   /** The runs per cell. Triples of (elementIndex, inside, edgeListIndex) laid out in a row */
   const cellRuns: Array<number[] | undefined> = new Array(cellCount);
   /** The lists of edge indices that the runs point to */
@@ -483,6 +519,7 @@ function assembleBins(
     touchedRows.length = 0;
     rowTouched.fill(0);
 
+    const dashed = element.dash != null;
     for (const path of picked.geometries[p].paths) {
       scanPath(
         path,
@@ -493,7 +530,8 @@ function assembleBins(
         margin,
         grid,
         cellSize,
-        edgeXY,
+        { xy: edgeXY, starts: edgeS },
+        dashed ? drapePathStarts(path) : null,
         scratch,
         rowDiff,
         rowTouched,
@@ -526,6 +564,7 @@ function assembleBins(
   // Repacking (laid out in the order cell -> run -> edge)
   const runs: number[] = [];
   const edges: number[] = [];
+  const edgeStarts: number[] = [];
   for (let c = 0; c < cellCount; c++) {
     const list = cellRuns[c];
     cells[c * 2] = runs.length / 4;
@@ -550,6 +589,7 @@ function assembleBins(
             break;
           }
           edges.push(edgeXY[at * 4], edgeXY[at * 4 + 1], edgeXY[at * 4 + 2], edgeXY[at * 4 + 3]);
+          edgeStarts.push(edgeS[at]);
           edgeCount++;
         }
       }
@@ -567,6 +607,7 @@ function assembleBins(
     cells,
     runs: new Float32Array(runs),
     edges: new Float32Array(edges),
+    edgeStarts: new Float32Array(edgeStarts),
     overflow: false,
     truncatedCells,
     cellWork: (runs.length / 4 + edges.length / 4) / cellCount,
@@ -657,7 +698,8 @@ function scanPath(
   margin: number,
   grid: number,
   cellSize: number,
-  edgeXY: number[],
+  out: EdgeSink,
+  starts: Float64Array | null,
   scratch: Map<number, number[]>,
   rowDiff: Int8Array,
   rowTouched: Uint8Array,
@@ -689,7 +731,7 @@ function scanPath(
       if (kind === 0) {
         accumulateInside(x0, y0, x1, y1, grid, cellSize, rowDiff, rowTouched, touchedRows);
       }
-      scatterEdge(x0, y0, x1, y1, margin, grid, cellSize, edgeXY, scratch);
+      scatterEdge(x0, y0, x1, y1, starts ? starts[e] : 0, margin, grid, cellSize, out, scratch);
     }
   }
 }
@@ -741,6 +783,12 @@ function accumulateInside(
   }
 }
 
+/** Where the edges of a tile are stacked: the in-tile coordinates and the starts along the path */
+interface EdgeSink {
+  readonly xy: number[];
+  readonly starts: number[];
+}
+
 /**
  * Assigns a single edge to the cells it passes through (including the margin)
  *
@@ -753,10 +801,11 @@ function scatterEdge(
   y0: number,
   x1: number,
   y1: number,
+  start: number,
   margin: number,
   grid: number,
   cellSize: number,
-  edgeXY: number[],
+  out: EdgeSink,
   scratch: Map<number, number[]>,
 ): void {
   const exLo = Math.min(x0, x1) - margin;
@@ -771,8 +820,9 @@ function scatterEdge(
   if (jHi > grid - 1) jHi = grid - 1;
   if (jLo > jHi) return;
 
-  const at = edgeXY.length / 4;
-  edgeXY.push(x0, y0, x1, y1);
+  const at = out.starts.length;
+  out.xy.push(x0, y0, x1, y1);
+  out.starts.push(start);
 
   const horizontal = y0 === y1;
   const inv = horizontal ? 0 : 1 / (y1 - y0);
