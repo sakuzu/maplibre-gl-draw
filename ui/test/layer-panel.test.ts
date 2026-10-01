@@ -262,7 +262,8 @@ describe('the limit of the features of the layer panel', () => {
     expect(fake.draw.layers.setActive).toHaveBeenLastCalledWith('l1');
   });
 
-  it('takes the limit as a number, and lists none with false', () => {
+  // Listing 1,500 rows in jsdom takes seconds on a slow machine (16 s seen on CI)
+  it('takes the limit as a number, and lists none with false', { timeout: 60_000 }, () => {
     const fake = crowded();
     handle = createLayerPanel(fake.asDraw, { target: fake.container, features: 2 });
     expect(rowNames(fake.container)).toEqual([
