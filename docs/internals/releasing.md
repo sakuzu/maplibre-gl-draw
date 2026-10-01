@@ -63,11 +63,19 @@ shipped in the package (it is listed in `files`).
   to the `## [Unreleased]` section, starting with the kind of change:
   `Added:`, `Changed:`, `Deprecated:`, `Removed:`, `Fixed:` or
   `Security:`.
+- The section opens with one sentence that names the version its
+  changes will be released as ("These changes will be released as
+  2.1.0"), chosen by the rules of [Versions](#versions) from the
+  bullets: an incompatible change makes a major release, an addition at
+  least a minor one, and fixes alone a patch. The bullet that raises the
+  kind of release updates the sentence in the same commit, so the
+  version set at step 2 of the release is already decided.
 - At a release, the `## [Unreleased]` heading becomes
-  `## [X.Y.Z] - YYYY-MM-DD`, its bullets are grouped under `### Added`,
-  `### Changed`, `### Deprecated`, `### Removed`, `### Fixed` and
-  `### Security` (in that order, without the prefix), and an empty
-  `## [Unreleased]` section is put back on top.
+  `## [X.Y.Z] - YYYY-MM-DD`, the sentence gives way to a short paragraph
+  on what the release brings, its bullets are grouped under
+  `### Added`, `### Changed`, `### Deprecated`, `### Removed`,
+  `### Fixed` and `### Security` (in that order, without the prefix),
+  and an empty `## [Unreleased]` section is put back on top.
 - Link references at the end of the file point each version at its
   comparison:
   `[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/vX.Y.Z...HEAD`
@@ -119,7 +127,8 @@ published files to the tagged commit.
    ```
 
 2. Set the new version without committing yet (`major`, `minor` or
-   `patch`, following the rules above).
+   `patch`, as the first sentence of the `## [Unreleased]` section
+   names it).
 
    ```sh
    npm version minor --no-git-tag-version
@@ -215,7 +224,8 @@ ruleset of the repository lists `refs/tags/ui-v*` beside
 beside `v*.*.*`.
 
 `ui/CHANGELOG.md` follows the same rules as the changelog of core: the
-`## [Unreleased]` section during development, and
+`## [Unreleased]` section during development, opened by the sentence
+that names the next version of the UI, and
 `## [X.Y.Z] - YYYY-MM-DD` with a short paragraph on top at a release.
 Check the body of the release with:
 
