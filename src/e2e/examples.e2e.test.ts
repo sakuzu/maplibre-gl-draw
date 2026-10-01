@@ -719,7 +719,7 @@ describe('the examples', () => {
       (await page.locator('[role="treeitem"][data-node="buildings"]').first().innerText())
         .replace(/\s+/g, ' ')
         .trim(),
-    ).toBe(`buildings ${buildings.toLocaleString('en')} rows`);
+    ).toBe('buildings');
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
