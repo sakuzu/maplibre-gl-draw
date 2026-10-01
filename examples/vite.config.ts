@@ -22,6 +22,12 @@ const PAGES = [
   'custom-feature-type',
   'large-data',
   'table-worker',
+  'feature-properties',
+  'layers-and-groups',
+  'style-rules-and-legend',
+  'snapping-and-tracing',
+  'geometry-operations',
+  'images',
 ];
 
 export default defineConfig({
