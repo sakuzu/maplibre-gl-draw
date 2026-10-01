@@ -725,11 +725,12 @@ async function whenPictureComplete(): Promise<void> {
 
 ## 例
 
-- [Datasets](../examples/datasets.ja.md) は、Overture Maps の東京都心の
-  建物と場所を、利用者の描いたものの下と上に表示します。建物は一度に
-  渡して高さで塗り分け、`layer-order` で描いたものの 2 つのレイヤーの
-  間に置きます。場所は見えている範囲の分を `provider` が渡し、間引いて
-  すべての前に置きます。行のクリックを知らせ、描いた線は建物に
+- [Datasets](../examples/datasets.ja.md) は、100 万を超える行を利用者の
+  描いたものと並べて表示します。作った 100 万の点は見えている範囲の分を
+  `provider` が渡して間引き、六角形のセル 25 万個は一度に渡します。
+  Overture Maps の東京都心の建物と場所も置きます。建物は外形の面積で
+  塗り分け、`layer-order` で描いたものの 2 つのレイヤーの間に置き、
+  セルはその奥に置きます。行のクリックを知らせ、描いた線は建物に
   スナップします
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.ja.md)
   は、同じ建物を GeoParquet のファイルから Worker で表に直接読み込み、

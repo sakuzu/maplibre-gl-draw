@@ -687,7 +687,7 @@ describe('the examples', () => {
     await close();
   });
 
-  it('datasets shows the sample data between and over two layers of the drawing, colors the buildings by area, lists the rules in the Legend tab and reports a click', {
+  it('datasets shows the generated cells and points and the sample data between and over two layers of the drawing, colors the buildings by area, thins the points until T, lists the rules in the Legend tab and reports a click', {
     timeout: browserTimeout(TIMEOUT),
   }, async () => {
     const count = (name: string): number =>
@@ -708,9 +708,10 @@ describe('the examples', () => {
     ).toEqual({
       buildings,
       places,
+      cells: 250_000,
     });
-    // The two layers of the drawing, the buildings placed between them, and the snapping to
-    // the datasets on
+    // The two layers of the drawing, the cells behind them, the buildings placed between them,
+    // and the snapping to the datasets on
     const drawing = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       const layers = Object.fromEntries(
@@ -733,11 +734,11 @@ describe('the examples', () => {
         'Survey area': ['Polygon'],
         'Planned route': ['LineString', 'Point', 'Point', 'Point'],
       },
-      order: ['Survey area', 'buildings', 'Planned route'],
+      order: ['cells', 'Survey area', 'buildings', 'Planned route'],
       snapToDatasets: true,
     });
-    // The layer panel lists the stack from the front: the places over every layer, and the
-    // buildings between the two layers with the number of their rows
+    // The layer panel lists the stack from the front: the places and the points over every
+    // layer, the buildings between the two layers and the cells behind them
     const rows = page.locator(
       '[data-role="layer-panel"] [data-container="root"] > [data-sortable-item]',
     );
@@ -746,7 +747,7 @@ describe('the examples', () => {
     ).toEqual(
       await page.evaluate(() => {
         const { draw } = window as unknown as E2EWindow;
-        return ['places', ...[...draw.layers.getOrder()].reverse()];
+        return ['places', 'points', ...[...draw.layers.getOrder()].reverse()];
       }),
     );
     expect(
@@ -757,6 +758,51 @@ describe('the examples', () => {
     expect(logs).toContain(
       `${buildings.toLocaleString('en')} buildings and ${places.toLocaleString('en')} places`,
     );
+    expect(logs).toContain('Keys: T turns the thinning of the points off and on');
+    expect(logs.some((line) => /^1,000,000 points made in \d+ ms/.test(line))).toBe(true);
+    expect(
+      logs.some((line) =>
+        /^250,000 cells: [\d,]+ ms to make the rows, [\d,]+ ms to give them to the dataset, and the first frame [\d,]+ ms after$/.test(
+          line,
+        ),
+      ),
+    ).toBe(true);
+    // The cells, all given at once, and the points the provider handed over for the view: the
+    // thinning draws a part of them, and T draws them all
+    const stats = (id: string) =>
+      page.evaluate(
+        (datasetId) =>
+          (window as unknown as E2EWindow).draw.datasets.get(datasetId)?.getThinningStats(),
+        id,
+      );
+    expect((await stats('cells'))?.total).toBe(250_000);
+    await expect
+      .poll(async () => (await stats('points'))?.total ?? 0, { timeout: browserTimeout(10_000) })
+      .toBeGreaterThan(0);
+    await expect
+      .poll(async () => (await stats('points'))?.visible ?? 0, { timeout: browserTimeout(5_000) })
+      .toBeGreaterThan(0);
+    const thinned = await stats('points');
+    expect(thinned?.enabled).toBe(true);
+    expect(thinned?.visible).toBeLessThan(thinned?.total ?? 0);
+    await expect
+      .poll(() => logs.some((line) => /^points: thinning on, [\d,]+ of [\d,]+ drawn$/.test(line)), {
+        timeout: browserTimeout(5_000),
+      })
+      .toBe(true);
+    await page.keyboard.press('t');
+    await expect
+      .poll(async () => (await stats('points'))?.visible, { timeout: browserTimeout(5_000) })
+      .toBe(thinned?.total);
+    await expect
+      .poll(() => logs.some((line) => /^points: thinning off, /.test(line)), {
+        timeout: browserTimeout(5_000),
+      })
+      .toBe(true);
+    await page.keyboard.press('t');
+    await expect
+      .poll(async () => (await stats('points'))?.visible, { timeout: browserTimeout(5_000) })
+      .toBe(thinned?.visible);
     // It opens on Positron, which the style of the address stands in for
     expect(
       (
@@ -790,7 +836,7 @@ describe('the examples', () => {
             .evaluateAll((lists) => lists.map((list) => list.getAttribute('aria-label'))),
         { timeout: browserTimeout(5_000) },
       )
-      .toEqual(['places', 'buildings']);
+      .toEqual(['places', 'points', 'buildings', 'cells']);
     expect(
       (await legendList('buildings').locator('[data-role="list-item"]').allInnerTexts()).map(
         (text) => text.trim(),
@@ -811,13 +857,19 @@ describe('the examples', () => {
         ),
     ).toEqual([...palette, '#d9d9d9']);
     expect(await legendList('places').locator('[data-role="list-item"]').count()).toBe(7);
+    expect(
+      (await legendList('points').locator('[data-role="list-item"]').allInnerTexts()).map((text) =>
+        text.trim(),
+      ),
+    ).toEqual(['walk', 'bicycle', 'car', 'train', 'Other']);
+    expect(await legendList('cells').locator('[data-role="list-item"]').count()).toBe(6);
     await page.getByRole('button', { name: 'Layers', exact: true }).click();
     expect(
       await page.evaluate(
         () => (window as unknown as E2EWindow).draw.datasets.get('buildings')?.listRows().length,
       ),
     ).toBe(buildings);
-    // The provider hands over the places in view, a part of them
+    // The provider of the places hands over those in view, a part of them
     await expect
       .poll(
         () =>
@@ -846,8 +898,10 @@ describe('the examples', () => {
     await settle(page);
     const clicked = await recordDatasetClick(page);
     await click(page, await pageOf(page, target));
-    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toMatch(/^(buildings|places)$/);
-    expect(logs.some((line) => /^(buildings|places): /.test(line))).toBe(true);
+    await expect
+      .poll(clicked, { timeout: browserTimeout(5_000) })
+      .toMatch(/^(buildings|places|points)$/);
+    expect(logs.some((line) => /^(buildings|places|points): /.test(line))).toBe(true);
     await close();
   });
 

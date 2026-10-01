@@ -30,7 +30,7 @@ them in this order.
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, routes along great circles, a box, a circle, an image and cities on the sphere, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
 | [200000-features](200000-features/) | 200,000 editable features loaded in one transaction | [Performance](../docs/guides/performance.md) |
-| [datasets](datasets/) | Datasets given at once and fetched for the view, clicks on their rows | [Large data](../docs/guides/large-data.md) |
+| [datasets](datasets/) | 1,000,000 points fetched for the view and thinned, 250,000 cells given at once, the buildings and places of Tokyo, clicks on their rows | [Large data](../docs/guides/large-data.md) |
 | [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns | [Large data](../docs/guides/large-data.md) |
 | [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, the standard UI without the toolbar | [Read-only](../docs/guides/read-only.md) |
 | [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector | [Plugins](../docs/guides/plugins.md) |

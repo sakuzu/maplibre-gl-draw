@@ -733,12 +733,13 @@ it.
 
 ## Examples
 
-- [Datasets](../examples/datasets.md) shows the buildings and the places
-  of central Tokyo from Overture Maps under and over the user's drawing:
-  the buildings, given at once and colored by their height, are
-  `layer-order` between two layers of the drawing; the places, handed
-  over by a provider for the part in view and thinned, are in front of
-  everything. A click on a row is reported, and the lines drawn snap to
+- [Datasets](../examples/datasets.md) shows over a million rows beside
+  the user's drawing: 1,000,000 generated points handed over by a
+  provider for the part in view and thinned, 250,000 hexagonal cells
+  given at once, and the buildings and the places of central Tokyo from
+  Overture Maps. The buildings, colored by the area of their footprint,
+  are `layer-order` between two layers of the drawing, and the cells
+  behind them. A click on a row is reported, and the lines drawn snap to
   the buildings
 - [Columnar data in a Worker](../examples/columnar-data-in-a-worker.md)
   reads the same buildings from a GeoParquet file in a Worker, straight
