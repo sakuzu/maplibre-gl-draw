@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Takes the pictures of the gallery of the examples (docs/public/examples/<name>.png)
+ * Takes the pictures of the gallery of the examples (docs/public/examples/<name>.jpg)
  *
  * Builds the examples and the playground with their own vite configurations (in memory, as the
  * end-to-end tests do) and opens each example of docs/examples/catalog.json in headless
@@ -84,7 +84,7 @@ mkdirSync(OUT, { recursive: true });
 
 try {
   for (const name of names) {
-    const output = join(OUT, `${name}.png`);
+    const output = join(OUT, `${name}.jpg`);
     writeFileSync(output, await capture(name));
     console.log(`Wrote ${output}`);
   }
@@ -111,7 +111,7 @@ async function capture(name) {
     if (file === undefined) {
       // The files of examples/public/ (the sample data), which vite copies to the build only
       // when it writes it to disk
-      const onDisk = join(EXAMPLES, 'public', rest.join('/'));
+      const onDisk = join(root, 'examples/public', rest.join('/'));
       if (existsSync(onDisk)) {
         return route.fulfill({
           contentType: CONTENT_TYPES[extname(path)] ?? 'application/octet-stream',
@@ -158,7 +158,7 @@ async function capture(name) {
   );
   await page.waitForTimeout(1000);
 
-  const png = await page.screenshot({ type: 'png' });
+  const png = await page.screenshot({ type: 'jpeg', quality: 82 });
   await context.close();
   return png;
 }

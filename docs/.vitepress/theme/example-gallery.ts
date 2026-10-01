@@ -8,7 +8,7 @@
  * The gallery page (docs/examples/index.md) writes an empty fence of the language
  * `example-gallery`, and the configuration renders it as this component. A card leads to the
  * page of the example, which shows it live with its code. The pictures are
- * docs/public/examples/<name>.png, taken by `npm run site:thumbnails`.
+ * docs/public/examples/<name>.jpg, taken by `npm run site:thumbnails`.
  */
 
 import { useData, withBase } from 'vitepress';
@@ -41,7 +41,7 @@ export const ExampleGallery = defineComponent({
           h('li', { key: example.name }, [
             h('a', { href: withBase(`${ja ? '/ja' : ''}/examples/${example.name}.html`) }, [
               h('img', {
-                src: withBase(`/examples/${example.name}.png`),
+                src: withBase(`/examples/${example.name}.jpg`),
                 alt: '',
                 width: 640,
                 height: 400,
