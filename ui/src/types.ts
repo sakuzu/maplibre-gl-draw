@@ -106,6 +106,12 @@ export interface DrawUIOptions {
    * had is given back by `destroy()`. True when left out
    */
   padding?: boolean;
+  /**
+   * Where the side panels go on a wide map: `'floating'` lays them over the map, gap-md from
+   * its edges and as tall as their content (the default, as the reference layout); `'beside'`
+   * docks them beside the map from 64rem. Below 48rem both become sheets
+   */
+  side?: 'floating' | 'beside';
 }
 
 /** A toolbar on the page */

@@ -82,7 +82,7 @@ describe('the padding of the map', () => {
   it('is the width of the panels beside the stage and the toolbar with its gap', async () => {
     layOut(1200);
     const fake = withPoint(true);
-    ui = createDrawUI(fake.asDraw);
+    ui = createDrawUI(fake.asDraw, { side: 'beside' });
     await settled();
     expect(fake.map.setPadding).toHaveBeenLastCalledWith({
       top: 0,

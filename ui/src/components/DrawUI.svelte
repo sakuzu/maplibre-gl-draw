@@ -53,6 +53,7 @@
     inspector,
     sections,
     onbeside,
+    side: sideMode = 'floating',
   }: {
     draw: DrawUIDraw & LayerPanelDraw & LegendDraw & InspectorDraw;
     tools: Box<ToolEntry[]>;
@@ -68,6 +69,8 @@
     sections: Box<InspectorSectionSpec[]>;
     /** Called with the side regions beside the stage after the layout or the open panes change */
     onbeside?: (beside: Beside) => void;
+    /** Where the side regions go on a wide map: floating over it or beside it */
+    side?: 'floating' | 'beside';
   } = $props();
 
   // The inspector is open while something is selected; closing it clears the selection
@@ -162,6 +165,7 @@
 
 <Shell
   overlay
+  side={sideMode}
   bind:leftOpen
   bind:rightOpen={() => selected.get(), closeInspector}
   leftLabel={m.layers}

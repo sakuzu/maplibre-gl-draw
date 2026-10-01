@@ -200,6 +200,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       inspector,
       sections,
       onbeside: padding ? (beside: Beside) => padding.update(beside) : undefined,
+      side: options.side,
     },
   });
   // The shell opens the left region in an effect: run it now, so that the panels are there when
