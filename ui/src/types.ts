@@ -4,6 +4,7 @@
 // The types of the API.
 
 import type { Draw, Mode } from '@sakuzu/maplibre-gl-draw';
+import type { InspectorHandle, InspectorOptions } from './inspector/types.js';
 import type { Locale } from './messages.js';
 
 /** The name of a built-in tool */
@@ -55,15 +56,18 @@ export interface DrawUIOptions {
   container?: HTMLElement;
   /** The toolbar at the bottom, or false for none; true when left out */
   toolbar?: boolean | ToolbarOptions;
-  /** The inspector on the right. Accepted, and not drawn yet in this version */
-  inspector?: boolean;
+  /**
+   * The inspector on the right, open while something is selected, or false for none; true when
+   * left out
+   */
+  inspector?: boolean | InspectorOptions;
   /** The layer panel on the left. Accepted, and not drawn yet in this version */
   layers?: boolean;
   /** The legend beside the layer panel. Accepted, and not drawn yet in this version */
   legend?: boolean;
   /** The words: `en` (the default), `ja`, or words laid over English */
   locale?: Locale;
-  /** The units of the measurements. Accepted, and not used yet in this version */
+  /** The units of the measurements of the inspector, unless its options name others; metric when left out */
   units?: 'metric' | 'imperial';
   /**
    * Whether the keyboard shortcuts are on: the keys of the tools, Delete and Backspace for the
@@ -107,6 +111,8 @@ export interface DrawUI {
   readonly toolbar: ToolbarHandle | null;
   /** The tools of the toolbar */
   readonly tools: ToolsHandle;
+  /** The inspector, or null when there is none */
+  readonly inspector: InspectorHandle | null;
   /** Changes the words */
   setLocale(locale: Locale): void;
   /** Removes the interface and stops following the draw instance. A second call does nothing */

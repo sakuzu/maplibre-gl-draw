@@ -21,3 +21,9 @@ follows semantic versioning.
 - The words come in English and Japanese, and any of them can be
   replaced (`locale`, `ui.setLocale`).
 - `style.css` keeps kata's tokens on the root element `.mgd-ui`.
+- The inspector on the right of `createDrawUI` (`inspector`, `units`):
+  the name, the style, the measurements and the attributes of a
+  feature; the shared fields and the operations of several features;
+  the settings of a layer and of a group. `createInspector(draw,
+  { target })` puts it alone in an element, and
+  `ui.inspector.sections.add` adds a section of the application.
