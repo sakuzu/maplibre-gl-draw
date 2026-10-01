@@ -1,0 +1,51 @@
+/*
+ * SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The showcase (?showcase): the legend card of the README images, and the space of the globe */
+
+.showcase-legend {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: flex;
+  gap: 1.25rem;
+  border-radius: 0.5rem;
+  background-color: rgb(255 255 255 / 0.94);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+  padding-inline: 0.875rem;
+  padding-block: 0.625rem;
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+.showcase-legend h2 {
+  margin: 0 0 0.25rem;
+  font-size: inherit;
+  font-weight: 600;
+  color: #111827;
+}
+
+.showcase-legend ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.showcase-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.showcase-legend-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.1875rem;
+}
+
+.showcase-space {
+  background-color: #0b1224;
+}

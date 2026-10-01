@@ -12,8 +12,6 @@
 
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
-
-import type { UnderlayRegistry } from '../gis/underlay';
 import { globeScene } from './globe';
 import { largeDataScene } from './large-data';
 import { overviewScene } from './overview';
@@ -46,40 +44,18 @@ export function getShowcaseScene(): ShowcaseScene | null {
 }
 
 /**
- * Prepares the page for the scene before the map is created
- */
-export function prepareShowcase(scene: ShowcaseScene): void {
-  document.documentElement.classList.add('showcase');
-  if (scene.mapOnly) document.documentElement.classList.add('showcase-map-only');
-}
-
-/**
- * Loads the drawing of the scene
- *
- * Called on the map's load, before the panels are built, so that they start from the
- * drawing.
- */
-export async function loadShowcase(
-  scene: ShowcaseScene,
-  draw: Draw,
-  map: maplibregl.Map,
-  underlays: UnderlayRegistry,
-): Promise<void> {
-  await scene.load({ draw, map, underlays });
-}
-
-/**
- * Finishes the scene once the panels are built, then marks the page ready once the map has
+ * Loads the drawing of the scene and finishes it, then marks the page ready once the map has
  * settled
+ *
+ * Called on the map's load.
  */
-export async function finishShowcase(
+export async function runShowcase(
   scene: ShowcaseScene,
   draw: Draw,
   map: maplibregl.Map,
-  underlays: UnderlayRegistry,
-  layerPanel: HTMLElement,
 ): Promise<void> {
-  await scene.finish?.({ draw, map, underlays, layerPanel });
+  await scene.load({ draw, map });
+  await scene.finish?.({ draw, map });
 
   await nextFrame();
   if (!map.loaded()) {

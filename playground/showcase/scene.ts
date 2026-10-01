@@ -11,8 +11,6 @@
 import type { Draw, DrawDocument, Feature, FileData } from '@sakuzu/maplibre-gl-draw';
 import type * as maplibregl from 'maplibre-gl';
 
-import type { UnderlayRegistry } from '../gis/underlay';
-
 /** The camera a scene opens with */
 export interface ShowcaseCamera {
   center: [number, number];
@@ -25,7 +23,6 @@ export interface ShowcaseCamera {
 export interface ShowcaseContext {
   draw: Draw;
   map: maplibregl.Map;
-  underlays: UnderlayRegistry;
 }
 
 export interface ShowcaseScene {
@@ -35,17 +32,14 @@ export interface ShowcaseScene {
   /** The largest pitch of the map, when the camera is tilted beyond the default 60 degrees */
   maxPitch?: number;
   /**
-   * Whether the map takes the whole width of the page (the sidebar is hidden), for a scene
-   * that is about how the drawing looks rather than about the panels
+   * Whether the map is shown alone, without the standard UI, for a scene that is about how the
+   * drawing looks rather than about the panels
    */
   mapOnly?: boolean;
-  /**
-   * Loads the drawing and sets up the map. Called on the map's load, before the panels are
-   * built, so that they start from the drawing
-   */
+  /** Loads the drawing and sets up the map. Called on the map's load */
   load(context: ShowcaseContext): Promise<void>;
-  /** Selects a feature, arranges the panels and adds the legend, once the panels are built */
-  finish?(context: ShowcaseContext & { layerPanel: HTMLElement }): Promise<void>;
+  /** Selects a feature and adds the legend, once the drawing is loaded */
+  finish?(context: ShowcaseContext): Promise<void>;
 }
 
 /** A feature of a scene's document: the fields a scene sets */

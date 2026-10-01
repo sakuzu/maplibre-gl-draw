@@ -10,20 +10,37 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig({
   // Relative asset paths, so the build can be served from any directory (GitHub Pages)
   base: './',
-  // The sample data is shared with the examples
-  publicDir: resolve(root, '../examples/public'),
   build: {
-    // The page bundles maplibre-gl and the whole library in one script
-    chunkSizeWarningLimit: 2500,
+    // The page bundles maplibre-gl, the whole library and the standard UI in one script
+    chunkSizeWarningLimit: 3000,
   },
   server: {
-    port: 3001,
+    // A port of its own, kept: the pages of the examples frame the playground from this address
+    port: 3300,
+    strictPort: true,
     open: true,
   },
   resolve: {
-    alias: {
-      // The library is taken from its sources, so a change shows without a build
-      '@sakuzu/maplibre-gl-draw': resolve(root, '../src/index.ts'),
-    },
+    // As in the examples: the library from its sources, the standard UI from its build
+    // (npm run ui:build), which imports core by its name and gets the same sources
+    alias: [
+      {
+        find: /^@sakuzu\/maplibre-gl-draw\/geometry$/,
+        replacement: resolve(root, '../src/geometry/index.ts'),
+      },
+      {
+        find: /^@sakuzu\/maplibre-gl-draw\/table$/,
+        replacement: resolve(root, '../src/table/index.ts'),
+      },
+      { find: /^@sakuzu\/maplibre-gl-draw$/, replacement: resolve(root, '../src/index.ts') },
+      {
+        find: /^@sakuzu\/maplibre-gl-draw-ui\/style\.css$/,
+        replacement: resolve(root, '../ui/dist/style.css'),
+      },
+      {
+        find: /^@sakuzu\/maplibre-gl-draw-ui$/,
+        replacement: resolve(root, '../ui/dist/index.js'),
+      },
+    ],
   },
 });

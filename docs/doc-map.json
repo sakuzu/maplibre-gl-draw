@@ -197,6 +197,21 @@
     ],
     "docs/examples-pages/columnar-data-in-a-worker.md": [
       "examples/columnar-data-in-a-worker/**"
+    ],
+    "docs/examples-pages/read-only-viewer.md": [
+      "examples/read-only-viewer/**"
+    ],
+    "docs/examples-pages/plugins.md": [
+      "examples/plugins/**"
+    ],
+    "docs/examples-pages/custom-feature-types.md": [
+      "examples/custom-feature-types/**"
+    ],
+    "docs/examples-pages/custom-ui.md": [
+      "examples/custom-ui/**"
+    ],
+    "docs/examples-pages/playground.md": [
+      "playground/**"
     ]
   }
 }

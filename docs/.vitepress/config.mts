@@ -103,7 +103,8 @@ function cjkBreaks(md: MarkdownIt): void {
  *     ```
  *
  * A fence, not an HTML tag, so that the page stays plain Markdown for markdownlint and GitHub.
- * A name that is not a folder of examples/ with a page fails the build.
+ * A name that is not a folder of examples/ with a page fails the build; `playground` names the
+ * playground (playground/).
  */
 function exampleFrames(md: MarkdownIt): void {
   const fence = md.renderer.rules.fence;
@@ -114,7 +115,8 @@ function exampleFrames(md: MarkdownIt): void {
       return self.renderToken(tokens, idx, options);
     }
     const name = token.content.trim();
-    if (!/^[a-z0-9-]+$/.test(name) || !existsSync(join(ROOT, 'examples', name, 'index.html'))) {
+    const page = name === 'playground' ? 'playground' : join('examples', name);
+    if (!/^[a-z0-9-]+$/.test(name) || !existsSync(join(ROOT, page, 'index.html'))) {
       throw new Error(`No example named "${name}" in examples/`);
     }
     return `<ExampleFrame name="${name}" />\n`;
@@ -244,14 +246,17 @@ export default defineConfig({
     },
   },
   head: [['meta', { name: 'theme-color', content: '#3451b2' }]],
-  // The examples the pages show in a frame, built under /examples/ of the site. They take the
-  // standard UI from its build (npm run ui:build, which `npm run site:build` checks for)
+  // The examples the pages show in a frame, built under /examples/ of the site, and the
+  // playground under /playground/. They take the standard UI from its build (npm run ui:build,
+  // which `npm run site:build` checks for)
   buildEnd: ({ outDir }) => {
-    execFileSync(
-      join(ROOT, 'node_modules/.bin/vite'),
-      ['build', '--outDir', join(outDir, 'examples'), '--emptyOutDir', '--logLevel', 'warn'],
-      { cwd: join(ROOT, 'examples'), stdio: 'inherit' },
-    );
+    for (const project of ['examples', 'playground']) {
+      execFileSync(
+        join(ROOT, 'node_modules/.bin/vite'),
+        ['build', '--outDir', join(outDir, project), '--emptyOutDir', '--logLevel', 'warn'],
+        { cwd: join(ROOT, project), stdio: 'inherit' },
+      );
+    }
   },
   themeConfig: {
     search: { provider: 'local' },

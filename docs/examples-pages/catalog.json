@@ -1,4 +1,11 @@
 {
+  "playground": {
+    "title": "Playground",
+    "titleJa": "Playground",
+    "description": "Every feature of the library on one page: the standard UI with all its parts, a plugin and a custom feature type with their tools and sections, terrain, the globe, a dataset, read-only and the interaction lock, saving in the browser, and 200,000 features.",
+    "descriptionJa": "ライブラリーのすべての機能を 1 つのページに載せています。すべての部品を 出した標準の UI、道具と節を足したプラグインと独自の地物の型、地形、 地球儀、データセット、読み取り専用と操作の錠、ブラウザーへの保存、 20 万の地物です。",
+    "order": 0
+  },
   "get-started": {
     "title": "Get started",
     "titleJa": "Get started",
@@ -96,5 +103,33 @@
     "description": "A table read in a Worker and handed to a dataset as its columns.",
     "descriptionJa": "Worker で表を読み、列のままデータセットに渡します。",
     "order": 14
+  },
+  "read-only-viewer": {
+    "title": "Read-only viewer",
+    "titleJa": "Read-only viewer",
+    "description": "A page that shows a drawing to look at, not to edit: the user selects a feature and reads its attributes, and nothing the user does changes the drawing.",
+    "descriptionJa": "描画を見るためだけのページです。利用者は地物を選んで属性を読めますが、 何をしても描画は変わりません。",
+    "order": 15
+  },
+  "plugins": {
+    "title": "Plugins",
+    "titleJa": "Plugins",
+    "description": "A plugin adds a mode of its own to the drawing, and the page adds a tool for that mode to the toolbar and a section for its features to the panel on the right.",
+    "descriptionJa": "プラグインで描画に独自のモードを足し、ページはそのモードの道具を道具の バーに、その地物のための節を右のパネルに足します。",
+    "order": 16
+  },
+  "custom-feature-types": {
+    "title": "Custom feature types",
+    "titleJa": "Custom feature types",
+    "description": "A feature type the library does not have: a route, a line with style keys of its own, which its definition draws, hits and takes into a selection box, and a section of the panel on the right for its keys.",
+    "descriptionJa": "ライブラリーにない地物の型です。ルートは独自のスタイルのキーを持つ線で、 その定義が描き方、当たり判定、範囲選択を決めます。右のパネルには、 そのキーのための節を足します。",
+    "order": 17
+  },
+  "custom-ui": {
+    "title": "Build your own UI",
+    "titleJa": "Build your own UI",
+    "description": "No standard UI: a toolbar and a panel of the selected feature built with the public API of the library alone, in plain TypeScript and a few rules of CSS. Everything the standard UI does is reachable this way.",
+    "descriptionJa": "標準の UI を使いません。道具のバーと、選んだ地物のパネルを、ライブラリーの 公開 API だけで作ります。素の TypeScript と数行の CSS で書きます。標準の UI ができることは、すべてこの方法で作れます。",
+    "order": 18
   }
 }

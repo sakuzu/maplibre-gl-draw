@@ -33,6 +33,10 @@ const PAGES = [
   '200000-features',
   'datasets',
   'columnar-data-in-a-worker',
+  'read-only-viewer',
+  'plugins',
+  'custom-feature-types',
+  'custom-ui',
 ];
 
 export default defineConfig({

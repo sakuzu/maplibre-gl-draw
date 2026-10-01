@@ -1,0 +1,50 @@
+---
+aside: false
+---
+
+# Custom feature types
+
+A feature type the library does not have: a route, a line with style
+keys of its own, which its definition draws, hits and takes into a
+selection box, and a section of the panel on the right for its keys.
+
+```example
+custom-feature-types
+```
+
+The page opens with the river route selected. The Route section of the
+panel on the right has its color, its width and whether it is dashed,
+and a change there redraws it at once. Click the other route, or drag a
+selection box over a vertex of it with Shift held, to select it; drag a
+vertex to move it.
+
+## Code
+
+The definition (`route.ts`) gives the type its renderer, which draws the
+line with the shared line renderer of the library, its hit test, its box
+selection, its selection frame and the handles on its vertices.
+`featureTypes.add` registers it (1). The style keys of a route
+(`routeColor`, `routeWidth`, `routeDashed`) are declared by declaration
+merging on `FeatureStyle`: core keeps a key it does not define with the
+feature, and the renderer checks the value before using it.
+
+The inspector of the standard UI has style fields only for the types of
+the library, so the page adds a section for the route's keys with
+`ui.inspector.sections.add` (4). Its `fields` are drawn by the UI, a
+color, a slider and a toggle, and `onchange` writes the key that changed
+into the style of the selected routes.
+
+::: code-group
+<<< @/../examples/custom-feature-types/main.ts
+<<< @/../examples/custom-feature-types/route.ts
+<<< @/../examples/custom-feature-types/index.html
+:::
+
+## Related
+
+- [Custom feature types](../guides/custom-types.md): the definition of a
+  type, its renderer and its hit test
+- [`FeatureTypeDefinition`](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md)
+  and [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)
+- [A section of the inspector](../../ui/README.md#inspector) of the
+  standard UI
