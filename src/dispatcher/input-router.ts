@@ -190,7 +190,8 @@ function firstTentativeCoordinate(tentative: TentativeState | null): Coordinate 
  *   little beyond ±180; the rendering and the export deal with that
  * - A drag moves every coordinate of its events by the one shift decided from where it started
  *   (`dragStartLngLat`), so the distance dragged never jumps by 360 degrees when the pointer
- *   crosses the antimeridian during the drag
+ *   crosses the antimeridian during the drag. The normalizer gives the positions of a press
+ *   continuously (the globe's jump from 180 to -180 included), so one shift keeps them so
  *
  * Away from the antimeridian, on the main copy of the world, nothing changes and the event is
  * returned as it is.

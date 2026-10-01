@@ -6,6 +6,13 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+- Fixed: on the globe, a freehand stroke drawn across the antimeridian is
+  drawn as the stroke alone. The globe gives the pointer longitudes in
+  [-180, 180], so where the pointer crossed the line (or slid along the
+  edge of the sphere past it) the next point of the stroke was 360
+  degrees from the one before, and a line went once round the globe
+  along the parallel. The coordinates of a press now run on past 180 as
+  they do on the flat map.
 - Fixed: `draw.options.update({ scaleWithZoom })` reaches the drawing
   modes at once. They kept the value given to `createDraw`, so a feature
   drawn after the option was turned off still got a reference zoom
