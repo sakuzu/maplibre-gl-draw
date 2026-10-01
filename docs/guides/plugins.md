@@ -482,7 +482,7 @@ again does nothing. `remove(name)` does the same by name.
 
 - [Plugins](../examples/plugins.md) adds a plugin with a mode of its
   own, an event it listens to and an API, and a tool and a section of
-  the standard UI for it
+  the standard UI for it; a key removes them all and adds them again
 
 ## Reference
 

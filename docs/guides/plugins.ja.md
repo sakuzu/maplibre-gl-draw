@@ -479,7 +479,7 @@ draw.setMode('draw_rectangle');
 
 - [Plugins](../examples/plugins.ja.md) では、独自のモード、受け取る
   イベント、API を持つプラグインを足し、そのための道具と節を標準の UI に
-  足します
+  足します。キーで、それらをまとめて取り除き、また足します
 
 ## リファレンス
 

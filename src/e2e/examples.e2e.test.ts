@@ -609,6 +609,50 @@ describe('the examples', () => {
     await close();
   });
 
+  it('save-and-load downloads both formats with D and G, and opens a file with B', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('save-and-load');
+    await loaded(page);
+    await click(page, at(-300, -250));
+
+    // D offers the document in the format of the library, G its features as GeoJSON
+    for (const [key, name] of [
+      ['d', 'drawing.maplibre-gl-draw.json'],
+      ['g', 'drawing.geojson'],
+    ] as const) {
+      const download = page.waitForEvent('download');
+      await page.keyboard.press(key);
+      const file = await download;
+      expect(file.suggestedFilename()).toBe(name);
+      const json = JSON.parse(readFileSync((await file.path()) as string, 'utf8')) as {
+        type?: string;
+        version?: string;
+        features: unknown[];
+      };
+      expect(json.features).toHaveLength(4);
+      if (key === 'd') expect(json.version).toBe('3.0.0');
+      else expect(json.type).toBe('FeatureCollection');
+    }
+
+    // B opens the chooser of the browser, and the file chosen is loaded into the drawing
+    const chooser = page.waitForEvent('filechooser');
+    await page.keyboard.press('b');
+    const point = { type: 'Point', coordinates: [139.774, 35.675] };
+    await (await chooser).setFiles({
+      name: 'one.geojson',
+      mimeType: 'application/geo+json',
+      buffer: Buffer.from(
+        JSON.stringify({
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: point, properties: { name: 'Chosen' } }],
+        }),
+      ),
+    });
+    await expect.poll(() => featureCount(page), { timeout: browserTimeout(5_000) }).toBe(5);
+    await close();
+  });
+
   it('globe opens on the globe, and the globe button of the map controls turns it flat', {
     timeout: TIMEOUT,
   }, async () => {
@@ -977,6 +1021,114 @@ describe('the examples', () => {
     await close();
   });
 
+  it('read-only-viewer switches read-only with R, the interaction lock with K, the lock of the Blocks layer with B and local hiding with H', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('read-only-viewer');
+    await loaded(page);
+    const press = async (key: string) => {
+      await page.keyboard.press(key);
+      await settle(page);
+    };
+    const state = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        const blocks = draw.layers.list().find((layer) => layer.name === 'Blocks');
+        if (blocks === undefined) throw new Error('No Blocks layer');
+        return {
+          readOnly: draw.isReadOnly(),
+          interactionLocked: draw.isInteractionLocked(),
+          layerLocked: blocks.locked === true,
+          hidden: draw.hidden.has(blocks.id),
+          visible: blocks.visible !== false,
+        };
+      });
+    const tower = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      return draw.features.list().find((f) => f.properties.name === 'North tower');
+    });
+    if (tower === undefined) throw new Error('No North tower');
+    const geometryOf = (id: string) =>
+      page.evaluate(
+        (featureId) => (window as unknown as E2EWindow).draw.features.get(featureId)?.geometry,
+        id,
+      );
+    const rename = () =>
+      page.evaluate(
+        (id) =>
+          (window as unknown as E2EWindow).draw.features.update(id, {
+            properties: { note: 'changed' },
+          }) !== null,
+        tower.id,
+      );
+    // The viewer opens read-only, with the three other states off
+    expect(await state()).toEqual({
+      readOnly: true,
+      interactionLocked: false,
+      layerLocked: false,
+      hidden: false,
+      visible: true,
+    });
+    expect(await rename()).toBe(false);
+    // The tools start, and what they draw is not kept
+    await page.getByRole('button', { name: 'Polygon', exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).toBe(
+      'draw_polygon',
+    );
+    await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
+    expect(await featureCount(page)).toBe(8);
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    // Locking a layer is a write, so read-only refuses it
+    await press('b');
+    expect((await state()).layerLocked).toBe(false);
+
+    // R: writable again, by code too
+    await press('r');
+    expect((await state()).readOnly).toBe(false);
+    expect(await rename()).toBe(true);
+
+    // K: the lock stops the tools of the user; code still writes
+    await press('k');
+    expect((await state()).interactionLocked).toBe(true);
+    await page.getByRole('button', { name: 'Polygon', exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).draw.getMode())).not.toBe(
+      'draw_polygon',
+    );
+    await clickRing(page, [at(-60, 120), at(60, 120), at(60, 200), at(-60, 200)]);
+    expect(await featureCount(page)).toBe(8);
+    expect(await rename()).toBe(true);
+    await press('k');
+    expect((await state()).interactionLocked).toBe(false);
+
+    // B: the locked layer keeps its features where they are; unlocked, a drag moves them
+    const [[corner]] = (tower.geometry as GeoJSON.Polygon).coordinates;
+    const inside = [corner[0] + 0.0008, corner[1] + 0.00055];
+    await page.evaluate(
+      (center) =>
+        (window as unknown as E2EWindow).map.jumpTo({ center: center as [number, number] }),
+      inside,
+    );
+    await settle(page);
+    await press('b');
+    expect((await state()).layerLocked).toBe(true);
+    await click(page, at(0, 0));
+    await drag(page, at(0, 0), at(-50, 40));
+    expect(await geometryOf(tower.id)).toEqual(tower.geometry);
+    await press('b');
+    expect((await state()).layerLocked).toBe(false);
+    await click(page, at(0, 0));
+    await drag(page, at(0, 0), at(-50, 40));
+    expect(await geometryOf(tower.id)).not.toEqual(tower.geometry);
+
+    // H: hidden on this page only; the layer stays visible in the document, under read-only too
+    await press('r');
+    await press('h');
+    expect(await state()).toMatchObject({ readOnly: true, hidden: true, visible: true });
+    await press('h');
+    expect((await state()).hidden).toBe(false);
+    await close();
+  });
+
   it('plugins adds the tool of the mode of the plugin, which stamps a point', {
     timeout: TIMEOUT,
   }, async () => {
@@ -992,6 +1144,65 @@ describe('the examples', () => {
       return all.map((f) => f.properties.stamp);
     });
     expect(stamped).toEqual(['done', 'planned']);
+    await close();
+  });
+
+  it('plugins removes the plugin with its mode, its tool and its section with U, and adds them back', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('plugins');
+    const press = async (key: string) => {
+      await page.keyboard.press(key);
+      await settle(page);
+    };
+    const stampTool = page.getByRole('button', { name: 'Stamp', exact: true });
+    const section = page.locator('[data-role="inspector"]').getByText('Planned', { exact: true });
+    const extension = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        let error: string | undefined;
+        try {
+          draw.setMode('stamp');
+        } catch (e) {
+          error = (e as { code?: string }).code;
+        }
+        draw.setMode('select');
+        return {
+          plugin: draw.extensions.plugins.has('stamp'),
+          mode: draw.extensions.modes.has('stamp'),
+          error,
+        };
+      });
+    // The page opens with the meeting point selected, on the section of the plugin
+    await section.waitFor();
+    expect(await stampTool.count()).toBe(1);
+    expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
+
+    await press('u');
+    expect(await extension()).toEqual({ plugin: false, mode: false, error: 'not-found' });
+    expect(await stampTool.count()).toBe(0);
+    expect(await section.count()).toBe(0);
+    // The stars stay in the drawing
+    expect(await featureCount(page)).toBe(1);
+
+    await press('u');
+    expect(await extension()).toEqual({ plugin: true, mode: true, error: undefined });
+    expect(await stampTool.count()).toBe(1);
+    await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.set('feature', [draw.features.list()[0].id]);
+    });
+    await section.waitFor();
+    // The plugin added again stamps and counts from zero
+    await stampTool.click();
+    await click(page, at(-100, 60));
+    expect(
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.extensions.plugins
+          .getApi<{ count(): number }>('stamp')
+          ?.count(),
+      ),
+    ).toBe(1);
     await close();
   });
 
@@ -1016,6 +1227,67 @@ describe('the examples', () => {
     expect(
       await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
     ).toEqual([hill.id]);
+    await close();
+  });
+
+  it('custom-feature-types unregisters the type with U, and registers it again', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-types');
+    const press = async (key: string) => {
+      await page.keyboard.press(key);
+      await settle(page);
+    };
+    const [hill, river] = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      return draw.features.list();
+    });
+    const [r0, r1] = (river.geometry as GeoJSON.LineString).coordinates;
+    const riverMiddle = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2];
+    const [h0, h1] = (hill.geometry as GeoJSON.LineString).coordinates;
+    const hillMiddle = [(h0[0] + h1[0]) / 2, (h0[1] + h1[1]) / 2];
+    const blue = async () =>
+      (await colorsAround(page, riverMiddle)).some(([r, , b]) => b > 180 && r < 120);
+    const state = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        return {
+          registered: draw.extensions.featureTypes.has('Route'),
+          count: draw.features.count(),
+          selected: [...draw.selection.get().ids],
+        };
+      });
+    expect(await blue()).toBe(true);
+    const clickHill = async () => {
+      await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+      await click(page, await pageOf(page, hillMiddle));
+      return (await state()).selected;
+    };
+
+    // Without the type the routes stay in the data, but they are not drawn and a click passes
+    // through them
+    await press('u');
+    expect(await state()).toMatchObject({ registered: false, count: 2 });
+    expect(await blue()).toBe(false);
+    expect(await clickHill()).toEqual([]);
+    // A selection box still takes one, by the fallback test of the library on its positions
+    await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+    const vertex = await pageOf(page, h0);
+    await page.keyboard.down('Shift');
+    await drag(
+      page,
+      { x: vertex.x - 20, y: vertex.y - 20 },
+      { x: vertex.x + 20, y: vertex.y + 20 },
+    );
+    await page.keyboard.up('Shift');
+    expect((await state()).selected).toEqual([hill.id]);
+
+    // Registered again, they come back as they were
+    await press('u');
+    expect(await state()).toMatchObject({ registered: true, count: 2 });
+    expect(await blue()).toBe(true);
+    expect(await clickHill()).toEqual([hill.id]);
     await close();
   });
 

@@ -26,8 +26,12 @@ export function stampStyle(state: StampState): FeatureStyle {
   return { pointShape: 'star', pointRadius: 11, pointColor: STAMP_COLORS[state] };
 }
 
-/** A plugin that adds the mode `stamp` */
-export function createStampPlugin(): Plugin<StampApi> {
+/**
+ * A plugin that adds the mode `stamp`
+ *
+ * @param onStamp Called with the count after each stamp is created
+ */
+export function createStampPlugin(onStamp?: (count: number) => void): Plugin<StampApi> {
   let stamps = 0;
 
   // A mode receives the input through its handlers; this one needs clicks and keys. `writes`
@@ -59,7 +63,9 @@ export function createStampPlugin(): Plugin<StampApi> {
       ctx.extensions.modes.add('stamp', stampMode);
       // After every creation, whatever made it
       ctx.on('feature.created', ({ feature }) => {
-        if (isStamp(feature)) stamps += 1;
+        if (!isStamp(feature)) return;
+        stamps += 1;
+        onStamp?.(stamps);
       });
     },
   };

@@ -26,15 +26,15 @@ them in this order.
 | [snapping-and-tracing](snapping-and-tracing/) | The snapping options, the guide lines, tracing a boundary, the snapping switch of the toolbar | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [geometry-operations](geometry-operations/) | Union, intersection, difference, split and buffer from the panel, length and area | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [images](images/) | The Image tool, `image.requested`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
-| [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save and load, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
+| [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save, load, download and open a file, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, a great circle, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
 | [200000-features](200000-features/) | A city of 208,073 editable features (buildings, parks, streets and places) loaded in one step | [Performance](../docs/guides/performance.md) |
 | [datasets](datasets/) | Datasets given at once and fetched for the view, clicks on their rows | [Large data](../docs/guides/large-data.md) |
 | [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns | [Large data](../docs/guides/large-data.md) |
-| [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, the standard UI without the toolbar | [Read-only](../docs/guides/read-only.md) |
-| [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector | [Plugins](../docs/guides/plugins.md) |
-| [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, and a section of the inspector for them | [Custom types](../docs/guides/custom-types.md) |
+| [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, keys that switch read-only, the interaction lock, a locked layer and local hiding apart | [Read-only](../docs/guides/read-only.md) |
+| [plugins](plugins/) | A plugin with a mode, an event and an api, its tool on the toolbar and a section of the inspector, all removed and added again with a key | [Plugins](../docs/guides/plugins.md) |
+| [custom-feature-types](custom-feature-types/) | A feature type with its own renderer, hit test, box selection and style keys, a section of the inspector for them, and a key that unregisters it | [Custom types](../docs/guides/custom-types.md) |
 | [custom-ui](custom-ui/) | A toolbar and a panel of your own on the public API, without the standard UI | [Drawing and editing](../docs/guides/drawing.md) |
 
 ## Running them
