@@ -138,6 +138,10 @@ draw.options.update({ style: { polygon: { fillOpacity: 0.4 } } });
 draw.options.update({ scaleWithZoom: false });
 ```
 
+An update that changed a value fires `options.changed` with the options
+after and before it, so a control that shows an option can follow it (see
+[the event reference](../reference/events.md#optionschanged)).
+
 ## Style rules
 
 A layer's `styleRule` derives a color from the properties of each feature.

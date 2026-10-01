@@ -95,6 +95,7 @@ change is made.
 | `hidden.changed` | `{ ids }` |
 | `readOnly.changed` | `{ readOnly }` |
 | `interactionLock.changed` | `{ locked }` |
+| `options.changed` | `{ options: RuntimeOptions; previous: RuntimeOptions }` |
 
 ### Input
 
@@ -187,9 +188,9 @@ therefore save on every `document.changed`.
 
 Neither the shape being drawn nor the state of a drag fires
 `document.changed`. Hiding an item on this client (`draw.hidden`),
-read-only and the interaction lock fire `hidden.changed`,
-`readOnly.changed` and `interactionLock.changed`, and never
-`document.changed`.
+read-only, the interaction lock and the options fire `hidden.changed`,
+`readOnly.changed`, `interactionLock.changed` and `options.changed`, and
+never `document.changed`.
 
 ### Order within one transaction
 
@@ -309,6 +310,25 @@ difference.
 
 Fire when `draw.setReadOnly` or `draw.setInteractionLocked` changes the
 value. Setting the value it already has fires nothing.
+
+### options.changed
+
+Fires inside `draw.options.update` once the new options are applied.
+`options` and `previous` are what `draw.options.get()` returns after and
+before the call, so a listener can compare them to see what changed. An
+update that leaves every value as it was, such as `update({})`, fires
+nothing, and neither does an update that throws. The options belong to
+this client and are not part of the document, so the event is not part of
+a transaction and fires no `document.changed`.
+
+```ts
+draw.on('options.changed', ({ options, previous }) => {
+  if (options.snapping?.enabled !== previous.snapping?.enabled) {
+    const pressed = String(options.snapping?.enabled === true);
+    snapButton.setAttribute('aria-pressed', pressed);
+  }
+});
+```
 
 ### snap.changed
 

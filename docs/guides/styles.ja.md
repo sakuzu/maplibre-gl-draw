@@ -138,6 +138,11 @@ draw.options.update({ style: { polygon: { fillOpacity: 0.4 } } });
 draw.options.update({ scaleWithZoom: false });
 ```
 
+値を変えた更新は、変更後と変更前の設定を持つ `options.changed` を
+発火します。設定を表示する UI は、このイベントで追随できます
+([イベントのリファレンス](../reference/events.md#optionschanged) (英語)
+を参照してください)。
+
 ## スタイル規則
 
 レイヤーの `styleRule` は、各地物のプロパティーから色を決めます。
