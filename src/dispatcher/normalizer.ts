@@ -29,7 +29,7 @@
  */
 
 import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from 'maplibre-gl';
-
+import { nearestLongitude } from '../shared/math/longitude.js';
 import type {
   DragNormalizedEvent,
   KeyNormalizedEvent,
@@ -156,6 +156,7 @@ interface Press {
   startTime: number;
   /** The last known position (used by dragcancel) */
   lastPoint: { x: number; y: number };
+  /** The last known coordinate, continuous from the start of the press (see `continuing`) */
   lastLngLat: { lng: number; lat: number };
   /** The last pointer event of the press (the originalEvent of a cancel by Escape or blur) */
   lastEvent: PointerOriginalEvent;
@@ -167,6 +168,21 @@ interface Press {
 
 type Point = { x: number; y: number };
 type LngLat = { lng: number; lat: number };
+
+/**
+ * The position of the pointer, on the copy of the world nearest to where it was last
+ *
+ * The flat map gives the pointer unwrapped longitudes, which run on past 180 as it crosses the
+ * antimeridian. The globe gives them in [-180, 180], so they jump by 360 degrees there: a
+ * freehand stroke drawn from them went once round the world along the parallel, and the shift
+ * of a feature dragged across jumped by a turn. Within a press each position is therefore
+ * taken on the copy nearest to the last one, so the pointer moves on continuously, as on the
+ * flat map. A position within 180 degrees of the last one is returned unchanged.
+ */
+function continuing(lngLat: LngLat, last: LngLat): LngLat {
+  const lng = nearestLongitude(lngLat.lng, last.lng);
+  return lng === lngLat.lng ? lngLat : { lng, lat: lngLat.lat };
+}
 
 /**
  * Whether a mouse event is the compatibility event a browser emits for a touch
@@ -335,9 +351,10 @@ export function createInputNormalizer(
   function movePress(
     current: Press,
     point: Point,
-    lngLat: LngLat,
+    rawLngLat: LngLat,
     originalEvent: PointerOriginalEvent,
   ): void {
+    const lngLat = continuing(rawLngLat, current.lastLngLat);
     current.lastPoint = point;
     current.lastLngLat = lngLat;
     current.lastEvent = originalEvent;
@@ -364,9 +381,10 @@ export function createInputNormalizer(
   function releasePress(
     current: Press,
     point: Point,
-    lngLat: LngLat,
+    rawLngLat: LngLat,
     originalEvent: PointerOriginalEvent,
   ): boolean {
+    const lngLat = continuing(rawLngLat, current.lastLngLat);
     clearLongPress(current);
     press = null;
 

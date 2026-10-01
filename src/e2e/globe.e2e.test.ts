@@ -496,3 +496,140 @@ describe('the points near the edge of the sphere', () => {
     await page.close();
   });
 });
+
+describe('drawing across the antimeridian on the globe', () => {
+  /**
+   * The east of Australia and the Pacific in view. The globe gives the pointer longitudes in
+   * [-180, 180], so the pointer jumps from 180 to -180 where it crosses the antimeridian
+   */
+  const PACIFIC = { center: [165, -15] as [number, number], zoom: 1.5 };
+
+  let page: Page;
+
+  beforeAll(async () => {
+    page = await openGlobe(PACIFIC);
+    // No snapping: the vertices are where the pointer is
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: false } }),
+    );
+  }, browserTimeout(60_000));
+
+  afterAll(async () => {
+    await page?.close();
+  });
+
+  /** The coordinates of the only feature, a line or the outer ring of an area */
+  async function onlyPath(): Promise<number[][]> {
+    const list = await page.evaluate(() => (window as unknown as E2EWindow).draw.features.list());
+    expect(list).toHaveLength(1);
+    const { geometry } = list[0];
+    if (geometry.type === 'Polygon') return geometry.coordinates[0];
+    if (geometry.type === 'LineString') return geometry.coordinates;
+    throw new Error(`Unexpected geometry ${geometry.type}`);
+  }
+
+  /** The largest step in longitude between two consecutive vertices */
+  function largestStep(path: number[][]): number {
+    let largest = 0;
+    for (let i = 1; i < path.length; i++) {
+      largest = Math.max(largest, Math.abs(path[i][0] - path[i - 1][0]));
+    }
+    return largest;
+  }
+
+  /** The latitudes where the path crosses the antimeridian, whichever copy it is drawn on */
+  function crossings(path: number[][]): number[] {
+    const wrap = (lng: number) => lng - 360 * Math.round(lng / 360);
+    const found: number[] = [];
+    for (let i = 1; i < path.length; i++) {
+      if (Math.abs(wrap(path[i][0]) - wrap(path[i - 1][0])) > 180) {
+        found.push((path[i][1] + path[i - 1][1]) / 2);
+      }
+    }
+    return found;
+  }
+
+  /** How many pixels changed on the parallels of `latitudes`, 45 to 75 degrees west of 180 */
+  async function changedOnParallels(
+    before: Picture,
+    after: Picture,
+    latitudes: number[],
+  ): Promise<number> {
+    let count = 0;
+    for (const lat of latitudes) {
+      for (const lng of [105, 120, 135]) {
+        const p = await projected(page, [lng, lat]);
+        count += countChanged(before, after, p.x, p.y, 4);
+      }
+    }
+    return count;
+  }
+
+  it('a freehand stroke across the antimeridian draws only the stroke', async () => {
+    await show(page, []);
+    const empty = await readPicture(page);
+    await page.evaluate(() => (window as unknown as E2EWindow).draw.setMode('draw_freehand'));
+    // Out along a parallel of the east of Australia, round the east of the antimeridian and back
+    const path: Array<[number, number]> = [
+      [150, -12],
+      [175, -10],
+      [190, -10],
+      [195, -28],
+      [175, -28],
+      [150, -30],
+    ];
+    const points = [];
+    for (const lngLat of path) points.push(await pageOf(page, lngLat));
+    await page.mouse.move(points[0].x, points[0].y);
+    await page.mouse.down();
+    for (const p of points.slice(1)) await page.mouse.move(p.x, p.y, { steps: 12 });
+    await settle(page);
+    const drawing = await readPicture(page);
+    await page.mouse.up();
+    await settle(page);
+    const drawn = await readPicture(page);
+
+    const stroke = await onlyPath();
+    const latitudes = crossings(stroke);
+    expect(latitudes).toHaveLength(2);
+    // Each vertex is next to the one before it, never a turn of the world away
+    expect(largestStep(stroke)).toBeLessThan(90);
+    // Nothing is drawn along the parallels the stroke crosses the antimeridian at, far from it,
+    // while it is drawn and once it is made
+    expect(await changedOnParallels(empty, drawing, latitudes)).toBe(0);
+    expect(await changedOnParallels(empty, drawn, latitudes)).toBe(0);
+    // The stroke itself is drawn where it crosses
+    for (const lat of latitudes) {
+      const p = await projected(page, [180, lat]);
+      expect(countChanged(empty, drawn, p.x, p.y, 4), `latitude ${lat}`).toBeGreaterThan(4);
+    }
+    await page.keyboard.press('Escape');
+  });
+
+  it('a line and an area drawn with clicks across the antimeridian are continuous', async () => {
+    for (const name of ['draw_line', 'draw_polygon']) {
+      await show(page, []);
+      const empty = await readPicture(page);
+      await page.evaluate((m) => (window as unknown as E2EWindow).draw.setMode(m), name);
+      const points = [];
+      for (const lngLat of [
+        [160, -10],
+        [195, -12],
+        [190, -30],
+      ]) {
+        points.push(await pageOf(page, lngLat));
+      }
+      for (const p of points) await click(page, p);
+      // A line ends with a click on its last vertex, an area with a click on its first
+      await click(page, name === 'draw_line' ? points[points.length - 1] : points[0]);
+      await settle(page);
+      const drawn = await readPicture(page);
+
+      const shape = await onlyPath();
+      const latitudes = crossings(shape);
+      expect(latitudes.length, name).toBeGreaterThan(0);
+      expect(largestStep(shape), name).toBeLessThan(90);
+      expect(await changedOnParallels(empty, drawn, latitudes), name).toBe(0);
+    }
+  });
+});

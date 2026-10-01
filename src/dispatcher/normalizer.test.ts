@@ -124,16 +124,17 @@ describe('InputNormalizer', () => {
     });
   }
 
-  /** Fires a MapLibre mouse event */
+  /** Fires a MapLibre mouse event (at the coordinate of the point unless one is given) */
   function mouse(
     type: 'mousedown' | 'mousemove' | 'mouseup' | 'click' | 'dblclick' | 'contextmenu',
     point: { x: number; y: number },
     extra: Record<string, unknown> = {},
+    lngLat: { lng: number; lat: number } = { lng: point.x, lat: point.y },
   ): void {
     map.fire(type, {
       type,
       point,
-      lngLat: { lng: point.x, lat: point.y },
+      lngLat,
       originalEvent: {
         type,
         button: 0,
@@ -463,6 +464,33 @@ describe('InputNormalizer', () => {
         expect(event.dragStartLngLat).toEqual({ lng: 10, lat: 10 });
       }
       expect(drags[2].point).toEqual({ x: 30, y: 15 });
+    });
+
+    it('keeps the coordinates of a press continuous where the globe jumps from 180 to -180', () => {
+      // The globe gives the longitudes in [-180, 180], so the pointer crossing the antimeridian
+      // eastwards jumps from 179.5 to -179; within the press it runs on past 180
+      mouse('mousedown', { x: 10, y: 10 }, {}, { lng: 178, lat: -10 });
+      mouse('mousemove', { x: 20, y: 10 }, {}, { lng: 179.5, lat: -10 });
+      mouse('mousemove', { x: 30, y: 10 }, {}, { lng: -179, lat: -10 });
+      mouse('mousemove', { x: 40, y: 12 }, {}, { lng: -177, lat: -11 });
+      mouse('mouseup', { x: 40, y: 12 }, {}, { lng: -177, lat: -11 });
+
+      expect(types()).toEqual([
+        'mousedown',
+        'dragstart',
+        'dragmove',
+        'dragmove',
+        'dragend',
+        'mouseup',
+      ]);
+      const lngs = events.map((e) => ('lngLat' in e ? e.lngLat.lng : Number.NaN));
+      expect(lngs).toEqual([178, 179.5, 181, 183, 183, 183]);
+      expect(events[4]).toMatchObject({ lngLat: { lng: 183, lat: -11 } });
+
+      // The next press starts from where the pointer is
+      events = [];
+      mouse('mousedown', { x: 40, y: 12 }, {}, { lng: -177, lat: -11 });
+      expect(events[0]).toMatchObject({ type: 'mousedown', lngLat: { lng: -177, lat: -11 } });
     });
 
     it('stays a drag once started, even when the pointer comes back to the press', () => {
