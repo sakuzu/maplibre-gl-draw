@@ -26,12 +26,12 @@ const map = new maplibregl.Map({
 });
 
 // 1. The globe, set once the style has loaded (a style can name a projection of its own), and
-// the sky: a thin atmosphere at the globe's edge. The map leaves the space around the globe
-// transparent, so the container's background is the space, dark blue
+// no atmosphere (its glow paints a light fringe inside the globe's edge). The map leaves the
+// space around the globe transparent, so the container's background is the space, dark blue
 map.getContainer().style.background = '#0b1026';
 map.on('style.load', () => {
   map.setProjection({ type: 'globe' });
-  map.setSky({ 'atmosphere-blend': 1 });
+  map.setSky({ 'atmosphere-blend': 0 });
 });
 
 const draw = createDraw(map);
