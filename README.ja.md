@@ -124,7 +124,7 @@ GeoJSON の properties を持つので、ファイルはコードで読む地物
 - [プレイグラウンド][demo]
   - すべての機能を 1 つの画面で。標準の UI 付き
 - [例][examples]
-  - 18 の例。どれも、例を動かすページにそのコードを添えています
+  - 20 の例。どれも、例を動かすページにそのコードを添えています
 
 例の一部を挙げます。
 
@@ -146,9 +146,10 @@ GeoJSON の properties を持つので、ファイルはコードで読む地物
 - [Custom feature types][ex-custom-feature-types]
   - 独自の描き方、当たり判定、範囲選択を持つ地物の型
 - [Datasets][ex-datasets]
-  - 5 万のマス目の色分けと、見えている範囲の点の取り寄せ
+  - Overture Maps の東京都心の建物と場所を描画の下と上に。場所は
+    見えている範囲の分を取り寄せる
 - [Columnar data in a Worker][ex-columnar-data-in-a-worker]
-  - Worker で読み込み、列のまま描く 20 万行
+  - 同じ建物を Worker で GeoParquet から読み込み、列のまま描く
 - [Build your own UI][ex-custom-ui]
   - 標準の UI を使わない、自分の道具のバーとパネル
 

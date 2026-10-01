@@ -235,8 +235,8 @@ draw.extensions.overlays.add({
 
 - [200,000 features](../examples/200000-features.ja.md) では、編集できる
   20 万の地物を 1 度で読み込みます
-- [Datasets](../examples/datasets.ja.md) では、5 万個のマスをデータセットで
-  表示します
+- [Datasets](../examples/datasets.ja.md) では、10,477 の建物と 17,558 の
+  場所を、編集しない 2 つのデータセットとして描画の下と上に表示します
 
 ## リファレンス
 
