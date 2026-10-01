@@ -316,7 +316,7 @@ The words of the names the library gives new features, layers and groups
 ## Examples
 
 - [Style features](../examples/style-features.md) gives each feature a
-  style of its own and changes the defaults of a type
+  style of its own, side by side, and changes the defaults of a type
 - [Style rules and legend](../examples/style-rules-and-legend.md) gives
   a layer each kind of rule and shows its rows in the legend of the
   standard UI

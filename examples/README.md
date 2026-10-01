@@ -17,7 +17,7 @@ them in this order.
 | Example | What it shows | Guide |
 | --- | --- | --- |
 | [get-started](get-started/) | Drawing, selecting and changing a feature in the panel on the right, the change events | [Getting started](../docs/getting-started.md) |
-| [style-features](style-features/) | The style of each feature, the defaults of a type, a style set from code and in the panel | [Styles](../docs/guides/styles.md) |
+| [style-features](style-features/) | The style of each feature side by side (colors, widths, dashes, point shapes and sizes), the defaults of a type, a style set from code and in the panel | [Styles](../docs/guides/styles.md) |
 | [feature-properties](feature-properties/) | Attributes loaded from GeoJSON, changed in the Attributes tab and with `features.update` | [Data format](../docs/reference/data-format.md) |
 | [layers-and-groups](layers-and-groups/) | Two layers and a group made from code, the order, the active layer, visibility, locks and opacity in the layer panel | [Layers and groups](../docs/guides/layers.md) |
 | [style-rules-and-legend](style-rules-and-legend/) | The four kinds of style rule on a layer and the Legend tab | [Styles](../docs/guides/styles.md) |

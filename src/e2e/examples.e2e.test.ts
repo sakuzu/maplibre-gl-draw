@@ -294,22 +294,27 @@ describe('the examples', () => {
     await close();
   });
 
-  it('style-features opens on the style of the block, and the inspector restyles it', {
+  it('style-features opens on the style of the middle area, and the inspector restyles it', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('style-features');
-    const block = () =>
+    const middle = () =>
       page.evaluate(() => {
         const { draw } = window as unknown as E2EWindow;
-        return draw.features.list().find((f) => f.properties.name === 'Block');
+        return draw.features.list().find((f) => f.properties.name === 'Dashed 3 px');
       });
     const fill = page
       .locator('[data-role="inspector"]')
       .getByRole('button', { name: 'Fill color' });
     await fill.waitFor();
-    expect((await fill.innerText()).trim().toLowerCase()).toBe('#edae49');
-    // The width the page set from code after the style it was created with
-    expect((await block())?.style).toMatchObject({ fillColor: '#edae49', strokeWidth: 4 });
+    expect((await fill.innerText()).trim().toLowerCase()).toBe('#66a182');
+    // The dash the page set from code after the style it was created with
+    expect((await middle())?.style).toMatchObject({
+      fillColor: '#66a182',
+      strokeColor: '#d1495b',
+      strokeWidth: 3,
+      lineStyle: 'dashed',
+    });
 
     // The color field opens kata's ColorPicker, whose code input commits a hex
     await fill.click();
@@ -317,7 +322,7 @@ describe('the examples', () => {
     await code.fill('#1a2b3c');
     await code.press('Enter');
     await expect
-      .poll(async () => (await block())?.style?.fillColor, { timeout: browserTimeout(5_000) })
+      .poll(async () => (await middle())?.style?.fillColor, { timeout: browserTimeout(5_000) })
       .toBe('#1A2B3C');
     await close();
   });

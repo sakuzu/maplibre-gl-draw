@@ -318,7 +318,7 @@ deriveLegend(rule, { legendOther: 'Autres' });
 ## 関連する例
 
 - [Style features](../examples/style-features.ja.md) では、地物ごとに
-  スタイルを付け、型の既定値を変えます
+  スタイルを付けて並べて比べ、型の既定値を変えます
 - [Style rules and legend](../examples/style-rules-and-legend.ja.md)
   では、レイヤーに各種類の規則を設定し、その行を標準の UI の凡例に
   出します

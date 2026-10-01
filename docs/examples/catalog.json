@@ -16,8 +16,8 @@
   "style-features": {
     "title": "Style features",
     "titleJa": "Style features",
-    "description": "The look of each feature: its colors, the width and the opacity of its lines, dashed and dotted lines, and the shape and the size of points.",
-    "descriptionJa": "地物ごとの見た目です。色、線の太さと透明度、破線と点線、点の形と大きさを決めます。",
+    "description": "The look of each feature, side by side: fill and outline colors, solid, dashed and dotted lines of several widths, and the four shapes of a point in four sizes.",
+    "descriptionJa": "地物ごとの見た目を並べて比べます。塗りと輪郭の色、太さの違う実線と破線と点線、点の 4 つの形と 4 つの大きさです。",
     "order": 2
   },
   "feature-properties": {

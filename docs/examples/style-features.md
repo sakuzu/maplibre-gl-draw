@@ -4,18 +4,23 @@ aside: false
 
 # Style features
 
-The look of each feature: its colors, the width and the opacity of its
-lines, dashed and dotted lines, and the shape and the size of points.
+The look of each feature, side by side: the colors of the fill and of
+the outline, solid, dashed and dotted lines of several widths, and the
+four shapes of a point in four sizes.
 
 ```example
 style-features
 ```
 
-The page opens with the block selected, so the panel on the right shows
-the fields of its style. Change one and the block takes it at once.
-Select another feature to see the fields of its type: a point has its
-shape and its size, a line its width and its dash, and an area its fill
-and its outline.
+The top row has three areas, each filled in one color and outlined in
+another, with outlines solid at 1 px, dashed at 3 px and dotted at
+6 px. The lines under them are 1, 4 and 10 px wide, then come a circle,
+a square, a triangle and a star with radii of 6, 9, 12 and 15 px, and
+at the bottom a circle of 80 m on the ground. The page opens with the
+middle area selected, so the panel on the right shows the fields of its
+style. Change one and the area takes it at once. Select another feature
+to see the fields of its type: a point has its shape and its size, a
+line its width and its dash, and an area its fill and its outline.
 
 ## Code
 
@@ -23,7 +28,8 @@ Each feature gets a `style` of its own when it is created (1). The
 defaults of a type, which the features without a style take, change with
 `draw.options.update` (2): draw an area with the tools to see them. The
 panel writes a change with `draw.features.update` (`updateMany` for
-several features), the call that the page makes once at the end (5).
+several features), the call that the page makes once at the end (5) to
+dash the outline of the middle area.
 
 ::: code-group
 <<< @/../examples/style-features/main.ts
