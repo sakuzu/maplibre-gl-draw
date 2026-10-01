@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "fzstd": "^0.1.1",
+    "hyparquet": "^1.31.2",
     "maplibre-gl": "~6.11.1"
   },
   "devDependencies": {

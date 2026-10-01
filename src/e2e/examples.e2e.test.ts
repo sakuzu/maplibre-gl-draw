@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
+import { parquetMetadata } from 'hyparquet';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -690,26 +691,47 @@ describe('the examples', () => {
     await close();
   });
 
-  it('columnar-data-in-a-worker shows the 200,000 rows of the Worker and reports a click', {
-    timeout: TIMEOUT,
+  it('columnar-data-in-a-worker reads every row of the GeoParquet file in its Worker and reports a click', {
+    timeout: browserTimeout(TIMEOUT),
   }, async () => {
-    const { page, close } = await openExample('columnar-data-in-a-worker');
-    await loaded(page);
-    const total = await page.evaluate(
-      () => (window as unknown as E2EWindow).draw.datasets.get('places')?.getThinningStats().total,
+    const file = readFileSync(join(EXAMPLES, 'public/data/tokyo-buildings.parquet'));
+    const rows = Number(
+      parquetMetadata(file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength))
+        .num_rows,
     );
-    expect(total).toBe(200_000);
-    // Row 0, where it is drawn
-    const lngLat = await page.evaluate(() => {
+    const { page, close } = await openExample('columnar-data-in-a-worker');
+    const result = await page.evaluate(
+      () =>
+        (window as unknown as { loaded: Promise<{ rows: number; firstFrameMs: number }> }).loaded,
+    );
+    expect(result.rows).toBe(rows);
+    expect(Number.isFinite(result.firstFrameMs)).toBe(true);
+    const total = await page.evaluate(() => {
+      const dataset = (window as unknown as E2EWindow).draw.datasets.get('buildings');
+      let count = 0;
+      while (dataset?.getRowId(count) != null) count++;
+      return count;
+    });
+    expect(total).toBe(rows);
+
+    // The middle of a building of four corners, at zoom 18
+    const target = await page.evaluate(() => {
       const { draw, map } = window as unknown as E2EWindow;
-      const point = draw.datasets.get('places')?.getRowPoint(0) as [number, number];
-      map.jumpTo({ center: point, zoom: 18 });
-      return point;
+      const dataset = draw.datasets.get('buildings');
+      for (let i = 0; dataset?.getRowId(i) != null; i++) {
+        const geometry = dataset.getRow(i)?.geometry;
+        if (geometry?.type !== 'MultiPolygon' || geometry.coordinates[0][0].length !== 5) continue;
+        const ring = geometry.coordinates[0][0].slice(0, 4);
+        const center = [0, 1].map((k) => ring.reduce((sum, p) => sum + p[k], 0) / 4);
+        map.jumpTo({ center: center as [number, number], zoom: 18 });
+        return center;
+      }
+      throw new Error('No building of four corners');
     });
     await settle(page);
     const clicked = await recordDatasetClick(page);
-    await click(page, await pageOf(page, lngLat));
-    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('places');
+    await click(page, await pageOf(page, target));
+    await expect.poll(clicked, { timeout: browserTimeout(5_000) }).toBe('buildings');
     await close();
   });
 

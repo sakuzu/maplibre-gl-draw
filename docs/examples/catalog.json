@@ -100,8 +100,8 @@
   "columnar-data-in-a-worker": {
     "title": "Columnar data in a Worker",
     "titleJa": "Columnar data in a Worker",
-    "description": "A table read in a Worker and handed to a dataset as its columns.",
-    "descriptionJa": "Worker で表を読み、列のままデータセットに渡します。",
+    "description": "A GeoParquet file of the buildings of central Tokyo read in a Worker and handed to a dataset as columns: no GeoJSON, no object per row, and no copy on the way to the page.",
+    "descriptionJa": "東京都心の建物の GeoParquet ファイルを Worker で読み、列のままデータセットに渡します。GeoJSON を経ず、行ごとのオブジェクトも作らず、コピーもしません。",
     "order": 14
   },
   "read-only-viewer": {

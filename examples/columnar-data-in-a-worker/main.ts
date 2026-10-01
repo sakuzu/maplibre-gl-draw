@@ -1,76 +1,83 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// columnar-data-in-a-worker: a large table read in a Worker and drawn from its columns.
-// The Worker builds 200,000 rows as typed arrays in the layout of GeoArrow, as a reader of
-// GeoParquet or Arrow hands them over, and prepares them there (the extents, the pieces and the
-// index of the clicks). It sends them without a copy, and a dataset draws the rows from the
-// arrays without making an object per row. A click logs the row, read from the same columns.
+// columnar-data-in-a-worker: a GeoParquet file read in a Worker and drawn from its columns.
+// The Worker fetches the buildings of central Tokyo from Overture Maps as GeoParquet
+// (examples/public/data/), reads the columns, decodes the geometry into typed arrays in the
+// layout of GeoArrow, and prepares them there (the extents, the pieces and the index of the
+// clicks). There is no GeoJSON and no object per row: the arrays cross to the page without a
+// copy, and a dataset draws the rows from them. A click logs the row, read from the same columns.
 
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
-import type { DictionaryColumn, PreparedTable } from '@sakuzu/maplibre-gl-draw/table';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { basemapStyle } from '../basemap.ts';
 import '../example.css';
+import type { Reply, Request } from './worker.ts';
 
-const CENTER: [number, number] = [139.767, 35.681];
 const map = new maplibregl.Map({
   container: 'map',
   style: basemapStyle(),
-  center: CENTER,
-  zoom: 11,
+  center: [139.778, 35.678],
+  zoom: 15,
+  attributionControl: {
+    customAttribution: '<a href="https://overturemaps.org">Overture Maps Foundation</a>',
+  },
 });
 const draw = createDraw(map);
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale });
 
-// 1. The dataset, empty until the Worker hands over its table, colored by a column
-const places = draw.datasets.add({
-  id: 'places',
-  rows: [],
+// 1. The dataset, empty until the Worker hands over its table, colored by the height column
+const buildings = draw.datasets.add({
+  id: 'buildings',
   styleRule: {
-    kind: 'categorical',
-    property: 'kind',
-    map: { shop: '#e15759', school: '#59a14f', station: '#4e79a7', park: '#76b7b2' },
-    other: '#cccccc',
+    kind: 'graduated',
+    property: 'height',
+    breaks: [10, 20, 40, 80],
+    colors: ['#fff5eb', '#fdbe85', '#fd8d3c', '#d94701', '#8c2d04'],
+    other: '#d9d9d9',
   },
-  baseStyle: { point: { pointRadius: 3 } },
+  baseStyle: { fill: { fillOpacity: 0.85, strokeColor: '#ffffff', strokeWidth: 0.5 } },
   interactive: true,
 });
 
-// 2. The Worker reads the table (here it makes one) and prepares it with `prepareTable` from
+// 2. The Worker fetches and reads the file, and prepares the table with `prepareTable` from
 // `@sakuzu/maplibre-gl-draw/table`, which imports neither maplibre nor WebGL
-const COUNT = 200_000;
 const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
 const started = performance.now();
-const loaded = new Promise<PreparedTable>((resolve) => {
-  worker.onmessage = (event: MessageEvent<{ prepared: PreparedTable; workerMs: number }>) => {
+const loaded = new Promise<{ rows: number; firstFrameMs: number }>((resolve) => {
+  worker.onmessage = (event: MessageEvent<Reply>) => {
     worker.terminate();
-    const { prepared, workerMs } = event.data;
+    const { prepared, times } = event.data;
     // 3. The prepared table goes to the dataset as it arrived: nothing is computed again here
-    const arrived = performance.now();
-    places.setTable(prepared);
-    console.log(
-      `${prepared.length.toLocaleString()} rows: ${Math.round(workerMs)} ms in the Worker,`,
-      `${Math.round(arrived - started)} ms until they arrived,`,
-      `${Math.round(performance.now() - arrived)} ms in setTable`,
-    );
-    resolve(prepared);
+    buildings.setTable(prepared);
+    // The time from the request to the first frame that draws the rows
+    map.once('render', () => {
+      const firstFrameMs = performance.now() - started;
+      const ms = (value: number): string => `${Math.round(value)} ms`;
+      console.log(
+        `${prepared.length.toLocaleString()} buildings: ${ms(times.fetch)} to fetch,`,
+        `${ms(times.read)} to read the columns, ${ms(times.table)} to build the table,`,
+        `${ms(times.prepare)} to prepare it, ${ms(firstFrameMs)} from the request to the first frame`,
+      );
+      resolve({ rows: prepared.length, firstFrameMs });
+    });
+    map.triggerRepaint();
   };
 });
-worker.postMessage({ count: COUNT, center: CENTER });
+const request: Request = { url: new URL('../data/tokyo-buildings.parquet', location.href).href };
+worker.postMessage(request);
 
-// 4. A click gives the index of the row; the page reads its values from the columns it holds
-places.on('clicked', async ({ rowIndex }) => {
-  const { columns } = (await loaded).table;
-  const kind = columns?.kind as DictionaryColumn;
-  const value = columns?.value as Float64Array;
+// 4. A click gives the row, its properties read from the columns the dataset holds
+buildings.on('clicked', ({ row, rowIndex }) => {
+  const { name, height, floors, class: kind } = row.properties ?? {};
   console.log(
-    `row ${rowIndex}: ${kind.dictionary[kind.codes[rowIndex]]}, value ${value[rowIndex]}`,
+    `row ${rowIndex}: ${name ?? '(no name)'}, height ${height ?? 'unknown'},`,
+    `${floors ?? 'unknown'} floors, class ${kind ?? 'unknown'}`,
   );
 });
 
