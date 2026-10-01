@@ -225,8 +225,8 @@ browser.
 
 ## Related examples
 
-- [200,000 features](../examples/200000-features.md) loads 200,000
-  editable features in one step
+- [200,000 features](../examples/200000-features.md) loads a city of
+  208,073 editable features in one step
 - [Datasets](../examples/datasets.md) shows 10,477 buildings and
   17,558 places in two datasets, not editable, under and over the
   drawing

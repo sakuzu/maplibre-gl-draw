@@ -735,7 +735,8 @@ async function whenPictureComplete(): Promise<void> {
   は、同じ建物を GeoParquet のファイルから Worker で表に直接読み込み、
   そこで `prepareTable` で下ごしらえして、写さずに渡します
 - [200,000 features](../examples/200000-features.ja.md) は、比べる
-  ために、20 万の建物を文書の地物として読み込みます。どれも編集できます
+  ために、208,073 の地物 (建物、公園、通り、施設) の街を文書の地物として
+  読み込みます。どれも編集できます
 
 描いた地物の代わりにデータセットを選ぶ規模の目安は、
 [性能](performance.ja.md) を参照してください。

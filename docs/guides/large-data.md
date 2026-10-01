@@ -744,9 +744,10 @@ it.
   reads the same buildings from a GeoParquet file in a Worker, straight
   into a table, prepares it there with `prepareTable` and hands it over
   without a copy
-- [200,000 features](../examples/200000-features.md) loads 200,000
-  buildings as features of the document instead, every one editable, for
-  comparison with a dataset
+- [200,000 features](../examples/200000-features.md) loads a city of
+  208,073 features (buildings, parks, streets and places) as features of
+  the document instead, every one editable, for comparison with a
+  dataset
 
 For the size at which to choose a dataset over drawn features, see
 [performance](performance.md).

@@ -53,13 +53,18 @@ polygon.
 ## See it
 
 The drawing of the playground over central Tokyo, the same drawing on a
-tilted map, the globe, and 3D terrain.
+tilted and rotated map, the globe, 3D terrain, and a city of 208,073
+editable features.
 
 ![The playground over central Tokyo: circles, lines, a polygon with a hole selected with its vertex handles, markers, an image, parcels colored by a style rule, a legend and the Layers panel](images/overview.jpg)
+
+![The drawing of the first picture seen with the map tilted and rotated so that north is not at the top](images/tilted.jpg)
 
 ![The globe with great-circle routes between continents, a box between two meridians and two parallels, and city markers](images/globe.jpg)
 
 ![Mountains above Innsbruck in 3D: areas draped over the slopes, a trail up to a summit, and a dashed line disappearing over a ridge](images/terrain.jpg)
+
+![A made-up city seen from a tilted camera: small houses, streets, parks and place markers, all editable features, reaching far into the distance, with a park in the foreground selected](images/large-data.jpg)
 
 ## License
 

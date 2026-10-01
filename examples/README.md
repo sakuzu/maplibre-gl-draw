@@ -29,7 +29,7 @@ them in this order.
 | [save-and-load](save-and-load/) | GeoJSON and the native format, keys to save and load, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, a great circle, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |
-| [200000-features](200000-features/) | 200,000 editable features loaded in one transaction | [Performance](../docs/guides/performance.md) |
+| [200000-features](200000-features/) | A city of 208,073 editable features (buildings, parks, streets and places) loaded in one step | [Performance](../docs/guides/performance.md) |
 | [datasets](datasets/) | Datasets given at once and fetched for the view, clicks on their rows | [Large data](../docs/guides/large-data.md) |
 | [columnar-data-in-a-worker](columnar-data-in-a-worker/) | A table read in a Worker and handed to a dataset as columns | [Large data](../docs/guides/large-data.md) |
 | [read-only-viewer](read-only-viewer/) | A drawing loaded and made read-only, its attributes in the inspector, the standard UI without the toolbar | [Read-only](../docs/guides/read-only.md) |
