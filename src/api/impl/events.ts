@@ -11,7 +11,8 @@
  * `document.changed` with the whole
  * change when the transaction changed the document. The engine announces the rest
  * on its internal emitter (snapping, clicks, images, the stacking order, failed loads,
- * drags), and each is passed on under its name here.
+ * drags), and each is passed on under its name here. `options.changed` comes from
+ * `draw.options`, which emits it on the same hub.
  */
 
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
