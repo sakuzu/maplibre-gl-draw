@@ -60,6 +60,10 @@ function isPosition(value: unknown): value is Coordinate {
  * Returns the geometry of a geometry, or of anything that carries one in a `geometry` field
  * (a GeoJSON feature, a feature of the drawing)
  *
+ * A value whose `geometry` member is a geometry is read as a feature first, whatever its own
+ * `type` says: a feature of the drawing names its feature type there (`'Polygon'`,
+ * `'Circle'`, `'Freehand'` and so on), which is not the type of a geometry it is.
+ *
  * @throws GeometryError (`invalid-input`) for a value that is neither, and for a feature
  *   without a geometry
  */
@@ -71,24 +75,29 @@ export function geometryOf(
   if (!isObject(value)) {
     throw invalidInput(operation, 'the input is not a geometry or a feature');
   }
-  if (!isGeometryType(value.type)) {
-    if (!('geometry' in value) && value.type !== 'Feature') {
-      throw invalidInput(operation, 'the input is not a geometry or a feature');
-    }
+  if ('geometry' in value || value.type === 'Feature') {
     const geometry = value.geometry;
-    if (!isObject(geometry) || !isGeometryType(geometry.type)) {
+    if (isObject(geometry) && isGeometryType(geometry.type)) {
+      return geometryOf(geometry as unknown as Geometry, operation);
+    }
+    if (!isGeometry(value)) {
       throw invalidInput(operation, 'the feature has no geometry');
     }
-    return geometryOf(geometry as unknown as Geometry, operation);
   }
-  if (value.type === 'GeometryCollection') {
-    if (!Array.isArray(value.geometries)) {
-      throw invalidInput(operation, 'the geometry collection has no geometries');
-    }
-  } else if (!Array.isArray(value.coordinates)) {
+  if (value.type === 'GeometryCollection' && !Array.isArray(value.geometries)) {
+    throw invalidInput(operation, 'the geometry collection has no geometries');
+  }
+  if (!isGeometry(value)) {
     throw invalidInput(operation, 'the input is not a geometry or a feature');
   }
   return value as unknown as Geometry;
+}
+
+/** Whether an object has the type of a geometry and the member that type carries */
+function isGeometry(value: Record<string, unknown>): boolean {
+  if (!isGeometryType(value.type)) return false;
+  if (value.type === 'GeometryCollection') return Array.isArray(value.geometries);
+  return Array.isArray(value.coordinates);
 }
 
 /** Whether a value names a GeoJSON geometry type */

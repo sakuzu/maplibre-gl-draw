@@ -11,9 +11,9 @@ The attributes of features: the keys and the values of their
 feature-properties
 ```
 
-The page opens with the market hall selected. Open the Attributes tab
-of the panel on the right to see its attributes: a value can be changed
-where it stands, removed, or added with a new key. A value typed there
+The page opens with the market hall selected, and the panel on the
+right on its Attributes tab, which lists its attributes: a value can be
+changed where it stands, removed, or added with a new key. A value typed there
 is kept as the string typed. Select the library or the avenue to see
 theirs. Each change, from the panel or from code, is logged in the
 browser console.
@@ -26,7 +26,9 @@ and a key given as `undefined` is removed (3); the panel writes its
 changes with the same call. `feature.updated` carries the feature before
 and after each change (1). The keys of the library, which begin with
 `maplibre-gl-draw:`, live in the same properties, and `isDrawProperty`
-tells them apart.
+tells them apart. `createDrawUI` takes
+`inspector: { tabs: ['attributes', 'style'] }`, and the first of `tabs`
+is the tab that opens (4).
 
 ::: code-group
 <<< @/../examples/feature-properties/main.ts

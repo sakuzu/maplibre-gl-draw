@@ -13,6 +13,12 @@ the project follows semantic versioning.
   `document.changed`.
 - Fixed: the site keeps the 1.0 API page URLs working through redirects
   to the current pages.
+- Fixed: the functions of `/geometry` take a feature of the drawing as it
+  is, as documented. A feature whose `type` names a geometry type
+  (`Polygon`, `LineString` and so on) was read as a geometry and threw a
+  `GeometryError` (`invalid-input`); an object with a `geometry` member
+  that is a geometry is now read as a feature first, whatever its own
+  `type`.
 - Added: two examples with the standard UI, `get-started` and
   `style-features`, and their pages on the site. The examples' dev server
   (`npm run dev`) moves to port 3200, and it and `npm run test:e2e` need

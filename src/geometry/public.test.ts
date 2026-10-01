@@ -795,11 +795,18 @@ describe('bbox and metersToDegrees', () => {
 });
 
 describe('inputs that carry a geometry', () => {
-  /** A feature as the drawing returns it: a `geometry` field and no GeoJSON `type` */
-  function drawn(id: string, geometry: DrawnFeature['geometry']): DrawnFeature {
+  /**
+   * A feature as the drawing returns it: a `geometry` field, and a `type` that names the type
+   * of the feature (the type of its geometry by default), not a GeoJSON `Feature`
+   */
+  function drawn(
+    id: string,
+    geometry: DrawnFeature['geometry'],
+    type: DrawnFeature['type'] = geometry.type,
+  ): DrawnFeature {
     return {
       id,
-      type: geometry.type === 'LineString' ? 'line' : 'polygon',
+      type,
       geometry,
       layerId: 'layer',
       groupId: undefined,
@@ -828,6 +835,79 @@ describe('inputs that carry a geometry', () => {
     ).toBeCloseTo(distance([0, 0], [1, 0]), 6);
     expect(simplify(drawn('a', square), 1)).toEqual(simplify(square, 1));
     expect(contains(drawn('a', square), drawn('b', square))).toBe(true);
+  });
+
+  it('reads a drawing feature whose type is Polygon as a feature, not as a geometry', () => {
+    const polygon = drawn('a', square, 'Polygon');
+    expect(area(polygon)).toBeCloseTo(area(square), 6);
+    expect(perimeter(polygon)).toBeCloseTo(perimeter(square), 6);
+    expect(centroid(polygon)).toEqual(centroid(square));
+    expect(pointOnSurface(polygon)).toEqual(pointOnSurface(square));
+    expect(pointInPolygon([0.5, 0.5], polygon)).toBe(true);
+    expect(overlaps(polygon, drawn('b', shifted, 'Polygon'))).toBe(true);
+    expect(contains(polygon, drawn('p', { type: 'Point', coordinates: [0.5, 0.5] }))).toBe(true);
+    expect(makeValid(polygon)).toEqual(makeValid(square));
+    expect(rewind(polygon)).toEqual(rewind(square));
+    expect(simplify(polygon, 1)).toEqual(simplify(square, 1));
+    expect(buffer(polygon, 10)).toEqual(buffer(square, 10));
+    expect(bbox(polygon)).toEqual([0, 0, 1, 1]);
+    expect(union([polygon, drawn('b', shifted, 'Polygon')])).toEqual(union([square, shifted]));
+    expect(intersection([polygon, drawn('b', shifted, 'Polygon')])).toEqual(
+      intersection([square, shifted]),
+    );
+    expect(difference(polygon, [drawn('b', shifted, 'Polygon')])).toEqual(
+      difference(square, [shifted]),
+    );
+    const cut = line([
+      [0.5, -1],
+      [0.5, 2],
+    ]);
+    expect(split(polygon, drawn('l', cut, 'LineString'))).toEqual(split(square, cut));
+  });
+
+  it('reads a drawing feature whose type is LineString as a feature', () => {
+    const path = line([
+      [0, 0],
+      [1, 0],
+    ]);
+    const feature = drawn('l', path, 'LineString');
+    expect(length(feature)).toBeCloseTo(length(path), 9);
+    expect(along(feature, 1000)).toEqual(along(path, 1000));
+    expect(nearestPointOnLine(feature, [0.5, 1])).toEqual(nearestPointOnLine(path, [0.5, 1]));
+  });
+
+  it('reads a drawing Circle feature by its Polygon geometry', () => {
+    const ring = circle([0, 0], 1000);
+    const feature = drawn('c', ring, 'Circle');
+    expect(area(feature)).toBeCloseTo(area(ring), 6);
+    expect(perimeter(feature)).toBeCloseTo(perimeter(ring), 6);
+    expect(bbox(feature)).toEqual(bbox(ring));
+  });
+
+  it('reads a drawing Freehand feature by its geometry', () => {
+    const feature = drawn('f', square, 'Freehand');
+    expect(area(feature)).toBeCloseTo(area(square), 6);
+  });
+
+  it('reads a GeoJSON Feature and a bare geometry', () => {
+    expect(area(feature(square))).toBeCloseTo(area(square), 6);
+    expect(area(square)).toBeGreaterThan(0);
+    const plain: Feature<Polygon> = { type: 'Feature', geometry: square, properties: null };
+    expect(bbox(plain)).toEqual([0, 0, 1, 1]);
+  });
+
+  it('rejects a feature-like object whose geometry is missing or not a geometry', () => {
+    const inputs = [
+      { id: 'a', type: 'Polygon' },
+      { id: 'a', type: 'Polygon', geometry: null },
+      { id: 'a', type: 'Circle', geometry: { type: 'Circle' } },
+      { type: 'Feature', geometry: null, properties: {} },
+      { type: 'Feature', properties: {} },
+      { type: 'Polygon' },
+    ];
+    for (const input of inputs) {
+      expect(() => area(input as unknown as Polygon)).toThrow(GeometryError);
+    }
   });
 
   it('takes any object with a geometry field', () => {

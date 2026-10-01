@@ -342,9 +342,10 @@ The functions are grouped by what they do:
 - Bounds and units: `bbox` and `metersToDegrees`
 
 A feature of the drawing is input as it is: the functions use anything
-with a `geometry` field, as they use a GeoJSON feature. A feature whose
-geometry the function cannot take throws a `GeometryError`, so check the
-kind first when the features are mixed:
+with a `geometry` field, as they use a GeoJSON feature. They read its
+`geometry`, not its `type`, so a `Circle` is measured as the `Polygon`
+it is. A feature whose geometry the function cannot take throws a
+`GeometryError`, so check the kind first when the features are mixed:
 
 ```ts
 import { area, union } from '@sakuzu/maplibre-gl-draw/geometry';

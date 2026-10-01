@@ -85,7 +85,7 @@ The options of `createDrawUI`, all optional:
 | --- | --- | --- |
 | `container` | The positioned element it lies over | the map's container |
 | `toolbar` | `false`, or the `tools`, `delete` and `snapping` | `true` |
-| `inspector` | `false`, or the `tabs` and `operations` | `true` |
+| `inspector` | `false`, or `tabs` (the first opens) and `operations` | `true` |
 | `layers` | `false`, or the `features`, `add` and `reorder` | `true` |
 | `legend` | The legend beside the layer panel | `true` |
 | `locale` | `en`, `ja`, or words laid over English | `en` |
@@ -162,6 +162,9 @@ const ui = createDrawUI(draw, {
   units: 'imperial', // ft, mi, ac; metric by default
 });
 ```
+
+The tabs open on the first of `tabs`: `['attributes', 'style']` opens
+on Attributes. A tab chosen stays open from one feature to the next.
 
 A value typed into an attribute is kept as the string typed. The
 inspector alone goes into any element with

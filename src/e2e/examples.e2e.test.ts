@@ -594,7 +594,7 @@ describe('the examples', () => {
     }
   });
 
-  it('feature-properties opens on the attributes, and the tab adds one', {
+  it('feature-properties opens on the Attributes tab, and the tab adds one', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('feature-properties');
@@ -608,9 +608,15 @@ describe('the examples', () => {
     expect(loaded).toMatchObject({ use: 'commercial', floors: 4, renovated: 2024 });
     expect(loaded).not.toHaveProperty('stalls');
 
-    // The Attributes tab of the selected feature; a value added there is kept as typed
+    // The inspector opens on the Attributes tab of the selected feature, with no click; a
+    // value added there is kept as typed
     const inspector = page.locator('[data-role="inspector"]');
-    await inspector.getByRole('button', { name: 'Attributes', exact: true }).click();
+    const current = inspector.locator('[data-role="tabs"] [aria-current="page"]').first();
+    await expect
+      .poll(async () => (await current.textContent())?.trim(), {
+        timeout: browserTimeout(5_000),
+      })
+      .toBe('Attributes');
     expect(await inspector.innerText()).toContain('commercial');
     await inspector.getByRole('button', { name: 'Add an attribute' }).click();
     await page.keyboard.type('height');
