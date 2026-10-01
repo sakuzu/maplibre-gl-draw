@@ -1,0 +1,1 @@
+const s="/maplibre-gl-draw/assets/overview.B350i802.jpg",a="/maplibre-gl-draw/assets/tilted.C7XegotS.jpg",t="/maplibre-gl-draw/assets/globe.VarStCxj.jpg",r="/maplibre-gl-draw/assets/terrain.CTAvFJ-p.jpg",e="/maplibre-gl-draw/assets/large-data.Dlz_1EdH.jpg";export{s as _,a,t as b,r as c,e as d};
