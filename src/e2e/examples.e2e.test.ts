@@ -113,6 +113,8 @@ const DEM_TILEJSON = {
   tiles: [`${ORIGIN}/e2e/dem/{z}/{x}/{y}.png`],
   minzoom: 0,
   maxzoom: 12,
+  // The tiles are 256 px; without this the source takes the default of 512
+  tileSize: 256,
 };
 
 const CONTENT_TYPES: Record<string, string> = {
