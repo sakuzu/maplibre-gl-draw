@@ -112,6 +112,24 @@ describe('drawing', () => {
     });
   });
 
+  it('writes the reference zoom while scaleWithZoom is on, and none after it is turned off', () => {
+    draw = createDraw(createMapStub().map);
+    const drawLine = () => {
+      draw.setMode('draw_line');
+      draw.drawing.addVertex([0, 0]);
+      draw.drawing.addVertex([1, 0.5]);
+      draw.drawing.finish();
+      const lines = draw.features.list({ type: 'LineString' });
+      return lines[lines.length - 1].properties['maplibre-gl-draw:createdZoom'];
+    };
+    expect(typeof drawLine()).toBe('number');
+    // The option changed while the instance runs reaches the drawing modes
+    draw.options.update({ scaleWithZoom: false });
+    expect(drawLine()).toBeUndefined();
+    draw.options.update({ scaleWithZoom: true });
+    expect(typeof drawLine()).toBe('number');
+  });
+
   it('places a point with one vertex, and cancels a shape in progress', () => {
     draw = createDraw(createMapStub().map);
     draw.setMode('draw_point');

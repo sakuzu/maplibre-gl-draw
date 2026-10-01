@@ -294,22 +294,27 @@ describe('the examples', () => {
     await close();
   });
 
-  it('style-features opens on the style of the block, and the inspector restyles it', {
+  it('style-features opens on the style of the middle area, and the inspector restyles it', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('style-features');
-    const block = () =>
+    const middle = () =>
       page.evaluate(() => {
         const { draw } = window as unknown as E2EWindow;
-        return draw.features.list().find((f) => f.properties.name === 'Block');
+        return draw.features.list().find((f) => f.properties.name === 'Dashed 3 px');
       });
     const fill = page
       .locator('[data-role="inspector"]')
       .getByRole('button', { name: 'Fill color' });
     await fill.waitFor();
-    expect((await fill.innerText()).trim().toLowerCase()).toBe('#edae49');
-    // The width the page set from code after the style it was created with
-    expect((await block())?.style).toMatchObject({ fillColor: '#edae49', strokeWidth: 4 });
+    expect((await fill.innerText()).trim().toLowerCase()).toBe('#66a182');
+    // The dash the page set from code after the style it was created with
+    expect((await middle())?.style).toMatchObject({
+      fillColor: '#66a182',
+      strokeColor: '#d1495b',
+      strokeWidth: 3,
+      lineStyle: 'dashed',
+    });
 
     // The color field opens kata's ColorPicker, whose code input commits a hex
     await fill.click();
@@ -317,7 +322,7 @@ describe('the examples', () => {
     await code.fill('#1a2b3c');
     await code.press('Enter');
     await expect
-      .poll(async () => (await block())?.style?.fillColor, { timeout: browserTimeout(5_000) })
+      .poll(async () => (await middle())?.style?.fillColor, { timeout: browserTimeout(5_000) })
       .toBe('#1A2B3C');
     await close();
   });
@@ -766,6 +771,132 @@ describe('the examples', () => {
     expect(await page.locator('[role="menuitem"][aria-current="true"]').count()).toBe(0);
     await page.keyboard.press('Escape');
     expect(await page.getByRole('menu').count()).toBe(0);
+    await close();
+  });
+
+  it('zoom-and-scale keeps the reference zoom of each feature, and Z switches scaleWithZoom', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('zoom-and-scale');
+    const state = () =>
+      page.evaluate(() => {
+        const w = window as unknown as E2EWindow & { layerIds: { scaled: string; fixed: string } };
+        const zoomOf = (layerId: string) =>
+          Object.fromEntries(
+            w.draw.features
+              .list({ layerId })
+              .map((f) => [f.properties.name, f.properties['maplibre-gl-draw:createdZoom']]),
+          );
+        return {
+          option: w.draw.options.get().scaleWithZoom,
+          active: w.draw.layers.getActive()?.id === w.layerIds.fixed ? 'fixed' : 'scaled',
+          names: w.draw.layers.list().map((layer) => layer.name),
+          scaled: zoomOf(w.layerIds.scaled),
+          fixed: zoomOf(w.layerIds.fixed),
+        };
+      });
+    const before = await state();
+    // The same three features in both layers, with a reference zoom in the first only, and the
+    // one the page set from code
+    expect(before.scaled).toEqual({
+      'Wide line': 15,
+      'Thick outline': 15,
+      'Big point': 15,
+      '2 px at zoom 13': 13,
+    });
+    expect(before.fixed).toEqual({
+      'Wide line': undefined,
+      'Thick outline': undefined,
+      'Big point': undefined,
+    });
+    expect(before).toMatchObject({ option: true, active: 'scaled' });
+    expect(before.names).toContain('→ Scaled with zoom');
+
+    // Z turns the option off and makes the second layer the active one
+    await page.keyboard.press('z');
+    const after = await state();
+    expect(after).toMatchObject({ option: false, active: 'fixed' });
+    expect(after.names).toContain('→ Fixed on screen');
+
+    // The tools then write no reference zoom: a line drawn goes into the second layer without one
+    await page.getByRole('button', { name: 'Line', exact: true }).click();
+    await click(page, at(-60, 160));
+    await click(page, at(60, 180));
+    await click(page, at(60, 180));
+    const drawn = await state();
+    expect(Object.keys(drawn.fixed)).toHaveLength(4);
+    expect(Object.values(drawn.fixed)).toEqual([undefined, undefined, undefined, undefined]);
+
+    // And Z turns it back on
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('z');
+    expect(await state()).toMatchObject({ option: true, active: 'scaled' });
+    await close();
+  });
+  it('editing-shapes moves a shared vertex in both parcels, then in one after T', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('editing-shapes');
+    type Shared = { lower: number[]; upper: number[] };
+    const shared = await page.evaluate(() => (window as unknown as { SHARED: Shared }).SHARED);
+    const parcels = () =>
+      page.evaluate(() => {
+        const { draw } = window as unknown as E2EWindow;
+        const ring = (name: string) => {
+          const feature = draw.features.list().find((f) => f.properties.name === name);
+          return (feature?.geometry as GeoJSON.Polygon | undefined)?.coordinates[0] ?? [];
+        };
+        return { west: ring('West parcel'), east: ring('East parcel') };
+      });
+    const has = (ring: number[][], position: number[]) =>
+      ring.some(([lng, lat]) => lng === position[0] && lat === position[1]);
+    const before = await parcels();
+    expect(has(before.west, shared.upper) && has(before.east, shared.upper)).toBe(true);
+    expect(
+      await page.evaluate(() =>
+        (window as unknown as E2EWindow).draw.selection.features().map((f) => f.properties.name),
+      ),
+    ).toEqual(['West parcel']);
+
+    // The selected west parcel shows a handle at the upper end of the shared edge: dragged, the
+    // vertex moves in both parcels, which keep one position there
+    const upper = await pageOf(page, shared.upper);
+    await drag(page, upper, { x: upper.x - 30, y: upper.y + 20 });
+    const moved = await parcels();
+    expect(has(moved.west, shared.upper) || has(moved.east, shared.upper)).toBe(false);
+    const westOnly = moved.west.filter((p) => !has(before.west, p));
+    expect(westOnly).toHaveLength(1);
+    expect(has(moved.east, westOnly[0])).toBe(true);
+
+    // T switches the shared vertices off: the lower end moves in the west parcel alone
+    await page.keyboard.press('t');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.options.get().topology?.sharedVertexDrag,
+      ),
+    ).toBe(false);
+    const lower = await pageOf(page, shared.lower);
+    await drag(page, lower, { x: lower.x - 30, y: lower.y - 20 });
+    const after = await parcels();
+    expect(has(after.west, shared.lower)).toBe(false);
+    expect(after.east).toEqual(moved.east);
+
+    // A click on the area with a hole selects it; its geometry has the outer ring and the hole,
+    // and the hole gets vertex handles of its own (their white fill)
+    const courtyard = await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      const feature = draw.features.list().find((f) => f.properties.name === 'Courtyard');
+      const rings = (feature?.geometry as GeoJSON.Polygon | undefined)?.coordinates ?? [];
+      return { id: feature?.id, rings };
+    });
+    const [outer, hole] = courtyard.rings;
+    // Halfway between the west edges of the outer ring and of the hole
+    await click(page, await pageOf(page, [(outer[0][0] + hole[0][0]) / 2, hole[0][1]]));
+    expect(
+      await page.evaluate(() => [...(window as unknown as E2EWindow).draw.selection.get().ids]),
+    ).toEqual([courtyard.id]);
+    expect(courtyard.rings).toHaveLength(2);
+    expect((await colorsAround(page, hole[1])).some(isWhite)).toBe(true);
     await close();
   });
 });

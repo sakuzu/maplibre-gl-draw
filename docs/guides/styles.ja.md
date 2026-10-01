@@ -318,10 +318,13 @@ deriveLegend(rule, { legendOther: 'Autres' });
 ## 関連する例
 
 - [Style features](../examples/style-features.ja.md) では、地物ごとに
-  スタイルを付け、型の既定値を変えます
+  スタイルを付けて並べて比べ、型の既定値を変えます
 - [Style rules and legend](../examples/style-rules-and-legend.ja.md)
   では、レイヤーに各種類の規則を設定し、その行を標準の UI の凡例に
   出します
+- [Zoom and scale](../examples/zoom-and-scale.ja.md) では、地物の
+  基準のズームを決め、ズームに従う太さと画面の上で固定した太さを
+  比べ、`scaleWithZoom` を切り替えます
 
 ## リファレンス
 

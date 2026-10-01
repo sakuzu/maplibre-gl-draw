@@ -16,8 +16,8 @@
   "style-features": {
     "title": "Style features",
     "titleJa": "Style features",
-    "description": "The look of each feature: its colors, the width and the opacity of its lines, dashed and dotted lines, and the shape and the size of points.",
-    "descriptionJa": "地物ごとの見た目です。色、線の太さと透明度、破線と点線、点の形と大きさを決めます。",
+    "description": "The look of each feature, side by side: fill and outline colors, solid, dashed and dotted lines of several widths, and the four shapes of a point in four sizes.",
+    "descriptionJa": "地物ごとの見た目を並べて比べます。塗りと輪郭の色、太さの違う実線と破線と点線、点の 4 つの形と 4 つの大きさです。",
     "order": 2
   },
   "feature-properties": {
@@ -131,5 +131,19 @@
     "description": "No standard UI: a toolbar and a panel of the selected feature built with the public API of the library alone, in plain TypeScript and a few rules of CSS. Everything the standard UI does is reachable this way.",
     "descriptionJa": "標準の UI を使いません。道具のバーと、選んだ地物のパネルを、ライブラリーの公開 API だけで作ります。素の TypeScript と数行の CSS で書きます。標準の UI ができることは、すべてこの方法で作れます。",
     "order": 18
+  },
+  "zoom-and-scale": {
+    "title": "Zoom and scale",
+    "titleJa": "Zoom and scale",
+    "description": "Widths in pixels at the reference zoom of each feature grow and shrink with the map like paint on the ground; without a reference zoom they stay the same on the screen.",
+    "descriptionJa": "地物ごとの基準のズームでのピクセルの太さは、地面に塗った線のように地図とともに太くも細くもなります。基準のズームを持たない地物は、画面の上で同じ太さのままです。",
+    "order": 3
+  },
+  "editing-shapes": {
+    "title": "Editing shapes",
+    "titleJa": "Editing shapes",
+    "description": "The handles of a selected feature: the frame that resizes and rotates it, its vertices and midpoints, an area with a hole, an area of two parts, and two parcels whose shared vertices move together.",
+    "descriptionJa": "選んだ地物のハンドルです。大きさを変えて回す枠、頂点と辺の中点、穴のある面、2 つの部分からなる面、共有する頂点がいっしょに動く 2 つの区画です。",
+    "order": 3.5
   }
 }

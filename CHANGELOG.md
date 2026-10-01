@@ -6,6 +6,11 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+- Fixed: `draw.options.update({ scaleWithZoom })` reaches the drawing
+  modes at once. They kept the value given to `createDraw`, so a feature
+  drawn after the option was turned off still got a reference zoom
+  (`maplibre-gl-draw:createdZoom`), and one drawn after it was turned on
+  got none.
 - Added: the event `options.changed`, with `{ options, previous }`: what
   `draw.options.get()` returns after and before a `draw.options.update`
   that changed a value. An update that changes nothing fires nothing,
@@ -25,7 +30,7 @@ the project follows semantic versioning.
   the standard UI built first (`npm run ui:build`).
 - Changed: the site (<https://sakuzu.github.io/maplibre-gl-draw/>) is
   the documentation site: getting started and the guides in English and
-  Japanese, a gallery of eighteen examples with the standard UI, each on
+  Japanese, a gallery of twenty examples with the standard UI, each on
   a page that runs it beside its code, the playground under
   `/playground/` and the API reference under `/api/`. The examples with
   buttons of their own (`basic`, `save-load`, `style-rules`,

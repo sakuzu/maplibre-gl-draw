@@ -403,6 +403,9 @@ if (shrunk === null) {
 - [Geometry operations](../examples/geometry-operations.md) runs
   `union`, `intersection`, `difference`, `split` and `buffer` from the
   panel, and measures the length and the area of the selection
+- [Editing shapes](../examples/editing-shapes.md) moves the shared
+  vertices of two parcels together, and switches
+  `topology.sharedVertexDrag` with a key
 
 ## Reference
 

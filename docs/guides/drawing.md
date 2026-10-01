@@ -508,6 +508,9 @@ application offer another way to enter coordinates, such as a form.
   standard UI and listens to `document.changed`
 - [Build your own UI](../examples/custom-ui.md) calls `setMode` from
   buttons of its own and follows `mode.changed` and the selection
+- [Editing shapes](../examples/editing-shapes.md) shows the frame, the
+  vertex and midpoint handles, an area with a hole, a `MultiPolygon` and
+  shared vertices that move together
 
 ## Reference
 
