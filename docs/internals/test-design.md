@@ -256,15 +256,17 @@ excluded from `npm test`. The browser is installed once with
 
 ## End-to-End Tests of the Examples
 
-Every example under `examples/NN-*/` (from `basic` to `table-worker`)
-is also a test. The intent is that each example is opened in headless
-Chromium, must render without errors (the map and the library's layers
-appear and nothing is logged to the console as an error), and then
-receives one representative interaction, such as drawing a polygon in
-`basic` or clicking a display feature in `large-data`. The code
-snippets in the README and the guides are cut from these examples, so
-this test is what keeps the documentation runnable. There is no script
-for it in `package.json` yet; it will be added alongside the examples.
+Every example under `examples/` is also a test
+(`src/e2e/examples.e2e.test.ts`, part of `npm run test:e2e`). The
+examples are built with their own vite configuration and opened in
+headless Chromium without the network: an empty style and flat elevation
+tiles replace the basemap and the elevation through the address of the
+page (`?style=` and `?dem=`). Each must open without a page error, and
+then receives one representative interaction, such as drawing a polygon
+with the toolbar in `get-started` or clicking a row in `datasets`. One
+test checks that the examples and the gallery of the site
+(`docs/examples/catalog.json`) name the same examples. The playground
+has a test of its own (`src/e2e/playground.e2e.test.ts`).
 
 ## Guidelines
 

@@ -7,21 +7,13 @@ import { defineConfig } from 'vite';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
-/** The pages: the list, the examples with the standard UI and the ten examples */
+/**
+ * The examples, in the order of the gallery of the site (docs/examples/catalog.json). Each is
+ * a page of its own; the gallery of the site lists them, so there is no list page here
+ */
 const PAGES = [
-  'index',
   'get-started',
   'style-features',
-  'basic',
-  'save-load',
-  'style-rules',
-  'snapping-and-geometry',
-  'terrain',
-  'read-only',
-  'plugin',
-  'custom-feature-type',
-  'large-data',
-  'table-worker',
   'feature-properties',
   'layers-and-groups',
   'style-rules-and-legend',
@@ -29,6 +21,7 @@ const PAGES = [
   'geometry-operations',
   'images',
   'save-and-load',
+  'terrain',
   'globe',
   '200000-features',
   'datasets',
@@ -46,18 +39,14 @@ export default defineConfig({
     // A port of its own, kept: a page that moved to another port would not be where the docs say
     port: 3200,
     strictPort: true,
-    open: true,
+    // There is no page at the root: `npm run dev` opens the first example
+    open: '/get-started/',
   },
   build: {
     // Each example bundles maplibre-gl and the library in one script
     chunkSizeWarningLimit: 2500,
     rolldownOptions: {
-      input: Object.fromEntries(
-        PAGES.map((page) => [
-          page,
-          resolve(root, page === 'index' ? 'index.html' : `${page}/index.html`),
-        ]),
-      ),
+      input: Object.fromEntries(PAGES.map((page) => [page, resolve(root, page, 'index.html')])),
     },
   },
   resolve: {

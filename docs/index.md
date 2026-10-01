@@ -11,10 +11,11 @@ hero:
       link: /getting-started
     - theme: alt
       text: Try the playground
-      link: https://sakuzu.github.io/maplibre-gl-draw/
+      link: /playground/
+      target: _self
     - theme: alt
       text: Examples
-      link: https://sakuzu.github.io/maplibre-gl-draw/examples/
+      link: /examples/
 features:
   - title: Draw and edit
     details: Points, lines, polygons, circles and freehand lines. Select, move, resize, rotate and edit vertices, with snapping and tracing.

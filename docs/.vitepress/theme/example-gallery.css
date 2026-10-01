@@ -1,0 +1,66 @@
+/*
+ * SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The gallery of the examples: cards of a picture, a title and a sentence, as many to a row as fit */
+.vp-doc .example-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vp-doc .example-gallery li {
+  margin: 0;
+}
+
+.vp-doc .example-gallery a {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.2s;
+}
+
+.vp-doc .example-gallery a:hover {
+  border-color: var(--vp-c-brand-1);
+}
+
+.vp-doc .example-gallery img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc .example-gallery .title {
+  padding: 12px 14px 4px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vp-doc .example-gallery a:hover .title {
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .example-gallery .description {
+  display: -webkit-box;
+  /* A margin, not a padding: the clamp cuts the text at the padding box */
+  margin: 0 14px 14px;
+  overflow: hidden;
+  color: var(--vp-c-text-2);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}

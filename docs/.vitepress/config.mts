@@ -7,30 +7,49 @@
  * The site reads the documents in docs/ where they are, so that they stay readable on GitHub
  * and the documentation gate (`npm run docs:check`) keeps checking the same files. A Japanese
  * document `X.ja.md` is served under /ja/. A link to a file that the site does not serve (the
- * internals, the sources, the examples, the generated API reference) is rewritten to the page
- * that shows it: GitHub, the live example, or the API reference.
+ * internals, the sources, the generated API reference) is rewritten to the page that shows it:
+ * GitHub or the API reference. A link to the folder of an example goes to its page.
  *
- * The pages of the examples (docs/examples-pages/) show each example live, in a frame: a fence
- * of the language `example` names it, and the theme's ExampleFrame renders it. The build puts
- * the built examples under /examples/ of the site, where the frames find them.
+ * The pages of the examples (docs/examples/) show each example live, in a frame: a fence of the
+ * language `example` names it, and the theme's ExampleFrame renders it. The gallery
+ * (docs/examples/index.md) is a fence of the language `example-gallery`, which the theme's
+ * ExampleGallery renders from docs/examples/catalog.json. The build puts the built examples
+ * under /examples/<name>/ and the playground under /playground/, where the frames find them,
+ * and writes the redirects of the URLs the site published before (scripts/site-redirects.mjs).
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type MarkdownIt from 'markdown-it';
 import { type DefaultTheme, defineConfig } from 'vitepress';
+import { writeRedirects } from '../../scripts/site-redirects.mjs';
 
 const REPO = 'https://github.com/sakuzu/maplibre-gl-draw';
-const LIVE = 'https://sakuzu.github.io/maplibre-gl-draw';
 const BASE = '/maplibre-gl-draw/';
 /** The root of the repository */
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /** The documents the site serves, relative to docs/ */
 const SITE_PAGE =
-  /^(index|getting-started|guides\/[a-z-]+|examples-pages\/[a-z0-9-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
+  /^(index|getting-started|guides\/[a-z-]+|examples\/[a-z0-9-]+|reference\/(README|data-format|events)|api\/.+)(\.ja)?\.md$/;
+
+/** An example of the gallery (docs/examples/catalog.json), by the name of its folder */
+interface CatalogEntry {
+  title: string;
+  titleJa: string;
+  order: number;
+}
+
+/** The names of the examples in the order of the gallery, the playground first */
+const CATALOG = Object.entries(
+  JSON.parse(readFileSync(join(ROOT, 'docs/examples/catalog.json'), 'utf8')) as Record<
+    string,
+    CatalogEntry
+  >,
+).sort(([, a], [, b]) => a.order - b.order);
 
 /** The source path (relative to docs/) of a page, from the path VitePress gives the renderer */
 function sourceOf(relativePath: string): string {
@@ -53,9 +72,13 @@ function siteHref(href: string, sourcePath: string): string {
   const media = target.match(/^docs\/api\/_media\/(.+)$/);
   if (media) target = `docs/${media[1]}`;
 
+  // The folder of an example: its page, which shows it live with its code
+  const lang = sourcePath.endsWith('.ja.md') ? 'ja/' : '';
   const example = target.match(/^examples\/([a-z0-9-]+)\/?$/);
-  if (example) return `${LIVE}/examples/${example[1]}/${hash}`;
-  if (target === 'examples' || target === 'examples/README.md') return `${LIVE}/examples/`;
+  if (example && existsSync(join(ROOT, 'docs/examples', `${example[1]}.md`))) {
+    return `/${lang}examples/${example[1]}.md${hash}`;
+  }
+  if (target === 'examples') return `/${lang}examples/${hash}`;
 
   if (target.startsWith('docs/')) {
     const doc = target.slice('docs/'.length);
@@ -102,6 +125,8 @@ function cjkBreaks(md: MarkdownIt): void {
  *     get-started
  *     ```
  *
+ * and an empty fence of the language `example-gallery` as the gallery of every example.
+ *
  * A fence, not an HTML tag, so that the page stays plain Markdown for markdownlint and GitHub.
  * A name that is not a folder of examples/ with a page fails the build; `playground` names the
  * playground (playground/).
@@ -110,7 +135,9 @@ function exampleFrames(md: MarkdownIt): void {
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     const token = tokens[idx];
-    if (token.info.trim() !== 'example') {
+    const info = token.info.trim();
+    if (info === 'example-gallery') return '<ExampleGallery />\n';
+    if (info !== 'example') {
       if (fence) return fence(tokens, idx, options, env, self);
       return self.renderToken(tokens, idx, options);
     }
@@ -212,22 +239,68 @@ const guides = (lang: 'en' | 'ja'): DefaultTheme.SidebarItem[] => {
   ];
 };
 
-const nav = (lang: 'en' | 'ja'): DefaultTheme.NavItem[] => {
-  const t = (en: string, ja: string) => (lang === 'ja' ? ja : en);
+/** The sidebar of the pages of the examples: the gallery, then each example in its order */
+const examples = (lang: 'en' | 'ja'): DefaultTheme.SidebarItem[] => {
+  const p = lang === 'ja' ? '/ja' : '';
   return [
-    { text: t('Guides', 'ガイド'), link: lang === 'ja' ? '/ja/getting-started' : '/getting-started', activeMatch: '/(ja/)?(getting-started|guides/)' },
-    { text: t('Examples', '例'), link: `${LIVE}/examples/`, target: '_self' },
-    { text: 'API', link: '/api/', activeMatch: '/api/' },
-    { text: 'Playground', link: `${LIVE}/`, target: '_self' },
+    {
+      text: lang === 'ja' ? '例' : 'Examples',
+      items: [
+        { text: lang === 'ja' ? 'ギャラリー' : 'Gallery', link: `${p}/examples/` },
+        ...CATALOG.map(([name, entry]) => ({
+          text: lang === 'ja' ? entry.titleJa : entry.title,
+          link: `${p}/examples/${name}`,
+        })),
+      ],
+    },
   ];
 };
+
+/**
+ * The tabs of the top bar
+ *
+ * The playground is not a page of VitePress, so its link opens it as a page of its own (a
+ * `target`, which the router leaves alone). While the site is served by `vitepress dev`, the
+ * theme sends that address on to the dev server of the playground (theme/dev-servers.ts).
+ */
+const nav = (lang: 'en' | 'ja'): DefaultTheme.NavItem[] => {
+  const p = lang === 'ja' ? '/ja' : '';
+  const t = (en: string, ja: string) => (lang === 'ja' ? ja : en);
+  return [
+    { text: t('Guides', 'ガイド'), link: `${p}/getting-started`, activeMatch: '/(ja/)?(getting-started|guides/)' },
+    { text: t('Examples', '例'), link: `${p}/examples/`, activeMatch: '/(ja/)?examples/' },
+    { text: 'API', link: '/api/', activeMatch: '/api/' },
+    { text: 'Playground', link: '/playground/', target: '_self' },
+  ];
+};
+
+/**
+ * Builds one vite project (examples/ or playground/) into a folder of the built site
+ *
+ * The build goes to a folder of its own first and is then copied in, so that it adds to the
+ * folder without removing the pages VitePress wrote there; a file of the build that a page of
+ * the site already has fails the build.
+ */
+function buildProject(project: string, outDir: string): void {
+  const tmp = mkdtempSync(join(tmpdir(), `site-${project}-`));
+  try {
+    execFileSync(
+      join(ROOT, 'node_modules/.bin/vite'),
+      ['build', '--outDir', tmp, '--emptyOutDir', '--logLevel', 'warn'],
+      { cwd: join(ROOT, project), stdio: 'inherit' },
+    );
+    cpSync(tmp, outDir, { recursive: true, force: false, errorOnExist: true });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
 
 export default defineConfig({
   title: 'maplibre-gl-draw',
   description:
     'Draw and edit shapes on a MapLibre GL JS map, with its own WebGL2 renderer, on terrain and on the globe.',
   base: BASE,
-  outDir: '../site-dist/docs',
+  outDir: '../site-dist',
   cleanUrls: false,
   lastUpdated: false,
   srcExclude: ['README.md', 'README.ja.md', 'api-index.md', 'internals/**', 'reference/api/**', 'api/_media/**'],
@@ -236,7 +309,7 @@ export default defineConfig({
     'getting-started.ja.md': 'ja/getting-started.md',
     'guides/:page.ja.md': 'ja/guides/:page.md',
     'reference/README.md': 'reference/index.md',
-    'examples-pages/:page.ja.md': 'ja/examples-pages/:page.md',
+    'examples/:page.ja.md': 'ja/examples/:page.md',
   },
   markdown: {
     config: (md) => {
@@ -246,17 +319,17 @@ export default defineConfig({
     },
   },
   head: [['meta', { name: 'theme-color', content: '#3451b2' }]],
-  // The examples the pages show in a frame, built under /examples/ of the site, and the
-  // playground under /playground/. They take the standard UI from its build (npm run ui:build,
-  // which `npm run site:build` checks for)
+  // The examples the pages show in a frame, built under /examples/<name>/ of the site beside
+  // the pages of the examples, and the playground under /playground/. They take the standard UI
+  // from its build (npm run ui:build, which `npm run site:build` checks for). Then the redirects
+  // of the URLs the site published before
   buildEnd: ({ outDir }) => {
-    for (const project of ['examples', 'playground']) {
-      execFileSync(
-        join(ROOT, 'node_modules/.bin/vite'),
-        ['build', '--outDir', join(outDir, project), '--emptyOutDir', '--logLevel', 'warn'],
-        { cwd: join(ROOT, project), stdio: 'inherit' },
-      );
-    }
+    buildProject('examples', join(outDir, 'examples'));
+    buildProject('playground', join(outDir, 'playground'));
+    const redirects = writeRedirects(outDir);
+    console.log(
+      `Wrote ${redirects.api} redirects of the API reference and ${redirects.examples} of the examples`,
+    );
   },
   themeConfig: {
     search: { provider: 'local' },
@@ -271,7 +344,10 @@ export default defineConfig({
     root: {
       label: 'English',
       lang: 'en',
-      themeConfig: { nav: nav('en'), sidebar: { '/api/': apiSidebar(), '/': guides('en') } },
+      themeConfig: {
+        nav: nav('en'),
+        sidebar: { '/api/': apiSidebar(), '/examples/': examples('en'), '/': guides('en') },
+      },
     },
     ja: {
       label: '日本語',
@@ -279,7 +355,7 @@ export default defineConfig({
       link: '/ja/',
       themeConfig: {
         nav: nav('ja'),
-        sidebar: { '/api/': apiSidebar(), '/ja/': guides('ja') },
+        sidebar: { '/api/': apiSidebar(), '/ja/examples/': examples('ja'), '/ja/': guides('ja') },
         outline: { label: 'このページの内容' },
         docFooter: { prev: '前のページ', next: '次のページ' },
         editLink: { pattern: `${REPO}/edit/main/docs/:path`, text: 'GitHub でこのページを直す' },
