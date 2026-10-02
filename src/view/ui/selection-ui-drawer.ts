@@ -10,7 +10,7 @@
 
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { THINNING_VIEWPORT_MARGIN_PX } from '../../shared/config/selection.js';
-import type { CoordinateTransform } from '../../shared/math/index.js';
+import { type CoordinateTransform, createCoordinateTransform } from '../../shared/math/index.js';
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
 import { isLocallyHidden, type LocalHiddenStore } from '../../store/local-visibility.js';
@@ -76,14 +76,9 @@ export function renderSelectionUI(
     pointInstanceRenderer.setProjectionData(projectionData);
   }
 
-  // Set the coordinate transform
-  const coordinateTransform: CoordinateTransform = {
-    project: (lngLat: Coordinate) => map.project([lngLat[0], lngLat[1]]),
-    unproject: (point: { x: number; y: number }) => {
-      const ll = map.unproject([point.x, point.y]);
-      return { lng: ll.lng, lat: ll.lat };
-    },
-  };
+  // Set the coordinate transform: the projection the markers are drawn with and the hit
+  // testing uses (the anchor projection while the terrain is on, the map's otherwise)
+  const coordinateTransform = createCoordinateTransform(map);
 
   selectionUIRenderer.setTransform(coordinateTransform);
   selectionUIRenderer.setProjectionData(projectionData);

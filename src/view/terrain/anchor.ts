@@ -233,10 +233,34 @@ export function projectAnchor(
   lat: number,
 ): ScreenPoint | null {
   const frame = context.anchorFrame;
+  if (!frame.mainMatrix || !frame.terrain) return null;
+  return projectAnchorAt(context, lng, lat, anchorElevationMeters(context, lng, lat));
+}
+
+/**
+ * Maps a position at a given elevation to screen coordinates, with the projection of
+ * {@link projectAnchor}
+ *
+ * Something drawn flat at one elevation, such as the frame of a selected point at the
+ * elevation of the point, is projected with this so that it lands where the shader draws it.
+ *
+ * @param elevationMeters The elevation in meters (the exaggeration included, as
+ *   {@link anchorElevationMeters} gives it)
+ * @returns null when the terrain is disabled, the frame state has not been established or the
+ *   position is behind the camera
+ * @internal
+ */
+export function projectAnchorAt(
+  context: TerrainContext,
+  lng: number,
+  lat: number,
+  elevationMeters: number,
+): ScreenPoint | null {
+  const frame = context.anchorFrame;
   const { mainMatrix: m, offsetUniforms, terrain, width, height } = frame;
   if (!m || !terrain || width <= 0 || height <= 0) return null;
 
-  const elevationMercator = anchorElevationMeters(context, lng, lat) * frame.elevationScale;
+  const elevationMercator = elevationMeters * frame.elevationScale;
   // The anchor is projected on the copy of the world it is drawn on
   const drawnLng = drawnLongitude(context, lng);
 

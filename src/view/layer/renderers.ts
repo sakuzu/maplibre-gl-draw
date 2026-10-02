@@ -121,6 +121,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     strokeRenderer,
     selectionConfig,
     selectionExtensions,
+    terrain,
   );
 
   // The tile size of this instance's map (read by the custom bounding box calculators)

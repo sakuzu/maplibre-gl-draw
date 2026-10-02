@@ -382,3 +382,65 @@ void main() {
     expect(compared).toBeGreaterThan(10);
   });
 });
+
+describe('the selection frame of a point on the terrain', () => {
+  it('keeps the size of the marker and the margin on a pitched view (it is not stretched)', async () => {
+    // A marker of radius 10 with an outline of 2 spans 24 px; the margin is 10 px on each side
+    const expectedSide = 2 * (10 + 2) + 2 * 10;
+    const frame = await page.evaluate(async (size) => {
+      const w = window as unknown as TerrainWindow;
+      const { map, draw } = w;
+      // A point on the slope of the peak, below the middle of the view
+      const ground = map.unproject([size.width / 2, size.height * 0.6]);
+      const point = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [ground.lng, ground.lat] },
+        style: { pointColor: '#00ff00', pointRadius: 10, pointStrokeWidth: 2 },
+      });
+      if (!point) throw new Error('no feature');
+      draw.selection.set('feature', [point.id]);
+      const frameReady = (): Promise<void> =>
+        new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      await frameReady();
+      await frameReady();
+      const extent = await new Promise<number[]>((resolve) => {
+        map.once('render', () => {
+          const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+          const width = gl.drawingBufferWidth;
+          const height = gl.drawingBufferHeight;
+          const pixels = new Uint8Array(width * height * 4);
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          const ratio = width / map.getCanvas().clientWidth;
+          // The pixels of the stroke of the frame (#FF2D55)
+          const box = [Infinity, Infinity, -Infinity, -Infinity];
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const i = (y * width + x) * 4;
+              const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+              if (r < 200 || g > 100 || b < 50 || b > 130) continue;
+              const sx = x / ratio;
+              const sy = (height - 1 - y) / ratio;
+              box[0] = Math.min(box[0], sx);
+              box[1] = Math.min(box[1], sy);
+              box[2] = Math.max(box[2], sx);
+              box[3] = Math.max(box[3], sy);
+            }
+          }
+          resolve(box);
+        });
+        map.triggerRepaint();
+      });
+      draw.features.delete(point.id);
+      return extent;
+    }, MAP_SIZE);
+
+    // The outer edge of the 2 px stroke is 1 px outside the side of the frame. The pixels of
+    // the stroke round its edges by up to a pixel, and the frame placed on the screen to the
+    // first order lands within a pixel more on a view this pitched (a frame cast onto the
+    // ground was 8 px taller here)
+    const width = frame[2] - frame[0] + 1 - 2;
+    const height = frame[3] - frame[1] + 1 - 2;
+    expect(Math.abs(width - expectedSide)).toBeLessThanOrEqual(3);
+    expect(Math.abs(height - expectedSide)).toBeLessThanOrEqual(3);
+  });
+});
