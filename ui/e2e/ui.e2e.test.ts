@@ -190,7 +190,7 @@ describe('the inspector', () => {
 });
 
 describe('the inspector of a point', () => {
-  it('starts the fields of the Style tab pad-md under the line of the tabs, with no title', async () => {
+  it('keeps the tabs in the head, and starts the description pad-md under their line, then the fields with no title', async () => {
     page = await openPage(browser, site);
     const { point } = await ids();
     await page.evaluate((id) => {
@@ -201,26 +201,59 @@ describe('the inspector of a point', () => {
     await settle(page);
     const measured = await inspector.evaluate((el) => {
       const tabs = el.querySelector('[data-role="tabs"]');
+      const body = el.querySelector('[data-role="panel"] > .scroll');
+      const content = body?.firstElementChild;
+      const description = content?.firstElementChild;
       const color = el.querySelector('[aria-label="Color"]');
-      if (!tabs?.parentElement || !color) throw new Error('no tabs or no color field');
-      // The step of the token, in the font of the content the tabs are in
+      if (!tabs?.parentElement || !body || !description || !color) {
+        throw new Error('no tabs, no content or no color field');
+      }
+      const row = description.querySelector('[data-role="pair"]') ?? description.firstElementChild;
+      if (!row) throw new Error('no description');
+      // The step of the token, in the font of the content
       const probe = document.createElement('div');
       probe.style.height = 'var(--kata-pad-md)';
-      tabs.parentElement.append(probe);
+      body.append(probe);
       const step = probe.getBoundingClientRect().height;
       probe.remove();
       return {
-        // From the line along the bottom of the tabs to the outline of the first field
-        gap: color.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom,
+        tabsInBody: body.contains(tabs),
+        // From the line along the bottom of the head (the tabs) to the row of the description
+        gap: row.getBoundingClientRect().top - body.getBoundingClientRect().top,
+        description: description.textContent ?? '',
+        colorAfter: !description.contains(color) && content?.children[1]?.contains(color),
         step,
         headings: [...el.querySelectorAll('[data-role="section-head"]')].map((h) =>
           h.textContent?.trim(),
         ),
       };
     });
+    expect(measured.tabsInBody).toBe(false);
+    expect(measured.description).toContain('Description');
+    expect(measured.colorAfter).toBe(true);
     expect(measured.step).toBeGreaterThan(0);
     expect(measured.gap).toBeCloseTo(measured.step, 1);
     expect(measured.headings).toEqual(['Operations']);
+  });
+
+  it('takes the width of the sheet on a narrow map', async () => {
+    page = await openPage(browser, site);
+    await page.setViewportSize({ width: 390, height: 667 });
+    const { point } = await ids();
+    await page.evaluate((id) => {
+      (window as unknown as E2EWindow).draw.selection.set('feature', [id]);
+    }, point);
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.locator('[data-role="tabs"]').waitFor();
+    await settle(page);
+    const widths = await inspector.evaluate((el) => ({
+      sheet: el.closest('[data-region="right"]')?.getBoundingClientRect().width ?? 0,
+      panel: el.querySelector('[data-role="panel"]')?.getBoundingClientRect().width ?? 0,
+      sheeted: el.hasAttribute('data-sheet'),
+    }));
+    expect(widths.sheeted).toBe(true);
+    expect(widths.sheet).toBeGreaterThan(380);
+    expect(widths.panel).toBeCloseTo(widths.sheet, 0);
   });
 });
 

@@ -14,8 +14,6 @@
     Kv,
     Pair,
     Row,
-    Stack,
-    Tabs,
   } from '@sakuzu/kata/svelte';
   import type { FeaturePatch } from '@sakuzu/maplibre-gl-draw';
   import {
@@ -41,11 +39,13 @@
 
   // FeatureInspector: the inspector of one feature in kata's InspectorFrame, laid out as
   // featureLayout gives it. The head is its name (properties.name), changed where it stands, and
-  // a subtitle (its type, its layer and whether this client hides it). Under the head, with no
-  // tab, are its measurements and its description (properties.description), changed where it
-  // stands. Then the tabs: Style has the fields of its style (with no title: the tab names them),
-  // the sections of the application and the buffer; Attributes the list of its other attributes.
-  // The foot deletes it, locks or unlocks it, and hides or shows it in this client.
+  // a subtitle (its type, its layer and whether this client hides it). Under the head are its
+  // measurements (InspectorFrame's underHead, which stays while the content scrolls), then the
+  // tabs (InspectorFrame's tabs). The content starts with its description
+  // (properties.description), changed where it stands, on every tab; then Style has the fields
+  // of its style (with no title: the tab names them), the sections of the application and the
+  // buffer, and Attributes the list of its other attributes. The foot deletes it, locks or
+  // unlocks it, and hides or shows it in this client.
   let {
     draw,
     view,
@@ -76,6 +76,8 @@
     layout.tabs.map((id) => ({ id, label: id === 'style' ? m.styleTab : m.attributesTab })),
   );
   const current = $derived(tabs.some((t) => t.id === tab) ? tab : tabs[0]?.id);
+  // The tabs show when there are two
+  const shownTabs = $derived(tabs.length > 1 ? tabs : []);
   const subtitle = $derived(
     [typeLabel(feature.type, m), view.layer?.name, view.hidden ? m.hiddenState : '']
       .filter(Boolean)
@@ -83,7 +85,6 @@
   );
   const name = $derived(featureName(feature));
   const attributes = $derived(attributeRows(feature));
-  const both = $derived(`${m.styleTab}, ${m.attributesTab}`);
   let bufferOpen = $state(false);
 
   const MEASURE_LABELS: Record<MeasureKey, keyof Messages> = {
@@ -108,6 +109,10 @@
     else draw.hidden.add(feature.id);
   }
 </script>
+
+{#snippet measured()}
+  <Block><Kv items={measurements} /></Block>
+{/snippet}
 
 {#snippet panel()}
   {#if current === 'style'}
@@ -161,37 +166,27 @@
   ontitle={editable ? (next) => update(namePatch(next)) : undefined}
   {subtitle}
   {onclose}
+  tabs={shownTabs}
+  current={current ?? ''}
+  onselect={(id) => (tab = id as InspectorTab)}
+  underHead={measurements.length > 0 ? measured : undefined}
   end={foot}
 >
-  {#if measurements.length > 0 || layout.description}
+  {#if layout.description}
     <Block>
-      <Stack gap="sm">
-        {#if measurements.length > 0}
-          <Kv items={measurements} />
-        {/if}
-        {#if layout.description}
-          <Pair label={m.description} top>
-            <InlineEdit
-              value={layout.description.text}
-              placeholder={m.addDescription}
-              label={layout.description.text ? m.description : m.addDescription}
-              multiline
-              editable={layout.description.editable}
-              onCommit={(next) => update(descriptionPatch(next))}
-            />
-          </Pair>
-        {/if}
-      </Stack>
+      <Pair label={m.description} top>
+        <InlineEdit
+          value={layout.description.text}
+          placeholder={m.addDescription}
+          label={layout.description.text ? m.description : m.addDescription}
+          multiline
+          editable={layout.description.editable}
+          onCommit={(next) => update(descriptionPatch(next))}
+        />
+      </Pair>
     </Block>
   {/if}
-  {#if tabs.length > 1 && current}
-    <Tabs {tabs} {current} label={both} onselect={(id) => (tab = id as InspectorTab)} />
-    <!-- The panel of the tab starts after the line of the tabs, as the content of a panel starts
-         after the line of its head: its first group is the first child of a Stack -->
-    <Stack gap={0}>{@render panel()}</Stack>
-  {:else}
-    {@render panel()}
-  {/if}
+  {@render panel()}
 </InspectorFrame>
 
 {#if layout.buffer}

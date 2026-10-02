@@ -254,7 +254,13 @@
       }}
     />
   {:else if inspectorSettings}
-    <Inspector {draw} {messages} settings={inspectorSettings} {sections} />
+    <Inspector
+      {draw}
+      {messages}
+      settings={inspectorSettings}
+      {sections}
+      sheet={layout?.rightMode === 'sheet'}
+    />
   {/if}
 {/snippet}
 

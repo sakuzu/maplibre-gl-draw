@@ -313,11 +313,13 @@ ui.tools.add({
 
 The inspector is the panel on the right of `createDrawUI`. It opens
 while something is selected and closes, clearing the selection, with its
-close button. For one feature it shows its name (`properties.name`,
-changed where it stands); under it, its measurements and its description
-(`properties.description`, changed where it stands); then a Style tab
-with the fields its type reads and an Attributes tab with its other
-attributes. Several features
+close button. On a narrow map it is a sheet from the bottom, as wide as
+the map. For one feature it shows its name (`properties.name`, changed
+where it stands); under it, its measurements, and the tabs, which stay
+while the content scrolls: a Style tab with the fields its type reads
+and an Attributes tab with its other attributes. The content of each tab
+starts with its description (`properties.description`, changed where it
+stands). Several features
 show the fields they share, a field whose values differ being mixed, and
 the operations that apply to them (union, intersection, difference,
 split and buffer). A layer and a group show their name, whether they are

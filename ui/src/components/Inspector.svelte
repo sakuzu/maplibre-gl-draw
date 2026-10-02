@@ -25,12 +25,15 @@
   // document, of what this client hides and of read-only, so a change made anywhere shows at
   // once. Nothing selected shows an empty state; one feature its inspector, several features a
   // summary, a layer or a group theirs. Every change calls the public API of the draw instance.
+  // In a sheet (a narrow map) the panel takes the sheet's width; the width of a panel is for a
+  // side pane.
   let {
     draw,
     messages,
     settings,
     sections,
     onclose,
+    sheet = false,
   }: {
     draw: InspectorDraw;
     messages: Box<Messages>;
@@ -39,6 +42,8 @@
     sections: Box<InspectorSectionSpec[]>;
     /** Called by the close button; clears the selection when left out */
     onclose?: () => void;
+    /** Whether it is in a sheet, whose width the panel takes */
+    sheet?: boolean;
   } = $props();
 
   const view = $derived(follow(draw, INSPECTOR_EVENTS, () => readView(draw)));
@@ -52,7 +57,7 @@
   const applying = (features: Feature[]) => applicableSections(sections.get(), features);
 </script>
 
-<div class="inspector" data-role="inspector">
+<div class="inspector" data-role="inspector" data-sheet={sheet ? '' : undefined}>
   {#if v.kind === 'feature'}
     <FeatureInspector
       {draw}
@@ -116,5 +121,8 @@
     min-height: 0;
     height: 100%;
     max-height: 100%;
+  }
+  .inspector[data-sheet] > :global([data-role='panel']) {
+    width: 100%;
   }
 </style>

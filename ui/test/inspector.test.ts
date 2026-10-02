@@ -188,7 +188,7 @@ describe('createInspector', () => {
     expect(hasButton(inspector.element, 'Description')).toBe(true);
   });
 
-  it('shows the measurements and the description under the head, before the tabs', () => {
+  it('shows the measurements under the head, then the tabs, and the description on top of the content', () => {
     const described = makeFeature({
       ...park,
       properties: { ...park.properties, description: 'Gate' },
@@ -201,31 +201,42 @@ describe('createInspector', () => {
     const el = inspector.element;
     const tablist = el.querySelector('[data-role="tabs"]');
     if (!tablist) throw new Error('no tabs');
+    const body = el.querySelector('[data-role="panel"] > .scroll');
+    if (!body) throw new Error('no content');
     const precedes = (a: Node, b: Node) =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
     const text = (needle: string) =>
       [...el.querySelectorAll('*')].find(
         (n) => n.children.length === 0 && n.textContent?.trim() === needle,
       );
-    for (const word of ['Area', 'Perimeter', 'Description', 'Gate']) {
+    // The measurements under the head, which stays while the content scrolls
+    for (const word of ['Area', 'Perimeter']) {
       const node = text(word);
       if (!node) throw new Error(`no ${word}`);
       expect(precedes(node, tablist)).toBe(true);
+      expect(body.contains(node)).toBe(false);
+    }
+    // The tabs in the head too, and the description first in the content
+    expect(body.contains(tablist)).toBe(false);
+    const fill = button(el, 'Fill color');
+    for (const word of ['Description', 'Gate']) {
+      const node = text(word);
+      if (!node) throw new Error(`no ${word}`);
+      expect(body.contains(node)).toBe(true);
+      expect(precedes(node, fill)).toBe(true);
     }
     // The Style tab: the fields and the operations, no measurements
-    const fill = button(el, 'Fill color');
-    expect(precedes(tablist, fill)).toBe(true);
     expect(hasButton(el, 'Buffer')).toBe(true);
-    // The Attributes tab: the list of the attributes only
+    // The Attributes tab: the description, then the list of the attributes only
     click(button(tablist, 'Attributes'));
     expect(el.textContent).toContain('kind');
     expect(hasButton(el, 'Fill color')).toBe(false);
     expect(hasButton(el, 'Buffer')).toBe(false);
     expect(el.textContent).toContain('Area');
-    expect(el.textContent).toContain('Gate');
+    expect(body.textContent).toContain('Gate');
   });
 
-  it('puts the fields of the Style tab straight under the tabs, with no title', () => {
+  it('puts the fields of the Style tab under the description, with no title', () => {
     const red = makeFeature({ ...park, style: { fillColor: '#ff0000' } });
     const fake = fakeDocument({ features: [red], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
@@ -237,10 +248,11 @@ describe('createInspector', () => {
     });
     flushSync();
     const el = inspector.element;
-    // The panel of the tab follows the tabs as a Stack, whose first child holds the fields
-    const panel = el.querySelector('[data-role="tabs"]')?.nextElementSibling;
+    // The content of the tab is a Stack under the tabs: the description to add, then the fields
+    const panel = el.querySelector('[data-role="panel"] > .scroll')?.firstElementChild;
     expect(panel?.getAttribute('data-role')).toBe('stack');
-    const first = panel?.firstElementChild;
+    expect(panel?.firstElementChild?.textContent).toContain('Description');
+    const first = panel?.children[1];
     expect(first?.getAttribute('data-role')).toBe('block');
     expect(first?.contains(button(el, 'Fill color'))).toBe(true);
     // Only the sections after the fields have titles
