@@ -11,7 +11,8 @@
  * `page.route`, and the map has an empty style.
  *
  * The browser is the one playwright-core installs for core's end-to-end tests
- * (`npx playwright-core install chromium-headless-shell`).
+ * (`npx playwright-core install chromium-headless-shell`); a test that also needs WebKit is
+ * skipped while it is not installed (`npx playwright-core install webkit`).
  */
 
 import { readFileSync } from 'node:fs';
@@ -21,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import type { Draw } from '@sakuzu/maplibre-gl-draw';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { type Browser, chromium, type Page } from 'playwright-core';
+import { type Browser, chromium, type Page, webkit } from 'playwright-core';
 import { build } from 'vite';
 import { scopeKata } from '../build/scope-css.ts';
 import type { DrawUI } from '../src/index.ts';
@@ -118,6 +119,18 @@ export async function launchBrowser(): Promise<Browser> {
   }
 }
 
+/**
+ * Starts headless WebKit, or gives null when it is not installed
+ * (`npx playwright-core install webkit`), so that the tests that need it can be skipped
+ */
+export async function launchWebKit(): Promise<Browser | null> {
+  try {
+    return await webkit.launch();
+  } catch {
+    return null;
+  }
+}
+
 const PAGE_HTML =
   '<!doctype html><html lang="en"><head>' +
   '<link rel="stylesheet" href="/maplibre-gl.css">' +
@@ -144,10 +157,15 @@ const CONTENT_TYPES: Record<string, string> = {
  * over it
  *
  * The page exposes `window.map`, `window.draw`, `window.ui`, `window.ids` and `window.layerId`.
- * Every request outside the test origin is aborted.
+ * Every request outside the test origin is aborted. The page is VIEWPORT large unless another
+ * size is given.
  */
-export async function openPage(browser: Browser, site: Site): Promise<Page> {
-  const page = await browser.newPage({ viewport: VIEWPORT });
+export async function openPage(
+  browser: Browser,
+  site: Site,
+  viewport: { width: number; height: number } = VIEWPORT,
+): Promise<Page> {
+  const page = await browser.newPage({ viewport });
   page.setDefaultTimeout(browserTimeout(10_000));
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(String(error)));

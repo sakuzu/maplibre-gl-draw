@@ -134,11 +134,15 @@ const upDown = (a: Box, b: Box) => a.top < b.bottom && b.top < a.bottom;
  *   box reaches the corner across
  *
  * The boxes are measured where maplibre-gl places them, without what this moved. The attribution
- * and the right region are followed with a ResizeObserver, as the toolbar and the corners are.
+ * and the right region are followed with a ResizeObserver, as the toolbar and the corners are:
+ * the boxes are read in the observer's delivery and the custom properties are written in the next
+ * frame, so that what they move is not measured again in the same delivery.
  */
 export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLift {
   let destroyed = false;
   let observer: ResizeObserver | undefined;
+  // The frame that writes what the observer measured, or 0
+  let frame = 0;
   let observed: Element[] = [];
   let inset: ShellInset = { top: 0, right: 0, bottom: 0, left: 0 };
   // What is applied now, to measure the boxes without it
@@ -183,12 +187,9 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
     container.style.setProperty('--mgd-ui-shift-right', `${shift}px`);
   }
 
-  function apply() {
-    if (destroyed) return;
-    if (!container.isConnected) {
-      set(0, 0, 0);
-      return;
-    }
+  /** What to apply, measured now: the lift of each corner and the shift of the right controls */
+  function measure(): { left: number; right: number; shift: number } {
+    if (!container.isConnected) return { left: 0, right: 0, shift: 0 };
     const box = container.getBoundingClientRect();
     // The corners where maplibre-gl places them (a corner keeps its place across)
     const place = (side: 'left' | 'right'): Box | null => {
@@ -239,7 +240,27 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
       const l = moved(left, 0, -liftLeft);
       if (across(a, l) && upDown(a, l)) liftLeft = Math.round(left.bottom - a.top);
     }
-    set(Math.max(0, liftLeft), liftRight, shift);
+    return { left: Math.max(0, liftLeft), right: liftRight, shift };
+  }
+
+  function apply() {
+    if (destroyed) return;
+    // What a delivery measured before is out of date
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    const next = measure();
+    set(next.left, next.right, next.shift);
+  }
+
+  /** The observer's delivery: measures now, and writes in the next frame */
+  function delivered() {
+    if (destroyed) return;
+    const next = measure();
+    if (frame) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!destroyed) set(next.left, next.right, next.shift);
+    });
   }
 
   function follow() {
@@ -255,7 +276,7 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
     observer?.disconnect();
     observed = next;
     if (typeof ResizeObserver === 'undefined') return;
-    observer ??= new ResizeObserver(apply);
+    observer ??= new ResizeObserver(delivered);
     for (const el of observed) observer.observe(el);
   }
 
@@ -269,6 +290,8 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
       observer?.disconnect();
       observer = undefined;
       observed = [];

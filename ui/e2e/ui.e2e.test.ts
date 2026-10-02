@@ -16,6 +16,7 @@ import {
   buildPage,
   type E2EWindow,
   launchBrowser,
+  launchWebKit,
   openPage,
   pageOf,
   type Site,
@@ -765,5 +766,54 @@ describe("the look of maplibre-gl's controls", () => {
     expect(light.group).toBe(light.panel);
     expect(light.group).not.toBe(dark.group);
     expect(light.icon).toBe('none');
+  });
+});
+
+describe('WebKit on a narrow map', () => {
+  let webkit: Browser | null = null;
+
+  beforeAll(async () => {
+    webkit = await launchWebKit();
+  }, browserTimeout(120_000));
+
+  afterAll(async () => {
+    await webkit?.close();
+  });
+
+  it('measures the interface without a ResizeObserver loop', async (ctx) => {
+    if (!webkit) {
+      ctx.skip();
+      return;
+    }
+    page = await openPage(webkit, site, { width: 390, height: 667 });
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(String(error)));
+    page.on('console', (message) => {
+      if (message.text().includes('ResizeObserver')) errors.push(message.text());
+    });
+    // As the playground: a credit long enough to wrap, actions in the card at the bottom left,
+    // then a feature selected, which opens the inspector as a sheet
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow;
+      w.map.addSource('credit', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        attribution: 'The survey of the city, the data of the transport authority and the walks',
+      });
+      w.map.addLayer({ id: 'credit', type: 'circle', source: 'credit' });
+      for (let i = 0; i < 4; i++) {
+        w.ui.actions.add({ id: `run-${i}`, label: `Action ${i}`, kind: 'action', run: () => {} });
+      }
+    });
+    await settle(page);
+    const { polygon } = await ids();
+    await page.evaluate((id) => {
+      (window as unknown as E2EWindow).draw.selection.set('feature', [id]);
+    }, polygon);
+    await page.locator('[data-role="inspector"] [data-role="tabs"]').waitFor();
+    await settle(page);
+    await page.waitForTimeout(500);
+    await settle(page);
+    expect(errors).toEqual([]);
   });
 });

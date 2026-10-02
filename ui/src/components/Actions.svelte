@@ -109,10 +109,12 @@
   const reopenButton = (root: HTMLElement) =>
     root.querySelector<HTMLElement>(':scope > [data-role="reopen"] > [data-role="floating"]');
 
-  function place() {
+  /** Where the card goes, measured now: the room it reserves, its height above the bottom, and
+   * the room above it; null while it is not on the page */
+  function measure(): { root: HTMLElement; reserve: string; bottom: number; room: number } | null {
     const root = card?.parentElement;
     const el = floating();
-    if (!root || !el) return;
+    if (!root || !el) return null;
     const box = root.getBoundingClientRect();
     const r = el.getBoundingClientRect();
     // The scale's corner, where it is drawn (lifted above the toolbar or the attribution)
@@ -132,12 +134,50 @@
     // The room the card takes at the bottom, which a panel floating at the left keeps clear of:
     // its height and its distance from the bottom, with the place it is moving to
     const reserve = `${Math.max(0, Math.round(r.height + (box.bottom - r.bottom) + (next - bottom)))}px`;
-    if (root.style.getPropertyValue(RESERVE) !== reserve) root.style.setProperty(RESERVE, reserve);
-    bottom = next;
     // The room above the place, less the button at the top left while it shows
     const button = reopen ? reopenButton(root)?.getBoundingClientRect() : undefined;
     const above = button && button.height > 0 ? button.height : 0;
-    room = Math.max(0, Math.round(box.height - next - above));
+    return {
+      root,
+      reserve,
+      bottom: next,
+      room: Math.max(0, Math.round(box.height - next - above)),
+    };
+  }
+
+  /** Writes a place measured before */
+  function write(at: NonNullable<ReturnType<typeof measure>>) {
+    const { root, reserve } = at;
+    if (root.style.getPropertyValue(RESERVE) !== reserve) root.style.setProperty(RESERVE, reserve);
+    bottom = at.bottom;
+    room = at.room;
+  }
+
+  // The frame that writes what an observer measured, or 0
+  let frame = 0;
+
+  /** Places the card now */
+  function place() {
+    // What an observer measured before is out of date
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    const at = measure();
+    if (at) write(at);
+  }
+
+  /**
+   * An observer's delivery: measures now and writes in the next frame, so that what the writes
+   * move is not measured again in the same delivery
+   */
+  function placeLater() {
+    const at = measure();
+    if (frame) cancelAnimationFrame(frame);
+    frame = at
+      ? requestAnimationFrame(() => {
+          frame = 0;
+          write(at);
+        })
+      : 0;
   }
 
   $effect(() => {
@@ -152,7 +192,7 @@
       place();
       return () => root.style.removeProperty(RESERVE);
     }
-    const observer = new ResizeObserver(() => place());
+    const observer = new ResizeObserver(() => placeLater());
     let bar: HTMLElement | null = null;
     const watch = () => {
       bar = toolbar(root);
@@ -170,17 +210,19 @@
         : new MutationObserver(() => {
             if (toolbar(root) === bar) return;
             watch();
-            place();
+            placeLater();
           });
     mutations?.observe(shell as Node, { childList: true, subtree: true });
     // The corners move by the custom properties on the map's container (controls.ts)
     const moves =
       typeof MutationObserver === 'undefined' || !corner
         ? null
-        : new MutationObserver(() => place());
+        : new MutationObserver(() => placeLater());
     if (corner) moves?.observe(corner, { attributes: true, attributeFilter: ['style'] });
     place();
     return () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
       observer.disconnect();
       mutations?.disconnect();
       moves?.disconnect();
