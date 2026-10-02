@@ -4,7 +4,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createToolbar, type ToolbarHandle } from '../src/index.js';
-import { fakeDraw } from './fake-draw.js';
+import { fakeDocument, fakeDraw } from './fake-draw.js';
 
 let bar: ToolbarHandle | undefined;
 afterEach(() => {
@@ -101,6 +101,18 @@ describe('createToolbar', () => {
     flushSync();
     expect(fake.draw.selection.delete).toHaveBeenCalledOnce();
     expect(fake.draw.setMode).not.toHaveBeenCalled();
+    expect(button('Delete').disabled).toBe(true);
+  });
+
+  it('is off while draw is read-only, whatever is selected', () => {
+    const fake = fakeDocument({ selection: { type: 'feature', ids: ['a'] }, readOnly: true });
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    expect(button('Delete').disabled).toBe(true);
+    fake.setReadOnly(false);
+    flushSync();
+    expect(button('Delete').disabled).toBe(false);
+    fake.setReadOnly(true);
+    flushSync();
     expect(button('Delete').disabled).toBe(true);
   });
 

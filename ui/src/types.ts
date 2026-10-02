@@ -325,7 +325,7 @@ export interface ToolbarSettings {
 }
 
 /** The members of a draw instance that the toolbar uses */
-export type ToolbarDraw = Pick<Draw, 'getMode' | 'setMode' | 'on' | 'off'> & {
+export type ToolbarDraw = Pick<Draw, 'getMode' | 'setMode' | 'isReadOnly' | 'on' | 'off'> & {
   readonly selection: Pick<Draw['selection'], 'get' | 'delete'>;
   readonly options: Pick<Draw['options'], 'get' | 'update'>;
 };

@@ -19,7 +19,8 @@
   //
   // It keeps nothing of the drawing: the current tool is the one whose mode is draw.getMode(),
   // read again on mode.changed; the delete button is off while draw.selection.get() is empty,
-  // read again on selection.changed; the magnet is on while snapping is, read again on
+  // read again on selection.changed, and while draw is read-only, read again on
+  // readOnly.changed; the magnet is on while snapping is, read again on
   // options.changed. Pressing a tool calls draw.setMode and delete calls draw.selection.delete.
   // The magnet is one of the Drawbar's switches, so that it looks like one, but pressing it opens
   // the snapping settings rather than switching snapping (SnappingSettings, which writes through
@@ -48,6 +49,7 @@
   const selected = $derived(
     follow(draw, ['selection.changed'], () => draw.selection.get().ids.length),
   );
+  const readOnly = $derived(follow(draw, ['readOnly.changed'], () => draw.isReadOnly()));
   const snapOn = $derived(
     follow(draw, ['options.changed'], () => draw.options.get().snapping?.enabled !== false),
   );
@@ -70,7 +72,7 @@
             kbd: keys ? formatShortcut('delete') : undefined,
             group: DELETE_ID,
             tone: 'danger' as const,
-            disabled: selected.get() === 0,
+            disabled: selected.get() === 0 || readOnly.get(),
           },
         ]
       : []),

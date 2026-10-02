@@ -355,6 +355,47 @@ describe('createInspector', () => {
     expect(inspector.element.textContent).toContain('Nothing is selected');
   });
 
+  it('turns every Delete off while draw is read-only', () => {
+    const other = makeFeature({ ...park, id: 'd', properties: {} });
+    const selections = [
+      { type: 'feature', ids: ['a'] },
+      { type: 'feature', ids: ['a', 'd'] },
+      { type: 'layer', ids: ['l1'] },
+      { type: 'layer', ids: ['l1', 'l2'] },
+      { type: 'group', ids: ['g1'] },
+      { type: 'group', ids: ['g1', 'g2'] },
+    ] as const;
+    const fake = fakeDocument({
+      features: [park, other],
+      layers: [
+        { id: 'l1', name: 'Layer 1' },
+        { id: 'l2', name: 'Layer 2' },
+      ],
+      groups: [
+        { id: 'g1', layerId: 'l1', name: 'Block', featureIds: ['a'], visible: true, locked: false },
+        {
+          id: 'g2',
+          layerId: 'l1',
+          name: 'Street',
+          featureIds: ['d'],
+          visible: true,
+          locked: false,
+        },
+      ],
+      readOnly: true,
+    });
+    const inspector = mountAlone(fake);
+    for (const { type, ids } of selections) {
+      fake.selectItems(type, [...ids]);
+      flushSync();
+      const remove = [...inspector.element.querySelectorAll('button')].filter((b) =>
+        b.textContent?.trim().startsWith('Delete'),
+      );
+      expect(remove.length, `${type} ${ids.join(',')}`).toBe(1);
+      expect(remove[0].disabled, `${type} ${ids.join(',')}`).toBe(true);
+    }
+  });
+
   it('offers the operations that apply to the selection', () => {
     const other = makeFeature({ ...park, id: 'd', properties: {} });
     const fake = fakeDocument({
