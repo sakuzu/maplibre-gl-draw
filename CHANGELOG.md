@@ -6,13 +6,36 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-02
+
+Three fixes: a plugin's fill, the click that finishes a plugin's
+exclusive interaction, and the selection frame of a point on the
+terrain. Nothing else changes.
+
+### Fixed
+
+- A plugin's `fill.draw` drew nothing: the fill shared with the render
+  context of custom feature renderers was never given its shader, so a
+  renderer that filled an area with it left the area empty. It is now
+  prepared each frame with the other renderers.
+- A click outside the element of a plugin's exclusive interaction
+  finished the interaction and did nothing else, so it took a second
+  click to select a feature. It now goes on as an ordinary click after
+  `finish()`: it selects the feature under it, or clears the selection
+  on the empty map. A click on the feature already selected does not
+  call `onFeatureClick`, so it does not start another interaction.
+- With the terrain on and the camera pitched, the selection frame of a
+  point was stretched into a tall rectangle. It now lies flat at the
+  elevation of the point and keeps the size of the marker and the margin
+  ([#12](https://github.com/sakuzu/maplibre-gl-draw/issues/12)).
+
 ## [2.1.1] - 2026-10-02
 
 Three fixes to the lines drawn on the terrain: their thickness on a
 high-DPI display, their thickness between the vertices, and dashed lines
 that sank into the ground. Nothing else changes.
 
-### Fixed
+### Fixed in 2.1.1
 
 - With the terrain on, a solid line or the outline of a polygon was drawn
   half as thick on a high-DPI display (a device pixel ratio of 2) as
@@ -1168,7 +1191,8 @@ available from Kasika, Inc.
 - A read-only mode and an interaction lock.
 - Plugins, custom modes and custom feature types.
 
-[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v1.0.0...v2.0.0
