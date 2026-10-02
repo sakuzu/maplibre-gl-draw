@@ -14,6 +14,7 @@ import type { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import type { PointShapeRenderer } from '../renderers/point/point-shape.js';
 import type { PolygonBatchRenderer } from '../renderers/polygon/batch.js';
+import type { FillShaderManager } from '../renderers/polygon/fill.js';
 import type { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
 import type { StrokeRenderer } from '../renderers/stroke.js';
 import type { TentativeRenderer } from '../ui/tentative.js';
@@ -33,6 +34,8 @@ export interface ShaderInitializerRenderers {
   sdfLineRenderer: SDFLineRenderer | null;
   polygonBatchRenderer: PolygonBatchRenderer | null;
   sdfPolygonRenderer: SDFPolygonRenderer | null;
+  /** The fill shared with the render context of custom feature renderers */
+  fillShaderManager: FillShaderManager | null;
 }
 
 /**
@@ -64,6 +67,7 @@ export class ShaderInitializer {
       sdfLineRenderer,
       polygonBatchRenderer,
       sdfPolygonRenderer,
+      fillShaderManager,
     } = this.renderers;
 
     if (featureDrawer) {
@@ -93,6 +97,7 @@ export class ShaderInitializer {
     if (sdfPolygonRenderer) {
       sdfPolygonRenderer.ensureShader(shaderData);
     }
+    fillShaderManager?.ensureShader(shaderData);
   }
 
   /**
@@ -135,6 +140,7 @@ export class ShaderInitializer {
       sdfLineRenderer,
       polygonBatchRenderer,
       sdfPolygonRenderer,
+      fillShaderManager,
     } = this.renderers;
 
     if (featureDrawer) {
@@ -164,6 +170,7 @@ export class ShaderInitializer {
     if (sdfPolygonRenderer) {
       sdfPolygonRenderer.setOffsetUniforms(uniforms);
     }
+    fillShaderManager?.setOffsetUniforms(uniforms);
   }
 
   /**

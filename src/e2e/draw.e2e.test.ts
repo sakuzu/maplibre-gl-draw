@@ -779,3 +779,65 @@ describe('a diffed setStyle on a real map', () => {
     expect(result.inside.slice(0, 3)).toEqual([255, 0, 0]);
   });
 });
+
+describe('a custom feature type that draws with the shared fill alone', () => {
+  afterAll(async () => {
+    await clearAll(page);
+  });
+
+  it('fills the area the renderer gives to fill.draw', async () => {
+    await clearAll(page);
+    const ring = [
+      await lngLatOf(page, at(-60, -60)),
+      await lngLatOf(page, at(60, -60)),
+      await lngLatOf(page, at(0, 60)),
+      await lngLatOf(page, at(-60, -60)),
+    ];
+    const result = await page.evaluate(async (coordinates) => {
+      const { map, draw } = window as unknown as E2EWindow;
+      if (!draw.extensions.featureTypes.has('E2EFillOnly')) {
+        // No line, no point and no shader of its own: the fill is the only thing drawn
+        draw.extensions.featureTypes.add({
+          type: 'E2EFillOnly',
+          geometry: 'Polygon',
+          renderer: {
+            onAdd() {},
+            draw(feature, ctx) {
+              const rings = (feature.geometry as { coordinates: number[][][] }).coordinates;
+              ctx.fill.draw(rings, { color: '#ff0000', opacity: 1 });
+            },
+            onRemove() {},
+          },
+        });
+      }
+      draw.features.create({
+        type: 'E2EFillOnly',
+        geometry: { type: 'Polygon', coordinates: [coordinates] },
+      });
+      const frame = (): Promise<void> =>
+        new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      await frame();
+      await frame();
+      return new Promise<{ inside: number[]; outside: number[] }>((resolve) => {
+        map.once('render', () => {
+          const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+          const ratio = gl.drawingBufferWidth / map.getCanvas().clientWidth;
+          const read = (x: number, y: number): number[] => {
+            const pixel = new Uint8Array(4);
+            const column = Math.round(x * ratio);
+            const row = gl.drawingBufferHeight - 1 - Math.round(y * ratio);
+            gl.readPixels(column, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return Array.from(pixel);
+          };
+          const width = map.getCanvas().clientWidth;
+          const height = map.getCanvas().clientHeight;
+          resolve({ inside: read(width / 2, height / 2), outside: read(10, 10) });
+        });
+        map.triggerRepaint();
+      });
+    }, ring);
+
+    expect(result.inside.slice(0, 3)).toEqual([255, 0, 0]);
+    expect(result.outside.slice(0, 3)).not.toEqual([255, 0, 0]);
+  });
+});

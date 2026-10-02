@@ -183,6 +183,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     sdfLineRenderer,
     polygonBatchRenderer,
     sdfPolygonRenderer,
+    fillShaderManager,
   });
 
   const batchManager = new BatchManager({
