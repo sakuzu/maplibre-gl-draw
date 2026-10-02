@@ -7,6 +7,62 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-02
+
+The narrow screen and the stage, from the visual review: the map's
+padding and its controls follow the panes kata's Shell reports, the
+actions card stands above the attribution and fits the map, the
+inspector takes the width of its sheet and keeps its tabs in the head,
+Delete has one place, maplibre-gl's controls follow the theme, and every
+dataset is dragged among the layers. It reads kata 1.6.0.
+
+### Added in 1.2.0
+
+- maplibre-gl's controls in the map's container, those of the
+  application too, follow the theme of `createDrawUI` (#10). The control
+  container (`.maplibregl-control-container`) has `data-mgd-ui-controls`,
+  to which the build moves kata's tokens as it does to `.mgd-ui`, and
+  the `data-color-mode` of the root, following `setTheme` and the
+  system; `destroy()` removes both. The groups of buttons, the lines
+  between them, the attribution and the scale are painted with the
+  tokens, and maplibre-gl's icons are inverted in the dark look.
+
+### Changed in 1.2.0
+
+- Every dataset is dragged among the layers in the layer panel (#6). A
+  dataset of `above-store` or `below-store` dropped among the layers is
+  moved to `layer-order` (`datasets.move`) and placed with
+  `layers.reorder`; when the reorder is refused, it goes back to its
+  own order. `LayerPanelDraw` needs `datasets.move`.
+- The map's padding follows the inset of kata's Shell (`onlayout`)
+  (#8): at the left, the room the left pane takes, beside the map or
+  floating over it with its gap; at the bottom, the height of the
+  sheets. The right pane, which opens with the selection, and the
+  toolbar are no longer padding, so the view does not jump on a
+  selection.
+- The controls of the bottom right of the map (not the attribution)
+  move to the left of the right pane, gap-md apart, while they would be
+  under it, and the bottom left corner (the scale) rises above the
+  attribution's box where that box reaches it across, as the two-line
+  attribution of a narrow map does (#8). The attribution is only read;
+  its compact form stays maplibre-gl's own.
+- The actions card stands above the higher of the scale and the
+  attribution's box where that box reaches the card across (#7). Its
+  height is capped to the map above its place, less gap-md at the top
+  and the button that opens the layer panel again while it shows, and
+  the whole card scrolls.
+- In a sheet, on a narrow map, the inspector takes the width of the
+  sheet instead of the width of a panel (#9). The inspector of a feature
+  passes its tabs to kata's InspectorFrame, so they stay in the head
+  while the content scrolls; its measurements are under the head, and
+  its description starts the content of each tab.
+- Delete is in the lead of the foot for several features, layers or
+  groups, as for one feature, instead of among the operations (#11).
+- kata 1.6.0: the Footer of an inspector stacks only when its row does
+  not fit, a sheet's half stage is the content's height, a narrow map
+  opens one side sheet at a time, and the actions of a row of the layer
+  panel that show on hover take no room until the row is hovered.
+
 ## [1.1.0] - 2026-10-01
 
 The basemaps as the back of the stack in the layer panel, the datasets
