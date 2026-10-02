@@ -238,12 +238,14 @@ describe('the datasets in the layer tree', () => {
     expect(nodes.map((n) => n.id)).toEqual(['l2', 'l1']);
   });
 
-  it('move among the layers when they are placed among them, and stay otherwise', () => {
+  it('move among the layers, and join the stacking order where they are dropped', () => {
     const nodes = buildNodes(stacked().draw, en);
-    const [places, l2, buildings] = nodes;
+    const [places, l2, buildings, , roads] = nodes;
     expect(canDropInto(buildings, null)).toBe(true);
     expect(canDropInto(buildings, l2)).toBe(false);
-    expect(canDropInto(places, null)).toBe(false);
+    expect(canDropInto(places, null)).toBe(true);
+    expect(canDropInto(roads, null)).toBe(true);
+    expect(canDropInto(places, l2)).toBe(false);
     // The dataset to the front of the layers: the datasets in front of every layer are not
     // entries of the stacking order
     expect(planMove({ id: 'buildings', parentId: null, index: 0 }, nodes)).toEqual({
@@ -255,7 +257,19 @@ describe('the datasets in the layer tree', () => {
       kind: 'layers',
       order: ['l1', 'l2', 'buildings'],
     });
-    expect(planMove({ id: 'places', parentId: null, index: 4 }, nodes)).toBeNull();
+    // The dataset in front of every layer dropped between the layers: it joins the stacking order
+    // there, and goes back to above-store when the reorder is refused
+    expect(planMove({ id: 'places', parentId: null, index: 1 }, nodes)).toEqual({
+      kind: 'layers',
+      order: ['l1', 'buildings', 'places', 'l2'],
+      join: { id: 'places', order: 'above-store' },
+    });
+    // The dataset behind every layer dropped in front of them all
+    expect(planMove({ id: 'roads', parentId: null, index: 0 }, nodes)).toEqual({
+      kind: 'layers',
+      order: ['l1', 'buildings', 'l2', 'roads'],
+      join: { id: 'roads', order: 'below-store' },
+    });
   });
 });
 

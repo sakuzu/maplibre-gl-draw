@@ -80,7 +80,7 @@ function fakeDataset(spec: FakeDatasetSpec) {
   };
   return {
     id: spec.id,
-    order: spec.order ?? 'layer-order',
+    order: spec.order ?? ('layer-order' as DatasetOrder),
     interactive: true,
     get visible() {
       return visible;
@@ -433,6 +433,19 @@ export function fakeDraw(
         (['below-store', 'layer-order', 'above-store'] as const).flatMap((o) =>
           datasets.filter((d) => d.order === o),
         ),
+      // Its order only, as core: a dataset that leaves `layer-order` leaves the stacking order,
+      // and one that joins it is put on the order by the caller (`layers.reorder`)
+      move: vi.fn((id: string, placement: { order?: DatasetOrder; index?: number }) => {
+        const dataset = datasets.find((d) => d.id === id);
+        if (!dataset) throw new Error(`no dataset ${id}`);
+        const next = placement.order ?? dataset.order;
+        if (dataset.order === 'layer-order' && next !== 'layer-order') {
+          order = order.filter((x) => x !== id);
+        }
+        dataset.order = next;
+        emit('dataset.reordered', { ids: datasets.map((d) => d.id) });
+        return true;
+      }),
     },
     getMap: () => map,
     // What the inspector reads besides (fakeDocument has a stand-in with every member it uses)

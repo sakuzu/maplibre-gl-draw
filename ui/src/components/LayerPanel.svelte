@@ -22,7 +22,7 @@
   } from '@sakuzu/kata/svelte';
   import type { Snippet } from 'svelte';
   import type { BasemapControl } from '../basemaps.js';
-  import { planMove } from '../layers/move.js';
+  import { type MoveJoin, planMove } from '../layers/move.js';
   import {
     buildNodes,
     canDropInto,
@@ -48,13 +48,15 @@
   // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.get(),
   // read again on selection.changed. Every action calls the public API of draw: the eye
   // `update({ visible })` (and shows again what this client hid) or a dataset's `setVisible`, the
-  // lock `update({ locked })`, a drop `layers.reorder`, `groups.move` or `features.move`, a press
+  // lock `update({ locked })`, a drop `layers.reorder` (with `datasets.move` for a dataset that
+  // joins the stacking order), `groups.move` or `features.move`, a press
   // `selection.set` (and `layers.setActive` for a layer), the add menu `layers.create` and
   // `selection.group`. A name is not changed in the tree: the head of the inspector changes it.
   //
   // A dataset is a row of the stack, not an item of the document: it has the eye and no lock, and
-  // a press on it does nothing (the selection stays). It is dragged among the layers when it is
-  // placed among them (`layer-order`); in front of or behind every layer it stays. A layer of more
+  // a press on it does nothing (the selection stays). It is dragged among the layers: one in front
+  // of or behind every layer is moved to `layer-order` (`datasets.move`) before the reorder, and
+  // back to its own order when the reorder is refused. A layer of more
   // features than the limit lists none: its one child counts them, and has no eye, no lock and no
   // grip, and a press on it does nothing. The eye and the lock are drawn here (LayerTree's
   // `actions`), for each kind its own.
@@ -239,10 +241,22 @@
     else if (kind === 'feature') draw.features.update(id, { locked });
   }
 
+  // A dataset in front of or behind every layer joins the stacking order (layer-order) before the
+  // reorder, and goes back to its own order when the reorder is refused
+  function reorderLayers(order: string[], join?: MoveJoin) {
+    if (join) draw.datasets.move(join.id, { order: 'layer-order' });
+    let done = false;
+    try {
+      done = draw.layers.reorder(order);
+    } finally {
+      if (join && !done) draw.datasets.move(join.id, { order: join.order });
+    }
+  }
+
   function onmove(move: TreeMove) {
     const plan = planMove(move, nodes);
     if (!plan) return;
-    if (plan.kind === 'layers') draw.layers.reorder(plan.order);
+    if (plan.kind === 'layers') reorderLayers(plan.order, plan.join);
     else if (plan.kind === 'group') draw.groups.move(plan.id, plan.to);
     else draw.features.move(plan.id, plan.to);
   }
@@ -275,14 +289,7 @@
 {#snippet row(node: TreeNode, name: Snippet<[TreeNode]>)}
   {@const own = node as LayerTreeNode}
   {#if own.kind === 'dataset'}
-    <!-- Placed in front of or behind every layer, it is not dragged, and shows no grip -->
-    <span
-      class="mark"
-      role="img"
-      aria-label={m.datasets}
-      title={m.datasets}
-      data-fixed={canDropInto(own, null) ? undefined : ''}
-    >
+    <span class="mark" role="img" aria-label={m.datasets} title={m.datasets}>
       <Markbox><Icon name={DATASET_ICON} /></Markbox>
     </span>
     <Text clamp>{own.name}</Text>

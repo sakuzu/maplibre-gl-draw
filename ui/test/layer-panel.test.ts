@@ -357,12 +357,15 @@ describe('the datasets of the layer panel', () => {
     expect(row(fake.container, 'buildings').querySelector('input')).toBeNull();
   });
 
-  it('is dragged among the layers only when it is placed among them', () => {
+  it('is dragged among the layers wherever it is placed', () => {
     const fake = stacked();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
-    // The one in front of every layer stays, and shows no grip
-    expect(row(fake.container, 'places').querySelector('[data-fixed]')).not.toBeNull();
-    expect(row(fake.container, 'buildings').querySelector('[data-fixed]')).toBeNull();
+    // The one in front of every layer too: neither is a fixed row, and both show the grip
+    for (const id of ['places', 'buildings']) {
+      const item = row(fake.container, id).closest('[role="treeitem"]');
+      expect(item?.querySelector('[data-fixed]')).toBeNull();
+      expect(item?.querySelector('[data-grip]')).not.toBeNull();
+    }
   });
 
   it('follows the datasets that come, go and change', () => {

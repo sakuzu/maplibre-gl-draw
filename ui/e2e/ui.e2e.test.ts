@@ -284,6 +284,62 @@ describe('the layer panel', () => {
     await page.mouse.up();
     await until(items, [line, polygon, point]);
   });
+
+  it('drags a dataset added with the default order among the layers', async () => {
+    page = await openPage(browser, site);
+    const panel = page.locator('[data-role="layer-panel"]');
+    // Two datasets behind every layer (below-store, the default of datasets.add); the later one
+    // in front
+    const layerId = await page.evaluate(() => {
+      const w = window as unknown as E2EWindow;
+      w.draw.datasets.add({ id: 'roads', rows: [] });
+      w.draw.datasets.add({ id: 'parcels', rows: [] });
+      return w.layerId;
+    });
+    const roots = panel.locator('[role="treeitem"][aria-level="1"][data-node]');
+    await until(
+      () => roots.evaluateAll((els) => els.map((el) => el.getAttribute('data-node'))),
+      [layerId, 'parcels', 'roads'],
+    );
+    // The layer folded, so that its row is one line to drop above
+    const layerRow = panel.locator(`[role="treeitem"][data-node="${layerId}"]`);
+    await layerRow.getByRole('button', { name: 'Collapse', exact: true }).click();
+
+    // The dataset at the back dragged by its grip above the layer
+    const roadsRow = panel.locator('[role="treeitem"][data-node="roads"]');
+    await roadsRow.hover();
+    const grip = await centerOf(roadsRow.locator('[data-grip]'));
+    const target = await layerRow.boundingBox();
+    if (!target) throw new Error('the row of the layer is not on the page');
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    // Past the tolerance of SortableJS (10 px), then over the top of the layer's row
+    await page.mouse.move(grip.x, grip.y - 15, { steps: 4 });
+    await page.mouse.move(grip.x, target.y + 3, { steps: 12 });
+    await page.waitForTimeout(200);
+    await page.mouse.move(grip.x, target.y + 2, { steps: 2 });
+    await page.mouse.up();
+
+    // It joined the stacking order in front of the layer; the other stays behind every layer
+    const placed = () =>
+      page.evaluate(() => {
+        const w = window as unknown as E2EWindow;
+        return {
+          order: w.draw.layers.getOrder(),
+          roads: w.draw.datasets.get('roads')?.order,
+          parcels: w.draw.datasets.get('parcels')?.order,
+        };
+      });
+    await until(placed, {
+      order: [layerId, 'roads'],
+      roads: 'layer-order',
+      parcels: 'below-store',
+    });
+    await until(
+      () => roots.evaluateAll((els) => els.map((el) => el.getAttribute('data-node'))),
+      ['roads', layerId, 'parcels'],
+    );
+  });
 });
 
 describe('operations', () => {

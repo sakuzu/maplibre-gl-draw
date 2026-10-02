@@ -378,13 +378,12 @@ export function selectionOf(
 }
 
 /**
- * Whether a node may be dropped into a parent (null for the root): a layer only at the root, a
- * group only into a layer, a feature into a layer or a group, and a dataset only at the root when
- * it is placed among the layers (`layer-order`); the others stay in front of or behind every layer
+ * Whether a node may be dropped into a parent (null for the root): a layer or a dataset only at
+ * the root, a group only into a layer, and a feature into a layer or a group. A dataset in front
+ * of or behind every layer joins the stacking order where it is dropped (move.ts)
  */
 export function canDropInto(node: TreeNode, parent: TreeNode | null): boolean {
-  if (node.kind === 'layer') return parent === null;
-  if (node.kind === 'dataset') return parent === null && inLayerOrder(node as LayerTreeNode);
+  if (node.kind === 'layer' || node.kind === 'dataset') return parent === null;
   if (node.kind === 'group') return parent?.kind === 'layer';
   if (node.kind === 'feature') return parent?.kind === 'layer' || parent?.kind === 'group';
   return false;

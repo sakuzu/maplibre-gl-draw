@@ -414,11 +414,18 @@ parcels.setZoomScale((zoom) => ({
 
 `order` places a dataset against the drawn features:
 
-| order | Position |
-| --- | --- |
-| `below-store` | Behind every layer of the document (the default) |
-| `above-store` | In front of every layer, behind the selection handles |
-| `layer-order` | At its ID in the stacking order of the layers |
+| order | Position | In the layer panel of the standard UI |
+| --- | --- | --- |
+| `below-store` | Behind every layer (the default) | Dropped: `layer-order` |
+| `above-store` | In front of every layer | Dropped: `layer-order` |
+| `layer-order` | At its ID in the stacking order | Dragged in the order |
+
+An `above-store` dataset is drawn behind the selection handles. The layer
+panel of the standard UI lets every dataset be dragged among the layers:
+it moves a `below-store` or `above-store` dataset dropped there to
+`layer-order` with `draw.datasets.move`, then places it with
+`draw.layers.reorder`; when the reorder is refused (read-only), the
+dataset goes back to its own order.
 
 Datasets on the same side are drawn in the order they were added, the
 later one in front. Inside a dataset, the end of the array (or the last

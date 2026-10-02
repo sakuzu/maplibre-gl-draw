@@ -15,16 +15,31 @@
 //   layers and those datasets in their new order from the back. The rows of the root that are
 //   not entries of the stacking order (the datasets in front of or behind every layer) are left
 //   out, and so are the entries the tree does not show, whose positions core keeps
+// - a dataset in front of or behind every layer (`above-store`, `below-store`): it joins the
+//   stacking order first (`join`: the panel moves it to `layer-order`, and back to its own order
+//   when the reorder is refused), then the same `layers.reorder` with it in its new place
 // - a group: `groups.move` to `{ layerId, index }`
 // - a feature: `features.move` to `{ layerId, index }`, or to `{ groupId, index }` in a group
 
 import type { TreeMove } from '@sakuzu/kata/svelte';
-import type { Group, Layer, MoveTarget } from '@sakuzu/maplibre-gl-draw';
-import { canDropInto, indexNodes, inLayerOrder, type LayerTreeNode } from './tree.js';
+import type { DatasetOrder, Group, Layer, MoveTarget } from '@sakuzu/maplibre-gl-draw';
+import {
+  canDropInto,
+  indexNodes,
+  inLayerOrder,
+  type LayerTreeNode,
+  type TreeDataset,
+} from './tree.js';
+
+/** A dataset that joins the stacking order before the reorder: its ID and the order it had */
+export interface MoveJoin {
+  id: string;
+  order: DatasetOrder;
+}
 
 /** The call of core a drop makes */
 export type MovePlan =
-  | { kind: 'layers'; order: string[] }
+  | { kind: 'layers'; order: string[]; join?: MoveJoin }
   | { kind: 'group'; id: string; to: MoveTarget }
   | { kind: 'feature'; id: string; to: MoveTarget };
 
@@ -67,12 +82,18 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
 
   if (parent === null) {
     const ordered = new Set(nodes.filter(inLayerOrder).map((n) => n.id));
+    // A dataset in front of or behind every layer joins the stacking order where it is dropped
+    const join: MoveJoin | undefined = ordered.has(move.id)
+      ? undefined
+      : { id: move.id, order: (at.node.data as TreeDataset).order };
+    ordered.add(move.id);
     const front = placed(
       nodes.map((n) => n.id),
       move.id,
       move.index,
     ).filter((id) => ordered.has(id));
-    return { kind: 'layers', order: front.reverse() };
+    const order = front.reverse();
+    return join ? { kind: 'layers', order, join } : { kind: 'layers', order };
   }
   // The children of the new parent from the front, after the move; the one after the node is
   // the one behind it

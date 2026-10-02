@@ -396,7 +396,7 @@ export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
   readonly features: Pick<Draw['features'], 'get' | 'update' | 'move' | 'getAppliedStyle'>;
   readonly selection: Pick<Draw['selection'], 'get' | 'set' | 'clear' | 'group'>;
   readonly hidden: Pick<Draw['hidden'], 'has' | 'remove'>;
-  readonly datasets: Pick<Draw['datasets'], 'get' | 'list'>;
+  readonly datasets: Pick<Draw['datasets'], 'get' | 'list' | 'move'>;
 };
 
 /** The members of a draw instance that the legend uses */
