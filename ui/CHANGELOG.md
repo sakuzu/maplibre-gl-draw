@@ -7,6 +7,18 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-02
+
+### Fixed in 1.2.1
+
+- In a sheet the inspector passes the sheet's height to its panel, so
+  the content scrolls and the foot stays in view (#14).
+- The delete button of the toolbar is off while the draw is read-only,
+  as the Delete of the inspector is (#19).
+- The bottom corners and the actions card write what their observers
+  measure in the next frame, so WebKit reports no ResizeObserver loop
+  (#21).
+
 ## [1.2.0] - 2026-10-02
 
 The narrow screen and the stage, from the visual review: the map's
