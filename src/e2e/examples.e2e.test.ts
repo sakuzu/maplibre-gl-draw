@@ -45,7 +45,7 @@ const VIEWPORT = { width: 1024, height: 720 } as const;
 /** The center of the page, where the center of the map is */
 const CENTER: PagePoint = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
 /** Opening a page compiles the shaders again on the software WebGL, which takes seconds */
-const TIMEOUT = 60_000;
+const TIMEOUT = browserTimeout(60_000);
 
 /** A page point relative to the center of the page */
 function at(dx: number, dy: number): PagePoint {
