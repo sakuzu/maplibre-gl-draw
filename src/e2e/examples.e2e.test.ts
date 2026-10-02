@@ -435,10 +435,10 @@ describe('the examples', () => {
     // The panel on the left shows the group, and the eye of the parcels hides the layer
     const panel = page.locator('[data-role="layer-panel"]');
     await panel.locator(`[role="treeitem"][data-node="${before.group.id}"]`).waitFor();
-    await panel
-      .locator(`[role="treeitem"][data-node="${before.ids.parcels}"]`)
-      .getByRole('button', { name: 'Hide', exact: true })
-      .click();
+    // The eye shows while the row is hovered
+    const parcelsRow = panel.locator(`[role="treeitem"][data-node="${before.ids.parcels}"]`);
+    await parcelsRow.hover();
+    await parcelsRow.getByRole('button', { name: 'Hide', exact: true }).click();
     await expect
       .poll(async () => (await state()).parcelsVisible, { timeout: browserTimeout(5_000) })
       .toBe(false);
@@ -1257,16 +1257,19 @@ describe('the examples', () => {
       inside,
     );
     await settle(page);
+    // Where the point is drawn: the map's padding (the left panel) moves the center of the map
+    const grip = await pageOf(page, inside as [number, number]);
+    const moved = { x: grip.x - 50, y: grip.y + 40 };
     await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(true);
     expect(await actionChecked(page, 'Lock Blocks')).toBe(true);
-    await click(page, at(0, 0));
-    await drag(page, at(0, 0), at(-50, 40));
+    await click(page, grip);
+    await drag(page, grip, moved);
     expect(await geometryOf(tower.id)).toEqual(tower.geometry);
     await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(false);
-    await click(page, at(0, 0));
-    await drag(page, at(0, 0), at(-50, 40));
+    await click(page, grip);
+    await drag(page, grip, moved);
     expect(await geometryOf(tower.id)).not.toEqual(tower.geometry);
 
     // Hide Blocks: hidden on this page only; the layer stays visible in the document, under
