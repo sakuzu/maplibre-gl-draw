@@ -25,7 +25,7 @@
     InspectorSettings,
   } from '../inspector/types.js';
   import type { Messages } from '../messages.js';
-  import type { Beside } from '../padding.js';
+  import type { ShellInset } from '../padding.js';
   import { fromMapCanvas, toolbarShortcuts } from '../shortcuts.js';
   import { type Box, follow } from '../store.js';
   import { toSpec } from '../tools.js';
@@ -45,9 +45,10 @@
 
   // DrawUI: kata's Shell laid over the map (overlay). The stage is left empty, so the map shows
   // through and keeps its own pointer and keys; the regions of the shell take the pointer where
-  // they are. The keyboard shortcuts are those of the toolbar's buttons. onbeside reports which
-  // side regions stand beside the stage, open, once the shell has drawn them, so that the map's
-  // padding can follow them. While the left region is closed, a small button floats at the top
+  // they are. The keyboard shortcuts are those of the toolbar's buttons. oninset reports how far
+  // the regions cover the stage from each edge (the inset of the shell's onlayout), once the
+  // shell has drawn them, so that the map's padding and its controls can follow them. While the
+  // left region is closed, a small button floats at the top
   // left of the map to open it again. At the top right, a button switches the theme to the look
   // that is not shown now (light reads the look the root shows, which the theme control keeps).
   //
@@ -56,8 +57,9 @@
   // them clears the selection, and a selection made anywhere closes them, so the two never show
   // at once; their close button and Escape close them.
   //
-  // At the bottom left, above maplibre-gl's scale, the card of the actions of the application
-  // shows while there are any; their keys are shortcuts of the shell, listed under its title.
+  // At the bottom left, above maplibre-gl's scale and the attribution, the card of the actions of
+  // the application shows while there are any; their keys are shortcuts of the shell, listed
+  // under its title.
   let {
     draw,
     tools,
@@ -67,7 +69,7 @@
     shortcuts = true,
     inspector,
     sections,
-    onbeside,
+    oninset,
     side: sideMode = 'floating',
     light,
     themeToggle = true,
@@ -90,8 +92,8 @@
     inspector: Box<InspectorSettings | null>;
     /** The sections the application added to the inspector */
     sections: Box<InspectorSectionSpec[]>;
-    /** Called with the side regions beside the stage after the layout or the open panes change */
-    onbeside?: (beside: Beside) => void;
+    /** Called with the inset of the shell after the layout, the open panes or the toolbar change */
+    oninset?: (inset: ShellInset) => void;
     /** Where the side regions go on a wide map: floating over it or beside it */
     side?: 'floating' | 'beside';
     /** Whether the root shows the light look now */
@@ -179,17 +181,15 @@
     shortcuts && actionList.length > 0 ? actionShortcuts(actions, cardTitle) : [],
   );
 
-  // Where the shell puts the side regions (beside the stage, floating or sheets), by its width
+  // Where the shell puts the side regions (beside the stage, floating or sheets), by its width,
+  // and how far they cover the stage
   let layout = $state<ShellLayout | null>(null);
   $effect(() => {
-    const now: Beside = {
-      left: !!side && leftOpen && layout?.leftMode === 'beside',
-      right: rightShown && layout?.rightMode === 'beside',
-    };
+    const now: ShellInset = layout ? { ...layout.inset } : { top: 0, right: 0, bottom: 0, left: 0 };
     // Also when the toolbar comes or goes
     void bar;
-    if (!onbeside) return;
-    const report = onbeside;
+    if (!oninset) return;
+    const report = oninset;
     // After the shell has drawn the regions
     tick().then(() => report(now));
   });
@@ -304,6 +304,7 @@
     startOpen={actionsOpen}
     {corner}
     beside={!!side && leftOpen && layout?.leftMode === 'beside'}
+    reopen={!!side && !leftOpen}
   />
 {/if}
 

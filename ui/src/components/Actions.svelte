@@ -27,10 +27,16 @@
   // narrow band) it starts folded, so that it does not cover the map.
   //
   // It stands gap-md from the left (from the left region, while it stands beside the map) and
-  // gap-md above maplibre-gl's controls of the bottom left corner (the scale), whose height is
-  // measured. Where the card or the corner reaches the toolbar across, as on a narrow map, it goes
-  // above the toolbar as well. The room it takes at the bottom is set on the root
+  // gap-md above the higher of maplibre-gl's controls of the bottom left corner (the scale) and
+  // the attribution's box where that box reaches the card across (the two-line attribution of a
+  // narrow map), each measured where it is drawn; the corner follows what moves it
+  // (controls.ts). Where the card reaches the toolbar across, as on a narrow map, it goes above
+  // the toolbar as well. The room it takes at the bottom is set on the root
   // (--mgd-ui-actions-reserve), and the layer panel floating at the left ends gap-md above it.
+  //
+  // Its height is at most the room above that place, less gap-md at the top, and less the button
+  // that opens the left region again and gap-md while that button shows at the top left; the
+  // whole card scrolls when its rows do not fit.
   let {
     actions,
     messages,
@@ -40,6 +46,7 @@
     startOpen = true,
     corner,
     beside = false,
+    reopen = false,
   }: {
     actions: ActionsState;
     messages: Messages;
@@ -55,6 +62,8 @@
     corner?: HTMLElement | null;
     /** Whether the left region stands beside the map, open: the card goes to its right */
     beside?: boolean;
+    /** Whether the button that opens the left region again shows at the top left */
+    reopen?: boolean;
   } = $props();
 
   /** The custom property on the root with the room the card takes at the bottom (root.css) */
@@ -81,6 +90,9 @@
   let card = $state<HTMLElement>();
   // The height above the bottom of the map that the card stands on (gap-md is added in the style)
   let bottom = $state(0);
+  // The room left for the card above its place, in px, less the button that opens the left region
+  // again (the gaps are subtracted in the style)
+  let room = $state<number | null>(null);
 
   /** The floating element of the card */
   const floating = () => card?.querySelector<HTMLElement>(':scope > [data-role="floating"]');
@@ -88,8 +100,14 @@
     corner?.querySelector<HTMLElement>(
       ':scope > .maplibregl-control-container > .maplibregl-ctrl-bottom-left',
     ) ?? null;
+  const attribution = () =>
+    corner?.querySelector<HTMLElement>(
+      ':scope > .maplibregl-control-container > .maplibregl-ctrl-bottom-right > .maplibregl-ctrl-attrib',
+    ) ?? null;
   const toolbar = (root: HTMLElement) =>
     root.querySelector<HTMLElement>('[data-region="bottom"] [data-role="drawbar"]');
+  const reopenButton = (root: HTMLElement) =>
+    root.querySelector<HTMLElement>(':scope > [data-role="reopen"] > [data-role="floating"]');
 
   function place() {
     const root = card?.parentElement;
@@ -97,24 +115,29 @@
     if (!root || !el) return;
     const box = root.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    const scale = bottomLeft();
-    // The corner's height from the bottom of the map, without the lift that moves its look
-    const cornerHeight = scale ? scale.offsetHeight : 0;
-    const b = toolbar(root)?.getBoundingClientRect();
-    let next = cornerHeight;
-    if (b && b.width > 0 && b.height > 0) {
-      const band = Math.max(0, box.bottom - b.top);
-      const s = scale?.getBoundingClientRect();
-      const cornerReaches = !!s && s.width > 0 && cornerHeight > 0 && s.right > b.left;
-      const cardReaches = r.right > b.left && r.left < b.right;
-      if (cornerReaches) next = band + cornerHeight;
-      else if (cardReaches) next = Math.max(band, cornerHeight);
+    // The scale's corner, where it is drawn (lifted above the toolbar or the attribution)
+    const scale = bottomLeft()?.getBoundingClientRect();
+    let next = scale && scale.width > 0 && scale.height > 0 ? box.bottom - scale.top : 0;
+    // The attribution's box, where it is drawn, while it reaches the card across
+    const a = attribution()?.getBoundingClientRect();
+    if (a && a.width > 0 && a.height > 0 && a.left < r.right && r.left < a.right) {
+      next = Math.max(next, box.bottom - a.top);
     }
+    // The toolbar, while the card reaches it across
+    const b = toolbar(root)?.getBoundingClientRect();
+    if (b && b.width > 0 && b.height > 0 && r.right > b.left && r.left < b.right) {
+      next = Math.max(next, box.bottom - b.top);
+    }
+    next = Math.max(0, Math.round(next));
     // The room the card takes at the bottom, which a panel floating at the left keeps clear of:
     // its height and its distance from the bottom, with the place it is moving to
     const reserve = `${Math.max(0, Math.round(r.height + (box.bottom - r.bottom) + (next - bottom)))}px`;
     if (root.style.getPropertyValue(RESERVE) !== reserve) root.style.setProperty(RESERVE, reserve);
     bottom = next;
+    // The room above the place, less the button at the top left while it shows
+    const button = reopen ? reopenButton(root)?.getBoundingClientRect() : undefined;
+    const above = button && button.height > 0 ? button.height : 0;
+    room = Math.max(0, Math.round(box.height - next - above));
   }
 
   $effect(() => {
@@ -124,6 +147,7 @@
     void open;
     void list;
     void beside;
+    void reopen;
     if (typeof ResizeObserver === 'undefined') {
       place();
       return () => root.style.removeProperty(RESERVE);
@@ -133,7 +157,7 @@
     const watch = () => {
       bar = toolbar(root);
       observer.disconnect();
-      for (const target of [root, el, bar, bottomLeft()]) {
+      for (const target of [root, el, bar, bottomLeft(), attribution()]) {
         if (target) observer.observe(target);
       }
     };
@@ -149,10 +173,17 @@
             place();
           });
     mutations?.observe(shell as Node, { childList: true, subtree: true });
+    // The corners move by the custom properties on the map's container (controls.ts)
+    const moves =
+      typeof MutationObserver === 'undefined' || !corner
+        ? null
+        : new MutationObserver(() => place());
+    if (corner) moves?.observe(corner, { attributes: true, attributeFilter: ['style'] });
     place();
     return () => {
       observer.disconnect();
       mutations?.disconnect();
+      moves?.disconnect();
       root.style.removeProperty(RESERVE);
     };
   });
@@ -181,7 +212,12 @@
     bottom={`calc(var(--kata-gap-md) + ${bottom}px)`}
   >
     {#if open}
-      <div class="card">
+      <div
+        class="card"
+        style:max-height={room === null
+          ? undefined
+          : `calc(${room}px - var(--kata-gap-md) * ${reopen ? 3 : 2} - var(--kata-border-width) * 2)`}
+      >
         <SectionHeader label={title} actions={head}>
           {#each list as spec (spec.id)}
             {@const key = kbd(spec)}
@@ -231,6 +267,7 @@
   .card {
     min-width: var(--kata-width-rail);
     max-width: var(--kata-width-panel);
+    overflow-y: auto;
   }
   .item {
     display: flex;

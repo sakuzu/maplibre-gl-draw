@@ -468,4 +468,26 @@ function addLegend(map: maplibregl.Map): void {
     `<li>${format(counts.places)} points (places)</li>` +
     '</ul></section>';
   map.getContainer().appendChild(card);
+  keepAboveAttribution(map, card);
+}
+
+/**
+ * Keeps the legend above maplibre-gl's attribution while the attribution's box reaches it across
+ * (the attribution wraps onto two lines on a narrow map), at the gap the style sheet gives it
+ * from the bottom. The attribution is only read
+ */
+function keepAboveAttribution(map: maplibregl.Map, card: HTMLElement): void {
+  const container = map.getContainer();
+  const attribution = () => container.querySelector<HTMLElement>('.maplibregl-ctrl-attrib');
+  const place = () => {
+    const a = attribution()?.getBoundingClientRect();
+    const c = card.getBoundingClientRect();
+    const across = !!a && a.width > 0 && a.left < c.right && c.left < a.right;
+    const lift = across ? Math.round(container.getBoundingClientRect().bottom - a.top) : 0;
+    const bottom = lift > 0 ? `calc(${lift}px + 0.75rem)` : '';
+    if (card.style.bottom !== bottom) card.style.bottom = bottom;
+  };
+  const observer = new ResizeObserver(place);
+  for (const el of [container, card, attribution()]) if (el) observer.observe(el);
+  place();
 }

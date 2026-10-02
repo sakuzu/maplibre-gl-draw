@@ -467,7 +467,7 @@ describe('the basemap row', () => {
 });
 
 describe('the actions', () => {
-  /** The boxes of the card, the scale, the toolbar and the map, on the page */
+  /** The boxes of the card, the scale, the attribution, the toolbar and the map, on the page */
   function boxes() {
     return page.evaluate(() => {
       const w = window as unknown as E2EWindow;
@@ -481,6 +481,7 @@ describe('the actions', () => {
         map: box(w.map.getContainer()),
         card: box(root.querySelector('[data-role="actions"] [data-role="floating"]')),
         scale: box(w.map.getContainer().querySelector('.maplibregl-ctrl-scale')),
+        attrib: box(w.map.getContainer().querySelector('.maplibregl-ctrl-attrib')),
         bar: box(root.querySelector('[data-region="bottom"] [data-role="drawbar"]')),
       };
     });
@@ -549,5 +550,105 @@ describe('the actions', () => {
     expect(narrow.card.bottom).toBeLessThan(narrow.scale.top);
     await card.getByText('Read-only').click();
     await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), true);
+  });
+
+  it('stand above the scale and a two-line attribution on a narrow map, and fit the map open', async () => {
+    page = await openPage(browser, site);
+    await page.setViewportSize({ width: 390, height: 667 });
+    // A credit long enough to wrap: a source drawn by a layer, and many actions
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow;
+      w.map.addSource('credit', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        attribution: 'The survey of the city, the data of the transport authority and the walks',
+      });
+      w.map.addLayer({ id: 'credit', type: 'circle', source: 'credit' });
+      for (let i = 0; i < 16; i++) {
+        w.ui.actions.add({ id: `run-${i}`, label: `Action ${i}`, kind: 'action', run: () => {} });
+      }
+    });
+    await expect
+      .poll(() => page.locator('.maplibregl-ctrl-attrib').innerText())
+      .toContain('transport authority');
+    // The layer panel opens as a sheet over the bottom; Escape closes it
+    await page.keyboard.press('Escape');
+    await settle(page);
+    const card = page.locator('.mgd-ui [data-role="actions"]');
+    await card.getByRole('button', { name: 'Actions' }).click();
+    await settle(page);
+
+    await expect
+      .poll(async () => {
+        const b = await boxes();
+        const attrib = b.attrib;
+        if (!b.card || !b.scale || !attrib || !b.map) return 'missing boxes';
+        const attribAcross = (r: { left: number; right: number }) =>
+          r.left < attrib.right && attrib.left < r.right;
+        // The attribution two lines high, across the scale and the card
+        if (attrib.bottom - attrib.top < 30) return 'one line';
+        if (!attribAcross(b.scale) || !attribAcross(b.card)) return 'not across';
+        // The scale above the attribution, the card above both, and the card inside the map
+        if (b.scale.bottom > attrib.top + 1) return 'scale under the attribution';
+        if (b.card.bottom > attrib.top || b.card.bottom > b.scale.top) return 'card too low';
+        if (b.card.top < b.map.top) return 'card past the top';
+        return 'ok';
+      })
+      .toBe('ok');
+    // The rows that do not fit scroll inside the card
+    const scrolls = await card
+      .locator('.card')
+      .evaluate((el) => el.scrollHeight > el.clientHeight && getComputedStyle(el).overflowY);
+    expect(scrolls).toBe('auto');
+  });
+});
+
+describe("maplibre-gl's controls and the padding of the map", () => {
+  it('keep the controls of the bottom right clear of the inspector, and pad the map at the left', async () => {
+    page = await openPage(browser, site);
+    const { polygon } = await ids();
+    /** The boxes of the controls of the bottom right, the attribution and the right pane */
+    const read = () =>
+      page.evaluate(() => {
+        const w = window as unknown as E2EWindow;
+        const box = (el: Element | null | undefined) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        };
+        const corner = w.map
+          .getContainer()
+          .querySelector('.maplibregl-ctrl-bottom-right') as HTMLElement;
+        return {
+          zoom: box(corner.querySelector('.maplibregl-ctrl-zoom-in')?.parentElement),
+          attrib: box(corner.querySelector('.maplibregl-ctrl-attrib')),
+          pane: box(w.ui.element.querySelector('[data-role="shell"] [data-region="right"]')),
+          padding: w.map.getPadding(),
+        };
+      });
+    const before = await read();
+    if (!before.zoom || !before.attrib) throw new Error('missing boxes');
+    // The left panel floats over the map: its room is the padding at the left, none at the right
+    expect(before.padding.left).toBeGreaterThan(0);
+    expect(before.padding.right).toBe(0);
+
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      polygon,
+    );
+    await expect
+      .poll(async () => {
+        const now = await read();
+        if (!now.zoom || !now.pane || !now.attrib) return 'missing boxes';
+        return now.zoom.right < now.pane.left ? 'clear' : 'under the pane';
+      })
+      .toBe('clear');
+    const open = await read();
+    // The attribution stays at the corner, and the padding does not change with the selection
+    expect(open.attrib?.right).toBeCloseTo(before.attrib.right, 0);
+    expect(open.padding).toEqual(before.padding);
+
+    await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+    await expect.poll(async () => (await read()).zoom?.right).toBeCloseTo(before.zoom.right, 0);
   });
 });

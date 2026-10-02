@@ -104,10 +104,11 @@ export interface DrawUIOptions extends BasemapOptions {
    */
   shortcuts?: boolean;
   /**
-   * Whether the map's padding follows the interface: the width of a panel that stands beside the
-   * map on its side, and the toolbar's height with its gap at the bottom, so that `fitBounds` and
-   * `easeTo` keep clear of them. Floating panels and sheets leave it at 0. The padding the map
-   * had is given back by `destroy()`. True when left out
+   * Whether the map's padding follows the interface: the room the left panel takes at the left
+   * (beside the map, or floating over it with its gap), and the height of the sheets at the
+   * bottom, so that `fitBounds` and `easeTo` keep clear of them. The right panel, which opens and
+   * closes with the selection, leaves it at 0, and so do the top and the toolbar. The padding the
+   * map had is given back by `destroy()`. True when left out
    */
   padding?: boolean;
   /**

@@ -7,7 +7,8 @@ import { createDrawUI, createLegend, createToolbar, type DrawUI } from '../src/i
 import { fakeDraw, feature, layer } from './fake-draw.js';
 
 // createDrawUI lies over the map as kata's root in a page kata does not own, with the Shell in
-// overlay, and keeps the map's padding to the panels beside it.
+// overlay, and keeps the map's padding to the inset the Shell reports: the left panel and the
+// sheets.
 
 let ui: DrawUI | undefined;
 let rect: ReturnType<typeof vi.spyOn> | undefined;
@@ -26,7 +27,11 @@ const withPoint = (selected: boolean) =>
     doc: { layers: [layer('l1', ['a'])], features: [feature('a', 'l1')] },
   });
 
-/** jsdom lays nothing out: the boxes of the map, the shell and its regions, in px */
+/**
+ * jsdom lays nothing out: the boxes of the map, the shell, its stage and its regions, in px. The
+ * left region is 280 wide beside the stage; floating, its pane is 320 wide gap-md (12) from the
+ * stage's edges; a sheet is 300 tall
+ */
 function layOut(shellWidth: number) {
   const box = (left: number, top: number, width: number, height: number) =>
     DOMRect.fromRect({ x: left, y: top, width, height });
@@ -34,19 +39,43 @@ function layOut(shellWidth: number) {
     this: HTMLElement,
   ) {
     if (this.matches('[data-role="shell"]')) return box(0, 0, shellWidth, 800);
-    if (this.matches('[data-region="left"]')) return box(0, 0, 280, 800);
-    if (this.matches('[data-region="right"]')) return box(shellWidth - 320, 0, 320, 800);
-    if (this.matches('[data-region="bottom"]')) return box(0, 800, shellWidth, 0);
-    if (this.matches('[data-role="drawbar"]')) return box(400, 740, 400, 48);
+    if (this.matches('.side.left')) return box(0, 0, 280, 800);
+    if (this.matches('.side.right')) return box(shellWidth - 320, 0, 320, 800);
+    if (this.matches('[data-region="stage"]')) {
+      const beside = !!this.closest('[data-role="shell"]')?.querySelector('.side.left');
+      return beside ? box(280, 0, shellWidth - 600, 800) : box(0, 0, shellWidth, 800);
+    }
+    if (this.matches('[data-role="floating"]:has(> [data-region="left"])')) {
+      return box(12, 12, 320, 400);
+    }
+    if (this.matches('[data-role="floating"]:has(> [data-region="right"])')) {
+      return box(shellWidth - 332, 12, 320, 400);
+    }
+    if (this.parentElement?.matches('.sheet-seat')) return box(0, 500, shellWidth, 300);
     if (this.querySelector('canvas')) return box(0, 0, shellWidth, 800);
     return box(0, 0, 0, 0);
   });
 }
 
-/** Waits for the shell to draw its regions and the padding to follow them */
+/**
+ * A ResizeObserver that reports each element once it is observed, as a browser does, so that
+ * the shell measures its regions (the one of the setup never reports)
+ */
+class Reporting {
+  constructor(private readonly callback: ResizeObserverCallback) {}
+  observe(): void {
+    queueMicrotask(() => this.callback([], this as unknown as ResizeObserver));
+  }
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+/** Waits for the shell to draw its regions, measure them and report the inset */
 async function settled() {
-  flushSync();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let i = 0; i < 4; i++) {
+    flushSync();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }
 
 describe('createDrawUI over the map', () => {
@@ -75,43 +104,51 @@ describe('createDrawUI over the map', () => {
 });
 
 describe('the padding of the map', () => {
+  const observer = globalThis.ResizeObserver;
   beforeEach(() => {
     vi.useRealTimers();
+    globalThis.ResizeObserver = Reporting as unknown as typeof ResizeObserver;
+  });
+  afterEach(() => {
+    globalThis.ResizeObserver = observer;
   });
 
-  it('is the width of the panels beside the stage and the toolbar with its gap', async () => {
+  it('is the width of the left panel beside the stage, and 0 for the right one', async () => {
     layOut(1200);
     const fake = withPoint(true);
     ui = createDrawUI(fake.asDraw, { side: 'beside' });
     await settled();
-    expect(fake.map.setPadding).toHaveBeenLastCalledWith({
-      top: 0,
-      left: 280,
-      right: 320,
-      bottom: 60,
-    });
-    // The inspector closes with the selection
-    fake.select([]);
-    await settled();
+    expect(ui.element.querySelector('.side.right')).not.toBeNull();
     expect(fake.map.setPadding).toHaveBeenLastCalledWith({
       top: 0,
       left: 280,
       right: 0,
-      bottom: 60,
+      bottom: 0,
     });
+    // The inspector closes with the selection, and the padding stays
+    const calls = fake.map.setPadding.mock.calls.length;
+    fake.select([]);
+    await settled();
+    expect(fake.map.setPadding).toHaveBeenCalledTimes(calls);
   });
 
-  it('is 0 at the sides while the panels float over the map', async () => {
+  it('is the room of the left panel floating over the map, with its gap', async () => {
     layOut(56 * 16);
     const fake = withPoint(true);
     ui = createDrawUI(fake.asDraw);
     await settled();
     expect(ui.element.querySelector('[data-role="shell"]')?.getAttribute('data-width')).toBe('mid');
     expect(ui.element.querySelector('[data-role="floating"] [data-region="left"]')).not.toBeNull();
-    expect(fake.map.setPadding).toHaveBeenLastCalledWith({ top: 0, left: 0, right: 0, bottom: 60 });
+    expect(ui.element.querySelector('[data-role="floating"] [data-region="right"]')).not.toBeNull();
+    expect(fake.map.setPadding).toHaveBeenLastCalledWith({
+      top: 0,
+      left: 332,
+      right: 0,
+      bottom: 0,
+    });
   });
 
-  it('is 0 at the sides while the panels are sheets', async () => {
+  it('is the height of the sheets at the bottom, and 0 at the sides', async () => {
     layOut(40 * 16);
     const fake = withPoint(true);
     ui = createDrawUI(fake.asDraw);
@@ -119,7 +156,12 @@ describe('the padding of the map', () => {
     expect(ui.element.querySelector('[data-role="shell"]')?.getAttribute('data-width')).toBe(
       'narrow',
     );
-    expect(fake.map.setPadding).toHaveBeenLastCalledWith({ top: 0, left: 0, right: 0, bottom: 60 });
+    expect(fake.map.setPadding).toHaveBeenLastCalledWith({
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 300,
+    });
   });
 
   it('is given back when the interface is destroyed', async () => {

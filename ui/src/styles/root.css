@@ -13,7 +13,7 @@
  * light, or auto while the system prefers light), or on any element around it, turns it light:
  * the build moves kata's light block onto the same selectors, so every color token switches
  * with color-scheme. An application changes the look by setting kata's tokens (--kata-*) on
- * .mgd-ui. The one exception to staying inside the root is the lift of maplibre-gl's bottom
+ * .mgd-ui. The one exception to staying inside the root is the placing of maplibre-gl's bottom
  * corners below.
  */
 
@@ -63,16 +63,25 @@
   max-height: calc(100% - var(--kata-gap-md) * 2 - var(--mgd-ui-actions-reserve, 0px));
 }
 
-/* The one rule outside the root: the bottom corners of maplibre-gl's controls (the scale, the
+/* The rules outside the root: the bottom corners of maplibre-gl's controls (the scale, the
  * navigation, the attribution) in the map's container. While createDrawUI is on the map, the
- * container has data-mgd-ui-lift, and a corner the toolbar reaches across (on a narrow map) is
- * lifted above it by the height the interface measures (--mgd-ui-lift-left, --mgd-ui-lift-right).
- * Only the look moves; maplibre-gl's placement is left as it is */
+ * container has data-mgd-ui-lift, and the interface measures how far they move (controls.ts): a
+ * corner the toolbar reaches across (on a narrow map) is lifted above it, and the bottom left
+ * corner above the attribution's box where that box reaches it (--mgd-ui-lift-left,
+ * --mgd-ui-lift-right); the controls of the bottom right, but the attribution, move to the left
+ * of the right panel while they would be under it (--mgd-ui-shift-right). Only the look moves;
+ * maplibre-gl's placement is left as it is */
 [data-mgd-ui-lift] > .maplibregl-control-container > .maplibregl-ctrl-bottom-left {
   transform: translateY(calc(-1 * var(--mgd-ui-lift-left, 0px)));
 }
 [data-mgd-ui-lift] > .maplibregl-control-container > .maplibregl-ctrl-bottom-right {
   transform: translateY(calc(-1 * var(--mgd-ui-lift-right, 0px)));
+}
+[data-mgd-ui-lift]
+  > .maplibregl-control-container
+  > .maplibregl-ctrl-bottom-right
+  > .maplibregl-ctrl:not(.maplibregl-ctrl-attrib) {
+  translate: calc(-1 * var(--mgd-ui-shift-right, 0px)) 0;
 }
 
 /* A panel put alone in an element fills the element's height */

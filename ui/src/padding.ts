@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The padding of the map under the interface. The side regions that stand beside the stage cover
-// the edges of the map, and the toolbar its bottom, so the map is told to keep its view (fitBounds,
-// easeTo, the centre) clear of them. A floating pane or a sheet lies over the map only for a
-// moment and leaves the padding at 0.
+// The padding of the map under the interface. kata's Shell reports how far its regions cover the
+// stage from each edge (the inset of onlayout), and the map is told to keep its view (fitBounds,
+// easeTo, the centre) clear of the regions that stay: the left region, beside the stage or
+// floating over it (it is open until the user closes it), and the sheets at the bottom. The
+// right region is left out: it opens and closes with the selection, and the view would jump each
+// time; maplibre-gl's controls of the bottom right move out of its way instead (controls.ts).
 
 /** The padding of a map in px, as maplibre-gl has it */
 export interface PaddingOptions {
@@ -21,116 +23,65 @@ export interface PaddingMap {
   setPadding(padding: PaddingOptions): unknown;
 }
 
-/** Which side regions stand beside the stage now, open */
-export interface Beside {
-  left: boolean;
-  right: boolean;
+/** How far the regions of the shell cover the stage from each edge, in px (kata's ShellLayout) */
+export interface ShellInset {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
 }
 
 /** The padding of a map, kept to the regions of the interface */
 export interface MapPadding {
-  /** Measures the regions again after the layout changed, and follows their sizes */
-  update(beside: Beside): void;
-  /** Stops following and gives the map back the padding it had before */
+  /** Follows the inset the shell reported */
+  update(inset: ShellInset): void;
+  /** Gives the map back the padding it had before */
   destroy(): void;
 }
 
-const ZERO: Beside = { left: false, right: false };
-
 /**
- * Keeps the padding of a map to the regions of the interface in `root`: the width of a side region
- * beside the stage on its side, and the height of the toolbar with its gap at the bottom.
+ * Keeps the padding of a map to the regions of the interface: the left inset at the left and the
+ * bottom inset (the sheets) at the bottom, each no more than the map's size; the top and the right
+ * stay 0.
  *
  * Every call to the map is guarded: once the map is removed, or its container leaves the page,
  * nothing is done.
  */
-export function mapPadding(map: PaddingMap, root: HTMLElement): MapPadding {
+export function mapPadding(map: PaddingMap): MapPadding {
   let before: PaddingOptions | null = null;
   try {
     before = { ...map.getPadding() };
   } catch {
     before = null;
   }
-  let beside: Beside = ZERO;
   let last = '';
   let destroyed = false;
-  let observer: ResizeObserver | undefined;
-  let observed: Element[] = [];
-
-  /** The element of a region of the shell, or null */
-  const region = (name: string) =>
-    root.querySelector<HTMLElement>(`[data-role="shell"] [data-region="${name}"]`);
-
-  function sources() {
-    return {
-      left: beside.left ? region('left') : null,
-      right: beside.right ? region('right') : null,
-      bottom: region('bottom'),
-      bar: root.querySelector<HTMLElement>('[data-region="bottom"] [data-role="drawbar"]'),
-    };
-  }
-
-  function apply() {
-    if (destroyed) return;
-    try {
-      const container = map.getContainer();
-      if (!container.isConnected) return;
-      const box = container.getBoundingClientRect();
-      const { left, right, bottom, bar } = sources();
-      const clamp = (v: number, max: number) => Math.round(Math.max(0, Math.min(v, max)));
-      const next = {
-        top: 0,
-        left: left ? clamp(left.getBoundingClientRect().right - box.left, box.width) : 0,
-        right: right ? clamp(box.right - right.getBoundingClientRect().left, box.width) : 0,
-        // The toolbar's height and its gap: from the top of the bar to the bottom edge of the
-        // toolbar's place (which rises over the sheets, so a sheet does not count)
-        bottom:
-          bottom && bar
-            ? clamp(
-                bottom.getBoundingClientRect().bottom - bar.getBoundingClientRect().top,
-                box.height,
-              )
-            : 0,
-      };
-      const key = `${next.left} ${next.right} ${next.bottom}`;
-      if (key === last) return;
-      last = key;
-      map.setPadding(next);
-    } catch {
-      // The map is gone
-    }
-  }
-
-  function follow() {
-    const { left, right, bar } = sources();
-    let container: HTMLElement | undefined;
-    try {
-      container = map.getContainer();
-    } catch {
-      container = undefined;
-    }
-    const next = [left, right, bar, container].filter((el): el is HTMLElement => !!el);
-    if (next.length === observed.length && next.every((el, i) => el === observed[i])) return;
-    observer?.disconnect();
-    observed = next;
-    if (typeof ResizeObserver === 'undefined') return;
-    observer ??= new ResizeObserver(apply);
-    for (const el of observed) observer.observe(el);
-  }
 
   return {
-    update(now: Beside) {
+    update(inset: ShellInset) {
       if (destroyed) return;
-      beside = { ...now };
-      follow();
-      apply();
+      try {
+        const container = map.getContainer();
+        if (!container.isConnected) return;
+        const box = container.getBoundingClientRect();
+        const clamp = (v: number, max: number) => Math.round(Math.max(0, Math.min(v, max)));
+        const next = {
+          top: 0,
+          left: clamp(inset.left, box.width),
+          right: 0,
+          bottom: clamp(inset.bottom, box.height),
+        };
+        const key = `${next.left} ${next.bottom}`;
+        if (key === last) return;
+        last = key;
+        map.setPadding(next);
+      } catch {
+        // The map is gone
+      }
     },
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      observer?.disconnect();
-      observer = undefined;
-      observed = [];
       if (!before || last === '') return;
       try {
         if (!map.getContainer().isConnected) return;

@@ -46,7 +46,7 @@ import {
   type Messages,
   resolveMessages,
 } from './messages.js';
-import { type Beside, type MapPadding, mapPadding } from './padding.js';
+import { type MapPadding, mapPadding, type ShellInset } from './padding.js';
 import { Box } from './store.js';
 import { checkTheme, type Theme, themeControl } from './theme.js';
 import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.js';
@@ -169,15 +169,16 @@ function toolsHandle(
  *
  * It draws the toolbar, the shortcuts, the layer panel and the legend on the left, and the
  * inspector on the right while something is selected. The map's padding follows the interface:
- * the width of a panel that stands beside the map (on a wide container) and the toolbar's height
+ * the room the left panel takes (beside the map or floating over it) at the left and the sheets
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
  * its padding back. The last section of the layer panel is the basemap, whose row opens the
  * basemaps of `options.basemaps` to choose from on the right, in the place of the inspector, when
  * there are two or more. A button at the top right switches between the
  * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
- * globe, the compass and the zoom at the right, the scale at the left); `destroy()` removes them.
- * The actions of the application (`options.actions`, `ui.actions`) are rows of a card at the
- * bottom left, above the scale, each with its key.
+ * globe, the compass and the zoom at the right, the scale at the left), which move out of the way
+ * of the toolbar, the right panel and the attribution; `destroy()` removes them. The actions of
+ * the application (`options.actions`, `ui.actions`) are rows of a card at the bottom left, above
+ * the scale and the attribution, each with its key.
  *
  * @param draw - The draw instance
  * @param options - What to show, the words and the keys
@@ -214,12 +215,12 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const light = new Box(false);
   const theme = themeControl(root, themeName, (next) => light.set(next));
   applyLocale(root, messages, options.locale ?? 'en');
-  // maplibre-gl's own controls at the bottom corners, lifted above the toolbar where it reaches
-  // them
+  // maplibre-gl's own controls at the bottom corners, kept clear of the toolbar, the right region
+  // and the attribution
   const controls = mapControls(map, options.mapControls);
   const lift = cornerLift(map.getContainer(), root);
-  // The map keeps its view clear of the panels beside the stage and of the toolbar
-  const padding: MapPadding | null = options.padding === false ? null : mapPadding(map, root);
+  // The map keeps its view clear of the left region and of the sheets
+  const padding: MapPadding | null = options.padding === false ? null : mapPadding(map);
   const view = mount(DrawUIView, {
     target: root,
     props: {
@@ -231,9 +232,9 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       shortcuts: options.shortcuts !== false,
       inspector,
       sections,
-      onbeside: (beside: Beside) => {
-        padding?.update(beside);
-        lift.update();
+      oninset: (inset: ShellInset) => {
+        padding?.update(inset);
+        lift.update(inset);
       },
       side: options.side,
       light,

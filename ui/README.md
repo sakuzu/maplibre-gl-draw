@@ -247,10 +247,15 @@ Each switch writes `draw.options.update`, and the settings follow
 `options.changed`, so a change made by code shows too.
 The side panels float over the map, gap-md from its edges and as tall
 as their content; `side: 'beside'` docks them beside the map on a wide
-one instead. The map's padding follows the interface, the width of a
-panel that stands beside the map and the toolbar's height at the bottom,
-so that `fitBounds` and `easeTo` keep clear of them; `padding: false`
-leaves the map's padding alone.
+one instead. The map's padding follows the interface: at the left, the
+room the left panel takes (beside the map, or floating over it with its
+gap), and at the bottom, the height of the sheets of a narrow map, as
+kata's Shell reports them (`onlayout`'s inset), so that `fitBounds` and
+`easeTo` keep clear of them. The right panel opens and closes with the
+selection and leaves the padding alone, so that the view does not jump;
+the controls of the bottom right move out of its way instead (see
+[Map controls](#map-controls)). `padding: false` leaves the map's
+padding alone.
 
 On the left, the layer panel and the legend share a panel, in two tabs.
 The layer panel has two sections, Stack and Basemap. Stack is the tree
@@ -382,7 +387,8 @@ action of the application (see [Actions](#actions)).
 
 An action of the application, such as saving the drawing or turning a
 setting on and off, is a row of a card at the bottom left of the map,
-above maplibre-gl's scale: a switch (`kind: 'toggle'`) or a button
+above maplibre-gl's scale and, where its box reaches the card across, the
+attribution: a switch (`kind: 'toggle'`) or a button
 (`kind: 'action'`), with its key at the end. A press on the row and its
 key both call `run`; a switch shows what `checked` returns, read again
 after each run and on `ui.actions.refresh()`, so the state stays with
@@ -394,7 +400,10 @@ and Shift+L) or another action uses is refused with an error. The card
 shows while there is an action, its head folds it into one button, and
 on a map narrower than 48rem it starts folded; where it would reach the
 toolbar across, it stands above the toolbar, and the layer panel
-floating at the left ends above it. Its title is `actionsTitle`, or the
+floating at the left ends above it. The card is no taller than the map
+above its place, less gap-md at the top and the button that opens the
+layer panel again while it shows; the whole card scrolls when its rows
+do not fit. Its title is `actionsTitle`, or the
 word for actions of the locale.
 
 ```ts
@@ -487,12 +496,21 @@ const ui = createDrawUI(draw, {
 });
 ```
 
-A page that adds controls of its own passes `mapControls: false`. Where
-the toolbar reaches a bottom corner of the map across, as on a narrow
-map, that corner (its controls and the attribution) is lifted above the
-toolbar. This is the one rule of the style sheet outside the root
-element: it applies to the map's container while the interface is on
-it.
+A page that adds controls of its own passes `mapControls: false`. The
+bottom corners of the map are kept clear of the interface:
+
+- where the toolbar reaches a bottom corner across, as on a narrow map,
+  that corner (its controls and the attribution) is lifted above the
+  toolbar
+- while the right panel covers the bottom right of the map, the controls
+  there (not the attribution) move to the left of it, gap-md apart
+- where the attribution's box reaches the scale across, as the two-line
+  attribution of a narrow map does, the bottom left corner is lifted
+  above it. The attribution is only read; its compact form is
+  maplibre-gl's own
+
+These are the rules of the style sheet outside the root element: they
+apply to the map's container while the interface is on it.
 
 ## Development
 
