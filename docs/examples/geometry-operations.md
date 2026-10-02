@@ -12,7 +12,8 @@ area of the selection.
 geometry-operations
 ```
 
-The page opens with the two squares that share an edge selected, so the
+On a wide screen, the page opens with the two squares that share an
+edge selected, so the
 panel on the right offers the operations for two areas. Union merges
 them into one. Shift + click selects more: select the first square and
 the line across it to split the square along the line, or any feature

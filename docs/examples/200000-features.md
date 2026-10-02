@@ -15,8 +15,8 @@ The city is made up, on a bent grid of streets west of central Tokyo,
 and seen from a tilted camera: near at hand in front, where the features
 can be told apart, and far into the distance behind. It holds 174,435
 polygons (buildings, and parks in green), 24,328 lines (streets, the
-avenues in red) and 9,310 points (cafes, clinics and bakeries). The park
-in front opens selected, with its vertex handles.
+avenues in red) and 9,310 points (cafes, clinics and bakeries). On a
+wide screen, the park in front opens selected, with its vertex handles.
 
 The features are like those drawn by hand. Click a building to select
 it: the panel on the right shows its use in the attributes. Drag it,
@@ -34,7 +34,7 @@ with a seeded random number generator, so it is the same on every visit
 (4). `draw.document.load` writes the 208,073 features in one transaction
 (5): one change, one event and one redraw. `draw.features.createMany` is
 one transaction too. The park is selected from the code once the load is
-done.
+done, on a wide screen (from 48rem) only.
 
 ::: code-group
 <<< @/../examples/200000-features/main.ts

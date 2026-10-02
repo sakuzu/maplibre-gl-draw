@@ -69,8 +69,9 @@ draw.on('selection.changed', () => {
 // 4. One of the calls from code: the area within 40 m of the line, a new feature beside it
 draw.features.buffer([line.id], { distanceMeters: 40 });
 
-// 5. Open with the two squares selected: the panel lists the operations for two areas
-draw.selection.set('feature', [west.id, east.id]);
+// 5. Open with the two squares selected on a wide screen: the panel lists the operations for two
+// areas (on a narrow one the panel would open over the map)
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west.id, east.id]);
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });

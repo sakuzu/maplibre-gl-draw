@@ -59,9 +59,10 @@ const ui = createDrawUI(draw, {
   inspector: { tabs: ['attributes', 'style'] },
 });
 
-// 5. Select the market hall: the panel on the right shows its name and its description, and
-// its Attributes tab, open, lists the other properties
-draw.selection.set('feature', [market]);
+// 5. Select the market hall on a wide screen: the panel on the right shows its name and its
+// description, and its Attributes tab, open, lists the other properties (on a narrow screen the
+// panel would open over the map)
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [market]);
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });

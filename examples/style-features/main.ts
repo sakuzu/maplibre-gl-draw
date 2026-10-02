@@ -90,8 +90,9 @@ draw.options.update({
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale });
 
-// 4. Select the middle area from code: the panel on the right opens on its style
-draw.selection.set('feature', [middle.id]);
+// 4. Select the middle area from code on a wide screen: the panel on the right opens on its style
+// (on a narrow one the panel would open over the map)
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [middle.id]);
 
 // 5. A field of the panel writes its value with features.update (updateMany for several
 // features); this is the same change as choosing the dashed outline there

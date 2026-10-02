@@ -12,7 +12,8 @@ parts, and two parcels whose shared vertices move together.
 editing-shapes
 ```
 
-The page opens with the west parcel selected. The squares at the
+On a wide screen, the page opens with the west parcel selected. The
+squares at the
 corners of its frame resize it from the opposite corner, and the dot
 above the frame rotates it around the center. A round handle sits on
 each vertex and a smaller one halfway along each edge: drag a vertex to
@@ -34,7 +35,8 @@ while it runs, from a switch the page adds to the standard UI with
 of their edge, as a shared vertex is an exact match (2). A hole is the
 second ring of a `Polygon`, and the parts of a `MultiPolygon` are
 polygons of their own, each created with its geometry (2).
-`draw.selection.set` opens the page with a parcel selected (4).
+`draw.selection.set` opens the page with a parcel selected on a wide
+screen (4).
 
 ::: code-group
 <<< @/../examples/editing-shapes/main.ts

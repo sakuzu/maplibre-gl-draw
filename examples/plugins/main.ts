@@ -101,14 +101,17 @@ function removeStamp(): void {
 
 addStamp();
 
-// 6. One stamp placed from code (where, in data.ts), selected so the panel opens on its section
+// 6. One stamp placed from code (where, in data.ts), selected on a wide screen so the panel opens
+// on its section (on a narrow one the panel would open over the map)
 const first = draw.features.create({
   type: 'Point',
   geometry: { type: 'Point', coordinates: MEETING_POINT },
   properties: { name: 'Meeting point', stamp: 'done' },
   style: stampStyle('done'),
 });
-if (first !== null) draw.selection.set('feature', [first.id]);
+if (first !== null && matchMedia('(min-width: 48rem)').matches) {
+  draw.selection.set('feature', [first.id]);
+}
 
 // 7. The api of the plugin, asked by its name: how many stamps were made, after each tool
 draw.on('mode.changed', ({ mode }) => {

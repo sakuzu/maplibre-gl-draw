@@ -16,8 +16,9 @@ The top row has three areas, each filled in one color and outlined in
 another, with outlines solid at 1 px, dashed at 3 px and dotted at
 6 px. The lines under them are 1, 4 and 10 px wide, then come a circle,
 a square, a triangle and a star with radii of 6, 9, 12 and 15 px, and
-at the bottom a circle of 80 m on the ground. The page opens with the
-middle area selected, so the panel on the right shows the fields of its
+at the bottom a circle of 80 m on the ground. On a wide screen, the page
+opens with the middle area selected, so the panel on the right shows the
+fields of its
 style. Change one and the area takes it at once. Select another feature
 to see the fields of its type: a point has its shape and its size, a
 line its width and its dash, and an area its fill and its outline.

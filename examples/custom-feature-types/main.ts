@@ -83,8 +83,11 @@ ui.inspector?.sections.add({
   },
 });
 
-// 5. Select the second route, so the panel opens on its section
-if (river !== null) draw.selection.set('feature', [river.id]);
+// 5. Select the second route on a wide screen, so the panel opens on its section (on a narrow one
+// the panel would open over the map)
+if (river !== null && matchMedia('(min-width: 48rem)').matches) {
+  draw.selection.set('feature', [river.id]);
+}
 
 // 6. The switch in the card of actions of the standard UI, with its key U (listed with ?, and
 // left alone while a field of the panels has the keyboard): it unregisters the type and

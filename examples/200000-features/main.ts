@@ -67,7 +67,8 @@ const loaded = draw.document.load(city).then(() => {
     `${format(counts.total)} features (${format(counts.polygons)} polygons, ` +
       `${format(counts.lines)} lines, ${format(counts.points)} points) loaded in ${ms} ms`,
   );
-  draw.selection.set('feature', [PARK_ID]);
+  // Selected on a wide screen only: on a narrow one the panel would open over the map
+  if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [PARK_ID]);
   return { ...counts, ms };
 });
 

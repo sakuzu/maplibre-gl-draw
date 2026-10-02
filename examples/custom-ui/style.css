@@ -41,6 +41,20 @@ body {
   transform: translateX(-50%);
 }
 
+/* A narrow screen: one row that scrolls sideways, above the attribution of two lines */
+@media (max-width: 40rem) {
+  .toolbar {
+    bottom: 64px;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .toolbar button {
+    flex: none;
+  }
+}
+
 .toolbar button {
   padding: 4px 10px;
   border: 1px solid #d0d7de;

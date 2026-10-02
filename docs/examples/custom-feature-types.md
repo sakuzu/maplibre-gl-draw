@@ -12,7 +12,8 @@ selection box, and a section of the panel on the right for its keys.
 custom-feature-types
 ```
 
-The page opens with the river route selected. The Route section of the
+On a wide screen, the page opens with the river route selected. The
+Route section of the
 panel on the right has its color, its width and whether it is dashed,
 and a change there redraws it at once. Click the other route, or drag a
 selection box over a vertex of it with Shift held, to select it; drag a

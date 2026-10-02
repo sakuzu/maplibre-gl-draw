@@ -47,8 +47,9 @@ const [west] = created;
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale });
 
-// 4. Open with the west parcel selected, so its frame and its handles are drawn
-draw.selection.set('feature', [west.id]);
+// 4. Open with the west parcel selected on a wide screen, so its frame and its handles are drawn
+// (on a narrow one the panel would open over the map)
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west.id]);
 
 // 5. A switch in the card of actions of the standard UI, with the key T (listed with ?, and left
 // alone while a field has the keyboard), switches the shared vertices: off, a vertex of the

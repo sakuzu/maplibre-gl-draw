@@ -11,7 +11,8 @@ The attributes of features: the keys and the values of their
 feature-properties
 ```
 
-The page opens with the market hall selected, and the panel on the
+On a wide screen, the page opens with the market hall selected, and
+the panel on the
 right on its Attributes tab, which lists its attributes: a value can be
 changed where it stands, removed, or added with a new key. A value typed there
 is kept as the string typed. Select the library or the avenue to see
