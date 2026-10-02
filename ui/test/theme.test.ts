@@ -165,6 +165,38 @@ describe('the theme', () => {
   });
 });
 
+describe("the theme of maplibre-gl's controls", () => {
+  /** maplibre-gl's control container in the map's container, as maplibre-gl draws it */
+  function controlContainer(container: HTMLElement) {
+    const el = document.createElement('div');
+    el.className = 'maplibregl-control-container';
+    container.prepend(el);
+    return el;
+  }
+
+  it('follows the theme of the interface, and is given back on destroy', () => {
+    const system = mockSystem(false);
+    const fake = fakeDraw();
+    const controls = controlContainer(fake.container);
+    ui = createDrawUI(fake.asDraw, { theme: 'light' });
+    // The control container takes kata's tokens and the look of the root
+    expect(controls.hasAttribute('data-mgd-ui-controls')).toBe(true);
+    expect(mode(controls)).toBe('light');
+    ui.setTheme('dark');
+    expect(controls.hasAttribute('data-color-mode')).toBe(false);
+    ui.setTheme('auto');
+    system.change(true);
+    expect(mode(controls)).toBe('light');
+    system.change(false);
+    expect(controls.hasAttribute('data-color-mode')).toBe(false);
+    system.change(true);
+    ui.destroy();
+    ui = undefined;
+    expect(controls.hasAttribute('data-mgd-ui-controls')).toBe(false);
+    expect(controls.hasAttribute('data-color-mode')).toBe(false);
+  });
+});
+
 describe('the theme button', () => {
   const button = (root: HTMLElement) =>
     root.querySelector<HTMLButtonElement>('[data-role="theme"] button');

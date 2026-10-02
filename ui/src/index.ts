@@ -48,7 +48,7 @@ import {
 } from './messages.js';
 import { type MapPadding, mapPadding, type ShellInset } from './padding.js';
 import { Box } from './store.js';
-import { checkTheme, type Theme, themeControl } from './theme.js';
+import { checkTheme, setLight, type Theme, themeControl } from './theme.js';
 import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.js';
 import type {
   AloneOptions,
@@ -102,6 +102,13 @@ export type {
 
 /** The class of the root element of the interface */
 const ROOT_CLASS = 'mgd-ui';
+
+/**
+ * The attribute on maplibre-gl's control container of the map under the interface, which takes
+ * kata's tokens (build/scope-css) and the look of the theme, so that root.css paints the map's
+ * controls with them
+ */
+const CONTROLS_ATTRIBUTE = 'data-mgd-ui-controls';
 
 /**
  * Creates the root element of the interface inside a container. It is kata's root in a page kata
@@ -211,9 +218,18 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const map = draw.getMap();
   const basemaps = basemapsOf(draw, options);
   const root = createRoot(options.container ?? map.getContainer(), true);
+  // maplibre-gl's controls in the map's container follow the theme: the control container takes
+  // kata's tokens and the look of the root
+  const controlContainer = map
+    .getContainer()
+    .querySelector<HTMLElement>(':scope > .maplibregl-control-container');
+  controlContainer?.setAttribute(CONTROLS_ATTRIBUTE, '');
   // The look the root shows, which the theme button follows
   const light = new Box(false);
-  const theme = themeControl(root, themeName, (next) => light.set(next));
+  const theme = themeControl(root, themeName, (next) => {
+    light.set(next);
+    if (controlContainer) setLight(controlContainer, next);
+  });
   applyLocale(root, messages, options.locale ?? 'en');
   // maplibre-gl's own controls at the bottom corners, kept clear of the toolbar, the right region
   // and the attribution
@@ -328,6 +344,8 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       if (destroyed) return;
       destroyed = true;
       theme.destroy();
+      controlContainer?.removeAttribute(CONTROLS_ATTRIBUTE);
+      controlContainer?.removeAttribute('data-color-mode');
       basemaps.destroy();
       padding?.destroy();
       lift.destroy();

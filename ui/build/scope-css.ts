@@ -11,7 +11,9 @@
 // - the tokens: :root becomes the root element (`:root:lang(ja)` becomes `.mgd-ui:lang(ja)`),
 //   and a rule that applies to any element (the light theme, the language switches) applies to
 //   the root element, to the elements inside it, and to the root element under an ancestor that
-//   matches (a page that sets `data-color-mode="light"` on its body)
+//   matches (a page that sets `data-color-mode="light"` on its body). They go to maplibre-gl's
+//   control container of the map under the interface as well (`[data-mgd-ui-controls]`, which
+//   createDrawUI sets), in the same ways, so that the map's controls are painted with them
 // - the shared rules of the components: each selector is limited to the elements inside the
 //   root element, without changing its specificity
 //
@@ -23,6 +25,9 @@ import postcss from 'postcss';
 
 /** The class of the root element of the interface */
 export const SCOPE = '.mgd-ui';
+
+/** maplibre-gl's control container of the map under the interface, which takes the tokens too */
+export const CONTROLS = '[data-mgd-ui-controls]';
 
 /** The kind of a style sheet of kata, from its path */
 export type KataSheet = 'tokens' | 'components';
@@ -62,10 +67,19 @@ function splitSelectors(list: string): string[] {
   return out.filter(Boolean);
 }
 
-/** The selectors of a rule of the tokens, moved from the page to the root element */
-export function scopeTokenSelector(selector: string, scope = SCOPE): string[] {
-  if (selector.includes(':root')) return [selector.replaceAll(':root', scope)];
-  return [`${scope}:is(${selector})`, `${selector} ${scope}`, `:where(${scope}) ${selector}`];
+/**
+ * The selectors of a rule of the tokens, moved from the page to the root element and to the
+ * control container of the map
+ */
+export function scopeTokenSelector(
+  selector: string,
+  scopes: readonly string[] = [SCOPE, CONTROLS],
+): string[] {
+  return scopes.flatMap((scope) =>
+    selector.includes(':root')
+      ? [selector.replaceAll(':root', scope)]
+      : [`${scope}:is(${selector})`, `${selector} ${scope}`, `:where(${scope}) ${selector}`],
+  );
 }
 
 /** A selector of the shared rules of the components, limited to the inside of the root element */
@@ -80,7 +94,7 @@ function rewrite(rule: Rule, sheet: KataSheet, scope: string): void {
   const selectors = splitSelectors(rule.selector);
   const next =
     sheet === 'tokens'
-      ? selectors.flatMap((s) => scopeTokenSelector(s, scope))
+      ? selectors.flatMap((s) => scopeTokenSelector(s, [scope, CONTROLS]))
       : selectors.map((s) => scopeComponentSelector(s, scope));
   rule.selector = next.join(',\n');
 }

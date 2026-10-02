@@ -28,8 +28,8 @@ export function checkTheme(theme: Theme | undefined): Theme {
   return theme;
 }
 
-/** The light or dark of a root element */
-function setLight(root: HTMLElement, light: boolean): void {
+/** The light or dark of a root element, or of another element that takes kata's tokens */
+export function setLight(root: HTMLElement, light: boolean): void {
   if (light) root.setAttribute('data-color-mode', 'light');
   else root.removeAttribute('data-color-mode');
 }

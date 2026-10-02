@@ -363,14 +363,26 @@ ui.inspector?.sections.add({
 ## Customize
 
 Everything the interface draws is inside its root element, which has the
-class `mgd-ui`, and its style sheet reaches nothing outside it. kata's
-tokens (the CSS custom properties `--kata-*`) are set on that element;
-set them on `.mgd-ui` to change the look. The `theme` option of
+class `mgd-ui`, and its style sheet reaches nothing outside it but
+maplibre-gl's controls of the map (see [Map controls](#map-controls)).
+kata's tokens (the CSS custom properties `--kata-*`) are set on that
+element; set them on `.mgd-ui` to change the look. The `theme` option of
 `createDrawUI` and of each part put alone is `light`, `dark` or `auto`
 (the default, which follows the system's `prefers-color-scheme` as it
 changes), and `ui.setTheme` changes it. kata's theme is dark;
 `data-color-mode="light"` on the root element, which `light` sets, or on
 any element around it, turns it light.
+
+maplibre-gl's controls in the map's container, those of the application
+too, follow the theme of `createDrawUI`: while it is on the map,
+maplibre-gl's control container (`.maplibregl-control-container`) has
+`data-mgd-ui-controls`, which takes kata's tokens, and the
+`data-color-mode` of the root. The groups of buttons, the lines between
+them, the attribution and the scale are painted with the tokens, and
+maplibre-gl's icons, which are dark images, are inverted in the dark
+look (`filter: invert(1)`). Set the tokens on
+`[data-mgd-ui-controls]` to change their look. `destroy()` removes both
+attributes.
 
 A button at the top right of the map switches the look: a sun while it
 is dark, a moon while it is light. It sets the theme to the look that is

@@ -37,27 +37,35 @@ describe('the tokens of kata', () => {
     for (const s of all) expect(s).not.toMatch(/:root/);
   });
 
-  it('are on the root element of the interface, with the language switches', () => {
+  it('are on the root element of the interface and the control container of the map, with the language switches', () => {
     const all = selectors(css);
     expect(all).toContain('.mgd-ui');
     expect(all).toContain('.mgd-ui:lang(ja)');
+    expect(all).toContain('[data-mgd-ui-controls]');
+    expect(all).toContain('[data-mgd-ui-controls]:lang(ja)');
   });
 
-  it('reach no element outside the root element', () => {
-    for (const s of selectors(css)) expect(s).toMatch(/\.mgd-ui/);
+  it('reach no element outside the root element and the control container of the map', () => {
+    for (const s of selectors(css)) expect(s).toMatch(/\.mgd-ui|\[data-mgd-ui-controls\]/);
   });
 
-  it('take the light theme from the root element or from around it', () => {
+  it('take the light theme from the root element, the control container or from around them', () => {
     expect(scopeTokenSelector('[data-color-mode="light"]')).toEqual([
       '.mgd-ui:is([data-color-mode="light"])',
       '[data-color-mode="light"] .mgd-ui',
       ':where(.mgd-ui) [data-color-mode="light"]',
+      '[data-mgd-ui-controls]:is([data-color-mode="light"])',
+      '[data-color-mode="light"] [data-mgd-ui-controls]',
+      ':where([data-mgd-ui-controls]) [data-color-mode="light"]',
     ]);
   });
 
-  it('turn :root into the root element wherever it is in a selector', () => {
-    expect(scopeTokenSelector(':root:lang(ko)')).toEqual(['.mgd-ui:lang(ko)']);
-    expect(scopeTokenSelector(':root')).toEqual(['.mgd-ui']);
+  it('turn :root into the root element and the control container wherever it is in a selector', () => {
+    expect(scopeTokenSelector(':root:lang(ko)')).toEqual([
+      '.mgd-ui:lang(ko)',
+      '[data-mgd-ui-controls]:lang(ko)',
+    ]);
+    expect(scopeTokenSelector(':root')).toEqual(['.mgd-ui', '[data-mgd-ui-controls]']);
   });
 });
 
@@ -85,7 +93,7 @@ describe('the PostCSS plugin', () => {
     const kept = await postcss([plugin]).process(own, { from: '/app/src/styles/root.css' });
     expect(kept.css).toBe(own);
     const tokens = await postcss([plugin]).process(':root { --x: 1; }', { from: tokensFile });
-    expect(tokens.css).toBe('.mgd-ui { --x: 1; }');
+    expect(tokens.css).toBe('.mgd-ui,\n[data-mgd-ui-controls] { --x: 1; }');
   });
 
   it('knows the sheets of kata by their paths', () => {

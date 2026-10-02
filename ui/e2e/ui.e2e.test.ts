@@ -685,3 +685,36 @@ describe("maplibre-gl's controls and the padding of the map", () => {
     await expect.poll(async () => (await read()).zoom?.right).toBeCloseTo(before.zoom.right, 0);
   });
 });
+
+describe("the look of maplibre-gl's controls", () => {
+  it('follows the theme of the interface', async () => {
+    page = await openPage(browser, site);
+    /** The background of a group of buttons, and the panel color of the interface */
+    const colors = () =>
+      page.evaluate(() => {
+        const w = window as unknown as E2EWindow;
+        const group = w.map.getContainer().querySelector('.maplibregl-ctrl-group');
+        const icon = w.map.getContainer().querySelector('.maplibregl-ctrl-icon');
+        const probe = document.createElement('div');
+        probe.style.background = 'var(--kata-color-panel)';
+        w.ui.element.append(probe);
+        const panel = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return {
+          group: group ? getComputedStyle(group).backgroundColor : '',
+          icon: icon ? getComputedStyle(icon).filter : '',
+          panel,
+        };
+      });
+    // Dark, the theme of the page
+    const dark = await colors();
+    expect(dark.group).toBe(dark.panel);
+    expect(dark.group).not.toBe('rgb(255, 255, 255)');
+    expect(dark.icon).toBe('invert(1)');
+    await page.evaluate(() => (window as unknown as E2EWindow).ui.setTheme('light'));
+    const light = await colors();
+    expect(light.group).toBe(light.panel);
+    expect(light.group).not.toBe(dark.group);
+    expect(light.icon).toBe('none');
+  });
+});

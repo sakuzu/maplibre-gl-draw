@@ -13,8 +13,11 @@
  * light, or auto while the system prefers light), or on any element around it, turns it light:
  * the build moves kata's light block onto the same selectors, so every color token switches
  * with color-scheme. An application changes the look by setting kata's tokens (--kata-*) on
- * .mgd-ui. The one exception to staying inside the root is the placing of maplibre-gl's bottom
- * corners below.
+ * .mgd-ui. The exceptions to staying inside the root are maplibre-gl's controls of the map under
+ * the interface below: the placing of the bottom corners, and their look. The build moves kata's
+ * tokens onto maplibre-gl's control container too while it has data-mgd-ui-controls, which
+ * createDrawUI sets with data-color-mode, following the theme of the root, and removes on
+ * destroy.
  */
 
 .mgd-ui {
@@ -82,6 +85,53 @@
   > .maplibregl-ctrl-bottom-right
   > .maplibregl-ctrl:not(.maplibregl-ctrl-attrib) {
   translate: calc(-1 * var(--mgd-ui-shift-right, 0px)) 0;
+}
+
+/* The look of maplibre-gl's controls in the map's container (the application's too), painted
+ * with kata's tokens, which the control container takes while createDrawUI is on the map: the
+ * groups of buttons and the lines between them, the attribution and the scale. maplibre-gl's
+ * icons are dark images, inverted in the dark look */
+[data-mgd-ui-controls] {
+  color-scheme: dark;
+}
+[data-mgd-ui-controls][data-color-mode="light"],
+[data-color-mode="light"] [data-mgd-ui-controls] {
+  color-scheme: light;
+}
+[data-mgd-ui-controls] .maplibregl-ctrl-group {
+  background: var(--kata-color-panel);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 0 0 var(--kata-border-width) var(--kata-color-line-strong);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl-group button + button {
+  border-top-color: var(--kata-color-line);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl button:not(:disabled):hover {
+  background-color: var(--kata-color-raise);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl.maplibregl-ctrl-attrib,
+[data-mgd-ui-controls] .maplibregl-ctrl-attrib.maplibregl-compact {
+  background-color: var(--kata-color-panel);
+  color: var(--kata-color-muted);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl-attrib a {
+  color: var(--kata-color-text);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl-scale {
+  background-color: var(--kata-color-panel);
+  border-color: var(--kata-color-text);
+  color: var(--kata-color-text);
+}
+[data-mgd-ui-controls] :is(.maplibregl-ctrl-icon, .maplibregl-ctrl-attrib-button) {
+  filter: invert(1);
+}
+[data-mgd-ui-controls][data-color-mode="light"]
+  :is(.maplibregl-ctrl-icon, .maplibregl-ctrl-attrib-button),
+[data-color-mode="light"]
+  [data-mgd-ui-controls]
+  :is(.maplibregl-ctrl-icon, .maplibregl-ctrl-attrib-button) {
+  filter: none;
 }
 
 /* A panel put alone in an element fills the element's height */
