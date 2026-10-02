@@ -323,7 +323,8 @@ stands). Several features
 show the fields they share, a field whose values differ being mixed, and
 the operations that apply to them (union, intersection, difference,
 split and buffer). A layer and a group show their name, whether they are
-visible and whether they are locked.
+visible and whether they are locked. Delete is at the start of the foot
+of every inspector, for one feature and for several things selected.
 
 ```ts
 const ui = createDrawUI(draw, {

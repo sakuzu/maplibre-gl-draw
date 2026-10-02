@@ -3,7 +3,7 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
-  import { Button, Panel, Row, SelectionSummary, State } from '@sakuzu/kata/svelte';
+  import { Button, Footer, Panel, SelectionSummary, State } from '@sakuzu/kata/svelte';
   import type { Feature } from '@sakuzu/maplibre-gl-draw';
   import { applicableSections } from '../inspector/sections.js';
   import type {
@@ -99,12 +99,14 @@
       title={fillWord(m.selectedCount, { count: v.count })}
       onclose={close}
     >
-      {#snippet actions()}
-        <Row wrap>
-          <Button variant="danger" disabled={v.readOnly} onclick={() => draw.selection.delete()}>
-            {m.delete}
-          </Button>
-        </Row>
+      {#snippet foot()}
+        <Footer>
+          {#snippet lead()}
+            <Button variant="danger" disabled={v.readOnly} onclick={() => draw.selection.delete()}>
+              {m.delete}
+            </Button>
+          {/snippet}
+        </Footer>
       {/snippet}
     </SelectionSummary>
   {:else}

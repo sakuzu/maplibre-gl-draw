@@ -366,9 +366,32 @@ describe('createInspector', () => {
       expect(hasButton(inspector.element, name)).toBe(true);
     }
     expect(hasButton(inspector.element, 'Split')).toBe(false);
+    // Delete is in the lead of the foot, as for one feature, not among the operations
+    const foot = inspector.element.querySelector('[data-role="footer"]');
+    if (!foot) throw new Error('no foot');
+    expect(foot.querySelector('.lead')?.contains(button(inspector.element, 'Delete'))).toBe(true);
+    expect(foot.contains(button(inspector.element, 'Union'))).toBe(false);
     click(button(inspector.element, 'Union'));
     expect(fake.mocks.features.union).toHaveBeenCalledWith(['a', 'd']);
     expect(fake.mocks.selection.set).toHaveBeenLastCalledWith('feature', ['union']);
+  });
+
+  it('deletes several layers from the lead of the foot', () => {
+    const fake = fakeDocument({
+      features: [park],
+      layers: [
+        { id: 'l1', name: 'Layer 1' },
+        { id: 'l2', name: 'Layer 2' },
+      ],
+      selection: { type: 'layer', ids: ['l1', 'l2'] },
+    });
+    const inspector = mountAlone(fake);
+    const foot = inspector.element.querySelector('[data-role="footer"]');
+    if (!foot) throw new Error('no foot');
+    const remove = button(inspector.element, 'Delete');
+    expect(foot.querySelector('.lead')?.contains(remove)).toBe(true);
+    click(remove);
+    expect(fake.mocks.selection.delete).toHaveBeenCalledOnce();
   });
 
   it('changes a layer', () => {

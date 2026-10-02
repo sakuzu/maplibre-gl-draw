@@ -406,10 +406,25 @@ describe('operations', () => {
     const count = () => page.evaluate(() => (window as unknown as E2EWindow).draw.features.count());
     expect(await count()).toBe(4);
 
-    await page
-      .locator('[data-role="inspector"]')
-      .getByRole('button', { name: 'Union', exact: true })
-      .click();
+    // Delete is in the lead of the foot, as for one feature; the operations are in the content
+    const inspector = page.locator('[data-role="inspector"]');
+    const foot = inspector.locator('[data-role="panel"] > [data-role="footer"]');
+    await expect
+      .poll(() => foot.getByRole('button', { name: 'Delete', exact: true }).count())
+      .toBe(1);
+    expect(await foot.getByRole('button', { name: 'Union', exact: true }).count()).toBe(0);
+    const lead = await foot.evaluate((el) => {
+      const remove = [...el.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Delete',
+      );
+      const box = el.getBoundingClientRect();
+      return remove ? remove.getBoundingClientRect().left - box.left : -1;
+    });
+    // At the start of the foot, inside its padding
+    expect(lead).toBeGreaterThan(0);
+    expect(lead).toBeLessThan(40);
+
+    await inspector.getByRole('button', { name: 'Union', exact: true }).click();
     await until(count, 3);
     const made = await page.evaluate(() => {
       const draw = (window as unknown as E2EWindow).draw;

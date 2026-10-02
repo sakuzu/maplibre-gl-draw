@@ -3,7 +3,7 @@
   SPDX-License-Identifier: AGPL-3.0-only
 -->
 <script lang="ts">
-  import { Button, Row, SelectionSummary } from '@sakuzu/kata/svelte';
+  import { Button, Footer, Row, SelectionSummary } from '@sakuzu/kata/svelte';
   import type { Feature, FeatureStyleResolved } from '@sakuzu/maplibre-gl-draw';
   import { applicableOperations, type OperationId, runOperation } from '../inspector/operations.js';
   import type {
@@ -18,8 +18,8 @@
 
   // SelectionInspector: several features in kata's SelectionSummary. It counts them by type,
   // shows the fields of the style they share (a field whose values differ is mixed) and the
-  // sections of the application that apply to all of them, and offers the operations that apply,
-  // grouping and deleting.
+  // sections of the application that apply to all of them, and offers the operations that apply
+  // and grouping. Delete is in the lead of the foot, as in the inspector of one feature.
   let {
     draw,
     features,
@@ -79,10 +79,17 @@
     <Button disabled={readOnly || !oneLayer} onclick={() => draw.selection.group()}>
       {m.groupAction}
     </Button>
-    <Button variant="danger" disabled={readOnly} onclick={() => draw.selection.delete()}>
-      {m.delete}
-    </Button>
   </Row>
+{/snippet}
+
+{#snippet foot()}
+  <Footer>
+    {#snippet lead()}
+      <Button variant="danger" disabled={readOnly} onclick={() => draw.selection.delete()}>
+        {m.delete}
+      </Button>
+    {/snippet}
+  </Footer>
 {/snippet}
 
 <SelectionSummary
@@ -91,6 +98,7 @@
   title={fillWord(m.selectedCount, { count: features.length })}
   {fields}
   {actions}
+  {foot}
   {onclose}
 />
 
