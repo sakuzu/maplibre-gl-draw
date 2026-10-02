@@ -312,7 +312,11 @@ but Escape.
 
 - A press inside the element that `container()` returns is left to the
   plugin, and the map does not pan
-- A click outside that element calls `finish()`
+- A click outside that element calls `finish()`, and then goes on as
+  an ordinary click: it selects the feature under it, or clears the
+  selection on the empty map. A click on the feature that is already
+  selected does not call `onFeatureClick`, so the click that finishes
+  an interaction does not start another
 - Escape calls `cancel()`
 - Leaving the select mode calls `finish()`
 

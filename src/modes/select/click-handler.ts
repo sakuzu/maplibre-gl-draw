@@ -6,7 +6,10 @@
  *
  * Single click: the priority order is plugin intercept -> vertex click -> feature selection
  *   1. While a plugin is interacting, clicks inside its container are consumed; anything else
- *      finishes it
+ *      finishes it and then goes on as an ordinary click (it selects the feature under it, or
+ *      clears the selection on the empty map), except that re-clicking the selected feature is
+ *      not delegated to plugins.handleFeatureClick (the click that finished an interaction does
+ *      not start another)
  *   2. A click on a vertex handle of a singly selected feature that supports vertex editing
  *      (LineString / Polygon / the Multi types) -> vertex selection
  *   3. Unified z traversal (hitTestTopmost) -> if it is a Store feature, the selection is
@@ -40,7 +43,8 @@ export function handleSelectClick(
   context: EngineModeContext,
   config: SelectionUIConfig,
 ): void {
-  if (handlePluginInteractionClick(event, context)) {
+  const interaction = handlePluginInteractionClick(event, context);
+  if (interaction === 'inside') {
     return;
   }
 
@@ -53,7 +57,7 @@ export function handleSelectClick(
   }
   store.setSelectedVertices(null);
 
-  handleFeatureClick(event, selection, selectedIds, context);
+  handleFeatureClick(event, selection, selectedIds, context, interaction === 'finished');
 }
 
 /**
@@ -84,26 +88,35 @@ export function handleSelectDoubleClick(
 }
 
 /**
+ * What a click did to a plugin interaction
+ *
+ * - `none`: no plugin was interacting
+ * - `inside`: the click landed in the container of the interaction and is consumed
+ * - `finished`: the click landed outside and finished the interaction
+ */
+type PluginInteractionClick = 'none' | 'inside' | 'finished';
+
+/**
  * Click handling during a plugin interaction
  *
- * @returns true when the click was consumed (= the caller skips the rest of the handling)
+ * Only `inside` consumes the click; after `finished` the caller handles it as an ordinary click.
  */
 function handlePluginInteractionClick(
   event: MouseNormalizedEvent,
   context: EngineModeContext,
-): boolean {
+): PluginInteractionClick {
   const pm = context.plugins;
-  if (!pm?.isPluginInteracting()) return false;
+  if (!pm?.isPluginInteracting()) return 'none';
 
   const container = pm.getPluginInteractionContainer();
   if (container) {
     const target = event.originalEvent.target as HTMLElement;
     if (container.contains(target)) {
-      return true;
+      return 'inside';
     }
   }
   pm.finishPluginInteraction();
-  return true;
+  return 'finished';
 }
 
 /**
@@ -163,12 +176,16 @@ function handleVertexClick(
 
 /**
  * Feature selection handling
+ *
+ * @param finishedInteraction The click finished a plugin interaction: re-clicking the selected
+ *   feature is not delegated to the plugins
  */
 function handleFeatureClick(
   event: MouseNormalizedEvent,
   selection: Selection,
   selectedIds: readonly string[],
   context: EngineModeContext,
+  finishedInteraction: boolean,
 ): void {
   const { store } = context;
   const orderedFeatures = getDisplayFeatures(store);
@@ -196,8 +213,14 @@ function handleFeatureClick(
   }
   const feature = top.feature;
 
-  // Re-clicking an already selected feature -> delegate to the plugins
-  if (!event.modifiers.shift && selectedIds.length === 1 && selectedIds.includes(feature.id)) {
+  // Re-clicking an already selected feature -> delegate to the plugins (not when the click
+  // finished an interaction)
+  if (
+    !finishedInteraction &&
+    !event.modifiers.shift &&
+    selectedIds.length === 1 &&
+    selectedIds.includes(feature.id)
+  ) {
     if (context.plugins?.handleFeatureClick(feature.id, event)) {
       return;
     }

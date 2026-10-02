@@ -8,6 +8,9 @@
  * core merely consumes the click and passes it to the provider, changing the selection in no way
  * at all (not even clearing it as an empty click would). As controls, the conventional behavior
  * for a Store feature and for no hit is checked as well.
+ *
+ * While a plugin is busy, a click inside its container is consumed, and a click outside
+ * finishes the interaction and then goes on as an ordinary click.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -182,5 +185,82 @@ describe('controls (the conventional path)', () => {
     click();
 
     expect(store.getSelection().type).toBeNull();
+  });
+});
+
+describe('a click while a plugin is busy', () => {
+  /** The element of the interaction, and a target inside it */
+  const inside = {} as HTMLElement;
+  const container = { contains: (target: unknown) => target === inside } as HTMLElement;
+
+  let finish: ReturnType<typeof vi.fn>;
+  let onFeatureClick: ReturnType<typeof vi.fn>;
+  let busy: boolean;
+
+  beforeEach(() => {
+    busy = true;
+    finish = vi.fn(() => {
+      busy = false;
+    });
+    onFeatureClick = vi.fn(() => true);
+    context = {
+      ...context,
+      plugins: {
+        isPluginInteracting: () => busy,
+        getPluginInteractionContainer: () => container,
+        finishPluginInteraction: finish,
+        filterSelectionCandidates: (ids: string[]) => ids,
+        handleFeatureClick: onFeatureClick,
+      },
+    } as unknown as EngineModeContext;
+  });
+
+  function clickOn(target: unknown): void {
+    const event = clickEvent();
+    event.originalEvent = { target } as unknown as MouseEvent;
+    handleSelectClick(event, context, DEFAULT_SELECTION_CONFIG);
+  }
+
+  it('finishes the interaction and selects another feature clicked outside', () => {
+    store.setSelection('feature', ['f1']);
+    top = { kind: 'store', feature: store.getFeature('f2') as Feature };
+
+    clickOn({});
+
+    expect(finish).toHaveBeenCalledTimes(1);
+    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+  });
+
+  it('finishes the interaction and clears the selection on the empty map outside', () => {
+    store.setSelection('feature', ['f1']);
+    top = null;
+
+    clickOn({});
+
+    expect(finish).toHaveBeenCalledTimes(1);
+    expect(store.getSelection().type).toBeNull();
+  });
+
+  it('consumes a click inside the container', () => {
+    store.setSelection('feature', ['f1']);
+    const setSelection = vi.spyOn(store, 'setSelection');
+    top = { kind: 'store', feature: store.getFeature('f2') as Feature };
+
+    clickOn(inside);
+
+    expect(finish).not.toHaveBeenCalled();
+    expect(setSelection).not.toHaveBeenCalled();
+    setSelection.mockRestore();
+  });
+
+  it('does not offer the click that finished it to the plugins as a re-click', () => {
+    store.setSelection('feature', ['f1']);
+    top = { kind: 'store', feature: store.getFeature('f1') as Feature };
+
+    clickOn({});
+
+    expect(finish).toHaveBeenCalledTimes(1);
+    expect(onFeatureClick).not.toHaveBeenCalled();
+    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
   });
 });
