@@ -255,6 +255,40 @@ describe('the inspector of a point', () => {
     expect(widths.sheet).toBeGreaterThan(380);
     expect(widths.panel).toBeCloseTo(widths.sheet, 0);
   });
+
+  it('fits the half sheet on a narrow map: its content scrolls and its foot is in view', async () => {
+    page = await openPage(browser, site);
+    await page.setViewportSize({ width: 390, height: 667 });
+    const { point } = await ids();
+    await page.evaluate((id) => {
+      (window as unknown as E2EWindow).draw.selection.set('feature', [id]);
+    }, point);
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.locator('[data-role="tabs"]').waitFor();
+    await settle(page);
+    const measured = await inspector.evaluate((el) => {
+      const scroll = el.querySelector('[data-role="panel"] > .scroll');
+      const remove = [...el.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Delete',
+      );
+      if (!scroll || !remove) throw new Error('no scrolling content or no Delete');
+      const box = remove.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return {
+        stage: el.closest('[data-stage]')?.getAttribute('data-stage'),
+        scrollHeight: scroll.scrollHeight,
+        clientHeight: scroll.clientHeight,
+        top: box.top,
+        bottom: box.bottom,
+        reached: !!hit && remove.contains(hit),
+      };
+    });
+    expect(measured.stage).toBe('half');
+    expect(measured.scrollHeight).toBeGreaterThan(measured.clientHeight);
+    expect(measured.top).toBeGreaterThanOrEqual(0);
+    expect(measured.bottom).toBeLessThanOrEqual(667);
+    expect(measured.reached).toBe(true);
+  });
 });
 
 describe('the layer panel', () => {

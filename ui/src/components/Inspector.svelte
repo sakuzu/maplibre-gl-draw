@@ -25,8 +25,8 @@
   // document, of what this client hides and of read-only, so a change made anywhere shows at
   // once. Nothing selected shows an empty state; one feature its inspector, several features a
   // summary, a layer or a group theirs. Every change calls the public API of the draw instance.
-  // In a sheet (a narrow map) the panel takes the sheet's width; the width of a panel is for a
-  // side pane.
+  // In a sheet (a narrow map) the panel takes the sheet's width, the width of a panel being for a
+  // side pane, and the sheet's height, so that its content scrolls and its foot stays in view.
   let {
     draw,
     messages,
@@ -124,7 +124,15 @@
     height: 100%;
     max-height: 100%;
   }
+  /* In a sheet the height of the sheet reaches the panel, which scrolls its content and keeps
+     its foot in view: a column that may shrink, and a panel that takes it and may shrink too */
+  .inspector[data-sheet] {
+    flex-direction: column;
+    min-height: 0;
+  }
   .inspector[data-sheet] > :global([data-role='panel']) {
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
   }
 </style>
