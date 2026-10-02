@@ -8,7 +8,8 @@
 
 import type { Basemap } from '@sakuzu/maplibre-gl-draw-ui';
 
-const params = new URLSearchParams(location.search);
+// Read outside a browser too (the tests of the sample geometry import the examples' modules)
+const params = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
 
 const OPENFREEMAP = 'https://tiles.openfreemap.org/styles';
 

@@ -248,11 +248,10 @@ describe('the layer panel', () => {
       'Station',
     ]);
 
-    // The eye of the line
-    await panel
-      .locator(`[role="treeitem"][data-node="${line}"]`)
-      .getByRole('button', { name: 'Hide', exact: true })
-      .click();
+    // The eye of the line, which shows while the row is hovered
+    const lineRow = panel.locator(`[role="treeitem"][data-node="${line}"]`);
+    await lineRow.hover();
+    await lineRow.getByRole('button', { name: 'Hide', exact: true }).click();
     await until(
       () =>
         page.evaluate(
