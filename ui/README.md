@@ -306,6 +306,9 @@ const ui = createDrawUI(draw, {
 
 Each goes alone into an element with
 `createLayerPanel(draw, { target })` and `createLegend(draw, { target })`.
+Alone, its root element paints the surface of a panel
+(`--kata-color-panel`) and declares it (`--kata-color-surface`), as the
+panel of the left region does around them.
 
 A tool for a mode of your own (added with `draw.extensions.modes.add`):
 

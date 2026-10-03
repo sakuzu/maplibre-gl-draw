@@ -92,6 +92,15 @@ describe('createLayerPanel', () => {
     expect(target.querySelector(':scope > .mgd-ui')).not.toBeNull();
   });
 
+  it('paints the surface of a panel on its root, with the legend put alone too', () => {
+    const fake = sample();
+    handle = createLayerPanel(fake.asDraw, { target: fake.container });
+    expect(handle.element.closest('.mgd-ui')?.hasAttribute('data-surface')).toBe(true);
+    handle.destroy();
+    handle = createLegend(fake.asDraw, { target: fake.container });
+    expect(handle.element.closest('.mgd-ui')?.hasAttribute('data-surface')).toBe(true);
+  });
+
   it('marks no layer as the one drawn features go into', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });

@@ -536,7 +536,8 @@ function leftSettings(options: DrawUIOptions): LeftSettings | null {
 
 /**
  * Puts a component alone in an element, in a root element of the interface; `cleanup` runs once
- * when it is removed
+ * when it is removed. The root paints the panel's surface and declares it (data-surface), as
+ * kata's Panel does around these components in the left region
  */
 function mountAlone(
   { target, locale, theme: themeOption }: AloneOptions,
@@ -548,6 +549,7 @@ function mountAlone(
   const themeName = checkTheme(themeOption);
   const messages = new Box(resolveMessages(locale));
   const root = createRoot(target, false);
+  root.dataset.surface = '';
   const theme = themeControl(root, themeName);
   applyLocale(root, messages, locale ?? 'en');
   const view = mount(component as typeof LayerPanelView, {
