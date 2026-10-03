@@ -1,6 +1,0 @@
-import{a as e,c as t,o as n,r,t as i}from"./basemap-CV5WDhph.js";import{t as a}from"./example-DsY7Cx6P.js";var o=[139.771,35.6812],s=new t({container:`map`,style:r(),center:o,zoom:15.5}),c=n(s);c.on(`image.requested`,({lngLat:e,zoom:t,layerId:n})=>{let r=document.createElement(`input`);r.type=`file`,r.accept=`image/*`,r.addEventListener(`change`,async()=>{let i=r.files?.[0];i&&await c.document.load(i,{coordinate:e,zoom:t,layerId:n})}),r.click()});var l=new URLSearchParams(location.search).get(`locale`)===`ja`?`ja`:`en`,u=a(c,{locale:l,basemaps:i,basemap:e()}),d=await c.document.load(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
-  <rect x="4" y="4" width="232" height="152" rx="12"
-    fill="#fff8e7" stroke="#30638e" stroke-width="8"/>
-  <path d="M40 120 L100 50 L140 95 L165 70 L200 120 Z" fill="#2a9d8f"/>
-  <circle cx="180" cy="45" r="16" fill="#edae49"/>
-</svg>`],{type:`image/svg+xml`}),{coordinate:o,zoom:15.5});if(d===null)throw Error(`The drawing is read-only`);var[f]=d.featureIds;c.features.update(f,{properties:{name:`Sketch map`},style:{imageOpacity:.85}}),Object.assign(window,{map:s,draw:c,ui:u});
