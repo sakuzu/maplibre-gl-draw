@@ -956,6 +956,12 @@ describe('the selection of drawn features', () => {
         { timeout: browserTimeout(10_000) },
       )
       .toBe('inside');
+    // The polygon can come inside while the pan is still easing; read the centre where it ends
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as E2EWindow).map.isMoving()), {
+        timeout: browserTimeout(10_000),
+      })
+      .toBe(false);
     const revealed = await read(polygon);
     expect(revealed.center).not.toEqual(before.center);
     expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
