@@ -73,7 +73,7 @@
   },
   "devDependencies": {
     "@lucide/svelte": "^1.49.0",
-    "@sakuzu/kata": "^1.6.2",
+    "@sakuzu/kata": "^1.7.0",
     "@sakuzu/maplibre-gl-draw": "file:..",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@testing-library/svelte": "^5.4.2",
