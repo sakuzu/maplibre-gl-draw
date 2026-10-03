@@ -675,6 +675,12 @@ describe('the actions', () => {
         if (b.scale.bottom > attrib.top + 1) return 'scale under the attribution';
         if (b.card.bottom > attrib.top || b.card.bottom > b.scale.top) return 'card too low';
         if (b.card.top < b.map.top) return 'card past the top';
+        // The attribution's box keeps the margin of the corner: 10px from the right of the map,
+        // and 10px above the toolbar it is lifted over
+        if (Math.abs(b.map.right - 10 - attrib.right) > 0.5) return 'no margin at the right';
+        if (b.bar && attribAcross(b.bar) && attrib.bottom > b.bar.top - 10 + 0.5) {
+          return 'no margin above the toolbar';
+        }
         return 'ok';
       })
       .toBe('ok');
@@ -745,6 +751,7 @@ describe("the look of maplibre-gl's controls", () => {
         const w = window as unknown as E2EWindow;
         const group = w.map.getContainer().querySelector('.maplibregl-ctrl-group');
         const icon = w.map.getContainer().querySelector('.maplibregl-ctrl-icon');
+        const attrib = w.map.getContainer().querySelector('.maplibregl-ctrl-attrib');
         const probe = document.createElement('div');
         probe.style.background = 'var(--kata-color-panel)';
         w.ui.element.append(probe);
@@ -753,6 +760,14 @@ describe("the look of maplibre-gl's controls", () => {
         return {
           group: group ? getComputedStyle(group).backgroundColor : '',
           icon: icon ? getComputedStyle(icon).filter : '',
+          attrib: attrib
+            ? {
+                background: getComputedStyle(attrib).backgroundColor,
+                radius: getComputedStyle(attrib).borderRadius,
+                line: getComputedStyle(attrib).boxShadow,
+                group: group ? getComputedStyle(group).boxShadow : '',
+              }
+            : null,
           panel,
         };
       });
@@ -761,6 +776,14 @@ describe("the look of maplibre-gl's controls", () => {
     expect(dark.group).toBe(dark.panel);
     expect(dark.group).not.toBe('rgb(255, 255, 255)');
     expect(dark.icon).toBe('invert(1)');
+    // The attribution is a box as the groups are: the panel, square, with their line
+    expect(dark.attrib).toEqual({
+      background: dark.panel,
+      radius: '0px',
+      line: dark.attrib?.group,
+      group: dark.attrib?.group,
+    });
+    expect(dark.attrib?.line).not.toBe('none');
     await page.evaluate(() => (window as unknown as E2EWindow).ui.setTheme('light'));
     const light = await colors();
     expect(light.group).toBe(light.panel);

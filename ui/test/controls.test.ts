@@ -229,7 +229,8 @@ describe('the bottom corners beside the right panel and the attribution', () => 
 
   /**
    * jsdom lays nothing out: a map `width` px wide and 600 tall, the controls of the bottom right
-   * from 480 down, the right pane down to `paneBottom`, gap-md 12, and the attribution's box
+   * from 480 down, the right pane down to `paneBottom`, gap-md 12, and the attribution's box,
+   * with the margin of the corner (10px from the right and from the bottom)
    */
   function layOut(
     width: number,

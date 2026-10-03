@@ -110,10 +110,23 @@
 [data-mgd-ui-controls] .maplibregl-ctrl button:not(:disabled):hover {
   background-color: var(--kata-color-raise);
 }
+/* The attribution, in both of maplibre-gl's forms (the wide band and the compact one, folded to
+ * its (i) button or open), is a box as the other controls are: square, with the line of a group,
+ * and at the bottom right, the margin of the controls of that corner (maplibre-gl gives the wide
+ * form none and the compact form 10px all round). The wide form's text is 8px from the sides of
+ * the box; the compact form keeps maplibre-gl's padding, which holds its (i) button at the end */
 [data-mgd-ui-controls] .maplibregl-ctrl.maplibregl-ctrl-attrib,
 [data-mgd-ui-controls] .maplibregl-ctrl-attrib.maplibregl-compact {
+  border-radius: 0;
+  box-shadow: 0 0 0 var(--kata-border-width) var(--kata-color-line-strong);
   background-color: var(--kata-color-panel);
   color: var(--kata-color-muted);
+}
+[data-mgd-ui-controls] .maplibregl-ctrl.maplibregl-ctrl-attrib:not(.maplibregl-compact) {
+  padding-inline: 8px;
+}
+[data-mgd-ui-controls] .maplibregl-ctrl-bottom-right > .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  margin: 0 10px 10px 0;
 }
 [data-mgd-ui-controls] .maplibregl-ctrl-attrib a {
   color: var(--kata-color-text);

@@ -381,7 +381,11 @@ maplibre-gl's control container (`.maplibregl-control-container`) has
 `data-color-mode` of the root. The groups of buttons, the lines between
 them, the attribution and the scale are painted with the tokens, and
 maplibre-gl's icons, which are dark images, are inverted in the dark
-look (`filter: invert(1)`). Set the tokens on
+look (`filter: invert(1)`). The attribution is a box as the groups
+are, in both of maplibre-gl's forms (the wide band and the compact one):
+square, with their line, and at the bottom right the margin of the
+other controls of that corner (10px from the right and from the
+bottom). Set the tokens on
 `[data-mgd-ui-controls]` to change their look. `destroy()` removes both
 attributes.
 
