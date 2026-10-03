@@ -952,6 +952,36 @@ Each item has the same five parts.
   `render`; `hasPendingWork()` stays useful for the work that no frame
   finishes (the answer of a provider).
 
+## 30. The Far Side of the Globe Is Clipped by Depth
+
+- Upstream behavior — maplibre's globe prelude
+  (`shaders/_projection_globe.vertex.glsl`) places a position on the
+  unit sphere with `projectToSphere` (x is the sine of the longitude, z
+  its cosine) and gives it the clip depth `globeComputeClippingZ`: one
+  minus its distance to `u_projection_clipping_plane`, the plane of the
+  horizon, so a position beyond the horizon lies past the far plane and
+  is clipped. During the transition (`projectionTransition` below 0.999)
+  the depth is mixed in from `z_globeness_threshold` (0.2) on.
+  `map.project` projects such a position onto the near face.
+- What we rely on — the clip and an imitation. A marker and the selection
+  frame of a point (`src/view/renderers/anchored-outline.ts`) put the
+  depth of their anchor on every vertex, so the far side clips them
+  whole. The combined frame of a multiple selection
+  (`src/view/ui/selection-ui/renderer.ts`) is made on the CPU from
+  `map.project`, and leaves out the corners on the far side with
+  `isOnVisibleSideOfGlobe` in `src/shared/math/globe-visibility.ts`, the
+  same test on the projection data of the frame.
+- Symptoms when it breaks — the combined frame reaches to the near-face
+  position of a selected feature behind the sphere, or stops short of one
+  in view.
+- Check when upgrading — `src/e2e/globe.e2e.test.ts` holds that a point
+  behind the sphere gets no frame and that a point near the edge gets the
+  frame of its marker; `src/shared/math/globe-visibility.test.ts` holds
+  the test. Compare `globeComputeClippingZ`, `projectToSphere` and
+  `interpolateProjection` with the new source.
+- Conditions for removal — maplibre exposing a public test of whether a
+  location is hidden by the sphere (its `isLocationOccluded` is internal).
+
 ## When Upgrading the Version
 
 When moving to a new maplibre version, do the following.
@@ -966,7 +996,8 @@ When moving to a new maplibre version, do the following.
   (install it once with `npx playwright-core install
   chromium-headless-shell`)
 - Run `npm run test:e2e` for the real input route (item 17), for the
-  ground on a known DEM (items 2, 8 and 9) and for the globe (item 28)
+  ground on a known DEM (items 2, 8 and 9) and for the globe (items 28
+  and 30)
 - Run `npm run typecheck` and `npm run lint`
 - The unit tests use fake terrain objects, so always confirm the real
   upstream shape (item 7) and the GL state (item 1) by hand

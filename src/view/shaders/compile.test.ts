@@ -29,6 +29,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../../test-utils.js';
+import { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import { PointShapeRenderer } from '../renderers/point/point-shape.js';
@@ -170,6 +171,9 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
   };
 
   withLabel('StrokeRenderer', () => new StrokeRenderer(mapStub, gl).ensureShader(shaderData));
+  withLabel('AnchoredOutlineRenderer', () =>
+    new AnchoredOutlineRenderer(mapStub, gl).ensureShader(shaderData),
+  );
   withLabel('PointInstanceRenderer', () =>
     new PointInstanceRenderer(mapStub, gl).ensureShader(shaderData),
   );
@@ -341,18 +345,18 @@ describe('shader programs on a real WebGL2', () => {
         () => file,
       ),
     );
-    // 10 renderers with one program each and the drape of a quad with two (image and paper);
+    // 11 renderers with one program each and the drape of a quad with two (image and paper);
     // the image and the paper share one call site
-    expect(sites).toHaveLength(11);
+    expect(sites).toHaveLength(12);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(12);
+    expect(programs).toHaveLength(13);
   });
 
   it(
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(24);
+      expect(programs.length).toBe(26);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

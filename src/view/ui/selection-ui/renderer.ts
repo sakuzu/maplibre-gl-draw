@@ -11,15 +11,18 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { SelectionUIConfig } from '../../../shared/config/selection.js';
+import { isOnVisibleSideOfGlobe } from '../../../shared/math/globe-visibility.js';
 import {
   applyMarginToBoundingBox,
   type CoordinateTransform,
   type ScreenPoint,
 } from '../../../shared/math/index.js';
 import type { Coordinate, DragState, Feature } from '../../../store/types.js';
+import type { AnchoredOutlineRenderer, OutlineOffset } from '../../renderers/anchored-outline.js';
 import type { StrokeRenderer } from '../../renderers/stroke.js';
 import { anchorElevationMeters, isAnchorActive, projectAnchorAt } from '../../terrain/anchor.js';
 import { TerrainContext } from '../../terrain/context.js';
+import { anchorGhostOpacity } from '../../terrain/occlusion.js';
 import {
   computeBoundingBox,
   computeCombinedBoundingBox,
@@ -29,22 +32,29 @@ import {
 import type { SelectionExtensionRegistry } from './extension-registry.js';
 import type { BoundingBoxCoords, FramePoint } from './types.js';
 
-/** The frame of a single-coordinate feature, flat at the elevation of the feature */
-interface PointFrame {
-  /** The corners of the frame, closed (the first corner comes again at the end) */
-  coords: Coordinate[];
-  /** The elevation the frame lies at, in meters (0 without terrain) */
+/**
+ * A position the frame is laid around on the screen: the anchor of an outline of
+ * AnchoredOutlineRenderer, and where the CPU projects it
+ */
+interface FrameAnchor {
+  /** The position, `[lng, lat]` */
+  anchor: Coordinate;
+  /** Its height, in meters (0 without terrain) */
   elevationMeters: number;
+  /** Its point on the screen, in CSS px */
+  center: ScreenPoint;
 }
 
-/**
- * How far the positions differ that the scale of the screen around a point is measured
- * between, in pixels at the zoom of the frame
- */
-const POINT_FRAME_PROBE_PX = 4;
+/** The frame of a single-coordinate feature: the corners on the screen around its anchor */
+interface PointFrame extends FrameAnchor {
+  /** The corners of the frame on the screen, in CSS px (not closed) */
+  corners: FramePoint[];
+}
 
 export class SelectionUIRenderer {
   readonly #strokeRenderer: StrokeRenderer;
+  /** Draws the frames that are figures of the screen (a point's, and the combined one) */
+  readonly #outlineRenderer: AnchoredOutlineRenderer;
   /** The Selection UI extension points of the draw instance this renderer belongs to */
   readonly #extensions: SelectionExtensionRegistry;
   /** The terrain state of the draw instance (an inactive one projects with the map) */
@@ -55,11 +65,13 @@ export class SelectionUIRenderer {
 
   constructor(
     strokeRenderer: StrokeRenderer,
+    outlineRenderer: AnchoredOutlineRenderer,
     config: SelectionUIConfig,
     extensions: SelectionExtensionRegistry,
     terrain: TerrainContext = new TerrainContext(),
   ) {
     this.#strokeRenderer = strokeRenderer;
+    this.#outlineRenderer = outlineRenderer;
     this.#config = config;
     this.#extensions = extensions;
     this.#terrain = terrain;
@@ -168,8 +180,11 @@ export class SelectionUIRenderer {
   /**
    * Draw the combined BoundingBox of a multi-selection
    *
-   * Gathers the corners of the margin-applied bbox of each feature and draws the combined AABB.
-   * This contains rotated OBBs (Text/Image) correctly after the margin is applied as well.
+   * The frame is made on the screen from the extent of the projected corners of every feature:
+   * the corners of the frame of a single-coordinate feature (#pointFrame), and the corners of
+   * the margin-applied bbox of the others, projected as they are drawn. A corner the camera
+   * cannot see (on the far side of the globe, or behind the camera) is left out. The rectangle
+   * is drawn as a figure of the screen laid around the first corner seen.
    */
   #drawCombinedBoundingBox(features: Feature[], zoom: number): void {
     if (!this.#transform) {
@@ -178,57 +193,88 @@ export class SelectionUIRenderer {
       if (bbox) this.#strokeBoundingBox(bbox, zoom);
       return;
     }
+    const projectionData = this.#projectionData;
+    if (!projectionData) return;
 
     const margin = this.#config.boundingBox.margin;
     const transform = this.#transform;
-    let minLng = Number.POSITIVE_INFINITY;
-    let maxLng = Number.NEGATIVE_INFINITY;
-    let minLat = Number.POSITIVE_INFINITY;
-    let maxLat = Number.NEGATIVE_INFINITY;
+    const terrain = this.#terrain;
+    const anchored = isAnchorActive(terrain);
+    let reference: FrameAnchor | null = null;
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    const extend = (points: readonly FramePoint[]) => {
+      for (const { x, y } of points) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    };
 
     for (const feature of features) {
       const bbox = computeBoundingBox(feature, this.#extensions);
       if (!bbox) continue;
 
-      // A single-coordinate feature (such as Point) is computed from the extent of the
-      // point frame + the margin, as its own frame is (#pointFrame). The coordinate used is
-      // the center of the bbox (features other than Point can be zero-area too, e.g. a
-      // MultiPoint with a single point, so coordinates must not be treated as a Coordinate)
+      // A single-coordinate feature (such as Point) gives the corners of its own frame. The
+      // coordinate used is the center of the bbox (features other than Point can be zero-area
+      // too, e.g. a MultiPoint with a single point)
       if (hasZeroArea(bbox)) {
-        const frame = this.#pointFrame(feature, bbox.center, zoom);
-        for (const [lng, lat] of frame?.coords ?? []) {
-          minLng = Math.min(minLng, lng);
-          maxLng = Math.max(maxLng, lng);
-          minLat = Math.min(minLat, lat);
-          maxLat = Math.max(maxLat, lat);
-        }
+        const frame = this.#pointFrame(feature, bbox.center);
+        if (!frame || !this.#isSeen(frame)) continue;
+        reference ??= frame;
+        extend(frame.corners);
         continue;
       }
 
       const marginedBbox = applyMarginToBoundingBox(bbox, margin, transform, zoom);
-      const corners = [
+      for (const corner of [
         marginedBbox.topLeft,
         marginedBbox.topRight,
         marginedBbox.bottomRight,
         marginedBbox.bottomLeft,
-      ];
-      for (const corner of corners) {
-        minLng = Math.min(minLng, corner[0]);
-        maxLng = Math.max(maxLng, corner[0]);
-        minLat = Math.min(minLat, corner[1]);
-        maxLat = Math.max(maxLat, corner[1]);
+      ]) {
+        // Projected as the frame of the feature is drawn: on the ground under the corner
+        const elevationMeters = anchorElevationMeters(terrain, corner[0], corner[1]);
+        const center = anchored
+          ? projectAnchorAt(terrain, corner[0], corner[1], elevationMeters)
+          : transform.project(corner);
+        if (!center) continue;
+        const seen: FrameAnchor = { anchor: corner, elevationMeters, center };
+        if (!this.#isSeen(seen)) continue;
+        reference ??= seen;
+        extend([center]);
       }
     }
 
-    if (!Number.isFinite(minLng)) return;
-    const coords: Coordinate[] = [
-      [minLng, maxLat],
-      [maxLng, maxLat],
-      [maxLng, minLat],
-      [minLng, minLat],
-      [minLng, maxLat],
+    if (!reference) return;
+    const { x, y } = reference.center;
+    const corners: OutlineOffset[] = [
+      { x: minX - x, y: minY - y },
+      { x: maxX - x, y: minY - y },
+      { x: maxX - x, y: maxY - y },
+      { x: minX - x, y: maxY - y },
     ];
-    this.#strokePath(coords, zoom);
+    this.#outlineRenderer.draw(
+      [reference.anchor[0], reference.anchor[1]],
+      reference.elevationMeters,
+      corners,
+      this.#config.boundingBox.stroke,
+      1,
+      zoom,
+      projectionData,
+    );
+  }
+
+  /** Whether the camera sees an anchor: not on the far side of the globe */
+  #isSeen({ anchor, elevationMeters }: FrameAnchor): boolean {
+    const projectionData = this.#projectionData;
+    return (
+      !projectionData ||
+      isOnVisibleSideOfGlobe(anchor[0], anchor[1], elevationMeters, projectionData)
+    );
   }
 
   /**
@@ -255,59 +301,50 @@ export class SelectionUIRenderer {
    * zero-area too, e.g. a MultiPoint with a single point, so coordinates must not be
    * treated as a Coordinate).
    *
-   * The frame lies flat at the elevation of the point (see #pointFrame).
+   * The frame is a figure of the screen laid around the point as its marker is (see
+   * #pointFrame): it is seen where the marker is seen, and faint where the terrain makes the
+   * marker faint.
    */
   #drawPointBoundingBox(feature: Feature, coord: Coordinate, zoom: number): void {
-    const frame = this.#pointFrame(feature, coord, zoom);
-    if (!frame) return;
-    this.#strokePath(frame.coords, zoom, {
-      elevationMeters: frame.elevationMeters,
-      followTerrain: false,
-    });
+    const frame = this.#pointFrame(feature, coord);
+    const projectionData = this.#projectionData;
+    if (!frame || !projectionData) return;
+    const { x, y } = frame.center;
+    this.#outlineRenderer.draw(
+      [coord[0], coord[1]],
+      frame.elevationMeters,
+      frame.corners.map((corner) => ({ x: corner.x - x, y: corner.y - y })),
+      this.#config.boundingBox.stroke,
+      anchorGhostOpacity(this.#terrain, coord[0], coord[1]),
+      zoom,
+      projectionData,
+    );
   }
 
   /**
    * The frame of a single-coordinate feature: the extent of its marker + the margin, on the
-   * screen, carried back to positions on the plane at the elevation of the point
+   * screen around the point
    *
-   * The center is projected as the marker is drawn: at the elevation of the point
+   * The center is projected on the CPU as the marker is drawn: at the elevation of the point
    * (`anchorElevationMeters`), with the anchor projection while the terrain is on and with the
-   * map's projection otherwise.
-   *
-   * While the terrain is on, the corners of the frame on the screen are carried back to
-   * positions with the scale of the screen around the point on the plane at its elevation (a
-   * first order approximation), not by casting them onto the ground: on a tilted view the
-   * ground behind the point is farther than the point and the ground in front is nearer, which
-   * stretched the frame. Drawn flat at the same elevation, the corners land where they were put
-   * on the screen. Without terrain the corners are cast onto the map, which is that plane (or
-   * the sphere, where a frame at a low zoom spans too many degrees for a first order
-   * approximation).
+   * map's projection otherwise. The corners stay on the screen; the frame is drawn around the
+   * point projected in the shader, the way the marker is, so it is never carried back onto the
+   * map.
    *
    * @returns null when the point cannot be projected (behind the camera)
    */
-  #pointFrame(feature: Feature, coord: Coordinate, zoom: number): PointFrame | null {
+  #pointFrame(feature: Feature, coord: Coordinate): PointFrame | null {
     const transform = this.#transform;
     if (!transform) return null;
     const terrain = this.#terrain;
     const elevationMeters = anchorElevationMeters(terrain, coord[0], coord[1]);
-    const anchored = isAnchorActive(terrain);
-    const project = (at: Coordinate): ScreenPoint | null =>
-      anchored ? projectAnchorAt(terrain, at[0], at[1], elevationMeters) : transform.project(at);
-
-    const center = project(coord);
+    const center = isAnchorActive(terrain)
+      ? projectAnchorAt(terrain, coord[0], coord[1], elevationMeters)
+      : transform.project(coord);
     if (!center) return null;
     const margin = this.#config.boundingBox.margin;
     const corners = this.#extensions.resolvePointFrameCorners(feature, center, margin);
-    const toPosition = anchored ? screenToPlane(project, coord, center, zoom) : null;
-    const coords: Coordinate[] = corners.map((corner) => {
-      const position = toPosition?.(corner);
-      if (position) return position;
-      // No terrain, or the plane seen edge on: the corner is cast onto the map
-      const at = transform.unproject(corner);
-      return [at.lng, at.lat];
-    });
-    coords.push(coords[0]);
-    return { coords, elevationMeters };
+    return { anchor: coord, elevationMeters, center, corners };
   }
 
   // ---------------- helpers ----------------
@@ -329,74 +366,17 @@ export class SelectionUIRenderer {
   /**
    * Draw the frame
    *
-   * By default the frame follows the ground: the elevation of every point of the path is
-   * looked up with the same function as the handles, so the corners of the frame match the
-   * corner handles and never drift from the position that can be grabbed.
-   *
-   * The frame of a single-coordinate feature is instead a flat plate at the elevation of the
-   * point (`elevationMeters`, without following the ground): its corners were placed on the
-   * screen around the marker, and a plate at the height of the marker keeps them there.
+   * The frame follows the ground: the elevation of every point of the path is looked up with
+   * the same function as the handles, so the corners of the frame match the corner handles and
+   * never drift from the position that can be grabbed.
    */
-  #strokePath(
-    coords: Coordinate[],
-    zoom: number,
-    placement: { elevationMeters?: number; followTerrain: boolean } = { followTerrain: true },
-  ): void {
+  #strokePath(coords: Coordinate[], zoom: number): void {
     this.#strokeRenderer.draw(
       coords,
       this.#config.boundingBox.stroke,
-      {
-        widthUnit: 'pixels',
-        closed: true,
-        followTerrain: placement.followTerrain,
-        ...(placement.elevationMeters !== undefined && {
-          elevationMeters: placement.elevationMeters,
-        }),
-      },
+      { widthUnit: 'pixels', closed: true, followTerrain: true },
       zoom,
       this.#projectionData ?? undefined,
     );
   }
-}
-
-/**
- * The inverse of a projection around a point, to the first order: a point of the screen near
- * `center` to the position whose projection it is
- *
- * The scale of the screen along the longitude and the latitude is measured by projecting
- * positions a few pixels to either side of `coord`.
- *
- * @returns null when the projection is degenerate there (seen edge on, or a probe behind the
- *   camera)
- */
-function screenToPlane(
-  project: (at: Coordinate) => ScreenPoint | null,
-  coord: Coordinate,
-  center: ScreenPoint,
-  zoom: number,
-): ((point: FramePoint) => Coordinate) | null {
-  const [lng, lat] = coord;
-  // Degrees of longitude per pixel at the zoom on a 512 px world, a few pixels' worth
-  const step = (360 / (512 * 2 ** zoom)) * POINT_FRAME_PROBE_PX;
-  const latStep = Math.min(step, Math.max(1e-9, (89.9 - Math.abs(lat)) / 2));
-  const east = project([lng + step, lat]);
-  const west = project([lng - step, lat]);
-  const north = project([lng, lat + latStep]);
-  const south = project([lng, lat - latStep]);
-  if (!east || !west || !north || !south) return null;
-
-  // The screen per degree of longitude (a, c) and of latitude (b, d)
-  const a = (east.x - west.x) / (2 * step);
-  const c = (east.y - west.y) / (2 * step);
-  const b = (north.x - south.x) / (2 * latStep);
-  const d = (north.y - south.y) / (2 * latStep);
-  const det = a * d - b * c;
-  const scale = Math.max(Math.abs(a), Math.abs(b), Math.abs(c), Math.abs(d));
-  if (!Number.isFinite(det) || Math.abs(det) <= 1e-12 * scale * scale) return null;
-
-  return (point) => {
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    return [lng + (d * dx - b * dy) / det, lat + (a * dy - c * dx) / det];
-  };
 }

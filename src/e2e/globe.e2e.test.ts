@@ -497,6 +497,115 @@ describe('the points near the edge of the sphere', () => {
   });
 });
 
+/**
+ * The extent (CSS px) of the pixels of the stroke of the selection frame (#FF2D55) in the
+ * second of two frames, or null when none is drawn (read in the page: the whole picture is
+ * not carried out of it)
+ */
+async function readFrameBox(page: Page): Promise<number[] | null> {
+  return page.evaluate(async () => {
+    const { map } = window as unknown as E2EWindow;
+    const read = (): Promise<number[] | null> =>
+      new Promise((resolve) => {
+        map.once('render', () => {
+          const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+          const width = gl.drawingBufferWidth;
+          const height = gl.drawingBufferHeight;
+          const pixels = new Uint8Array(width * height * 4);
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          const ratio = width / map.getCanvas().clientWidth;
+          const box = [Infinity, Infinity, -Infinity, -Infinity];
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const i = (y * width + x) * 4;
+              const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+              if (r < 200 || g > 100 || b < 50 || b > 130) continue;
+              const sx = x / ratio;
+              const sy = (height - 1 - y) / ratio;
+              box[0] = Math.min(box[0], sx);
+              box[1] = Math.min(box[1], sy);
+              box[2] = Math.max(box[2], sx);
+              box[3] = Math.max(box[3], sy);
+            }
+          }
+          resolve(Number.isFinite(box[0]) ? box : null);
+        });
+        map.triggerRepaint();
+      });
+    await read();
+    return read();
+  });
+}
+
+/** Shows one point with a marker of radius 6 and an outline of 2, and selects it */
+async function selectPoint(page: Page, coordinate: [number, number]): Promise<void> {
+  await show(page, [
+    {
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: coordinate },
+      style: { pointColor: '#00FF00', pointRadius: 6, pointStrokeWidth: 2 },
+    },
+  ]);
+  await page.evaluate(() => {
+    const { draw } = window as unknown as E2EWindow;
+    draw.selection.set('feature', [draw.features.list()[0].id]);
+  });
+  await settle(page);
+}
+
+/** The side of the frame of that marker: the marker (16 px) and the margin on each side */
+const POINT_FRAME_SIDE = 2 * (6 + 2) + 2 * 10;
+
+describe('the selection frame of a point on the globe', () => {
+  it('a point on the far side of the sphere gets no frame', async () => {
+    const page = await openGlobe(CAMERA);
+    // On the near side the frame is drawn around the marker
+    await selectPoint(page, [10, 30]);
+    expect(await readFrameBox(page)).not.toBeNull();
+
+    // Behind the sphere, at a pitch of 0 and turned and pitched
+    for (const camera of [
+      { pitch: 0, bearing: 0 },
+      { pitch: 40, bearing: 30 },
+    ]) {
+      await page.evaluate((c) => (window as unknown as E2EWindow).map.jumpTo(c), camera);
+      await selectPoint(page, [150, -30]);
+      expect(await readFrameBox(page), JSON.stringify(camera)).toBeNull();
+    }
+    await page.close();
+  });
+
+  it('a point near the edge of the sphere gets the frame of its marker, around it', async () => {
+    const page = await openGlobe({ center: [0, -30], zoom: 1 });
+    await page.evaluate(() => (window as unknown as E2EWindow).map.setBearing(30));
+    await settle(page);
+    // The last latitude up the meridian of the center that maplibre projects and unprojects
+    // back to itself (the same edge as the test above)
+    const edge = await page.evaluate(() => {
+      const { map } = window as unknown as E2EWindow;
+      let last = -30;
+      for (let lat = -30; lat < 90; lat += 0.02) {
+        const back = map.unproject(map.project([0, lat]));
+        if (Math.abs(back.lat - lat) > 0.05 || Math.abs(back.lng) > 0.05) break;
+        last = lat;
+      }
+      return last;
+    });
+    const coordinate: [number, number] = [0, edge - 1];
+    await selectPoint(page, coordinate);
+    const box = await readFrameBox(page);
+    expect(box).not.toBeNull();
+    const at = await projected(page, coordinate);
+    const [left, top, right, bottom] = box as number[];
+    // The outer edge of the 2 px stroke is 1 px outside the side of the frame
+    expect(Math.abs(right - left + 1 - 2 - POINT_FRAME_SIDE)).toBeLessThanOrEqual(3);
+    expect(Math.abs(bottom - top + 1 - 2 - POINT_FRAME_SIDE)).toBeLessThanOrEqual(3);
+    expect(Math.abs((left + right) / 2 - at.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs((top + bottom) / 2 - at.y)).toBeLessThanOrEqual(2);
+    await page.close();
+  });
+});
+
 describe('drawing across the antimeridian on the globe', () => {
   /**
    * The east of Australia and the Pacific in view. The globe gives the pointer longitudes in

@@ -6,12 +6,17 @@
  * which has no margin, with `selectionStyle.boundingBox.margin` added on every side
  */
 
+import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { drawProperties } from '../../shared/properties.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
+import type {
+  AnchoredOutlineRenderer,
+  OutlineOffset,
+} from '../../view/renderers/anchored-outline.js';
 import type { StrokeRenderer } from '../../view/renderers/stroke.js';
 import { createSelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import { SelectionUIRenderer } from '../../view/ui/selection-ui/renderer.js';
@@ -89,20 +94,42 @@ const FEATURES: Feature[] = [
   }),
 ];
 
-/** The corners of the frame the renderer draws for one selected feature, on the screen */
-function drawnFrame(target: Feature): ScreenPoint[] {
-  const frames: Coordinate[][] = [];
-  const stroke = { draw: (coords: Coordinate[]) => frames.push(coords) };
+/**
+ * A renderer of selection frames whose drawing is recorded as the corners on the screen: a
+ * frame on the map through its corners, a frame of the screen through its anchor and offsets
+ */
+function recordingRenderer(
+  registry: typeof extensions,
+  project: (lngLat: Coordinate) => ScreenPoint,
+): { renderer: SelectionUIRenderer; frames: ScreenPoint[][] } {
+  const frames: ScreenPoint[][] = [];
+  const stroke = {
+    // The path is closed: the first corner comes again at the end
+    draw: (coords: Coordinate[]) => frames.push(coords.slice(0, 4).map((c) => project(c))),
+  };
+  const outline = {
+    draw: (anchor: Coordinate, _elevation: number, corners: OutlineOffset[]) => {
+      const [x, y] = project(anchor);
+      frames.push(corners.map((c) => [x + c.x, y + c.y] as ScreenPoint));
+    },
+  };
   const renderer = new SelectionUIRenderer(
     stroke as unknown as StrokeRenderer,
+    outline as unknown as AnchoredOutlineRenderer,
     DEFAULT_SELECTION_CONFIG,
-    extensions,
+    registry,
   );
+  renderer.setProjectionData({} as ProjectionData);
+  return { renderer, frames };
+}
+
+/** The corners of the frame the renderer draws for one selected feature, on the screen */
+function drawnFrame(target: Feature): ScreenPoint[] {
+  const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
   renderer.setTransform(transform);
   renderer.draw([target], ZOOM);
   expect(frames).toHaveLength(1);
-  // The path is closed: the first corner comes again at the end
-  return frames[0].slice(0, 4).map((c) => screen.project(c));
+  return frames[0];
 }
 
 /** The distance from a point to the line through two points, positive away from `inside` */
@@ -176,15 +203,10 @@ describe('the selection frame of a built-in point of a draw instance', () => {
         selectionExtensions: registry,
       });
       const [x] = engineScreen.project([0.1, 0.1]);
-      const frames: Coordinate[][] = [];
-      const renderer = new SelectionUIRenderer(
-        { draw: (coords: Coordinate[]) => frames.push(coords) } as unknown as StrokeRenderer,
-        DEFAULT_SELECTION_CONFIG,
-        registry,
-      );
+      const { renderer, frames } = recordingRenderer(registry, (c) => engineScreen.project(c));
       renderer.setTransform(createCoordinateTransform(engineMap));
       renderer.draw([stored], ZOOM);
-      const right = engineScreen.project(frames[0][1])[0];
+      const right = frames[0][1][0];
       return { outline: engineScreen.outline(stored)[1][0] - x, frame: right - x };
     } finally {
       engine.destroy();
@@ -203,6 +225,57 @@ describe('the selection frame of a built-in point of a draw instance', () => {
     expect(frameOf({ pointRadius: 20, pointStrokeWidth: 4 })).toEqual({
       outline: expect.closeTo(24, 6),
       frame: expect.closeTo(24 + MARGIN, 6),
+    });
+  });
+});
+
+describe('the combined frame of a multiple selection', () => {
+  const point = (id: string, coordinates: [number, number]): Feature => ({
+    ...feature('Point', { type: 'Point', coordinates }),
+    id,
+  });
+  const a = point('a', [0.1, 0.1]);
+  const b = point('b', [0.3, -0.1]);
+
+  /** The frames drawn for a selection, with the projection of the frame given */
+  function framesOf(features: Feature[], projection: Partial<ProjectionData>): ScreenPoint[][] {
+    const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
+    renderer.setTransform(transform);
+    renderer.setProjectionData(projection as ProjectionData);
+    renderer.draw(features, ZOOM);
+    return frames;
+  }
+
+  /** The extent of a frame on the screen: [left, top, right, bottom] */
+  const extentOf = (frame: ScreenPoint[]) => [
+    Math.min(...frame.map(([x]) => x)),
+    Math.min(...frame.map(([, y]) => y)),
+    Math.max(...frame.map(([x]) => x)),
+    Math.max(...frame.map(([, y]) => y)),
+  ];
+
+  it('spans the frames of its members on the screen', () => {
+    const frames = framesOf([a, b], {});
+    // The frame of each point, then the combined one
+    expect(frames).toHaveLength(3);
+    // a is up and to the left of b
+    const [left, top] = extentOf(frames[0]);
+    const [, , right, bottom] = extentOf(frames[1]);
+    const expected = [left, top, right, bottom];
+    extentOf(frames[2]).forEach((value, i) => {
+      expect(value).toBeCloseTo(expected[i], 6);
+    });
+  });
+
+  it('leaves out a member on the far side of the globe', () => {
+    // The horizon at longitude 0.2: b (0.3) is behind the sphere
+    const edge = Math.sin((0.2 * Math.PI) / 180);
+    const globe = { clippingPlane: [-1, 0, 0, edge], projectionTransition: 1 } as never;
+    const frames = framesOf([a, b], globe);
+    const own = extentOf(frames[0]);
+    const combined = extentOf(frames[frames.length - 1]);
+    combined.forEach((value, i) => {
+      expect(value).toBeCloseTo(own[i], 6);
     });
   });
 });

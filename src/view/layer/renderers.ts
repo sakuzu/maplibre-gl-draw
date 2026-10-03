@@ -16,6 +16,7 @@ import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import { TextureCache } from '../cache/texture.js';
+import { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import { BatchManager } from '../renderers/batch-manager.js';
 import { FeatureDrawer } from '../renderers/drawer.js';
 import { type ImageErrorFn, ImageRenderer } from '../renderers/image.js';
@@ -42,6 +43,8 @@ export interface Renderers {
   quadShader: QuadShader;
   imageRenderer: ImageRenderer;
   strokeRenderer: StrokeRenderer;
+  /** The outlines laid on the screen around an anchor (the frames of points) */
+  outlineRenderer: AnchoredOutlineRenderer;
   sdfLineRenderer: SDFLineRenderer;
   pointShapeRenderer: PointShapeRenderer;
   pointInstanceRenderer: PointInstanceRenderer;
@@ -108,6 +111,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   );
 
   const strokeRenderer = new StrokeRenderer(mapInstance, gl, pixelRatio, terrain);
+  const outlineRenderer = new AnchoredOutlineRenderer(mapInstance, gl, pixelRatio, terrain);
   const sdfLineRenderer = new SDFLineRenderer(mapInstance, gl, pixelRatio, terrain);
   const pointShapeRenderer = new PointShapeRenderer(mapInstance, gl, pixelRatio, terrain);
   const pointInstanceRenderer = new PointInstanceRenderer(mapInstance, gl, pixelRatio, terrain);
@@ -119,6 +123,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   const selectionExtensions = scope.selection.extensions;
   const selectionUIRenderer = new SelectionUIRenderer(
     strokeRenderer,
+    outlineRenderer,
     selectionConfig,
     selectionExtensions,
     terrain,
@@ -179,6 +184,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     tentativeRenderer,
     quadShader,
     strokeRenderer,
+    outlineRenderer,
     pointShapeRenderer,
     pointInstanceRenderer,
     sdfLineRenderer,
@@ -202,6 +208,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     quadShader,
     imageRenderer,
     strokeRenderer,
+    outlineRenderer,
     sdfLineRenderer,
     pointShapeRenderer,
     pointInstanceRenderer,
@@ -243,6 +250,7 @@ const GPU_OWNERS = [
   'textureCache',
   'quadShader',
   'strokeRenderer',
+  'outlineRenderer',
   'pointShapeRenderer',
   'pointInstanceRenderer',
   'sdfLineRenderer',
