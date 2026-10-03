@@ -17,7 +17,9 @@ import type {
   AnchoredOutlineRenderer,
   OutlineOffset,
 } from '../../view/renderers/anchored-outline.js';
+import type { PointShapeRenderer } from '../../view/renderers/point/point-shape.js';
 import type { StrokeRenderer } from '../../view/renderers/stroke.js';
+import { SelectionHandlesRenderer } from '../../view/ui/handles.js';
 import { createSelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import { SelectionUIRenderer } from '../../view/ui/selection-ui/renderer.js';
 import type { ScreenPoint } from '../events.js';
@@ -234,48 +236,41 @@ describe('the combined frame of a multiple selection', () => {
     ...feature('Point', { type: 'Point', coordinates }),
     id,
   });
-  const a = point('a', [0.1, 0.1]);
-  const b = point('b', [0.3, -0.1]);
+  const [, , , line, polygon] = FEATURES;
 
-  /** The frames drawn for a selection, with the projection of the frame given */
-  function framesOf(features: Feature[], projection: Partial<ProjectionData>): ScreenPoint[][] {
+  /** The corners of the combined frame (the last frame drawn) and of the corner handles */
+  function frameAndHandles(features: Feature[]): { frame: ScreenPoint[]; handles: ScreenPoint[] } {
     const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
     renderer.setTransform(transform);
-    renderer.setProjectionData(projection as ProjectionData);
     renderer.draw(features, ZOOM);
-    return frames;
+
+    const handles: ScreenPoint[] = [];
+    const handlesRenderer = new SelectionHandlesRenderer(
+      { draw: () => {} } as unknown as StrokeRenderer,
+      {
+        draw: (position: Coordinate) => handles.push(screen.project(position)),
+      } as unknown as PointShapeRenderer,
+      DEFAULT_SELECTION_CONFIG,
+    );
+    handlesRenderer.setTransform(transform);
+    const bbox = renderer.computeCombinedFeatureBoundingBox(features);
+    if (!bbox) throw new Error('no box');
+    handlesRenderer.drawResizeHandles(bbox, ZOOM);
+    return { frame: frames[frames.length - 1], handles };
   }
 
-  /** The extent of a frame on the screen: [left, top, right, bottom] */
-  const extentOf = (frame: ScreenPoint[]) => [
-    Math.min(...frame.map(([x]) => x)),
-    Math.min(...frame.map(([, y]) => y)),
-    Math.max(...frame.map(([x]) => x)),
-    Math.max(...frame.map(([, y]) => y)),
-  ];
-
-  it('spans the frames of its members on the screen', () => {
-    const frames = framesOf([a, b], {});
-    // The frame of each point, then the combined one
-    expect(frames).toHaveLength(3);
-    // a is up and to the left of b
-    const [left, top] = extentOf(frames[0]);
-    const [, , right, bottom] = extentOf(frames[1]);
-    const expected = [left, top, right, bottom];
-    extentOf(frames[2]).forEach((value, i) => {
-      expect(value).toBeCloseTo(expected[i], 6);
-    });
-  });
-
-  it('leaves out a member on the far side of the globe', () => {
-    // The horizon at longitude 0.2: b (0.3) is behind the sphere
-    const edge = Math.sin((0.2 * Math.PI) / 180);
-    const globe = { clippingPlane: [-1, 0, 0, edge], projectionTransition: 1 } as never;
-    const frames = framesOf([a, b], globe);
-    const own = extentOf(frames[0]);
-    const combined = extentOf(frames[frames.length - 1]);
-    combined.forEach((value, i) => {
-      expect(value).toBeCloseTo(own[i], 6);
-    });
+  it.each([
+    ['features with an area', [line, polygon]],
+    ['points only', [point('a', [0.1, 0.1]), point('b', [0.3, -0.1])]],
+    ['points and a line', [point('a', [0.1, 0.4]), line]],
+  ] as const)('of %s has its corners on the corner handles', (_name, features) => {
+    const { frame, handles } = frameAndHandles([...features]);
+    expect(frame).toHaveLength(4);
+    for (const corner of frame) {
+      const nearest = Math.min(
+        ...handles.map(([x, y]) => Math.hypot(x - corner[0], y - corner[1])),
+      );
+      expect(nearest).toBeCloseTo(0, 6);
+    }
   });
 });

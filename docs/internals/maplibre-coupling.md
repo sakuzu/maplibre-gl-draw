@@ -955,32 +955,29 @@ Each item has the same five parts.
 ## 30. The Far Side of the Globe Is Clipped by Depth
 
 - Upstream behavior — maplibre's globe prelude
-  (`shaders/_projection_globe.vertex.glsl`) places a position on the
-  unit sphere with `projectToSphere` (x is the sine of the longitude, z
-  its cosine) and gives it the clip depth `globeComputeClippingZ`: one
-  minus its distance to `u_projection_clipping_plane`, the plane of the
-  horizon, so a position beyond the horizon lies past the far plane and
-  is clipped. During the transition (`projectionTransition` below 0.999)
-  the depth is mixed in from `z_globeness_threshold` (0.2) on.
-  `map.project` projects such a position onto the near face.
-- What we rely on — the clip and an imitation. A marker and the selection
-  frame of a point (`src/view/renderers/anchored-outline.ts`) put the
-  depth of their anchor on every vertex, so the far side clips them
-  whole. The combined frame of a multiple selection
-  (`src/view/ui/selection-ui/renderer.ts`) is made on the CPU from
-  `map.project`, and leaves out the corners on the far side with
-  `isOnVisibleSideOfGlobe` in `src/shared/math/globe-visibility.ts`, the
-  same test on the projection data of the frame.
-- Symptoms when it breaks — the combined frame reaches to the near-face
-  position of a selected feature behind the sphere, or stops short of one
-  in view.
+  (`shaders/_projection_globe.vertex.glsl`) gives a position the clip
+  depth `globeComputeClippingZ`: one minus its distance to
+  `u_projection_clipping_plane`, the plane of the horizon, so a position
+  beyond the horizon lies past the far plane and is clipped. During the
+  transition (`projectionTransition` below 0.999) the depth is mixed in
+  from `z_globeness_threshold` (0.2) on. `map.project` projects such a
+  position onto the near face.
+- What we rely on — assumption. Our shaders project through
+  `projectTileWithElevation`, so the clip hides what lies behind the
+  sphere. A marker and the selection frame of a point
+  (`src/view/renderers/anchored-outline.ts`) put the depth of their
+  anchor on every vertex, so the far side clips them whole; the combined
+  frame of a multiple selection is a box on the map and is clipped like
+  any line. Nothing of a frame is made from `map.project` on the CPU.
+- Symptoms when it breaks — the frame of a selected point behind the
+  sphere is drawn on its near face.
 - Check when upgrading — `src/e2e/globe.e2e.test.ts` holds that a point
-  behind the sphere gets no frame and that a point near the edge gets the
-  frame of its marker; `src/shared/math/globe-visibility.test.ts` holds
-  the test. Compare `globeComputeClippingZ`, `projectToSphere` and
-  `interpolateProjection` with the new source.
-- Conditions for removal — maplibre exposing a public test of whether a
-  location is hidden by the sphere (its `isLocationOccluded` is internal).
+  behind the sphere and the combined frame of points behind it draw no
+  frame, and that a point near the edge gets the frame of its marker.
+  Compare `globeComputeClippingZ` and `interpolateProjection` with the new
+  source.
+- Conditions for removal — none while the engine projects its vertices
+  with maplibre's prelude.
 
 ## When Upgrading the Version
 

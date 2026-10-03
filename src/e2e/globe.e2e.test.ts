@@ -575,6 +575,28 @@ describe('the selection frame of a point on the globe', () => {
     await page.close();
   });
 
+  it('the combined frame of points behind the sphere is clipped with them', async () => {
+    const page = await openGlobe(CAMERA);
+    await page.evaluate(() => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.setMode('select');
+      draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+      // Two points behind the sphere: the combined frame is a box on the map between them
+      const ids = [
+        [150, -30],
+        [165, -15],
+      ].map(
+        (coordinates) =>
+          draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates } })?.id ??
+          '',
+      );
+      draw.selection.set('feature', ids);
+    });
+    await settle(page);
+    expect(await readFrameBox(page)).toBeNull();
+    await page.close();
+  });
+
   it('a point near the edge of the sphere gets the frame of its marker, around it', async () => {
     const page = await openGlobe({ center: [0, -30], zoom: 1 });
     await page.evaluate(() => (window as unknown as E2EWindow).map.setBearing(30));

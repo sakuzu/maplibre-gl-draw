@@ -705,6 +705,150 @@ describe('drawing on a pitched and rotated map', () => {
   });
 });
 
+describe('the combined frame of a multiple selection on a turned and pitched map', () => {
+  /**
+   * How the frame (green) and the corner handles (blue) lie: how far the frame strays outside
+   * the convex hull of the handles, and how far the farthest corner of that hull is from the
+   * frame (CSS px)
+   */
+  async function frameAgainstHandles(): Promise<{ outside: number; reach: number }> {
+    return page.evaluate(
+      () =>
+        new Promise<{ outside: number; reach: number }>((resolve) => {
+          const { map } = window as unknown as E2EWindow;
+          map.once('render', () => {
+            const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+            const width = gl.drawingBufferWidth;
+            const height = gl.drawingBufferHeight;
+            const ratio = width / map.getCanvas().clientWidth;
+            const pixels = new Uint8Array(width * height * 4);
+            gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            const green: number[][] = [];
+            const blue: number[][] = [];
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                const i = (y * width + x) * 4;
+                const [r, g, b] = [pixels[i], pixels[i + 1], pixels[i + 2]];
+                const at = [x / ratio, (height - 1 - y) / ratio];
+                if (g > 200 && r < 60 && b < 60) green.push(at);
+                else if (b > 200 && r < 60 && g < 60) blue.push(at);
+              }
+            }
+            // The convex hull of the handles (monotone chain), counterclockwise in y-down terms
+            const sorted = [...blue].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+            const cross = (o: number[], a: number[], b: number[]) =>
+              (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+            const half = (points: number[][]) => {
+              const chain: number[][] = [];
+              for (const p of points) {
+                while (
+                  chain.length >= 2 &&
+                  cross(chain[chain.length - 2], chain[chain.length - 1], p) <= 0
+                ) {
+                  chain.pop();
+                }
+                chain.push(p);
+              }
+              chain.pop();
+              return chain;
+            };
+            const hull = [...half(sorted), ...half([...sorted].reverse())];
+            // How far a point is outside the hull (0 inside)
+            const outsideOf = (p: number[]) => {
+              let worst = 0;
+              for (let i = 0; i < hull.length; i++) {
+                const a = hull[i];
+                const b = hull[(i + 1) % hull.length];
+                const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+                if (length === 0) continue;
+                worst = Math.max(worst, -cross(a, b, p) / length);
+              }
+              return worst;
+            };
+            const outside = Math.max(...green.map(outsideOf));
+            const reach = Math.max(
+              ...hull.map((corner) =>
+                Math.min(...green.map((p) => Math.hypot(p[0] - corner[0], p[1] - corner[1]))),
+              ),
+            );
+            resolve({ outside, reach });
+          });
+          map.triggerRepaint();
+        }),
+    );
+  }
+
+  beforeAll(async () => {
+    await clearAll(page);
+    const squares = [
+      [at(-120, -60), at(-40, 20)],
+      [at(30, 0), at(110, 70)],
+    ];
+    const rings: number[][][] = [];
+    for (const [from, to] of squares) {
+      const corners = [from, { x: to.x, y: from.y }, to, { x: from.x, y: to.y }, from];
+      rings.push(await Promise.all(corners.map((corner) => lngLatOf(page, corner))));
+    }
+    await page.evaluate((list) => {
+      const { draw } = window as unknown as E2EWindow;
+      const w = window as unknown as { e2eSelectionStyle: unknown };
+      w.e2eSelectionStyle = draw.options.get().selectionStyle;
+      draw.options.update({
+        selectionStyle: {
+          boundingBox: {
+            stroke: { width: 2, color: '#00ff00', opacity: 1, lineStyle: 'solid' },
+            margin: 10,
+          },
+          resizeHandle: {
+            point: {
+              shape: 'square',
+              size: 10,
+              fillColor: '#0000ff',
+              fillOpacity: 1,
+              strokeColor: '#0000ff',
+              strokeWidth: 0,
+              strokeOpacity: 1,
+            },
+          },
+        },
+      });
+      const ids = list.map(
+        (ring) =>
+          draw.features.create({
+            type: 'Polygon',
+            geometry: { type: 'Polygon', coordinates: [ring] },
+            style: { strokeColor: '#808080', fillColor: '#808080' },
+          })?.id ?? '',
+      );
+      draw.selection.set('feature', ids);
+    }, rings);
+    await settle(page);
+  });
+
+  afterAll(async () => {
+    await page.evaluate((camera) => {
+      const { map, draw } = window as unknown as E2EWindow;
+      map.jumpTo({ ...camera, pitch: 0, bearing: 0 });
+      const saved = (window as unknown as { e2eSelectionStyle: unknown }).e2eSelectionStyle;
+      draw.options.update({ selectionStyle: saved as never });
+    }, FLAT);
+    await clearAll(page);
+  });
+
+  it.each([
+    { bearing: 30, pitch: 0 },
+    { bearing: 30, pitch: 50 },
+  ])('has its corners on the corner handles at bearing $bearing, pitch $pitch', async (view) => {
+    await page.evaluate((camera) => (window as unknown as E2EWindow).map.jumpTo(camera), view);
+    await settle(page);
+    const { outside, reach } = await frameAgainstHandles();
+    // The frame stays within the hull of the handles (its line is 2 px wide)
+    expect(outside).toBeLessThanOrEqual(1.5);
+    // and runs into every handle: the frame leaves a 10 px handle within its side
+    expect(reach).toBeLessThanOrEqual(12);
+  });
+});
+
 describe('a replaced Store that held its features before the instance, with null fields', () => {
   afterAll(async () => {
     // The other tests use an instance over the built-in Store

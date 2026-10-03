@@ -11,14 +11,13 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { SelectionUIConfig } from '../../../shared/config/selection.js';
-import { isOnVisibleSideOfGlobe } from '../../../shared/math/globe-visibility.js';
 import {
   applyMarginToBoundingBox,
   type CoordinateTransform,
   type ScreenPoint,
 } from '../../../shared/math/index.js';
 import type { Coordinate, DragState, Feature } from '../../../store/types.js';
-import type { AnchoredOutlineRenderer, OutlineOffset } from '../../renderers/anchored-outline.js';
+import type { AnchoredOutlineRenderer } from '../../renderers/anchored-outline.js';
 import type { StrokeRenderer } from '../../renderers/stroke.js';
 import { anchorElevationMeters, isAnchorActive, projectAnchorAt } from '../../terrain/anchor.js';
 import { TerrainContext } from '../../terrain/context.js';
@@ -32,28 +31,21 @@ import {
 import type { SelectionExtensionRegistry } from './extension-registry.js';
 import type { BoundingBoxCoords, FramePoint } from './types.js';
 
-/**
- * A position the frame is laid around on the screen: the anchor of an outline of
- * AnchoredOutlineRenderer, and where the CPU projects it
- */
-interface FrameAnchor {
-  /** The position, `[lng, lat]` */
+/** The frame of a single-coordinate feature: the corners on the screen around its anchor */
+interface PointFrame {
+  /** The position, `[lng, lat]` (the anchor of the outline) */
   anchor: Coordinate;
   /** Its height, in meters (0 without terrain) */
   elevationMeters: number;
   /** Its point on the screen, in CSS px */
   center: ScreenPoint;
-}
-
-/** The frame of a single-coordinate feature: the corners on the screen around its anchor */
-interface PointFrame extends FrameAnchor {
   /** The corners of the frame on the screen, in CSS px (not closed) */
   corners: FramePoint[];
 }
 
 export class SelectionUIRenderer {
   readonly #strokeRenderer: StrokeRenderer;
-  /** Draws the frames that are figures of the screen (a point's, and the combined one) */
+  /** Draws the frames of points, which are figures of the screen */
   readonly #outlineRenderer: AnchoredOutlineRenderer;
   /** The Selection UI extension points of the draw instance this renderer belongs to */
   readonly #extensions: SelectionExtensionRegistry;
@@ -132,7 +124,7 @@ export class SelectionUIRenderer {
         this.#drawIndividualBoundingBox(feature, zoom);
       }
     }
-    this.#drawCombinedBoundingBox(features, zoom);
+    this.#drawBoundingBoxWithMargin(features, zoom);
   }
 
   /**
@@ -178,107 +170,13 @@ export class SelectionUIRenderer {
   }
 
   /**
-   * Draw the combined BoundingBox of a multi-selection
+   * Draw the BoundingBox with a margin: the frame of a single selection, and the combined frame
+   * of a multi-selection
    *
-   * The frame is made on the screen from the extent of the projected corners of every feature:
-   * the corners of the frame of a single-coordinate feature (#pointFrame), and the corners of
-   * the margin-applied bbox of the others, projected as they are drawn. A corner the camera
-   * cannot see (on the far side of the globe, or behind the camera) is left out. The rectangle
-   * is drawn as a figure of the screen laid around the first corner seen.
-   */
-  #drawCombinedBoundingBox(features: Feature[], zoom: number): void {
-    if (!this.#transform) {
-      // The fallback when there is no transform (without a margin)
-      const bbox = computeCombinedBoundingBox(features, this.#extensions);
-      if (bbox) this.#strokeBoundingBox(bbox, zoom);
-      return;
-    }
-    const projectionData = this.#projectionData;
-    if (!projectionData) return;
-
-    const margin = this.#config.boundingBox.margin;
-    const transform = this.#transform;
-    const terrain = this.#terrain;
-    const anchored = isAnchorActive(terrain);
-    let reference: FrameAnchor | null = null;
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    const extend = (points: readonly FramePoint[]) => {
-      for (const { x, y } of points) {
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-      }
-    };
-
-    for (const feature of features) {
-      const bbox = computeBoundingBox(feature, this.#extensions);
-      if (!bbox) continue;
-
-      // A single-coordinate feature (such as Point) gives the corners of its own frame. The
-      // coordinate used is the center of the bbox (features other than Point can be zero-area
-      // too, e.g. a MultiPoint with a single point)
-      if (hasZeroArea(bbox)) {
-        const frame = this.#pointFrame(feature, bbox.center);
-        if (!frame || !this.#isSeen(frame)) continue;
-        reference ??= frame;
-        extend(frame.corners);
-        continue;
-      }
-
-      const marginedBbox = applyMarginToBoundingBox(bbox, margin, transform, zoom);
-      for (const corner of [
-        marginedBbox.topLeft,
-        marginedBbox.topRight,
-        marginedBbox.bottomRight,
-        marginedBbox.bottomLeft,
-      ]) {
-        // Projected as the frame of the feature is drawn: on the ground under the corner
-        const elevationMeters = anchorElevationMeters(terrain, corner[0], corner[1]);
-        const center = anchored
-          ? projectAnchorAt(terrain, corner[0], corner[1], elevationMeters)
-          : transform.project(corner);
-        if (!center) continue;
-        const seen: FrameAnchor = { anchor: corner, elevationMeters, center };
-        if (!this.#isSeen(seen)) continue;
-        reference ??= seen;
-        extend([center]);
-      }
-    }
-
-    if (!reference) return;
-    const { x, y } = reference.center;
-    const corners: OutlineOffset[] = [
-      { x: minX - x, y: minY - y },
-      { x: maxX - x, y: minY - y },
-      { x: maxX - x, y: maxY - y },
-      { x: minX - x, y: maxY - y },
-    ];
-    this.#outlineRenderer.draw(
-      [reference.anchor[0], reference.anchor[1]],
-      reference.elevationMeters,
-      corners,
-      this.#config.boundingBox.stroke,
-      1,
-      zoom,
-      projectionData,
-    );
-  }
-
-  /** Whether the camera sees an anchor: not on the far side of the globe */
-  #isSeen({ anchor, elevationMeters }: FrameAnchor): boolean {
-    const projectionData = this.#projectionData;
-    return (
-      !projectionData ||
-      isOnVisibleSideOfGlobe(anchor[0], anchor[1], elevationMeters, projectionData)
-    );
-  }
-
-  /**
-   * Draw the BoundingBox with a margin (for a single selection)
+   * The combined frame is the box the resize and rotate handles are placed on
+   * (computeCombinedBoundingBox, where a point counts by its coordinate, with the same margin as
+   * the handles), so its corners are the corner handles on every map. It is drawn on the map like
+   * any frame with an area, so the far side of the globe clips it as it clips the features.
    */
   #drawBoundingBoxWithMargin(features: Feature[], zoom: number): void {
     const bbox = computeCombinedBoundingBox(features, this.#extensions);

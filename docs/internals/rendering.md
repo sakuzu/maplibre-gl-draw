@@ -1651,9 +1651,8 @@ the path of maplibre's layers.
 - The other paths drawn on the CPU are cut with the line cell before they
   are drawn: the dashes of features (`densifyPathForGlobe` before
   `splitIntoDashes`) and the outlines of the selection UI
-  (`StrokeRenderer`). The frame of a point and the combined frame of a
-  multiple selection are figures of the screen laid around an anchor
-  (`AnchoredOutlineRenderer`), so there is nothing to cut
+  (`StrokeRenderer`). The frame of a point is a figure of the screen laid
+  around an anchor (`AnchoredOutlineRenderer`), so there is nothing to cut
 - Images (`QuadShader`) are cut with the fill cell into the grid of the
   terrain's degraded path (`buildQuadGrid`, one piece per cell): the
   corners are interpolated on the Mercator plane and the texture
