@@ -257,6 +257,16 @@ the controls of the bottom right move out of its way instead (see
 [Map controls](#map-controls)). `padding: false` leaves the map's
 padding alone.
 
+When the selection of drawn features changes, the map pans once, after
+the panels have opened for it, so that the selection shows in the part
+of the map the interface leaves visible: the map less the left and the
+right panels, the sheets at the bottom, and the band of the toolbar
+and of the attribution's box. A selection already inside that part, as
+one clicked on the map is, does not move the map. The pan moves the
+centre only (`easeTo`): the zoom never changes, and a selection larger
+than that part is centred in it. A row of a dataset is not a selection
+of the draw instance and is left to the application.
+
 On the left, the layer panel and the legend share a panel, in two tabs.
 The layer panel has two sections, Stack and Basemap. Stack is the tree
 of the layers, their groups and their features, from the front, with

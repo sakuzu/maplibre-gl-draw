@@ -794,6 +794,107 @@ describe("maplibre-gl's controls and the padding of the map", () => {
   });
 });
 
+describe('the selection of drawn features', () => {
+  /**
+   * The box of a feature and the part of the map the interface leaves visible, on the map's
+   * container: less the left and the right panes, above the toolbar and the attribution
+   */
+  function read(id: string) {
+    return page.evaluate((featureId) => {
+      const w = window as unknown as E2EWindow;
+      const map = w.map.getContainer().getBoundingClientRect();
+      const boxOf = (selector: string, within: Element) => {
+        const el = within.querySelector(selector);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 ? r : null;
+      };
+      const root = w.ui.element;
+      const left = boxOf('[data-role="shell"] [data-region="left"]', root);
+      const right = boxOf('[data-role="shell"] [data-region="right"]', root);
+      const bar = boxOf('[data-region="bottom"] [data-role="drawbar"]', root);
+      const attrib = boxOf('.maplibregl-ctrl-attrib', w.map.getContainer());
+      const geometry = w.draw.features.get(featureId)?.geometry;
+      if (geometry?.type !== 'Polygon') throw new Error('no polygon');
+      const points = geometry.coordinates[0].map((p) =>
+        w.map.project([p[0] as number, p[1] as number]),
+      );
+      return {
+        box: {
+          left: Math.min(...points.map((p) => p.x)),
+          top: Math.min(...points.map((p) => p.y)),
+          right: Math.max(...points.map((p) => p.x)),
+          bottom: Math.max(...points.map((p) => p.y)),
+        },
+        visible: {
+          left: left ? left.right - map.left : 0,
+          top: 0,
+          right: right ? right.left - map.left : map.width,
+          bottom: Math.min(
+            map.height,
+            bar ? bar.top - map.top : map.height,
+            attrib ? attrib.top - map.top : map.height,
+          ),
+        },
+        rightOpen: !!right,
+        center: w.map.getCenter().toArray(),
+      };
+    }, id);
+  }
+
+  const inside = (r: Awaited<ReturnType<typeof read>>) =>
+    r.box.left >= r.visible.left - 0.5 &&
+    r.box.right <= r.visible.right + 0.5 &&
+    r.box.top >= r.visible.top - 0.5 &&
+    r.box.bottom <= r.visible.bottom + 0.5;
+
+  it('pans into the part of the map left visible when the right pane opens over it, and stays where it shows', async () => {
+    page = await openPage(browser, site, { width: 768, height: 800 });
+    const { polygon } = await ids();
+    // The left pane closed (Shift+L), so that the polygon fits beside the right one, and the
+    // polygon where the right pane opens
+    await page.mouse.move(300, 300);
+    await page.keyboard.press('Shift+L');
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).map.jumpTo({ center: [139.758, 35.676] }),
+    );
+    await settle(page);
+    const before = await read(polygon);
+    expect(before.rightOpen).toBe(false);
+    expect(before.visible.left).toBe(0);
+    const zoom = await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom());
+
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      polygon,
+    );
+    await expect
+      .poll(
+        async () => {
+          const now = await read(polygon);
+          if (!now.rightOpen) return 'closed';
+          return inside(now) ? 'inside' : 'outside';
+        },
+        { timeout: browserTimeout(10_000) },
+      )
+      .toBe('inside');
+    const revealed = await read(polygon);
+    expect(revealed.center).not.toEqual(before.center);
+    expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
+
+    // Selected again where it shows, it does not move the map
+    await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.clear());
+    await expect.poll(async () => (await read(polygon)).rightOpen).toBe(false);
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      polygon,
+    );
+    await expect.poll(async () => (await read(polygon)).rightOpen).toBe(true);
+    await page.waitForTimeout(300);
+    expect((await read(polygon)).center).toEqual(revealed.center);
+  });
+});
+
 describe("the look of maplibre-gl's controls", () => {
   it('follows the theme of the interface', async () => {
     page = await openPage(browser, site);

@@ -47,6 +47,7 @@ import {
   resolveMessages,
 } from './messages.js';
 import { type MapPadding, mapPadding, type ShellInset } from './padding.js';
+import { reveal, screenBox, visibleRegion } from './reveal.js';
 import { Box } from './store.js';
 import { checkTheme, setLight, type Theme, themeControl } from './theme.js';
 import { checkSpec, entryId, insertTool, normalizeTools, toSpec } from './tools.js';
@@ -178,7 +179,9 @@ function toolsHandle(
  * inspector on the right while something is selected. The map's padding follows the interface:
  * the room the left panel takes (beside the map or floating over it) at the left and the sheets
  * at the bottom, so that `fitBounds` and `easeTo` keep clear of them; `destroy()` gives the map
- * its padding back. The last section of the layer panel is the basemap, whose row opens the
+ * its padding back. When the selection of drawn features changes, the map pans once (the zoom
+ * stays) so that it shows clear of the panels, the sheets, the toolbar and the attribution,
+ * unless it shows there already. The last section of the layer panel is the basemap, whose row opens the
  * basemaps of `options.basemaps` to choose from on the right, in the place of the inspector, when
  * there are two or more. A button at the top right switches between the
  * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
@@ -238,6 +241,8 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   const lift = cornerLift(map.getContainer(), root);
   // The map keeps its view clear of the left region and of the sheets
   const padding: MapPadding | null = options.padding === false ? null : mapPadding(map);
+  // A new selection of drawn features is brought into the part of the map left visible
+  const revealing = selectionReveal(draw, root);
   const view = mount(DrawUIView, {
     target: root,
     props: {
@@ -253,6 +258,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
         padding?.update(inset);
         controls.setNarrow(narrow);
         lift.update(inset, narrow);
+        revealing.inset(inset);
       },
       side: options.side,
       light,
@@ -350,10 +356,96 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       controlContainer?.removeAttribute('data-color-mode');
       basemaps.destroy();
       padding?.destroy();
+      revealing.destroy();
       lift.destroy();
       controls.destroy();
       unmount(view);
       root.remove();
+    },
+  };
+}
+
+/** The selection revealed, following the inset of the shell */
+interface SelectionReveal {
+  /** Takes the inset the shell reported; a selection waiting for it is revealed in the next task */
+  inset(inset: ShellInset): void;
+  /** Stops following the selection */
+  destroy(): void;
+}
+
+/**
+ * Reveals the selection of drawn features each time it changes (reveal.ts), once the shell's
+ * insets have settled for it: the right region opens with a selection, and the shell measures it
+ * in a ResizeObserver delivery and reports the inset in the next frame. So the selection is
+ * revealed in the task after the next inset, or, when none comes within two frames (the regions
+ * did not change), in the task after those. The map pans with `easeTo`, the centre only.
+ *
+ * Every call to the map is guarded: once the map is removed, or its container leaves the page,
+ * nothing is done.
+ */
+function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
+  const map = draw.getMap();
+  let inset: ShellInset = { top: 0, right: 0, bottom: 0, left: 0 };
+  let pending = false;
+  let destroyed = false;
+  let frame = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  /** Reveals in the next task */
+  const soon = () => {
+    cancel();
+    timer = setTimeout(run, 0);
+  };
+  function run() {
+    cancel();
+    if (destroyed || !pending) return;
+    pending = false;
+    try {
+      const container = map.getContainer();
+      if (!container.isConnected) return;
+      const selection = draw.selection.get();
+      if (selection.type !== 'feature') return;
+      const geometries = selection.ids.flatMap((id) => {
+        const feature = draw.features.get(id);
+        return feature ? [feature.geometry] : [];
+      });
+      const box = screenBox(geometries, (lngLat) => map.project(lngLat));
+      if (!box) return;
+      const by = reveal(box, visibleRegion(container, root, inset));
+      if (!by) return;
+      const centre = map.project(map.getCenter());
+      map.easeTo({ center: map.unproject([centre.x + by.x, centre.y + by.y]) });
+    } catch {
+      // The map is gone
+    }
+  }
+  const off = draw.on('selection.changed', ({ selection }) => {
+    cancel();
+    pending = selection.type === 'feature' && selection.ids.length > 0;
+    if (!pending) return;
+    frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        soon();
+      });
+    });
+  });
+  return {
+    inset(next: ShellInset) {
+      if (destroyed) return;
+      inset = { ...next };
+      if (pending) soon();
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      cancel();
+      off();
     },
   };
 }
