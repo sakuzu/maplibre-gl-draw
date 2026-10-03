@@ -18,7 +18,8 @@
  *   4. Within the same priority, the closer one wins
  *
  * 'snap.change' is emitted only when the result changed (the event of the instance is
- * 'snap.changed'). When the snap comes off, it is emitted once without a target.
+ * 'snap.changed'). When the snap comes off, it is emitted once without a target, and so is
+ * a clear (leaving a mode, an input the mode does not snap, turning snapping off).
  */
 
 import type { ModifierKeys } from '../dispatcher/types.js';
@@ -221,6 +222,17 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
   }
 
   /**
+   * Drops the result when it holds a target, emitting the change once without a target (the
+   * same event as a snap that comes off). A result without a target is left as it is.
+   */
+  function clear(): void {
+    if (!lastResult?.target) return;
+    const { lngLat } = lastResult;
+    lastResult = null;
+    deps.eventEmitter?.emit('snap.change', { lngLat });
+  }
+
+  /**
    * Evaluates a single candidate and updates best
    *
    * They are compared by the priority of the kind first and then by distance, and only
@@ -385,7 +397,10 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
 
     setEnabled(value: boolean): void {
       enabled = value;
+      if (!value) clear();
     },
+
+    clear,
 
     setTolerance(px: number): void {
       options.tolerancePx = px;
@@ -401,6 +416,7 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
 
     setKindEnabled(kind: SnapTargetKind, value: boolean): void {
       options.kinds[kind] = value;
+      if (!value) clear();
     },
 
     isKindEnabled(kind: SnapTargetKind): boolean {

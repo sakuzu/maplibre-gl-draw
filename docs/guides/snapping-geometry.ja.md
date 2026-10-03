@@ -117,6 +117,12 @@ draw.options.get().snapping; // 現在の設定
 正方形、交点は点、ガイドは小さな輪とその下の破線のガイド線
 です。
 
+記号はいまのモードの入力のものです。モードを抜けたとき、描画を
+取り消したとき (`draw.drawing.cancel()`)、吸着かその種類を切った
+ときは、その場で消え、`snap.changed` が `null` で発火します。
+`select` で吸着するのは頂点と地物のドラッグだけです。頂点の近くに
+ポインターを置いただけでは記号を描きません。
+
 `snap.changed` は、結果が変わるたびに発火します。`result` は
 `SnapResult` で、吸着が外れると `null` です。`target.kind`、
 `target.featureId`、`target.datasetId` (データセットの行の

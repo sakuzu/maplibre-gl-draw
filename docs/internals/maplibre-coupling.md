@@ -952,6 +952,33 @@ Each item has the same five parts.
   `render`; `hasPendingWork()` stays useful for the work that no frame
   finishes (the answer of a provider).
 
+## 30. The Far Side of the Globe Is Clipped by Depth
+
+- Upstream behavior — maplibre's globe prelude
+  (`shaders/_projection_globe.vertex.glsl`) gives a position the clip
+  depth `globeComputeClippingZ`: one minus its distance to
+  `u_projection_clipping_plane`, the plane of the horizon, so a position
+  beyond the horizon lies past the far plane and is clipped. During the
+  transition (`projectionTransition` below 0.999) the depth is mixed in
+  from `z_globeness_threshold` (0.2) on. `map.project` projects such a
+  position onto the near face.
+- What we rely on — assumption. Our shaders project through
+  `projectTileWithElevation`, so the clip hides what lies behind the
+  sphere. A marker and the selection frame of a point
+  (`src/view/renderers/anchored-outline.ts`) put the depth of their
+  anchor on every vertex, so the far side clips them whole; the combined
+  frame of a multiple selection is a box on the map and is clipped like
+  any line. Nothing of a frame is made from `map.project` on the CPU.
+- Symptoms when it breaks — the frame of a selected point behind the
+  sphere is drawn on its near face.
+- Check when upgrading — `src/e2e/globe.e2e.test.ts` holds that a point
+  behind the sphere and the combined frame of points behind it draw no
+  frame, and that a point near the edge gets the frame of its marker.
+  Compare `globeComputeClippingZ` and `interpolateProjection` with the new
+  source.
+- Conditions for removal — none while the engine projects its vertices
+  with maplibre's prelude.
+
 ## When Upgrading the Version
 
 When moving to a new maplibre version, do the following.
@@ -966,7 +993,8 @@ When moving to a new maplibre version, do the following.
   (install it once with `npx playwright-core install
   chromium-headless-shell`)
 - Run `npm run test:e2e` for the real input route (item 17), for the
-  ground on a known DEM (items 2, 8 and 9) and for the globe (item 28)
+  ground on a known DEM (items 2, 8 and 9) and for the globe (items 28
+  and 30)
 - Run `npm run typecheck` and `npm run lint`
 - The unit tests use fake terrain objects, so always confirm the real
   upstream shape (item 7) and the GL state (item 1) by hand

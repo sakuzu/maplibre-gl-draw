@@ -300,14 +300,16 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
    *
    * Whether snapping is wanted is asked of the current mode per input type
    * (isSnapEnabledFor). A mode that does not declare it snaps for every input type
-   * (as before).
+   * (as before). An input that is not snapped clears the previous result, so the
+   * indicator of an earlier snap does not stay behind it.
    */
   function applySnap<E extends MouseNormalizedEvent | DragNormalizedEvent>(
     event: E,
     inputType: SnapInputKind,
   ): { event: E; result: SnapResult | null } {
-    if (!snapService || event.snap === false) return { event, result: null };
-    if (modeManager.getHandler()?.isSnapEnabledFor?.(inputType) === false) {
+    if (!snapService) return { event, result: null };
+    if (event.snap === false || modeManager.getHandler()?.isSnapEnabledFor?.(inputType) === false) {
+      snapService.clear();
       return { event, result: null };
     }
 

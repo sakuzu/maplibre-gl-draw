@@ -383,27 +383,42 @@ void main() {
   });
 });
 
-describe('the selection frame of a point on the terrain', () => {
-  it('keeps the size of the marker and the margin on a pitched view (it is not stretched)', async () => {
-    // A marker of radius 10 with an outline of 2 spans 24 px; the margin is 10 px on each side
-    const expectedSide = 2 * (10 + 2) + 2 * 10;
-    const frame = await page.evaluate(async (size) => {
+/** The camera of a pitched view of the frame tests, set before each one */
+interface FrameView {
+  pitch: number;
+  bearing: number;
+}
+
+/**
+ * The extent on the screen (CSS px) of the stroke of the selection frame (#FF2D55) of a point
+ * placed on the ground under a point of the canvas, with the given radius and outline
+ */
+async function frameExtent(
+  view: FrameView,
+  at: { x: number; y: number },
+  style: { pointRadius: number; pointStrokeWidth: number },
+): Promise<{ box: number[]; center: number[] }> {
+  return page.evaluate(
+    async ({ camera, where, look }) => {
       const w = window as unknown as TerrainWindow;
       const { map, draw } = w;
-      // A point on the slope of the peak, below the middle of the view
-      const ground = map.unproject([size.width / 2, size.height * 0.6]);
-      const point = draw.features.create({
-        type: 'Point',
-        geometry: { type: 'Point', coordinates: [ground.lng, ground.lat] },
-        style: { pointColor: '#00ff00', pointRadius: 10, pointStrokeWidth: 2 },
-      });
-      if (!point) throw new Error('no feature');
-      draw.selection.set('feature', [point.id]);
+      map.jumpTo(camera);
       const frameReady = (): Promise<void> =>
         new Promise((resolve) => requestAnimationFrame(() => resolve()));
       await frameReady();
       await frameReady();
-      const extent = await new Promise<number[]>((resolve) => {
+      const ground = map.unproject([where.x, where.y]);
+      const point = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [ground.lng, ground.lat] },
+        style: { pointColor: '#00ff00', ...look },
+      });
+      if (!point) throw new Error('no feature');
+      draw.selection.set('feature', [point.id]);
+      await frameReady();
+      await frameReady();
+      const center = w.probe.terrain.project([ground.lng, ground.lat]);
+      const box = await new Promise<number[]>((resolve) => {
         map.once('render', () => {
           const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
           const width = gl.drawingBufferWidth;
@@ -412,7 +427,7 @@ describe('the selection frame of a point on the terrain', () => {
           gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
           const ratio = width / map.getCanvas().clientWidth;
           // The pixels of the stroke of the frame (#FF2D55)
-          const box = [Infinity, Infinity, -Infinity, -Infinity];
+          const extent = [Infinity, Infinity, -Infinity, -Infinity];
           for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
               const i = (y * width + x) * 4;
@@ -420,27 +435,60 @@ describe('the selection frame of a point on the terrain', () => {
               if (r < 200 || g > 100 || b < 50 || b > 130) continue;
               const sx = x / ratio;
               const sy = (height - 1 - y) / ratio;
-              box[0] = Math.min(box[0], sx);
-              box[1] = Math.min(box[1], sy);
-              box[2] = Math.max(box[2], sx);
-              box[3] = Math.max(box[3], sy);
+              extent[0] = Math.min(extent[0], sx);
+              extent[1] = Math.min(extent[1], sy);
+              extent[2] = Math.max(extent[2], sx);
+              extent[3] = Math.max(extent[3], sy);
             }
           }
-          resolve(box);
+          resolve(extent);
         });
         map.triggerRepaint();
       });
       draw.features.delete(point.id);
-      return extent;
-    }, MAP_SIZE);
+      return { box, center: center ? [center[0], center[1]] : [] };
+    },
+    { camera: view, where: at, look: style },
+  );
+}
 
-    // The outer edge of the 2 px stroke is 1 px outside the side of the frame. The pixels of
-    // the stroke round its edges by up to a pixel, and the frame placed on the screen to the
-    // first order lands within a pixel more on a view this pitched (a frame cast onto the
-    // ground was 8 px taller here)
-    const width = frame[2] - frame[0] + 1 - 2;
-    const height = frame[3] - frame[1] + 1 - 2;
-    expect(Math.abs(width - expectedSide)).toBeLessThanOrEqual(3);
-    expect(Math.abs(height - expectedSide)).toBeLessThanOrEqual(3);
+/** Checks the frame against the side the marker and the margin give, and its center */
+function expectFrame(
+  frame: { box: number[]; center: number[] },
+  style: { pointRadius: number; pointStrokeWidth: number },
+): void {
+  const expectedSide = 2 * (style.pointRadius + style.pointStrokeWidth) + 2 * 10;
+  // The outer edge of the 2 px stroke is 1 px outside the side of the frame, and the pixels of
+  // the stroke round its edges by up to a pixel
+  const width = frame.box[2] - frame.box[0] + 1 - 2;
+  const height = frame.box[3] - frame.box[1] + 1 - 2;
+  expect(Math.abs(width - expectedSide)).toBeLessThanOrEqual(3);
+  expect(Math.abs(height - expectedSide)).toBeLessThanOrEqual(3);
+  // The frame stands around the marker
+  expect(Math.abs((frame.box[0] + frame.box[2]) / 2 - frame.center[0])).toBeLessThanOrEqual(2);
+  expect(Math.abs((frame.box[1] + frame.box[3]) / 2 - frame.center[1])).toBeLessThanOrEqual(2);
+}
+
+describe('the selection frame of a point on the terrain', () => {
+  const marker = { pointRadius: 10, pointStrokeWidth: 2 };
+  const below = { x: MAP_SIZE.width / 2, y: MAP_SIZE.height * 0.6 };
+  const far = { x: MAP_SIZE.width / 2, y: MAP_SIZE.height * 0.3 };
+
+  it('keeps the size of the marker and the margin on a pitched view (it is not stretched)', async () => {
+    expectFrame(await frameExtent({ pitch: 60, bearing: 20 }, below, marker), marker);
+  });
+
+  it('keeps it at pitch 72, for a point far up the view and for a large marker', async () => {
+    const view = { pitch: 72, bearing: 20 };
+    expectFrame(await frameExtent(view, below, marker), marker);
+    expectFrame(await frameExtent(view, far, marker), marker);
+    const large = { pointRadius: 30, pointStrokeWidth: 3 };
+    expectFrame(await frameExtent(view, below, large), large);
+  });
+
+  it('keeps it at pitch 80, turned', async () => {
+    const view = { pitch: 80, bearing: 150 };
+    expectFrame(await frameExtent(view, below, marker), marker);
+    expectFrame(await frameExtent(view, far, marker), marker);
   });
 });

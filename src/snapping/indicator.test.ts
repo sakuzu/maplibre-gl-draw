@@ -15,6 +15,7 @@ import type { FrameDrawContext } from '../extension/index.js';
 import type { SDFStrokeOptions, SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import { createSnapIndicatorLook, SnapIndicatorRenderer } from './indicator.js';
+import { createSnapService } from './service.js';
 import type { SnapResult, SnapService } from './types.js';
 import { resolveSnapKinds } from './types.js';
 
@@ -32,6 +33,7 @@ function fakeService(result: SnapResult | null): SnapService {
     setDatasetsEnabled: () => {},
     isDatasetsEnabled: () => true,
     setGuideStep: () => {},
+    clear: () => {},
     getResult: () => result,
     getOptions: () => ({
       enabled: true,
@@ -96,6 +98,31 @@ describe('SnapIndicatorRenderer', () => {
     noTarget.draw(PROJECTION, 14, fakeContext(calls));
 
     expect(calls).toHaveLength(0);
+  });
+
+  it('draws nothing once the service clears its result', () => {
+    const calls: DrawCall[] = [];
+    const service = createSnapService();
+    service.register({
+      name: 'p',
+      candidates: () => [{ kind: 'vertex', coordinate: [139.7, 35.68] }],
+    });
+    service.resolve(
+      { lng: 139.7, lat: 35.68 },
+      { x: 0, y: 0 },
+      {
+        zoom: 14,
+        modifiers: { shift: false, ctrl: false, alt: false, meta: false },
+      },
+    );
+    const renderer = new SnapIndicatorRenderer({ snapService: service });
+    renderer.draw(PROJECTION, 14, fakeContext(calls));
+    expect(calls).toHaveLength(1);
+
+    service.clear();
+    renderer.draw(PROJECTION, 14, fakeContext(calls));
+
+    expect(calls).toHaveLength(1);
   });
 
   it('draws a circle for a vertex and a square for an edge, at the snapped position', () => {

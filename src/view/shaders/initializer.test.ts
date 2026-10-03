@@ -20,6 +20,7 @@ function emptyRenderers(): ShaderInitializerRenderers {
     tentativeRenderer: null,
     quadShader: null,
     strokeRenderer: null,
+    outlineRenderer: null,
     pointShapeRenderer: null,
     pointInstanceRenderer: null,
     sdfLineRenderer: null,

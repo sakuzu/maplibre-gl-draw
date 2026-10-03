@@ -260,7 +260,10 @@ pixels, in the order top left, top right, bottom right, bottom left of
 the shape as it stands unturned. The frame is drawn along them in place
 of the box of `bounds`, and for a geometry other than `Point` the
 resize and rotate handles sit on its corners and edges. A `Point` type
-keeps a frame without those handles. When `outline` returns anything
+keeps a frame without those handles. That frame stays on the screen:
+it is drawn around the point the way its marker is, so it keeps its
+size on a pitched view and is hidden with the marker behind the globe.
+When `outline` returns anything
 but four corners, the frame comes from `bounds`. `ctx.screen.outline`
 reads the corners of the frame of any feature, of the built-in types
 too, so that something drawn around a feature can follow its frame; a

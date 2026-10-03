@@ -1651,7 +1651,8 @@ the path of maplibre's layers.
 - The other paths drawn on the CPU are cut with the line cell before they
   are drawn: the dashes of features (`densifyPathForGlobe` before
   `splitIntoDashes`) and the outlines of the selection UI
-  (`StrokeRenderer`)
+  (`StrokeRenderer`). The frame of a point is a figure of the screen laid
+  around an anchor (`AnchoredOutlineRenderer`), so there is nothing to cut
 - Images (`QuadShader`) are cut with the fill cell into the grid of the
   terrain's degraded path (`buildQuadGrid`, one piece per cell): the
   corners are interpolated on the Mercator plane and the texture
@@ -1895,8 +1896,9 @@ How an extension draws its own symbols on terrain is described in the
 
 Renderers create their VAOs and buffers once and only upload data
 (`bufferData`, `texSubImage2D`) and draw per frame; no `createBuffer` or
-`delete*` per draw. StrokeRenderer, FillShaderManager,
-PolygonBatchRenderer and SDFPolygonRenderer keep their VAO and buffers
+`delete*` per draw. StrokeRenderer, AnchoredOutlineRenderer,
+FillShaderManager, PolygonBatchRenderer and SDFPolygonRenderer keep their
+VAO and buffers
 (index buffers bound into the VAO), SDFLineRenderer keeps its coordinate
 texture and instance buffer, and PointInstanceRenderer keeps a VAO and an
 instance buffer per shape.

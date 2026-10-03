@@ -379,13 +379,20 @@ export interface SnapService {
    */
   register(provider: SnapProvider): () => void;
 
-  /** Turns snapping on or off */
+  /** Turns snapping on or off (turning it off clears the result) */
   setEnabled(enabled: boolean): void;
+
+  /**
+   * Drops the most recent result when it holds a target, and emits 'snap.change' once
+   * without a target. Called when the input stops being snapped: the mode is left or
+   * cancelled, or the mode does not snap the input
+   */
+  clear(): void;
 
   /** Whether snapping is enabled */
   isEnabled(): boolean;
 
-  /** Turns each kind on or off */
+  /** Turns each kind on or off (turning one off clears the result) */
   setKindEnabled(kind: SnapTargetKind, enabled: boolean): void;
 
   /** Whether a kind is enabled */

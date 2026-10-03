@@ -206,6 +206,17 @@ describe('clearing the selection in SelectMode.onStop', () => {
   });
 });
 
+describe('SelectMode: the inputs it snaps', () => {
+  it('snaps the drags only (a hover and a click are not snapped and draw no indicator)', () => {
+    const select = new SelectMode();
+    expect(select.isSnapEnabledFor('dragstart')).toBe(true);
+    expect(select.isSnapEnabledFor('dragmove')).toBe(true);
+    expect(select.isSnapEnabledFor('dragend')).toBe(true);
+    expect(select.isSnapEnabledFor('mousemove')).toBe(false);
+    expect(select.isSnapEnabledFor('click')).toBe(false);
+  });
+});
+
 describe('selection-independent auxiliary handles in SelectMode', () => {
   let onHandleDragStart: ReturnType<typeof vi.fn<AuxiliaryHandleProvider['onHandleDragStart']>>;
 

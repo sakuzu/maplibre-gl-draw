@@ -188,7 +188,14 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
           modeManager.registerMode(name, () => {
             const handle = createModeContext(modeServices, screen);
             try {
-              return bridgeMode(name, factory(handle.context), handle.dispose, handle.entering);
+              return bridgeMode(
+                name,
+                factory(handle.context),
+                handle.dispose,
+                handle.entering,
+                // An interrupted mode leaves no snap behind (leaving it is cleared by the engine)
+                () => context.snapService.clear(),
+              );
             } catch (error) {
               handle.dispose();
               throw error;

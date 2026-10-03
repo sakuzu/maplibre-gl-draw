@@ -6,13 +6,20 @@
  * which has no margin, with `selectionStyle.boundingBox.margin` added on every side
  */
 
+import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { drawProperties } from '../../shared/properties.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
+import type {
+  AnchoredOutlineRenderer,
+  OutlineOffset,
+} from '../../view/renderers/anchored-outline.js';
+import type { PointShapeRenderer } from '../../view/renderers/point/point-shape.js';
 import type { StrokeRenderer } from '../../view/renderers/stroke.js';
+import { SelectionHandlesRenderer } from '../../view/ui/handles.js';
 import { createSelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import { SelectionUIRenderer } from '../../view/ui/selection-ui/renderer.js';
 import type { ScreenPoint } from '../events.js';
@@ -89,20 +96,42 @@ const FEATURES: Feature[] = [
   }),
 ];
 
-/** The corners of the frame the renderer draws for one selected feature, on the screen */
-function drawnFrame(target: Feature): ScreenPoint[] {
-  const frames: Coordinate[][] = [];
-  const stroke = { draw: (coords: Coordinate[]) => frames.push(coords) };
+/**
+ * A renderer of selection frames whose drawing is recorded as the corners on the screen: a
+ * frame on the map through its corners, a frame of the screen through its anchor and offsets
+ */
+function recordingRenderer(
+  registry: typeof extensions,
+  project: (lngLat: Coordinate) => ScreenPoint,
+): { renderer: SelectionUIRenderer; frames: ScreenPoint[][] } {
+  const frames: ScreenPoint[][] = [];
+  const stroke = {
+    // The path is closed: the first corner comes again at the end
+    draw: (coords: Coordinate[]) => frames.push(coords.slice(0, 4).map((c) => project(c))),
+  };
+  const outline = {
+    draw: (anchor: Coordinate, _elevation: number, corners: OutlineOffset[]) => {
+      const [x, y] = project(anchor);
+      frames.push(corners.map((c) => [x + c.x, y + c.y] as ScreenPoint));
+    },
+  };
   const renderer = new SelectionUIRenderer(
     stroke as unknown as StrokeRenderer,
+    outline as unknown as AnchoredOutlineRenderer,
     DEFAULT_SELECTION_CONFIG,
-    extensions,
+    registry,
   );
+  renderer.setProjectionData({} as ProjectionData);
+  return { renderer, frames };
+}
+
+/** The corners of the frame the renderer draws for one selected feature, on the screen */
+function drawnFrame(target: Feature): ScreenPoint[] {
+  const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
   renderer.setTransform(transform);
   renderer.draw([target], ZOOM);
   expect(frames).toHaveLength(1);
-  // The path is closed: the first corner comes again at the end
-  return frames[0].slice(0, 4).map((c) => screen.project(c));
+  return frames[0];
 }
 
 /** The distance from a point to the line through two points, positive away from `inside` */
@@ -176,15 +205,10 @@ describe('the selection frame of a built-in point of a draw instance', () => {
         selectionExtensions: registry,
       });
       const [x] = engineScreen.project([0.1, 0.1]);
-      const frames: Coordinate[][] = [];
-      const renderer = new SelectionUIRenderer(
-        { draw: (coords: Coordinate[]) => frames.push(coords) } as unknown as StrokeRenderer,
-        DEFAULT_SELECTION_CONFIG,
-        registry,
-      );
+      const { renderer, frames } = recordingRenderer(registry, (c) => engineScreen.project(c));
       renderer.setTransform(createCoordinateTransform(engineMap));
       renderer.draw([stored], ZOOM);
-      const right = engineScreen.project(frames[0][1])[0];
+      const right = frames[0][1][0];
       return { outline: engineScreen.outline(stored)[1][0] - x, frame: right - x };
     } finally {
       engine.destroy();
@@ -204,5 +228,49 @@ describe('the selection frame of a built-in point of a draw instance', () => {
       outline: expect.closeTo(24, 6),
       frame: expect.closeTo(24 + MARGIN, 6),
     });
+  });
+});
+
+describe('the combined frame of a multiple selection', () => {
+  const point = (id: string, coordinates: [number, number]): Feature => ({
+    ...feature('Point', { type: 'Point', coordinates }),
+    id,
+  });
+  const [, , , line, polygon] = FEATURES;
+
+  /** The corners of the combined frame (the last frame drawn) and of the corner handles */
+  function frameAndHandles(features: Feature[]): { frame: ScreenPoint[]; handles: ScreenPoint[] } {
+    const { renderer, frames } = recordingRenderer(extensions, (c) => screen.project(c));
+    renderer.setTransform(transform);
+    renderer.draw(features, ZOOM);
+
+    const handles: ScreenPoint[] = [];
+    const handlesRenderer = new SelectionHandlesRenderer(
+      { draw: () => {} } as unknown as StrokeRenderer,
+      {
+        draw: (position: Coordinate) => handles.push(screen.project(position)),
+      } as unknown as PointShapeRenderer,
+      DEFAULT_SELECTION_CONFIG,
+    );
+    handlesRenderer.setTransform(transform);
+    const bbox = renderer.computeCombinedFeatureBoundingBox(features);
+    if (!bbox) throw new Error('no box');
+    handlesRenderer.drawResizeHandles(bbox, ZOOM);
+    return { frame: frames[frames.length - 1], handles };
+  }
+
+  it.each([
+    ['features with an area', [line, polygon]],
+    ['points only', [point('a', [0.1, 0.1]), point('b', [0.3, -0.1])]],
+    ['points and a line', [point('a', [0.1, 0.4]), line]],
+  ] as const)('of %s has its corners on the corner handles', (_name, features) => {
+    const { frame, handles } = frameAndHandles([...features]);
+    expect(frame).toHaveLength(4);
+    for (const corner of frame) {
+      const nearest = Math.min(
+        ...handles.map(([x, y]) => Math.hypot(x - corner[0], y - corner[1])),
+      );
+      expect(nearest).toBeCloseTo(0, 6);
+    }
   });
 });

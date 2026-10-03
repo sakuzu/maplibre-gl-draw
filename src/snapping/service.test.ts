@@ -777,4 +777,72 @@ describe('SnapService', () => {
       expect(service.getResult()).toEqual(result);
     });
   });
+
+  describe('clearing the result', () => {
+    /** A service snapped to a vertex, with the events it emits */
+    function snapped(): { service: SnapService; events: SnapResult[] } {
+      const eventEmitter = new EventEmitterImpl();
+      const events: SnapResult[] = [];
+      eventEmitter.on('snap.change', (result) => events.push(result));
+      const service = createSnapService({ eventEmitter });
+      service.register(fixedProvider('p', [{ kind: 'vertex', coordinate: offsetByPixels(1, 0) }]));
+      resolveAt(service);
+      return { service, events };
+    }
+
+    it('drops a result with a target and emits once without a target', () => {
+      const { service, events } = snapped();
+      expect(events).toHaveLength(1);
+
+      service.clear();
+
+      expect(service.getResult()).toBeNull();
+      expect(events).toHaveLength(2);
+      expect(events[1].target).toBeUndefined();
+    });
+
+    it('emits nothing when there is no target to drop', () => {
+      const { service, events } = snapped();
+      service.clear();
+      service.clear();
+      expect(events).toHaveLength(2);
+
+      // A resolution that snaps nothing after a clear is not a change either
+      resolveAt(service, { lng: 140.5, lat: 35.68 });
+      expect(events).toHaveLength(2);
+    });
+
+    it('snaps again on the next resolution, as a change', () => {
+      const { service, events } = snapped();
+      service.clear();
+
+      resolveAt(service);
+
+      expect(service.getResult()?.target?.kind).toBe('vertex');
+      expect(events).toHaveLength(3);
+    });
+
+    it('is cleared by setEnabled(false), and not by setEnabled(true)', () => {
+      const { service, events } = snapped();
+      service.setEnabled(true);
+      expect(events).toHaveLength(1);
+
+      service.setEnabled(false);
+
+      expect(service.getResult()).toBeNull();
+      expect(events).toHaveLength(2);
+      expect(events[1].target).toBeUndefined();
+    });
+
+    it('is cleared by turning a kind off', () => {
+      const { service, events } = snapped();
+      service.setKindEnabled('edge', true);
+      expect(events).toHaveLength(1);
+
+      service.setKindEnabled('vertex', false);
+
+      expect(service.getResult()).toBeNull();
+      expect(events).toHaveLength(2);
+    });
+  });
 });

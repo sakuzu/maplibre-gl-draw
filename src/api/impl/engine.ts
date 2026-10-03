@@ -299,6 +299,14 @@ export function createEngine(
   eventEmitter.on('snap.change', repaintOnSnapChange);
   teardown.add(() => eventEmitter.off('snap.change', repaintOnSnapChange));
 
+  // A snap belongs to the input of the mode that made it: leaving the mode clears it (any
+  // mode, built-in or added), so neither the indicator nor snap.changed keeps a stale target
+  teardown.add(
+    store.subscribe((changes) => {
+      if (changes.mode) snapService.clear();
+    }),
+  );
+
   // 4. Create the RenderCoordinator (triggers a repaint automatically when the
   // Store changes)
   const renderCoordinator = createRenderCoordinator({ map, store });

@@ -125,6 +125,8 @@ const BRIDGED = Symbol('extension mode');
  */
 export interface BridgedMode extends EngineModeHandler {
   readonly [BRIDGED]: ModeHandler;
+  /** Interrupts the mode (`onCancel`) and clears what its input left (the snap) */
+  cancel(): void;
 }
 
 /**
@@ -135,6 +137,7 @@ export interface BridgedMode extends EngineModeHandler {
  * @param onExit - Called after the mode was left, to end what its context holds
  * @param entering - Runs the entering of the mode, so that its context knows the cursor the
  *   mode sets then
+ * @param onCancelled - Called after the mode was interrupted, to clear what its input left
  * @internal
  */
 export function bridgeMode(
@@ -142,6 +145,7 @@ export function bridgeMode(
   handler: ModeHandler,
   onExit: () => void,
   entering: (run: () => void) => void = (run) => run(),
+  onCancelled: () => void = () => {},
 ): BridgedMode {
   const bridged: BridgedMode = {
     [BRIDGED]: handler,
@@ -158,7 +162,14 @@ export function bridgeMode(
       }
     },
     onExternalStateChange() {
-      handler.onCancel?.();
+      bridged.cancel();
+    },
+    cancel() {
+      try {
+        handler.onCancel?.();
+      } finally {
+        onCancelled();
+      }
     },
     undoVertex: () => handler.onUndoVertex?.() === true,
     redoVertex: () => handler.onRedoVertex?.() === true,
@@ -198,7 +209,7 @@ export function routeToMode(
   if (!mode) return undefined;
   const consumed = deliver(mode, event, snapped, snap);
   if (!consumed && event.type === 'keydown' && event.key === 'Escape' && mode.onCancel) {
-    mode.onCancel();
+    (handler as BridgedMode).cancel();
     return true;
   }
   return consumed;

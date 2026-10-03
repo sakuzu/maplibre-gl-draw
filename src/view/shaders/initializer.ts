@@ -9,6 +9,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import type { FeatureDrawer } from '../renderers/drawer.js';
 import type { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
@@ -29,6 +30,8 @@ export interface ShaderInitializerRenderers {
   tentativeRenderer: TentativeRenderer | null;
   quadShader: QuadShader | null;
   strokeRenderer: StrokeRenderer | null;
+  /** The outlines laid on the screen around an anchor (the frames of points) */
+  outlineRenderer: AnchoredOutlineRenderer | null;
   pointShapeRenderer: PointShapeRenderer | null;
   pointInstanceRenderer: PointInstanceRenderer | null;
   sdfLineRenderer: SDFLineRenderer | null;
@@ -62,6 +65,7 @@ export class ShaderInitializer {
       tentativeRenderer,
       quadShader,
       strokeRenderer,
+      outlineRenderer,
       pointShapeRenderer,
       pointInstanceRenderer,
       sdfLineRenderer,
@@ -81,6 +85,9 @@ export class ShaderInitializer {
     }
     if (strokeRenderer) {
       strokeRenderer.ensureShader(shaderData);
+    }
+    if (outlineRenderer) {
+      outlineRenderer.ensureShader(shaderData);
     }
     if (pointShapeRenderer) {
       pointShapeRenderer.ensureShader(shaderData);
@@ -135,6 +142,7 @@ export class ShaderInitializer {
       tentativeRenderer,
       quadShader,
       strokeRenderer,
+      outlineRenderer,
       pointShapeRenderer,
       pointInstanceRenderer,
       sdfLineRenderer,
@@ -154,6 +162,9 @@ export class ShaderInitializer {
     }
     if (strokeRenderer) {
       strokeRenderer.setOffsetUniforms(uniforms);
+    }
+    if (outlineRenderer) {
+      outlineRenderer.setOffsetUniforms(uniforms);
     }
     if (pointShapeRenderer) {
       pointShapeRenderer.setOffsetUniforms(uniforms);
