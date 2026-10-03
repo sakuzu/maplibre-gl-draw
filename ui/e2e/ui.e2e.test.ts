@@ -661,6 +661,58 @@ describe('the actions', () => {
     await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), true);
   });
 
+  it('leave the layer panel above them scrolling with its scrollbar while the card is open', async () => {
+    // A browser that draws the scrollbars, as on a desktop
+    const desktop = await launchBrowser({ scrollbars: true });
+    try {
+      page = await openPage(desktop, site, { width: 1440, height: 900 });
+      await scrollingPanel();
+    } finally {
+      await page.close();
+      await desktop.close();
+    }
+  });
+
+  /** Checks the layer panel above a tall card: it scrolls, and shows the track of kata */
+  async function scrollingPanel() {
+    // A card tall enough that the layer panel above it cannot keep its own height
+    await page.evaluate(() => {
+      const w = window as unknown as E2EWindow;
+      for (let i = 0; i < 12; i++) {
+        w.ui.actions.add({ id: `run-${i}`, label: `Action ${i}`, kind: 'action', run: () => {} });
+      }
+    });
+    await settle(page);
+    const measured = await page.evaluate(() => {
+      const root = (window as unknown as E2EWindow).ui.element;
+      const scroll = root.querySelector<HTMLElement>(
+        '[data-region="left"] [data-role="panel"] > .scroll',
+      );
+      const card = root.querySelector('[data-role="actions"] [data-role="floating"]');
+      if (!scroll || !card) return null;
+      // The thickness of kata's track, resolved where the panel is
+      const probe = document.createElement('div');
+      probe.style.width = 'var(--kata-size-sm-rem)';
+      scroll.appendChild(probe);
+      const track = probe.getBoundingClientRect().width;
+      probe.remove();
+      const style = getComputedStyle(scroll);
+      const borders = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+      return {
+        card: card.getBoundingClientRect().height,
+        scrolls: scroll.scrollHeight > scroll.clientHeight,
+        bar: scroll.offsetWidth - scroll.clientWidth - borders,
+        track,
+      };
+    });
+    if (!measured) throw new Error('missing the panel or the card');
+    expect(measured.card).toBeGreaterThan(0);
+    expect(measured.scrolls).toBe(true);
+    expect(measured.track).toBeGreaterThan(0);
+    // The track of kata (not the browser's own), within the whole pixels of clientWidth
+    expect(Math.abs(measured.bar - measured.track)).toBeLessThan(1);
+  }
+
   it('stand above the scale on a narrow map, with the attribution folded and no globe or compass, and fit the map open', async () => {
     page = await openPage(browser, site);
     await page.setViewportSize({ width: 390, height: 667 });

@@ -105,11 +105,15 @@ export async function buildPage(): Promise<Site> {
   return files;
 }
 
-/** Starts headless Chromium with a software WebGL2 */
-export async function launchBrowser(): Promise<Browser> {
+/**
+ * Starts headless Chromium with a software WebGL2. Headless Chromium hides the scrollbars;
+ * scrollbars: true draws them, as a browser on a desktop does, for a test that measures them
+ */
+export async function launchBrowser({ scrollbars = false } = {}): Promise<Browser> {
   try {
     return await chromium.launch({
       args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
+      ...(scrollbars ? { ignoreDefaultArgs: ['--hide-scrollbars'] } : {}),
     });
   } catch (error) {
     throw new Error(
