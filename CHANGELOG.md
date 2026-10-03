@@ -6,6 +6,33 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-10-04
+
+Two fixes: the snap indicator that stayed after its input, and the
+selection frame of a point on the globe and on the terrain at a high
+pitch.
+
+### Fixed in 2.1.3
+
+- The snap indicator stayed after the input that made it: after leaving
+  the drawing mode, turning snapping off, Escape, or a pan, it went on
+  showing the last result, and `snap.changed` did not report the end of
+  the snap. The engine now clears the snap result when the mode changes,
+  when snapping (or a kind of it) is turned off, when a mode declines to
+  snap an input, and on cancel, and `snap.changed` reports `null` once
+  ([#22](https://github.com/sakuzu/maplibre-gl-draw/issues/22)).
+- The select mode snapped every input, so hovering near a vertex drew
+  the indicator, against the guide ("only while drawing and while moving
+  a vertex"). It now snaps its drags only. A select-mode plugin that
+  read `event.snapped` on a hover or a click receives the raw position
+  ([#22](https://github.com/sakuzu/maplibre-gl-draw/issues/22)).
+- The selection frame of a point is drawn as a figure of the screen,
+  like the mark: it keeps the size of the mark and the margin on the
+  terrain at any pitch and at the edge of the globe, and a point on the
+  far side of the globe gets no frame. The frame of a selection of
+  several features is drawn on the box of its handles
+  ([#12](https://github.com/sakuzu/maplibre-gl-draw/issues/12)).
+
 ## [2.1.2] - 2026-10-02
 
 Three fixes: a plugin's fill, the click that finishes a plugin's
@@ -1192,6 +1219,7 @@ available from Kasika, Inc.
 - Plugins, custom modes and custom feature types.
 
 [Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.2...HEAD
+[2.1.3]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.0.0...v2.1.0

@@ -7,6 +7,40 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-04
+
+From the review of the standard UI on kata 1.8: the map at a narrow
+width, the actions card, the attribution and a selection under a pane.
+
+### Added in 1.3.0
+
+- A selection of drawn features that the panes hide is revealed: when
+  its box on the screen is not inside the part of the map left visible
+  (the container less the panes, the bottom sheet, the toolbar's band
+  and the attribution), the map pans its centre there, without changing
+  the zoom. A selection made on the map is visible and does not move it
+  (#15).
+- At a narrow width the attribution comes folded to its (i) button and
+  the globe and compass controls are left out; zoom stays. A wide width
+  is unchanged (#23).
+
+### Changed in 1.3.0
+
+- Each action of the actions card is one pressable row (a kata
+  ListItem) with its name and its key at the end; the switch rows use
+  the same columns, so the keys line up (#16).
+- The attribution has the box of the corner controls in both forms: the
+  line of a control group, square corners, and the corner's margin, so
+  it no longer touches the map's edges or the toolbar (#18).
+- kata ^1.8.1: the panes show kata's scrollbar when they scroll, so a
+  layer pane above an open actions card shows that it scrolls (#20);
+  disabled shapes have no hue.
+
+### Fixed in 1.3.0
+
+- A layer panel or a legend mounted alone paints the panel's surface
+  and declares it, so what covers part of a row matches it.
+
 ## [1.2.1] - 2026-10-02
 
 ### Fixed in 1.2.1
