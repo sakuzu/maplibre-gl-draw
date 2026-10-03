@@ -111,8 +111,8 @@ export class SelectMode implements EngineModeHandler {
 
   /**
    * Snapping applies only while a vertex or a feature is dragged: a click or a hover in
-   * select is not snapped (and draws no indicator). A plugin that wants a snapped position
-   * there asks for one.
+   * select is not snapped (and draws no indicator). A mode of the contract that wants the
+   * snapped position of a point asks `snap` of its ModeContext.
    */
   isSnapEnabledFor(inputType: SnapInputKind): boolean {
     return inputType === 'dragstart' || inputType === 'dragmove' || inputType === 'dragend';
