@@ -75,7 +75,7 @@ describe('the actions', () => {
     expect(card(ui.element)).toBeNull();
   });
 
-  it('draw a row for each, a switch or a button, with its key', () => {
+  it('draw a row for each in a list, a switch or a pressable row, with its key', () => {
     const fake = fakeDraw();
     ui = createDrawUI(fake.asDraw);
     const a = switchOf('a', 'R');
@@ -89,10 +89,24 @@ describe('the actions', () => {
     expect(sw).not.toBeNull();
     expect(row(root, 'a')?.textContent).toContain('Switch a');
     expect(row(root, 'a')?.querySelector('kbd')?.textContent).toBe('R');
-    const button = row(root, 'b')?.querySelector('button');
-    expect(button?.textContent).toContain('Save');
-    expect(row(root, 'b')?.querySelector('kbd')?.textContent).toMatch(/Shift\+S|⇧S/);
+    // An action is one pressable row with its name and its key, a switch a row with its name and
+    // the switch, then its key: both list items of one list, with the same columns
+    const b = row(root, 'b');
+    expect(b?.getAttribute('data-role')).toBe('list-item');
+    expect(b?.getAttribute('role')).toBe('button');
+    expect(b?.getAttribute('tabindex')).toBe('0');
+    expect(b?.querySelector('button')).toBeNull();
+    expect(b?.textContent).toContain('Save');
+    expect(b?.querySelector('kbd')?.textContent).toMatch(/Shift\+S|⇧S/);
     expect(row(root, 'c')?.querySelector('kbd')).toBeNull();
+    const toggle = row(root, 'a');
+    expect(toggle?.getAttribute('data-role')).toBe('list-item');
+    expect(toggle?.getAttribute('role')).toBeNull();
+    expect(toggle?.style.gridTemplateColumns).toBe(b?.style.gridTemplateColumns);
+    expect(toggle?.style.gridTemplateColumns).toBe('minmax(0, 1fr) auto');
+    for (const id of ['a', 'b', 'c']) {
+      expect(row(root, id)?.parentElement?.closest('[data-role="list"]')).not.toBeNull();
+    }
   });
 
   it('take the title of the options and the words of the locale', () => {
@@ -110,8 +124,10 @@ describe('the actions', () => {
     const run = vi.fn();
     ui.actions.add({ id: 'b', label: 'Save', kind: 'action', run });
     flushSync();
-    row(ui.element, 'b')?.querySelector('button')?.click();
+    row(ui.element, 'b')?.click();
     expect(run).toHaveBeenCalledTimes(1);
+    key(row(ui.element, 'b')!, 'Enter');
+    expect(run).toHaveBeenCalledTimes(2);
   });
 
   it('show the state of a switch, read again after it runs and on refresh', () => {
@@ -160,8 +176,10 @@ describe('the actions', () => {
       disabled: () => true,
     });
     flushSync();
-    const button = row(ui.element, 'b')?.querySelector('button');
-    expect(button?.disabled).toBe(true);
+    const b = row(ui.element, 'b');
+    expect(b?.getAttribute('aria-disabled')).toBe('true');
+    expect(b?.hasAttribute('tabindex')).toBe(false);
+    b?.click();
     key(document.body, 's');
     expect(run).not.toHaveBeenCalled();
   });

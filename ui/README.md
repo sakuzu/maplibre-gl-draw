@@ -418,11 +418,12 @@ action of the application (see [Actions](#actions)).
 ### Actions
 
 An action of the application, such as saving the drawing or turning a
-setting on and off, is a row of a card at the bottom left of the map,
-above maplibre-gl's scale and, where its box reaches the card across, the
-attribution: a switch (`kind: 'toggle'`) or a button
-(`kind: 'action'`), with its key at the end. A press on the row and its
-key both call `run`; a switch shows what `checked` returns, read again
+setting on and off, is a row of the list in a card at the bottom left of
+the map, above maplibre-gl's scale and, where its box reaches the card
+across, the attribution: its name and a switch (`kind: 'toggle'`), or
+its name in a row pressed as one button (`kind: 'action'`), with its key
+at the end of the row, so that the keys line up. A press on the row and
+its key both call `run`; a switch shows what `checked` returns, read again
 after each run and on `ui.actions.refresh()`, so the state stays with
 the application. `disabled` dims the row and turns its key off, and
 `hint` is a caption under it. The keys are listed with `?` under the

@@ -9,7 +9,10 @@
     formatShortcut,
     Icon,
     Kbd,
+    List,
+    ListItem,
     SectionHeader,
+    Stack,
     Text,
     Toggle,
   } from '@sakuzu/kata/svelte';
@@ -18,10 +21,12 @@
   import type { ActionSpec } from '../types.js';
 
   // Actions: the card of the actions of the application at the bottom left of the map. A small
-  // head with the title and a button that folds the card, then a row for each action: a switch
-  // (toggle) whose state is checked(), or a button (action), each with its key at the end and its
-  // hint, if any, as a caption under it. The rows read checked() and disabled() again whenever the
-  // version changes (after each run, and on refresh()).
+  // head with the title and a button that folds the card, then a list with a row for each action,
+  // its name in the first column and its key in the second, so that the keys line up at the end:
+  // an action is one pressable row (a list item with onclick), a switch (toggle) is a row whose
+  // first column holds its name and the switch, whose state is checked(). A hint, if any, is a
+  // caption under the name. The rows read checked() and disabled() again whenever the version
+  // changes (after each run, and on refresh()).
   //
   // Folded, the card is one button with the title that opens it again. Below 48rem (the shell's
   // narrow band) it starts folded, so that it does not cover the map.
@@ -65,6 +70,9 @@
     /** Whether the button that opens the left region again shows at the top left */
     reopen?: boolean;
   } = $props();
+
+  /** The columns of every row: the name (and the switch), then the key */
+  const COLUMNS = 'minmax(0, 1fr) auto';
 
   /** The custom property on the root with the room the card takes at the bottom (root.css) */
   const RESERVE = '--mgd-ui-actions-reserve';
@@ -247,6 +255,16 @@
   </Button>
 {/snippet}
 
+<!-- A switch: its name and the switch in one control, which a press on the name switches too -->
+{#snippet toggle(spec: ActionSpec)}
+  <Toggle
+    between
+    label={spec.label}
+    disabled={read(spec, 'disabled')}
+    bind:checked={() => read(spec, 'checked'), () => runAction(actions, spec)}
+  />
+{/snippet}
+
 <!-- Outside the shell's regions: the root gives it the pointer (data-role="actions") -->
 <div data-role="actions" bind:this={card}>
   <Floating
@@ -260,34 +278,42 @@
           ? undefined
           : `calc(${room}px - var(--kata-gap-md) * ${reopen ? 3 : 2} - var(--kata-border-width) * 2)`}
       >
-        <SectionHeader label={title} actions={head}>
-          {#each list as spec (spec.id)}
-            {@const key = kbd(spec)}
-            <div class="item" data-action={spec.id}>
-              <div class="row">
-                <div class="control">
-                  {#if spec.kind === 'toggle'}
-                    <Toggle
-                      between
-                      label={spec.label}
-                      disabled={read(spec, 'disabled')}
-                      bind:checked={() => read(spec, 'checked'), () => runAction(actions, spec)}
-                    />
+        <SectionHeader label={title} actions={head} flush>
+          <List>
+            {#each list as spec (spec.id)}
+              {@const key = kbd(spec)}
+              {#if spec.kind === 'toggle'}
+                <ListItem columns={COLUMNS} plain data-action={spec.id}>
+                  {#if spec.hint}
+                    <Stack gap="sm">
+                      {@render toggle(spec)}
+                      <Text role="caption" muted clamp>{spec.hint}</Text>
+                    </Stack>
                   {:else}
-                    <Button
-                      block
-                      disabled={read(spec, 'disabled')}
-                      onclick={() => runAction(actions, spec)}
-                    >
-                      {spec.label}
-                    </Button>
+                    {@render toggle(spec)}
                   {/if}
-                </div>
-                {#if key}<Kbd bare>{key}</Kbd>{/if}
-              </div>
-              {#if spec.hint}<Text role="caption" muted>{spec.hint}</Text>{/if}
-            </div>
-          {/each}
+                  {#if key}<Kbd bare>{key}</Kbd>{/if}
+                </ListItem>
+              {:else}
+                <ListItem
+                  columns={COLUMNS}
+                  disabled={read(spec, 'disabled')}
+                  onclick={() => runAction(actions, spec)}
+                  data-action={spec.id}
+                >
+                  {#if spec.hint}
+                    <Stack gap="sm">
+                      <Text clamp>{spec.label}</Text>
+                      <Text role="caption" muted clamp>{spec.hint}</Text>
+                    </Stack>
+                  {:else}
+                    <span>{spec.label}</span>
+                  {/if}
+                  {#if key}<Kbd bare>{key}</Kbd>{/if}
+                </ListItem>
+              {/if}
+            {/each}
+          </List>
         </SectionHeader>
       </div>
     {:else}
@@ -310,22 +336,5 @@
     min-width: var(--kata-width-rail);
     max-width: var(--kata-width-panel);
     overflow-y: auto;
-  }
-  .item {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--kata-gap-sm);
-    min-width: 0;
-  }
-  /* The rows are as high as a switch: their buttons are small buttons, as in a list */
-  .control {
-    flex: 1 1 auto;
-    min-width: 0;
-    --kata-box: var(--kata-height-button-sm);
   }
 </style>

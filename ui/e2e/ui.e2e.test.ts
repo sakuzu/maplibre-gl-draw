@@ -605,6 +605,32 @@ describe('the actions', () => {
     expect(wide.card.right).toBeLessThan(wide.bar.left);
     expect(wide.card.left - wide.map.left).toBeGreaterThan(0);
 
+    // Each row is a list item of the card's width with its key at its end, inside it: the keys
+    // of a switch and of a pressable row line up at the right
+    const rows = await card.locator('[data-action]').evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect();
+        const k = el.querySelector('kbd')?.getBoundingClientRect();
+        const list = el.closest('[data-role="list"]')?.getBoundingClientRect();
+        return {
+          role: el.getAttribute('data-role'),
+          width: r.width,
+          list: list?.width,
+          inside: !!k && k.left >= r.left && k.right <= r.right,
+          right: k?.right,
+          button: el.querySelector('button') !== null,
+        };
+      }),
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.role).toBe('list-item');
+      expect(row.width).toBeCloseTo(row.list ?? Number.NaN, 0);
+      expect(row.inside).toBe(true);
+      expect(row.button).toBe(false);
+    }
+    expect(rows[0]?.right).toBeCloseTo(rows[1]?.right ?? Number.NaN, 0);
+
     // A press on the switch's text, and the key
     await card.getByText('Read-only').click();
     await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), true);
