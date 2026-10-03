@@ -249,6 +249,37 @@ async function clickRing(page: Page, points: PagePoint[]): Promise<void> {
   for (const point of [...points, points[0]]) await click(page, point);
 }
 
+/**
+ * Waits for the map to be still after a selection: the standard UI pans a new selection out from
+ * under the right pane that opens for it, once the pane is laid out (a few frames later), with
+ * `easeTo`. Still is not moving, with the same centre over six frames
+ */
+async function still(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            new Promise<boolean>((resolve) => {
+              const { map } = window as unknown as E2EWindow;
+              const before = map.getCenter().toArray().join();
+              let frames = 6;
+              const next = () => {
+                frames -= 1;
+                if (frames > 0) {
+                  requestAnimationFrame(next);
+                  return;
+                }
+                resolve(!map.isMoving() && map.getCenter().toArray().join() === before);
+              };
+              requestAnimationFrame(next);
+            }),
+        ),
+      { timeout: browserTimeout(10_000) },
+    )
+    .toBe(true);
+}
+
 /** Waits for the promise a page exposes as `loaded` (the data it reads as it opens) */
 async function loaded(page: Page): Promise<void> {
   await page.evaluate(() => (window as unknown as { loaded: Promise<unknown> }).loaded);
@@ -1257,19 +1288,25 @@ describe('the examples', () => {
       inside,
     );
     await settle(page);
-    // Where the point is drawn: the map's padding (the left panel) moves the center of the map
-    const grip = await pageOf(page, inside as [number, number]);
-    const moved = { x: grip.x - 50, y: grip.y + 40 };
+    /**
+     * Clicks the point and drags it 50 px left and 40 px down. Where the point is drawn: the
+     * map's padding (the left panel) moves the center of the map, and the map pans the tower
+     * selected by the click out from under the right pane that opens for it
+     */
+    const grabAndDrag = async () => {
+      await click(page, await pageOf(page, inside as [number, number]));
+      await still(page);
+      const grip = await pageOf(page, inside as [number, number]);
+      await drag(page, grip, { x: grip.x - 50, y: grip.y + 40 });
+    };
     await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(true);
     expect(await actionChecked(page, 'Lock Blocks')).toBe(true);
-    await click(page, grip);
-    await drag(page, grip, moved);
+    await grabAndDrag();
     expect(await geometryOf(tower.id)).toEqual(tower.geometry);
     await pressAction(page, 'Lock Blocks');
     expect((await state()).layerLocked).toBe(false);
-    await click(page, grip);
-    await drag(page, grip, moved);
+    await grabAndDrag();
     expect(await geometryOf(tower.id)).not.toEqual(tower.geometry);
 
     // Hide Blocks: hidden on this page only; the layer stays visible in the document, under
@@ -1477,6 +1514,8 @@ describe('the examples', () => {
       hill.id,
     );
     await settle(page);
+    // The route reaches under the right pane that opens for it, so the map pans it out
+    await still(page);
     // Selected: the handle is drawn there with the look of a vertex handle
     expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
 
