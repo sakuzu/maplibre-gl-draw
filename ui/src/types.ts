@@ -127,7 +127,9 @@ export interface DrawUIOptions extends BasemapOptions {
    * maplibre-gl's own controls, added to the map as maplibre-gl draws them: at the bottom right,
    * from the top, the globe, the compass and the zoom; at the bottom left, the scale. True (all
    * four) when left out; false for none, as for a page that adds controls of its own; an object
-   * for some of them. `destroy()` removes them
+   * for some of them. Below 48rem the globe and the compass are left out (the zoom stays) and the
+   * attribution is folded to its (i) button, which opens it; false leaves the attribution alone.
+   * `destroy()` removes them
    */
   mapControls?: boolean | MapControlsOptions;
   /**

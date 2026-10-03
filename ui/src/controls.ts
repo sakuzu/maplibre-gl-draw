@@ -6,13 +6,15 @@
 //
 // - mapControls() adds the controls as maplibre-gl draws them: at the bottom right, from the top,
 //   the globe, the compass (with the pitch) and the zoom; at the bottom left, the scale. Their look
-//   is maplibre-gl's style sheet, which the page imports
+//   is maplibre-gl's style sheet, which the page imports. It follows the shell's narrow: a narrow
+//   map has no globe and no compass (the zoom stays), and its attribution is folded to its (i)
+//   button whenever maplibre-gl builds it open
 // - cornerLift() lifts a bottom corner of the map (its controls and the attribution) above the
 //   toolbar while the toolbar reaches it, as it does on a narrow map; moves the controls of the
 //   bottom right (not the attribution) to the left of the right region while they would be under
-//   it; and lifts the bottom left corner (the scale) above the attribution while the attribution's
-//   box reaches it across, as the two-line attribution of a narrow map does. The attribution is
-//   only read: its classes (maplibre-gl's compact attribution) are left as maplibre-gl sets them
+//   it; and, but on a narrow map, lifts the bottom left corner (the scale) above the attribution
+//   while the attribution's box reaches it across, as a two-line attribution does. It only reads
+//   the attribution
 
 import {
   type ControlPosition,
@@ -28,20 +30,38 @@ import type { MapControlsOptions } from './types.js';
 export interface ControlsMap {
   addControl(control: IControl, position?: ControlPosition): unknown;
   removeControl(control: IControl): unknown;
+  getContainer(): HTMLElement;
 }
 
-/** The controls added to a map, to remove */
+/** The controls added to a map, to follow the shell's narrow and to remove */
 export interface MapControls {
-  /** Removes the controls from the map. A second call does nothing */
+  /**
+   * Follows the shell's narrow: on a narrow map, removes the globe and the compass and folds the
+   * attribution; on a wider one, adds the globe and the compass back
+   */
+  setNarrow(narrow: boolean): void;
+  /** Removes the controls from the map and stops following the attribution. A second call does nothing */
   destroy(): void;
 }
+
+/** The class of maplibre-gl's compact attribution, and the one it has while it is open */
+const COMPACT = 'maplibregl-compact';
+const COMPACT_SHOW = 'maplibregl-compact-show';
 
 /**
  * Adds maplibre-gl's controls to a map: all four with `true` or `undefined`, none with `false`,
  * those not set to false with an object.
  *
  * maplibre-gl puts a control added to a bottom corner above those already there, so the controls
- * of the bottom right are added from the bottom: the zoom, the compass, then the globe.
+ * of the bottom right are added from the bottom: the zoom, the compass, then the globe. The globe
+ * and the compass come back the same way, above the zoom.
+ *
+ * While the map is narrow (`setNarrow`), the globe and the compass are removed, and the
+ * attribution is folded to its (i) button: maplibre-gl builds its compact attribution open (until
+ * the first drag), when it first fills, when the map's width brings the compact form back, and
+ * when a page adds it again; each time, its open class is removed, as maplibre-gl's own fold on a
+ * drag does. The (i) button opens it still. With `false`, nothing is added and the attribution is
+ * left alone.
  */
 export function mapControls(
   map: ControlsMap,
@@ -50,36 +70,97 @@ export function mapControls(
   const want: MapControlsOptions | null =
     option === false ? null : option === true || option === undefined ? {} : option;
   const added: IControl[] = [];
+  // The globe and the compass, which a narrow map leaves out
+  let wideOnly: IControl[] = [];
+  let narrow = false;
+  let destroyed = false;
   const add = (control: IControl, position: ControlPosition) => {
     map.addControl(control, position);
     added.push(control);
+    return control;
+  };
+  const remove = (control: IControl) => {
+    const at = added.indexOf(control);
+    if (at >= 0) added.splice(at, 1);
+    try {
+      map.removeControl(control);
+    } catch {
+      // The map is gone
+    }
+  };
+  const addWideOnly = () => {
+    if (!want) return;
+    if (want.compass !== false) {
+      wideOnly.push(
+        add(
+          new NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }),
+          'bottom-right',
+        ),
+      );
+    }
+    if (want.globe !== false) wideOnly.push(add(new GlobeControl(), 'bottom-right'));
   };
   if (want) {
     if (want.zoom !== false) {
       add(new NavigationControl({ showZoom: true, showCompass: false }), 'bottom-right');
     }
-    if (want.compass !== false) {
-      add(
-        new NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }),
-        'bottom-right',
-      );
-    }
-    if (want.globe !== false) add(new GlobeControl(), 'bottom-right');
+    addWideOnly();
     if (want.scale !== false) add(new ScaleControl(), 'bottom-left');
   }
-  let destroyed = false;
+
+  // The attribution of the map, folded while the map is narrow
+  const container = map.getContainer();
+  const watched =
+    container.querySelector<HTMLElement>(':scope > .maplibregl-control-container') ?? container;
+  const isAttribution = (node: Node): node is Element =>
+    node instanceof Element && node.matches('.maplibregl-ctrl-attrib');
+  const fold = (el: Element) => {
+    if (narrow) el.classList.remove(COMPACT_SHOW);
+  };
+  /** maplibre-gl built it open: it was added, or it has just become compact */
+  const watcher =
+    want && typeof MutationObserver !== 'undefined'
+      ? new MutationObserver((records) => {
+          if (!narrow) return;
+          for (const record of records) {
+            if (record.type === 'childList') {
+              for (const node of record.addedNodes) if (isAttribution(node)) fold(node);
+            } else if (
+              isAttribution(record.target) &&
+              record.target.classList.contains(COMPACT) &&
+              !(record.oldValue ?? '').split(/\s+/).includes(COMPACT)
+            ) {
+              fold(record.target);
+            }
+          }
+        })
+      : null;
+  watcher?.observe(watched, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class'],
+    attributeOldValue: true,
+  });
+
   return {
+    setNarrow(next: boolean) {
+      if (destroyed || !want || next === narrow) return;
+      narrow = next;
+      if (narrow) {
+        for (const control of wideOnly) remove(control);
+        wideOnly = [];
+        for (const el of watched.querySelectorAll('.maplibregl-ctrl-attrib')) fold(el);
+      } else {
+        addWideOnly();
+      }
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      for (const control of added) {
-        try {
-          map.removeControl(control);
-        } catch {
-          // The map is gone
-        }
-      }
-      added.length = 0;
+      watcher?.disconnect();
+      for (const control of [...added]) remove(control);
+      wideOnly = [];
     },
   };
 }
@@ -91,9 +172,9 @@ export const LIFT_ATTRIBUTE = 'data-mgd-ui-lift';
 export interface CornerLift {
   /**
    * Measures again after the toolbar came, went or changed, or the regions of the shell moved;
-   * with the inset the shell reported, which is kept until the next one
+   * with the inset the shell reported and whether it is narrow, which are kept until the next ones
    */
-  update(inset?: ShellInset): void;
+  update(inset?: ShellInset, narrow?: boolean): void;
   /** Stops following and puts the corners back */
   destroy(): void;
 }
@@ -131,7 +212,8 @@ const upDown = (a: Box, b: Box) => a.top < b.bottom && b.top < a.bottom;
  *   while the right region covers the stage (the inset's right) and they are under it up and
  *   down: by the inset and gap-md
  * - --mgd-ui-lift-left also lifts the bottom left corner above the attribution's box while that
- *   box reaches the corner across
+ *   box reaches the corner across, but on a narrow map: there the attribution is folded to its
+ *   (i) button (mapControls), and the band the button opens is not lifted for
  *
  * The boxes are measured where maplibre-gl places them, without what this moved. The attribution
  * and the right region are followed with a ResizeObserver, as the toolbar and the corners are:
@@ -145,6 +227,7 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
   let frame = 0;
   let observed: Element[] = [];
   let inset: ShellInset = { top: 0, right: 0, bottom: 0, left: 0 };
+  let narrow = false;
   // What is applied now, to measure the boxes without it
   let now = { left: 0, right: 0, shift: 0 };
   let last = '';
@@ -231,9 +314,10 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
       }
     }
 
-    // The bottom left corner: above the toolbar, and above the attribution's box
+    // The bottom left corner: above the toolbar, and above the attribution's box but on a narrow
+    // map
     let liftLeft = reachesBar(left) ? band : 0;
-    const attrib = attribution()?.getBoundingClientRect();
+    const attrib = narrow ? undefined : attribution()?.getBoundingClientRect();
     if (left && attrib && attrib.width > 0 && attrib.height > 0) {
       // Where the attribution goes, and the corner lifted as far as the toolbar asks
       const a = moved(attrib, 0, now.right - liftRight);
@@ -281,9 +365,10 @@ export function cornerLift(container: HTMLElement, root: HTMLElement): CornerLif
   }
 
   return {
-    update(next?: ShellInset) {
+    update(next?: ShellInset, nextNarrow?: boolean) {
       if (destroyed) return;
       if (next) inset = { ...next };
+      if (nextNarrow !== undefined) narrow = nextNarrow;
       follow();
       apply();
     },

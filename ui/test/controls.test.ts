@@ -3,7 +3,7 @@
 
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cornerLift } from '../src/controls.js';
+import { cornerLift, mapControls } from '../src/controls.js';
 import { createDrawUI, type DrawUI } from '../src/index.js';
 import { fakeDraw } from './fake-draw.js';
 
@@ -286,7 +286,7 @@ describe('the bottom corners beside the right panel and the attribution', () => 
 
   it('lift the scale above the attribution where its box reaches the scale across', () => {
     const { container, root } = scene();
-    // Two lines across most of a narrow map, from 550 down
+    // Two lines across most of the map, from 550 down
     layOut(390, container, { left: 60, top: 550 });
     const lift = cornerLift(container, root);
     lift.update(inset(0));
@@ -307,5 +307,177 @@ describe('the bottom corners beside the right panel and the attribution', () => 
       'maplibregl-ctrl maplibregl-ctrl-attrib',
     );
     lift.destroy();
+  });
+
+  it('leave the scale where it is under an open attribution on a narrow map', () => {
+    const { container, root } = scene();
+    // The band the (i) button opens, across the scale
+    layOut(390, container, { left: 60, top: 550 });
+    const lift = cornerLift(container, root);
+    lift.update(inset(0), true);
+    expect(value(container, '--mgd-ui-lift-left')).toBe('0px');
+    // Wider, the same box lifts it again
+    lift.update(inset(0), false);
+    expect(value(container, '--mgd-ui-lift-left')).toBe('50px');
+    lift.destroy();
+  });
+});
+
+describe("maplibre-gl's controls on a narrow map", () => {
+  /** The names of the controls a call list holds, as stacks() labels them */
+  const names = (calls: unknown[][]) =>
+    (calls as unknown as Added[]).map(([control]) =>
+      control.constructor.name === 'NavigationControl'
+        ? control.options?.showCompass
+          ? 'compass'
+          : 'zoom'
+        : control.constructor.name,
+    );
+
+  it('leave out the globe and the compass, and add them back above the zoom on a wider one', () => {
+    const fake = fakeDraw();
+    const controls = mapControls(fake.map, undefined);
+    expect(fake.map.addControl).toHaveBeenCalledTimes(4);
+    controls.setNarrow(true);
+    expect(names(fake.map.removeControl.mock.calls)).toEqual(['compass', 'GlobeControl']);
+    // Narrow again changes nothing
+    controls.setNarrow(true);
+    expect(fake.map.removeControl).toHaveBeenCalledTimes(2);
+    controls.setNarrow(false);
+    // Each goes above those there: the compass above the zoom, the globe above the compass
+    const again = fake.map.addControl.mock.calls.slice(4);
+    expect(names(again)).toEqual(['compass', 'GlobeControl']);
+    expect(again.map(([, position]) => position)).toEqual(['bottom-right', 'bottom-right']);
+    // destroy() removes the zoom, the scale and the two added back, once
+    fake.map.removeControl.mockClear();
+    controls.destroy();
+    controls.destroy();
+    expect(names(fake.map.removeControl.mock.calls).sort()).toEqual(
+      ['GlobeControl', 'ScaleControl', 'compass', 'zoom'].sort(),
+    );
+  });
+
+  it('keep those set to false out', () => {
+    const fake = fakeDraw();
+    const controls = mapControls(fake.map, { globe: false });
+    controls.setNarrow(true);
+    controls.setNarrow(false);
+    expect(names(fake.map.addControl.mock.calls.slice(3))).toEqual(['compass']);
+    controls.destroy();
+  });
+
+  /** maplibre-gl's attribution in the map's container: compact, and open as it is built */
+  function attribution(holder: HTMLElement, classes: string) {
+    const el = document.createElement('details');
+    el.className = `maplibregl-ctrl maplibregl-ctrl-attrib ${classes}`;
+    holder.appendChild(el);
+    return el;
+  }
+
+  /** The map's container with maplibre-gl's control container and its bottom right corner */
+  function corner(fake: ReturnType<typeof fakeDraw>) {
+    const holder = document.createElement('div');
+    holder.className = 'maplibregl-control-container';
+    const right = document.createElement('div');
+    right.className = 'maplibregl-ctrl-bottom-right';
+    holder.appendChild(right);
+    fake.container.prepend(holder);
+    return right;
+  }
+
+  /** The mutation observer's records are delivered in a microtask */
+  const delivered = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const open = (el: Element) => el.classList.contains('maplibregl-compact-show');
+
+  it('fold the attribution to its (i) button each time maplibre-gl builds it open', async () => {
+    const fake = fakeDraw();
+    const right = corner(fake);
+    const first = attribution(right, 'maplibregl-compact maplibregl-compact-show');
+    const controls = mapControls(fake.map, undefined);
+    controls.setNarrow(true);
+    expect(open(first)).toBe(false);
+    expect(first.classList.contains('maplibregl-compact')).toBe(true);
+
+    // The (i) button opens it, and it stays open
+    first.classList.add('maplibregl-compact-show');
+    await delivered();
+    expect(open(first)).toBe(true);
+
+    // Added again by the page, open
+    first.remove();
+    const second = attribution(right, 'maplibregl-compact maplibregl-compact-show');
+    await delivered();
+    expect(open(second)).toBe(false);
+
+    // Built empty, then compact and open when it fills
+    second.remove();
+    const third = attribution(right, 'maplibregl-attrib-empty');
+    await delivered();
+    third.className =
+      'maplibregl-ctrl maplibregl-ctrl-attrib maplibregl-compact maplibregl-compact-show';
+    await delivered();
+    expect(open(third)).toBe(false);
+
+    // On a wider map it is left as maplibre-gl builds it
+    controls.setNarrow(false);
+    third.remove();
+    const wide = attribution(right, 'maplibregl-compact maplibregl-compact-show');
+    await delivered();
+    expect(open(wide)).toBe(true);
+
+    // And after destroy()
+    controls.setNarrow(true);
+    controls.destroy();
+    const after = attribution(right, 'maplibregl-compact maplibregl-compact-show');
+    await delivered();
+    expect(open(after)).toBe(true);
+  });
+
+  it('leave the attribution alone with mapControls: false', async () => {
+    const fake = fakeDraw();
+    const right = corner(fake);
+    const el = attribution(right, 'maplibregl-compact maplibregl-compact-show');
+    const controls = mapControls(fake.map, false);
+    controls.setNarrow(true);
+    await delivered();
+    expect(open(el)).toBe(true);
+    controls.destroy();
+  });
+
+  it('follow the shell of createDrawUI', async () => {
+    const observer = globalThis.ResizeObserver;
+    // An observer that reports each element once it is observed, so that the shell measures
+    globalThis.ResizeObserver = class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(): void {
+        queueMicrotask(() => this.callback([], this as unknown as ResizeObserver));
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof ResizeObserver;
+    try {
+      // A shell 640 wide, narrower than 48rem
+      rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        const width = this.matches('[data-role="shell"]') || this.querySelector('canvas') ? 640 : 0;
+        return DOMRect.fromRect({ x: 0, y: 0, width, height: width ? 800 : 0 });
+      });
+      const fake = fakeDraw();
+      const right = corner(fake);
+      const el = attribution(right, 'maplibregl-compact maplibregl-compact-show');
+      ui = createDrawUI(fake.asDraw);
+      for (let i = 0; i < 4; i++) {
+        flushSync();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(ui.element.querySelector('[data-role="shell"]')?.getAttribute('data-width')).toBe(
+        'narrow',
+      );
+      expect(names(fake.map.removeControl.mock.calls)).toEqual(['compass', 'GlobeControl']);
+      expect(open(el)).toBe(false);
+    } finally {
+      globalThis.ResizeObserver = observer;
+    }
   });
 });

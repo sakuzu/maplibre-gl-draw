@@ -635,10 +635,10 @@ describe('the actions', () => {
     await until(() => page.evaluate(() => (window as unknown as { on: boolean }).on), true);
   });
 
-  it('stand above the scale and a two-line attribution on a narrow map, and fit the map open', async () => {
+  it('stand above the scale on a narrow map, with the attribution folded and no globe or compass, and fit the map open', async () => {
     page = await openPage(browser, site);
     await page.setViewportSize({ width: 390, height: 667 });
-    // A credit long enough to wrap: a source drawn by a layer, and many actions
+    // A credit long enough to wrap when open: a source drawn by a layer, and many actions
     await page.evaluate(() => {
       const w = window as unknown as E2EWindow;
       w.map.addSource('credit', {
@@ -651,9 +651,8 @@ describe('the actions', () => {
         w.ui.actions.add({ id: `run-${i}`, label: `Action ${i}`, kind: 'action', run: () => {} });
       }
     });
-    await expect
-      .poll(() => page.locator('.maplibregl-ctrl-attrib').innerText())
-      .toContain('transport authority');
+    const attribution = page.locator('.maplibregl-ctrl-attrib');
+    await expect.poll(() => attribution.textContent()).toContain('transport authority');
     // The layer panel opens as a sheet over the bottom; Escape closes it
     await page.keyboard.press('Escape');
     await settle(page);
@@ -661,24 +660,42 @@ describe('the actions', () => {
     await card.getByRole('button', { name: 'Actions' }).click();
     await settle(page);
 
+    /** The controls of the bottom right, from the top */
+    const stack = () =>
+      page.evaluate(() =>
+        [
+          ...(window as unknown as E2EWindow).map
+            .getContainer()
+            .querySelectorAll('.maplibregl-ctrl-bottom-right > .maplibregl-ctrl'),
+        ].map((el) =>
+          el.querySelector('.maplibregl-ctrl-globe, .maplibregl-ctrl-globe-enabled')
+            ? 'globe'
+            : el.querySelector('.maplibregl-ctrl-compass')
+              ? 'compass'
+              : el.querySelector('.maplibregl-ctrl-zoom-in')
+                ? 'zoom'
+                : el.classList.contains('maplibregl-ctrl-attrib')
+                  ? 'attribution'
+                  : 'other',
+        ),
+      );
+    expect(await stack()).toEqual(['zoom', 'attribution']);
+
     await expect
       .poll(async () => {
         const b = await boxes();
         const attrib = b.attrib;
         if (!b.card || !b.scale || !attrib || !b.map) return 'missing boxes';
-        const attribAcross = (r: { left: number; right: number }) =>
-          r.left < attrib.right && attrib.left < r.right;
-        // The attribution two lines high, across the scale and the card
-        if (attrib.bottom - attrib.top < 30) return 'one line';
-        if (!attribAcross(b.scale) || !attribAcross(b.card)) return 'not across';
-        // The scale above the attribution, the card above both, and the card inside the map
-        if (b.scale.bottom > attrib.top + 1) return 'scale under the attribution';
-        if (b.card.bottom > attrib.top || b.card.bottom > b.scale.top) return 'card too low';
+        // The attribution folded to its (i) button, at the corner
+        if (attrib.right - attrib.left > 40) return 'open';
+        // The card above the scale, and inside the map
+        if (b.card.bottom > b.scale.top) return 'card too low';
         if (b.card.top < b.map.top) return 'card past the top';
         // The attribution's box keeps the margin of the corner: 10px from the right of the map,
         // and 10px above the toolbar it is lifted over
         if (Math.abs(b.map.right - 10 - attrib.right) > 0.5) return 'no margin at the right';
-        if (b.bar && attribAcross(b.bar) && attrib.bottom > b.bar.top - 10 + 0.5) {
+        const across = attrib.left < (b.bar?.right ?? 0) && (b.bar?.left ?? 0) < attrib.right;
+        if (b.bar && across && attrib.bottom > b.bar.top - 10 + 0.5) {
           return 'no margin above the toolbar';
         }
         return 'ok';
@@ -689,6 +706,41 @@ describe('the actions', () => {
       .locator('.card')
       .evaluate((el) => el.scrollHeight > el.clientHeight && getComputedStyle(el).overflowY);
     expect(scrolls).toBe('auto');
+
+    // The (i) button opens the band, which the scale does not move for
+    const scaleTop = (await boxes()).scale?.top;
+    await attribution.locator('summary').click();
+    await settle(page);
+    await expect.poll(async () => (await boxes()).attrib?.right ?? 0).toBeGreaterThan(0);
+    const opened = await boxes();
+    if (!opened.attrib || !opened.scale) throw new Error('missing boxes');
+    expect(opened.attrib.right - opened.attrib.left).toBeGreaterThan(40);
+    expect(opened.scale.top).toBeCloseTo(scaleTop ?? Number.NaN, 0);
+
+    // A rebuild of the attribution comes folded: the page adds one, which maplibre-gl builds open;
+    // the one opened by the (i) button stays open
+    const rebuilt = await page.evaluate(async () => {
+      const w = window as unknown as E2EWindow & {
+        e2e: { maplibregl: typeof import('maplibre-gl') };
+      };
+      const before = w.map.getContainer().querySelector('.maplibregl-ctrl-attrib');
+      const control = new w.e2e.maplibregl.AttributionControl({ compact: true });
+      w.map.addControl(control);
+      const added = control._container;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const folded = {
+        added: added.classList.contains('maplibregl-compact'),
+        addedOpen: added.classList.contains('maplibregl-compact-show'),
+        beforeOpen: !!before?.classList.contains('maplibregl-compact-show'),
+      };
+      w.map.removeControl(control);
+      return folded;
+    });
+    expect(rebuilt).toEqual({ added: true, addedOpen: false, beforeOpen: true });
+
+    // Wider, the globe and the compass come back above the zoom
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect.poll(stack).toEqual(['globe', 'compass', 'zoom', 'attribution']);
   });
 });
 

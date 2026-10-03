@@ -46,10 +46,10 @@
   // DrawUI: kata's Shell laid over the map (overlay). The stage is left empty, so the map shows
   // through and keeps its own pointer and keys; the regions of the shell take the pointer where
   // they are. The keyboard shortcuts are those of the toolbar's buttons. oninset reports how far
-  // the regions cover the stage from each edge (the inset of the shell's onlayout), once the
-  // shell has drawn them, so that the map's padding and its controls can follow them. While the
-  // left region is closed, a small button floats at the top
-  // left of the map to open it again. At the top right, a button switches the theme to the look
+  // the regions cover the stage from each edge (the inset of the shell's onlayout) and whether the
+  // shell is narrow, once the shell has drawn them, so that the map's padding and its controls
+  // can follow them. While the left region is closed, a small button floats at the top left of
+  // the map to open it again. At the top right, a button switches the theme to the look
   // that is not shown now (light reads the look the root shows, which the theme control keeps).
   //
   // The right region shows the inspector while something is selected, or the basemaps to choose
@@ -92,8 +92,11 @@
     inspector: Box<InspectorSettings | null>;
     /** The sections the application added to the inspector */
     sections: Box<InspectorSectionSpec[]>;
-    /** Called with the inset of the shell after the layout, the open panes or the toolbar change */
-    oninset?: (inset: ShellInset) => void;
+    /**
+     * Called with the inset of the shell and whether it is narrow, after the layout, the open
+     * panes or the toolbar change
+     */
+    oninset?: (inset: ShellInset, narrow: boolean) => void;
     /** Where the side regions go on a wide map: floating over it or beside it */
     side?: 'floating' | 'beside';
     /** Whether the root shows the light look now */
@@ -186,12 +189,13 @@
   let layout = $state<ShellLayout | null>(null);
   $effect(() => {
     const now: ShellInset = layout ? { ...layout.inset } : { top: 0, right: 0, bottom: 0, left: 0 };
+    const narrow = layout?.width === 'narrow';
     // Also when the toolbar comes or goes
     void bar;
     if (!oninset) return;
     const report = oninset;
     // After the shell has drawn the regions
-    tick().then(() => report(now));
+    tick().then(() => report(now, narrow));
   });
 
   // The theme button: the look it switches to, and its place. While the inspector is open

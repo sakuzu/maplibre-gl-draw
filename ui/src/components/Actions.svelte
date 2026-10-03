@@ -28,10 +28,10 @@
   //
   // It stands gap-md from the left (from the left region, while it stands beside the map) and
   // gap-md above the higher of maplibre-gl's controls of the bottom left corner (the scale) and
-  // the attribution's box where that box reaches the card across (the two-line attribution of a
-  // narrow map), each measured where it is drawn; the corner follows what moves it
-  // (controls.ts). Where the card reaches the toolbar across, as on a narrow map, it goes above
-  // the toolbar as well. The room it takes at the bottom is set on the root
+  // the attribution's box where that box reaches the card across (a two-line attribution, or the
+  // band the (i) button opens on a narrow map), each measured where it is drawn; the corner
+  // follows what moves it (controls.ts). Where the card reaches the toolbar across, as on a
+  // narrow map, it goes above the toolbar as well. The room it takes at the bottom is set on the root
   // (--mgd-ui-actions-reserve), and the layer panel floating at the left ends gap-md above it.
   //
   // Its height is at most the room above that place, less gap-md at the top, and less the button

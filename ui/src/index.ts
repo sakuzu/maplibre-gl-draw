@@ -183,7 +183,8 @@ function toolsHandle(
  * there are two or more. A button at the top right switches between the
  * light and the dark look, and maplibre-gl's own controls go to the bottom corners of the map (the
  * globe, the compass and the zoom at the right, the scale at the left), which move out of the way
- * of the toolbar, the right panel and the attribution; `destroy()` removes them. The actions of
+ * of the toolbar, the right panel and the attribution; a narrow map (below 48rem) shows no globe
+ * and no compass, and its attribution folded to its (i) button; `destroy()` removes them. The actions of
  * the application (`options.actions`, `ui.actions`) are rows of a card at the bottom left, above
  * the scale and the attribution, each with its key.
  *
@@ -232,7 +233,7 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
   });
   applyLocale(root, messages, options.locale ?? 'en');
   // maplibre-gl's own controls at the bottom corners, kept clear of the toolbar, the right region
-  // and the attribution
+  // and the attribution; a narrow map has no globe and no compass, and its attribution folded
   const controls = mapControls(map, options.mapControls);
   const lift = cornerLift(map.getContainer(), root);
   // The map keeps its view clear of the left region and of the sheets
@@ -248,9 +249,10 @@ export function createDrawUI(draw: Draw, options: DrawUIOptions = {}): DrawUI {
       shortcuts: options.shortcuts !== false,
       inspector,
       sections,
-      oninset: (inset: ShellInset) => {
+      oninset: (inset: ShellInset, narrow: boolean) => {
         padding?.update(inset);
-        lift.update(inset);
+        controls.setNarrow(narrow);
+        lift.update(inset, narrow);
       },
       side: options.side,
       light,

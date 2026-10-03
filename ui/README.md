@@ -509,6 +509,16 @@ also resets the pitch) and the zoom; at the bottom left, the scale
 maplibre-gl's style sheet, which the page imports itself
 (`import 'maplibre-gl/dist/maplibre-gl.css'`).
 
+On a narrow map (below 48rem, kata's Shell's narrow) the globe and the
+compass are left out, and only the zoom stays; they come back above it
+on a wider map. The attribution of a narrow map is folded to its (i)
+button: maplibre-gl builds its compact attribution open (until the
+first drag), and each time it does so (when the attribution first
+fills, when the map's width brings the compact form back, or when the
+page adds it again) the interface folds it, as maplibre-gl's own fold
+on a drag does. The (i) button opens it. Wider maps are left as they
+are. With `mapControls: false` the attribution is left alone too.
+
 ```ts
 const ui = createDrawUI(draw, {
   mapControls: { globe: false, scale: true }, // or false for none
@@ -523,10 +533,10 @@ bottom corners of the map are kept clear of the interface:
   toolbar
 - while the right panel covers the bottom right of the map, the controls
   there (not the attribution) move to the left of it, gap-md apart
-- where the attribution's box reaches the scale across, as the two-line
-  attribution of a narrow map does, the bottom left corner is lifted
-  above it. The attribution is only read; its compact form is
-  maplibre-gl's own
+- where the attribution's box reaches the scale across, as a two-line
+  attribution does, the bottom left corner is lifted above it, but on a
+  narrow map, where the attribution is folded: the band its (i) button
+  opens is not lifted for
 
 These are the rules of the style sheet outside the root element: they
 apply to the map's container while the interface is on it.
