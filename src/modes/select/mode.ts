@@ -34,7 +34,7 @@ import {
   getSelectedFeatureIds,
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
-import type { EngineModeContext, EngineModeHandler } from '../handler.js';
+import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../handler.js';
 import { queryFeaturesInBox } from './box-selection.js';
 import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
@@ -107,6 +107,15 @@ export class SelectMode implements EngineModeHandler {
     store.transact(() => {
       store.setSelection(null, []);
     }, 'silent');
+  }
+
+  /**
+   * Snapping applies only while a vertex or a feature is dragged: a click or a hover in
+   * select is not snapped (and draws no indicator). A plugin that wants a snapped position
+   * there asks for one.
+   */
+  isSnapEnabledFor(inputType: SnapInputKind): boolean {
+    return inputType === 'dragstart' || inputType === 'dragmove' || inputType === 'dragend';
   }
 
   /**

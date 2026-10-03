@@ -265,6 +265,8 @@ draw.extensions.plugins.add(createShortcuts());
 - A consumed key still reaches the map. To stop the map from also
   using it (the arrows, `+`, `-`), call `event.original.preventDefault()`
 - `onPointerLeave` arrives when the pointer leaves the map
+- In `select` only the drags snap. A click or a move there carries
+  `snapped.lngLat` equal to `lngLat`
 
 ## Hooks of the select mode
 
@@ -454,6 +456,11 @@ become vertices. `snapPreference` narrows the snapping:
 
 A mode whose preference changes while it draws declares
 `snapPreference` as a getter; it is read before every input.
+
+The snap belongs to the input of the mode. The engine takes it back
+when the mode is left or receives `onCancel`, and for an input that
+`unsnapped` leaves out, so no symbol stays on the map and `snap.changed`
+fires with `null`.
 
 ### Drags
 

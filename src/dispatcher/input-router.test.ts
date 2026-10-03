@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { DisplayInteractions } from '../dataset/interaction.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
+import { SelectMode } from '../modes/select/mode.js';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createSnapService } from '../snapping/service.js';
@@ -363,6 +364,43 @@ describe('Snapping of InputRouter', () => {
     expect(mode.dragStarts[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
     expect(mode.dragEnds[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
     expect(mode.clicks[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
+  });
+
+  it('an input that is not snapped clears the previous snap (the indicator does not stay)', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    mode.isSnapEnabledFor = (inputType) => inputType !== 'mousemove';
+
+    const cursor = nearTarget(3);
+    emit(makeMouseEvent('click', cursor.lng, cursor.lat));
+    expect(snapService.getResult()?.target?.kind).toBe('vertex');
+
+    // A move the mode declines
+    emit(makeMouseEvent('mousemove', cursor.lng, cursor.lat));
+    expect(snapService.getResult()).toBeNull();
+
+    // An event that asks not to be snapped
+    emit(makeMouseEvent('click', cursor.lng, cursor.lat));
+    expect(snapService.getResult()?.target?.kind).toBe('vertex');
+    emit(makeMouseEvent('click', cursor.lng, cursor.lat, { snap: false }));
+    expect(snapService.getResult()).toBeNull();
+  });
+
+  it('select snaps only its drags: a hover or a click near a vertex is not snapped', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    const select = new SelectMode();
+    mode.isSnapEnabledFor = (inputType) => select.isSnapEnabledFor(inputType);
+
+    const cursor = nearTarget(3);
+    emit(makeMouseEvent('mousemove', cursor.lng, cursor.lat));
+    emit(makeMouseEvent('click', cursor.lng, cursor.lat));
+    expect(mode.moves[0].lngLat).toEqual(cursor);
+    expect(mode.clicks[0].lngLat).toEqual(cursor);
+    expect(snapService.getResult()).toBeNull();
+
+    normalizer.emit(makeDragMoveEvent(cursor.lng, cursor.lat));
+    expect(mode.dragMoves[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
   });
 
   it('a mode that does not implement isSnapEnabledFor snaps for every type (default)', () => {

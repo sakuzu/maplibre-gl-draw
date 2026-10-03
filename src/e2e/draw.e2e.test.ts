@@ -529,6 +529,101 @@ describe('a point with a companion under the real pointer', () => {
   });
 });
 
+describe('the snap indicator belongs to the input of the mode', () => {
+  /** The pixels of the snap color (#00C7BE) in a box of 60 px around a page point */
+  async function snapPixels(point: PagePoint): Promise<number> {
+    return page.evaluate(
+      (pt) =>
+        new Promise<number>((resolve) => {
+          const { map } = window as unknown as E2EWindow;
+          map.once('render', () => {
+            const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+            const rect = map.getCanvas().getBoundingClientRect();
+            const ratio = gl.drawingBufferWidth / map.getCanvas().clientWidth;
+            const size = Math.round(60 * ratio);
+            const x = Math.round((pt.x - rect.left) * ratio) - size / 2;
+            const y = gl.drawingBufferHeight - Math.round((pt.y - rect.top) * ratio) - size / 2;
+            const pixels = new Uint8Array(size * size * 4);
+            gl.readPixels(x, y, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            let count = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+              const near =
+                Math.abs(pixels[i] - 0x00) < 24 &&
+                Math.abs(pixels[i + 1] - 0xc7) < 24 &&
+                Math.abs(pixels[i + 2] - 0xbe) < 24;
+              if (near && pixels[i + 3] > 0) count++;
+            }
+            resolve(count);
+          });
+          map.triggerRepaint();
+        }),
+      point,
+    );
+  }
+
+  /** The last result snap.changed carried: its kind, or null */
+  async function lastSnap(): Promise<string | null | undefined> {
+    return page.evaluate(() => {
+      const snaps = (window as unknown as { e2eSnaps: Array<string | null> }).e2eSnaps;
+      return snaps[snaps.length - 1];
+    });
+  }
+
+  beforeAll(async () => {
+    await clearAll(page);
+    const target = await lngLatOf(page, at(0, 0));
+    await page.evaluate((coordinates) => {
+      const { draw } = window as unknown as E2EWindow;
+      draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates } });
+      const w = window as unknown as { e2eSnaps: Array<string | null> };
+      w.e2eSnaps = [];
+      draw.on('snap.changed', ({ result }) => w.e2eSnaps.push(result?.target?.kind ?? null));
+    }, target);
+    await settle(page);
+  });
+
+  afterAll(async () => {
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: true } }),
+    );
+    await clearAll(page);
+  });
+
+  /** Enters draw_line and snaps to the point with the real pointer */
+  async function snapInDrawLine(): Promise<void> {
+    await setMode(page, 'draw_line');
+    await page.mouse.move(at(20, 20).x, at(20, 20).y);
+    await page.mouse.move(at(4, 0).x, at(4, 0).y);
+    await settle(page);
+    expect(await lastSnap()).toBe('vertex');
+    expect(await snapPixels(at(0, 0))).toBeGreaterThan(0);
+  }
+
+  it('goes when the mode is left, and a hover in select does not snap', async () => {
+    await snapInDrawLine();
+
+    await setMode(page, 'select');
+    expect(await lastSnap()).toBeNull();
+    expect(await snapPixels(at(0, 0))).toBe(0);
+
+    await page.mouse.move(at(3, 1).x, at(3, 1).y);
+    await page.mouse.move(at(4, 0).x, at(4, 0).y);
+    await settle(page);
+    expect(await lastSnap()).toBeNull();
+    expect(await snapPixels(at(0, 0))).toBe(0);
+  });
+
+  it('goes when snapping is turned off', async () => {
+    await snapInDrawLine();
+
+    await page.evaluate(() =>
+      (window as unknown as E2EWindow).draw.options.update({ snapping: { enabled: false } }),
+    );
+    expect(await lastSnap()).toBeNull();
+    expect(await snapPixels(at(0, 0))).toBe(0);
+  });
+});
+
 describe('the stacking order on a real map', () => {
   it('places external entries and layer-order datasets with reorder, and the runs follow', async () => {
     const result = await page.evaluate(() => {

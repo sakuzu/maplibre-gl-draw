@@ -126,3 +126,58 @@ describe('selection.ungroup', () => {
     expect(draw.features.get(features[0].id)?.groupId).toBe('g1');
   });
 });
+
+describe('the snap of a mode is taken back with the mode', () => {
+  /** The results snap.changed carried, as the kind of their target (null without one) */
+  const watchSnap = (): Array<string | null> => {
+    const kinds: Array<string | null> = [];
+    draw.on('snap.changed', ({ result }) => kinds.push(result?.target?.kind ?? null));
+    return kinds;
+  };
+
+  beforeEach(() => {
+    point(0, 0, 'p');
+  });
+
+  it('is cleared when the mode is left', () => {
+    const kinds = watchSnap();
+    draw.setMode('draw_line');
+    createSyntheticInput(engine).move([0, 0]);
+    expect(kinds).toEqual(['vertex']);
+
+    draw.setMode('select');
+
+    expect(kinds).toEqual(['vertex', null]);
+    expect(engine.context.snapService.getResult()).toBeNull();
+  });
+
+  it('is cleared when the drawing is cancelled from outside', () => {
+    const kinds = watchSnap();
+    draw.setMode('draw_line');
+    const input = createSyntheticInput(engine);
+    input.click([0.5, 0.5]);
+    input.move([0, 0]);
+    expect(kinds).toEqual(['vertex']);
+
+    expect(draw.drawing.cancel()).toBe(true);
+
+    expect(kinds).toEqual(['vertex', null]);
+    expect(draw.getMode()).toBe('draw_line');
+  });
+
+  it('is cleared when an Escape the mode does not take interrupts it', () => {
+    const onCancel = vi.fn();
+    draw.extensions.modes.add('probe', () => ({ onCancel }));
+    const kinds = watchSnap();
+    draw.setMode('probe');
+    const input = createSyntheticInput(engine);
+    input.move([0, 0]);
+    expect(kinds).toEqual(['vertex']);
+
+    input.key('Escape');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(kinds).toEqual(['vertex', null]);
+    expect(draw.getMode()).toBe('probe');
+  });
+});

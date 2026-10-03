@@ -264,6 +264,8 @@ draw.extensions.plugins.add(createShortcuts());
 - 消費したキーは地図に届きます。地図にも使わせたくないとき (矢印、
   `+`、`-`) は、`event.original.preventDefault()` を呼びます
 - `onPointerLeave` は、ポインターが地図の外に出たときに届きます
+- `select` で吸着するのはドラッグだけです。そこでのクリックと移動の
+  `snapped.lngLat` は `lngLat` と同じです
 
 ## 選択モードのフック
 
@@ -451,6 +453,11 @@ draw.setMode('draw_rectangle');
 
 描いている途中で好みが変わるモードは、`snapPreference` をゲッターで
 書きます。入力のたびに読まれます。
+
+吸着はモードの入力のものです。モードを抜けたとき、`onCancel` を
+受けたとき、`unsnapped` で外した入力のときは、エンジンが吸着を
+取り返します。地図に記号は残らず、`snap.changed` が `null` で
+発火します。
 
 ### ドラッグ
 

@@ -116,6 +116,12 @@ While snapped, a symbol is drawn on the snap target: a ring for a vertex,
 a square for an edge, a dot for an intersection, and for a guide a small
 ring with the guide line dashed underneath.
 
+The symbol belongs to the input of the current mode. Leaving the mode,
+cancelling the drawing (`draw.drawing.cancel()`) and turning snapping or
+the kind off remove it at once, and `snap.changed` fires with `null`. In
+`select` only the drags of vertices and features snap, so a pointer that
+only hovers near a vertex draws no symbol.
+
 `snap.changed` fires whenever the result changes. Its `result` is a
 `SnapResult`, or `null` when snapping is lost. `target.kind`,
 `target.featureId`, `target.datasetId` (for a row of a dataset) and
