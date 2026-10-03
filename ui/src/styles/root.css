@@ -148,8 +148,8 @@
 }
 
 /* The layer panel and the legend put alone (createLayerPanel, createLegend) are not inside kata's
- * Panel, which paints the panel's surface and declares it for what covers part of it (a sticky
- * row, a ring cut out of the surface): the root does both, as kata's surface mixin does */
+ * Panel, which paints the panel's surface and declares it for what covers part of it (the end
+ * of a row, a ring cut out of the surface): the root does both, as kata's surface mixin does */
 .mgd-ui[data-surface] {
   background: var(--kata-color-panel);
   --kata-color-surface: var(--kata-color-panel);
