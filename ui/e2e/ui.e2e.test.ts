@@ -191,7 +191,7 @@ describe('the inspector', () => {
 });
 
 describe('the inspector of a point', () => {
-  it('keeps the tabs in the head, and starts the description pad-md under their line, then the fields with no title', async () => {
+  it('keeps the tabs in the head, and starts what the description shows pad-md under their line, then the fields with no title', async () => {
     page = await openPage(browser, site);
     const { point } = await ids();
     await page.evaluate((id) => {
@@ -209,8 +209,10 @@ describe('the inspector of a point', () => {
       if (!tabs?.parentElement || !body || !description || !color) {
         throw new Error('no tabs, no content or no color field');
       }
-      const row = description.querySelector('[data-role="pair"]') ?? description.firstElementChild;
-      if (!row) throw new Error('no description');
+      // The value of the description: a control without a line, laid out as what it shows (its
+      // text, or the icon and the text that add a description)
+      const shown = description.querySelector('[data-role="pair"] [data-role="box"]');
+      if (!shown) throw new Error('no description');
       // The step of the token, in the font of the content
       const probe = document.createElement('div');
       probe.style.height = 'var(--kata-pad-md)';
@@ -219,8 +221,8 @@ describe('the inspector of a point', () => {
       probe.remove();
       return {
         tabsInBody: body.contains(tabs),
-        // From the line along the bottom of the head (the tabs) to the row of the description
-        gap: row.getBoundingClientRect().top - body.getBoundingClientRect().top,
+        // From the line along the bottom of the head (the tabs) to the top of what the description shows
+        gap: shown.getBoundingClientRect().top - body.getBoundingClientRect().top,
         description: description.textContent ?? '',
         colorAfter: !description.contains(color) && content?.children[1]?.contains(color),
         step,
@@ -235,6 +237,81 @@ describe('the inspector of a point', () => {
     expect(measured.step).toBeGreaterThan(0);
     expect(measured.gap).toBeCloseTo(measured.step, 1);
     expect(measured.headings).toEqual(['Operations']);
+  });
+
+  it('keeps md + md from the description to the next block, and levels the name with the first line of the description (#17)', async () => {
+    page = await openPage(browser, site);
+    const { point } = await ids();
+    await page.evaluate((id) => {
+      (window as unknown as E2EWindow).draw.selection.set('feature', [id]);
+    }, point);
+    const inspector = page.locator('[data-role="inspector"]');
+    await inspector.locator('[data-role="tabs"]').waitFor();
+    await settle(page);
+    const measure = () =>
+      inspector.evaluate((el) => {
+        const body = el.querySelector('[data-role="panel"] > .scroll');
+        const pair = [...el.querySelectorAll('[data-role="pair"]')].find((p) =>
+          p.textContent?.includes('Description'),
+        );
+        const block = pair?.closest('[data-role="block"]');
+        const next = block?.nextElementSibling?.querySelector('[data-role="pair"]');
+        const name = pair?.firstElementChild;
+        // The value: a control without a line, laid out as what it shows (its text, or the icon
+        // and the text that add a description)
+        const control = pair?.querySelector('[data-role="box"]');
+        const value = control?.querySelector('[data-ink]');
+        if (!body || !pair || !next || !name || !control || !value) {
+          throw new Error('no description');
+        }
+        // The baseline of the first line of an element: a box of no height sits on it
+        const baseline = (e: Element) => {
+          const mark = document.createElement('span');
+          mark.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+          e.prepend(mark);
+          const y = mark.getBoundingClientRect().top;
+          mark.remove();
+          return y;
+        };
+        const shown = control.getBoundingClientRect();
+        const probe = document.createElement('div');
+        probe.style.height = 'var(--kata-pad-md)';
+        body.append(probe);
+        const step = probe.getBoundingClientRect().height;
+        probe.remove();
+        return {
+          step,
+          added: !!pair.querySelector('.add'),
+          // From the edge of the content to the first line of the value
+          top: shown.top - body.getBoundingClientRect().top,
+          // From what the value shows last (its last line, trimmed at the baseline) to the next block
+          toNext: next.getBoundingClientRect().top - shown.bottom,
+          nameBaseline: baseline(name),
+          valueBaseline: baseline(value),
+        };
+      });
+
+    // At rest with no description: the row that adds one
+    const empty = await measure();
+    expect(empty.added).toBe(true);
+    expect(empty.step).toBeGreaterThan(0);
+    expect(empty.top).toBeCloseTo(empty.step, 1);
+    expect(empty.toNext).toBeCloseTo(empty.step * 2, 1);
+
+    // With a description of several lines
+    await inspector.getByRole('button', { name: 'Add a description' }).click();
+    await page.keyboard.type(
+      'A covered yard between the blocks, where the market stands on Saturdays',
+    );
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await inspector.getByRole('button', { name: 'Description', exact: true }).waitFor();
+    await page.mouse.move(1, 1);
+    await settle(page);
+    const filled = await measure();
+    expect(filled.added).toBe(false);
+    expect(filled.top).toBeCloseTo(filled.step, 1);
+    expect(filled.toNext).toBeCloseTo(filled.step * 2, 1);
+    expect(filled.nameBaseline).toBeCloseTo(filled.valueBaseline, 1);
   });
 
   it('takes the width of the sheet on a narrow map', async () => {
