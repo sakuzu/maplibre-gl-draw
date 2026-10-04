@@ -119,7 +119,8 @@ describe('the basemap section', () => {
     expect(texts(ui.element)).toEqual(['Dark']);
     ui.setLocale('ja');
     flushSync();
-    const heads = [...ui.element.querySelectorAll('[data-role="section-head"] .label')];
+    const layerPanel = ui.element.querySelector('[data-role="layer-panel"]');
+    const heads = [...(layerPanel?.querySelectorAll('[data-role="section-head"] .label') ?? [])];
     expect(heads.map((h) => h.textContent)).toEqual(['スタック', '背景地図']);
     expect(texts(ui.element)).toEqual(['Dark']);
   });
