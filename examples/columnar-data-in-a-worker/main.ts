@@ -78,8 +78,8 @@ function ask(request: Request): Promise<Reply> {
   });
 }
 
-/** A time in whole milliseconds, for the console */
-const ms = (value: number): string => `${Math.round(value).toLocaleString('en')} ms`;
+/** A time in whole milliseconds, for the console (one below the timer's resolution can come out a little under zero; it reads as 0) */
+const ms = (value: number): string => `${Math.max(0, Math.round(value)).toLocaleString('en')} ms`;
 
 /** Resolves with the time of the next frame drawn */
 function nextFrame(): Promise<number> {
