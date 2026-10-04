@@ -1,6 +1,6 @@
 {
   "name": "@sakuzu/maplibre-gl-draw-ui",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "The standard user interface of @sakuzu/maplibre-gl-draw: a toolbar of drawing tools and keyboard shortcuts over the map, with a plain JavaScript API.",
   "keywords": [
     "maplibre",

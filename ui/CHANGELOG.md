@@ -7,6 +7,21 @@ follows semantic versioning.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-04
+
+kata ^1.9.2: the panes follow kata's measuring of what is seen.
+
+### Fixed in 1.3.1
+
+- The description of a feature is as far from the next block as other
+  text (md + md), empty or not, and its name shares the baseline of its
+  first line (#17).
+- A ghost button alone in a Floating (the theme switch, the collapsed
+  actions card) keeps its hit area inside the Floating's line, and the
+  card's text is no longer against the line.
+- Rows with ghost buttons and fields at rest are as tall as their text
+  (kata 1.9): the inspector and the layer rows are tighter.
+
 ## [1.3.0] - 2026-10-04
 
 From the review of the standard UI on kata 1.8: the map at a narrow
