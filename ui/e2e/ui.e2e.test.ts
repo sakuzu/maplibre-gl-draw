@@ -297,6 +297,8 @@ describe('the inspector of a point', () => {
     expect(empty.step).toBeGreaterThan(0);
     expect(empty.top).toBeCloseTo(empty.step, 1);
     expect(empty.toNext).toBeCloseTo(empty.step * 2, 1);
+    // The icon of the add row sits in a seat, so the row's first baseline is its text's
+    expect(empty.nameBaseline).toBeCloseTo(empty.valueBaseline, 1);
 
     // With a description of several lines
     await inspector.getByRole('button', { name: 'Add a description' }).click();
