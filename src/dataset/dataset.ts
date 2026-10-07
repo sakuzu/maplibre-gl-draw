@@ -31,7 +31,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, Coordinate, Feature, StyleRule } from '../shared/types/model.js';
 import type { PreparedTable, Table } from '../table/types.js';
-import { sanitizeDrawFactors } from '../view/renderers/draw-factors.js';
+import { type RetainedDrawFactors, sanitizeDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import { TerrainContext } from '../view/terrain/context.js';
 import { DisplayChunkSet } from './chunk-set.js';
@@ -613,13 +613,14 @@ export class DatasetImpl implements Dataset {
     if (renderers) {
       this.chunks.draw({ target, renderers, terrain, projectionData, zoom, bounds, factors });
     } else {
-      this.drawImmediate(target, projectionData, zoom, bounds);
+      this.drawImmediate(target, projectionData, zoom, bounds, factors);
     }
 
     drawSelectionHighlight({
       target,
       projectionData,
       zoom,
+      factors,
       bounds,
       selected: this.selected,
       styles: this.chunks.retainedRenderers?.styles,
@@ -727,13 +728,15 @@ export class DatasetImpl implements Dataset {
    * Draws in immediate mode (the path for an environment without the retained-mode renderers)
    *
    * The frame of the batch is started without passing a layer. The rules have already been
-   * evaluated here, so the rule evaluation of the rendering side (FeatureDrawer) is not used.
+   * evaluated here, so the rule evaluation of the rendering side (FeatureDrawer) is not used. The
+   * factors of the frame are passed, the same as to the retained batches.
    */
   private drawImmediate(
     target: DisplayBatchTarget,
     projectionData: ProjectionData,
     zoom: number,
     bounds: BoundingBox,
+    factors: RetainedDrawFactors,
   ): void {
     const rows = this.source.index.search(bounds).filter((row) => this.thinning.isDrawnRow(row));
     let visible = this.styler.prepareAll(this.featuresOf(rows));
@@ -744,7 +747,7 @@ export class DatasetImpl implements Dataset {
     }
     if (visible.length === 0) return;
 
-    target.beginFrame(projectionData, zoom);
+    target.beginFrame(projectionData, zoom, undefined, factors);
     for (const feature of visible) {
       target.processFeature(feature, false);
     }

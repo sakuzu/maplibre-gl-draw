@@ -915,4 +915,118 @@ describe('BatchManager the opacity of the layer', () => {
 
     expect(h.pointDrawAll.mock.calls[0][3]).toEqual({ scale: 1, opacity: 1 });
   });
+
+  it('combines the factors of the frame with those of the layer for every batch', () => {
+    const h = createOpacityManager();
+    h.manager.beginFrame({} as ProjectionData, 14, LAYER_AT_HALF, { scale: 2, opacity: 0.5 });
+    h.manager.processFeature(makePoint('p', [0, 0]), false);
+    h.manager.processFeature(
+      {
+        id: 'l',
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+        layerId: 'layer-1',
+        groupId: undefined,
+        properties: {},
+        locked: false,
+        visible: true,
+        style: {},
+      },
+      false,
+    );
+    h.manager.processFeature(polygon('g'), false);
+    h.manager.endFrame();
+
+    expect(h.pointDrawAll.mock.calls[0][3]).toEqual({ scale: 2, opacity: 0.25 });
+    expect(h.lineDrawAll.mock.calls[0][4]).toEqual({ scale: 2, opacity: 0.25 });
+    expect(h.sdfPolygonDrawBatch.mock.calls[0][4]).toEqual({ scale: 2, opacity: 0.25 });
+  });
+
+  it('multiplies the factors of the frame into the paths without a factor uniform', () => {
+    const drawer = createDrawer();
+    const drawPointShape = vi.spyOn(drawer, 'drawPointShape').mockImplementation(() => {});
+    vi.spyOn(drawer, 'getPointStyle').mockImplementation(() => ({
+      ...DEFAULT_FEATURE_STYLE_CONFIG.point.point,
+      shape: 'icon',
+    }));
+    const h = createOpacityManager(drawer);
+    h.manager.beginFrame({} as ProjectionData, 14, undefined, { scale: 0.25, opacity: 0.5 });
+    h.manager.processFeature(
+      polygon('g', { fillColor: '#ff0000', fillOpacity: 0.8, lineStyle: 'dashed' }),
+      false,
+    );
+    h.manager.processFeature(makePoint('p', [0, 0]), false);
+    h.manager.endFrame();
+
+    expect(h.fillColors[0][3]).toBeCloseTo(0.4);
+    const style = drawPointShape.mock.calls[0][1];
+    const defaults = DEFAULT_FEATURE_STYLE_CONFIG.point.point;
+    expect(style.size).toBeCloseTo(defaults.size * 0.25);
+    expect(style.strokeWidth).toBeCloseTo(defaults.strokeWidth * 0.25);
+    expect(style.fillOpacity).toBeCloseTo(defaults.fillOpacity * 0.5);
+    expect(style.strokeOpacity).toBeCloseTo(defaults.strokeOpacity * 0.5);
+  });
+
+  it('cuts the dashes from the width the size factor of the frame gives', () => {
+    // The pieces are copied out, since the batch array is cleared after the draw
+    const drawDashes = (style: FeatureStyle, scale: number, type: 'LineString' | 'Polygon') => {
+      const pieces: number[][][] = [];
+      const lineDrawAll = vi.fn((items: LineBatchItem[]) => {
+        for (const item of items) pieces.push(item.coords.map((c) => [...c]));
+      });
+      const manager = createBatchManager({
+        gl: {
+          canvas: { width: 800, height: 600 },
+          drawingBufferWidth: 800,
+          drawingBufferHeight: 600,
+        } as WebGL2RenderingContext,
+        featureDrawer: createDrawer(),
+        pointInstanceRenderer: { drawAll: vi.fn() } as unknown as PointInstanceRenderer,
+        sdfLineRenderer: {
+          beginDraw: vi.fn(),
+          endDraw: vi.fn(),
+          drawAll: lineDrawAll,
+        } as unknown as SDFLineRenderer,
+        polygonBatchRenderer: { drawBatch: vi.fn() } as unknown as PolygonBatchRenderer,
+        sdfPolygonRenderer: { drawBatch: vi.fn() } as unknown as SDFPolygonRenderer,
+      });
+      manager.beginFrame({} as ProjectionData, 14, undefined, { scale, opacity: 1 });
+      if (type === 'LineString') {
+        manager.processFeature(
+          {
+            ...polygon('l', style),
+            type: 'LineString',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [0, 0],
+                [0.05, 0],
+              ],
+            },
+          },
+          false,
+        );
+      } else {
+        manager.processFeature(polygon('g', style), false);
+      }
+      manager.endFrame();
+      return pieces;
+    };
+
+    for (const type of ['LineString', 'Polygon'] as const) {
+      // Twice the size factor cuts the same dashes as twice the width
+      const scaled = drawDashes({ strokeWidth: 3, lineStyle: 'dashed' }, 2, type);
+      const wide = drawDashes({ strokeWidth: 6, lineStyle: 'dashed' }, 1, type);
+      const plain = drawDashes({ strokeWidth: 3, lineStyle: 'dashed' }, 1, type);
+      expect(scaled.length).toBeGreaterThan(0);
+      expect(scaled).toEqual(wide);
+      expect(scaled.length).toBeLessThan(plain.length);
+    }
+  });
 });

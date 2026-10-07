@@ -17,6 +17,7 @@ import { densifyPathForGlobe } from '../globe-subdivision.js';
 import { TerrainContext } from '../terrain/context.js';
 import { anchorGhostOpacity } from '../terrain/occlusion.js';
 import {
+  combineDrawFactors,
   layerDrawFactors,
   NEUTRAL_DRAW_FACTORS,
   type RetainedDrawFactors,
@@ -304,12 +305,20 @@ export class BatchManager {
    *
    * @param layer The layer to draw (used to evaluate the style rules, and its opacity is
    *   multiplied into everything the frame draws; no factor when omitted)
+   * @param factors The draw factors of the frame itself (a dataset passes those of its
+   *   `zoomScale`). They are combined with the factors of the layer and multiplied into
+   *   everything the frame draws, the same as on the retained path; no factor when omitted
    */
-  beginFrame(projectionData: ProjectionData, zoom: number, layer?: Layer): void {
+  beginFrame(
+    projectionData: ProjectionData,
+    zoom: number,
+    layer?: Layer,
+    factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  ): void {
     this.projectionData = projectionData;
     this.zoom = zoom;
     this.layer = layer;
-    this.factors = layerDrawFactors(layer);
+    this.factors = combineDrawFactors(layerDrawFactors(layer), factors);
     this.currentBatchType = null;
   }
 
@@ -403,7 +412,7 @@ export class BatchManager {
       }
       // Shapes that do not support instancing are drawn individually, one point at a time
       // (MultiPoint comes into this function part by part, so they are drawn per point)
-      this.featureDrawer.drawPointShape(coord, this.withLayerOpacity(style), this.zoom, feature.id);
+      this.featureDrawer.drawPointShape(coord, this.withFrameFactors(style), this.zoom, feature.id);
     } else {
       // Color, size and stroke are instance attributes, so the batch key only needs the shape
       const batchKey: InstancingShape = instancedShape;
@@ -476,8 +485,10 @@ export class BatchManager {
     const fixedWidth = getCreatedZoom(feature) === undefined;
     const createdZoom = getCreatedZoom(feature) ?? this.zoom;
 
-    // Compute the effective line width at the current zoom level
-    const effectiveStrokeWidth = strokeStyle.width * 2 ** (this.zoom - createdZoom);
+    // Compute the effective line width at the current zoom level (with the size factor of the
+    // frame, which the shader multiplies into the width, so the dashes follow the drawn width)
+    const effectiveStrokeWidth =
+      strokeStyle.width * 2 ** (this.zoom - createdZoom) * this.factors.scale;
 
     // For dashed/dotted lines the dashes are computed on the CPU side
     const dashPattern = getStrokeDashPattern(strokeStyle.lineStyle, effectiveStrokeWidth);
@@ -629,7 +640,9 @@ export class BatchManager {
     // convention as withFixedWidth; collectPolygons in retained mode does the same).
     const fixedWidth = getCreatedZoom(feature) === undefined;
     const createdZoom = getCreatedZoom(feature) ?? this.zoom;
-    const effectiveStrokeWidth = strokeStyle.width * 2 ** (this.zoom - createdZoom);
+    // The drawn width of the outline (with the size factor of the frame; the dashes follow it)
+    const effectiveStrokeWidth =
+      strokeStyle.width * 2 ** (this.zoom - createdZoom) * this.factors.scale;
     const isDashed = strokeStyle.lineStyle !== 'solid';
 
     if (strokeStyle.opacity > 0 && !isDashed) {
@@ -667,7 +680,7 @@ export class BatchManager {
       if (fillColor[3] > 0) {
         this.polygonFillBatch.push({
           coordinates: rings,
-          color: this.colorWithLayerOpacity(fillColor),
+          color: this.colorWithFrameOpacity(fillColor),
           featureId: feature.id,
           partIndex,
         });
@@ -694,7 +707,7 @@ export class BatchManager {
     if (fillColor[3] > 0) {
       this.polygonFillBatch.push({
         coordinates: rings,
-        color: this.colorWithLayerOpacity(fillColor),
+        color: this.colorWithFrameOpacity(fillColor),
         featureId,
         partIndex,
       });
@@ -761,23 +774,26 @@ export class BatchManager {
   }
 
   /**
-   * A color with the opacity of the layer multiplied into its alpha (for the fill-only polygon
-   * batch, whose colors are per vertex and which has no factor uniform)
+   * A color with the opacity factor of the frame multiplied into its alpha (for the fill-only
+   * polygon batch, whose colors are per vertex and which has no factor uniform)
    */
-  private colorWithLayerOpacity(color: Color): Color {
+  private colorWithFrameOpacity(color: Color): Color {
     const opacity = this.factors.opacity;
     return opacity === 1 ? color : [color[0], color[1], color[2], color[3] * opacity];
   }
 
   /**
-   * A point style with the opacity of the layer multiplied in (for the per-point renderer, which
-   * has no factor uniform)
+   * A point style with the factors of the frame multiplied in (for the per-point renderer, which
+   * has no factor uniform): the size and the stroke width by the size factor, the opacities by
+   * the opacity factor
    */
-  private withLayerOpacity(style: PointStyle): PointStyle {
-    const opacity = this.factors.opacity;
-    if (opacity === 1) return style;
+  private withFrameFactors(style: PointStyle): PointStyle {
+    const { scale, opacity } = this.factors;
+    if (scale === 1 && opacity === 1) return style;
     return {
       ...style,
+      size: style.size * scale,
+      strokeWidth: style.strokeWidth * scale,
       fillOpacity: style.fillOpacity * opacity,
       strokeOpacity: style.strokeOpacity * opacity,
     };

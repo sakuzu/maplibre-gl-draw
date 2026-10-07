@@ -399,7 +399,8 @@ merged over `baseStyle`.
 
 `zoomScale` multiplies the size and the opacity by factors that depend on
 the zoom. It is called each time the map is drawn, and changing what it
-returns rebuilds nothing.
+returns rebuilds nothing. It applies to everything the dataset draws, the
+selection highlight and dashed lines included.
 
 <!-- docs-check: with datasets -->
 

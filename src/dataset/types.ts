@@ -14,6 +14,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import type { BoundingBox, Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import type { PreparedTable, Table } from '../table/types.js';
+import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import type { StyleRuleChannel } from '../view/style-rule.js';
@@ -628,7 +629,18 @@ export function normalizeDisplayFeature(input: DatasetRow, index: number): Featu
  * @internal
  */
 export interface DisplayBatchTarget {
-  beginFrame(projectionData: ProjectionData, zoom: number, layer?: Layer): void;
+  /**
+   * Opens a frame of the batches
+   *
+   * @param factors The draw factors of the frame (the dataset passes those of its `zoomScale`,
+   *   so that every path it draws through gets the same factors as its retained batches)
+   */
+  beginFrame(
+    projectionData: ProjectionData,
+    zoom: number,
+    layer?: Layer,
+    factors?: RetainedDrawFactors,
+  ): void;
   processFeature(feature: Feature, isSelected: boolean): boolean;
   endFrame(): void;
   /**

@@ -1367,9 +1367,9 @@ They are passed as `RetainedDrawFactors { scale, opacity }`
 opacity 1) as the default.
 
 Uniforms are residual per-program state, so every path that has no factors
-(`draw`, the immediate draws of a dataset, the selection UI) must write
-the neutral values. Otherwise the factors of a dataset or a layer drawn
-just before leak into whatever is drawn next.
+(`draw`, the selection UI) must write the neutral values. Otherwise the
+factors of a dataset or a layer drawn just before leak into whatever is
+drawn next.
 
 ### The opacity of a Store layer
 
@@ -1415,8 +1415,14 @@ type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
 - A frame where `opacity` is 0 skips the dataset entirely
 - It applies per dataset, never to the Store, and multiplies with the
   render scale
-- Features drawn in immediate mode (dashed lines, the point shape `icon`)
-  do not get the factors
+- Every path of the dataset gets the same factors. The features drawn in
+  immediate mode (dashed lines and outlines, the point shape `icon`, every
+  feature when the retained renderers are missing) and the selection
+  highlight, with the feature it redraws over it, take them through the
+  optional `factors` of `BatchManager.beginFrame`, which combines them with
+  the factors of the layer (`combineDrawFactors`)
+- Dashes are cut from the width with the factor, so a dash and a gap scale
+  with the line
 
 ## Collision thinning
 

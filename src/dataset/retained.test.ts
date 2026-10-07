@@ -855,6 +855,41 @@ describe('the zoom-dependent drawing factors (zoomScale)', () => {
       { scale: 1, opacity: 1 },
     ]);
   });
+
+  it('the immediate-mode fallback and the selection highlight get the factors of the frame', () => {
+    const { manager } = createManager();
+    const probe = createRetainedProbe();
+    const dataset = add(manager, {
+      id: 'c1',
+      rows: [line('dashed', 0, { style: { lineStyle: 'dashed' } }), point('pt', 5)],
+      zoomScale: () => ({ scale: 0.5, opacity: 0.4 }),
+    });
+    dataset.setSelectedIds(['pt']);
+
+    drawFrame(manager, probe);
+
+    // One frame for the dashed line of the chunk and one for the highlight
+    const frames = vi.mocked(probe.target.beginFrame).mock.calls;
+    expect(probe.immediate.map((feature) => feature.id)).toEqual(['dashed', 'pt', 'pt']);
+    expect(frames).toHaveLength(2);
+    for (const frame of frames) expect(frame[3]).toEqual({ scale: 0.5, opacity: 0.4 });
+  });
+
+  it('without the retained renderers the immediate frame gets the factors as well', () => {
+    const { manager } = createManager();
+    const probe = createRetainedProbe();
+    add(manager, {
+      id: 'c1',
+      rows: [point('pt', 0)],
+      zoomScale: () => ({ scale: 2, opacity: 0.5 }),
+    });
+    const target: DisplayBatchTarget = { ...probe.target, getRetainedRenderers: undefined };
+
+    manager.draw('below-store', target, {} as ProjectionData, 10);
+
+    expect(probe.immediate.map((feature) => feature.id)).toEqual(['pt']);
+    expect(vi.mocked(target.beginFrame).mock.calls[0][3]).toEqual({ scale: 2, opacity: 0.5 });
+  });
 });
 
 describe('following the changes of the DEM coverage', () => {

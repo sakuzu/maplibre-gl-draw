@@ -19,6 +19,7 @@ import type { BoundingBox, Feature } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../shared/utils/pixel-ratio.js';
 import { getSurfaceTessellationStep } from '../view/globe-subdivision.js';
+import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
 import { boundsCenter, rebasedRetainedOrigin } from '../view/shaders/retained-origin.js';
 import { getAnchorElevationGeneration } from '../view/terrain/anchor.js';
@@ -241,7 +242,7 @@ export interface DisplayChunkFrame {
   zoom: number;
   bounds: BoundingBox;
   /** The zoom-dependent drawing factors of this frame */
-  factors: { scale: number; opacity: number };
+  factors: RetainedDrawFactors;
 }
 
 /**
@@ -459,11 +460,10 @@ export class DisplayChunkSet {
       drawChunkBatches(state.batches, renderers, zoom, projectionData, factors);
 
       // The features that cannot be retained are drawn immediately, right after the retained
-      // batches of the chunk, the points last (the immediate-mode path is not multiplied by the
-      // factors)
+      // batches of the chunk, the points last (with the same factors as the retained batches)
       const { fallback, pointFallback } = state.batches;
       if (fallback.length > 0 || pointFallback.length > 0) {
-        target.beginFrame(projectionData, zoom);
+        target.beginFrame(projectionData, zoom, undefined, factors);
         for (const feature of fallback) target.processFeature(feature, false);
         for (const feature of pointFallback) target.processFeature(feature, false);
         target.endFrame();

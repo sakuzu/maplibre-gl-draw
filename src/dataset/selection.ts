@@ -20,6 +20,7 @@ import {
 } from '../shared/config/selection-highlight.js';
 import type { BoundingBox, Coordinate, Feature } from '../shared/types/model.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
+import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { RetainedStyleResolver } from '../view/renderers/retained.js';
 import { getStyleRuleChannel } from '../view/style-rule.js';
@@ -44,6 +45,11 @@ export interface SelectionHighlightInput {
   target: DisplayBatchTarget;
   projectionData: ProjectionData;
   zoom: number;
+  /**
+   * The draw factors of the frame (those of `zoomScale`; the highlight and the feature redrawn
+   * over it take the same factors as the rest of the dataset). No factors when omitted
+   */
+  factors?: RetainedDrawFactors;
   bounds: BoundingBox;
   /** The selected features (in draw order) */
   selected: readonly Feature[];
@@ -92,7 +98,7 @@ export function drawSelectionHighlight(input: SelectionHighlightInput): void {
   );
   if (visible.length === 0) return;
 
-  target.beginFrame(projectionData, zoom);
+  target.beginFrame(projectionData, zoom, undefined, input.factors);
   for (const feature of visible) {
     const prepared = input.prepare(feature);
     // The hand-over decision (drapedFills) switches a few frames late, so looking only at it

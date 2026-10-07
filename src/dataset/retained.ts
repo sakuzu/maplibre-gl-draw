@@ -1033,7 +1033,7 @@ function collectPoint(
   const style = styles.getPointStyle(feature);
   const shape = toInstancedPointShape(style.shape);
   if (!shape) {
-    // The path that goes to immediate mode is not multiplied by the factors of zoomScale
+    // The immediate-mode path gets the same factors of zoomScale (DisplayBatchTarget.beginFrame)
     pushFallback(draft, feature);
     return;
   }
@@ -1064,7 +1064,7 @@ function collectLine(
   // only)
   if (skipDraped && strokeStyle.opacity > 0 && strokeStyle.width > 0) return;
   if (strokeStyle.lineStyle !== 'solid') {
-    // The path that goes to immediate mode is not multiplied by the factors of zoomScale
+    // The immediate-mode path gets the same factors of zoomScale (DisplayBatchTarget.beginFrame)
     pushFallback(draft, feature);
     return;
   }
@@ -1110,7 +1110,7 @@ function collectPolygon(
   // (in this frame only)
   if (skipDraped) return;
   if (hasStroke && strokeStyle.lineStyle !== 'solid') {
-    // The path that goes to immediate mode is not multiplied by the factors of zoomScale
+    // The immediate-mode path gets the same factors of zoomScale (DisplayBatchTarget.beginFrame)
     pushFallback(draft, feature);
     return;
   }

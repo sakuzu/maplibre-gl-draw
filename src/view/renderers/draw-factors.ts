@@ -13,8 +13,11 @@
  * Conventions:
  *
  * - The default is `NEUTRAL_DRAW_FACTORS` (1x scale, opacity 1), so calls that
- *   pass no factors (Store rendering, immediate mode) look exactly as before,
+ *   pass no factors (the Store rendering, for example) look exactly as before,
  *   down to the pixel
+ * - The immediate-mode frame of a dataset takes its factors through
+ *   `BatchManager.beginFrame`, which combines them with the factors of the layer
+ *   (`combineDrawFactors`)
  * - A uniform is per-program residual state, so even rendering paths that do
  *   not use the factors must write 1 (a value left over from a previous draw
  *   makes another draw come out thinner; this is the same family of accident as
@@ -74,4 +77,19 @@ export function layerDrawFactors(
   const opacity = layer?.opacity;
   if (opacity === undefined || opacity === 1) return NEUTRAL_DRAW_FACTORS;
   return sanitizeDrawFactors({ scale: 1, opacity });
+}
+
+/**
+ * The product of two sets of factors (the frame's own factors over those of the layer)
+ *
+ * Both are taken as already rounded (`sanitizeDrawFactors`, `layerDrawFactors`). Neutral
+ * factors on either side give the other set itself.
+ */
+export function combineDrawFactors(
+  a: RetainedDrawFactors,
+  b: RetainedDrawFactors,
+): RetainedDrawFactors {
+  if (b === NEUTRAL_DRAW_FACTORS || (b.scale === 1 && b.opacity === 1)) return a;
+  if (a === NEUTRAL_DRAW_FACTORS || (a.scale === 1 && a.opacity === 1)) return b;
+  return { scale: a.scale * b.scale, opacity: a.opacity * b.opacity };
 }
