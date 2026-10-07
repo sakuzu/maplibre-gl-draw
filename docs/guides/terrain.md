@@ -53,7 +53,7 @@ call.
 - Areas and lines are painted as pixels of the ground rather than as
   triangles lifted onto it, so they follow every fold of the relief
   without tearing or sinking. A line keeps the width it has on a flat
-  map, however steep the slope
+  map, however steep the slope, and below a pixel it fades the same way
 - Area fills are shaded with the same light as the ground's hillshade, so
   the relief stays readable under an opaque fill. Only the lightness
   changes; the colors still match a legend

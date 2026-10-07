@@ -114,6 +114,16 @@ const AA_HALF_WIDTH_PX = 0.5;
  */
 export const POINT_AA_PADDING_PX = 1;
 
+/**
+ * The smallest outer radius a point is drawn at (device pixels): a diameter of one pixel
+ *
+ * A smaller point cannot be drawn smaller, since the antialiasing band alone is a pixel wide: its
+ * coverage would tend to a blob of a fixed size as the radius goes to 0, and the point would never
+ * fade. Below this radius the shape is drawn at it, fainter by the ratio of the areas
+ * (`pointInkFactor`), so the ink it leaves follows its area and goes to nothing with it.
+ */
+export const POINT_MIN_OUTER_PX = 0.5;
+
 // Stride of the instance data (floats per instance)
 // position(2) + fillColor(4) + strokeColor(4) + size(1) + strokeWidth(1)
 //   + elevation(1) = 13 floats
@@ -163,7 +173,32 @@ export function pointSdfEdges(
 ): PointSdfEdges {
   const radius = Math.max(0, fillSizePx) * sizeScale;
   const outer = radius + Math.max(0, strokeWidthPx) * sizeScale;
+  // Below a diameter of one pixel the shape is drawn at that diameter (pointInkFactor)
+  if (outer > 0 && outer < POINT_MIN_OUTER_PX) {
+    const grow = POINT_MIN_OUTER_PX / outer;
+    return {
+      radius: radius * grow,
+      outer: POINT_MIN_OUTER_PX,
+      extent: POINT_MIN_OUTER_PX + POINT_AA_PADDING_PX,
+    };
+  }
   return { radius, outer, extent: outer + POINT_AA_PADDING_PX };
+}
+
+/**
+ * The factor the alpha of a point is multiplied by (the same computation as the shader)
+ *
+ * 1 at an outer radius of `POINT_MIN_OUTER_PX` and above. Below it the point is drawn at that
+ * radius (`pointSdfEdges`), and the factor is the ratio of its true area to the area drawn, so the
+ * ink it leaves follows its area and goes to 0 with it. A radius of 0 or below draws nothing (0).
+ *
+ * @param outerPx The outer radius (radius + stroke width, with the size factor; device pixels)
+ */
+export function pointInkFactor(outerPx: number): number {
+  if (!(outerPx > 0)) return 0;
+  if (outerPx >= POINT_MIN_OUTER_PX) return 1;
+  const ratio = outerPx / POINT_MIN_OUTER_PX;
+  return ratio * ratio;
 }
 
 /**
@@ -510,6 +545,7 @@ flat out vec4 v_stroke_color;
 out vec2 v_offset_px;
 flat out float v_radius_px;
 flat out float v_outer_px;
+flat out float v_ink;
 
 void main() {
     // The anchor elevation comes from the CPU (the same source as hit testing).
@@ -522,6 +558,15 @@ void main() {
 
     float radius = max(a_instance_size, 0.0) * u_size_scale;
     float outer = radius + max(a_instance_stroke_width, 0.0) * u_size_scale;
+    // Below a diameter of one pixel the shape is drawn at that diameter, fainter by the ratio of
+    // the areas, so the ink it leaves follows its area (pointSdfEdges, pointInkFactor)
+    v_ink = 1.0;
+    if (outer > 0.0 && outer < ${POINT_MIN_OUTER_PX.toFixed(1)}) {
+        float grow = ${POINT_MIN_OUTER_PX.toFixed(1)} / outer;
+        v_ink = 1.0 / (grow * grow);
+        radius *= grow;
+        outer = ${POINT_MIN_OUTER_PX.toFixed(1)};
+    }
     // The billboard is sized as the outer radius plus the antialiasing padding
     // (so that the edge is not clipped)
     vec2 offsetPx = a_quad * (outer + ${POINT_AA_PADDING_PX.toFixed(1)});
@@ -542,6 +587,7 @@ flat in vec4 v_stroke_color;
 in vec2 v_offset_px;
 flat in float v_radius_px;
 flat in float v_outer_px;
+flat in float v_ink;          // the factor of a point below one pixel (1 otherwise)
 uniform float u_opacity;      // opacity factor at draw time (default 1)
 uniform float u_shape;        // shape (0 = circle, 1 = square, 2 = triangle, 3 = star)
 out vec4 fragColor;
@@ -569,7 +615,7 @@ void main() {
     vec4 color = mix(v_stroke_color, v_fill_color, fillMix);
 
     // Blending is non-premultiplied, so the factors are applied to the alpha only
-    fragColor = vec4(color.rgb, color.a * u_opacity * coverage);
+    fragColor = vec4(color.rgb, color.a * u_opacity * coverage * v_ink);
 }`;
 
     return createProgram(this.gl, vertexSource, fragmentSource);

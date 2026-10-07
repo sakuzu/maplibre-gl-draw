@@ -327,6 +327,15 @@ float dashDistance(vec2 sa, vec2 sb, float start, float len, float dash, float p
     return best;
 }
 
+// The coverage of an outline of a half width at a screen distance from it. Below one
+// pixel of width the outline is drawn one pixel wide and fainter by its width, so the ink
+// per unit of length follows the width and goes to nothing with it (the rule of the
+// vertex path's line and outline shaders)
+float strokeCoverage(float halfWidth, float dist) {
+    float ink = clamp(2.0 * halfWidth, 0.0, 1.0);
+    return clamp(max(halfWidth, 0.5) + 0.5 - dist, 0.0, 1.0) * ink;
+}
+
 // Compose on top (premultiplied alpha)
 vec4 over(vec4 below, vec3 rgb, float a) {
     return vec4(rgb * a + below.rgb * (1.0 - a), a + below.a * (1.0 - a));
@@ -462,7 +471,7 @@ void main() {
         }
 
         if (paints && halfWidth > 0.0 && stroke.a > 0.0) {
-            float coverage = clamp(halfWidth + 0.5 - strokeDist, 0.0, 1.0);
+            float coverage = strokeCoverage(halfWidth, strokeDist);
             if (coverage > 0.0) acc = over(acc, stroke.rgb, stroke.a * coverage * factors.x);
         }
 
@@ -487,7 +496,7 @@ void main() {
             // for features that have no outline (the same as the immediate mode), and
             // it is solid under a dashed outline too
             float selHalf = halfWidth + u_selection_stroke_extra * 0.5;
-            selStroke = max(selStroke, clamp(selHalf + 0.5 - minDist, 0.0, 1.0) * factors.x);
+            selStroke = max(selStroke, strokeCoverage(selHalf, minDist) * factors.x);
         }
     }
 

@@ -24,7 +24,9 @@ import type { PointInstanceDataFull } from './point-instance.js';
 import {
   buildPointInstanceData,
   POINT_AA_PADDING_PX,
+  POINT_MIN_OUTER_PX,
   PointInstanceRenderer,
+  pointInkFactor,
   pointSdfEdges,
 } from './point-instance.js';
 
@@ -353,5 +355,37 @@ describe('SDF boundaries (pointSdfEdges)', () => {
       outer: 0,
       extent: POINT_AA_PADDING_PX,
     });
+  });
+
+  it('draws a point below a diameter of one pixel at that diameter, keeping its proportions', () => {
+    expect(pointSdfEdges(0.1, 0.1)).toEqual({
+      radius: 0.25,
+      outer: POINT_MIN_OUTER_PX,
+      extent: POINT_MIN_OUTER_PX + POINT_AA_PADDING_PX,
+    });
+    expect(pointSdfEdges(1, 0, 0.25).outer).toBe(POINT_MIN_OUTER_PX);
+  });
+});
+
+describe('the ink of a point below one pixel (pointInkFactor)', () => {
+  it('is 1 at a diameter of one pixel and above', () => {
+    expect(pointInkFactor(POINT_MIN_OUTER_PX)).toBe(1);
+    expect(pointInkFactor(6)).toBe(1);
+  });
+
+  it('below it, is the ratio of the true area to the area drawn', () => {
+    expect(pointInkFactor(POINT_MIN_OUTER_PX / 2)).toBeCloseTo(0.25);
+    expect(pointInkFactor(POINT_MIN_OUTER_PX / 10)).toBeCloseTo(0.01);
+  });
+
+  it('falls steadily to 0 with the radius, without a lower limit', () => {
+    let previous = 1;
+    for (const outer of [0.4, 0.3, 0.2, 0.1, 0.01, 0.001]) {
+      const ink = pointInkFactor(outer);
+      expect(ink).toBeLessThan(previous);
+      previous = ink;
+    }
+    expect(pointInkFactor(0)).toBe(0);
+    expect(pointInkFactor(-1)).toBe(0);
   });
 });

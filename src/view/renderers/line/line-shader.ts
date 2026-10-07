@@ -257,6 +257,11 @@ void main() {
     float lineWidth = (strokeWidth > 0.0
         ? strokeWidth * pow(2.0, u_zoom - createdZoom)
         : (strokeWidth < 0.0 ? -strokeWidth : u_width)) * u_size_scale;
+    // Below one pixel the line is drawn one pixel wide and fainter by its width, so the ink per
+    // unit of length follows the width and goes to nothing with it (the caps of every dash
+    // included, which would otherwise keep a blob of a fixed size)
+    float ink = clamp(lineWidth, 0.0, 1.0);
+    lineWidth = max(lineWidth, 1.0);
     float halfWidth = lineWidth / 2.0;
 
     // HHAA: expand by w+1 so that partially covered pixels are included too
@@ -301,7 +306,7 @@ void main() {
     v_linesofar = segmentStart + t * screenSegmentLength;  // cumulative distance (for dashes)
     v_line_pos = linePos;                  // position along the line
     v_seg_length = screenSegmentLength;    // segment length (computed on the GPU)
-    v_color = a_color;                     // line color (instance attribute)
+    v_color = a_color * ink;               // line color (instance attribute), by the ink
 }`;
 }
 

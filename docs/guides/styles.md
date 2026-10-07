@@ -76,7 +76,9 @@ draw.features.update(featureId, {
 - `strokeWidth` is in pixels at the zoom the feature was drawn at, its
   reference zoom (the property `maplibre-gl-draw:createdZoom`). The line
   then grows and shrinks with the map like its geometry, like a line
-  drawn on paper
+  drawn on paper. There is no lower limit: below a pixel the line is
+  drawn fainter instead of thinner, so it fades out as the map is zoomed
+  out
 - The drawing modes write the reference zoom unless the option
   `scaleWithZoom` is `false`. A feature without it (one created with
   `features.create`, or drawn with that option off) keeps its width in

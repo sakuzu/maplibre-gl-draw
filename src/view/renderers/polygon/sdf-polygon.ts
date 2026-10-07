@@ -410,6 +410,10 @@ void main() {
         float lineWidth = (strokeWidth >= 0.0
             ? strokeWidth * pow(2.0, u_zoom - createdZoom)
             : -strokeWidth) * u_size_scale;
+        // Below one pixel the outline is drawn one pixel wide and fainter by its width, so the
+        // ink per unit of length follows the width and goes to nothing with it
+        float ink = clamp(lineWidth, 0.0, 1.0);
+        lineWidth = max(lineWidth, 1.0);
         float halfWidth = lineWidth / 2.0;
 
         // Expand by 1 pixel for HHAA
@@ -423,7 +427,7 @@ void main() {
         vec2 finalNdc = (finalScreenPos / u_viewport) * 2.0 - 1.0;
         gl_Position = vec4(finalNdc * clipPos.w, clipPos.z, clipPos.w);
 
-        v_color = a_color;
+        v_color = vec4(a_color.rgb, a_color.a * ink);
         v_type = 1.0;
         v_dist = a_side * expandedHalfWidth;
         v_halfWidth = halfWidth;

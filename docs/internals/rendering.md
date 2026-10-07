@@ -799,6 +799,9 @@ which is feature order.
   and without stroke share an instance array
 - The radius and stroke boundary follow the same formula as the pure
   function `pointSdfEdges()`, and the shader embeds the same margins
+- A point below a diameter of one pixel is drawn at that diameter and
+  fainter (`pointInkFactor`; see
+  [Sizes below one pixel](#sizes-below-one-pixel))
 
 An instance is 12 floats: relative coordinates 2, fill color 4, stroke
 color 4, radius 1, stroke width 1. The order is exactly the input order;
@@ -1348,6 +1351,32 @@ uses it for every feature without a `createdZoom`, in retained and
 immediate mode alike (`withFixedWidth`, `collectPolygons`). Zero means
 something different per renderer: the per-batch `u_width` for lines, and
 no outline for polygons.
+
+### Sizes below one pixel
+
+Sizes have no lower limit: a line drawn at a reference zoom halves with
+each zoom step out, and so does everything a `zoomScale` factor shrinks.
+Disappearing when zoomed out is the intended behaviour, so a size below
+one pixel is not drawn larger. It cannot be drawn smaller either, since
+the antialiasing band alone is a pixel wide, so it is drawn fainter: the
+ink it leaves on the screen follows its true size and goes to nothing with
+it.
+
+- Points: below an outer radius of `POINT_MIN_OUTER_PX` (0.5, a diameter
+  of one pixel) the shape is drawn at that radius, with the fill and the
+  stroke in proportion, and its alpha is multiplied by the ratio of the
+  true area to the area drawn (`pointSdfEdges`, `pointInkFactor`). The ink
+  follows the area and goes to 0 with the radius. Without it the coverage
+  tends to a blob of a fixed size as the radius goes to 0, so the point
+  never fades
+- Lines and polygon outlines: below a width of one pixel they are drawn
+  one pixel wide and their alpha is multiplied by the width, so the ink per
+  unit of length equals the width. The round caps of every dash follow it
+  too (they otherwise kept a blob of a fixed size each)
+- The analytic drape applies the same rule to its outlines
+  (`strokeCoverage` in `drape/renderer.ts`)
+- It applies to drawn features and datasets alike. At one pixel and above
+  nothing changes
 
 ### Draw-time factors
 
