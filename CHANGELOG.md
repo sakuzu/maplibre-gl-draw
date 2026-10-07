@@ -6,6 +6,33 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-10-07
+
+Two fixes to how sizes follow the zoom: the paths of a dataset that drew
+at a fixed size, and sizes below one pixel that never disappeared.
+
+### Fixed in 2.1.4
+
+- A dataset applies the draw factors of its `zoomScale` (size and
+  opacity) on every path it draws through. The selection highlight and
+  the selected feature drawn on top of it, dashed and dotted lines and
+  polygon outlines, and shapes that go through immediate mode used to be
+  drawn at their stored size, so a selected point or a dashed line did
+  not change with the zoom. The dash pattern is now made from the scaled
+  width. `BatchManager.beginFrame` and `DisplayBatchTarget.beginFrame`
+  take an optional `factors` that is combined with the layer factors
+  ([#28](https://github.com/sakuzu/maplibre-gl-draw/issues/28)).
+- Sizes below one pixel are drawn so that the ink on screen follows the
+  real size and fades out smoothly. A point whose diameter is below
+  1 px is drawn at 1 px with its alpha multiplied by the ratio of the
+  areas, and a line or a polygon outline thinner than 1 px is drawn at
+  1 px with its alpha multiplied by the width, on the flat map and on
+  the terrain drape alike. Before, a shrinking point kept a faint blob
+  of about the antialiasing width until its size was exactly 0. This
+  applies to datasets and hand-drawn features. Nothing changes at 1 px
+  and above, and no minimum or maximum size is added
+  ([#28](https://github.com/sakuzu/maplibre-gl-draw/issues/28)).
+
 ## [2.1.3] - 2026-10-04
 
 Two fixes: the snap indicator that stayed after its input, and the
