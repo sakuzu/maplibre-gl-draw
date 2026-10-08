@@ -521,6 +521,13 @@ export.
 A reader that wants only your attributes drops the keys for which
 `isDrawProperty(key)` is true.
 
+`featuresToGeoJSON(features, { getFile })` writes features with the same
+rules without a drawing, so features the application keeps outside one
+are written as the drawing writes its own. They come out in the order
+given, and `featureToGeoJSON` writes one feature. `getFile` reads the
+file of an Image by its ID (`(id) => store.getFile(id)`, for example);
+without it, an Image is written without its pixels.
+
 ### Keys added to properties
 
 Besides the values of the library, the export adds these keys.

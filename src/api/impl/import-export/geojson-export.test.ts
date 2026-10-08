@@ -5,7 +5,8 @@
  * Tests for the GeoJSON export: the text `document.toGeoJSON` writes is pinned character by
  * character, for a document that goes through every rule of the export (rounding, ring
  * orientation, the antimeridian, the added keys, images, the order of hidden features and an
- * unsupported geometry)
+ * unsupported geometry), and the public functions that write features without a drawing
+ * write the same text
  */
 
 import type { Geometry } from 'geojson';
@@ -14,6 +15,7 @@ import { MemoryStore } from '../../../store/memory.js';
 import type { Feature, Layer } from '../../../store/types.js';
 import { createResourceDeps } from '../../../test-utils.js';
 import type { DocumentResource } from '../../document.js';
+import { featuresToGeoJSON, featureToGeoJSON } from '../../model.js';
 import { createDocument } from '../document.js';
 
 const layer = (id: string, visible = true): Layer => ({
@@ -504,5 +506,49 @@ describe('document.toGeoJSON', () => {
         ]
       }"
     `);
+  });
+});
+
+describe('featuresToGeoJSON and featureToGeoJSON', () => {
+  /** The features of the store in the order document.toGeoJSON writes them */
+  const inExportOrder = (): Feature[] =>
+    doc.toGeoJSON().features.map((f) => store.getFeature(String(f.id)) as Feature);
+
+  it('write the same text as document.toGeoJSON for the same features', () => {
+    const features = [...inExportOrder(), store.getFeature('collection') as Feature];
+    const getFile = (id: string) => store.getFile(id);
+    expect(JSON.stringify(featuresToGeoJSON(features, { getFile }), null, 2)).toBe(
+      JSON.stringify(doc.toGeoJSON(), null, 2),
+    );
+    expect(JSON.stringify(features.map((f) => featureToGeoJSON(f, { getFile })))).toBe(
+      JSON.stringify([...doc.toGeoJSON().features, null]),
+    );
+  });
+
+  it('write the features in the order given', () => {
+    const features = inExportOrder().reverse();
+    expect(featuresToGeoJSON(features).features.map((f) => f.id)).toEqual(
+      features.map((f) => f.id),
+    );
+  });
+
+  it('write an Image without its pixels when the file is not read', () => {
+    const image = store.getFeature('image') as Feature;
+    const written = featureToGeoJSON(image)?.properties ?? {};
+    expect(written['maplibre-gl-draw:featureType']).toBe('Image');
+    expect(written).not.toHaveProperty('maplibre-gl-draw:imageData');
+    expect(written).not.toHaveProperty('maplibre-gl-draw:imageMimeType');
+    expect(featureToGeoJSON(image, { getFile: () => undefined })?.properties).toEqual(written);
+  });
+
+  it('write an empty collection without a bbox', () => {
+    expect(featuresToGeoJSON([])).toEqual({ type: 'FeatureCollection', features: [] });
+  });
+
+  it('do not change the features given', () => {
+    const polygon = structuredClone(store.getFeature('polygon') as Feature);
+    const before = structuredClone(polygon);
+    featuresToGeoJSON([polygon]);
+    expect(polygon).toEqual(before);
   });
 });

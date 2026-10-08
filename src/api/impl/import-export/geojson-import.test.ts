@@ -279,7 +279,7 @@ describe('loadGeoJSON', () => {
         custom('d', 'Routes', { type: 'MultiLineString', coordinates: [ring.slice(0, 2)] }),
         custom('e', 'Pin', { type: 'Point', coordinates: [0, 0] }),
       ];
-      const exported = originals.map((f) => convertFeatureToGeoJSON(f, store));
+      const exported = originals.map((f) => convertFeatureToGeoJSON(f));
       const result = await loadGeoJSON(featureCollection(...exported), deps);
       expect(result.skipped).toEqual([]);
       expect(result.featureIds.map((id) => store.getFeature(id)?.type)).toEqual([

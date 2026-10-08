@@ -5,6 +5,10 @@
  * Conversion from the internal Feature to the GeoJSON format + export of a
  * GeoJSON FeatureCollection
  *
+ * The conversion is pure: it reads only the features it is given and, for the image of an
+ * Image, the function that reads an embedded file. The export of the document puts the
+ * features of the Store in their order and converts them with the same functions.
+ *
  * The output follows RFC 7946: every position is rounded to GEOJSON_COORDINATE_DECIMALS
  * decimal places, the rings of a polygon follow the right-hand rule (the outer ring
  * counter-clockwise, the holes clockwise) whatever orientation they were drawn in, every
@@ -26,11 +30,14 @@ import {
 import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../../shared/properties.js';
 import { listShownFeatures } from '../../../store/local-visibility.js';
 import type { Store } from '../../../store/store.js';
-import type { ExportOptions, Feature } from '../../../store/types.js';
+import type { ExportOptions, Feature, FileData } from '../../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS } from './constants.js';
 import { setOwnProperty } from './own-property.js';
 
 type Position = [number, number];
+
+/** Reads an embedded file by its ID (undefined when there is no such file) */
+export type ReadFile = (id: string) => FileData | undefined;
 
 const COORDINATE_SCALE = 10 ** GEOJSON_COORDINATE_DECIMALS;
 
@@ -130,11 +137,14 @@ function exportGeometry(geometry: GeoJSON.Geometry): GeoJSON.Geometry | null {
  *     properties with the maplibre-gl-draw: prefix
  *   - the positions are rounded and the rings oriented (see the top of this file)
  *   - a type that is not the type of its geometry is identified by featureType
- *   - for an Image feature, the image data is embedded as Base64
+ *   - for an Image feature, the image data is embedded as Base64, when `readFile` is given
+ *     and finds its file
+ *
+ * @param readFile - Reads the file of an Image by its ID
  */
 export function convertFeatureToGeoJSON(
   feature: Feature,
-  store: Store,
+  readFile?: ReadFile,
 ): GeoJSON.Feature<GeoJSON.Geometry> | null {
   const properties: Record<string, unknown> = {};
 
@@ -177,7 +187,7 @@ export function convertFeatureToGeoJSON(
   // Embed the image data of an Image as Base64
   if (feature.type === 'Image') {
     const imageFileId = getDrawProperty(feature, 'imageFileId');
-    const fileData = imageFileId ? store.getFile(imageFileId) : undefined;
+    const fileData = imageFileId && readFile ? readFile(imageFileId) : undefined;
     if (fileData) {
       properties[`${DRAW_PROPERTY_PREFIX}imageData`] = fileData.dataURL;
       properties[`${DRAW_PROPERTY_PREFIX}imageMimeType`] = fileData.mimeType;
@@ -217,9 +227,24 @@ export function exportGeoJSON(
     features = features.filter((f) => layerIdSet.has(f.layerId));
   }
 
+  return convertFeaturesToGeoJSON(features, (id) => store.getFile(id));
+}
+
+/**
+ * Converts internal Features into a GeoJSON FeatureCollection, in the order given
+ *
+ * A feature whose geometry cannot be exported is left out. The collection carries the bbox of
+ * every exported position, unless nothing was exported.
+ *
+ * @param readFile - Reads the file of an Image by its ID
+ */
+export function convertFeaturesToGeoJSON(
+  features: readonly Feature[],
+  readFile?: ReadFile,
+): GeoJSON.FeatureCollection<GeoJSON.Geometry> {
   const geoJSONFeatures: GeoJSON.Feature<GeoJSON.Geometry>[] = [];
   for (const feature of features) {
-    const geoFeature = convertFeatureToGeoJSON(feature, store);
+    const geoFeature = convertFeatureToGeoJSON(feature, readFile);
     if (geoFeature) {
       geoJSONFeatures.push(geoFeature);
     }

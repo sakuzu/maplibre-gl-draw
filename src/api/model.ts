@@ -24,6 +24,10 @@ import {
   evaluateStyleRule as evaluateRule,
   getStyleRuleChannel as getRuleChannel,
 } from '../view/style-rule.js';
+import {
+  convertFeaturesToGeoJSON,
+  convertFeatureToGeoJSON,
+} from './impl/import-export/geojson-export.js';
 
 // ============================================================================
 // Features
@@ -571,4 +575,55 @@ export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): Leg
  */
 export function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill' {
   return getRuleChannel(type);
+}
+
+// ============================================================================
+// GeoJSON functions
+// ============================================================================
+
+/** Options of {@link featuresToGeoJSON} and {@link featureToGeoJSON}. */
+export interface GeoJSONExportOptions {
+  /**
+   * Reads an embedded file by its ID, for the pixels of an Image: `(id) => store.getFile(id)`,
+   * for example. An Image whose file it does not find, or every Image when it is left out, is
+   * written without `maplibre-gl-draw:imageData` and `maplibre-gl-draw:imageMimeType`.
+   */
+  getFile?: (id: string) => FileData | undefined;
+}
+
+/**
+ * Writes features as a GeoJSON FeatureCollection, as `document.toGeoJSON` writes the
+ * document, without a drawing: the features need not be in one.
+ *
+ * The features come out in the order given (`document.toGeoJSON` gives the draw order, with
+ * the hidden features at the end). The rules of the output are those of `document.toGeoJSON`:
+ * positions rounded to 7 decimal places, rings by the right-hand rule, longitudes brought into
+ * -180 to 180, the values of the feature added to `properties` under the prefixed keys, and a
+ * `bbox` unless nothing was written. A feature whose geometry is a GeometryCollection is left
+ * out. The features given are not changed.
+ *
+ * @param features - The features, in the order to write them
+ * @param options - Where the files of the images are read from
+ * @returns The FeatureCollection
+ */
+export function featuresToGeoJSON(
+  features: readonly Feature[],
+  options?: GeoJSONExportOptions,
+): GeoJSONFeatureCollection {
+  return convertFeaturesToGeoJSON(features, options?.getFile);
+}
+
+/**
+ * Writes one feature as a GeoJSON Feature, as {@link featuresToGeoJSON} writes each of its
+ * features.
+ *
+ * @param feature - The feature
+ * @param options - Where the file of an image is read from
+ * @returns The Feature, or `null` when its geometry is a GeometryCollection
+ */
+export function featureToGeoJSON(
+  feature: Feature,
+  options?: GeoJSONExportOptions,
+): GeoJSONFeature | null {
+  return convertFeatureToGeoJSON(feature, options?.getFile);
 }
