@@ -83,6 +83,13 @@ const rows = draw.document.toGeoJSON().features.map((f) =>
 );
 ```
 
+描画に無い地物や、一部の地物だけを書き出すときは、それらを
+`featuresToGeoJSON(features, { getFile })` に渡します。渡した順に、
+`toGeoJSON()` と同じ規則で書き出します。地物 1 つなら
+`featureToGeoJSON` を使います。`getFile` は ID から画像のファイルを
+引く関数で、たとえば `(id) => store.getFile(id)` です。渡さないと、
+画像は画素を持たずに書き出されます。
+
 ## 読み込み
 
 `draw.document.load(source, options?)` は、`File` か `Blob`、JSON の

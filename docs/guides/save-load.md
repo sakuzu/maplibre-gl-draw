@@ -85,6 +85,13 @@ const rows = draw.document.toGeoJSON().features.map((f) =>
 );
 ```
 
+To write features that are not in the drawing, or only some of its
+features, pass them to `featuresToGeoJSON(features, { getFile })`. It
+writes them in the order given, with the same rules as `toGeoJSON()`;
+`featureToGeoJSON` writes one feature. `getFile` reads the file of an
+image by its ID, for example `(id) => store.getFile(id)`; without it, an
+image is written without its pixels.
+
 ## Loading
 
 `draw.document.load(source, options?)` takes a `File` or a `Blob`, a JSON
