@@ -225,7 +225,10 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
   isExternalEntry: func,
 };
 
-/** The members of the public Store the instance calls; `abortIntermediateUpdates` is optional */
+/**
+ * The members of the public Store the instance calls; `abortIntermediateUpdates`,
+ * `getMaxNameNumber` and `recordNameNumber` are optional
+ */
 const STORE_METHODS = [
   'getFeature',
   'listFeatures',

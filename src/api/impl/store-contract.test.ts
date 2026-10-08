@@ -64,6 +64,8 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'setReadOnly',
   'setInteractionLock',
   'setLocallyHidden',
+  'getMaxNameNumber',
+  'recordNameNumber',
 ]);
 
 /**
@@ -177,6 +179,34 @@ describe('a Store of the application', () => {
     expect(host.store.isInteractionLocked()).toBe(true);
     // Hiding the selected feature took it out of the selection, in the Store of the application
     expect(host.store.getSelection()).toEqual({ type: null, ids: [] });
+  });
+});
+
+describe('a Store of the application that knows numbers of names beyond what it lists', () => {
+  it('numbers a new layer and a drawn point after them, and is told each number taken', () => {
+    const known: Record<string, number> = { Layer: 6, Point: 20 };
+    const recorded: Array<[string, number]> = [];
+    const store: Store = Object.assign(new MemoryContractStore(), {
+      getMaxNameNumber: (type: string): number | undefined => known[type],
+      recordNameNumber: (type: string, number: number) => {
+        recorded.push([type, number]);
+        known[type] = Math.max(known[type] ?? 0, number);
+      },
+    });
+    const own = createEngine(createMapStub().map, { store }, { deferDefaultMode: true });
+    const ownDraw = createDrawOnEngine(own, { store });
+    own.enterDefaultMode();
+
+    ownDraw.setMode('draw_point');
+    createSyntheticInput(own).click([0.2, 0.2]);
+
+    expect(store.listLayers().map((layer) => layer.name)).toEqual(['Layer 7']);
+    expect(store.listFeatures().map((feature) => feature.properties.name)).toEqual(['Point 21']);
+    expect(recorded).toEqual([
+      ['Layer', 7],
+      ['Point', 21],
+    ]);
+    ownDraw.destroy();
   });
 });
 

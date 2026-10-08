@@ -27,6 +27,7 @@ import type {
   BoxSelection,
   DragState,
   Feature,
+  FeatureType,
   FileData,
   Group,
   Layer,
@@ -432,4 +433,12 @@ export interface Store extends StoreView, UiState {
 
   /** Sets the metadata, merging (see {@link DocumentStore.setMetadata}) */
   setMetadata(metadata: Partial<Metadata>): boolean;
+
+  /**
+   * The largest number of a generated name the Store knows to be used for this type, beyond
+   * what it lists, or undefined (see the public `Store.getMaxNameNumber`)
+   */
+  getMaxNameNumber?(type: FeatureType | 'Layer' | 'Group'): number | undefined;
+  /** Tells the Store the number of a name just generated (see the public `Store.recordNameNumber`) */
+  recordNameNumber?(type: FeatureType | 'Layer' | 'Group', number: number): void;
 }

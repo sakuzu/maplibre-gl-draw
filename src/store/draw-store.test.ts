@@ -255,6 +255,27 @@ describe('a Store of the host', () => {
     expect(store.getSelection().ids).toEqual(['f1']);
   });
 
+  it('passes the numbers of generated names to and from a Store of the host that has them', () => {
+    const recorded: Array<[string, number]> = [];
+    const document = Object.assign(new MemoryContractStore(), {
+      getMaxNameNumber: (type: string) => (type === 'Point' ? 41 : undefined),
+      recordNameNumber: (type: string, number: number) => {
+        recorded.push([type, number]);
+      },
+    });
+    const store = toStore(document);
+
+    expect(store.getMaxNameNumber?.('Point')).toBe(41);
+    expect(store.getMaxNameNumber?.('Layer')).toBeUndefined();
+    store.recordNameNumber?.('Layer', 3);
+    expect(recorded).toEqual([['Layer', 3]]);
+
+    // A Store of the host without them gives nothing and is not called
+    const plain = toStore(new MemoryContractStore());
+    expect(plain.getMaxNameNumber?.('Point')).toBeUndefined();
+    expect(() => plain.recordNameNumber?.('Point', 1)).not.toThrow();
+  });
+
   it('uses a Store it is given as it is', () => {
     const store = new MemoryStore();
     expect(toStore(store)).toBe(store);

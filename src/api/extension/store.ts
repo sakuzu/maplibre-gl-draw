@@ -9,7 +9,7 @@
  */
 
 import type { DocumentChange } from '../events.js';
-import type { Feature, FileData, Group, Layer, Metadata } from '../model.js';
+import type { Feature, FeatureType, FileData, Group, Layer, Metadata } from '../model.js';
 import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
 
 /**
@@ -203,4 +203,25 @@ export interface Store extends StoreView {
   setInteractionLock(value: boolean): void;
   /** Hides or shows an item in this client. */
   setLocallyHidden(id: string, hidden: boolean): void;
+  /**
+   * The largest number of a generated name ("Point 7") the Store knows to be used for this
+   * type: a feature type, `'Layer'` or `'Group'`. Optional.
+   *
+   * The instance numbers the names of new features, layers and groups from the names it can
+   * read through `listFeatures`, `listLayers` and `listGroups`. A Store that holds only part
+   * of the document can implement this method to give the numbers used in the part it does
+   * not hold, so that they are not used again: the next number is the one after the larger
+   * of the two. Return `undefined` when the Store knows nothing more than what it lists.
+   */
+  getMaxNameNumber?(type: FeatureType | 'Layer' | 'Group'): number | undefined;
+  /**
+   * Tells the Store the number of a name the instance has just generated for this type: a
+   * feature type, `'Layer'` or `'Group'`. Optional.
+   *
+   * It is called once per generated name, as the name is generated; the name may still not be
+   * written (a refused write leaves its number unused, as a deletion does). A Store that
+   * implements {@link Store.getMaxNameNumber} can use it to keep what that method returns up
+   * to date.
+   */
+  recordNameNumber?(type: FeatureType | 'Layer' | 'Group', number: number): void;
 }

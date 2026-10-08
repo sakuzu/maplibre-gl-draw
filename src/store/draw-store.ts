@@ -35,6 +35,7 @@ import type {
   BoxSelection,
   DragState,
   Feature,
+  FeatureType,
   FileData,
   Group,
   Layer,
@@ -177,6 +178,17 @@ export class DrawStore implements Store {
 
   setMetadata(metadata: Partial<Metadata>): boolean {
     return this.#write(() => this.#contract.setMetadata(metadata));
+  }
+
+  // ============================================================================
+  // The numbers of generated names (optional members of the contract)
+  // ============================================================================
+
+  getMaxNameNumber(type: FeatureType | 'Layer' | 'Group'): number | undefined {
+    return this.#contract.getMaxNameNumber?.(type);
+  }
+  recordNameNumber(type: FeatureType | 'Layer' | 'Group', number: number): void {
+    this.#contract.recordNameNumber?.(type, number);
   }
 
   // ============================================================================

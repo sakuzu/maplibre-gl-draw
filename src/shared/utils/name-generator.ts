@@ -15,15 +15,24 @@
 import type { Feature, FeatureType, Group, Layer, StoreChange } from '../types/model.js';
 
 /**
- * What the generator reads from the Store: the current contents and the change notifications.
- * The Store satisfies it; declaring only this keeps shared/ below store/. The constructor
- * spells the same shape out, because AutoNameGenerator is public and this name is not.
+ * What the generator reads from the Store: the current contents and the change notifications,
+ * and, optionally, the numbers the Store knows beyond what it lists. The Store satisfies it;
+ * declaring only this keeps shared/ below store/. The constructor spells the same shape out,
+ * because AutoNameGenerator is public and this name is not.
+ *
+ * A Store that holds only part of the document lists only that part, so the numbers of the
+ * names it does not hold cannot be read from its contents. Such a Store gives them with
+ * `getMaxNameNumber` (the largest number it knows to be used for a type, or undefined) and
+ * is told each number generated with `recordNameNumber`. A Store without them is numbered
+ * from its contents alone.
  */
 interface NameSource {
   listFeatures(): Feature[];
   listLayers(): Layer[];
   listGroups(): Group[];
   subscribe(listener: (changes: StoreChange) => void): () => void;
+  getMaxNameNumber?(type: AutoNameType): number | undefined;
+  recordNameNumber?(type: AutoNameType, number: number): void;
 }
 
 /**
@@ -149,6 +158,11 @@ export function normalizeAutoNameConfig(
  * any generation happened is also recorded (with the old approach it could be reused after the
  * deletion). This is an extension of the "a number used once is not reused" policy, and it can
  * only work in the direction of increasing the gaps.
+ *
+ * A Store that holds only part of the document can give, per type, the largest number it
+ * knows to be used (`getMaxNameNumber`): each generation then takes the number after the
+ * larger of that and the count above, and tells the Store the number it took
+ * (`recordNameNumber`). With a Store that has neither, the numbering is the count above alone.
  */
 export class AutoNameGenerator {
   private readonly store: NameSource;
@@ -166,6 +180,8 @@ export class AutoNameGenerator {
       listLayers(): Layer[];
       listGroups(): Group[];
       subscribe(listener: (changes: StoreChange) => void): () => void;
+      getMaxNameNumber?(type: AutoNameType): number | undefined;
+      recordNameNumber?(type: AutoNameType, number: number): void;
     },
     config: AutoNameConfig | boolean = true,
   ) {
@@ -252,9 +268,22 @@ export class AutoNameGenerator {
    */
   private findNextNumber(featureType: FeatureType, typeName: string): number {
     this.scanOnce(featureType, () => this.getMaxNumberFromFeatures(featureType, typeName));
+    return this.takeNextNumber(featureType);
+  }
 
-    const nextNumber = (this.counters.get(featureType) ?? 0) + 1;
-    this.counters.set(featureType, nextNumber);
+  /**
+   * Takes the next number of a counter key: the one after the larger of the counter and the
+   * largest number the Store knows (when it gives one), and tells the Store the number taken
+   */
+  private takeNextNumber(counterKey: AutoNameType): number {
+    const known = this.store.getMaxNameNumber?.(counterKey);
+    if (known !== undefined && Number.isSafeInteger(known)) {
+      this.recordNumber(counterKey, known);
+    }
+
+    const nextNumber = (this.counters.get(counterKey) ?? 0) + 1;
+    this.counters.set(counterKey, nextNumber);
+    this.store.recordNameNumber?.(counterKey, nextNumber);
 
     return nextNumber;
   }
@@ -406,11 +435,7 @@ export class AutoNameGenerator {
       }
       return maxNumber;
     });
-
-    const nextNumber = (this.counters.get(LAYER_COUNTER_KEY) ?? 0) + 1;
-    this.counters.set(LAYER_COUNTER_KEY, nextNumber);
-
-    return nextNumber;
+    return this.takeNextNumber(LAYER_COUNTER_KEY);
   }
 
   /**
@@ -447,10 +472,6 @@ export class AutoNameGenerator {
       }
       return maxNumber;
     });
-
-    const nextNumber = (this.counters.get(GROUP_COUNTER_KEY) ?? 0) + 1;
-    this.counters.set(GROUP_COUNTER_KEY, nextNumber);
-
-    return nextNumber;
+    return this.takeNextNumber(GROUP_COUNTER_KEY);
   }
 }

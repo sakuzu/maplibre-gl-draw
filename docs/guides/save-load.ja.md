@@ -364,6 +364,11 @@ const draw = createDraw(map, { store });
 [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md) に
 書いてあります。
 
+自動の名前 ("Point 3"、"Layer 2") の番号は、ストアが返す名前から数え、
+同じ番号を 2 度使いません。文書の一部だけを持つストアは、省略できる
+`getMaxNameNumber` と `recordNameNumber` も実装できます。持っていない
+部分で使われた番号を、使い直さないためです。
+
 ストアが持つ文書は、`document.toJSON()` が書き出すものと同じです。形は
 [データ形式のリファレンス](../reference/data-format.md) にあります。
 

@@ -255,6 +255,120 @@ describe('the incremental following of AutoNameGenerator', () => {
   });
 });
 
+describe('a Store that knows numbers beyond what it lists', () => {
+  /**
+   * A view of the store that holds only part of the document: it lists what the store holds,
+   * and knows the largest number used for each type in `known`, kept up to date with the
+   * numbers it is told.
+   */
+  function partialSource(known: Record<string, number>) {
+    const recorded: Array<[string, number]> = [];
+    const source = {
+      listFeatures: () => store.listFeatures(),
+      listLayers: () => store.listLayers(),
+      listGroups: () => store.listGroups(),
+      subscribe: (listener: Parameters<MemoryStore['subscribe']>[0]) => store.subscribe(listener),
+      getMaxNameNumber: (type: string): number | undefined => known[type],
+      recordNameNumber: (type: string, number: number) => {
+        recorded.push([type, number]);
+        known[type] = Math.max(known[type] ?? 0, number);
+      },
+    };
+    return { source, recorded };
+  }
+
+  it('numbers from the next after the number the Store knows, when it is larger', () => {
+    createFeature('Point', 'Point 2');
+    const { source } = partialSource({ Point: 12, Layer: 4, Group: 9 });
+    const generator = new AutoNameGenerator(source);
+
+    expect(generator.generateName('Point')).toBe('Point 13');
+    expect(generator.generateName('Point')).toBe('Point 14');
+    expect(generator.generateLayerName()).toBe('Layer 5');
+    expect(generator.generateGroupName()).toBe('Group 10');
+    // A type the Store knows nothing of is numbered from the contents alone
+    expect(generator.generateName('LineString')).toBe('LineString 1');
+  });
+
+  it('numbers from the contents when they hold a larger number than the Store knows', () => {
+    createFeature('Point', 'Point 30');
+    const { source } = partialSource({ Point: 12 });
+    const generator = new AutoNameGenerator(source);
+
+    expect(generator.generateName('Point')).toBe('Point 31');
+  });
+
+  it('reads the number the Store knows on every generation', () => {
+    const known: Record<string, number> = { Point: 1 };
+    const { source } = partialSource(known);
+    const generator = new AutoNameGenerator(source);
+    expect(generator.generateName('Point')).toBe('Point 2');
+
+    // The Store comes to know a larger number (from a part it does not hold)
+    known.Point = 50;
+
+    expect(generator.generateName('Point')).toBe('Point 51');
+  });
+
+  it('tells the Store each number it generates', () => {
+    const { source, recorded } = partialSource({ Point: 7 });
+    const generator = new AutoNameGenerator(source);
+
+    generator.generateName('Point');
+    generator.generateLayerName();
+    generator.generateGroupName();
+    generator.generateName('Point');
+
+    expect(recorded).toEqual([
+      ['Point', 8],
+      ['Layer', 1],
+      ['Group', 1],
+      ['Point', 9],
+    ]);
+  });
+
+  it('a second generator over the same Store does not use the numbers the first took', () => {
+    const { source } = partialSource({});
+    const first = new AutoNameGenerator(source);
+    expect(first.generateName('Point')).toBe('Point 1');
+    expect(first.generateName('Point')).toBe('Point 2');
+
+    const second = new AutoNameGenerator(source);
+
+    expect(second.generateName('Point')).toBe('Point 3');
+  });
+
+  it('ignores a number the Store gives that is not an integer', () => {
+    const { source } = partialSource({ Point: Number.NaN, Layer: 2.5 });
+    const generator = new AutoNameGenerator(source);
+
+    expect(generator.generateName('Point')).toBe('Point 1');
+    expect(generator.generateLayerName()).toBe('Layer 1');
+  });
+
+  it('neither reads nor tells the Store when naming is disabled', () => {
+    const getMaxNameNumber = vi.fn(() => 5);
+    const recordNameNumber = vi.fn();
+    const generator = new AutoNameGenerator(
+      {
+        listFeatures: () => store.listFeatures(),
+        listLayers: () => store.listLayers(),
+        listGroups: () => store.listGroups(),
+        subscribe: (listener) => store.subscribe(listener),
+        getMaxNameNumber,
+        recordNameNumber,
+      },
+      false,
+    );
+
+    expect(generator.generateName('Point')).toBeUndefined();
+    expect(generator.generateLayerName()).toBe('Layer');
+    expect(generator.generateGroupName()).toBe('Group');
+    expect(getMaxNameNumber).not.toHaveBeenCalled();
+    expect(recordNameNumber).not.toHaveBeenCalled();
+  });
+});
+
 describe('the computational cost of AutoNameGenerator', () => {
   it('does not scan everything on every generation', () => {
     for (let i = 0; i < 10_000; i++) {

@@ -362,6 +362,12 @@ they were applied. They are written in full on
 [`Store`](../api/maplibre-gl-draw/interfaces/Store.md) and
 [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md).
 
+The automatic names ("Point 3", "Layer 2") are numbered from the names
+the store lists, and a number is never used twice. A store that holds
+only part of the document can also implement the optional
+`getMaxNameNumber` and `recordNameNumber`, so that the numbers used in the
+part it does not hold are not used again.
+
 The document it holds is the one `document.toJSON()` writes; its shape is
 in [the data format reference](../reference/data-format.md).
 
