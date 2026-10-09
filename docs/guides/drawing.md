@@ -160,9 +160,11 @@ draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
 draw.setMode('draw_image');
 ```
 
-The image is centered on `coordinate`, converted to WebP (scaled down when
-a side exceeds 4096 px), stored once in the files of the document and
-referenced by the feature, and the new feature is selected. Several Image
+The image is centered on `coordinate` and converted to WebP when the
+browser can encode WebP, or kept in the format the browser returns (such as
+PNG) when it cannot. It is scaled down when a side exceeds 4096 px, stored
+once in the files of the document and referenced by the feature, and the
+new feature is selected. Several Image
 features can share one stored file.
 
 The library does not take files dropped on the map. To place a dropped

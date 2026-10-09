@@ -4,7 +4,8 @@
 /**
  * Image processing utilities
  *
- * Converts an image file into the WebP format, resizing it when necessary.
+ * Converts an image file into the WebP format, resizing it when necessary. A browser that cannot
+ * encode WebP from a canvas returns another format (such as PNG), and the image keeps that format.
  */
 
 import { EMBEDDED_IMAGE_MIME_TYPES, type EmbeddedImageMimeType } from './embedded-image.js';
@@ -81,7 +82,8 @@ function calculateResizedDimensions(
 }
 
 /**
- * Converts a file into a DataURL in the WebP format
+ * Converts a file into a DataURL in the WebP format, or in the format the browser returns when it
+ * cannot encode WebP
  * A large image is resized automatically
  *
  * @throws UnsupportedImageTypeError when the browser returns a type other than PNG / JPEG /
@@ -99,7 +101,8 @@ export function exceedsMaxImageSize(width: number, height: number): boolean {
 }
 
 /**
- * Converts an image DataURL into a DataURL in the WebP format
+ * Converts an image DataURL into a DataURL in the WebP format, or in the format the browser
+ * returns when it cannot encode WebP
  * A large image is resized automatically
  *
  * @throws UnsupportedImageTypeError when the browser returns a type other than PNG / JPEG /

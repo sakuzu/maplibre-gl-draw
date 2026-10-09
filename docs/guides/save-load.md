@@ -274,9 +274,11 @@ await draw.document.load(imageFile, {
 });
 ```
 
-The image is converted to WebP, scaled down when a side exceeds 4096 px,
-stored once among the files of the document and referenced by the new
-`Image` feature through its property `maplibre-gl-draw:imageFileId`.
+The image is converted to WebP when the browser can encode WebP, and is
+otherwise stored in the format the browser returns (such as PNG). It is
+scaled down when a side exceeds 4096 px, stored once among the files of the
+document and referenced by the new `Image` feature through its property
+`maplibre-gl-draw:imageFileId`.
 Embedded images in a loaded file are accepted only as
 `data:image/(png|jpeg|webp|gif);base64,` data URLs that match their
 declared type. See [Drawing and editing](drawing.md) for the `draw_image`

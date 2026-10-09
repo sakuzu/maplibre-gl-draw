@@ -689,7 +689,8 @@ native format and in `maplibre-gl-draw:imageData` of GeoJSON.
 - Any other URL (`http:`, `https:`, `blob:`) and SVG are rejected, so
   opening a file never makes the viewer send a request
 - An image wider or taller than 4096 px is scaled down and stored as WebP,
-  the same as when an image file is loaded
+  or in the format the browser returns (such as PNG) when it cannot encode
+  WebP, the same as when an image file is loaded
 
 ## Image files
 
@@ -697,9 +698,10 @@ native format and in `maplibre-gl-draw:imageData` of GeoJSON.
 file adds one Image feature at `coordinate` and selects it. `coordinate` is
 required; `zoom` becomes `createdZoom` (1 when omitted) and `layerId`
 defaults to the active layer. `image.requested` gives you all three (see
-[Events](./events.md)). The image is converted to WebP and scaled down when
-it is larger than 4096 px. With `mode: 'replace'`, the features and groups
-that were there before are deleted afterwards.
+[Events](./events.md)). The image is converted to WebP, or kept in the
+format the browser returns (such as PNG) when it cannot encode WebP, and
+scaled down when it is larger than 4096 px. With `mode: 'replace'`, the
+features and groups that were there before are deleted afterwards.
 
 The load is one transaction with the source `load`. The result has
 `format: 'image'` and `replaced: false`, or `true` with `mode: 'replace'`.

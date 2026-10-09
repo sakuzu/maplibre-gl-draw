@@ -276,8 +276,9 @@ await draw.document.load(imageFile, {
 });
 ```
 
-画像は WebP に変換し、一辺が 4096 px を超えると縮小して、文書の
-ファイルとして 1 度だけ保存します。新しい `Image` の地物は、
+画像は、ブラウザーが WebP を作れれば WebP に変換し、作れなければ
+ブラウザーが返した形式 (PNG など) のままにします。一辺が 4096 px を
+超えると縮小して、文書のファイルとして 1 度だけ保存します。新しい `Image` の地物は、
 プロパティー `maplibre-gl-draw:imageFileId` でそれを参照します。
 読み込むファイルに埋め込まれた画像は、宣言した型と一致する
 `data:image/(png|jpeg|webp|gif);base64,` のデータ URL だけを受け付け
