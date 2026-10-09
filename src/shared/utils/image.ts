@@ -7,6 +7,8 @@
  * Converts an image file into the WebP format, resizing it when necessary.
  */
 
+import { EMBEDDED_IMAGE_MIME_TYPES, type EmbeddedImageMimeType } from './embedded-image.js';
+
 export interface ProcessedImage {
   dataUrl: string;
   width: number;
@@ -15,6 +17,35 @@ export interface ProcessedImage {
 }
 
 const WEBP_QUALITY = 0.95;
+
+/**
+ * The error thrown when the canvas returns an image of a type the library does not accept
+ *
+ * A browser that cannot encode the requested type returns another one (usually PNG); one that
+ * is not PNG / JPEG / WebP / GIF cannot be stored as an embedded image.
+ */
+export class UnsupportedImageTypeError extends Error {
+  constructor(mimeType: string) {
+    super(`The browser returned an image of an unsupported type: ${mimeType || '(none)'}`);
+    this.name = 'UnsupportedImageTypeError';
+  }
+}
+
+/** The type in the `data:<type>;` or `data:<type>,` prefix of a data URL */
+const DATA_URL_TYPE = /^data:([^;,]*)[;,]/;
+
+/**
+ * The type of the image a data URL holds, read from its prefix
+ *
+ * @throws UnsupportedImageTypeError when the type is not PNG / JPEG / WebP / GIF
+ */
+function acceptedImageType(dataUrl: string): EmbeddedImageMimeType {
+  const mimeType = DATA_URL_TYPE.exec(dataUrl)?.[1] ?? '';
+  if (!(EMBEDDED_IMAGE_MIME_TYPES as readonly string[]).includes(mimeType)) {
+    throw new UnsupportedImageTypeError(mimeType);
+  }
+  return mimeType as EmbeddedImageMimeType;
+}
 
 /**
  * Maximum size of an image
@@ -52,6 +83,9 @@ function calculateResizedDimensions(
 /**
  * Converts a file into a DataURL in the WebP format
  * A large image is resized automatically
+ *
+ * @throws UnsupportedImageTypeError when the browser returns a type other than PNG / JPEG /
+ *   WebP / GIF
  */
 export async function processImageFile(file: File): Promise<ProcessedImage> {
   return processImageDataUrl(await fileToDataUrl(file));
@@ -67,6 +101,9 @@ export function exceedsMaxImageSize(width: number, height: number): boolean {
 /**
  * Converts an image DataURL into a DataURL in the WebP format
  * A large image is resized automatically
+ *
+ * @throws UnsupportedImageTypeError when the browser returns a type other than PNG / JPEG /
+ *   WebP / GIF
  */
 export async function processImageDataUrl(originalDataUrl: string): Promise<ProcessedImage> {
   // 1. Load it as an Image (to get the dimensions)
@@ -95,14 +132,15 @@ export async function processImageDataUrl(originalDataUrl: string): Promise<Proc
 
   ctx.drawImage(img, 0, 0, width, height);
 
-  // 4. Convert into WebP
-  const webpDataUrl = canvas.toDataURL('image/webp', WEBP_QUALITY);
+  // 4. Convert into WebP. A browser that cannot encode WebP returns another type, so the type
+  //    is read from the data URL it returned rather than taken from the request
+  const dataUrl = canvas.toDataURL('image/webp', WEBP_QUALITY);
 
   return {
-    dataUrl: webpDataUrl,
+    dataUrl,
     width,
     height,
-    mimeType: 'image/webp',
+    mimeType: acceptedImageType(dataUrl),
   };
 }
 

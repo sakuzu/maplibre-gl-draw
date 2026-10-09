@@ -11,7 +11,11 @@
  */
 
 import { readEmbeddedImage } from '../../../shared/utils/embedded-image.js';
-import { exceedsMaxImageSize, processImageDataUrl } from '../../../shared/utils/image.js';
+import {
+  exceedsMaxImageSize,
+  processImageDataUrl,
+  UnsupportedImageTypeError,
+} from '../../../shared/utils/image.js';
 
 /** An embedded image accepted for import */
 export interface EmbeddedFileContent {
@@ -24,7 +28,8 @@ export interface EmbeddedFileContent {
  *
  * @param dataURL - the image data URL found in the data
  * @param mimeType - the MIME type declared next to it
- * @returns the content to store, or null when it is not an accepted embedded image
+ * @returns the content to store, or null when it is not an accepted embedded image, or when
+ *   it has to be scaled down and the browser returns the result in a type that is not accepted
  */
 export async function normalizeEmbeddedFile(
   dataURL: unknown,
@@ -35,7 +40,13 @@ export async function normalizeEmbeddedFile(
   if (mimeType !== info.mimeType) return null;
 
   if (exceedsMaxImageSize(info.width, info.height)) {
-    const processed = await processImageDataUrl(dataURL);
+    let processed: Awaited<ReturnType<typeof processImageDataUrl>>;
+    try {
+      processed = await processImageDataUrl(dataURL);
+    } catch (error) {
+      if (error instanceof UnsupportedImageTypeError) return null;
+      throw error;
+    }
     return { mimeType: processed.mimeType, dataURL: processed.dataUrl };
   }
   return { mimeType: info.mimeType, dataURL };

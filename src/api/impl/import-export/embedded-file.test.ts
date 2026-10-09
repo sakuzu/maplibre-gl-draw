@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { processImageDataUrl, UnsupportedImageTypeError } from '../../../shared/utils/image.js';
 import { normalizeEmbeddedFile } from './embedded-file.js';
 
 vi.mock('../../../shared/utils/image', async (importOriginal) => ({
@@ -42,6 +43,13 @@ describe('normalizeEmbeddedFile', () => {
       mimeType: 'image/webp',
       dataURL: 'data:image/webp;base64,UklGRg==',
     });
+  });
+
+  it('rejects an image whose scaled-down result comes back in a type that is not accepted', async () => {
+    vi.mocked(processImageDataUrl).mockRejectedValueOnce(
+      new UnsupportedImageTypeError('image/bmp'),
+    );
+    expect(await normalizeEmbeddedFile(pngDataUrl(16384, 4096), 'image/png')).toBeNull();
   });
 
   it('rejects an external URL', async () => {
