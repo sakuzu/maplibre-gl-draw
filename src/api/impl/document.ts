@@ -13,7 +13,7 @@ import { DrawError } from '../errors.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
 import type { GroupShell } from './groups.js';
 import { insertGroup, prepareGroupShell } from './groups.js';
-import { isGeoJSONFeatureCollection, isNativeFormat } from './import-export/format-detection.js';
+import { isNativeFormat, toFeatureCollection } from './import-export/format-detection.js';
 import { exportGeoJSON } from './import-export/geojson-export.js';
 import { prepareGeoJSON } from './import-export/geojson-import.js';
 import { prepareImage } from './import-export/image-import.js';
@@ -23,16 +23,6 @@ import type { PreparedLayer } from './layers.js';
 import { insertLayer, prepareLayer } from './layers.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, isRecord, isTaken, notFound } from './shared.js';
-
-const GEOMETRY_TYPES: ReadonlySet<string> = new Set([
-  'Point',
-  'LineString',
-  'Polygon',
-  'MultiPoint',
-  'MultiLineString',
-  'MultiPolygon',
-  'GeometryCollection',
-]);
 
 /** A source after the files and the strings are read */
 type ReadSource = { kind: 'data'; data: unknown } | { kind: 'image'; file: File };
@@ -309,24 +299,6 @@ function parseJSON(text: string): unknown {
   } catch (error) {
     throw asDrawError('unsupported-format', error);
   }
-}
-
-/** A FeatureCollection from GeoJSON data (a collection, a feature or a geometry), or null */
-function toFeatureCollection(data: unknown): FeatureCollection | null {
-  if (isGeoJSONFeatureCollection(data)) return data as FeatureCollection;
-  if (!isRecord(data)) return null;
-  if (data.type === 'Feature') {
-    return { type: 'FeatureCollection', features: [data as unknown as GeoJSON.Feature] };
-  }
-  if (typeof data.type === 'string' && GEOMETRY_TYPES.has(data.type)) {
-    return {
-      type: 'FeatureCollection',
-      features: [
-        { type: 'Feature', properties: {}, geometry: data as unknown as GeoJSON.Geometry },
-      ],
-    };
-  }
-  return null;
 }
 
 /** Wraps an error of a reader into a DrawError with the code */

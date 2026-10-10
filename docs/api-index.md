@@ -25,7 +25,10 @@ generated from the sources. To learn how to use the library, start with
   {@link maplibre-gl-draw!DatasetOptions | DatasetOptions}.
 - To save and load, see
   {@link maplibre-gl-draw!DrawDocument | DrawDocument} and
-  {@link maplibre-gl-draw!LoadOptions | LoadOptions}.
+  {@link maplibre-gl-draw!LoadOptions | LoadOptions}. To read a source
+  without writing it, see
+  {@link maplibre-gl-draw!parseGeoJSON | parseGeoJSON} and
+  {@link maplibre-gl-draw!parseNative | parseNative}.
 - To add a plugin, a mode or a feature type, see
   {@link maplibre-gl-draw!Plugin | Plugin},
   {@link maplibre-gl-draw!ModeHandler | ModeHandler} and

@@ -49,6 +49,11 @@ feature of a custom type (`R`); each has a section of its own in the
 panel on the right. The globe button at the bottom right switches the
 projection. A file dropped on the map is loaded there.
 
+The IDs of what the library creates come from the page, through the
+option `generateId`: the time the page opened and a count, such as
+`pg-mgk3x1a2-5`. Outside the scenes (`?plain`), the panel on the right
+shows the ID of the feature selected in a section of its own.
+
 The switches that are not tools are actions in the card at the bottom
 left of the map, each with a key with Shift, which `?` lists. A switch
 shows its state, also when another control or code changes it:

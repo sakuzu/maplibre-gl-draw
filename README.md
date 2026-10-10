@@ -104,7 +104,8 @@ and images, and load it to get the same state back. Write it as GeoJSON
 to exchange features with other tools: a feature holds a GeoJSON
 geometry and GeoJSON properties, so the file has the shape of the
 features you read in code. Features kept outside a drawing are written
-with the same rules by `featuresToGeoJSON`.
+with the same rules by `featuresToGeoJSON`, and `parseGeoJSON` and
+`parseNative` read a file into new features without writing them.
 Every change arrives as one event per transaction, with where it came
 from, and the store that holds the document can be replaced
 ([save and load](docs/guides/save-load.md)).

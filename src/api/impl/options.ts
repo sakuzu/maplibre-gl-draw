@@ -36,7 +36,7 @@ import { describeStyleProblem } from './import-export/style-validation.js';
 import { invalidInput, isRecord, onlyKeys } from './shared.js';
 
 /** The options that can only be given when the instance is created */
-const CREATION_KEYS = ['defaultMode', 'store', 'initDefaultLayer'] as const;
+const CREATION_KEYS = ['defaultMode', 'store', 'initDefaultLayer', 'generateId'] as const;
 
 /** The options that change while the instance runs */
 const RUNTIME_KEYS = [
@@ -289,6 +289,7 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
     ...RUNTIME_CHECKS,
     defaultMode: string,
     initDefaultLayer: bool,
+    generateId: func,
     store(value, what) {
       if (!isRecord(value) && !(value instanceof DrawStore)) {
         throw invalidInput(`${what} must be a Store`);
@@ -667,6 +668,7 @@ export function toEngineOptions(
   };
   if (options.defaultMode !== undefined) result.defaultMode = options.defaultMode;
   if (options.initDefaultLayer !== undefined) result.initDefaultLayer = options.initDefaultLayer;
+  if (options.generateId !== undefined) result.generateId = options.generateId;
   if (runtime.scaleWithZoom !== undefined) result.scaleWithZoom = runtime.scaleWithZoom;
   if (runtime.clickTolerance !== undefined) result.clickTolerance = runtime.clickTolerance;
   if (runtime.dragThreshold !== undefined) result.dragThreshold = runtime.dragThreshold;

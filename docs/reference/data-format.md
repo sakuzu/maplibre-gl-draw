@@ -435,8 +435,9 @@ serialize it with `JSON.stringify` and store it as `application/json`.
 Loading the native format replaces the whole document; `mode: 'merge'` is
 refused with `invalid-input`. Everything is checked before anything is
 changed, and the first problem rejects the load: the promise rejects with a
-`DrawError` whose code is `invalid-input`, and the document stays as it
-was.
+`DrawError` whose code is `invalid-input` (or `unsupported-format` for an
+image the browser cannot encode, see [Embedded images](#embedded-images)),
+and the document stays as it was.
 
 - `version` passes [Version](#version), and `features` is an array
 - Every layer has a non-empty string `id`, a string `name`, boolean
@@ -604,8 +605,9 @@ checked and converted before anything is written.
   `pointColor`. Simplestyle has no key for the outline of a marker. They
   also stay in `properties`. Export does not write simplestyle
 - An embedded image is accepted only on a `Point` whose marker is `Image`,
-  and only in the form of [Embedded images](#embedded-images). A bad image
-  rejects the whole load, because only an altered file can carry one
+  and only in the form of [Embedded images](#embedded-images). An image
+  that cannot be imported rejects the whole load: a bad one means the file
+  was altered, and one the browser cannot encode would be lost
 
 The load is one transaction with the source `load`. With
 `mode: 'replace'` the same transaction deletes every feature and group of
@@ -692,6 +694,11 @@ native format and in `maplibre-gl-draw:imageData` of GeoJSON.
   the same as when an image file is loaded. When the browser cannot encode
   WebP, it is stored as JPEG if none of its pixels is transparent, and
   otherwise in the format the browser returns (such as PNG)
+- An image that breaks one of the rules above, or whose pixels cannot be
+  decoded, fails with `invalid-input`. An image to scale down that the
+  browser returns in another type fails with `unsupported-format`, as an
+  image file does. A load rejects with that code; `parseGeoJSON` and
+  `parseNative` leave the feature out and list it in `skipped` with it
 
 ## Image files
 

@@ -100,7 +100,8 @@ GeoParquet や Arrow の表は、点、線、多角形が行ごとに混ざっ�
 ほかのツールと地物をやり取りできます。地物は GeoJSON の図形と
 GeoJSON の properties を持つので、ファイルはコードで読む地物と同じ形に
 なります。描画の外に持っている地物も、`featuresToGeoJSON` で同じ規則で
-書き出せます。
+書き出せます。`parseGeoJSON` と `parseNative` は、ファイルを書き込まずに
+新しい地物として読みます。
 変更は取引ごとに 1 つのイベントで、出どころを添えて届きます。文書を
 保存するストアは差し替えられます
 ([保存と読み込み](docs/guides/save-load.ja.md))。

@@ -334,10 +334,10 @@ draw.options.update({ snapping: { enabled: false } });
 draw.options.update({ rendering: { renderScale: 0.5 } });
 ```
 
-Every option but `defaultMode`, `store` and `initDefaultLayer` can
-change at run time through `draw.options`. The default styles are keyed
-`point`, `line`, `polygon`, `circle` and `image`, with the keys of
-`FeatureStyle`, and every color is a CSS color string. The look of the
+Every option but `defaultMode`, `store`, `initDefaultLayer` and
+`generateId` can change at run time through `draw.options`. The default
+styles are keyed `point`, `line`, `polygon`, `circle` and `image`, with
+the keys of `FeatureStyle`, and every color is a CSS color string. The look of the
 shape being drawn is `previewStyle` (`style.tentative` in 1.0), and the
 look of the selection box is `selectionStyle.boxSelection`
 (`renderingStyle.boxSelectionStyle` in 1.0).

@@ -25,6 +25,13 @@ export interface PreparedLoad {
 export interface ConvertedFeatureResult {
   feature: Feature;
   fileData?: FileData;
+  /**
+   * The ID the input gives the feature, on the first feature made from it (the parts of a
+   * flattened Multi and of a GeometryCollection come from one feature of the input)
+   */
+  sourceId?: string;
+  /** The ID of the file the input names for the embedded image, when it names one */
+  sourceFileId?: string;
 }
 
 /**

@@ -6,6 +6,40 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+An application can make the IDs itself, and can read a source into new
+features, groups, files and layers without writing it.
+
+### Added in 2.3.0
+
+- `DrawOptions.generateId`, given only when the instance is created,
+  makes the ID of everything the library creates instead of the built-in
+  ULIDs: features drawn or created without an ID, groups, layers, the
+  files of images, the results of the geometry operations, and the
+  features and files a GeoJSON load gives new IDs
+  ([#36](https://github.com/sakuzu/maplibre-gl-draw/issues/36)).
+- `parseGeoJSON(input, options)` and `parseNative(input, options)` read
+  GeoJSON or a document of the library as `document.load` reads it and
+  write nothing, the counterpart of `featuresToGeoJSON`. They return a
+  `ParsedDocument`: the features, groups, files and layers with new IDs
+  from `ParseOptions.generateId`, the references between them rewritten,
+  and the features left out in `skipped` with a `DrawErrorCode`.
+  `ParsedDocument.idMap` gives the new ID of each ID of the input, one map
+  per kind, so that an application or an extension rewrites the references
+  it keeps in `properties`, which the library leaves as they are
+  ([#36](https://github.com/sakuzu/maplibre-gl-draw/issues/36)).
+
+### Fixed in 2.3.0
+
+- An embedded image that has to be scaled down and that the browser
+  cannot decode rejects a GeoJSON load or a load of a document of the
+  library with a `DrawError` (`invalid-input`) instead of the error of
+  the decoding
+  ([#33](https://github.com/sakuzu/maplibre-gl-draw/issues/33)).
+- An embedded image that the browser cannot encode in an accepted type
+  rejects a load with `unsupported-format`, as an image file does,
+  instead of `invalid-input`
+  ([#35](https://github.com/sakuzu/maplibre-gl-draw/issues/35)).
+
 ## [2.2.0] - 2026-10-10
 
 Features can be written as GeoJSON without a drawing, a store that holds

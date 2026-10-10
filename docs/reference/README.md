@@ -26,8 +26,10 @@ The package has four entry points.
   `createDraw` and the instance it returns (`Draw`, with its
   collections and resources), the options, the document model, the
   events, the errors, the datasets, the Store and the extension contract,
-  and the functions that write features as GeoJSON without a drawing
-  (`featuresToGeoJSON`, `featureToGeoJSON`)
+  the functions that write features as GeoJSON without a drawing
+  (`featuresToGeoJSON`, `featureToGeoJSON`), and those that read GeoJSON
+  or a document of the library without writing it (`parseGeoJSON`,
+  `parseNative`)
 - `@sakuzu/maplibre-gl-draw/geometry` — geometry that needs no map:
   measure, create circles and buffers, combine and split polygons, test
   and repair shapes. The functions take and return GeoJSON and do not

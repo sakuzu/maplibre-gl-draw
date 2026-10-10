@@ -341,9 +341,9 @@ draw.options.update({ snapping: { enabled: false } });
 draw.options.update({ rendering: { renderScale: 0.5 } });
 ```
 
-`defaultMode`、`store`、`initDefaultLayer` 以外の設定は、実行中に
-`draw.options` で変えられます。既定の見た目の鍵は `point`、`line`、
-`polygon`、`circle`、`image` で、中身は `FeatureStyle` の鍵です。
+`defaultMode`、`store`、`initDefaultLayer`、`generateId` 以外の設定は、
+実行中に `draw.options` で変えられます。既定の見た目の鍵は `point`、
+`line`、`polygon`、`circle`、`image` で、中身は `FeatureStyle` の鍵です。
 色はすべて CSS の色の文字列です。描いている途中の形の見た目は
 `previewStyle` (1.0 の `style.tentative`)、範囲選択の枠の見た目は
 `selectionStyle.boxSelection` (1.0 の

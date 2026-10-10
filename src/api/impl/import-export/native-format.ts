@@ -8,6 +8,7 @@
 import { getDrawProperty } from '../../../shared/properties.js';
 import type { Store } from '../../../store/store.js';
 import type { Data, ExportOptions, FileData, LoadResult } from '../../../store/types.js';
+import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
@@ -84,10 +85,20 @@ export async function prepareNative(data: Data, deps: { store: Store }): Promise
   if (store.getLayer(DEFAULT_LAYER_ID)) retainedLayerIds.add(DEFAULT_LAYER_ID);
   // Data of an earlier major version is brought to the current one first
   const upgraded = upgradeNativeData(data) as Data;
-  const { layers, layerOrder, groups, features, files } = await validateNativeData(
+  const { layers, layerOrder, groups, features, files, fileProblems } = await validateNativeData(
     upgraded,
     retainedLayerIds,
   );
+  // A file whose image cannot be imported refuses the whole load, as a malformed field does;
+  // an image the browser cannot encode is refused as unsupported-format, the same as when an
+  // image file is loaded
+  for (const [key, problem] of fileProblems) {
+    throw new DrawError(
+      problem.code,
+      `Invalid native data: file "${key}" ${problem.detail}`,
+      problem.cause === undefined ? undefined : { cause: problem.cause },
+    );
+  }
   const featureIds = features.map((f) => f.id);
   // A kept layer the data does not list goes to the back, where it stays when the data does
   // not mention it (every layer must be on the stacking order to be drawn)
