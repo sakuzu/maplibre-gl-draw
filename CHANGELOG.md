@@ -22,7 +22,10 @@ features, groups, files and layers without writing it.
   write nothing, the counterpart of `featuresToGeoJSON`. They return a
   `ParsedDocument`: the features, groups, files and layers with new IDs
   from `ParseOptions.generateId`, the references between them rewritten,
-  and the features left out in `skipped` with a `DrawErrorCode`
+  and the features left out in `skipped` with a `DrawErrorCode`.
+  `ParsedDocument.idMap` gives the new ID of each ID of the input, one map
+  per kind, so that an application or an extension rewrites the references
+  it keeps in `properties`, which the library leaves as they are
   ([#36](https://github.com/sakuzu/maplibre-gl-draw/issues/36)).
 
 ### Fixed in 2.3.0

@@ -253,6 +253,11 @@ draw.transact(() => {
 - 地物、グループ、レイヤー、ファイルには、すべて新しい ID を振ります。
   入力の ID は残しません。それらの間の参照 (地物のグループ、グループの
   メンバー、Image のファイル) は新しい ID を指します
+- ライブラリーが知らない参照は、そのまま残します。アプリケーションや
+  拡張が `properties` に持つ、ほかの地物の ID などです。`idMap` は、
+  入力の ID ごとの新しい ID を、種類 (`features`、`groups`、`files`、
+  `layers`) ごとに持ちます。これで参照を付け替えます。読まなかった ID
+  は載りません
 - `layerId` を指定すると、すべての地物をそのレイヤーに入れます。指定
   しなければ、GeoJSON の地物の `layerId` は空になり、ライブラリーの
   文書の地物は `layers` にある自分のレイヤーの ID を持ちます。`layers`
@@ -267,6 +272,23 @@ draw.transact(() => {
   するのは、入力がその形式でないとき (`unsupported-format`) と、
   読み込みなら受け付けないライブラリーの文書のとき (`invalid-input`)
   だけです
+
+アプリケーションは、地物を書き込む前に、自分の参照を `idMap` で
+付け替えられます。次の例では、地物が `properties.target` にほかの地物の
+ID を持っています。
+
+```ts
+import type { ParsedDocument } from '@sakuzu/maplibre-gl-draw';
+
+declare const parsed: ParsedDocument;
+
+for (const feature of parsed.features) {
+  const target = feature.properties.target;
+  if (typeof target === 'string') {
+    feature.properties.target = parsed.idMap.features[target];
+  }
+}
+```
 
 ### アプリケーションの ID
 

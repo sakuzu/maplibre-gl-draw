@@ -252,6 +252,11 @@ draw.transact(() => {
 - Every feature, group, layer and file gets a new ID; the IDs of the
   input are never kept. The references between them (the group of a
   feature, the members of a group, the file of an Image) name the new IDs
+- A reference the library does not know, such as the ID of another
+  feature that the application or an extension keeps in `properties`, is
+  left as it is. `idMap` gives the new ID of each ID of the input, one
+  map per kind (`features`, `groups`, `files` and `layers`), to rewrite
+  it; an ID that was not read is not in it
 - `layerId` puts every feature into one layer. Without it, the features
   of GeoJSON have an empty `layerId`, and those of a document of the
   library the ID of their layer in `layers`, which lists the layers of
@@ -267,6 +272,23 @@ draw.transact(() => {
   browser cannot encode) and the reason. Only an input that is not of the
   format (`unsupported-format`) and a document of the library that a load
   would refuse (`invalid-input`) reject the promise
+
+With `idMap`, an application rewrites its own references before it
+writes the features. Here a feature keeps the ID of another one in
+`properties.target`:
+
+```ts
+import type { ParsedDocument } from '@sakuzu/maplibre-gl-draw';
+
+declare const parsed: ParsedDocument;
+
+for (const feature of parsed.features) {
+  const target = feature.properties.target;
+  if (typeof target === 'string') {
+    feature.properties.target = parsed.idMap.features[target];
+  }
+}
+```
 
 ### The IDs of the application
 
