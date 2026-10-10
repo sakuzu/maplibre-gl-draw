@@ -5,7 +5,8 @@
  * Image processing utilities
  *
  * Converts an image file into the WebP format, resizing it when necessary. A browser that cannot
- * encode WebP from a canvas returns another format (such as PNG), and the image keeps that format.
+ * encode WebP from a canvas returns another format (such as PNG). The image is then encoded as JPEG
+ * when none of its pixels is transparent, and otherwise keeps the format the browser returned.
  */
 
 import { EMBEDDED_IMAGE_MIME_TYPES, type EmbeddedImageMimeType } from './embedded-image.js';
@@ -18,6 +19,9 @@ export interface ProcessedImage {
 }
 
 const WEBP_QUALITY = 0.95;
+
+/** The quality of the JPEG an opaque image is encoded as when the browser cannot encode WebP */
+const JPEG_QUALITY = 0.92;
 
 /**
  * The error thrown when the canvas returns an image of a type the library does not accept
@@ -82,8 +86,9 @@ function calculateResizedDimensions(
 }
 
 /**
- * Converts a file into a DataURL in the WebP format, or in the format the browser returns when it
- * cannot encode WebP
+ * Converts a file into a DataURL in the WebP format. When the browser cannot encode WebP, an image
+ * with no transparent pixel is encoded as JPEG, and one with a transparent pixel keeps the format
+ * the browser returns (such as PNG)
  * A large image is resized automatically
  *
  * @throws UnsupportedImageTypeError when the browser returns a type other than PNG / JPEG /
@@ -101,8 +106,9 @@ export function exceedsMaxImageSize(width: number, height: number): boolean {
 }
 
 /**
- * Converts an image DataURL into a DataURL in the WebP format, or in the format the browser
- * returns when it cannot encode WebP
+ * Converts an image DataURL into a DataURL in the WebP format. When the browser cannot encode
+ * WebP, an image with no transparent pixel is encoded as JPEG, and one with a transparent pixel
+ * keeps the format the browser returns (such as PNG)
  * A large image is resized automatically
  *
  * @throws UnsupportedImageTypeError when the browser returns a type other than PNG / JPEG /
@@ -137,14 +143,39 @@ export async function processImageDataUrl(originalDataUrl: string): Promise<Proc
 
   // 4. Convert into WebP. A browser that cannot encode WebP returns another type, so the type
   //    is read from the data URL it returned rather than taken from the request
-  const dataUrl = canvas.toDataURL('image/webp', WEBP_QUALITY);
+  let dataUrl = canvas.toDataURL('image/webp', WEBP_QUALITY);
+  let mimeType = acceptedImageType(dataUrl);
+
+  // 5. When the browser cannot encode WebP, an opaque image is encoded as JPEG, which is far
+  //    smaller than PNG for a photo. An image with a transparent pixel keeps the returned type,
+  //    because JPEG would lose the transparency
+  if (mimeType !== 'image/webp' && !hasTransparentPixel(ctx, width, height)) {
+    dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    mimeType = acceptedImageType(dataUrl);
+  }
 
   return {
     dataUrl,
     width,
     height,
-    mimeType: acceptedImageType(dataUrl),
+    mimeType,
   };
+}
+
+/**
+ * Whether any pixel drawn on the canvas is not fully opaque (alpha below 255)
+ * Stops at the first such pixel
+ */
+function hasTransparentPixel(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): boolean {
+  const { data } = ctx.getImageData(0, 0, width, height);
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 255) return true;
+  }
+  return false;
 }
 
 /**
