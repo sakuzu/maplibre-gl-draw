@@ -95,6 +95,8 @@ export interface EngineOptions {
   store?: StoreContract | Store;
   /** Whether the document starts with one empty layer (true by default) */
   initDefaultLayer?: boolean;
+  /** Makes the ID of every feature, group, layer and file the engine creates (ULIDs by default) */
+  generateId?: () => string;
   /** Tells the entries of the stacking order that are outside the document */
   isExternalEntry?: (entryId: string) => boolean;
   /** The pixel ratio to draw with, instead of the one of the map */
@@ -146,6 +148,7 @@ export interface Context {
       | 'autoName'
       | 'store'
       | 'initDefaultLayer'
+      | 'generateId'
       | 'topology'
       | 'snap'
       | 'trace'
@@ -345,8 +348,9 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     activeLayerId = '';
   }
 
-  // Feature ID generation (a ULID is used to guarantee uniqueness)
-  const generateFeatureId = () => createId();
+  // The ID of everything the engine creates: the generator of the application, or a ULID
+  const generateId = options.generateId;
+  const generateFeatureId = generateId ? () => generateId() : createId;
 
   const setActiveLayerId = (id: string): void => {
     if (store.getLayer(id)) {

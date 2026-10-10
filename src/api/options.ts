@@ -401,7 +401,7 @@ export interface AutoNameOptions {
 
 /**
  * The options that can change while the instance runs, with `draw.options.update`: every
- * option but `defaultMode`, `store` and `initDefaultLayer`.
+ * option but `defaultMode`, `store`, `initDefaultLayer` and `generateId`.
  */
 export interface RuntimeOptions {
   /** Replaces the words the library shows */
@@ -461,6 +461,16 @@ export interface DrawOptions extends RuntimeOptions {
   store?: Store;
   /** Whether a layer is created when there is none; only at creation */
   initDefaultLayer?: boolean;
+  /**
+   * Makes the ID of everything the library creates, instead of the built-in generator; only
+   * at creation. It is called for every new feature, group, layer and file: drawing, grouping
+   * a selection, the results of a geometry operation, an image and every feature of a GeoJSON
+   * load. It must return a non-empty string that is unique for the lifetime of the document
+   * and never reused, also after the thing it named was deleted. An ID given by the caller,
+   * such as `id` of `features.create`, is used as it is. When it is left out, the IDs are
+   * ULIDs.
+   */
+  generateId?: () => string;
 }
 
 /**
