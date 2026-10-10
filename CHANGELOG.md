@@ -6,6 +6,8 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-10
+
 Features can be written as GeoJSON without a drawing, a store that holds
 only part of the document can keep the numbers of the automatic names,
 and an image keeps a small format on a browser that cannot encode WebP.
@@ -1274,7 +1276,9 @@ available from Kasika, Inc.
 - A read-only mode and an interaction lock.
 - Plugins, custom modes and custom feature types.
 
-[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.4...v2.2.0
+[2.1.4]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/sakuzu/maplibre-gl-draw/compare/v2.1.0...v2.1.1
