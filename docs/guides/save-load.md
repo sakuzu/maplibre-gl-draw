@@ -274,7 +274,8 @@ await draw.document.load(imageFile, {
 });
 ```
 
-The image is converted to WebP when the browser can encode WebP, and is
+The image is converted to WebP. When the browser cannot encode WebP, the
+image is converted to JPEG if none of its pixels is transparent, and is
 otherwise stored in the format the browser returns (such as PNG). It is
 scaled down when a side exceeds 4096 px, stored once among the files of the
 document and referenced by the new `Image` feature through its property
