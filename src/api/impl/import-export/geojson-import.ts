@@ -14,7 +14,6 @@ import {
   hasDrawProperty,
   setDrawProperty,
 } from '../../../shared/properties.js';
-import { createId } from '../../../shared/utils/id.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
 import type { Store } from '../../../store/store.js';
 import type {
@@ -25,15 +24,15 @@ import type {
   LoadResult,
   SkippedFeature,
 } from '../../../store/types.js';
-import { DrawError } from '../../errors.js';
-import { normalizeEmbeddedFile } from './embedded-file.js';
+import { DrawError, type DrawErrorCode } from '../../errors.js';
+import type { EmbeddedFileProblem } from './embedded-file.js';
+import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { foldLegacyImageStyle } from './legacy-image-style.js';
 import { setOwnProperty } from './own-property.js';
 import { isCssColor, sanitizeFeatureStyle } from './style-validation.js';
 import type { ConvertedFeatureResult, GeoJSONImportOptions, PreparedLoad } from './types.js';
 
-/** A GeoJSON feature that the import left out, with the reason */
 /** The result of a GeoJSON import */
 export interface GeoJSONLoadResult extends LoadResult {
   format: 'geojson';
@@ -150,7 +149,7 @@ function flattenMultiGeometry<T>(
   coordsArray: T[],
   toGeometry: (coords: T) => GeoJSON.Point | GeoJSON.LineString | GeoJSON.Polygon,
   generateFeatureId: () => string,
-  meta: GeoJSONFeatureMeta,
+  meta: Omit<GeoJSONFeatureMeta, 'id'>,
   userProperties: Record<string, unknown>,
   featureType: unknown,
   fileData: FileData | undefined,
@@ -225,7 +224,7 @@ function collectGeometryCollectionParts(
  */
 function convertGeometryCollection(
   geometry: GeoJSON.GeometryCollection,
-  meta: GeoJSONFeatureMeta,
+  meta: Omit<GeoJSONFeatureMeta, 'id'>,
   userProperties: Record<string, unknown>,
   generateFeatureId: () => string,
 ): ConvertedFeatureResult[] | null {
@@ -424,6 +423,17 @@ function simplestyleToFeatureStyle(
   return found ? sanitizeFeatureStyle(style) : undefined;
 }
 
+/** How a GeoJSON Feature is converted */
+export interface GeoJSONConvertOptions {
+  /** Whether Multi* geometries are expanded into features with a single geometry */
+  flattenMulti?: boolean;
+  /**
+   * Whether a feature keeps the ID the input gives it (a load resolves the collisions when it
+   * writes); when false, every feature gets a new ID
+   */
+  keepIds: boolean;
+}
+
 /**
  * Converts a GeoJSON Feature into the internal Feature format
  *
@@ -432,13 +442,14 @@ function simplestyleToFeatureStyle(
  * default (it is expanded into individual features only when `flattenMulti: true`). A
  * GeometryCollection is folded by type into at most three features. visible/locked/groupId
  * are restored from the properties with the maplibre-gl-draw: prefix. Nothing is written.
+ *
+ * @param generateId - Makes the IDs of new features and of the files of embedded images
  */
 export function convertGeoJSONToFeature(
   geoFeature: unknown,
   layerId: string,
-  generateFeatureId: () => string,
-  generateFileId: () => string,
-  options?: GeoJSONImportOptions,
+  generateId: () => string,
+  options: GeoJSONConvertOptions,
 ): { results: ConvertedFeatureResult[] } | { reason: string } {
   if (!isRecord(geoFeature)) return { reason: 'the entry is not a GeoJSON Feature object' };
   const rawProperties = geoFeature.properties;
@@ -449,23 +460,26 @@ export function convertGeoJSONToFeature(
   const geometry = normalizeGeometry(geoFeature.geometry);
   if (typeof geometry === 'string') return { reason: geometry };
 
-  const flattenMulti = options?.flattenMulti === true;
+  const flattenMulti = options.flattenMulti === true;
 
   // An id is a string; a number (allowed for a GeoJSON id) is normalized into its string
   // form, and anything else gets a new id. The prefixed property takes precedence, then the
   // standard id member of the Feature. Whether it collides with existing data is resolved by
-  // the caller, which knows the store.
+  // the caller, which knows the store. The id is taken only for a feature that keeps one
+  // (the parts of a flattened Multi and of a GeometryCollection get their own).
   const prefixedId = properties?.[`${DRAW_PROPERTY_PREFIX}id`];
   const rawId =
     prefixedId === undefined || prefixedId === null || prefixedId === ''
       ? geoFeature.id
       : prefixedId;
-  const id =
+  const sourceId =
     typeof rawId === 'string' && rawId !== ''
       ? rawId
       : typeof rawId === 'number' && Number.isFinite(rawId)
         ? String(rawId)
-        : generateFeatureId();
+        : undefined;
+  const takeId = (): string =>
+    options.keepIds && sourceId !== undefined ? sourceId : generateId();
   const rawLayerId = properties?.[`${DRAW_PROPERTY_PREFIX}layerId`];
   const featureLayerId = typeof rawLayerId === 'string' && rawLayerId !== '' ? rawLayerId : layerId;
   const rawGroupId = properties?.[`${DRAW_PROPERTY_PREFIX}groupId`];
@@ -535,7 +549,7 @@ export function convertGeoJSONToFeature(
   // imageFileId
   let fileData: FileData | undefined;
   if (embedsImage) {
-    const newFileId = generateFileId();
+    const newFileId = generateId();
     fileData = {
       id: newFileId,
       mimeType: imageMimeType as string,
@@ -544,8 +558,7 @@ export function convertGeoJSONToFeature(
     setDrawProperty(userProperties, 'imageFileId', newFileId);
   }
 
-  const meta: GeoJSONFeatureMeta = {
-    id,
+  const meta: Omit<GeoJSONFeatureMeta, 'id'> = {
     layerId: featureLayerId,
     groupId,
     style,
@@ -558,18 +571,29 @@ export function convertGeoJSONToFeature(
       case 'Point':
       case 'LineString':
       case 'Polygon': {
-        const result = convertSingleGeometry(geometry, meta, userProperties, featureType, fileData);
+        const result = convertSingleGeometry(
+          geometry,
+          { ...meta, id: takeId() },
+          userProperties,
+          featureType,
+          fileData,
+        );
         return result ? [result] : null;
       }
 
       case 'MultiPoint':
         if (!flattenMulti) {
-          return convertMultiGeometry(geometry, meta, userProperties, featureType);
+          return convertMultiGeometry(
+            geometry,
+            { ...meta, id: takeId() },
+            userProperties,
+            featureType,
+          );
         }
         return flattenMultiGeometry(
           geometry.coordinates,
           (coords) => ({ type: 'Point', coordinates: coords }) as GeoJSON.Point,
-          generateFeatureId,
+          generateId,
           meta,
           userProperties,
           featureType,
@@ -578,12 +602,17 @@ export function convertGeoJSONToFeature(
 
       case 'MultiLineString':
         if (!flattenMulti) {
-          return convertMultiGeometry(geometry, meta, userProperties, featureType);
+          return convertMultiGeometry(
+            geometry,
+            { ...meta, id: takeId() },
+            userProperties,
+            featureType,
+          );
         }
         return flattenMultiGeometry(
           geometry.coordinates,
           (coords) => ({ type: 'LineString', coordinates: coords }) as GeoJSON.LineString,
-          generateFeatureId,
+          generateId,
           meta,
           userProperties,
           undefined,
@@ -592,12 +621,17 @@ export function convertGeoJSONToFeature(
 
       case 'MultiPolygon':
         if (!flattenMulti) {
-          return convertMultiGeometry(geometry, meta, userProperties, featureType);
+          return convertMultiGeometry(
+            geometry,
+            { ...meta, id: takeId() },
+            userProperties,
+            featureType,
+          );
         }
         return flattenMultiGeometry(
           geometry.coordinates,
           (coords) => ({ type: 'Polygon', coordinates: coords }) as GeoJSON.Polygon,
-          generateFeatureId,
+          generateId,
           meta,
           userProperties,
           undefined,
@@ -605,7 +639,7 @@ export function convertGeoJSONToFeature(
         );
 
       case 'GeometryCollection':
-        return convertGeometryCollection(geometry, meta, userProperties, generateFeatureId);
+        return convertGeometryCollection(geometry, meta, userProperties, generateId);
 
       default:
         // Unreachable: normalizeGeometry rejects every other type
@@ -616,6 +650,70 @@ export function convertGeoJSONToFeature(
   const results = convert();
   // Only a GeometryCollection without any member produces nothing
   return results ? { results } : { reason: 'the geometry has no parts' };
+}
+
+/** A feature of the input that a conversion left out, with the code and the reason */
+export interface ConversionSkip {
+  /** The index of the feature in the input */
+  index: number;
+  /** Why it was left out */
+  reason: DrawErrorCode;
+  /** Why it was left out, in English, for logs */
+  detail: string;
+}
+
+/** A converted feature with the index of the feature of the input it came from */
+export interface IndexedConversion extends ConvertedFeatureResult {
+  index: number;
+}
+
+/**
+ * Converts the features of a GeoJSON FeatureCollection: the step that a load and a parse share
+ *
+ * A feature that cannot be converted is skipped with `invalid-input` and its reason. The
+ * embedded images are not decoded yet (see {@link decodeEmbeddedImages}).
+ */
+export function convertGeoJSONFeatures(
+  features: readonly unknown[],
+  layerId: string,
+  generateId: () => string,
+  options: GeoJSONConvertOptions,
+): { results: IndexedConversion[]; skipped: ConversionSkip[] } {
+  const results: IndexedConversion[] = [];
+  const skipped: ConversionSkip[] = [];
+  features.forEach((geoFeature: unknown, index) => {
+    const converted = convertGeoJSONToFeature(geoFeature, layerId, generateId, options);
+    if ('reason' in converted) {
+      skipped.push({ index, reason: 'invalid-input', detail: converted.reason });
+    } else {
+      for (const result of converted.results) results.push({ ...result, index });
+    }
+  });
+  return { results, skipped };
+}
+
+/**
+ * Validates and normalizes the embedded images of converted features, in place: the step that
+ * a load and a parse share
+ *
+ * Embedded images are accepted only as PNG / JPEG / WebP / GIF data URLs, and an oversized one
+ * is scaled down. Nothing is thrown; the features whose image cannot be imported are returned
+ * with the problem, in input order.
+ */
+export async function decodeEmbeddedImages(
+  results: readonly IndexedConversion[],
+): Promise<Array<{ result: IndexedConversion; problem: EmbeddedFileProblem }>> {
+  const problems: Array<{ result: IndexedConversion; problem: EmbeddedFileProblem }> = [];
+  for (const result of results) {
+    if (!result.fileData) continue;
+    const content = await normalizeEmbeddedFile(result.fileData.dataURL, result.fileData.mimeType);
+    if (isEmbeddedFileProblem(content)) {
+      problems.push({ result, problem: content });
+    } else {
+      result.fileData = { ...result.fileData, ...content };
+    }
+  }
+  return problems;
 }
 
 /** How many times a colliding feature id is regenerated before the import gives up */
@@ -640,44 +738,34 @@ export async function prepareGeoJSON(
 ): Promise<PreparedLoad> {
   const { store, autoNameGenerator, generateFeatureId, getCurrentLayerId } = deps;
   const layerId = getCurrentLayerId();
-  const generateFileId = () => createId();
 
   // 1. Validate and convert everything, and decode the embedded images, before writing.
   //    store.transact does not roll back, so nothing may throw once the writing has started. A
   //    feature that cannot be imported is skipped with its reason instead of rejecting the
-  //    whole load.
-  const results: ConvertedFeatureResult[] = [];
-  const skipped: SkippedFeature[] = [];
-  data.features.forEach((geoFeature: unknown, index) => {
-    const converted = convertGeoJSONToFeature(
-      geoFeature,
-      layerId,
-      generateFeatureId,
-      generateFileId,
-      options,
-    );
-    if ('reason' in converted) {
-      skipped.push({ index, reason: converted.reason });
-    } else {
-      results.push(...converted.results);
-    }
+  //    whole load. The features keep the IDs of the file; the collisions are resolved when
+  //    they are written.
+  const converted = convertGeoJSONFeatures(data.features, layerId, generateFeatureId, {
+    flattenMulti: options?.flattenMulti,
+    keepIds: true,
   });
+  const { results } = converted;
+  const skipped: SkippedFeature[] = converted.skipped.map(({ index, detail }) => ({
+    index,
+    reason: detail,
+  }));
 
-  // Embedded images are accepted only as PNG / JPEG / WebP / GIF data URLs, and an oversized
-  // one is scaled down. Unlike a malformed geometry, a bad image rejects the whole load: the
-  // image fields are written only by this library's export, so a bad one means the file was
-  // altered, and the load is refused rather than trusted in part.
-  for (const result of results) {
-    if (!result.fileData) continue;
-    const content = await normalizeEmbeddedFile(result.fileData.dataURL, result.fileData.mimeType);
-    if (!content) {
-      throw new DrawError(
-        'invalid-input',
-        `Invalid GeoJSON: the image data of feature "${result.feature.id}" is not an embedded ` +
-          'PNG / JPEG / WebP / GIF data URL of its declared type',
-      );
-    }
-    result.fileData = { ...result.fileData, ...content };
+  // Unlike a malformed geometry, a bad image rejects the whole load: the image fields are
+  // written only by this library's export, so a bad one means the file was altered, and the
+  // load is refused rather than trusted in part. An image the browser cannot encode is refused
+  // as unsupported-format, the same as when an image file is loaded.
+  const [failure] = await decodeEmbeddedImages(results);
+  if (failure) {
+    const { result, problem } = failure;
+    throw new DrawError(
+      problem.code,
+      `Invalid GeoJSON: the image data of feature "${result.feature.id}" ${problem.detail}`,
+      problem.cause === undefined ? undefined : { cause: problem.cause },
+    );
   }
 
   const replace = options?.replace === true;

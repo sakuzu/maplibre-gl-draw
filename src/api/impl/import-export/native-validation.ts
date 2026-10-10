@@ -13,7 +13,8 @@
 import type { Data, Feature, FileData, Group, Layer } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
-import { normalizeEmbeddedFile } from './embedded-file.js';
+import type { EmbeddedFileProblem } from './embedded-file.js';
+import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
 import { describeGeometryProblem } from './geometry-validation.js';
 import { sanitizeFeatureStyle } from './style-validation.js';
 
@@ -135,23 +136,34 @@ function validateFeature(
   return { ...feature, style: style ?? {} } as unknown as Feature;
 }
 
-async function validateFiles(files: unknown): Promise<FileData[]> {
-  if (files === undefined) return [];
-  if (!isRecord(files)) fail('files is not an object');
+/**
+ * Validates the shape of the files and normalizes their images; an image that cannot be
+ * imported is returned as a problem instead of throwing
+ */
+async function validateFiles(
+  files: unknown,
+): Promise<{ files: FileData[]; fileProblems: Map<string, EmbeddedFileProblem> }> {
   const result: FileData[] = [];
+  const fileProblems = new Map<string, EmbeddedFileProblem>();
+  if (files === undefined) return { files: result, fileProblems };
+  if (!isRecord(files)) fail('files is not an object');
   for (const [key, file] of Object.entries(files)) {
     if (!isRecord(file) || !isNonEmptyString(file.id) || file.id !== key) {
       fail(`file "${key}" is not an object whose id matches its key`);
     }
-    const content = await normalizeEmbeddedFile(file.dataURL, file.mimeType);
-    if (!content) {
-      fail(
-        `file "${key}" is not an embedded PNG / JPEG / WebP / GIF data URL of its declared type`,
-      );
-    }
-    result.push({ ...(file as unknown as FileData), ...content });
   }
-  return result;
+  for (const [key, file] of Object.entries(files)) {
+    const content = await normalizeEmbeddedFile(
+      (file as Record<string, unknown>).dataURL,
+      (file as Record<string, unknown>).mimeType,
+    );
+    if (isEmbeddedFileProblem(content)) {
+      fileProblems.set(key, content);
+    } else {
+      result.push({ ...(file as unknown as FileData), ...content });
+    }
+  }
+  return { files: result, fileProblems };
 }
 
 /**
@@ -181,16 +193,21 @@ export interface ValidatedNativeData {
   groups: Group[];
   /** The features in data order, each style reduced to its usable keys */
   features: Feature[];
+  /** The files whose image could be imported, normalized */
   files: FileData[];
+  /** The files whose image cannot be imported, by ID, with the reason */
+  fileProblems: Map<string, EmbeddedFileProblem>;
 }
 
 /**
- * Validates native data before the destructive part of the import
+ * Validates native data before the destructive part of the import: the step that a load and
+ * a parse share
  *
  * @param data - the data to load
  * @param retainedLayerIds - IDs of the layers that remain in the store after it is cleared
  * @throws when anything the import relies on is missing or malformed, or when the data has
- *   another major version
+ *   another major version. A file whose image cannot be imported does not throw: it is
+ *   returned in `fileProblems`
  */
 export async function validateNativeData(
   data: Data,
@@ -229,6 +246,6 @@ export async function validateNativeData(
     return feature;
   });
 
-  const files = await validateFiles(data.files);
-  return { layers, layerOrder, groups, features, files };
+  const { files, fileProblems } = await validateFiles(data.files);
+  return { layers, layerOrder, groups, features, files, fileProblems };
 }
