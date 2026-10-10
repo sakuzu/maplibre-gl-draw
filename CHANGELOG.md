@@ -6,6 +6,35 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
+Features can be written as GeoJSON without a drawing, a store that holds
+only part of the document can keep the numbers of the automatic names,
+and an image keeps a small format on a browser that cannot encode WebP.
+
+### Added in 2.2.0
+
+- `featuresToGeoJSON(features, options)` and `featureToGeoJSON(feature,
+  options)` write features that need not be in a drawing with the rules of
+  `document.toGeoJSON`: rounding, ring orientation, the antimeridian, the
+  prefixed keys and the bbox. `ToGeoJSONOptions.getFile` reads the file of
+  an Image by its ID, and an Image whose file it does not find is written
+  without its pixels.
+- `Store` gets two optional members, `getMaxNameNumber(type)` and
+  `recordNameNumber(type, number)`. A store that holds only part of the
+  document implements them so that a number used in the part it does not
+  hold is not used again for an automatic name. A store without them is
+  numbered as before.
+
+### Changed in 2.2.0
+
+- `FileData.mimeType` of an image that was converted is the type the
+  browser returned, not the one requested
+  ([#31](https://github.com/sakuzu/maplibre-gl-draw/issues/31)).
+- When the browser cannot encode WebP, an image with no transparent pixel
+  is encoded as JPEG (quality 0.92) instead of being kept as PNG, so a
+  photo stays small. An image with a transparent pixel keeps the format
+  the browser returns
+  ([#34](https://github.com/sakuzu/maplibre-gl-draw/issues/34)).
+
 ## [2.1.4] - 2026-10-07
 
 Two fixes to how sizes follow the zoom: the paths of a dataset that drew
