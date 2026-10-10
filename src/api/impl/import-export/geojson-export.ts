@@ -158,7 +158,9 @@ export function convertFeatureToGeoJSON(
   // Add the metadata
   properties[`${DRAW_PROPERTY_PREFIX}id`] = feature.id;
   properties[`${DRAW_PROPERTY_PREFIX}layerId`] = feature.layerId;
-  if (feature.groupId !== undefined) {
+  // A feature given from outside a drawing may carry `null` for no group, which is read as
+  // undefined at the boundary
+  if (feature.groupId != null) {
     properties[`${DRAW_PROPERTY_PREFIX}groupId`] = feature.groupId;
   }
   if (!feature.visible) {
@@ -168,7 +170,8 @@ export function convertFeatureToGeoJSON(
     properties[`${DRAW_PROPERTY_PREFIX}locked`] = true;
   }
   if (Object.keys(feature.style).length > 0) {
-    properties[`${DRAW_PROPERTY_PREFIX}style`] = feature.style;
+    // A copy, so that changing the output does not change the feature given
+    properties[`${DRAW_PROPERTY_PREFIX}style`] = structuredClone(feature.style);
   }
 
   const geometry = exportGeometry(feature.geometry);

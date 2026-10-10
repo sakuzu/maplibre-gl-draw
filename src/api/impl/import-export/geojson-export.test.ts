@@ -545,6 +545,29 @@ describe('featuresToGeoJSON and featureToGeoJSON', () => {
     expect(featuresToGeoJSON([])).toEqual({ type: 'FeatureCollection', features: [] });
   });
 
+  it('write no group for a feature whose groupId is null', () => {
+    const polygon = {
+      ...(store.getFeature('polygon') as Feature),
+      groupId: null as unknown as undefined,
+    };
+    expect(featureToGeoJSON(polygon)?.properties).not.toHaveProperty('maplibre-gl-draw:groupId');
+  });
+
+  it('write a style that is not the object of the feature given', () => {
+    const point = feature(
+      'styled',
+      { type: 'Point', coordinates: [139, 35] },
+      { style: { pointRadius: 8, fillColor: '#123456' } },
+    );
+    const written = featureToGeoJSON(point)?.properties?.['maplibre-gl-draw:style'] as Record<
+      string,
+      unknown
+    >;
+    expect(written).toEqual(point.style);
+    written.pointRadius = 1;
+    expect(point.style).toEqual({ pointRadius: 8, fillColor: '#123456' });
+  });
+
   it('do not change the features given', () => {
     const polygon = structuredClone(store.getFeature('polygon') as Feature);
     const before = structuredClone(polygon);
