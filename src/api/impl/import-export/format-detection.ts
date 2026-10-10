@@ -43,3 +43,30 @@ export function isGeoJSONFeatureCollection(
   const obj = data as Record<string, unknown>;
   return obj.type === 'FeatureCollection' && Array.isArray(obj.features);
 }
+
+const GEOMETRY_TYPES: ReadonlySet<string> = new Set([
+  'Point',
+  'LineString',
+  'Polygon',
+  'MultiPoint',
+  'MultiLineString',
+  'MultiPolygon',
+  'GeometryCollection',
+]);
+
+/** A FeatureCollection from GeoJSON data (a collection, a feature or a geometry), or null */
+export function toFeatureCollection(data: unknown): GeoJSON.FeatureCollection | null {
+  if (isGeoJSONFeatureCollection(data)) return data;
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
+  const obj = data as Record<string, unknown>;
+  if (obj.type === 'Feature') {
+    return { type: 'FeatureCollection', features: [data as GeoJSON.Feature] };
+  }
+  if (typeof obj.type === 'string' && GEOMETRY_TYPES.has(obj.type)) {
+    return {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {}, geometry: data as GeoJSON.Geometry }],
+    };
+  }
+  return null;
+}

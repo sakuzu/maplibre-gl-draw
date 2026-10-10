@@ -24,10 +24,12 @@ import {
   evaluateStyleRule as evaluateRule,
   getStyleRuleChannel as getRuleChannel,
 } from '../view/style-rule.js';
+import type { DrawErrorCode } from './errors.js';
 import {
   convertFeaturesToGeoJSON,
   convertFeatureToGeoJSON,
 } from './impl/import-export/geojson-export.js';
+import { parseGeoJSONInput, parseNativeInput } from './impl/import-export/parse.js';
 
 // ============================================================================
 // Features
@@ -626,4 +628,100 @@ export function featureToGeoJSON(
   options?: ToGeoJSONOptions,
 ): GeoJSONFeature | null {
   return convertFeatureToGeoJSON(feature, options?.getFile);
+}
+
+// ============================================================================
+// Parsing
+// ============================================================================
+
+/** Options of {@link parseGeoJSON} and {@link parseNative}. */
+export interface ParseOptions {
+  /**
+   * Makes the ID of every feature, group, layer and file of the result; the IDs are ULIDs when
+   * it is left out. Give the generator given to `createDraw` as `generateId`, so that every ID
+   * of the document comes from one place.
+   */
+  generateId?: () => string;
+  /**
+   * The layer every feature goes into. Leave it out when the caller creates the layer and sets
+   * it: the features of GeoJSON then have an empty `layerId`, and those of a document of the
+   * library the ID of their layer in `layers`.
+   */
+  layerId?: string;
+  /** Whether the Multi geometries of GeoJSON are split into one feature per part */
+  flattenMulti?: boolean;
+}
+
+/**
+ * What {@link parseGeoJSON} and {@link parseNative} read, ready to be written into a document.
+ *
+ * Every feature, group, layer and file has a new ID, and the references between them (the
+ * group of a feature, the members of a group, the file of an image) name the new IDs. Nothing
+ * is named automatically: a feature without a name has none.
+ */
+export interface ParsedDocument {
+  /** The features, complete, with new IDs, in the order of the input */
+  features: Feature[];
+  /** The groups, their members given by the new IDs of the features */
+  groups: GroupInput[];
+  /** The files of the embedded images, normalized, with new IDs */
+  files: FileData[];
+  /**
+   * The layers of a document of the library with new IDs, from the back of the stacking order;
+   * empty for GeoJSON, and when `layerId` is given
+   */
+  layers: LayerInput[];
+  /**
+   * The features of the input that were left out: `index` is the position of the feature in
+   * the input, `reason` the code a load would throw for it, and `detail` the reason in English,
+   * for logs
+   */
+  skipped: Array<{ index: number; reason: DrawErrorCode; detail?: string }>;
+}
+
+/**
+ * Reads GeoJSON into features, groups and files without a drawing, the counterpart of
+ * {@link featuresToGeoJSON}: nothing is written, and no document is needed.
+ *
+ * The features are read as `document.load` reads them: the values of the library come back from
+ * the prefixed keys, a Multi geometry stays one feature unless `flattenMulti` is given, and a
+ * GeometryCollection is folded by type. Unlike a load, the IDs of the input are never kept:
+ * every feature and file gets one from `generateId`, and the features that name the same group
+ * with `maplibre-gl-draw:groupId` form a new group. A feature that cannot be read is left out
+ * and reported in `skipped`, with `invalid-input`; so is a feature whose embedded image is not
+ * a PNG / JPEG / WebP / GIF data URL of its declared type or cannot be decoded, and one whose
+ * image the browser cannot encode when it scales it down, with `unsupported-format`.
+ *
+ * @param input - A FeatureCollection, a Feature or a geometry
+ * @param options - The generator of the IDs, the layer and the reading of Multi geometries
+ * @returns What was read
+ * @throws `DrawError` with the code `unsupported-format` when the input is not GeoJSON, or
+ *   `invalid-input` when an option has the wrong type
+ */
+export function parseGeoJSON(
+  input: GeoJSONFeatureCollection | GeoJSONFeature | Geometry,
+  options?: ParseOptions,
+): Promise<ParsedDocument> {
+  return parseGeoJSONInput(input, options);
+}
+
+/**
+ * Reads a document of the library into features, groups, files and layers without a drawing,
+ * with new IDs: nothing is written, and no document is needed.
+ *
+ * The document is checked as `document.load` checks it. Every layer, group, feature and file
+ * gets a new ID from `generateId`, and the references between them are rewritten; the
+ * metadata of the document is not read. A feature whose image file cannot be imported is left
+ * out and reported in `skipped`, with `invalid-input` or `unsupported-format` as for
+ * {@link parseGeoJSON}, and a group whose features are all left out is left out too.
+ *
+ * @param input - A document of the library, as `document.toJSON` writes it
+ * @param options - The generator of the IDs and the layer
+ * @returns What was read
+ * @throws `DrawError` with the code `unsupported-format` when the input is not a document of
+ *   the library, or `invalid-input` when it is malformed, has another major version, or an
+ *   option has the wrong type
+ */
+export function parseNative(input: DrawDocument, options?: ParseOptions): Promise<ParsedDocument> {
+  return parseNativeInput(input, options);
 }
