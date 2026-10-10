@@ -582,7 +582,7 @@ export function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fi
 // ============================================================================
 
 /** Options of {@link featuresToGeoJSON} and {@link featureToGeoJSON}. */
-export interface GeoJSONExportOptions {
+export interface ToGeoJSONOptions {
   /**
    * Reads an embedded file by its ID, for the pixels of an Image: `(id) => store.getFile(id)`,
    * for example. An Image whose file it does not find, or every Image when it is left out, is
@@ -608,7 +608,7 @@ export interface GeoJSONExportOptions {
  */
 export function featuresToGeoJSON(
   features: readonly Feature[],
-  options?: GeoJSONExportOptions,
+  options?: ToGeoJSONOptions,
 ): GeoJSONFeatureCollection {
   return convertFeaturesToGeoJSON(features, options?.getFile);
 }
@@ -623,7 +623,7 @@ export function featuresToGeoJSON(
  */
 export function featureToGeoJSON(
   feature: Feature,
-  options?: GeoJSONExportOptions,
+  options?: ToGeoJSONOptions,
 ): GeoJSONFeature | null {
   return convertFeatureToGeoJSON(feature, options?.getFile);
 }

@@ -205,5 +205,5 @@ export type {
 export { deriveLegend, evaluateStyleRule, getStyleRuleChannel } from './api/model.js';
 
 // GeoJSON functions
-export type { GeoJSONExportOptions } from './api/model.js';
+export type { ToGeoJSONOptions } from './api/model.js';
 export { featuresToGeoJSON, featureToGeoJSON } from './api/model.js';
