@@ -21,8 +21,23 @@ import { isNativeFormat, toFeatureCollection } from './format-detection.js';
 import { convertGeoJSONFeatures, decodeEmbeddedImages } from './geojson-import.js';
 import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
+import { setOwnProperty } from './own-property.js';
 
 type Skipped = ParsedDocument['skipped'];
+type IdMap = ParsedDocument['idMap'];
+
+/** An empty map of the IDs of the input to the new ones */
+function createIdMap(): IdMap {
+  return { features: {}, groups: {}, files: {}, layers: {} };
+}
+
+/**
+ * Records the new ID of an ID of the input; the first one stays. The ID is an own key, so that
+ * an ID such as `__proto__` stays an ordinary key
+ */
+function recordId(map: Record<string, string>, from: string, to: string): void {
+  if (Object.getOwnPropertyDescriptor(map, from) === undefined) setOwnProperty(map, from, to);
+}
 
 /** The options of a parse, checked, with the generator resolved */
 interface ResolvedParseOptions {
@@ -108,23 +123,37 @@ export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<Pa
     const groups = new Map<string, GroupInput & { featureIds: string[] }>();
     const features: Feature[] = [];
     const files: FileData[] = [];
-    for (const { feature, fileData } of kept) {
+    const idMap = createIdMap();
+    for (const { feature, fileData, sourceId, sourceFileId } of kept) {
       // The layer a feature names in the input is not one of the target document
       feature.layerId = target;
       if (feature.groupId !== undefined) {
         let group = groups.get(feature.groupId);
         if (!group) {
-          group = { id: generateId(), featureIds: [] };
+          const id = generateId();
+          group = { id, featureIds: [] };
           groups.set(feature.groupId, group);
+          recordId(idMap.groups, feature.groupId, id);
         }
         group.featureIds.push(feature.id);
         feature.groupId = group.id;
       }
+      if (sourceId !== undefined) recordId(idMap.features, sourceId, feature.id);
       features.push(feature);
-      if (fileData) files.push(fileData);
+      if (fileData) {
+        files.push(fileData);
+        if (sourceFileId !== undefined) recordId(idMap.files, sourceFileId, fileData.id);
+      }
     }
 
-    return { features, groups: [...groups.values()], files, layers: [], skipped: byIndex(skipped) };
+    return {
+      features,
+      groups: [...groups.values()],
+      files,
+      layers: [],
+      skipped: byIndex(skipped),
+      idMap,
+    };
   });
 }
 
@@ -211,13 +240,17 @@ export function parseNativeInput(input: unknown, options?: unknown): Promise<Par
       });
     });
 
-    return {
-      features,
-      groups: parseGroups(validated.groups, validated.features, groupIds, featureIds),
-      files: parsedFiles,
-      layers,
-      skipped,
-    };
+    const groups = parseGroups(validated.groups, validated.features, groupIds, featureIds);
+
+    // Every ID of the input with the new one of what was read
+    const idMap = createIdMap();
+    const keptGroups = new Set(groups.map((group) => group.id));
+    for (const [from, to] of featureIds) recordId(idMap.features, from, to);
+    for (const [from, to] of groupIds) if (keptGroups.has(to)) recordId(idMap.groups, from, to);
+    for (const [from, to] of fileIds) recordId(idMap.files, from, to);
+    for (const [from, to] of layerIds) recordId(idMap.layers, from, to);
+
+    return { features, groups, files: parsedFiles, layers, skipped, idMap };
   });
 }
 

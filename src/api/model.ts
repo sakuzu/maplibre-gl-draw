@@ -658,6 +658,9 @@ export interface ParseOptions {
  * Every feature, group, layer and file has a new ID, and the references between them (the
  * group of a feature, the members of a group, the file of an image) name the new IDs. Nothing
  * is named automatically: a feature without a name has none.
+ *
+ * A reference the library does not know, such as the ID of another feature that an application
+ * or an extension keeps in `properties`, is left as it is: rewrite it with `idMap`.
  */
 export interface ParsedDocument {
   /** The features, complete, with new IDs, in the order of the input */
@@ -677,6 +680,28 @@ export interface ParsedDocument {
    * for logs
    */
   skipped: Array<{ index: number; reason: DrawErrorCode; detail?: string }>;
+  /**
+   * The new ID of each thing that had an ID in the input, by the ID of the input, one map per
+   * kind (an ID of the input may name a feature and a file at once). A feature, group, file or
+   * layer the input gave no ID, or that was left out, is not listed. When several features
+   * come from one feature of the input (the parts of a GeometryCollection, or of a Multi
+   * geometry with `flattenMulti`), its ID gives the first of them; when the input gives one ID
+   * to several features, it gives the first.
+   *
+   * ```ts
+   * const target = parsed.idMap.features[oldId]; // undefined when it was not read
+   * ```
+   */
+  idMap: {
+    /** The new IDs of the features */
+    features: Record<string, string>;
+    /** The new IDs of the groups (the `maplibre-gl-draw:groupId` of GeoJSON) */
+    groups: Record<string, string>;
+    /** The new IDs of the files of the images */
+    files: Record<string, string>;
+    /** The new IDs of the layers of a document of the library listed in `layers` */
+    layers: Record<string, string>;
+  };
 }
 
 /**
@@ -687,7 +712,9 @@ export interface ParsedDocument {
  * the prefixed keys, a Multi geometry stays one feature unless `flattenMulti` is given, and a
  * GeometryCollection is folded by type. Unlike a load, the IDs of the input are never kept:
  * every feature and file gets one from `generateId`, and the features that name the same group
- * with `maplibre-gl-draw:groupId` form a new group. A feature that cannot be read is left out
+ * with `maplibre-gl-draw:groupId` form a new group. `idMap` gives the new ID of each ID of the
+ * input, for the references the library does not know, such as an ID of another feature in
+ * `properties`, which are left as they are. A feature that cannot be read is left out
  * and reported in `skipped`, with `invalid-input`; so is a feature whose embedded image is not
  * a PNG / JPEG / WebP / GIF data URL of its declared type or cannot be decoded, and one whose
  * image the browser cannot encode when it scales it down, with `unsupported-format`.
@@ -711,7 +738,8 @@ export function parseGeoJSON(
  *
  * The document is checked as `document.load` checks it. Every layer, group, feature and file
  * gets a new ID from `generateId`, and the references between them are rewritten; the
- * metadata of the document is not read. A feature whose image file cannot be imported is left
+ * metadata of the document is not read. `idMap` gives the new ID of each ID of the input, for
+ * the references the library does not know, which are left as they are. A feature whose image file cannot be imported is left
  * out and reported in `skipped`, with `invalid-input` or `unsupported-format` as for
  * {@link parseGeoJSON}, and a group whose features are all left out is left out too.
  *

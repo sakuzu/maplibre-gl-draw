@@ -548,7 +548,10 @@ export function convertGeoJSONToFeature(
   // When there is image data on a single Image point, create the FileData and set a new
   // imageFileId
   let fileData: FileData | undefined;
+  let sourceFileId: string | undefined;
   if (embedsImage) {
+    const namedFileId = properties?.[drawPropertyKey('imageFileId')];
+    if (typeof namedFileId === 'string' && namedFileId !== '') sourceFileId = namedFileId;
     const newFileId = generateId();
     fileData = {
       id: newFileId,
@@ -649,7 +652,11 @@ export function convertGeoJSONToFeature(
 
   const results = convert();
   // Only a GeometryCollection without any member produces nothing
-  return results ? { results } : { reason: 'the geometry has no parts' };
+  if (!results) return { reason: 'the geometry has no parts' };
+  const [first] = results;
+  if (sourceId !== undefined) first.sourceId = sourceId;
+  if (sourceFileId !== undefined && first.fileData) first.sourceFileId = sourceFileId;
+  return { results };
 }
 
 /** A feature of the input that a conversion left out, with the code and the reason */

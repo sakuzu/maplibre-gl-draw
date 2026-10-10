@@ -143,6 +143,88 @@ describe('parseGeoJSON', () => {
     expect(parsed.layers).toEqual([]);
     expect(parsed.skipped).toEqual([]);
     expect(new Set(minted).size).toBe(minted.length);
+
+    // The IDs the input gave, each with its new ID; the image had none of its own
+    expect(parsed.idMap).toEqual({
+      features: { a: ids[0], b: ids[1], '3': ids[2] },
+      groups: { g: group.id },
+      files: { 'old-file': file.id },
+      layers: {},
+    });
+  });
+
+  it('leaves a reference it does not know as it is, for idMap to rewrite', async () => {
+    const parsed = await parseGeoJSON({
+      type: 'FeatureCollection',
+      features: [
+        input.features[0],
+        {
+          type: 'Feature',
+          id: 'pointer',
+          properties: { link: { featureId: 'a', at: 0.5 }, others: ['a', 'missing'] },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+        },
+      ],
+    });
+    const [target, pointer] = parsed.features;
+    // The library does not know these keys: they keep the IDs of the input
+    expect(pointer.properties).toEqual({
+      link: { featureId: 'a', at: 0.5 },
+      others: ['a', 'missing'],
+    });
+    // The application rewrites them with the map
+    const { features } = parsed.idMap;
+    expect(features.a).toBe(target.id);
+    expect(features.pointer).toBe(pointer.id);
+    expect(features.missing).toBeUndefined();
+    const link = pointer.properties.link as { featureId: string };
+    expect(features[link.featureId]).toBe(target.id);
+  });
+
+  it('maps an ID of the input to the first feature made from it, and keeps IDs as own keys', async () => {
+    const point = (id: string, coordinates: number[]) => ({
+      type: 'Feature' as const,
+      id,
+      properties: {},
+      geometry: { type: 'Point' as const, coordinates },
+    });
+    const parsed = await parseGeoJSON(
+      {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            id: 'multi',
+            properties: {},
+            geometry: {
+              type: 'MultiPoint',
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+          },
+          point('twice', [2, 2]),
+          point('twice', [3, 3]),
+          point('__proto__', [4, 4]),
+        ],
+      },
+      { flattenMulti: true },
+    );
+    const ids = parsed.features.map((feature) => feature.id);
+    expect(ids).toHaveLength(5);
+    const { features } = parsed.idMap;
+    expect(features.multi).toBe(ids[0]);
+    expect(features.twice).toBe(ids[2]);
+    expect(Object.keys(features)).toEqual(['multi', 'twice', '__proto__']);
+    expect(Object.getOwnPropertyDescriptor(features, '__proto__')?.value).toBe(ids[4]);
+    expect(Object.getPrototypeOf(features)).toBe(Object.prototype);
   });
 
   it('keeps the order of the input, names nothing, and leaves the layer empty without layerId', async () => {
@@ -372,6 +454,12 @@ describe('parseNative', () => {
     expect(new Set(all).size).toBe(8);
     for (const id of all) expect(minted).toContain(id);
     expect(parsed.skipped).toEqual([]);
+    expect(parsed.idMap).toEqual({
+      features: { p: p.id, q: q.id, r: r.id, img: img.id },
+      groups: { g: q.groupId },
+      files: { f: parsed.files[0].id },
+      layers: { back, front },
+    });
     // The input is not changed
     expect(doc.features[0].id).toBe('p');
   });
@@ -381,6 +469,7 @@ describe('parseNative', () => {
     expect(parsed.layers).toEqual([]);
     expect(parsed.features.every((f) => f.layerId === 'target')).toBe(true);
     expect(parsed.groups).toHaveLength(1);
+    expect(parsed.idMap.layers).toEqual({});
   });
 
   it('leaves out a feature whose image cannot be imported, and a group left empty', async () => {
@@ -399,6 +488,9 @@ describe('parseNative', () => {
     expect(parsed.features).toHaveLength(2);
     expect(parsed.files).toEqual([]);
     expect(parsed.groups).toEqual([]);
+    // What was left out has no new ID
+    expect(parsed.idMap).toMatchObject({ groups: {}, files: {} });
+    expect(Object.keys(parsed.idMap.features)).toEqual(['p', 'q']);
     expect(parsed.skipped).toEqual([
       {
         index: 1,
