@@ -383,3 +383,743 @@ describe('document.loadMany', () => {
     expect(store.listFeatures()).toHaveLength(1);
   });
 });
+
+describe('document.loadMany store contents', () => {
+  /** A 10 by 10 PNG header, enough for the embedded image check (it is not scaled down) */
+  const smallPng = (() => {
+    const bytes = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes, 0);
+    bytes.writeUInt32BE(13, 8);
+    bytes.write('IHDR', 12, 'latin1');
+    bytes.writeUInt32BE(10, 16);
+    bytes.writeUInt32BE(10, 20);
+    return `data:image/png;base64,${bytes.toString('base64')}`;
+  })();
+
+  const native = {
+    version: '2.0.0',
+    layers: [
+      {
+        id: 'n1',
+        name: 'native',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        items: ['g1', 'img'],
+      },
+    ],
+    layerOrder: ['n1'],
+    groups: [
+      { id: 'g1', name: 'group', visible: true, locked: false, layerId: 'n1', featureIds: ['m'] },
+    ],
+    features: [
+      {
+        id: 'm',
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [1, 1] },
+        layerId: 'n1',
+        groupId: 'g1',
+        properties: { name: 'M' },
+        style: {},
+        visible: true,
+        locked: false,
+      },
+      {
+        id: 'img',
+        type: 'Image',
+        geometry: { type: 'Point', coordinates: [2, 2] },
+        layerId: 'n1',
+        properties: { 'maplibre-gl-draw:imageFileId': 'f1' },
+        style: {},
+        visible: true,
+        locked: false,
+      },
+    ],
+    files: { f1: { id: 'f1', mimeType: 'image/png', dataURL: smallPng } },
+  };
+
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        id: 'm',
+        properties: {},
+        geometry: { type: 'Point', coordinates: [3, 3] },
+      },
+      {
+        type: 'Feature',
+        id: 7,
+        properties: { 'maplibre-gl-draw:groupId': 'g1', 'maplibre-gl-draw:layerId': 'n1' },
+        geometry: { type: 'Point', coordinates: [4, 4] },
+      },
+      {
+        type: 'Feature',
+        properties: { kind: 'multi' },
+        geometry: {
+          type: 'MultiPoint',
+          coordinates: [
+            [5, 5],
+            [6, 6],
+          ],
+        },
+      },
+      {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'GeometryCollection',
+          geometries: [
+            { type: 'Point', coordinates: [7, 7] },
+            {
+              type: 'LineString',
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
+          ],
+        },
+      },
+      { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [] } },
+      {
+        type: 'Feature',
+        properties: {
+          'maplibre-gl-draw:featureType': 'Image',
+          'maplibre-gl-draw:imageData': smallPng,
+          'maplibre-gl-draw:imageMimeType': 'image/png',
+          'maplibre-gl-draw:imageFileId': 'old',
+        },
+        geometry: { type: 'Point', coordinates: [8, 8] },
+      },
+    ],
+  };
+
+  it('writes the same features, groups, layers and files as before', async () => {
+    const source = geojson as never;
+    const first = await doc.load(native as never);
+    const results = await doc.loadMany([
+      { source },
+      { source, options: { flattenMulti: true, layer: { name: 'new' } } },
+      { source, options: { layerId: 'n1', group: { name: 'folder' } } },
+    ]);
+    // The generated ids are written as their order of appearance, so that the contents compare
+    // whatever the order in which the ids were taken
+    const generated = new Map<string, string>();
+    const contents = JSON.stringify(
+      {
+        results: [first, ...(results ?? [])],
+        layers: store.listLayers(),
+        layerOrder: store.getLayerOrder(),
+        groups: store.listGroups(),
+        features: store.listFeatures(),
+        files: store.listFiles(),
+      },
+      (_key, value: unknown) => {
+        if (typeof value !== 'string' || !/^(id-\d+|[0-9A-HJKMNP-TV-Z]{26})$/.test(value)) {
+          return value;
+        }
+        if (!generated.has(value)) generated.set(value, `#${generated.size + 1}`);
+        return generated.get(value);
+      },
+      1,
+    );
+    expect(contents).toMatchInlineSnapshot(`
+      "{
+       "results": [
+        {
+         "format": "native",
+         "featureIds": [
+          "m",
+          "img"
+         ],
+         "replaced": true
+        },
+        {
+         "format": "geojson",
+         "featureIds": [
+          "#1",
+          "7",
+          "#2",
+          "#3",
+          "#4",
+          "#5"
+         ],
+         "replaced": false,
+         "skipped": [
+          {
+           "index": 4,
+           "reason": "the Point has malformed coordinates"
+          }
+         ]
+        },
+        {
+         "format": "geojson",
+         "featureIds": [
+          "#6",
+          "#7",
+          "#8",
+          "#9",
+          "#10",
+          "#11",
+          "#12"
+         ],
+         "replaced": false,
+         "skipped": [
+          {
+           "index": 4,
+           "reason": "the Point has malformed coordinates"
+          }
+         ],
+         "layerId": "#13"
+        },
+        {
+         "format": "geojson",
+         "featureIds": [
+          "#14",
+          "#15",
+          "#16",
+          "#17",
+          "#18",
+          "#19"
+         ],
+         "replaced": false,
+         "skipped": [
+          {
+           "index": 4,
+           "reason": "the Point has malformed coordinates"
+          }
+         ],
+         "groupId": "#20"
+        }
+       ],
+       "layers": [
+        {
+         "id": "n1",
+         "name": "native",
+         "visible": true,
+         "locked": false,
+         "opacity": 1,
+         "items": [
+          "g1",
+          "img",
+          "#1",
+          "#2",
+          "#3",
+          "#4",
+          "#5",
+          "#20"
+         ]
+        },
+        {
+         "id": "#13",
+         "name": "new",
+         "visible": true,
+         "locked": false,
+         "opacity": 1,
+         "items": [
+          "#6",
+          "#7",
+          "#8",
+          "#9",
+          "#10",
+          "#11",
+          "#12"
+         ]
+        }
+       ],
+       "layerOrder": [
+        "n1",
+        "#13"
+       ],
+       "groups": [
+        {
+         "id": "g1",
+         "name": "group",
+         "visible": true,
+         "locked": false,
+         "layerId": "n1",
+         "featureIds": [
+          "m",
+          "7"
+         ]
+        },
+        {
+         "id": "#20",
+         "name": "folder",
+         "visible": true,
+         "locked": false,
+         "layerId": "n1",
+         "featureIds": [
+          "#14",
+          "#15",
+          "#16",
+          "#17",
+          "#18",
+          "#19"
+         ]
+        }
+       ],
+       "features": [
+        {
+         "id": "m",
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           1,
+           1
+          ]
+         },
+         "layerId": "n1",
+         "groupId": "g1",
+         "properties": {
+          "name": "M"
+         },
+         "style": {},
+         "visible": true,
+         "locked": false
+        },
+        {
+         "id": "img",
+         "type": "Image",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           2,
+           2
+          ]
+         },
+         "layerId": "n1",
+         "properties": {
+          "maplibre-gl-draw:imageFileId": "f1"
+         },
+         "style": {},
+         "visible": true,
+         "locked": false
+        },
+        {
+         "id": "#1",
+         "layerId": "n1",
+         "properties": {
+          "name": "Point 1"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           3,
+           3
+          ]
+         }
+        },
+        {
+         "id": "7",
+         "layerId": "n1",
+         "groupId": "g1",
+         "properties": {
+          "name": "Point 2"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           4,
+           4
+          ]
+         }
+        },
+        {
+         "id": "#2",
+         "layerId": "n1",
+         "properties": {
+          "kind": "multi",
+          "name": "MultiPoint 1"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiPoint",
+         "geometry": {
+          "type": "MultiPoint",
+          "coordinates": [
+           [
+            5,
+            5
+           ],
+           [
+            6,
+            6
+           ]
+          ]
+         }
+        },
+        {
+         "id": "#3",
+         "layerId": "n1",
+         "properties": {
+          "name": "MultiPoint 2"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiPoint",
+         "geometry": {
+          "type": "MultiPoint",
+          "coordinates": [
+           [
+            7,
+            7
+           ]
+          ]
+         }
+        },
+        {
+         "id": "#4",
+         "layerId": "n1",
+         "properties": {
+          "name": "MultiLineString 1"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiLineString",
+         "geometry": {
+          "type": "MultiLineString",
+          "coordinates": [
+           [
+            [
+             0,
+             0
+            ],
+            [
+             1,
+             1
+            ]
+           ]
+          ]
+         }
+        },
+        {
+         "id": "#5",
+         "layerId": "n1",
+         "properties": {
+          "maplibre-gl-draw:imageFileId": "#21",
+          "name": "Image 1"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Image",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           8,
+           8
+          ]
+         }
+        },
+        {
+         "id": "#6",
+         "layerId": "#13",
+         "properties": {
+          "name": "Point 3"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           3,
+           3
+          ]
+         }
+        },
+        {
+         "id": "#7",
+         "layerId": "#13",
+         "properties": {
+          "name": "Point 4"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           4,
+           4
+          ]
+         }
+        },
+        {
+         "id": "#8",
+         "layerId": "#13",
+         "properties": {
+          "kind": "multi",
+          "name": "Point 5"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           5,
+           5
+          ]
+         }
+        },
+        {
+         "id": "#9",
+         "layerId": "#13",
+         "properties": {
+          "kind": "multi",
+          "name": "Point 6"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           6,
+           6
+          ]
+         }
+        },
+        {
+         "id": "#10",
+         "layerId": "#13",
+         "properties": {
+          "name": "MultiPoint 3"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiPoint",
+         "geometry": {
+          "type": "MultiPoint",
+          "coordinates": [
+           [
+            7,
+            7
+           ]
+          ]
+         }
+        },
+        {
+         "id": "#11",
+         "layerId": "#13",
+         "properties": {
+          "name": "MultiLineString 2"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiLineString",
+         "geometry": {
+          "type": "MultiLineString",
+          "coordinates": [
+           [
+            [
+             0,
+             0
+            ],
+            [
+             1,
+             1
+            ]
+           ]
+          ]
+         }
+        },
+        {
+         "id": "#12",
+         "layerId": "#13",
+         "properties": {
+          "maplibre-gl-draw:imageFileId": "#22",
+          "name": "Image 2"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Image",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           8,
+           8
+          ]
+         }
+        },
+        {
+         "id": "#14",
+         "layerId": "n1",
+         "properties": {
+          "name": "Point 7"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           3,
+           3
+          ]
+         },
+         "groupId": "#20"
+        },
+        {
+         "id": "#15",
+         "layerId": "n1",
+         "properties": {
+          "name": "Point 8"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Point",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           4,
+           4
+          ]
+         },
+         "groupId": "#20"
+        },
+        {
+         "id": "#16",
+         "layerId": "n1",
+         "properties": {
+          "kind": "multi",
+          "name": "MultiPoint 4"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiPoint",
+         "geometry": {
+          "type": "MultiPoint",
+          "coordinates": [
+           [
+            5,
+            5
+           ],
+           [
+            6,
+            6
+           ]
+          ]
+         },
+         "groupId": "#20"
+        },
+        {
+         "id": "#17",
+         "layerId": "n1",
+         "properties": {
+          "name": "MultiPoint 5"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiPoint",
+         "geometry": {
+          "type": "MultiPoint",
+          "coordinates": [
+           [
+            7,
+            7
+           ]
+          ]
+         },
+         "groupId": "#20"
+        },
+        {
+         "id": "#18",
+         "layerId": "n1",
+         "properties": {
+          "name": "MultiLineString 3"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "MultiLineString",
+         "geometry": {
+          "type": "MultiLineString",
+          "coordinates": [
+           [
+            [
+             0,
+             0
+            ],
+            [
+             1,
+             1
+            ]
+           ]
+          ]
+         },
+         "groupId": "#20"
+        },
+        {
+         "id": "#19",
+         "layerId": "n1",
+         "properties": {
+          "maplibre-gl-draw:imageFileId": "#23",
+          "name": "Image 3"
+         },
+         "style": {},
+         "locked": false,
+         "visible": true,
+         "type": "Image",
+         "geometry": {
+          "type": "Point",
+          "coordinates": [
+           8,
+           8
+          ]
+         },
+         "groupId": "#20"
+        }
+       ],
+       "files": [
+        {
+         "id": "f1",
+         "mimeType": "image/png",
+         "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAK"
+        },
+        {
+         "id": "#21",
+         "mimeType": "image/png",
+         "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAK"
+        },
+        {
+         "id": "#22",
+         "mimeType": "image/png",
+         "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAK"
+        },
+        {
+         "id": "#23",
+         "mimeType": "image/png",
+         "dataURL": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAK"
+        }
+       ]
+      }"
+    `);
+  });
+});
