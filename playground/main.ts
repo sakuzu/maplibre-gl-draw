@@ -47,10 +47,15 @@ const map = new maplibregl.Map({
 });
 
 // 1. The draw instance, with snapping on; a scene brings its own layers, and the empty page
-// (`?plain`) starts with one
+// (`?plain`) starts with one. The IDs of what the library creates come from the page, as an
+// application that names things itself would give them: the time the page opened and a count,
+// so that an ID is never made twice, also after a reload and with a saved document opened
+const session = Date.now().toString(36);
+let made = 0;
 const draw = createDraw(map, {
   initDefaultLayer: scene === null,
   snapping: { enabled: true, disableKey: 'alt' },
+  generateId: () => `pg-${session}-${(++made).toString(36)}`,
 });
 
 // 2. A plugin with a mode of its own, and a custom feature type with a mode that places it
@@ -124,6 +129,18 @@ function mountUI(): DrawUI {
       draw.features.updateMany(features.map((f) => ({ id: f.id, patch })));
     },
   });
+  // The ID of the feature selected, made by the generator of step 1. The scenes of the showcase
+  // are pictures of the drawing: the section is left out there
+  if (scene === null) {
+    ui.inspector?.sections.add({
+      id: 'id',
+      title: 'ID',
+      appliesTo: (features) => features.length === 1,
+      fields: ([first]) => [
+        { key: 'id', kind: 'text', label: 'ID', value: first.id, disabled: true },
+      ],
+    });
+  }
   ui.inspector?.sections.add({
     id: 'route',
     title: ja ? 'ルート' : 'Route',
