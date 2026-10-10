@@ -73,7 +73,7 @@ const MAIN = [
   'FeatureTypesCollection',
   'FileData',
   'FillRenderer',
-  'GeoJSONExportOptions',
+  'ToGeoJSONOptions',
   'getStyleRuleChannel',
   'Group',
   'GroupFilter',
