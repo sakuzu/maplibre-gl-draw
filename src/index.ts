@@ -208,6 +208,6 @@ export { deriveLegend, evaluateStyleRule, getStyleRuleChannel } from './api/mode
 export type { ToGeoJSONOptions } from './api/model.js';
 export { featuresToGeoJSON, featureToGeoJSON } from './api/model.js';
 
-// Parsing without a drawing
+// Parse functions
 export type { ParsedDocument, ParseOptions } from './api/model.js';
 export { parseGeoJSON, parseNative } from './api/model.js';

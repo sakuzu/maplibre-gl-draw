@@ -140,6 +140,11 @@ input?.addEventListener('change', async () => {
   and reason; the rest are loaded
 - A style value of the wrong type or form (a color that is not a CSS
   color, an opacity outside 0 to 1) is dropped, and the feature is kept
+- An embedded image that is not a PNG, JPEG, WebP or GIF data URL of its
+  declared type, or whose pixels cannot be decoded, rejects the load with
+  `invalid-input`. An image that has to be scaled down and that the
+  browser cannot encode in one of those types rejects it with
+  `unsupported-format`, as an image file does
 - A GeoJSON feature whose ID is already taken gets a new ID, so a file
   written by `toGeoJSON()` can be loaded back into the same drawing
 - GeoJSON features go into the layer of `options.layerId` when it is
@@ -215,6 +220,79 @@ await draw.document.loadMany([
   },
 ]);
 ```
+
+### Reading without writing
+
+`parseGeoJSON(input, options?)` and `parseNative(input, options?)` read a
+source as a load reads it and write nothing. They need no drawing, and
+give back a `ParsedDocument` (features, groups, files, layers and the
+features left out) for the application to write where it chooses: in
+parts, into another store, or after it has placed them. They are the
+counterpart of `featuresToGeoJSON`.
+
+```ts
+import { parseGeoJSON, type Store } from '@sakuzu/maplibre-gl-draw';
+
+declare const geojson: GeoJSON.FeatureCollection;
+declare const store: Store; // the Store given to createDraw, which keeps the files
+
+const target = draw.layers.getActive()?.id;
+const parsed = await parseGeoJSON(geojson, { layerId: target });
+for (const { index, reason, detail } of parsed.skipped) {
+  console.warn(`feature ${index} left out (${reason}): ${detail}`);
+}
+draw.transact(() => {
+  for (const file of parsed.files) store.createFile(file);
+  // The features first, then the groups that take them in
+  draw.features.createMany(parsed.features.map(({ groupId: _, ...rest }) => rest));
+  draw.groups.createMany(parsed.groups);
+});
+```
+
+- Every feature, group, layer and file gets a new ID; the IDs of the
+  input are never kept. The references between them (the group of a
+  feature, the members of a group, the file of an Image) name the new IDs
+- `layerId` puts every feature into one layer. Without it, the features
+  of GeoJSON have an empty `layerId`, and those of a document of the
+  library the ID of their layer in `layers`, which lists the layers of
+  the document from the back, for the application to create
+- The GeoJSON features that name the same `maplibre-gl-draw:groupId` form
+  one new group. `flattenMulti` splits Multi geometries as it does for a
+  load
+- No feature is given a name, and the features keep the order of the
+  input
+- A feature that a load would leave out, and one whose embedded image
+  cannot be imported, is left out and listed in `skipped` with its index,
+  the code (`invalid-input`, or `unsupported-format` for an image the
+  browser cannot encode) and the reason. Only an input that is not of the
+  format (`unsupported-format`) and a document of the library that a load
+  would refuse (`invalid-input`) reject the promise
+
+### The IDs of the application
+
+By default the library makes a ULID for everything it creates. The
+option `generateId` of `createDraw` replaces it: features drawn or
+created without an ID, groups, layers, the files of images and the
+results of the geometry operations take their IDs from it, and so does a
+load for a GeoJSON feature that has no ID or one that is taken. It is
+given only when the instance is created.
+
+```ts
+import { createDraw, parseGeoJSON } from '@sakuzu/maplibre-gl-draw';
+
+declare const geojson: GeoJSON.FeatureCollection;
+
+const generateId = () => crypto.randomUUID();
+const app = createDraw(map, { generateId });
+const parsed = await parseGeoJSON(geojson, { generateId });
+console.log(app.features.count(), parsed.features.length);
+```
+
+The generator must return a non-empty string that is unique for the
+lifetime of the document and never reused, also after the thing it named
+was deleted. An ID the code gives, such as `id` of `features.create`, is
+used as it is. Give the same generator to `parseGeoJSON` and
+`parseNative`, so that every ID of the document comes from one place.
 
 ## Files dropped on the map
 

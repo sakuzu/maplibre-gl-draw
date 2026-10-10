@@ -29,6 +29,7 @@ const MAIN_CATEGORIES = [
   'Extensions',
   'Style rule functions',
   'GeoJSON functions',
+  'Parse functions',
 ];
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */

@@ -137,6 +137,11 @@ input?.addEventListener('change', async () => {
   除かれ、その番号と理由が `skipped` に載ります。残りは読み込みます
 - 型や形の合わないスタイルの値 (CSS の色ではない色、0 から 1 の範囲外の
   不透明度) は捨て、地物は残します
+- 埋め込まれた画像が、宣言した型の PNG、JPEG、WebP、GIF のデータ URL
+  でないとき、または画素をデコードできないときは、読み込み全体を
+  `invalid-input` で受け付けません。縮小が必要な画像を、ブラウザーが
+  それらの型で書き出せないときは、画像ファイルと同じく
+  `unsupported-format` で受け付けません
 - ID がすでに使われている GeoJSON の地物には新しい ID を振り
   ます。そのため、`toGeoJSON()` で書き出したファイルを同じ描画に
   読み戻せます
@@ -216,6 +221,78 @@ await draw.document.loadMany([
   },
 ]);
 ```
+
+### 書き込まずに読む
+
+`parseGeoJSON(input, options?)` と `parseNative(input, options?)` は、
+読み込みと同じようにソースを読み、何も書き込みません。描画は要らず、
+`ParsedDocument` (地物、グループ、ファイル、レイヤー、除いた地物) を
+返します。アプリケーションは、それを好きな場所に書き込めます。分けて
+書く、別のストアに書く、置き場所を決めてから書く、といった使い方です。
+`featuresToGeoJSON` と対になる関数です。
+
+```ts
+import { parseGeoJSON, type Store } from '@sakuzu/maplibre-gl-draw';
+
+declare const geojson: GeoJSON.FeatureCollection;
+declare const store: Store; // createDraw に渡した Store。ファイルはここに置く
+
+const target = draw.layers.getActive()?.id;
+const parsed = await parseGeoJSON(geojson, { layerId: target });
+for (const { index, reason, detail } of parsed.skipped) {
+  console.warn(`feature ${index} left out (${reason}): ${detail}`);
+}
+draw.transact(() => {
+  for (const file of parsed.files) store.createFile(file);
+  // 先に地物を作り、それを入れるグループを後に作る
+  draw.features.createMany(parsed.features.map(({ groupId: _, ...rest }) => rest));
+  draw.groups.createMany(parsed.groups);
+});
+```
+
+- 地物、グループ、レイヤー、ファイルには、すべて新しい ID を振ります。
+  入力の ID は残しません。それらの間の参照 (地物のグループ、グループの
+  メンバー、Image のファイル) は新しい ID を指します
+- `layerId` を指定すると、すべての地物をそのレイヤーに入れます。指定
+  しなければ、GeoJSON の地物の `layerId` は空になり、ライブラリーの
+  文書の地物は `layers` にある自分のレイヤーの ID を持ちます。`layers`
+  は文書のレイヤーを奥から並べたもので、アプリケーションが作ります
+- 同じ `maplibre-gl-draw:groupId` を指す GeoJSON の地物は、1 つの新しい
+  グループになります。`flattenMulti` は、読み込みと同じく Multi の形状を
+  分けます
+- 地物に名前は付けません。地物は入力の順に並びます
+- 読み込みなら除く地物と、埋め込まれた画像を取り込めない地物は除き、
+  その番号、コード (`invalid-input`。ブラウザーが書き出せない画像は
+  `unsupported-format`)、理由を `skipped` に載せます。promise が失敗
+  するのは、入力がその形式でないとき (`unsupported-format`) と、
+  読み込みなら受け付けないライブラリーの文書のとき (`invalid-input`)
+  だけです
+
+### アプリケーションの ID
+
+ライブラリーは、作るものすべてに既定で ULID を振ります。`createDraw`
+のオプション `generateId` は、これを置き換えます。ID を指定せずに
+描いたり作ったりした地物、グループ、レイヤー、画像のファイル、形状の
+操作の結果は、ここから ID を受け取ります。ID の無い GeoJSON の地物と、
+ID がすでに使われている GeoJSON の地物にも、読み込みはここから ID を
+振ります。インスタンスを作るときにしか指定できません。
+
+```ts
+import { createDraw, parseGeoJSON } from '@sakuzu/maplibre-gl-draw';
+
+declare const geojson: GeoJSON.FeatureCollection;
+
+const generateId = () => crypto.randomUUID();
+const app = createDraw(map, { generateId });
+const parsed = await parseGeoJSON(geojson, { generateId });
+console.log(app.features.count(), parsed.features.length);
+```
+
+この関数は、空でない文字列を返します。その文字列は文書が続く間
+一意で、名付けたものを消した後も使い回してはいけません。
+`features.create` の `id` のように、コードが渡した ID はそのまま
+使います。`parseGeoJSON` と `parseNative` にも同じ関数を渡すと、文書の
+ID がすべて 1 か所から来ます。
 
 ## 地図にドロップされたファイル
 

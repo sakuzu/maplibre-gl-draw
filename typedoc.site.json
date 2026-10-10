@@ -25,6 +25,7 @@
     "Extensions",
     "Style rule functions",
     "GeoJSON functions",
+    "Parse functions",
     "Measure",
     "Create",
     "Combine",
