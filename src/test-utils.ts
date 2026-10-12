@@ -24,7 +24,14 @@ import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
 import type { KeyNormalizedEvent, ModifierKeys, MouseNormalizedEvent } from './dispatcher/types.js';
+import {
+  createFeatureTablesStore,
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from './feature-table/feature-tables.js';
+import type { LayerTable } from './feature-table/layer-table.js';
 import type { ModeManager } from './modes/manager.js';
+import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
 import type { Feature } from './shared/types/model.js';
@@ -32,6 +39,11 @@ import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import type { SnapResult } from './snapping/types.js';
 import type { Store } from './store/store.js';
+import { createRowGroupBuilder, type RowInput } from './table/row-group-builder.js';
+import { FeatureDrawer } from './view/renderers/drawer.js';
+import type { ImageRenderer } from './view/renderers/image.js';
+import type { SDFLineRenderer } from './view/renderers/line/sdf-line.js';
+import type { PointShapeRenderer } from './view/renderers/point/point-shape.js';
 import type { TerrainContext } from './view/terrain/context.js';
 import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
 
@@ -437,5 +449,101 @@ export function createSyntheticInput(engine: {
       };
       inputRouter.dispatch(event);
     },
+  };
+}
+
+// === The rows held as columns ===
+
+/** A drawer built from stubs: the style resolution touches neither GL nor the map */
+export function createTestDrawer(featureStyle = DEFAULT_FEATURE_STYLE_CONFIG): FeatureDrawer {
+  const gl = {
+    createBuffer: (): object => ({}),
+    createVertexArray: (): object => ({}),
+    bindBuffer: (): void => {},
+    bindVertexArray: (): void => {},
+    enableVertexAttribArray: (): void => {},
+    vertexAttribPointer: (): void => {},
+  } as unknown as WebGL2RenderingContext;
+  return new FeatureDrawer({
+    gl,
+    map: {} as never,
+    sdfLineRenderer: {} as SDFLineRenderer,
+    pointShapeRenderer: {} as PointShapeRenderer,
+    imageRenderer: {} as ImageRenderer,
+    featureStyle,
+  });
+}
+
+/** The key of the order of the `i`-th row (they sort in the order of `i`) */
+export function orderKey(i: number): string {
+  return `k${String(i).padStart(6, '0')}`;
+}
+
+/** A feature as a row */
+export function rowOfFeature(feature: Feature, order: string): RowInput {
+  return {
+    id: feature.id,
+    type: feature.type,
+    geometry: feature.geometry,
+    order,
+    style: feature.style as Record<string, unknown>,
+    properties: feature.properties,
+    visible: feature.visible,
+    locked: feature.locked,
+  };
+}
+
+/**
+ * Tables holding the features in one layer, in the order given
+ *
+ * @param targetRows The largest number of rows of a row group
+ */
+export function tablesOfFeatures(
+  layerId: string,
+  features: readonly Feature[],
+  targetRows?: number,
+): { internals: FeatureTablesInternals; table: LayerTable } {
+  const { tables, writer } = createFeatureTablesStore();
+  const builder = createRowGroupBuilder({ targetRows });
+  features.forEach((feature, i) => {
+    builder.addRow(rowOfFeature(feature, orderKey(i)));
+  });
+  writer.adopt(layerId, builder.finish());
+  const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+  return { internals, table: internals.layerTable(layerId) as LayerTable };
+}
+
+/** A feature of the tests */
+export function feature(
+  id: string,
+  type: Feature['type'],
+  coordinates: unknown,
+  extra: Partial<Feature> = {},
+): Feature {
+  const geometryTypes = [
+    'Point',
+    'MultiPoint',
+    'LineString',
+    'MultiLineString',
+    'Polygon',
+    'MultiPolygon',
+  ];
+  // A Circle, an Image and a custom type hold a Point; a Freehand a LineString
+  const geometryType = geometryTypes.includes(type)
+    ? type
+    : type === 'Freehand'
+      ? 'LineString'
+      : 'Point';
+  return {
+    id,
+    type,
+    geometry: { type: geometryType, coordinates } as Feature['geometry'],
+    layerId: 'layer',
+    groupId: undefined,
+    properties: {},
+    style: {},
+    locked: false,
+    visible: true,
+    ...extra,
   };
 }
