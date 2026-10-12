@@ -225,14 +225,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   advanceAdoption(budget: TableWorkBudget): boolean {
     while (this.adoptions.length > 0 && budget.canStep()) {
-      budget.stepped();
       const next = this.adoptions.shift() as { layer: LayerTable; data: RowGroupData };
-      try {
-        this.adoptGroup(next.layer, next.data);
-      } catch (error) {
-        // There is no caller to throw to any more: the group is left out
-        console.error(error);
-      }
+      budget.step(() => {
+        try {
+          this.adoptGroup(next.layer, next.data);
+        } catch (error) {
+          // There is no caller to throw to any more: the group is left out
+          console.error(error);
+        }
+      });
     }
     return this.adoptions.length > 0;
   }

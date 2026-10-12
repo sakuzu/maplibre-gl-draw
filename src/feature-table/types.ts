@@ -26,11 +26,16 @@ export type GroupHandle = number;
 
 /**
  * The time a frame gives the work done a step at a time (the same shape as the budget of the
- * builds of the chunks, so one budget can be shared by both)
+ * builds of the chunks, so one budget can be shared by both). Only the time spent in the steps
+ * is counted
  */
 export interface TableWorkBudget {
   /** Whether one more step may be done in this frame (the first step of a frame always may) */
   canStep(): boolean;
-  /** Counts a step */
-  stepped(): void;
+  /**
+   * Does one step of work, and counts it and the time it takes
+   *
+   * @param work The step, given the time the budget runs out at
+   */
+  step<T>(work: (deadline: number) => T): T;
 }

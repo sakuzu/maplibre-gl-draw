@@ -17,7 +17,9 @@
  * (`dataset/chunk-set.ts`) and the rows held as columns (`view/layer/table-retained.ts`).
  *
  * The budget is given by the caller, so that one budget can be shared by every chunk built in a
- * frame.
+ * frame. It counts the time of the work only (the starts and the steps of the builds): the
+ * drawing of the chunks already built, which comes in between in the order of the chunks, does
+ * not use it.
  */
 
 import type { BoundingBox } from '../../shared/types/model.js';
@@ -64,19 +66,27 @@ export interface RetainedChunkState<B> {
 }
 
 /**
- * The time the builds may take in a frame
+ * The time the work done a step at a time may take in a frame
+ *
+ * Only the time spent in the steps is counted. What the frame does between them (drawing what is
+ * built, the other layers, the host) does not use the budget, so a frame that draws much still
+ * gives the work its time.
  *
  * @internal
  */
 export interface ChunkBuildBudget {
-  /** When the time of the frame runs out */
-  readonly deadline: number;
   /** The clock the budget is measured with */
   now(): number;
-  /** Whether one more build may step in this frame (the first step of the frame always may) */
+  /** Whether one more step may be done in this frame (the first step of the frame always may) */
   canStep(): boolean;
-  /** Counts a step */
-  stepped(): void;
+  /**
+   * Does one step of work, and counts it and the time it takes
+   *
+   * @param work The step. It is given the time the budget runs out at, counted from when the step
+   *   starts (the start itself when nothing is left: a step does at least one slice)
+   * @returns What the step returns
+   */
+  step<T>(work: (deadline: number) => T): T;
 }
 
 /**
@@ -89,23 +99,28 @@ export function chunkClock(): number {
 }
 
 /**
- * The budget of one frame: `ms` from now, and always at least one step
+ * The budget of one frame: `ms` of work, and always at least one step
  *
- * @param ms The time the builds may take (Infinity: every build in view finishes in the frame)
+ * @param ms The time the work may take (Infinity: every build in view finishes in the frame)
  * @internal
  */
 export function createChunkBuildBudget(
   ms: number,
   now: () => number = chunkClock,
 ): ChunkBuildBudget {
-  const start = now();
+  let spent = 0;
   let steps = 0;
   return {
-    deadline: start + ms,
     now,
-    canStep: () => steps === 0 || now() - start < ms,
-    stepped: () => {
+    canStep: () => steps === 0 || spent < ms,
+    step<T>(work: (deadline: number) => T): T {
+      const start = now();
       steps++;
+      try {
+        return work(start + Math.max(0, ms - spent));
+      } finally {
+        spent += now() - start;
+      }
     },
   };
 }
@@ -188,20 +203,23 @@ export function advanceChunkBuilds<S extends RetainedChunkState<B>, B>(
     const stale =
       state.batches !== null && (state.stale || host.isStale(state) || rebased !== null);
 
-    if (!settled && (state.job || !state.batches || stale)) pending = true;
-    if (settled && !state.job && (!state.batches || stale)) {
-      const origin = state.viewOrigin ?? boundsCenter(state.bounds);
-      state.jobOrigin = origin;
-      state.job = host.startJob(state, origin);
-    }
-
-    if (state.job && !settled) pending = true;
-    if (state.job && settled) {
+    const wantsBuild = state.job !== null || !state.batches || stale;
+    if (wantsBuild && !settled) pending = true;
+    if (wantsBuild && settled) {
       if (budget.canStep()) {
-        budget.stepped();
-        const done = state.job.step(budget.deadline, budget.now);
+        // A build is started in the step that first advances it, so the time of starting it
+        // (what the host walks to size the build) is counted as well
+        const done = budget.step((deadline) => {
+          if (!state.job) {
+            const origin = state.viewOrigin ?? boundsCenter(state.bounds);
+            state.jobOrigin = origin;
+            state.job = host.startJob(state, origin);
+          }
+          return state.job.step(deadline, budget.now);
+        });
+        const job = state.job as RetainedChunkJob<B>;
         if (done) {
-          const built = state.job.take();
+          const built = job.take();
           state.job = null;
           if (built) {
             // The old batches are discarded only once the new ones are complete (no flicker)

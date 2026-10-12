@@ -22,6 +22,7 @@ import {
   STATE_HIDDEN_LOCAL,
   toGpuState,
 } from './row-state.js';
+import type { TableWorkBudget } from './types.js';
 
 /**
  * Tables whose `adopt` takes the groups in at once (the queue and the budget are tested in
@@ -43,12 +44,13 @@ function createFeatureTables(): ReturnType<typeof createFeatureTablesStore> {
 }
 
 /** A budget of `steps` steps */
-function stepBudget(steps: number): { canStep(): boolean; stepped(): void; taken: number } {
+function stepBudget(steps: number): TableWorkBudget & { taken: number } {
   const budget = {
     taken: 0,
     canStep: () => budget.taken < steps,
-    stepped: () => {
+    step: <T>(work: (deadline: number) => T): T => {
       budget.taken++;
+      return work(Number.POSITIVE_INFINITY);
     },
   };
   return budget;

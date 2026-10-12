@@ -651,18 +651,20 @@ export class TableLayerRenderer {
     if (settled && chunk.filled < count && this.cachedFeatures + count - chunk.filled <= limit) {
       chunk.features ??= new Array(count).fill(null);
       const budget = this.budget as ChunkBuildBudget;
+      const features = chunk.features;
       while (chunk.filled < count && budget.canStep()) {
-        budget.stepped();
-        const end = Math.min(count, chunk.filled + SLICE_ROWS);
-        for (let i = chunk.filled; i < end; i++) {
-          const row = from + i;
-          chunk.features[i] =
-            group.data.geometry.types[row] < 0
-              ? null
-              : rowFeature(tables.readContext, layerId, group, row);
-        }
-        this.cachedFeatures += end - chunk.filled;
-        chunk.filled = end;
+        budget.step(() => {
+          const end = Math.min(count, chunk.filled + SLICE_ROWS);
+          for (let i = chunk.filled; i < end; i++) {
+            const row = from + i;
+            features[i] =
+              group.data.geometry.types[row] < 0
+                ? null
+                : rowFeature(tables.readContext, layerId, group, row);
+          }
+          this.cachedFeatures += end - chunk.filled;
+          chunk.filled = end;
+        });
       }
     }
     if (chunk.filled < count && settled && this.cachedFeatures + count - chunk.filled <= limit) {

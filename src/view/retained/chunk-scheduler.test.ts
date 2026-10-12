@@ -135,4 +135,85 @@ describe('advanceChunkBuilds', () => {
     expect(states[0].job).toBeNull();
     expect(disposed).toEqual(['job a#1']);
   });
+
+  it('gives the builds their time however long the drawing of the chunks built takes', () => {
+    // A clock that the draws and the steps move: every draw takes 50 ms, a step 1 ms
+    let clock = 0;
+    const now = (): number => clock;
+    const states = ['a', 'b', 'c', 'd', 'e'].map((name) => state(name));
+    const { h } = host();
+    const timed: ChunkSchedulerHost<State, string> = {
+      ...h,
+      startJob: (s, origin) => {
+        const job = h.startJob(s, origin);
+        return {
+          ...job,
+          step: (deadline, n) => {
+            clock += 1;
+            return job.step(deadline, n);
+          },
+        };
+      },
+      draw: (s) => {
+        clock += 50;
+        return h.draw(s);
+      },
+    };
+    const budget = createChunkBuildBudget(12, now);
+    expect(
+      advanceChunkBuilds(states, { bounds: VIEW, zoom: 10, settled: true, budget }, timed),
+    ).toBe(false);
+    expect(states.every((s) => s.batches !== null)).toBe(true);
+  });
+
+  it('counts the start of a build in the budget, and starts no build once it is spent', () => {
+    let clock = 0;
+    const states = [state('a'), state('b')];
+    const { h } = host();
+    const slow: ChunkSchedulerHost<State, string> = {
+      ...h,
+      startJob: (s, origin) => {
+        clock += 20;
+        return h.startJob(s, origin);
+      },
+    };
+    const budget = createChunkBuildBudget(12, () => clock);
+    expect(
+      advanceChunkBuilds(states, { bounds: VIEW, zoom: 10, settled: true, budget }, slow),
+    ).toBe(true);
+    expect(states[0].batches).toBe('a#1');
+    expect(states[1].job).toBeNull();
+    expect(states[1].batches).toBeNull();
+  });
+});
+
+describe('createChunkBuildBudget', () => {
+  it('counts the time of the steps only, and gives a step the time left of the budget', () => {
+    let clock = 0;
+    const budget = createChunkBuildBudget(10, () => clock);
+    clock += 100;
+    expect(budget.canStep()).toBe(true);
+    const first = budget.step((deadline) => {
+      clock += 4;
+      return deadline;
+    });
+    expect(first).toBe(110);
+    clock += 100;
+    expect(budget.canStep()).toBe(true);
+    const second = budget.step((deadline) => {
+      clock += 7;
+      return deadline;
+    });
+    expect(second).toBe(210);
+    expect(budget.canStep()).toBe(false);
+    // A step past the budget is given no time (it does a slice and stops)
+    expect(budget.step((deadline) => deadline)).toBe(clock);
+  });
+
+  it('always lets the first step of a frame go', () => {
+    const budget = createChunkBuildBudget(0, () => 0);
+    expect(budget.canStep()).toBe(true);
+    budget.step(() => {});
+    expect(budget.canStep()).toBe(false);
+  });
 });
