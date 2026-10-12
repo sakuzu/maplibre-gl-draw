@@ -52,3 +52,32 @@ export type {
   TableGeometry,
   TableMixedGeometry,
 } from './types.js';
+
+// Rows of a document held as columns, built in a Worker
+export type {
+  RowGroupBuilder,
+  RowGroupBuilderOptions,
+  RowGroupKey,
+  RowInput,
+} from './row-group-builder.js';
+export {
+  createRowGroupBuilder,
+  ROW_GROUP_TARGET_ROWS,
+  ROW_GROUP_TARGET_VERTICES,
+  rowGroupTransferList,
+} from './row-group-builder.js';
+export type { RowGroupData, TriangleCache } from './row-group-types.js';
+export { ROW_FLAG_DELETED, ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE } from './row-group-types.js';
+export type { GroupKeySource, RowKeySource } from './row-keys.js';
+export { compareRowKeys } from './row-keys.js';
+export type { Utf8Column } from './utf8-column.js';
+export type { PropertyColumns, ValueColumn } from './value-column.js';
+export {
+  VALUE_ABSENT,
+  VALUE_FALSE,
+  VALUE_NESTED,
+  VALUE_NULL,
+  VALUE_NUMBER,
+  VALUE_STRING,
+  VALUE_TRUE,
+} from './value-column.js';
