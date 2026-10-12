@@ -14,7 +14,12 @@ const root = fileURLToPath(new URL('.', import.meta.url));
  */
 function isolateTablePage(): Plugin {
   const isolate = (url: string | undefined, setHeader: (name: string, value: string) => void) => {
-    if (!url?.startsWith('/table.html')) return;
+    if (!url) return;
+    const path = url.split('?')[0] ?? url;
+    // Another page (an HTML document other than table.html, or a directory) stays unisolated.
+    // The scripts and the Workers are isolated too: a Worker of an isolated page fails to load
+    // when its own response does not carry the embedder policy.
+    if (path !== '/table.html' && (path.endsWith('.html') || path.endsWith('/'))) return;
     setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
   };
