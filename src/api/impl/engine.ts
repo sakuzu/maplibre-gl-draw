@@ -35,12 +35,13 @@ import type { ModeManager } from '../../modes/manager.js';
 import { SelectMode } from '../../modes/select/mode.js';
 import { SnapIndicatorRenderer } from '../../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
-import type { Mode } from '../../store/types.js';
+import type { FeatureStyle, Mode } from '../../store/types.js';
 import { createRenderCoordinator } from '../../view/coordinator.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { attachSlotLayers } from '../../view/layer/attach.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
 import { createCustomLayer } from '../../view/layer/index.js';
+import { pointMarkerReachPx } from '../../view/renderers/point/point-style.js';
 import {
   DEFAULT_VIEWPORT_EXPANSION_FACTOR,
   getExpandedViewportBounds,
@@ -246,6 +247,9 @@ export function createEngine(
       return context.options.clickTolerance;
     },
     companions: featureCompanions,
+    // A point of a layer held as rows is hit on its marker, as the points of the Store are
+    pointMarkerReachPx: (feature) =>
+      pointMarkerReachPx(feature.style as FeatureStyle | undefined, featureStyle.point.point),
   };
   const hitTestTopmost = createTopmostHitTester(topmostDeps);
 

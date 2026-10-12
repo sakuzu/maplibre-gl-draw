@@ -51,6 +51,7 @@ import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
+import type { GpuMemorySnapshot } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { installAnchorProjector, uninstallAnchorProjector } from '../terrain/anchor.js';
 import {
@@ -75,6 +76,7 @@ import { SlotManager } from './slot-manager.js';
 import { type StackSlot, slotLayerId } from './slots.js';
 import { StoreRetainedCache } from './store-retained.js';
 import { isOpacityOnlyLayersChange } from './store-retained-invalidation.js';
+import { TableLayerRenderer } from './table-retained.js';
 import { TerrainResolver } from './terrain-resolver.js';
 
 /**
@@ -180,6 +182,13 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   getTerrainContext(): TerrainContext;
   /** The WebGL context of the map while the drawing is on it, or null */
   getGL(): WebGL2RenderingContext | null;
+  /** The GPU memory the renderers of this instance hold (what they recorded allocating) */
+  getGpuMemory(): GpuMemorySnapshot;
+  /**
+   * The drawing of the layers held as rows of columns (null while the GPU side is not built),
+   * for the hooks of measurement
+   */
+  getTableRenderer(): TableLayerRenderer | null;
   /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `draw.hasPendingWork()`)
@@ -214,6 +223,8 @@ interface EngineState {
    * used.
    */
   storeRetainedCache: StoreRetainedCache | null;
+  /** The drawing of the layers held as rows of columns (null while the GPU side is not built) */
+  tableRetained: TableLayerRenderer | null;
   /**
    * The rendering pixel ratio baked into the retained batches (null when not built yet)
    *
@@ -269,6 +280,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     mapInstance: null,
     renderers: null,
     storeRetainedCache: null,
+    tableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
     unwatchContextLoss: null,
@@ -464,6 +476,13 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         extensions: renderScope.selection.extensions,
       });
     }
+    engine.tableRetained = new TableLayerRenderer({
+      gl,
+      terrain: terrainContext,
+      ledger: renderScope.gpu,
+      pixelRatio,
+      requestRepaint: () => engine.mapInstance?.triggerRepaint(),
+    });
 
     // Initialize the custom renderers and the overlay renderers (an overlay added before the
     // engine existed receives its onAdd here)
@@ -501,6 +520,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Release the retained batches of the Store rendering too (before disposing the renderers)
     engine.storeRetainedCache?.dispose(r.batchManager.getRetainedRenderers());
     engine.storeRetainedCache = null;
+    engine.tableRetained?.dispose(r.batchManager.getRetainedRenderers());
+    engine.tableRetained = null;
     engine.builtPixelRatio = null;
 
     // The DEM atlas, the drape renderers, and the plan and the index that point into the pack
@@ -561,6 +582,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       terrainContext,
       map?.isMoving?.() === true || map?.isZooming?.() === true,
     );
+    // The budget of the builds of the rows held as columns is one per frame
+    engine.tableRetained?.beginFrame();
 
     // The zoom that the rendering reads is the style zoom (a value that absorbs the steps of the
     // elevation settlement; frame-state.ts). The position of the camera (the altitude in meters)
@@ -651,6 +674,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       featureCompanions,
       datasets,
       storeRetainedCache: engine.storeRetainedCache,
+      tableRetained: engine.tableRetained,
       selectionScope: renderScope.selection,
     };
     renderSegment(renderDeps, frame, index);
@@ -658,6 +682,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     if (index === frame.segments.length - 1) {
       renderForeground(renderDeps, frame);
+      engine.tableRetained?.endFrame();
       engine.frame = null;
     }
   }
@@ -748,6 +773,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // Adding a custom type changes the classification of the features (whether they can be
       // retained)
       engine.storeRetainedCache?.invalidateAll();
+      engine.tableRetained?.reclassify();
       // Only while the GPU side exists (otherwise buildGpuResources calls onAdd)
       if (engine.renderers && engine.gl && engine.mapInstance) {
         // A renderer can serve several types: it is released only when no type uses it
@@ -758,6 +784,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         if (customRenderers.get(type) !== renderer) return;
         customRenderers.delete(type);
         engine.storeRetainedCache?.invalidateAll();
+        engine.tableRetained?.reclassify();
         if (engine.renderers && engine.gl && !isRegisteredRenderer(renderer)) renderer.onRemove();
         engine.mapInstance?.triggerRepaint();
       };
@@ -778,9 +805,18 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       return engine.renderers ? engine.gl : null;
     },
 
+    getGpuMemory(): GpuMemorySnapshot {
+      return renderScope.gpu.snapshot();
+    },
+
+    getTableRenderer(): TableLayerRenderer | null {
+      return engine.tableRetained;
+    },
+
     hasPendingWork(): boolean {
       if (drape.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
+      if (engine.tableRetained?.hasPendingWork) return true;
       for (const renderer of dynamicOverlayRenderers) {
         if (renderer.hasPendingWork?.()) return true;
       }

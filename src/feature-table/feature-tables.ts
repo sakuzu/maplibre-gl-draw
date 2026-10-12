@@ -2,22 +2,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The features of a document held as rows of columns (`FeatureTables`)
+ * The implementation of the features of a document held as rows of columns
  *
- * A Store can hold the features of its layers as rows rather than as objects: every layer is a
- * {@link LayerTableView} of rows in row groups, built in a Worker and taken in without a copy.
- * The drawing, the hit testing and the readers of many rows read the columns; a row becomes a
- * feature only when one is asked for.
- *
- * `createFeatureTables` returns the two halves: `tables`, the reading side, which the Store
- * hands out as its `tables`, and `writer`, which only the implementation of the Store keeps and
- * calls (after it has recorded what it writes). Nothing else writes the tables.
+ * The reading and writing sides are declared in `api/tables.ts`. Here are the tables
+ * themselves: the ids and their handles, the styles, the groups of features, the state of the
+ * rows, and the row groups of every layer. The drawing and the hit testing read them through
+ * `featureTablesInternals`.
  */
 
-import type { BoundingBox, Coordinate, Feature, FeatureType } from '../shared/types/model.js';
+import type {
+  FeatureTables,
+  FeatureTablesOptions,
+  FeatureTablesWriter,
+  LayerTableView,
+  RowHandle,
+} from '../api/tables.js';
+import type { BBox } from '../geometry/types.js';
+import type { Feature, FeatureType } from '../shared/types/model.js';
 import { searchPackedRTree } from '../table/packed-rtree.js';
 import { ROW_FLAG_DELETED, ROW_FLAG_VISIBLE, type RowGroupData } from '../table/row-group-types.js';
-import { type Utf8Column, utf8ColumnLength } from '../table/utf8-column.js';
+import { utf8ColumnLength } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
@@ -33,88 +37,15 @@ import {
   toGpuState,
 } from './row-state.js';
 import { StyleTable } from './style-table.js';
-import type { RowGroupHandle, RowHandle } from './types.js';
+import type { RowGroupHandle } from './types.js';
 
 /**
- * The rows of one layer, read without making features
+ * Creates the tables of the features of a document, as its reading and writing sides (the
+ * implementation of `createFeatureTables`)
+ *
+ * @internal
  */
-export interface LayerTableView {
-  /** The layer */
-  readonly layerId: string;
-  /** The number of rows (deleted ones included until they are dropped) */
-  readonly rowCount: number;
-  /**
-   * The handles of the rows drawn whose bbox meets a box, in the order of the layer (a hidden
-   * row is not drawn)
-   */
-  listDrawnRows(bounds: BoundingBox): Int32Array;
-  /** The bbox of a row (null for a row without a geometry or not in this layer) */
-  getRowBounds(handle: RowHandle): BoundingBox | null;
-  /** The type of a row (null for a row not in this layer) */
-  getRowType(handle: RowHandle): FeatureType | null;
-  /** The coordinate of a row whose geometry is a Point (null for any other row) */
-  getRowPoint(handle: RowHandle): Coordinate | null;
-  /** The value of an attribute of a row (undefined when it does not hold the key) */
-  valueAt(handle: RowHandle, key: string): unknown;
-  /**
-   * A row as a feature: a new object every call, so read the values above for what is read
-   * often (undefined for a deleted row or one not in this layer)
-   */
-  getRow(handle: RowHandle): Feature | undefined;
-  /** Changes whenever the rows drawn may have changed (added, hidden, shown) */
-  getDrawnRowsRevision(): number;
-  /** The handles of `count` rows from the `start`-th one, in the order of the layer */
-  rowsInOrder(start: number, count: number): Int32Array;
-}
-
-/**
- * The reading side of the features held as rows: what a Store hands out as its `tables`
- */
-export interface FeatureTables {
-  /** The rows of a layer (undefined for a layer that holds no rows) */
-  layer(layerId: string): LayerTableView | undefined;
-  /** The handle of the row of an id (undefined for an unknown or deleted row) */
-  handleOf(id: string): RowHandle | undefined;
-  /** The id of the row of a handle (undefined for an unknown handle) */
-  idOf(handle: RowHandle): string | undefined;
-}
-
-/**
- * The writing side of the features held as rows: kept by the implementation of the Store only
- */
-export interface FeatureTablesWriter {
-  /**
-   * The handle of the row of each id, given to the ids not seen yet
-   *
-   * @param hashes The hashes of the ids (`RowGroupData.idHashes`; computed when omitted)
-   */
-  allocateHandles(ids: Utf8Column, hashes?: Uint32Array): Int32Array;
-  /**
-   * Takes row groups into a layer, without copying their columns
-   *
-   * The rows that have no handle yet (-1) get one, the styles of a group built in a Worker are
-   * numbered in the table of styles, and every group is put at its place in the order of the
-   * layer. The groups are kept as they are: do not change their arrays afterwards.
-   *
-   * @throws when an id is already a row of the document, when a row names a group of features
-   *   that is not known, when the rows of a group are not in the order of their keys, or when
-   *   the keys of a group overlap those of another group of the layer
-   */
-  adopt(layerId: string, groups: readonly RowGroupData[]): void;
-}
-
-/**
- * The options of {@link createFeatureTables}
- */
-export interface FeatureTablesOptions {
-  /** The number of strings read from the columns that are kept (50,000 when omitted) */
-  readonly stringCacheSize?: number;
-}
-
-/**
- * Creates the tables of the features of a document, as its reading and writing sides
- */
-export function createFeatureTables(options: FeatureTablesOptions = {}): {
+export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
   tables: FeatureTables;
   writer: FeatureTablesWriter;
 } {
@@ -357,13 +288,13 @@ class LayerTableViewImpl implements LayerTableView {
     return this.table.rowCount;
   }
 
-  listDrawnRows(bounds: BoundingBox): Int32Array {
+  listDrawnRows(bbox: BBox): Int32Array {
     const out: number[] = [];
     const rows: number[] = [];
     for (let g = 0; g < this.table.groupCount; g++) {
       const group = this.table.groupAt(g);
       rows.length = 0;
-      searchPackedRTree(group.data.index, bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, rows);
+      searchPackedRTree(group.data.index, bbox[0], bbox[1], bbox[2], bbox[3], rows);
       rows.sort((a, b) => a - b);
       for (const row of rows) {
         if ((group.state[row] & STATE_HIDDEN_MASK) === 0) out.push(group.data.handles[row]);
@@ -372,13 +303,13 @@ class LayerTableViewImpl implements LayerTableView {
     return Int32Array.from(out);
   }
 
-  getRowBounds(handle: RowHandle): BoundingBox | null {
+  getRowBounds(handle: RowHandle): BBox | null {
     const at = this.locate(handle);
     if (!at) return null;
     const b = at.group.data.rowBounds;
     const i = at.row * 4;
     if (Number.isNaN(b[i])) return null;
-    return { minX: b[i], minY: b[i + 1], maxX: b[i + 2], maxY: b[i + 3] };
+    return [b[i], b[i + 1], b[i + 2], b[i + 3]];
   }
 
   getRowType(handle: RowHandle): FeatureType | null {
@@ -386,7 +317,7 @@ class LayerTableViewImpl implements LayerTableView {
     return at ? rowType(at.group.data, at.row) : null;
   }
 
-  getRowPoint(handle: RowHandle): Coordinate | null {
+  getRowPoint(handle: RowHandle): [number, number] | null {
     const at = this.locate(handle);
     return at ? rowPoint(at.group, at.row) : null;
   }

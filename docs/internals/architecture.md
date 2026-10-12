@@ -227,7 +227,8 @@ otherwise.
 There are no runtime violations and no runtime cycles. The type-only
 imports that point upward are few and deliberate: `modes/`, `snapping/`,
 `dataset/` and `view/ui/` read the normalized event and hit test types of
-`dispatcher/`; the drawing modes of `modes/draw/` read the types of the
+`dispatcher/`; the tables of `feature-table/` read the public types of their
+reading and writing sides (`api/tables.ts`); the drawing modes of `modes/draw/` read the types of the
 extension contract they are written to; the Store of core reads the public
 `Store` it is programmed against; the point hit test reads the public
 `Feature`; `view/shaders/` reads the shader types of the render context;

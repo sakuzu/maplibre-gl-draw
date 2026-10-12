@@ -14,6 +14,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -22,6 +23,7 @@ import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
 import { customRendererOf } from './store-retained-classify.js';
+import type { TableLayerRenderer } from './table-retained.js';
 
 /**
  * Draw features and overlays layer by layer
@@ -51,6 +53,9 @@ import { customRendererOf } from './store-retained-classify.js';
  *
  * The rendering result (including the z-order) is the same either way.
  *
+ * A layer the Store holds as rows of columns (`store.tables`) is drawn from its rows by
+ * `tableRetained`, at its place in the order, whichever path the features take.
+ *
  * An external renderer (a custom feature type or a layer-aware overlay) may rewrite the GL blend
  * state for its own purposes. If it comes back having left it rewritten, everything drawn later
  * in that frame (the layers that follow and the datasets) is drawn with the
@@ -66,6 +71,8 @@ import { customRendererOf } from './store-retained-classify.js';
  * @param view The part of the view to draw, on one copy of the world (the expanded viewport
  *   of the ViewportFilter when omitted). A view across the antimeridian is drawn once per
  *   copy, each with its own range
+ * @param tableRetained The drawing of the layers held as rows of columns (such layers are not
+ *   drawn when omitted)
  */
 export function renderLayers(
   r: Renderers,
@@ -83,6 +90,7 @@ export function renderLayers(
   restoreBlendState?: () => void,
   range?: RenderLayersRange,
   view?: RenderLayersView,
+  tableRetained?: TableLayerRenderer,
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
@@ -100,6 +108,12 @@ export function renderLayers(
       ? r.batchManager.getRetainedRenderers()
       : undefined;
   const useRetained = storeRetained !== undefined && retainedRenderers !== undefined;
+  // The layers held as rows are always drawn from their retained batches
+  const tables = tableRetained ? featureTablesInternals(store.tables) : undefined;
+  const rowRenderers =
+    tables && typeof r.batchManager.getRetainedRenderers === 'function'
+      ? r.batchManager.getRetainedRenderers()
+      : undefined;
 
   if (useRetained) storeRetained.beginFrame(companions);
 
@@ -161,7 +175,27 @@ export function renderLayers(
     // The custom renderers and the companions of the layer get its opacity in their context
     const layerContext = layerRendererContext(customRendererContext, layer);
 
-    if (useRetained && retainedRenderers) {
+    const table = tables?.layerTable(layerId);
+    if (table && tables && tableRetained) {
+      // A layer held as rows: drawn from its rows, unless the layer is hidden
+      if (rowRenderers && layer.visible !== false && !store.isHidden(layerId)) {
+        tableRetained.drawLayer(
+          tables,
+          table,
+          layer,
+          { projectionData: defaultProjectionData, zoom, bounds: viewportBounds },
+          {
+            renderers: rowRenderers,
+            batchManager: r.batchManager,
+            customRenderers,
+            customRendererContext: layerContext,
+            companions,
+            getVisibleIds,
+            restoreBlendState,
+          },
+        );
+      }
+    } else if (useRetained && retainedRenderers) {
       storeRetained.drawLayer(
         layerId,
         layer,

@@ -154,6 +154,16 @@ export type {
 // Store
 export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
 
+// Features held as rows of columns
+export type {
+  FeatureTables,
+  FeatureTablesOptions,
+  FeatureTablesWriter,
+  LayerTableView,
+  RowHandle,
+} from './api/tables.js';
+export { createFeatureTables } from './api/tables.js';
+
 // Extensions
 export type {
   ExtensionContext,

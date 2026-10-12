@@ -23,6 +23,7 @@
  */
 
 import type { Store as PublicStore } from '../api/extension/store.js';
+import type { FeatureTables } from '../api/tables.js';
 import type {
   BoxSelection,
   DragState,
@@ -306,6 +307,9 @@ export interface UiState {
  * made through them into one notification.
  */
 export interface StoreView {
+  /** The features of the layers held as rows of columns (see the public `StoreView`) */
+  readonly tables?: FeatureTables;
+
   // The document
   /** Returns the feature with this ID, or undefined */
   getFeature(id: string): Feature | undefined;

@@ -27,6 +27,7 @@
  *     modes and the public API rely on it.
  */
 
+import type { FeatureTables } from '../api/tables.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
@@ -80,6 +81,11 @@ export class DrawStore implements Store {
   // ============================================================================
   // The document: reads
   // ============================================================================
+
+  /** The features of the layers the contract holds as rows of columns */
+  get tables(): FeatureTables | undefined {
+    return this.#contract.tables;
+  }
 
   getFeature(id: string): Feature | undefined {
     const feature = this.#contract.getFeature(id);

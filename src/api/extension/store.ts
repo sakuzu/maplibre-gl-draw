@@ -11,6 +11,7 @@
 import type { DocumentChange } from '../events.js';
 import type { Feature, FeatureType, FileData, Group, Layer, Metadata } from '../model.js';
 import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
+import type { FeatureTables } from '../tables.js';
 
 /**
  * Where a write came from, as it arrives in {@link DocumentChange.source} and in the `source` of
@@ -120,6 +121,13 @@ export interface StoreView {
    * @returns What `fn` returns
    */
   transact<T>(fn: () => T, source?: UpdateSource): T;
+  /**
+   * The features of the layers the Store holds as rows of columns, when it holds them so
+   * ({@link createFeatureTables}). The instance draws and hit tests such a layer from its rows,
+   * and makes a feature of a row only when one is asked for. Undefined for a Store that holds
+   * its features as objects
+   */
+  readonly tables?: FeatureTables;
 }
 
 /**

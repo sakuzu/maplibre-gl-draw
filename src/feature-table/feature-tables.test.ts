@@ -11,7 +11,10 @@ import { describe, expect, it } from 'vitest';
 import { createRowGroupBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
-import { createFeatureTables, featureTablesInternals } from './feature-tables.js';
+import {
+  createFeatureTablesStore as createFeatureTables,
+  featureTablesInternals,
+} from './feature-tables.js';
 import type { LayerTable } from './layer-table.js';
 import {
   GPU_STATE_BULK,
@@ -180,7 +183,7 @@ describe('createFeatureTables', () => {
     expect(tables.handleOf('gone')).toBeUndefined();
     expect(tables.handleOf('hidden')).toBeDefined();
     const view = tables.layer('layer');
-    const all = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+    const all: [number, number, number, number] = [-1, -1, 1, 1];
     expect(Array.from(view?.listDrawnRows(all) ?? []).map((h) => tables.idOf(h))).toEqual([
       'shown',
       'circle',
@@ -217,7 +220,7 @@ describe('createFeatureTables', () => {
     const handle = tables.handleOf('a0') as number;
     expect(tables.layer('b')?.getRow(handle)).toBeUndefined();
     expect(tables.layer('b')?.getRowBounds(handle)).toBeNull();
-    expect(tables.layer('a')?.getRowBounds(handle)).toEqual({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+    expect(tables.layer('a')?.getRowBounds(handle)).toEqual([0, 0, 0, 0]);
   });
 
   it('allocates handles for the ids of a column', () => {

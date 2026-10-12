@@ -11,7 +11,9 @@
  * structure of BatchManager.
  *
  * The builders from packed typed arrays (`buildRetainedPacked` and `buildRetainedPackedBatch`)
- * are optional: a set without them gets the same data as arrays of objects.
+ * are optional: a set without them gets the same data as arrays of objects. So are the batches of
+ * rows held as columns (built from their arrays, drawn a range of rows at a time); a set without
+ * them does not draw such rows.
  *
  * The immediate-mode API (drawAll / drawBatch) is not part of this type. A
  * retained-mode batch does not share resources with the shared buffers and
@@ -28,20 +30,27 @@ export type RetainedLineRenderer = Pick<
   SDFLineRenderer,
   'buildRetainedBatch' | 'drawRetainedBatch' | 'disposeRetainedBatch'
 > &
-  Partial<Pick<SDFLineRenderer, 'buildRetainedPackedBatch'>>;
+  Partial<
+    Pick<SDFLineRenderer, 'buildRetainedPackedBatch' | 'buildRetainedRows' | 'drawRetainedRange'>
+  >;
 
 /** Retained-mode API for polygons */
 export type RetainedPolygonRenderer = Pick<
   SDFPolygonRenderer,
   'buildRetained' | 'drawRetained' | 'disposeRetained'
->;
+> &
+  Partial<
+    Pick<SDFPolygonRenderer, 'createRetainedRows' | 'writeRetainedRows' | 'drawRetainedRange'>
+  >;
 
 /** Retained-mode API for points */
 export type RetainedPointRenderer = Pick<
   PointInstanceRenderer,
   'buildRetained' | 'drawRetained' | 'disposeRetained'
 > &
-  Partial<Pick<PointInstanceRenderer, 'buildRetainedPacked'>>;
+  Partial<
+    Pick<PointInstanceRenderer, 'buildRetainedPacked' | 'buildRetainedRows' | 'drawRetainedRange'>
+  >;
 
 /** Style resolution (used only once, at build time) */
 export type RetainedStyleResolver = Pick<

@@ -81,16 +81,38 @@ export function drawFeaturesImmediate(
   deps: StoreRetainedDrawDeps,
   visibleIds?: ReadonlySet<string>,
 ): void {
-  const { batchManager, customRenderers, customRendererContext } = deps;
-
-  batchManager.beginFrame(projectionData, zoom, layer);
-
+  const features: Feature[] = [];
   for (const id of featureIds) {
     if (visibleIds && !visibleIds.has(id)) continue;
 
     const feature = store.getFeature(id);
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
+    features.push(feature);
+  }
+  drawImmediateFeatures(features, layer, projectionData, zoom, deps);
+}
 
+/**
+ * Draws features in immediate mode, in the order given (the features to draw, already
+ * thinned and filtered)
+ *
+ * Each feature gets its companions drawn right before it, and a custom type is drawn after the
+ * batch has been flushed, to keep the draw order.
+ *
+ * @internal
+ */
+export function drawImmediateFeatures(
+  features: Iterable<Feature>,
+  layer: Layer | undefined,
+  projectionData: ProjectionData,
+  zoom: number,
+  deps: StoreRetainedDrawDeps,
+): void {
+  const { batchManager, customRenderers, customRendererContext } = deps;
+
+  batchManager.beginFrame(projectionData, zoom, layer);
+
+  for (const feature of features) {
     // Companion drawing (feature companion): drawn right before the feature itself, that is,
     // one z below it. classifyFeature splits a feature that has a companion out into an
     // immediate chunk, so going through here makes the z order in retained mode identical to

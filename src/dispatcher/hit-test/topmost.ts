@@ -28,6 +28,10 @@
  * A dataset with interactive: false also occludes hits. In that case feature is null
  * and neither click nor hover is fired.
  *
+ * A layer the Store holds as rows of columns (`store.tables`) is tested on its rows
+ * (`feature-table/hit-test.ts`): a row hit is returned as it is, as a row (`kind: 'row'`), and no
+ * feature of the Store is made for it.
+ *
  * When the features of a layer are examined, the companions of a feature
  * (view/feature-companion) are asked right after the test of the feature itself fails and
  * before moving on to the next (one step further back) feature. A companion is drawn one z
@@ -38,6 +42,12 @@
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
+import {
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from '../../feature-table/feature-tables.js';
+import { hitTestLayerTable } from '../../feature-table/hit-test.js';
+import type { LayerTable } from '../../feature-table/layer-table.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
@@ -48,6 +58,7 @@ import type {
   FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import { hitTestFeatureCompanions } from '../../view/feature-companion.js';
+import { getStyleRuleChannel } from '../../view/style-rule.js';
 import { clickCopies } from './local-frame.js';
 import type { HitTestService, UnprojectFunction } from './service.js';
 import { DEFAULT_HIT_TEST_OPTIONS } from './strategies/base.js';
@@ -63,9 +74,24 @@ import { createVisibilityLookup, type VisibilityLookup } from './visibility-look
  * - companion: something that accompanies a feature (view/feature-companion). It was hit
  *   right after the test of the feature itself failed, and the click is received by the
  *   provider (the selection state does not change)
+ * - row: a row of a layer held as rows of columns. Nothing is made of it for the hit: the
+ *   feature it was tested as is dropped after the hit is read
  */
 export type TopHit =
   | { kind: 'store'; feature: Feature }
+  | {
+      kind: 'row';
+      /** The layer of the row */
+      layerId: string;
+      /** The id of the row */
+      id: string;
+      /** The handle of the row */
+      handle: number;
+      /** Whether the row, its group or its layer is locked */
+      locked: boolean;
+      /** The row as a feature, made for the test (for the distance of the hit) */
+      feature: Feature;
+    }
   | {
       kind: 'dataset';
       dataset: Dataset;
@@ -135,6 +161,11 @@ export interface TopmostHitTestDeps {
    * When omitted, the companion hit test is not performed.
    */
   companions?: FeatureCompanionRegistry;
+  /**
+   * How far the marker of a point reaches from it (screen px), for the rows held as columns: a
+   * point is hit anywhere on its marker. Only the click tolerance when omitted
+   */
+  pointMarkerReachPx?(feature: Feature): number;
 }
 
 /**
@@ -192,16 +223,62 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     return companion ? { kind: 'companion', companion } : null;
   };
 
+  /**
+   * The frontmost row of a layer held as rows hit at the click (null when none is, or when the
+   * layer is hidden)
+   */
+  const rowOf = (
+    tables: FeatureTablesInternals,
+    table: LayerTable,
+    copies: readonly Coordinate[],
+    tolerance: number,
+  ): TopHit | null => {
+    const layer = store.getLayer(table.layerId);
+    if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
+    // A point is hit anywhere on its marker: the candidates are looked for as far as the
+    // largest marker of the styles of the rows reaches
+    const degreesPerPixel = 360 / (512 * 2 ** (deps.getZoom?.() ?? 0));
+    const reachOf = (feature: Feature): number =>
+      getStyleRuleChannel(feature.type) === 'point' && deps.pointMarkerReachPx
+        ? Math.max(tolerance, deps.pointMarkerReachPx(feature) * degreesPerPixel)
+        : tolerance;
+    const reach = Math.max(tolerance, maxMarkerReach(tables, deps) * degreesPerPixel);
+    for (const coordinate of copies) {
+      const hit = hitTestLayerTable(tables, table, {
+        coordinate,
+        reach,
+        toleranceOf: reachOf,
+        test,
+      });
+      if (!hit) continue;
+      const groupHandle = hit.group.data.groups[hit.row];
+      const locked =
+        hit.feature.locked ||
+        (groupHandle >= 0 && tables.groups.isLocked(groupHandle)) ||
+        layer.locked === true;
+      return {
+        kind: 'row',
+        layerId: table.layerId,
+        id: hit.feature.id,
+        handle: hit.group.data.handles[hit.row],
+        locked,
+        feature: hit.feature,
+      };
+    }
+    return null;
+  };
+
   return (point, options) => {
     const orderedFeatures = options?.orderedFeatures ?? getDisplayFeatures(store);
     const companion = companionContext(point);
     // Within one hit test, the visibility of a layer or a group is looked up only once per
     // container.
     const visible = createVisibilityLookup(store);
+    const tables = featureTablesInternals(store.tables);
 
-    // On a map with no dataset at all (none is visible), the cost is kept the same as
-    // the conventional path. The spatial index is queried only once as well.
-    if (!datasets?.hasAny()) {
+    // On a map with no dataset at all (none is visible) and no layer held as rows, the cost is
+    // kept the same as the conventional path. The spatial index is queried only once as well.
+    if (!datasets?.hasAny() && !tables) {
       if (!companion) {
         const hit = hitTestService.hitTest(point, unproject, orderedFeatures);
         return hit ? { kind: 'store', feature: hit.feature } : null;
@@ -236,7 +313,9 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     };
 
     // 1. The above-store side
-    const above = onCopies((copy) => datasets.hitTestSide('above-store', copy, tolerance, test));
+    const above = onCopies(
+      (copy) => datasets?.hitTestSide('above-store', copy, tolerance, test) ?? null,
+    );
     if (above) return toTopHit(above);
 
     // 2. The stacking order from the front. One hit test per frame is enough on the Store
@@ -247,6 +326,14 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
 
     for (let i = layerOrder.length - 1; i >= 0; i--) {
       const entryId = layerOrder[i];
+
+      // A layer held as rows is tested on its rows
+      const table = tables?.layerTable(entryId);
+      if (tables && table) {
+        const row = rowOf(tables, table, copies, tolerance);
+        if (row) return row;
+        continue;
+      }
 
       if (store.getLayer(entryId) !== undefined) {
         if (!storeHits) {
@@ -272,14 +359,42 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
         continue;
       }
 
-      const entry = onCopies((copy) => datasets.hitTestEntry(entryId, copy, tolerance, test));
+      const entry = onCopies(
+        (copy) => datasets?.hitTestEntry(entryId, copy, tolerance, test) ?? null,
+      );
       if (entry) return toTopHit(entry);
     }
 
     // 3. The below-store side
-    const below = onCopies((copy) => datasets.hitTestSide('below-store', copy, tolerance, test));
+    const below = onCopies(
+      (copy) => datasets?.hitTestSide('below-store', copy, tolerance, test) ?? null,
+    );
     return below ? toTopHit(below) : null;
   };
+}
+
+/** The reach of the largest marker among the styles of the rows (screen px), by table */
+const MARKER_REACH = new WeakMap<FeatureTablesInternals, { styles: number; reach: number }>();
+
+/**
+ * The reach of the largest marker of the points of the rows (screen px): the largest reach of
+ * the styles of the rows, kept until a style is added
+ */
+function maxMarkerReach(
+  tables: FeatureTablesInternals,
+  deps: Pick<TopmostHitTestDeps, 'pointMarkerReachPx'>,
+): number {
+  const reachOf = deps.pointMarkerReachPx;
+  if (!reachOf) return 0;
+  const known = MARKER_REACH.get(tables);
+  if (known && known.styles === tables.styles.size) return known.reach;
+  let reach = 0;
+  for (let id = 0; id < tables.styles.size; id++) {
+    const probe = { type: 'Point', style: tables.styles.get(id) } as Feature;
+    reach = Math.max(reach, reachOf(probe));
+  }
+  MARKER_REACH.set(tables, { styles: tables.styles.size, reach });
+  return reach;
 }
 
 /**

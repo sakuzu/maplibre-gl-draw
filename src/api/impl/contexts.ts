@@ -430,6 +430,15 @@ export function toHit(
         featureId: top.feature.id,
         distancePx: distanceToFeaturePx(top.feature),
       };
+    case 'row':
+      // A row of a layer held as rows is a feature of the document; the distance is measured
+      // from the row as the feature it was tested as
+      return {
+        kind: 'feature',
+        id: top.id,
+        featureId: top.id,
+        distancePx: distanceToFeaturePx(top.feature),
+      };
     case 'dataset':
       if (!top.feature) return null;
       return {
