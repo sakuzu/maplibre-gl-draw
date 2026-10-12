@@ -682,7 +682,8 @@ export class TableLayerRenderer {
 
   /**
    * The places the drawn ranges of a layer are cut at: `cuts` places spread evenly over the
-   * rows of the retained chunks in view, as rows of each chunk
+   * places between two rows of the retained chunks in view, as rows of each chunk (a cut is
+   * never at the start of a chunk, so every cut is one more draw)
    */
   private placeCuts(
     table: LayerTable,
@@ -690,7 +691,7 @@ export class TableLayerRenderer {
     bounds: BoundingBox,
   ): Map<RetainedRowsChunk, number[]> {
     const visible: RetainedRowsChunk[] = [];
-    let total = 0;
+    let interior = 0;
     for (let g = 0; g < table.groupCount; g++) {
       const groupCache = cache.groups.get(table.groupAt(g).handle);
       if (!groupCache) continue;
@@ -698,33 +699,31 @@ export class TableLayerRenderer {
         if (chunk.type !== 'retained' || !chunk.batches?.batch) continue;
         if (!meets(chunk.bounds, bounds)) continue;
         visible.push(chunk);
-        total += chunk.range.to - chunk.range.from;
+        interior += chunk.range.to - chunk.range.from - 1;
       }
     }
     const out = new Map<RetainedRowsChunk, number[]>();
-    if (total < 2) return out;
-    const n = Math.min(this.cuts, total - 1);
+    const n = Math.min(this.cuts, interior);
     let chunkIndex = 0;
     let before = 0;
     for (let i = 1; i <= n; i++) {
-      const at = Math.floor((i * total) / (n + 1));
+      // The i-th of n places spread over the interior places: with more places than cuts the
+      // steps are at least one place, so no two cuts are at the same place
+      const at = n === interior ? i - 1 : Math.floor((i * interior) / (n + 1));
       while (chunkIndex < visible.length) {
-        const size = visible[chunkIndex].range.to - visible[chunkIndex].range.from;
+        const size = visible[chunkIndex].range.to - visible[chunkIndex].range.from - 1;
         if (at < before + size) break;
         before += size;
         chunkIndex++;
       }
       const chunk = visible[chunkIndex];
       if (!chunk) break;
-      const local = at - before;
-      // A cut at the start of a chunk cuts nothing
-      if (local <= 0) continue;
       let list = out.get(chunk);
       if (!list) {
         list = [];
         out.set(chunk, list);
       }
-      if (list[list.length - 1] !== local) list.push(local);
+      list.push(at - before + 1);
     }
     return out;
   }
