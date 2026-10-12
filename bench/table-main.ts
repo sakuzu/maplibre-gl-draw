@@ -102,6 +102,9 @@ for (const [key, value] of Object.entries({
 
 // More than 100,000 features need a confirmation before they are made
 const LARGE = 100_000;
+
+/** The GPU memory (MB) the drawing may allocate before a run stops */
+const GPU_LIMIT_MB = 500;
 if (params.n > LARGE) {
   startButton.disabled = true;
   confirmButton.hidden = false;
@@ -167,6 +170,8 @@ async function measuredMemoryMb(): Promise<number | null> {
 
 /** Whether the heap went past the limit */
 function overLimit(): boolean {
+  // The GPU memory the drawing allocated is capped as well, so a leak cannot run on unseen
+  if (draw.debug.gpu().bytes / MB > GPU_LIMIT_MB) return true;
   const heap = heapMb();
   return heap !== null && heap > params.limitMb;
 }
@@ -329,7 +334,7 @@ async function runTableBench(): Promise<TableBenchResult> {
   const openIntervals = await recordFrames(() => open(result));
   result.phases.push(phaseOf('opening', openIntervals));
   render(result);
-  if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB while opening`);
+  if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB while opening`);
   result.memory.afterOpenMb = await measuredMemoryMb();
   if (params.mode === 'table' && params.cuts > 0)
     draw.debug.tables().setArtificialCuts(params.cuts);
@@ -374,7 +379,7 @@ async function runTableBench(): Promise<TableBenchResult> {
     const intervals = await recordFrames(run);
     result.phases.push(phaseOf(name, intervals));
     render(result);
-    if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB (${name})`);
+    if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB (${name})`);
   }
   result.memory.endMb = await measuredMemoryMb();
   return finish();
