@@ -791,10 +791,11 @@ which is feature order.
 - The fragment shader splits by distance from the center: inside is the
   fill color, the outer band is the stroke color, outside is discarded.
   Half a pixel on each side of a boundary is smoothed with `smoothstep`
-- The shape is a distance function selected by `u_shape` (0 to 3 for
-  `circle`, `square`, `triangle`, `star`; `POINT_SDF_GLSL` in
-  `point-sdf.ts`, shared with the per-point renderer). The vertex buffer
-  is the same
+- The shape is a distance function selected by the shape code of the
+  instance (0 to 3 for `circle`, `square`, `triangle`, `star`;
+  `POINT_SDF_GLSL` in `point-sdf.ts`, shared with the per-point renderer),
+  so points of every shape are drawn in one draw in their order. The
+  vertex buffer is the same
 - With stroke width 0 the outer radius equals the radius, so points with
   and without stroke share an instance array
 - The radius and stroke boundary follow the same formula as the pure
@@ -912,15 +913,17 @@ picture, z-order included.
 ### Runs and chunks
 
 Retained mode must produce the same picture as immediate mode, so a layer's
-feature sequence is cut into runs at exactly the positions where the
-BatchManager would flush, and the runs are drawn in order.
-`classifyFeature()` (`store-retained-classify.ts`) returns one of seven run
+feature sequence is cut into runs where the way of drawing changes, the
+features keep their order within a run, and the runs are drawn in order.
+The only flush of the BatchManager that does not end a run is a change of
+the point shape, which the instances carry.
+`classifyFeature()` (`store-retained-classify.ts`) returns one of four run
 kinds, and a run ends where the kind changes:
 
 - `polygon`: Polygon, MultiPolygon, Circle (fill only or a solid outline)
 - `line`: LineString, Freehand, MultiLineString (solid)
-- `point-circle`, `point-square`, `point-triangle`, `point-star`: Point
-  and MultiPoint with that shape
+- `point`: Point and MultiPoint of an instanced shape (the shape is a
+  value of the instance, so a change of shape does not end a run)
 - `immediate`: anything that cannot be retained
 
 A run is cut into chunks of at most `STORE_CHUNK_TARGET` (512) features, and

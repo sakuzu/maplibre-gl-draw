@@ -10,11 +10,7 @@
 
 import type { Feature, Layer } from '../../store/types.js';
 import type { RetainedLineBatch } from '../renderers/line/line-types.js';
-import {
-  type PointShape,
-  type RetainedPointBatch,
-  toInstancedPointShape,
-} from '../renderers/point/point-instance.js';
+import type { RetainedPointBatch } from '../renderers/point/point-instance.js';
 import type { RetainedPolygonBatch } from '../renderers/polygon/sdf-polygon.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import type { ChunkBBox } from './store-retained-bbox.js';
@@ -152,24 +148,17 @@ export function buildChunkBatch(
     return 'built';
   }
 
-  const shape = pointShapeOfRun(chunk.kind);
-  if (shape) {
+  if (chunk.kind === 'point') {
+    // Every point carries its own shape
     const points = collectPoints(features, styles, layer);
     if (points.length === 0) return 'empty';
-    const batch = renderers.point.buildRetained(points, shape, { origin });
+    const batch = renderers.point.buildRetained(points, 'circle', { origin });
     if (!batch) return 'retry';
     chunk.point = batch;
     return 'built';
   }
 
   return 'empty';
-}
-
-/**
- * The point shape of a point run (null for any other kind)
- */
-function pointShapeOfRun(kind: RunKind): PointShape | null {
-  return kind.startsWith('point-') ? toInstancedPointShape(kind.slice('point-'.length)) : null;
 }
 
 /**

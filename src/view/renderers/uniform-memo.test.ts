@@ -223,7 +223,8 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     expect(mock.writes('u_center_lnglat')).toBe(1);
     expect(mock.writes('u_use_offset_mode')).toBe(1);
     expect(mock.writes('u_size_scale')).toBe(1);
-    expect(mock.writes('u_shape')).toBe(1);
+    // The shape is a value of the instances, not a uniform
+    expect(mock.writes('u_shape')).toBe(0);
   });
 
   it('rewrites u_origin_shift with its own origin for each chunk', () => {

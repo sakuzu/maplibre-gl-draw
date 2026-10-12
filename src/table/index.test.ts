@@ -30,6 +30,7 @@ const EXPORTS = [
   'DictionaryColumn',
   'GeometryType',
   'GroupKeySource',
+  'PackedRTree',
   'prepareTable',
   'PreparedTable',
   'PropertyColumns',

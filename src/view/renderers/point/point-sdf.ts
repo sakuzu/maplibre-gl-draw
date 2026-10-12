@@ -23,7 +23,7 @@
 /** The shapes the built-in renderers draw */
 export type SdfPointShape = 'circle' | 'square' | 'triangle' | 'star';
 
-/** Value of the `u_shape` uniform for each shape */
+/** The code of each shape, as the shaders read it */
 export const POINT_SHAPE_CODE: Readonly<Record<SdfPointShape, number>> = {
   circle: 0,
   square: 1,

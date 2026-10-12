@@ -138,6 +138,8 @@ interface MockBatch {
   /** Widths pushed onto a line batch (a fixed width is negative) */
   widths: number[];
   origin: [number, number] | undefined;
+  /** The shape of each point of a point batch (the shape of the batch for a point without one) */
+  shapes?: string[];
 }
 
 /** Diff written into the coordinate texture */
@@ -233,13 +235,14 @@ function createRendererProbe(
     },
     line,
     point: {
-      buildRetained: (points: PointInstanceDataFull[], _shape: PointShape, options) =>
+      buildRetained: (points: PointInstanceDataFull[], shape: PointShape, options) =>
         record({
           kind: 'point',
           ids: [],
           count: points.length,
           widths: [],
           origin: options?.origin,
+          shapes: points.map((point) => point.shape ?? shape),
         }) as unknown as RetainedPointBatch,
       drawRetained: (batch, _zoom, _projection, factors): void => {
         recordDraw(batch, factors);
@@ -516,7 +519,7 @@ describe('classifyFeature', () => {
     ).toBe('line');
   });
 
-  it('points split runs per shape, a shape without instancing support is immediate', () => {
+  it('points of every instanced shape are one kind, a shape without instancing support is immediate', () => {
     const styles = createStyles({
       circle: { pointShape: 'circle' },
       square: { pointShape: 'square' },
@@ -527,22 +530,22 @@ describe('classifyFeature', () => {
 
     expect(
       classifyFeature(makeFeature('circle', 'Point'), styles.resolver, empty, companions),
-    ).toBe('point-circle');
+    ).toBe('point');
     expect(
       classifyFeature(makeFeature('square', 'Point'), styles.resolver, empty, companions),
-    ).toBe('point-square');
+    ).toBe('point');
     expect(
       classifyFeature(makeFeature('triangle', 'Point'), styles.resolver, empty, companions),
-    ).toBe('point-triangle');
+    ).toBe('point');
     expect(classifyFeature(makeFeature('star', 'Point'), styles.resolver, empty, companions)).toBe(
-      'point-star',
+      'point',
     );
     expect(classifyFeature(makeFeature('icon', 'Point'), styles.resolver, empty, companions)).toBe(
       'immediate',
     );
     expect(
       classifyFeature(makeFeature('circle', 'MultiPoint'), styles.resolver, empty, companions),
-    ).toBe('point-circle');
+    ).toBe('point');
   });
 
   it('a polygon with a solid outline or only a fill is polygon, a dashed one immediate', () => {
@@ -600,7 +603,7 @@ describe('classifyFeature', () => {
 
     // Even a type that could be retained as a point goes to immediate drawing once registered
     expect(classifyFeature(makeFeature('p', 'Point'), styles.resolver, new Map(), companions)).toBe(
-      'point-circle',
+      'point',
     );
     expect(
       classifyFeature(makeFeature('p', 'Point'), styles.resolver, customTypes, companions),
@@ -640,7 +643,7 @@ describe('run splitting', () => {
     expect(h.probe.drawn).toEqual(h.probe.built);
   });
 
-  it('a change of the point shape cuts a run', () => {
+  it('points of different shapes stay in one run, each with its own shape', () => {
     const h = createHarness(
       [makeFeature('c1', 'Point'), makeFeature('s1', 'Point'), makeFeature('c2', 'Point')],
       { s1: { pointShape: 'square' } },
@@ -648,8 +651,9 @@ describe('run splitting', () => {
 
     h.draw();
 
-    expect(h.probe.built.map((b) => b.kind)).toEqual(['point', 'point', 'point']);
-    expect(h.probe.built.map((b) => b.count)).toEqual([1, 1, 1]);
+    expect(h.probe.built.map((b) => b.kind)).toEqual(['point']);
+    expect(h.probe.built.map((b) => b.count)).toEqual([3]);
+    expect(h.probe.built[0].shapes).toEqual(['circle', 'square', 'circle']);
   });
 
   it('features that cannot be retained get their own run and are drawn immediately', () => {

@@ -14,7 +14,10 @@ import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js'
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import { toLineBatchItem, toPointInstanceData } from '../renderers/batch-manager.js';
 import type { LineBatchItem } from '../renderers/line/line-types.js';
-import type { PointInstanceDataFull } from '../renderers/point/point-instance.js';
+import {
+  type PointInstanceDataFull,
+  toInstancedPointShape,
+} from '../renderers/point/point-instance.js';
 import type { SDFPolygonBatchData } from '../renderers/polygon/sdf-polygon.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 
@@ -137,13 +140,15 @@ export function collectPoints(
 
   for (const feature of features) {
     const style = styles.getPointStyle(feature, layer);
+    // The shape is a value of the instance (a run holds points of every instanced shape)
+    const shape = toInstancedPointShape(style.shape) ?? undefined;
 
     if (feature.type === 'MultiPoint') {
       for (const coord of coordinatesOf(feature) as Coordinate[]) {
-        points.push(toPointInstanceData(coord, style));
+        points.push({ ...toPointInstanceData(coord, style), shape });
       }
     } else {
-      points.push(toPointInstanceData(coordinatesOf(feature) as Coordinate, style));
+      points.push({ ...toPointInstanceData(coordinatesOf(feature) as Coordinate, style), shape });
     }
   }
 

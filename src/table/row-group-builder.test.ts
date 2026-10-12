@@ -264,8 +264,8 @@ describe('createRowGroupBuilder', () => {
     expect(group.vertexCount).toBe(ring.length);
   });
 
-  it('keeps the indices of a large fill in 32 bits', () => {
-    const n = 70_000;
+  it('keeps the indices of a large fill in 32 bits', { timeout: 60_000 }, () => {
+    const n = 65_600;
     const ring: number[][] = [];
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;

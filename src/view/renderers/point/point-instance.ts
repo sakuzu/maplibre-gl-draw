@@ -20,6 +20,8 @@
  * - position (vec2): coordinates relative to the origin
  * - fill color (vec4) / stroke color (vec4): RGBA
  * - radius (float) / stroke width (float): device pixels
+ * - shape (float): the code of the shape (`POINT_SHAPE_CODE`), so points of every shape are
+ *   drawn in one draw call and in their order
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
@@ -79,6 +81,13 @@ export interface PointInstanceDataFull {
    */
   elevationMeters?: number;
   /**
+   * The shape of this point (when omitted, the shape given to the draw or the build)
+   *
+   * The shape is a value of the instance, so points of different shapes go in one batch in
+   * their order.
+   */
+  shape?: PointShape;
+  /**
    * Opacity factor used when the point is occluded by the terrain (omitted or 1 is normal
    * display)
    *
@@ -126,15 +135,24 @@ export const POINT_MIN_OUTER_PX = 0.5;
 
 // Stride of the instance data (floats per instance)
 // position(2) + fillColor(4) + strokeColor(4) + size(1) + strokeWidth(1)
-//   + elevation(1) = 13 floats
-const INSTANCE_STRIDE = 13;
+//   + elevation(1) + shape(1) = 14 floats
+const INSTANCE_STRIDE = 14;
 const INSTANCE_BYTES = INSTANCE_STRIDE * 4;
+
+/** The float of the instance that holds the code of the shape */
+const INSTANCE_SHAPE = 13;
 
 /** Number of vertices of the billboard (quad) */
 const QUAD_VERTEX_COUNT = 4;
 
-/** Value of the uniform that represents the shape */
-const SHAPE_UNIFORM: Readonly<Record<PointShape, number>> = POINT_SHAPE_CODE;
+/**
+ * The code of a shape as the instances carry it
+ *
+ * @internal
+ */
+export function pointShapeCode(shape: PointShape): number {
+  return POINT_SHAPE_CODE[shape] ?? 0;
+}
 
 /**
  * SDF boundaries of one instance (device pixels)
@@ -209,7 +227,7 @@ export function pointInkFactor(outerPx: number): number {
  * set of billboard vertex buffer, instance buffer and VAO.
  */
 export interface RetainedPointBatch {
-  /** Shape of the points */
+  /** The shape of the points that do not name one */
   readonly shape: PointShape;
   /** VAO dedicated to this batch */
   readonly vao: WebGLVertexArrayObject;
@@ -259,9 +277,11 @@ export function buildPointInstanceData(
   origin: [number, number],
   pixelRatio?: PixelRatioInput,
   terrain?: TerrainContext,
+  shape: PointShape = 'circle',
 ): Float32Array {
   const dpr = resolvePixelRatio(pixelRatio);
   const data = new Float32Array(points.length * INSTANCE_STRIDE);
+  const defaultCode = pointShapeCode(shape);
 
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
@@ -291,6 +311,7 @@ export function buildPointInstanceData(
     // disabled it returns 0 and the result is identical to before.
     data[offset + 12] =
       p.elevationMeters ?? (terrain ? anchorElevationMeters(terrain, p.coord[0], p.coord[1]) : 0);
+    data[offset + INSTANCE_SHAPE] = p.shape ? pointShapeCode(p.shape) : defaultCode;
   }
 
   return data;
@@ -337,10 +358,12 @@ export function buildPackedPointInstanceData(
   origin: [number, number],
   pixelRatio?: PixelRatioInput,
   terrain?: TerrainContext,
+  shape: PointShape = 'circle',
 ): Float32Array {
   const dpr = resolvePixelRatio(pixelRatio);
   const { count, lngLat, style } = points;
   const data = new Float32Array(count * INSTANCE_STRIDE);
+  const code = pointShapeCode(shape);
 
   for (let i = 0; i < count; i++) {
     const offset = i * INSTANCE_STRIDE;
@@ -360,6 +383,7 @@ export function buildPackedPointInstanceData(
     data[offset + 10] = style[s + 8] * dpr;
     data[offset + 11] = style[s + 9] * dpr;
     data[offset + 12] = terrain ? anchorElevationMeters(terrain, lng, lat) : 0;
+    data[offset + INSTANCE_SHAPE] = code;
   }
 
   return data;
@@ -386,8 +410,6 @@ interface PointProjectionLocs {
   sizeScale: WebGLUniformLocation | null;
   /** Opacity factor at draw time (fragment) */
   opacity: WebGLUniformLocation | null;
-  /** Shape (switches the distance function in the fragment shader) */
-  shape: WebGLUniformLocation | null;
 }
 
 /**
@@ -401,8 +423,6 @@ interface PointProjectionLocs {
 interface PointUniformMemo {
   /** Frame number in which the draw-time factors were last written (-1 if never written) */
   factorsFrame: number;
-  /** Frame number in which the shape was last written (-1 if never written) */
-  shapeFrame: number;
   /** Frame number in which u_pixel_to_clip was last written (-1 if never written) */
   pixelToClipFrame: number;
   /** Canvas dimensions that u_pixel_to_clip was based on */
@@ -411,8 +431,6 @@ interface PointUniformMemo {
   /** Values written to the draw-time factors */
   sizeScale: number;
   opacity: number;
-  /** Value written to u_shape */
-  shape: number;
 }
 
 /**
@@ -436,13 +454,11 @@ interface PointProgramState {
 function createPointMemo(): PointUniformMemo {
   return {
     factorsFrame: -1,
-    shapeFrame: -1,
     pixelToClipFrame: -1,
     canvasWidth: Number.NaN,
     canvasHeight: Number.NaN,
     sizeScale: Number.NaN,
     opacity: Number.NaN,
-    shape: Number.NaN,
   };
 }
 
@@ -535,6 +551,7 @@ layout(location = 3) in vec4 a_instance_stroke_color;   // stroke color
 layout(location = 4) in float a_instance_size;          // fill radius (pixels)
 layout(location = 5) in float a_instance_stroke_width;  // stroke width (pixels)
 layout(location = 6) in float a_instance_elevation_m;   // anchor ground elevation (meters)
+layout(location = 7) in float a_instance_shape;         // shape (0 circle, 1 square, 2 triangle, 3 star)
 
 uniform vec2 u_pixel_to_clip; // pixel-to-clip-space conversion factor
 uniform float u_size_scale;   // size factor at draw time (default 1)
@@ -546,6 +563,7 @@ out vec2 v_offset_px;
 flat out float v_radius_px;
 flat out float v_outer_px;
 flat out float v_ink;
+flat out float v_shape;
 
 void main() {
     // The anchor elevation comes from the CPU (the same source as hit testing).
@@ -578,6 +596,7 @@ void main() {
     v_offset_px = offsetPx;
     v_radius_px = radius;
     v_outer_px = outer;
+    v_shape = a_instance_shape;
 }`;
 
     const fragmentSource = `#version 300 es
@@ -588,8 +607,8 @@ in vec2 v_offset_px;
 flat in float v_radius_px;
 flat in float v_outer_px;
 flat in float v_ink;          // the factor of a point below one pixel (1 otherwise)
+flat in float v_shape;        // shape (0 = circle, 1 = square, 2 = triangle, 3 = star)
 uniform float u_opacity;      // opacity factor at draw time (default 1)
-uniform float u_shape;        // shape (0 = circle, 1 = square, 2 = triangle, 3 = star)
 out vec4 fragColor;
 
 const float AA = ${AA_HALF_WIDTH_PX.toFixed(1)};
@@ -600,7 +619,7 @@ void main() {
 
     // The billboard is one to one with screen pixels, so the distance can be measured in pixels.
     // d is the signed distance to the outer edge (negative inside)
-    float d = pointShapeSdf(v_offset_px, v_outer_px, u_shape);
+    float d = pointShapeSdf(v_offset_px, v_outer_px, v_shape);
 
     // Coverage of the outer edge. Outside it, everything but the antialiasing band is discarded
     float coverage = 1.0 - smoothstep(-AA, AA, d);
@@ -677,6 +696,11 @@ void main() {
     gl.vertexAttribPointer(6, 1, gl.FLOAT, false, INSTANCE_BYTES, 48);
     gl.vertexAttribDivisor(6, 1);
 
+    // Shape: location=7, offset 52, 1 float
+    gl.enableVertexAttribArray(7);
+    gl.vertexAttribPointer(7, 1, gl.FLOAT, false, INSTANCE_BYTES, INSTANCE_SHAPE * 4);
+    gl.vertexAttribDivisor(7, 1);
+
     gl.bindVertexArray(null);
 
     return { vao, shapeBuffer: vertexBuffer };
@@ -724,7 +748,6 @@ void main() {
       pixelToClip: gl.getUniformLocation(program, 'u_pixel_to_clip'),
       sizeScale: gl.getUniformLocation(program, 'u_size_scale'),
       opacity: gl.getUniformLocation(program, 'u_opacity'),
-      shape: gl.getUniformLocation(program, 'u_shape'),
     };
     const projection = new ProjectionUniformManager(gl).useTerrainState(this.terrain);
     projection.getLocations(program);
@@ -754,21 +777,6 @@ void main() {
       memo.opacity = factors.opacity;
     }
     memo.factorsFrame = frame;
-  }
-
-  /**
-   * Writes the shape (switches the distance function in the fragment shader)
-   */
-  private setShape(program: WebGLProgram, shape: PointShape): void {
-    const { locs, memo } = this.getProgramState(program);
-    const frame = getRenderFrame();
-    const value = SHAPE_UNIFORM[shape] ?? 0;
-
-    if (locs.shape && (memo.shapeFrame !== frame || memo.shape !== value)) {
-      this.gl.uniform1f(locs.shape, value);
-      memo.shape = value;
-    }
-    memo.shapeFrame = frame;
   }
 
   /**
@@ -834,7 +842,7 @@ void main() {
    * front in instance order (= the order of the given array = feature order).
    *
    * @param points The array of point data
-   * @param shape The point shape
+   * @param shape The shape of the points that do not name one
    * @param zoom The current zoom level
    * @param factors The draw-time factors (the opacity of the layer being drawn; scale 1 and
    *   opacity 1 when omitted)
@@ -862,6 +870,7 @@ void main() {
       centerLngLat,
       this.pixelRatio,
       this.terrain,
+      shape,
     );
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
@@ -871,7 +880,6 @@ void main() {
     this.setProjectionUniforms(this.program, zoom);
     // Always written (1 when the caller has none) so that no factor of an earlier draw is left
     this.setDrawFactors(this.program, factors);
-    this.setShape(this.program, shape);
 
     gl.bindVertexArray(this.getVAO(this.program));
     drawBillboardsWithoutDepth(gl, () => {
@@ -909,7 +917,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     gl.bufferData(
       gl.ARRAY_BUFFER,
-      buildPointInstanceData(points, origin, this.pixelRatio, this.terrain),
+      buildPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape),
       gl.STATIC_DRAW,
     );
 
@@ -949,7 +957,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     gl.bufferData(
       gl.ARRAY_BUFFER,
-      buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain),
+      buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape),
       gl.STATIC_DRAW,
     );
 
@@ -1003,7 +1011,6 @@ void main() {
     gl.useProgram(this.program);
     this.setProjectionUniformsWith(this.program, zoom, projectionData, offsetUniforms, originShift);
     this.setDrawFactors(this.program, factors);
-    this.setShape(this.program, batch.shape);
 
     gl.bindVertexArray(batch.vao);
     drawBillboardsWithoutDepth(gl, () => {

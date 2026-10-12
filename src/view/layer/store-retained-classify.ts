@@ -13,16 +13,16 @@ import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
-import { type PointShape, toInstancedPointShape } from '../renderers/point/point-instance.js';
+import { toInstancedPointShape } from '../renderers/point/point-instance.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 
 /**
  * Kind of a run
  *
- * It is matched with the unit at which the BatchManager of immediate mode flushes a batch (the
- * batch kind and the point shape). A position where the kind changes becomes a run boundary.
+ * A position where the kind changes becomes a run boundary. The shape of a point is a value of
+ * its instance, so points of every instanced shape make one run.
  */
-export type RunKind = 'polygon' | 'line' | `point-${PointShape}` | 'immediate';
+export type RunKind = 'polygon' | 'line' | 'point' | 'immediate';
 
 /**
  * The custom renderer that draws a feature: the one registered for its type, unless it
@@ -41,9 +41,11 @@ export function customRendererOf<R>(
 /**
  * Classifies a feature into the kind of its run
  *
- * It copies the batch kinds, the flush rules and the fallback rules of immediate mode
- * (BatchManager.processFeature) as they are. If this drifts from immediate mode the z-order
- * breaks, so keep the conditions here in one-to-one correspondence with the immediate-mode side.
+ * It copies the batch kinds and the fallback rules of immediate mode
+ * (BatchManager.processFeature). If this drifts from immediate mode the z-order breaks, so keep
+ * the conditions here in one-to-one correspondence with the immediate-mode side. The rows held
+ * as columns are classified by the same rules (`classifyRow` of `table-partition.ts`), and the
+ * two must stay one to one as well.
  *
  * @param customTypes Renderers of the custom feature types (a registered type is drawn at once)
  * @param layer The layer it belongs to (used to evaluate the style rules)
@@ -69,7 +71,7 @@ export function classifyFeature(
     case 'MultiPoint': {
       const shape = toInstancedPointShape(styles.getPointStyle(feature, layer).shape);
       // A shape without instancing support is drawn immediately, one point at a time
-      return shape ? `point-${shape}` : 'immediate';
+      return shape ? 'point' : 'immediate';
     }
     case 'LineString':
     case 'Freehand':

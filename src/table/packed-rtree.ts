@@ -20,11 +20,10 @@ const DEFAULT_NODE_SIZE = 16;
 const HILBERT_SIDE = 1 << 16;
 
 /**
- * The arrays of a packed R-tree
+ * The arrays of a packed R-tree: the spatial index of a row group
  *
  * Leaves come first (one per row with a geometry), then the nodes of each level up to the root.
- *
- * @internal
+ * Treat it as opaque; it is built with the rows and read by the library.
  */
 export interface PackedRTree {
   /** The number of entries of one node */

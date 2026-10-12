@@ -80,31 +80,31 @@ describe('classifyFeature with the style resolution of the renderer', () => {
   const customTypes = new Map<string, unknown>();
   const companions = createFeatureCompanionRegistry();
 
-  it('puts a point in the run of the shape its own style names', () => {
+  it('puts a point of every instanced shape its own style names in one run', () => {
     const drawer = createDrawer(DEFAULT_FEATURE_STYLE_CONFIG);
     const classify = (style?: FeatureStyle): string =>
       classifyFeature(pointWith(style), drawer, customTypes, companions);
 
-    expect(classify({ pointShape: 'square' })).toBe('point-square');
-    expect(classify({ pointShape: 'triangle' })).toBe('point-triangle');
-    expect(classify({ pointShape: 'star' })).toBe('point-star');
-    expect(classify({ pointShape: 'circle' })).toBe('point-circle');
+    expect(classify({ pointShape: 'square' })).toBe('point');
+    expect(classify({ pointShape: 'triangle' })).toBe('point');
+    expect(classify({ pointShape: 'star' })).toBe('point');
+    expect(classify({ pointShape: 'circle' })).toBe('point');
   });
 
-  it('puts a point without a shape in the run of the default of the instance', () => {
+  it('puts a point without a shape in the same run as the others', () => {
     const base = DEFAULT_FEATURE_STYLE_CONFIG;
     const drawer = createDrawer({
       ...base,
       point: { ...base.point, point: { ...base.point.point, shape: 'star' } },
     });
 
-    expect(classifyFeature(pointWith(), drawer, customTypes, companions)).toBe('point-star');
+    expect(classifyFeature(pointWith(), drawer, customTypes, companions)).toBe('point');
     expect(
       classifyFeature(pointWith({ pointColor: '#00ff00' }), drawer, customTypes, companions),
-    ).toBe('point-star');
+    ).toBe('point');
     expect(
       classifyFeature(pointWith({ pointShape: 'square' }), drawer, customTypes, companions),
-    ).toBe('point-square');
+    ).toBe('point');
   });
 });
 
@@ -119,7 +119,7 @@ describe('classifyFeature with a renderer that takes only some features of its t
     const plain = makeFeature('Point', [0, 0]);
     const special = { ...plain, properties: { kind: 'special' } } as Feature;
 
-    expect(classifyFeature(plain, drawer, customTypes, companions)).toBe('point-circle');
+    expect(classifyFeature(plain, drawer, customTypes, companions)).toBe('point');
     expect(classifyFeature(special, drawer, customTypes, companions)).toBe('immediate');
     expect(customRendererOf(customTypes, plain)).toBeUndefined();
     expect(customRendererOf(customTypes, special)).toBe(overriding);

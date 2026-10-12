@@ -109,7 +109,7 @@ describe('buildChunkBatch', () => {
         [1, 1],
       ],
     ]);
-    buildChunkBatch(createChunkEntry('point-square'), [point], undefined, [0, 0], renderers);
+    buildChunkBatch(createChunkEntry('point'), [point], undefined, [0, 0], renderers);
     buildChunkBatch(createChunkEntry('polygon'), [polygon], undefined, [0, 0], renderers);
     expect(calls).toEqual(['build:point', 'build:polygon']);
   });

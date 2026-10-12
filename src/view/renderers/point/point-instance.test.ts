@@ -181,7 +181,7 @@ const POINTS: PointInstanceDataFull[] = [
 ];
 
 /** Floats per instance (position 2 + colors 8 + sizes 2 + elevation 1) */
-const STRIDE = 13;
+const STRIDE = 14;
 
 /** Extracts the uploaded instance array (the one that is not the 8 floats of the billboard) */
 function instanceUpload(mock: RecordingGL): Float32Array {
@@ -267,21 +267,39 @@ describe('single-pass rendering of points', () => {
     expect([data[2], data[STRIDE + 3], data[STRIDE * 2 + 4]]).toEqual([1, 1, 1]);
   });
 
-  it('switches the shape with a uniform (circle 0 / square 1 / triangle 2 / star 3)', () => {
+  it('carries the shape in every instance (circle 0 / square 1 / triangle 2 / star 3)', () => {
     const mock = createRecordingGL();
     const renderer = createRenderer(mock);
 
-    mock.reset();
-    renderer.drawAll(POINTS, 'circle', 12);
-    renderer.drawAll(POINTS, 'square', 12);
-    renderer.drawAll(POINTS, 'triangle', 12);
-    renderer.drawAll(POINTS, 'star', 12);
+    const codes = (shape: 'circle' | 'square' | 'triangle' | 'star'): number[] => {
+      mock.reset();
+      renderer.drawAll(POINTS, shape, 12);
+      const data = instanceUpload(mock);
+      return POINTS.map((_, i) => data[i * STRIDE + 13]);
+    };
+    expect(codes('circle')).toEqual([0, 0, 0]);
+    expect(codes('square')).toEqual([1, 1, 1]);
+    expect(codes('triangle')).toEqual([2, 2, 2]);
+    expect(codes('star')).toEqual([3, 3, 3]);
+    // No uniform switches the shape between draws
+    expect(mock.calls('uniform1f').filter((call) => call.args[0] === 'u_shape')).toEqual([]);
+  });
 
-    const shapeWrites = mock
-      .calls('uniform1f')
-      .filter((call) => call.args[0] === 'u_shape')
-      .map((call) => call.args[1]);
-    expect(shapeWrites).toEqual([0, 1, 2, 3]);
+  it('draws points of different shapes in one draw, each with its own shape', () => {
+    const mock = createRecordingGL();
+    const renderer = createRenderer(mock);
+    const mixed = [
+      { ...POINTS[0], shape: 'star' as const },
+      { ...POINTS[1] },
+      { ...POINTS[2], shape: 'triangle' as const },
+    ];
+
+    mock.reset();
+    renderer.drawAll(mixed, 'square', 12);
+
+    expect(mock.calls('drawArraysInstanced')).toHaveLength(1);
+    const data = instanceUpload(mock);
+    expect(mixed.map((_, i) => data[i * STRIDE + 13])).toEqual([3, 1, 2]);
   });
 
   it('uses a single shader that receives both the fill and the stroke color as attributes', () => {
@@ -294,7 +312,7 @@ describe('single-pass rendering of points', () => {
     expect(sources[0]).toContain('a_instance_fill_color');
     expect(sources[0]).toContain('a_instance_stroke_color');
     // The fragment stage measures the distance with the shared distance functions of the shapes
-    expect(sources[1]).toContain('pointShapeSdf(v_offset_px, v_outer_px, u_shape)');
+    expect(sources[1]).toContain('pointShapeSdf(v_offset_px, v_outer_px, v_shape)');
   });
 });
 
