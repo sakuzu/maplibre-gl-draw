@@ -42,6 +42,7 @@ import type {
 } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { EngineOverlayRenderer, FeatureTypeHandler } from '../../extension/index.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
@@ -235,6 +236,8 @@ interface EngineState {
    */
   builtPixelRatio: number | null;
   unsubscribeStore: (() => void) | null;
+  /** Stops the asking for frames when row groups wait to be taken in */
+  unwatchTables: (() => void) | null;
   /** Stops following the context loss of the canvas (null while not added) */
   unwatchContextLoss: (() => void) | null;
   /** The frame being drawn (the first slot builds it, the last slot closes it) */
@@ -283,6 +286,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     tableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
+    unwatchTables: null,
     unwatchContextLoss: null,
     frame: null,
     preparedTerrainState: null,
@@ -400,6 +404,13 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       if (changes.layers !== undefined) slots.sync();
     });
 
+    // The row groups given to the tables are taken in over the frames: a frame is asked for
+    // when they start waiting
+    engine.unwatchTables =
+      featureTablesInternals(store.tables)?.onPendingWork(() =>
+        engine.mapInstance?.triggerRepaint(),
+      ) ?? null;
+
     watchContextLoss(mapInstance);
 
     // Build the GPU side (skipped while the context is lost; the restore builds it then)
@@ -416,6 +427,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.unsubscribeStore();
       engine.unsubscribeStore = null;
     }
+    engine.unwatchTables?.();
+    engine.unwatchTables = null;
     engine.unwatchContextLoss?.();
     engine.unwatchContextLoss = null;
 
@@ -582,8 +595,11 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       terrainContext,
       map?.isMoving?.() === true || map?.isZooming?.() === true,
     );
-    // The budget of the builds of the rows held as columns is one per frame
+    // The budget of the builds of the rows held as columns is one per frame, and the row groups
+    // waiting to be taken in go first in it (the chunks are built from the groups taken in)
     engine.tableRetained?.beginFrame();
+    const tables = featureTablesInternals(store.tables);
+    if (tables) engine.tableRetained?.advanceTables(tables);
 
     // The zoom that the rendering reads is the style zoom (a value that absorbs the steps of the
     // elevation settlement; frame-state.ts). The position of the camera (the altitude in meters)
@@ -817,6 +833,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       if (drape.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
       if (engine.tableRetained?.hasPendingWork) return true;
+      if (featureTablesInternals(store.tables)?.hasPendingAdoption) return true;
       for (const renderer of dynamicOverlayRenderers) {
         if (renderer.hasPendingWork?.()) return true;
       }

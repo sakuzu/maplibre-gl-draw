@@ -510,6 +510,7 @@ export function tablesOfFeatures(
   });
   writer.adopt(layerId, builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+  internals.flushAdoption();
   return { internals, table: internals.layerTable(layerId) as LayerTable };
 }
 

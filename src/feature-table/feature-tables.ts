@@ -37,7 +37,7 @@ import {
   toGpuState,
 } from './row-state.js';
 import { StyleTable } from './style-table.js';
-import type { RowGroupHandle } from './types.js';
+import type { RowGroupHandle, TableWorkBudget } from './types.js';
 
 /**
  * Creates the tables of the features of a document, as its reading and writing sides (the
@@ -83,6 +83,27 @@ export interface FeatureTablesInternals {
   rowGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | undefined;
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
+  /** Whether row groups given to `adopt` are still waiting to be taken in */
+  readonly hasPendingAdoption: boolean;
+  /**
+   * Takes in the row groups waiting, one group per step, within the budget of the frame (at
+   * least one group per call). A group that cannot be taken in is left out and reported
+   *
+   * @returns Whether groups are still waiting
+   */
+  advanceAdoption(budget: TableWorkBudget): boolean;
+  /**
+   * Takes in every row group waiting at once (a host without frames, the tests)
+   *
+   * @throws when a group cannot be taken in (the groups after it keep waiting)
+   */
+  flushAdoption(): void;
+  /**
+   * Calls `listener` when row groups start waiting, so the drawing asks for a frame
+   *
+   * @returns The function that stops the calls
+   */
+  onPendingWork(listener: () => void): () => void;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -112,6 +133,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly rowGroups = new Map<RowGroupHandle, { layer: LayerTable; group: RowGroup }>();
   private nextGroup = 0;
   private revisionCount = 0;
+  /** The row groups given to `adopt` and not taken in yet, in the order they were given */
+  private readonly adoptions: Array<{ layer: LayerTable; data: RowGroupData }> = [];
+  private readonly workListeners = new Set<() => void>();
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -166,17 +190,69 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return out;
   }
 
+  /**
+   * Checks the row groups and queues them: they are taken in a group at a time within the
+   * budget of the frames (`advanceAdoption`), so a large file does not hold a frame
+   */
   adopt(layerId: string, groups: readonly RowGroupData[]): void {
+    // The checks of the shape of the groups are cheap and done here, so that a group made wrong
+    // is refused before anything is queued; the checks of the rows are done when it is taken in
+    for (const data of groups) {
+      checkShape(data);
+      if (data.length === 0) throw new Error('FeatureTables: an empty row group');
+      for (let r = 0; r < data.length; r++) {
+        const group = data.groups[r];
+        if (group >= 0 && !this.groups.has(group)) {
+          throw new Error(`FeatureTables: a row names the group ${group}, which is unknown`);
+        }
+      }
+    }
     let layer = this.layers.get(layerId);
     if (!layer) {
       layer = new LayerTable(layerId, this.groups);
       this.layers.set(layerId, layer);
     }
-    for (const data of groups) this.adoptGroup(layer, data);
+    const wasPending = this.adoptions.length > 0;
+    for (const data of groups) this.adoptions.push({ layer, data });
+    if (!wasPending && this.adoptions.length > 0) {
+      for (const listener of this.workListeners) listener();
+    }
   }
 
+  get hasPendingAdoption(): boolean {
+    return this.adoptions.length > 0;
+  }
+
+  advanceAdoption(budget: TableWorkBudget): boolean {
+    while (this.adoptions.length > 0 && budget.canStep()) {
+      budget.stepped();
+      const next = this.adoptions.shift() as { layer: LayerTable; data: RowGroupData };
+      try {
+        this.adoptGroup(next.layer, next.data);
+      } catch (error) {
+        // There is no caller to throw to any more: the group is left out
+        console.error(error);
+      }
+    }
+    return this.adoptions.length > 0;
+  }
+
+  flushAdoption(): void {
+    while (this.adoptions.length > 0) {
+      const next = this.adoptions.shift() as { layer: LayerTable; data: RowGroupData };
+      this.adoptGroup(next.layer, next.data);
+    }
+  }
+
+  onPendingWork(listener: () => void): () => void {
+    this.workListeners.add(listener);
+    return () => {
+      this.workListeners.delete(listener);
+    };
+  }
+
+  /** Takes in one row group: the handles, the numbers of its styles, the state of its rows */
   private adoptGroup(layer: LayerTable, data: RowGroupData): void {
-    checkShape(data);
     if (data.handles.some((handle) => handle < 0)) {
       data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     }
@@ -185,10 +261,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (!this.ids.has(handle)) throw new Error(`FeatureTables: the handle ${handle} is unknown`);
       if (this.ids.mainGroup(handle) >= 0) {
         throw new Error(`FeatureTables: "${this.ids.idOf(handle)}" is already a row`);
-      }
-      const group = data.groups[r];
-      if (group >= 0 && !this.groups.has(group)) {
-        throw new Error(`FeatureTables: a row names the group ${group}, which is unknown`);
       }
     }
     // The styles of a group built in a Worker get the numbers of the table of styles

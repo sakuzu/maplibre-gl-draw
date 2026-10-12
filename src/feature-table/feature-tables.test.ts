@@ -7,14 +7,11 @@
  */
 
 import type { Geometry } from 'geojson';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createRowGroupBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
-import {
-  createFeatureTablesStore as createFeatureTables,
-  featureTablesInternals,
-} from './feature-tables.js';
+import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
 import type { LayerTable } from './layer-table.js';
 import {
   GPU_STATE_BULK,
@@ -25,6 +22,37 @@ import {
   STATE_HIDDEN_LOCAL,
   toGpuState,
 } from './row-state.js';
+
+/**
+ * Tables whose `adopt` takes the groups in at once (the queue and the budget are tested in
+ * their own section)
+ */
+function createFeatureTables(): ReturnType<typeof createFeatureTablesStore> {
+  const made = createFeatureTablesStore();
+  const internals = featureTablesInternals(made.tables);
+  return {
+    tables: made.tables,
+    writer: {
+      ...made.writer,
+      adopt: (layerId, groups) => {
+        made.writer.adopt(layerId, groups);
+        internals?.flushAdoption();
+      },
+    },
+  };
+}
+
+/** A budget of `steps` steps */
+function stepBudget(steps: number): { canStep(): boolean; stepped(): void; taken: number } {
+  const budget = {
+    taken: 0,
+    canStep: () => budget.taken < steps,
+    stepped: () => {
+      budget.taken++;
+    },
+  };
+  return budget;
+}
 
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
 
@@ -147,6 +175,7 @@ describe('createFeatureTables', () => {
   });
 
   it('refuses a group whose arrays do not have one entry per row', () => {
+    // Refused before anything is queued
     const { writer } = createFeatureTables();
     const [group] = groups(3);
     const broken = { ...group, flags: new Uint8Array(2) };
@@ -258,5 +287,99 @@ describe('LayerTable', () => {
     expect(layer.comparePositions(p(second, 1), p(second, 2))).toBeLessThan(0);
     expect(layer.comparePositions(p(second, 2, 1), p(second, 2, 0))).toBeGreaterThan(0);
     expect(() => layer.comparePositions(p(99, 0), p(first, 0))).toThrow();
+  });
+});
+
+describe('adopt over the frames', () => {
+  it('queues the groups and takes them in a group per step, within the budget', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const internals = featureTablesInternals(tables);
+    if (!internals) throw new Error('no internals');
+    const asked = vi.fn();
+    internals.onPendingWork(asked);
+
+    writer.adopt('layer', groups(9, { targetRows: 3 }));
+    expect(asked).toHaveBeenCalledTimes(1);
+    expect(internals.hasPendingAdoption).toBe(true);
+    // Nothing is taken in yet: the layer is there and empty
+    expect(tables.layer('layer')?.rowCount).toBe(0);
+    expect(tables.handleOf('r0')).toBeUndefined();
+
+    // Queuing more while groups wait does not ask again
+    writer.adopt('layer', groups(3, { keyOffset: 20, prefix: 'z', targetRows: 3 }));
+    expect(asked).toHaveBeenCalledTimes(1);
+
+    const budget = stepBudget(2);
+    expect(internals.advanceAdoption(budget)).toBe(true);
+    expect(budget.taken).toBe(2);
+    expect(tables.layer('layer')?.rowCount).toBe(6);
+    expect(tables.handleOf('r4')).toBeDefined();
+    expect(tables.handleOf('r6')).toBeUndefined();
+
+    expect(internals.advanceAdoption(stepBudget(10))).toBe(false);
+    expect(internals.hasPendingAdoption).toBe(false);
+    const view = tables.layer('layer');
+    expect(Array.from(view?.rowsInOrder(0, 12) ?? []).map((h) => tables.idOf(h))).toEqual([
+      ...Array.from({ length: 9 }, (_, i) => `r${i}`),
+      'z20',
+      'z21',
+      'z22',
+    ]);
+  });
+
+  it('changes the revision of the rows drawn with every group taken in', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const internals = featureTablesInternals(tables);
+    if (!internals) throw new Error('no internals');
+    writer.adopt('layer', groups(4, { targetRows: 2 }));
+    const before = internals.revision;
+    internals.advanceAdoption(stepBudget(1));
+    expect(internals.revision).toBeGreaterThan(before);
+  });
+
+  it('leaves out a group that cannot be taken in, reports it and takes the others in', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const internals = featureTablesInternals(tables);
+    if (!internals) throw new Error('no internals');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      writer.adopt('layer', groups(5));
+      // Keys that overlap the first group, then a group that is fine
+      writer.adopt('layer', groups(2, { keyOffset: 3, prefix: 'x' }));
+      writer.adopt('layer', groups(2, { keyOffset: 10, prefix: 'y' }));
+      expect(internals.advanceAdoption(stepBudget(10))).toBe(false);
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(String(error.mock.calls[0][0])).toMatch(/overlap/);
+      expect(tables.layer('layer')?.rowCount).toBe(7);
+      expect(tables.handleOf('x3')).toBeUndefined();
+      expect(tables.handleOf('y10')).toBeDefined();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('refuses at once, and queues nothing, when a row names an unknown group', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const internals = featureTablesInternals(tables);
+    expect(() =>
+      writer.adopt('layer', [
+        ...groups(1),
+        ...groups(1, { keyOffset: 60, prefix: 'g', extra: { group: 3 } }),
+      ]),
+    ).toThrow(/unknown/);
+    expect(internals?.hasPendingAdoption).toBe(false);
+  });
+
+  it('gives the rows handles from the hashes the groups carry (not hashing on the main thread)', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const internals = featureTablesInternals(tables);
+    if (!internals) throw new Error('no internals');
+    const [group] = groups(3);
+    const allocate = vi.spyOn(internals.ids, 'allocate');
+    writer.adopt('layer', [group]);
+    internals.flushAdoption();
+    expect(allocate).toHaveBeenCalledTimes(1);
+    expect(allocate.mock.calls[0][1]).toBe(group.idHashes);
+    for (const id of ['r0', 'r1', 'r2']) expect(tables.handleOf(id)).toBeDefined();
   });
 });

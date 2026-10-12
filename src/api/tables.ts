@@ -87,13 +87,19 @@ export interface FeatureTablesWriter {
   /**
    * Takes row groups into a layer, without copying their columns.
    *
-   * The rows that have no handle yet (-1) get one, the styles of a group built in a Worker are
-   * numbered in the table of styles, and every group is put at its place in the order of the
-   * layer. The groups are kept as they are: do not change their arrays afterwards.
+   * The groups are queued, and taken in a group at a time within the time of the frames of the
+   * drawing, so that a large file does not hold a frame; the layer draws the groups taken in so
+   * far. When a group is taken in, its rows that have no handle yet (-1) get one (from the hashes
+   * of `idHashes`, computed where the group was built), its styles built in a Worker are numbered
+   * in the table of styles, and it is put at its place in the order of the layer. The groups are
+   * kept as they are: do not change their arrays afterwards.
    *
-   * @throws when an id is already a row of the document, when a row names a group of features
-   *   that is not known, when the rows of a group are not in the order of their keys, or when
-   *   the keys of a group overlap those of another group of the layer
+   * A group that cannot be taken in (an id that is already a row of the document, rows not in
+   * the order of their keys, keys that overlap those of another group of the layer) is left out
+   * and reported on the console.
+   *
+   * @throws when an array of a group does not have one entry per row, when a group is empty, or
+   *   when a row names a group of features that is not known (nothing is queued then)
    */
   adopt(layerId: string, groups: readonly RowGroupData[]): void;
 }

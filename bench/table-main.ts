@@ -239,9 +239,11 @@ async function open(result: TableBenchResult): Promise<void> {
     result.open.buildGroups = response.buildMs;
     result.open.workerTotal = received - t0;
     if (overLimit()) return;
+    // The groups are queued here and taken in over the frames (within their budget), so the
+    // time of taking them in is part of the first drawing below
     const a0 = performance.now();
     tablesOfPage.writer.adopt(LAYER_ID, response.groups);
-    result.open.adopt = performance.now() - a0;
+    result.open.adoptQueue = performance.now() - a0;
   } else {
     const g0 = performance.now();
     const styles = stylesOf(params);
@@ -323,7 +325,9 @@ async function runTableBench(): Promise<TableBenchResult> {
   });
 
   setStatus('Opening...');
-  await open(result);
+  // The frames of the opening: the longest one is the longest the page stops while it opens
+  const openIntervals = await recordFrames(() => open(result));
+  result.phases.push(phaseOf('opening', openIntervals));
   render(result);
   if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB while opening`);
   result.memory.afterOpenMb = await measuredMemoryMb();

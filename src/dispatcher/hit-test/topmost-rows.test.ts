@@ -62,6 +62,7 @@ function adopt(layerId: string, features: Feature[]): void {
     builder.addRow(rowOfFeature(f, orderKey(i)));
   });
   tables.writer.adopt(layerId, builder.finish());
+  featureTablesInternals(tables.tables)?.flushAdoption();
 }
 
 beforeEach(() => {

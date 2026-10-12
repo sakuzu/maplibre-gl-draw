@@ -238,6 +238,17 @@ export class TableLayerRenderer {
     this.builtPixelRatio = dpr;
   }
 
+  /**
+   * Takes in the row groups waiting in the tables, first in the budget of the frame (another
+   * frame is asked for when groups are left)
+   */
+  advanceTables(tables: FeatureTablesInternals): void {
+    if (!tables.hasPendingAdoption) return;
+    const budget = this.budget ?? createChunkBuildBudget(TABLE_BUILD_BUDGET_MS);
+    this.budget = budget;
+    if (tables.advanceAdoption(budget)) this.pending = true;
+  }
+
   /** Ends a frame: another one is asked for when a build is left */
   endFrame(): void {
     if (this.pending) this.options.requestRepaint();

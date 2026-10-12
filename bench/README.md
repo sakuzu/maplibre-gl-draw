@@ -98,8 +98,11 @@ Start opens the map, shows the whole of it, stops at zoom 14, then pans
 and zooms. The page shows the time of each step of the opening, the
 median, 95th percentile and longest frame interval of each phase, the JS
 heap, the memory measured by the browser and the GPU memory of the
-drawing. The run stops when the JS heap goes past `limit`, and reports
-what it measured until then.
+drawing. The opening is a phase as well: its longest frame interval is
+the longest time the page stops while the map opens (in `mode=table` the
+row groups are taken in over the frames, after `adoptQueue`). The run
+stops when the JS heap goes past `limit`, and reports what it measured
+until then.
 
 Only this page is served cross-origin isolated (COOP and COEP headers, by
 the dev and preview servers of `bench/vite.config.ts`), so

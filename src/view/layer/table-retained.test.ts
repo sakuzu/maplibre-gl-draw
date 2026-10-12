@@ -13,10 +13,22 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
+import {
+  createFeatureTablesStore,
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from '../../feature-table/feature-tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
-import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
+import { createRowGroupBuilder } from '../../table/row-group-builder.js';
+import {
+  createTestDrawer,
+  feature,
+  orderKey,
+  rowOfFeature,
+  seededRandom,
+  tablesOfFeatures,
+} from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { TerrainContext } from '../terrain/context.js';
@@ -320,6 +332,51 @@ describe('the order of the drawing of a layer held as rows', () => {
     } while (renderer.hasPendingWork && frames < 1000);
     expect(renderer.hasPendingWork).toBe(false);
     expect(frames).toBeGreaterThan(2);
+  });
+
+  it('takes the row groups given to adopt in a group per frame first, and draws those taken in, in order', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    const builder = createRowGroupBuilder({ targetRows: 20 });
+    interleaved(100, 9).forEach((f, i) => {
+      builder.addRow(rowOfFeature(f, orderKey(i)));
+    });
+    writer.adopt('layer', builder.finish());
+    const mocks = createRenderers();
+    let repaints = 0;
+    const renderer = new TableLayerRenderer({
+      gl: createGL(),
+      terrain,
+      requestRepaint: () => {
+        repaints++;
+      },
+      buildBudgetMs: 0,
+    });
+    const taken: number[] = [];
+    let frames = 0;
+    do {
+      const record: TableDrawRecord[] = [];
+      renderer.recordDraws(record);
+      renderer.beginFrame();
+      renderer.advanceTables(internals);
+      const table = internals.layerTable('layer') as LayerTable;
+      taken.push(table.groupCount);
+      renderer.drawLayer(
+        internals,
+        table,
+        LAYER,
+        { projectionData: PROJECTION, zoom: 10, bounds: undefined },
+        mocks.deps,
+      );
+      renderer.endFrame();
+      renderer.recordDraws(null);
+      expect(inOrder(record)).toBe(true);
+      frames++;
+    } while ((renderer.hasPendingWork || internals.hasPendingAdoption) && frames < 1000);
+    // With no time in the frame, the first step of each frame takes one group in
+    expect(taken.slice(0, 5)).toEqual([1, 2, 3, 4, 5]);
+    expect(internals.hasPendingAdoption).toBe(false);
+    expect(repaints).toBeGreaterThanOrEqual(4);
   });
 });
 

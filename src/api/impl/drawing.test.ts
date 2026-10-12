@@ -81,6 +81,7 @@ describe('debug.gpu and debug.tables', () => {
       builder.addRow(rowOfFeature(feature(id, 'Point', [i, i]), orderKey(i)));
     });
     writer.adopt('rows', builder.finish());
+    featureTablesInternals(tables)?.flushAdoption();
     const contract = new MemoryContractStore();
     Object.defineProperty(contract, 'tables', { value: tables });
     draw = createDraw(createMapStub().map, { store: contract, initDefaultLayer: false });
