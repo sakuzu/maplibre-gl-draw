@@ -188,6 +188,39 @@ describe('classifyRow', () => {
     expect(result.rows[1]).toBe('immediate');
   });
 
+  it('makes no feature of a row when no extension is registered, and only for the rows an extension answers for', () => {
+    const features = variety();
+    const { internals, table } = tablesOfFeatures('layer', features);
+    const group = table.groupAt(0);
+    const slots = new RowStyleSlots(createTestDrawer(), internals.styles, undefined);
+    const made: string[] = [];
+    const classifyAll = (customTypes: Map<string, unknown>) => {
+      made.length = 0;
+      for (let row = 0; row < features.length; row++) {
+        classifyRow(group, row, {
+          slots,
+          customTypes,
+          companions: createFeatureCompanionRegistry(),
+          featureOf: (g, r) => {
+            const f = rowFeature(internals.readContext, 'layer', g, r);
+            made.push(f.type);
+            return f;
+          },
+        });
+      }
+      return [...made];
+    };
+    // The built-in types (points, lines, polygons, Circles, images) are read from the columns
+    expect(classifyAll(new Map())).toEqual([]);
+    // A renderer that takes every feature of its type needs no feature either
+    expect(classifyAll(new Map([['Marker', {}]]))).toEqual([]);
+    // A renderer that answers from a feature is asked for the rows of its type only
+    const pointRows = features.filter((f) => f.type === 'Point').length;
+    expect(
+      classifyAll(new Map([['Point', { appliesTo: (f: Feature) => f.properties.kind === 'a' }]])),
+    ).toEqual(Array(pointRows).fill('Point'));
+  });
+
   it('gives a row without a geometry no kind', () => {
     const { internals, table } = tablesOfFeatures('layer', [feature('p', 'Point', [0, 0])]);
     const group = table.groupAt(0);
