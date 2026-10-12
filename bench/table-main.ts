@@ -334,7 +334,10 @@ async function runTableBench(): Promise<TableBenchResult> {
   const openIntervals = await recordFrames(() => open(result));
   result.phases.push(phaseOf('opening', openIntervals));
   render(result);
-  if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB while opening`);
+  if (overLimit())
+    return finish(
+      `the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB while opening`,
+    );
   result.memory.afterOpenMb = await measuredMemoryMb();
   if (params.mode === 'table' && params.cuts > 0)
     draw.debug.tables().setArtificialCuts(params.cuts);
@@ -379,7 +382,10 @@ async function runTableBench(): Promise<TableBenchResult> {
     const intervals = await recordFrames(run);
     result.phases.push(phaseOf(name, intervals));
     render(result);
-    if (overLimit()) return finish(`the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB (${name})`);
+    if (overLimit())
+      return finish(
+        `the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB (${name})`,
+      );
   }
   result.memory.endMb = await measuredMemoryMb();
   return finish();
