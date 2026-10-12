@@ -58,6 +58,59 @@ the drape. Compare `style=dashed` with `style=solid` at the same number of
 edges, with a few edges (`edges=100`) as the cost of the frame without
 lines.
 
+## table.html
+
+The same features drawn two ways: held as rows of columns (`mode=table`)
+or as features of the Store (`mode=store`), on a map with a background
+layer only (no network), in a fixed 1280 x 800 map. The features are made
+in the page; in `mode=table` a Worker builds them into row groups and
+hands them to the page without a copy.
+
+Open it from the root of the repository:
+
+```sh
+npm install
+npm run dev:bench
+```
+
+Then open <http://localhost:3002/table.html>, for example
+<http://localhost:3002/table.html?mode=table&n=10000&kind=mixed>. The
+address sets the conditions (the form on the right side of the page
+writes them too):
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| `mode` | `table` (rows) or `store` (features) | `table` |
+| `n` | Number of features | `10000` |
+| `kind` | `point`, `line`, `polygon5`, `polygon50` or `mixed` | `mixed` |
+| `styles` | Number of distinct styles | `1` |
+| `alpha` | `1` translucent, `0` opaque | `1` |
+| `cuts` | Artificial cuts: `0`, `100`, `1000`, `3000` | `0` |
+| `limit` | Heap limit in MB: `1024`, `500`, `400` | `1024` |
+
+A `line` has 10 vertices, `polygon5` and `polygon50` have 5 and 50, and
+`mixed` takes the four kinds in turn. The cuts split the ranges drawn of
+`mode=table` only. The heap limits are those of a PC (`1024`), an iPad
+(`500`) and an iPhone (`400`).
+
+More than 100,000 features need the confirmation button before Start.
+Start opens the map, shows the whole of it, stops at zoom 14, then pans
+and zooms. The page shows the time of each step of the opening, the
+median, 95th percentile and longest frame interval of each phase, the JS
+heap, the memory measured by the browser and the GPU memory of the
+drawing. The run stops when the JS heap goes past `limit`, and reports
+what it measured until then.
+
+Only this page is served cross-origin isolated (COOP and COEP headers, by
+the dev and preview servers of `bench/vite.config.ts`), so
+`performance.measureUserAgentSpecificMemory()` works; the page shows
+`isolated=true` when it is. The heap of `performance.memory` is shown in
+Chromium-based browsers only.
+
+For automation, the page exposes `window.runTableBench()`, which runs one
+measurement and returns the results, and `window.benchResult`, the
+results so far.
+
 ## Test data
 
 `npm run generate -w bench` writes native files of 1,000 and 10,000

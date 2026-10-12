@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<!--
+  SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rows Held as Columns Benchmark</title>
+    <style>
+      html, body { margin: 0; padding: 0; background: #fff; }
+      /* Only the parts of maplibre-gl.css needed to lay out the map (no CDN dependency). */
+      .maplibregl-map { position: relative; overflow: hidden; }
+      .maplibregl-canvas { position: absolute; left: 0; top: 0; }
+      /* Fix the map at 1280x800 so the measurement conditions stay constant. */
+      #map { width: 1280px; height: 800px; }
+      #side {
+        position: absolute; top: 0; left: 1280px; width: 460px; padding: 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px; line-height: 1.5; color: #212529;
+      }
+      #params label { display: inline-block; margin: 2px 8px 2px 0; }
+      #params input { width: 80px; }
+      button { margin: 6px 6px 6px 0; padding: 4px 12px; font-size: 12px; }
+      #status { white-space: pre-wrap; margin: 6px 0; }
+      table { border-collapse: collapse; margin: 6px 0; }
+      th, td { border: 1px solid #ced4da; padding: 2px 6px; text-align: right; }
+      th:first-child, td:first-child { text-align: left; }
+      .stopped { color: #c92a2a; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="side">
+      <form id="params" method="get">
+        <label>mode
+          <select name="mode">
+            <option value="table">table (rows of columns)</option>
+            <option value="store">store (features)</option>
+          </select>
+        </label>
+        <label>n <input name="n" type="number" min="1"></label>
+        <label>kind
+          <select name="kind">
+            <option value="point">point</option>
+            <option value="line">line of 10 vertices</option>
+            <option value="polygon5">polygon of 5 vertices</option>
+            <option value="polygon50">polygon of 50 vertices</option>
+            <option value="mixed">mixed, interleaved</option>
+          </select>
+        </label>
+        <label>styles <input name="styles" type="number" min="1"></label>
+        <label>alpha
+          <select name="alpha">
+            <option value="1">translucent</option>
+            <option value="0">opaque</option>
+          </select>
+        </label>
+        <label>cuts
+          <select name="cuts">
+            <option value="0">0</option>
+            <option value="100">100</option>
+            <option value="1000">1000</option>
+            <option value="3000">3000</option>
+          </select>
+        </label>
+        <label>heap limit
+          <select name="limit">
+            <option value="1024">1 GB (PC)</option>
+            <option value="500">500 MB (iPad)</option>
+            <option value="400">400 MB (iPhone)</option>
+          </select>
+        </label>
+        <button type="submit">Apply (reload)</button>
+      </form>
+      <button id="confirm" type="button" hidden>Confirm more than 100,000 features</button>
+      <button id="start" type="button">Start</button>
+      <div id="status">Starting...</div>
+      <div id="result"></div>
+    </div>
+    <script type="module" src="./table-main.ts"></script>
+  </body>
+</html>
