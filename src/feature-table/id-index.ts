@@ -1,0 +1,256 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The table from the ids of the rows to their handles, and where each row is
+ *
+ * The ids are compared as bytes (`Utf8Column`), never turned into strings of the engine: an
+ * open-addressing table of handles keyed by the hash of the bytes (computed where the rows are
+ * built, often in a Worker), and every handle remembers the column and the entry its id bytes
+ * are in. A hundred thousand ids cost a few typed arrays and no string at all.
+ *
+ * Every handle also has where its row is: its row group and its row there (`mainGroup`,
+ * `mainRow`), and its place among the rows changed since (`deltaSlot`, -1 for none), so a row
+ * that is in both can be found in both.
+ */
+
+import {
+  equalUtf8,
+  hashString,
+  hashUtf8,
+  type Utf8Column,
+  utf8ColumnFromStrings,
+  utf8String,
+} from '../table/utf8-column.js';
+import type { RowGroupHandle, RowHandle } from './types.js';
+
+/** A slot of the table that never held a handle */
+const EMPTY = -1;
+/** A slot whose handle was removed (the probing goes on past it) */
+const REMOVED = -2;
+
+/**
+ * The ids of the rows, their handles, and where each row is
+ *
+ * @internal
+ */
+export class IdIndex {
+  /** The handle in each slot (EMPTY or REMOVED for none); the length is a power of two */
+  private slots: Int32Array = new Int32Array(64).fill(EMPTY);
+  /** The number of slots in use, removed ones included (what fills the table) */
+  private used = 0;
+  /** The columns the ids are read from */
+  private readonly sources: Utf8Column[] = [];
+  /** The index in `sources` of the column of each handle's id (-1 for a removed handle) */
+  private sourceOf: Int32Array = new Int32Array(64).fill(-1);
+  /** The entry of that column */
+  private entryOf: Int32Array = new Int32Array(64);
+  /** The hash of each handle's id */
+  private hashOf: Uint32Array = new Uint32Array(64);
+  /** The row group of each handle (-1 when the row is in none) */
+  private groupOf: Int32Array = new Int32Array(64).fill(-1);
+  /** The row of each handle in its row group */
+  private rowOf: Int32Array = new Int32Array(64).fill(-1);
+  /** The place of each handle among the changed rows (-1 for none) */
+  private deltaOf: Int32Array = new Int32Array(64).fill(-1);
+  /** The number of handles given */
+  private count = 0;
+
+  /** The number of handles given (the next handle is this number) */
+  get size(): number {
+    return this.count;
+  }
+
+  /**
+   * The handle of each entry of a column, given to the ids not seen yet
+   *
+   * @param hashes The hash of each entry (computed when omitted)
+   * @returns The handle of each entry
+   */
+  allocate(ids: Utf8Column, hashes?: Uint32Array): Int32Array {
+    const n = ids.offsets.length - 1;
+    const out = new Int32Array(n);
+    let source = -1;
+    for (let i = 0; i < n; i++) {
+      const hash = hashes ? hashes[i] : hashUtf8(ids, i);
+      let handle = this.find(ids, i, hash);
+      if (handle < 0) {
+        if (source < 0) {
+          source = this.sources.length;
+          this.sources.push(ids);
+        }
+        handle = this.insert(source, i, hash);
+      }
+      out[i] = handle;
+    }
+    return out;
+  }
+
+  /**
+   * The handle of an id, or -1 when it has none
+   */
+  handleOf(id: string): RowHandle {
+    const column = utf8ColumnFromStrings([id]);
+    return this.find(column, 0, hashString(id));
+  }
+
+  /**
+   * The handle of entry `index` of a column, or -1 when it has none
+   */
+  handleOfEntry(ids: Utf8Column, index: number, hash = hashUtf8(ids, index)): RowHandle {
+    return this.find(ids, index, hash);
+  }
+
+  /** The id of a handle (undefined for a handle that was never given or was removed) */
+  idOf(handle: RowHandle): string | undefined {
+    if (!this.has(handle)) return undefined;
+    return utf8String(this.sources[this.sourceOf[handle]], this.entryOf[handle]);
+  }
+
+  /** Whether the handle was given and not removed */
+  has(handle: RowHandle): boolean {
+    return handle >= 0 && handle < this.count && this.sourceOf[handle] >= 0;
+  }
+
+  /**
+   * Takes a handle out of the table: its id gets a new handle the next time it is seen
+   */
+  remove(handle: RowHandle): void {
+    if (!this.has(handle)) return;
+    const mask = this.slots.length - 1;
+    let slot = this.hashOf[handle] & mask;
+    while (this.slots[slot] !== EMPTY) {
+      if (this.slots[slot] === handle) {
+        this.slots[slot] = REMOVED;
+        break;
+      }
+      slot = (slot + 1) & mask;
+    }
+    this.sourceOf[handle] = -1;
+    this.groupOf[handle] = -1;
+    this.rowOf[handle] = -1;
+    this.deltaOf[handle] = -1;
+  }
+
+  /**
+   * Moves the id of a handle to another column (the column of the row group that now holds the
+   * row), so the column it was first read from is not kept for it
+   */
+  rehome(handle: RowHandle, ids: Utf8Column, index: number): void {
+    if (!this.has(handle)) return;
+    let source = this.sources.lastIndexOf(ids);
+    if (source < 0) {
+      source = this.sources.length;
+      this.sources.push(ids);
+    }
+    this.sourceOf[handle] = source;
+    this.entryOf[handle] = index;
+  }
+
+  // === Where the rows are ===
+
+  /** The row group of a handle (-1 when the row is in none) */
+  mainGroup(handle: RowHandle): RowGroupHandle {
+    return handle >= 0 && handle < this.count ? this.groupOf[handle] : -1;
+  }
+
+  /** The row of a handle in its row group (-1 when the row is in none) */
+  mainRow(handle: RowHandle): number {
+    return handle >= 0 && handle < this.count ? this.rowOf[handle] : -1;
+  }
+
+  /** The place of a handle among the changed rows (-1 for none) */
+  deltaSlot(handle: RowHandle): number {
+    return handle >= 0 && handle < this.count ? this.deltaOf[handle] : -1;
+  }
+
+  /** Records where the row of a handle is */
+  setMain(handle: RowHandle, group: RowGroupHandle, row: number): void {
+    this.groupOf[handle] = group;
+    this.rowOf[handle] = row;
+  }
+
+  // === The table ===
+
+  /** The handle of an id, or -1 */
+  private find(ids: Utf8Column, index: number, hash: number): RowHandle {
+    const mask = this.slots.length - 1;
+    let slot = hash & mask;
+    for (;;) {
+      const handle = this.slots[slot];
+      if (handle === EMPTY) return -1;
+      if (
+        handle >= 0 &&
+        this.hashOf[handle] === hash &&
+        equalUtf8(this.sources[this.sourceOf[handle]], this.entryOf[handle], ids, index)
+      ) {
+        return handle;
+      }
+      slot = (slot + 1) & mask;
+    }
+  }
+
+  /** Gives a new handle to an id that has none */
+  private insert(source: number, index: number, hash: number): RowHandle {
+    const handle = this.count++;
+    this.reserve(this.count);
+    this.sourceOf[handle] = source;
+    this.entryOf[handle] = index;
+    this.hashOf[handle] = hash;
+    this.groupOf[handle] = -1;
+    this.rowOf[handle] = -1;
+    this.deltaOf[handle] = -1;
+    if ((this.used + 1) * 2 > this.slots.length) this.rehash();
+    const mask = this.slots.length - 1;
+    let slot = hash & mask;
+    while (this.slots[slot] >= 0) slot = (slot + 1) & mask;
+    if (this.slots[slot] === EMPTY) this.used++;
+    this.slots[slot] = handle;
+    return handle;
+  }
+
+  /** Builds the table again at a size that keeps it at most half full (removed slots dropped) */
+  private rehash(): void {
+    let live = 0;
+    for (let handle = 0; handle < this.count; handle++) if (this.sourceOf[handle] >= 0) live++;
+    let size = 64;
+    while (size < (live + 1) * 4) size *= 2;
+    const slots = new Int32Array(size).fill(EMPTY);
+    const mask = size - 1;
+    for (let handle = 0; handle < this.count; handle++) {
+      if (this.sourceOf[handle] < 0) continue;
+      // The handle being inserted has no slot yet
+      if (handle === this.count - 1) continue;
+      let slot = this.hashOf[handle] & mask;
+      while (slots[slot] !== EMPTY) slot = (slot + 1) & mask;
+      slots[slot] = handle;
+    }
+    this.slots = slots;
+    this.used = live - 1;
+  }
+
+  /** Makes the arrays per handle hold at least `n` handles */
+  private reserve(n: number): void {
+    if (n <= this.sourceOf.length) return;
+    let size = this.sourceOf.length * 2;
+    while (size < n) size *= 2;
+    this.sourceOf = grow(this.sourceOf, size, -1);
+    this.entryOf = grow(this.entryOf, size, 0);
+    this.hashOf = growUint(this.hashOf, size);
+    this.groupOf = grow(this.groupOf, size, -1);
+    this.rowOf = grow(this.rowOf, size, -1);
+    this.deltaOf = grow(this.deltaOf, size, -1);
+  }
+}
+
+function grow(array: Int32Array, size: number, fill: number): Int32Array {
+  const next = new Int32Array(size).fill(fill);
+  next.set(array);
+  return next;
+}
+
+function growUint(array: Uint32Array, size: number): Uint32Array {
+  const next = new Uint32Array(size);
+  next.set(array);
+  return next;
+}

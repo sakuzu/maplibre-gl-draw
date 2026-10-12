@@ -31,6 +31,7 @@ const RANK = {
   shared: 1,
   table: 1.2,
   extension: 1.5,
+  'feature-table': 1.7,
   store: 2,
   view: 3,
   dataset: 3.5,

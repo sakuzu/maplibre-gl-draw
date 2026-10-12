@@ -140,6 +140,8 @@ and the rest, in `src/api/impl/`) are built on the engine.
                  |  reads and subscribes
                store/          state
                  |
+               feature-table/  rows of the document held as columns
+                 |
                extension/      contracts for extensions (types only)
                  |
                table/          tables of rows as columns (a sub-entry)
@@ -188,6 +190,10 @@ and the rest, in `src/api/impl/`) are built on the engine.
     re-exports building blocks of `view/`, `dispatcher/` and `shared/`, and
     nothing inside the library imports it, not even a type, so a layer 1
     declaration never depends on layer 2.
+11. `feature-table/` holds the features of a document as rows of columns
+    (the tables a Store can hand out). It reads `table/` and `shared/`, and
+    knows neither the Store nor the view: `store/`, `view/` and
+    `dispatcher/` read it.
 
 ### Checking the rules
 
@@ -196,10 +202,10 @@ reads the import statements of `src/` and checks them against the rules.
 Tests, `src/e2e/` and `src/test-utils.ts` are left out.
 
 Every area has a height. From the bottom: `geometry/`; `shared/` together
-with `src/messages.ts`; `extension/`; `store/`; `view/`; `dataset/`;
-`operations/` and `snapping/` at the same height; `modes/`; `dispatcher/`;
-`api/`; and the entry file `src/index.ts`, with `src/webgl/` at the same
-height. An import
+with `src/messages.ts`; `table/`; `extension/`; `feature-table/`; `store/`;
+`view/`; `dataset/`; `operations/` and `snapping/` at the same height;
+`modes/`; `dispatcher/`; `api/`; and the entry file `src/index.ts`, with
+`src/webgl/` at the same height. An import
 may point to a lower area or stay inside its own area, with the exceptions
 of rules 4, 5, 6, 9 and 10.
 
