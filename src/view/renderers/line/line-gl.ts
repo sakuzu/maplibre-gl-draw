@@ -10,8 +10,14 @@
  * immediate mode.
  */
 
+import { type GpuLedger, textureBytes } from '../../gpu-ledger.js';
 import { calculateLngLatOffset } from '../../shaders/helpers.js';
-import { INSTANCE_BYTES, type LineBatchArrays, STATION_VERTICES } from './line-geometry.js';
+import {
+  INSTANCE_BYTES,
+  type LineBatchArrays,
+  ROW_LINE_BYTES,
+  STATION_VERTICES,
+} from './line-geometry.js';
 import type { LineBatchShape, RetainedLineBatch } from './line-types.js';
 
 /**
@@ -31,22 +37,35 @@ export function setupQuadAttribs(gl: WebGL2RenderingContext): void {
 /**
  * Sets up the instance attributes (call it with the instances bound to ARRAY_BUFFER)
  *
- * Immediate mode and retained mode use the same layout (stride = 48 bytes = 12 floats).
+ * Immediate mode and retained mode use the same layout (stride = 48 bytes = 12 floats). A
+ * batch of rows held as columns adds the number of the row (stride = 52 bytes), and draws a
+ * range of its rows by pointing the attributes at its first instance (WebGL2 has no draw that
+ * starts at an instance).
  *
+ * @param rows Whether the instances carry the number of their row
+ * @param first The instance the attributes start at
  * @internal
  */
-export function setupInstanceAttribs(gl: WebGL2RenderingContext): void {
+export function setupInstanceAttribs(gl: WebGL2RenderingContext, rows = false, first = 0): void {
+  const stride = rows ? ROW_LINE_BYTES : INSTANCE_BYTES;
+  const base = first * stride;
   gl.enableVertexAttribArray(2);
-  gl.vertexAttribPointer(2, 4, gl.FLOAT, false, INSTANCE_BYTES, 0); // a_indices
+  gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, base); // a_indices
   gl.vertexAttribDivisor(2, 1);
 
   gl.enableVertexAttribArray(3);
-  gl.vertexAttribPointer(3, 4, gl.FLOAT, false, INSTANCE_BYTES, 16); // a_extra (vec4)
+  gl.vertexAttribPointer(3, 4, gl.FLOAT, false, stride, base + 16); // a_extra (vec4)
   gl.vertexAttribDivisor(3, 1);
 
   gl.enableVertexAttribArray(4);
-  gl.vertexAttribPointer(4, 4, gl.FLOAT, false, INSTANCE_BYTES, 32); // a_color (vec4)
+  gl.vertexAttribPointer(4, 4, gl.FLOAT, false, stride, base + 32); // a_color (vec4)
   gl.vertexAttribDivisor(4, 1);
+
+  if (rows) {
+    gl.enableVertexAttribArray(5);
+    gl.vertexAttribPointer(5, 1, gl.FLOAT, false, stride, base + 48); // a_row
+    gl.vertexAttribDivisor(5, 1);
+  }
 }
 
 /**
@@ -107,7 +126,16 @@ export class ImmediateCoordTexture {
   texture: WebGLTexture | null = null;
   size = 0;
 
+  private ledger: GpuLedger | undefined;
+
   constructor(private readonly gl: WebGL2RenderingContext) {}
+
+  /** Records the memory of the texture from now on, and the texture it holds already */
+  useLedger(ledger: GpuLedger): void {
+    this.ledger = ledger;
+    if (this.texture)
+      ledger.record(this.texture, 'lines', 'texture', textureBytes(this.size, this.size, 16));
+  }
 
   /**
    * Uploads the coordinates (returns with the texture bound to TEXTURE_2D)
@@ -125,7 +153,10 @@ export class ImmediateCoordTexture {
     if (texSize > limit) return false;
 
     if (!this.texture || texSize > this.size) {
-      if (this.texture) gl.deleteTexture(this.texture);
+      if (this.texture) {
+        this.ledger?.release(this.texture);
+        gl.deleteTexture(this.texture);
+      }
 
       let size = 2;
       while (size < texSize) size *= 2;
@@ -135,6 +166,7 @@ export class ImmediateCoordTexture {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, size, size);
       setCoordTextureParams(gl);
+      this.ledger?.record(texture, 'lines', 'texture', textureBytes(size, size, 16));
 
       this.texture = texture;
       this.size = size;
@@ -149,11 +181,27 @@ export class ImmediateCoordTexture {
   /** Deletes the texture */
   dispose(): void {
     if (this.texture) {
+      this.ledger?.release(this.texture);
       this.gl.deleteTexture(this.texture);
       this.texture = null;
       this.size = 0;
     }
   }
+}
+
+/**
+ * What a retained line batch is built with besides its data
+ *
+ * @internal
+ */
+export interface RetainedLineBatchOptions {
+  /** Where the GPU memory is recorded */
+  readonly ledger?: GpuLedger;
+  /**
+   * For a batch of rows held as columns: where the instances of each row start (rows + 1
+   * entries). Its instances then carry the number of their row
+   */
+  readonly rowFirst?: Int32Array;
 }
 
 /**
@@ -174,9 +222,12 @@ export function createRetainedLineBatch(
   origin: [number, number],
   widthZoom: number | null,
   limit: number,
+  options: RetainedLineBatchOptions = {},
 ): RetainedLineBatch | null {
   const texture = createCoordTexture(gl, arrays.texData, arrays.texSize, limit);
   if (!texture) return null;
+  const { ledger, rowFirst } = options;
+  ledger?.record(texture, 'lines', 'texture', textureBytes(arrays.texSize, arrays.texSize, 16));
 
   const vao = gl.createVertexArray()!;
   gl.bindVertexArray(vao);
@@ -185,17 +236,21 @@ export function createRetainedLineBatch(
   const quadBuffer = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, STATION_VERTICES, gl.STATIC_DRAW);
+  ledger?.record(quadBuffer, 'lines', 'buffer', STATION_VERTICES.byteLength);
   setupQuadAttribs(gl);
 
-  // The instance attributes (the layout is identical to immediate mode)
+  // The instance attributes (the layout is identical to immediate mode, with the number of the
+  // row for a batch of rows)
   const instanceBuffer = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, arrays.instanceData, gl.STATIC_DRAW);
-  setupInstanceAttribs(gl);
+  ledger?.record(instanceBuffer, 'lines', 'buffer', arrays.instanceData.byteLength);
+  setupInstanceAttribs(gl, rowFirst !== undefined);
 
   gl.bindVertexArray(null);
 
   return {
+    rowFirst,
     vao,
     quadBuffer,
     instanceBuffer,
@@ -264,7 +319,11 @@ export function patchRetainedCoordTexels(
 export function deleteRetainedLineBatch(
   gl: WebGL2RenderingContext,
   batch: RetainedLineBatch,
+  ledger?: GpuLedger,
 ): void {
+  ledger?.release(batch.quadBuffer);
+  ledger?.release(batch.instanceBuffer);
+  ledger?.release(batch.texture);
   gl.deleteVertexArray(batch.vao);
   gl.deleteBuffer(batch.quadBuffer);
   gl.deleteBuffer(batch.instanceBuffer);

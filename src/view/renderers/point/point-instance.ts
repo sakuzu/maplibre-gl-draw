@@ -27,6 +27,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
+import type { GpuLedger } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
@@ -40,6 +41,14 @@ import { ProjectionUniformManager } from '../../shaders/projection.js';
 import { anchorElevationMeters } from '../../terrain/anchor.js';
 import { TerrainContext } from '../../terrain/context.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
+import {
+  bindRowState,
+  ROW_HIDDEN_POSITION_GLSL,
+  ROW_STATE_GLSL,
+  type RowStateBinding,
+  type RowStateLocations,
+  rowStateLocations,
+} from '../row-state.js';
 import { drawBillboardsWithoutDepth } from './billboard-depth.js';
 import { POINT_SDF_GLSL, POINT_SHAPE_CODE, type SdfPointShape } from './point-sdf.js';
 
@@ -137,10 +146,22 @@ export const POINT_MIN_OUTER_PX = 0.5;
 // position(2) + fillColor(4) + strokeColor(4) + size(1) + strokeWidth(1)
 //   + elevation(1) + shape(1) = 14 floats
 const INSTANCE_STRIDE = 14;
-const INSTANCE_BYTES = INSTANCE_STRIDE * 4;
+const INSTANCE_BYTES_PLAIN = INSTANCE_STRIDE * 4;
 
 /** The float of the instance that holds the code of the shape */
 const INSTANCE_SHAPE = 13;
+
+/**
+ * Floats per instance of a batch of rows held as columns: the 14 of an instance and the number
+ * of the row in its row group
+ *
+ * @internal
+ */
+export const ROW_POINT_STRIDE = 15;
+const ROW_POINT_BYTES = ROW_POINT_STRIDE * 4;
+
+/** The size of the vertex buffer of the billboard */
+const QUAD_BYTES = 8 * 4;
 
 /** Number of vertices of the billboard (quad) */
 const QUAD_VERTEX_COUNT = 4;
@@ -229,6 +250,12 @@ export function pointInkFactor(outerPx: number): number {
 export interface RetainedPointBatch {
   /** The shape of the points that do not name one */
   readonly shape: PointShape;
+  /**
+   * For a batch of rows held as columns, where the instances of each row start: row `r` of the
+   * batch has the instances `[rowFirst[r], rowFirst[r + 1])` (rows + 1 entries). Undefined for
+   * any other batch
+   */
+  readonly rowFirst?: Int32Array;
   /** VAO dedicated to this batch */
   readonly vao: WebGLVertexArrayObject;
   /** Vertex buffer of the billboard */
@@ -346,6 +373,45 @@ export interface PackedPointInstances {
 }
 
 /**
+ * Writes one instance: what `buildPackedPointInstanceData` writes for one point
+ *
+ * @param target The instance array
+ * @param at Where the instance starts in `target`
+ * @param style The packed style ({@link PACKED_POINT_STYLE_STRIDE} values from `styleAt`)
+ * @param dpr The pixel ratio the sizes are converted with
+ * @param elevation The elevation of the anchor in meters
+ * @param shapeCode The code of the shape ({@link pointShapeCode})
+ * @internal
+ */
+export function writePointInstance(
+  target: Float32Array,
+  at: number,
+  lng: number,
+  lat: number,
+  origin: readonly [number, number],
+  style: ArrayLike<number>,
+  styleAt: number,
+  dpr: number,
+  elevation: number,
+  shapeCode: number,
+): void {
+  target[at] = lng - origin[0];
+  target[at + 1] = lat - origin[1];
+  target[at + 2] = style[styleAt];
+  target[at + 3] = style[styleAt + 1];
+  target[at + 4] = style[styleAt + 2];
+  target[at + 5] = style[styleAt + 3];
+  target[at + 6] = style[styleAt + 4];
+  target[at + 7] = style[styleAt + 5];
+  target[at + 8] = style[styleAt + 6];
+  target[at + 9] = style[styleAt + 7];
+  target[at + 10] = style[styleAt + 8] * dpr;
+  target[at + 11] = style[styleAt + 9] * dpr;
+  target[at + 12] = elevation;
+  target[at + INSTANCE_SHAPE] = shapeCode;
+}
+
+/**
  * Builds the instance array from packed points
  *
  * It writes exactly what `buildPointInstanceData` writes for the same points (the same arithmetic
@@ -366,24 +432,20 @@ export function buildPackedPointInstanceData(
   const code = pointShapeCode(shape);
 
   for (let i = 0; i < count; i++) {
-    const offset = i * INSTANCE_STRIDE;
     const lng = lngLat[i * 2];
     const lat = lngLat[i * 2 + 1];
-    const s = i * PACKED_POINT_STYLE_STRIDE;
-    data[offset] = lng - origin[0];
-    data[offset + 1] = lat - origin[1];
-    data[offset + 2] = style[s];
-    data[offset + 3] = style[s + 1];
-    data[offset + 4] = style[s + 2];
-    data[offset + 5] = style[s + 3];
-    data[offset + 6] = style[s + 4];
-    data[offset + 7] = style[s + 5];
-    data[offset + 8] = style[s + 6];
-    data[offset + 9] = style[s + 7];
-    data[offset + 10] = style[s + 8] * dpr;
-    data[offset + 11] = style[s + 9] * dpr;
-    data[offset + 12] = terrain ? anchorElevationMeters(terrain, lng, lat) : 0;
-    data[offset + INSTANCE_SHAPE] = code;
+    writePointInstance(
+      data,
+      i * INSTANCE_STRIDE,
+      lng,
+      lat,
+      origin,
+      style,
+      i * PACKED_POINT_STYLE_STRIDE,
+      dpr,
+      terrain ? anchorElevationMeters(terrain, lng, lat) : 0,
+      code,
+    );
   }
 
   return data;
@@ -472,6 +534,12 @@ export class PointInstanceRenderer {
 
   private program: WebGLProgram | null = null;
   private variantName = '';
+  /** The variant of the program that draws rows held as columns (made on its first use) */
+  private rowProgram: WebGLProgram | null = null;
+  /** The uniform locations of the state of the rows in `rowProgram` */
+  private rowStateLocs: RowStateLocations | null = null;
+  /** The shader data the programs were made with (the variant of the rows is made from it) */
+  private shaderData: ShaderData | null = null;
 
   // Vertices of the billboard (the vertex buffer is created per VAO)
   private quadVertices: Float32Array;
@@ -500,16 +568,20 @@ export class PointInstanceRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
+  /** Where the GPU memory this renderer allocates is recorded */
+  private readonly ledger: GpuLedger | undefined;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger?: GpuLedger,
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.ledger = ledger;
     this.instanceBuffer = gl.createBuffer();
     this.quadVertices = generateQuadVertices();
   }
@@ -528,7 +600,28 @@ export class PointInstanceRenderer {
 
       this.program = this.createPointProgram(shaderData.vertexShaderPrelude, shaderData.define);
       this.variantName = shaderData.variantName;
+      this.shaderData = shaderData;
     }
+  }
+
+  /**
+   * Makes the variant of the program that draws rows held as columns, for the shader data of
+   * the program (once per variant)
+   *
+   * @returns Whether it can draw rows (false before the first `ensureShader`)
+   * @internal
+   */
+  ensureRowProgram(): boolean {
+    if (this.rowProgram) return true;
+    const shaderData = this.shaderData;
+    if (!shaderData) return false;
+    this.rowProgram = this.createPointProgram(
+      shaderData.vertexShaderPrelude,
+      shaderData.define,
+      true,
+    );
+    this.rowStateLocs = rowStateLocations(this.gl, this.rowProgram);
+    return true;
   }
 
   /**
@@ -538,12 +631,13 @@ export class PointInstanceRenderer {
    * outer radius plus the padding, and the fragment stage separates fill, stroke and outside by
    * the signed distance to the outer edge of the shape.
    */
-  private createPointProgram(prelude: string, define: string): WebGLProgram {
+  private createPointProgram(prelude: string, define: string, rows = false): WebGLProgram {
     const projTransitionUniform = getProjectionTransitionUniform(prelude);
     const vertexSource = `#version 300 es
+${rows ? '#define TABLE_ROWS' : ''}
 ${prelude}
 ${define}
-${projTransitionUniform}${OFFSET_MODE_GLSL}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}
 layout(location = 0) in vec2 a_quad;             // billboard vertex (±1)
 layout(location = 1) in vec2 a_instance_lnglat_offset;  // offset from center (64-bit on CPU)
 layout(location = 2) in vec4 a_instance_fill_color;     // fill color
@@ -552,6 +646,9 @@ layout(location = 4) in float a_instance_size;          // fill radius (pixels)
 layout(location = 5) in float a_instance_stroke_width;  // stroke width (pixels)
 layout(location = 6) in float a_instance_elevation_m;   // anchor ground elevation (meters)
 layout(location = 7) in float a_instance_shape;         // shape (0 circle, 1 square, 2 triangle, 3 star)
+#ifdef TABLE_ROWS
+layout(location = 8) in float a_row;                    // the number of the row in its group
+#endif
 
 uniform vec2 u_pixel_to_clip; // pixel-to-clip-space conversion factor
 uniform float u_size_scale;   // size factor at draw time (default 1)
@@ -571,8 +668,20 @@ void main() {
     g_anchor_elevation_m = a_instance_elevation_m;
     g_anchor_elevation_on = 1.0;
 
+#ifdef TABLE_ROWS
+    // The state of the row: a hidden row draws nothing, a moving one is translated
+    uint rowState = readRowState(a_row);
+    if (rowStateHidden(rowState)) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    vec2 lnglatOffset = a_instance_lnglat_offset + rowStateTranslation(rowState);
+#else
+    vec2 lnglatOffset = a_instance_lnglat_offset;
+#endif
+
     // High precision version: uses relative coordinates computed with 64-bit precision on the CPU
-    vec4 centerClip = project_position_to_clipspace_from_offset(a_instance_lnglat_offset, u_projection_matrix);
+    vec4 centerClip = project_position_to_clipspace_from_offset(lnglatOffset, u_projection_matrix);
 
     float radius = max(a_instance_size, 0.0) * u_size_scale;
     float outer = radius + max(a_instance_stroke_width, 0.0) * u_size_scale;
@@ -646,7 +755,10 @@ void main() {
    * The immediate mode passes the shared instance buffer, and the retained mode passes the
    * instance buffer dedicated to the batch. The attribute layout is common to both.
    */
-  private createVAOWith(instanceBuffer: WebGLBuffer | null): {
+  private createVAOWith(
+    instanceBuffer: WebGLBuffer | null,
+    rows = false,
+  ): {
     vao: WebGLVertexArrayObject;
     shapeBuffer: WebGLBuffer;
   } {
@@ -659,51 +771,71 @@ void main() {
     const vertexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.quadVertices, gl.STATIC_DRAW);
+    this.ledger?.record(vertexBuffer, 'points', 'buffer', QUAD_BYTES);
 
     gl.enableVertexAttribArray(0); // a_quad
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
     // Instance buffer
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-
-    // Relative coordinates: location=1, offset 0, 2 floats
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, INSTANCE_BYTES, 0);
-    gl.vertexAttribDivisor(1, 1);
-
-    // Fill color: location=2, offset 8, 4 floats
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, INSTANCE_BYTES, 8);
-    gl.vertexAttribDivisor(2, 1);
-
-    // Stroke color: location=3, offset 24, 4 floats
-    gl.enableVertexAttribArray(3);
-    gl.vertexAttribPointer(3, 4, gl.FLOAT, false, INSTANCE_BYTES, 24);
-    gl.vertexAttribDivisor(3, 1);
-
-    // Radius: location=4, offset 40, 1 float
-    gl.enableVertexAttribArray(4);
-    gl.vertexAttribPointer(4, 1, gl.FLOAT, false, INSTANCE_BYTES, 40);
-    gl.vertexAttribDivisor(4, 1);
-
-    // Stroke width: location=5, offset 44, 1 float
-    gl.enableVertexAttribArray(5);
-    gl.vertexAttribPointer(5, 1, gl.FLOAT, false, INSTANCE_BYTES, 44);
-    gl.vertexAttribDivisor(5, 1);
-
-    // Ground elevation of the anchor (meters): location=6, offset 48, 1 float
-    gl.enableVertexAttribArray(6);
-    gl.vertexAttribPointer(6, 1, gl.FLOAT, false, INSTANCE_BYTES, 48);
-    gl.vertexAttribDivisor(6, 1);
-
-    // Shape: location=7, offset 52, 1 float
-    gl.enableVertexAttribArray(7);
-    gl.vertexAttribPointer(7, 1, gl.FLOAT, false, INSTANCE_BYTES, INSTANCE_SHAPE * 4);
-    gl.vertexAttribDivisor(7, 1);
+    this.pointInstanceAttribs(rows, 0);
 
     gl.bindVertexArray(null);
 
     return { vao, shapeBuffer: vertexBuffer };
+  }
+
+  /**
+   * Points the instance attributes of the bound vertex array at the bound instance buffer,
+   * from instance `first` (a batch of rows draws a range of its rows this way: WebGL2 has no
+   * draw that starts at an instance)
+   */
+  private pointInstanceAttribs(rows: boolean, first: number): void {
+    const gl = this.gl;
+    const stride = rows ? ROW_POINT_BYTES : INSTANCE_BYTES_PLAIN;
+    const base = first * stride;
+
+    // Relative coordinates: location=1, offset 0, 2 floats
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, base);
+    gl.vertexAttribDivisor(1, 1);
+
+    // Fill color: location=2, offset 8, 4 floats
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, base + 8);
+    gl.vertexAttribDivisor(2, 1);
+
+    // Stroke color: location=3, offset 24, 4 floats
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 4, gl.FLOAT, false, stride, base + 24);
+    gl.vertexAttribDivisor(3, 1);
+
+    // Radius: location=4, offset 40, 1 float
+    gl.enableVertexAttribArray(4);
+    gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, base + 40);
+    gl.vertexAttribDivisor(4, 1);
+
+    // Stroke width: location=5, offset 44, 1 float
+    gl.enableVertexAttribArray(5);
+    gl.vertexAttribPointer(5, 1, gl.FLOAT, false, stride, base + 44);
+    gl.vertexAttribDivisor(5, 1);
+
+    // Ground elevation of the anchor (meters): location=6, offset 48, 1 float
+    gl.enableVertexAttribArray(6);
+    gl.vertexAttribPointer(6, 1, gl.FLOAT, false, stride, base + 48);
+    gl.vertexAttribDivisor(6, 1);
+
+    // Shape: location=7, offset 52, 1 float
+    gl.enableVertexAttribArray(7);
+    gl.vertexAttribPointer(7, 1, gl.FLOAT, false, stride, base + INSTANCE_SHAPE * 4);
+    gl.vertexAttribDivisor(7, 1);
+
+    // The number of the row (rows held as columns only): location=8, offset 56, 1 float
+    if (rows) {
+      gl.enableVertexAttribArray(8);
+      gl.vertexAttribPointer(8, 1, gl.FLOAT, false, stride, base + INSTANCE_STRIDE * 4);
+      gl.vertexAttribDivisor(8, 1);
+    }
   }
 
   /**
@@ -875,6 +1007,7 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.instanceBuffer, 'points', 'buffer', instanceData.byteLength);
 
     gl.useProgram(this.program);
     this.setProjectionUniforms(this.program, zoom);
@@ -915,11 +1048,9 @@ void main() {
 
     const instanceBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      buildPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape),
-      gl.STATIC_DRAW,
-    );
+    const data = buildPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
 
     const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer);
 
@@ -955,11 +1086,9 @@ void main() {
 
     const instanceBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape),
-      gl.STATIC_DRAW,
-    );
+    const data = buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
 
     const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer);
 
@@ -971,6 +1100,95 @@ void main() {
       instanceCount: points.count,
       origin,
     };
+  }
+
+  /**
+   * Builds a point batch of rows held as columns
+   *
+   * The instances are written by the caller ({@link writePointInstance}, then the number of the
+   * row in its group), {@link ROW_POINT_STRIDE} floats each, in the order of the rows.
+   *
+   * @param instances The instances (at least `count * ROW_POINT_STRIDE` floats)
+   * @param count The number of instances
+   * @param origin The origin the positions are relative to (already rounded to Float32)
+   * @param rowFirst Where the instances of each row of the batch start (rows + 1 entries)
+   * @returns The batch, or null when there is nothing to draw
+   * @internal
+   */
+  buildRetainedRows(
+    instances: Float32Array,
+    count: number,
+    origin: [number, number],
+    rowFirst: Int32Array,
+  ): RetainedPointBatch | null {
+    if (count === 0) return null;
+    const gl = this.gl;
+    const instanceBuffer = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+    const data = instances.subarray(0, count * ROW_POINT_STRIDE);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
+    const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer, true);
+    return {
+      shape: 'circle',
+      rowFirst,
+      vao,
+      shapeBuffer,
+      instanceBuffer,
+      instanceCount: count,
+      origin: normalizeOrigin(origin),
+    };
+  }
+
+  /**
+   * Draws the rows `[fromRow, toRow)` of a batch of rows held as columns
+   *
+   * The instance attributes are pointed at the first instance of `fromRow`, and the state of
+   * the rows (hidden, moving) is read from the texture of their group.
+   *
+   * @param factors The draw-time factors (scale 1 and opacity 1 when omitted)
+   * @internal
+   */
+  drawRetainedRange(
+    batch: RetainedPointBatch,
+    fromRow: number,
+    toRow: number,
+    zoom: number,
+    projectionData: ProjectionData,
+    rowState: RowStateBinding,
+    factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  ): void {
+    const rowFirst = batch.rowFirst;
+    if (!rowFirst || !this.ensureRowProgram() || !this.rowProgram) return;
+    const first = rowFirst[fromRow];
+    const count = rowFirst[toRow] - first;
+    if (count <= 0) return;
+
+    const gl = this.gl;
+    const program = this.rowProgram;
+    const cameraUniforms = this.offsetUniforms;
+    const offsetUniforms =
+      cameraUniforms ??
+      calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array);
+    const originShift: [number, number] = cameraUniforms
+      ? [
+          batch.origin[0] - cameraUniforms.centerLngLat[0],
+          batch.origin[1] - cameraUniforms.centerLngLat[1],
+        ]
+      : [0, 0];
+
+    gl.useProgram(program);
+    this.setProjectionUniformsWith(program, zoom, projectionData, offsetUniforms, originShift);
+    this.setDrawFactors(program, factors);
+    bindRowState(gl, this.rowStateLocs as RowStateLocations, rowState);
+
+    gl.bindVertexArray(batch.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, batch.instanceBuffer);
+    this.pointInstanceAttribs(true, first);
+    drawBillboardsWithoutDepth(gl, () => {
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, QUAD_VERTEX_COUNT, count);
+    });
+    gl.bindVertexArray(null);
   }
 
   /**
@@ -1027,6 +1245,8 @@ void main() {
     const gl = this.gl;
 
     gl.deleteVertexArray(batch.vao);
+    this.ledger?.release(batch.shapeBuffer);
+    this.ledger?.release(batch.instanceBuffer);
     gl.deleteBuffer(batch.shapeBuffer);
     gl.deleteBuffer(batch.instanceBuffer);
   }
@@ -1040,6 +1260,11 @@ void main() {
       gl.deleteProgram(this.program);
       this.program = null;
     }
+    if (this.rowProgram) {
+      gl.deleteProgram(this.rowProgram);
+      this.rowProgram = null;
+      this.rowStateLocs = null;
+    }
 
     // The uniform locations and the record of the values written last are tied to the program,
     // so they are discarded along with it (a recreated program also resets its uniforms to their
@@ -1049,6 +1274,7 @@ void main() {
     // Clear the VAOs and the vertex buffers of the billboard
     for (const entry of this.quadVaos.values()) {
       gl.deleteVertexArray(entry.vao);
+      this.ledger?.release(entry.shapeBuffer);
       gl.deleteBuffer(entry.shapeBuffer);
     }
     this.quadVaos.clear();
@@ -1063,6 +1289,7 @@ void main() {
     this.disposePrograms();
 
     if (this.instanceBuffer) {
+      this.ledger?.release(this.instanceBuffer);
       gl.deleteBuffer(this.instanceBuffer);
       this.instanceBuffer = null;
     }

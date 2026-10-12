@@ -22,12 +22,19 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
+import type { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import { calculateOffsetUniforms, createProgram } from '../../shaders/helpers.js';
 import { ProjectionUniformManager } from '../../shaders/projection.js';
 import { TerrainContext } from '../../terrain/context.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
-import type { PackedLineItems } from './line-geometry.js';
+import {
+  bindRowState,
+  type RowStateBinding,
+  type RowStateLocations,
+  rowStateLocations,
+} from '../row-state.js';
+import type { LineBatchArrays, PackedLineItems } from './line-geometry.js';
 import {
   buildLineBatchArrays,
   buildPackedLineBatchArrays,
@@ -76,10 +83,24 @@ export type {
  *
  * Line rendering with the HHAA approach
  */
+/**
+ * The variant of the program that draws rows held as columns, with its own uniform locations
+ */
+interface RowLineProgram {
+  readonly program: WebGLProgram;
+  readonly uniforms: LineUniforms;
+  readonly projection: ProjectionUniformManager;
+  readonly state: RowStateLocations;
+}
+
 export class SDFLineRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram | null = null;
   private variantName = '';
+  /** The shader data the program was made with (the variant of the rows is made from it) */
+  private shaderData: ShaderData | null = null;
+  /** The variant of the program that draws rows held as columns (made on its first use) */
+  private rowProgram: RowLineProgram | null = null;
 
   // Buffers for instancing
   private quadVAO: WebGLVertexArrayObject | null = null;
@@ -119,6 +140,8 @@ export class SDFLineRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
+  /** Where the GPU memory this renderer allocates is recorded */
+  private ledger: GpuLedger | undefined;
 
   constructor(
     _map: MapLibreMap,
@@ -135,6 +158,17 @@ export class SDFLineRenderer {
       surface: true,
     }).useTerrainState(terrain);
     this.initBuffers();
+  }
+
+  /**
+   * Records the GPU memory this renderer allocates from now on, and what it holds already
+   *
+   * @internal
+   */
+  useLedger(ledger: GpuLedger): void {
+    this.ledger = ledger;
+    this.immCoordTexture.useLedger(ledger);
+    ledger.record(this.quadVBO, 'lines', 'buffer', STATION_VERTICES.byteLength);
   }
 
   /**
@@ -234,11 +268,7 @@ export class SDFLineRenderer {
         this.gl.deleteProgram(this.program);
       }
 
-      this.program = createProgram(
-        this.gl,
-        buildLineVertexSource(shaderData.vertexShaderPrelude, shaderData.define),
-        LINE_FRAGMENT_SOURCE,
-      );
+      this.program = this.createLineProgram(shaderData, false);
       this.variantName = shaderData.variantName;
 
       // Get the renderer-specific uniform locations (this also discards the record of the
@@ -247,7 +277,49 @@ export class SDFLineRenderer {
 
       // Get the projection-related uniform locations (shared)
       this.projectionUniformManager.getLocations(this.program);
+
+      // The variant of the rows is made again from the new shader data when it is next used
+      this.shaderData = shaderData;
+      this.disposeRowProgram();
     }
+  }
+
+  /**
+   * Makes the variant of the program that draws rows held as columns, for the shader data of
+   * the program (once per variant)
+   *
+   * @returns Whether it can draw rows (false before the first `ensureShader`)
+   * @internal
+   */
+  ensureRowProgram(): boolean {
+    if (this.rowProgram) return true;
+    const shaderData = this.shaderData;
+    if (!shaderData) return false;
+    const gl = this.gl;
+    const program = this.createLineProgram(shaderData, true);
+    const uniforms = new LineUniforms(gl);
+    uniforms.bind(program);
+    const projection = new ProjectionUniformManager(gl, { surface: true }).useTerrainState(
+      this.terrain,
+    );
+    projection.getLocations(program);
+    this.rowProgram = { program, uniforms, projection, state: rowStateLocations(gl, program) };
+    return true;
+  }
+
+  /** The program of the lines, or its variant that draws rows held as columns */
+  private createLineProgram(shaderData: ShaderData, rows: boolean): WebGLProgram {
+    return createProgram(
+      this.gl,
+      buildLineVertexSource(shaderData.vertexShaderPrelude, shaderData.define, rows),
+      LINE_FRAGMENT_SOURCE,
+    );
+  }
+
+  private disposeRowProgram(): void {
+    if (!this.rowProgram) return;
+    this.gl.deleteProgram(this.rowProgram.program);
+    this.rowProgram = null;
   }
 
   /**
@@ -405,6 +477,7 @@ export class SDFLineRenderer {
     // Upload into the instance buffer (orphaned and reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.immInstanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.STREAM_DRAW);
+    this.ledger?.record(this.immInstanceBuffer, 'lines', 'buffer', instanceData.byteLength);
 
     // widthOverride: the GPU computation (0) when createdZoom is specified, otherwise u_width
     // Convert the line width into physical pixels (CSS pixels * devicePixelRatio)
@@ -486,6 +559,7 @@ export class SDFLineRenderer {
     // Upload into the instance buffer (orphaned and reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.immInstanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, arrays.instanceData, gl.STREAM_DRAW);
+    this.ledger?.record(this.immInstanceBuffer, 'lines', 'buffer', arrays.instanceData.byteLength);
 
     this.executeDrawCall(
       arrays.instanceCount,
@@ -542,7 +616,112 @@ export class SDFLineRenderer {
       origin,
       options.widthZoom ?? null,
       this.textureSizeLimit(),
+      { ledger: this.ledger },
     );
+  }
+
+  /**
+   * Builds a line batch of rows held as columns
+   *
+   * The coordinate texels and the instances are written by the caller
+   * (`writePackedLineInstances`, then the number of the row in its group), `ROW_LINE_STRIDE`
+   * floats per instance, in the order of the rows. The batch is solid and its widths follow the
+   * zoom at draw time (a fixed width is negative), as the batches of the Store are.
+   *
+   * @param rowFirst Where the instances of each row of the batch start (rows + 1 entries)
+   * @returns The batch, or null when the coordinates do not fit in a texture of this GPU or
+   *   there is no instance
+   * @internal
+   */
+  buildRetainedRows(
+    arrays: LineBatchArrays,
+    origin: [number, number],
+    rowFirst: Int32Array,
+  ): RetainedLineBatch | null {
+    if (arrays.instanceCount === 0) return null;
+    return createRetainedLineBatch(
+      this.gl,
+      arrays,
+      { lineStyle: 'solid' },
+      normalizeOrigin(origin),
+      null,
+      this.textureSizeLimit(),
+      { ledger: this.ledger, rowFirst },
+    );
+  }
+
+  /**
+   * Draws the rows `[fromRow, toRow)` of a line batch of rows held as columns
+   *
+   * The instance attributes are pointed at the first instance of `fromRow`, and the state of
+   * the rows (hidden, moving) is read from the texture of their group.
+   *
+   * @internal
+   */
+  drawRetainedRange(
+    batch: RetainedLineBatch,
+    fromRow: number,
+    toRow: number,
+    zoom: number,
+    projectionData: ProjectionData,
+    rowState: RowStateBinding,
+    factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  ): void {
+    const rowFirst = batch.rowFirst;
+    if (!rowFirst || !this.ensureRowProgram() || !this.rowProgram) return;
+    const first = rowFirst[fromRow];
+    const count = rowFirst[toRow] - first;
+    if (count <= 0) return;
+
+    const gl = this.gl;
+    const { program, uniforms, projection, state } = this.rowProgram;
+    gl.useProgram(program);
+    gl.bindVertexArray(batch.vao);
+
+    const cameraUniforms = this.offsetUniforms;
+    if (cameraUniforms) {
+      projection.setUniforms(projectionData, zoom, cameraUniforms, [
+        batch.origin[0] - cameraUniforms.centerLngLat[0],
+        batch.origin[1] - cameraUniforms.centerLngLat[1],
+      ]);
+    } else {
+      projection.setUniforms(
+        projectionData,
+        zoom,
+        calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array),
+      );
+    }
+    uniforms.setViewport(gl.drawingBufferWidth, gl.drawingBufferHeight);
+    const stations = resolveLineStations(
+      this.terrain,
+      batch.maxSegmentMeters,
+      batch.instanceCount,
+      batch.maxSegmentMercator,
+    );
+    uniforms.setLineDraw(
+      0,
+      batch.widthZoom ?? zoom,
+      batch.texSize,
+      stations,
+      lineStationsOnMercatorPlane(this.terrain),
+    );
+    uniforms.setDrawFactors(factors);
+    uniforms.setDash(batch.shape, resolvePixelRatio(this.pixelRatio));
+    bindRowState(gl, state, rowState);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, batch.texture);
+    gl.bindBuffer(gl.ARRAY_BUFFER, batch.instanceBuffer);
+    setupInstanceAttribs(gl, true, first);
+
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 2 * (stations + 1), count);
+    gl.bindVertexArray(null);
+
+    // When this interrupted an immediate-mode frame, restore the shared VAO and the program
+    if (this.isDrawing && this.program) {
+      gl.useProgram(this.program);
+      gl.bindVertexArray(this.quadVAO);
+    }
   }
 
   /**
@@ -582,6 +761,7 @@ export class SDFLineRenderer {
       origin,
       options.widthZoom ?? null,
       this.textureSizeLimit(),
+      { ledger: this.ledger },
     );
   }
 
@@ -704,7 +884,7 @@ export class SDFLineRenderer {
    * @internal
    */
   disposeRetainedBatch(batch: RetainedLineBatch): void {
-    deleteRetainedLineBatch(this.gl, batch);
+    deleteRetainedLineBatch(this.gl, batch, this.ledger);
   }
 
   /**
@@ -718,16 +898,19 @@ export class SDFLineRenderer {
       gl.deleteProgram(this.program);
       this.program = null;
     }
+    this.disposeRowProgram();
     if (this.quadVAO) {
       gl.deleteVertexArray(this.quadVAO);
       this.quadVAO = null;
     }
     if (this.quadVBO) {
+      this.ledger?.release(this.quadVBO);
       gl.deleteBuffer(this.quadVBO);
       this.quadVBO = null;
     }
     this.immCoordTexture.dispose();
     if (this.immInstanceBuffer) {
+      this.ledger?.release(this.immInstanceBuffer);
       gl.deleteBuffer(this.immInstanceBuffer);
       this.immInstanceBuffer = null;
     }

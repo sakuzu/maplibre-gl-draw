@@ -19,10 +19,10 @@ import { resolveContentPixelRatio, resolvePixelRatio } from '../../../shared/uti
 import type { Coordinate } from '../../../store/types.js';
 import { EarcutCache } from '../../cache/earcut.js';
 import { getSurfaceTessellationStep, tessellateSurfaceFill } from '../../globe-subdivision.js';
+import type { GpuLedger } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
-  calculateLngLatOffset,
   calculateOffsetUniforms,
   createProgram,
   getProjectionTransitionUniform,
@@ -44,6 +44,14 @@ import {
 import { reportTerrainCoarsening } from '../../terrain/state.js';
 import type { TessellationStep } from '../../terrain/tessellation.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
+import {
+  bindRowState,
+  ROW_HIDDEN_POSITION_GLSL,
+  ROW_STATE_GLSL,
+  type RowStateBinding,
+  type RowStateLocations,
+  rowStateLocations,
+} from '../row-state.js';
 import type { PolygonRendererScope } from './batch.js';
 import { buildEarcutInput } from './earcut-input.js';
 import { drawFillWithTerrainCull } from './terrain-cull.js';
@@ -89,6 +97,14 @@ export interface SDFPolygonBatchData {
 /** Floats per vertex: pos(2) + color(4) + type(1) + prev(2) + next(2) + side(1) + extra(3) */
 const VERTEX_STRIDE = 15;
 
+/**
+ * Floats per vertex of a batch of rows held as columns: the 15 of a vertex and the number of
+ * the row in its row group
+ *
+ * @internal
+ */
+export const ROW_POLYGON_STRIDE = 16;
+
 /** The vertex array and index array of a batch */
 interface PolygonGeometry {
   vertexData: Float32Array;
@@ -115,6 +131,12 @@ interface PolygonRecord {
  * It shares no resources with the shared vertex buffer and shared VAO of immediate mode.
  */
 export interface RetainedPolygonBatch {
+  /**
+   * For a batch of rows held as columns, where the indices of each row start: row `r` of the
+   * batch draws the indices `[rowFirst[r], rowFirst[r + 1])` (rows + 1 entries). Undefined for
+   * any other batch
+   */
+  readonly rowFirst?: Int32Array;
   /** The VAO with the attributes already set up (dedicated to this batch) */
   readonly vao: WebGLVertexArrayObject;
   /** The vertex buffer (dedicated to this batch) */
@@ -169,6 +191,89 @@ function defaultPolygonOrigin(polygons: SDFPolygonBatchData[]): [number, number]
 }
 
 /**
+ * Writes a vertex of the fill: what the batches write for a coordinate of a fill
+ *
+ * @param target The vertex array
+ * @param at Where the vertex starts in `target`
+ * @param origin The origin the position is relative to
+ * @param color The fill color with its opacity folded into the alpha
+ * @internal
+ */
+export function writePolygonFillVertex(
+  target: Float32Array,
+  at: number,
+  lng: number,
+  lat: number,
+  origin: readonly [number, number],
+  color: ArrayLike<number>,
+): void {
+  // The offset from the origin, computed at 64-bit precision
+  target[at] = lng - origin[0];
+  target[at + 1] = lat - origin[1];
+  target[at + 2] = color[0];
+  target[at + 3] = color[1];
+  target[at + 4] = color[2];
+  target[at + 5] = color[3];
+  // type = fill (0), and prev / next / side / extra stay 0
+}
+
+/**
+ * Writes a vertex of the outline: what the batches write for an end of an edge
+ *
+ * @param target The vertex array
+ * @param at Where the vertex starts in `target`
+ * @param side 1 for the left of the edge, -1 for its right
+ * @param t 0 for the start of the edge, 1 for its end
+ * @param strokeWidth The width in device pixels, negative for a width fixed on screen
+ * @param origin The origin the positions are relative to
+ * @internal
+ */
+export function writePolygonStrokeVertex(
+  target: Float32Array,
+  at: number,
+  pos: readonly [number, number],
+  color: ArrayLike<number>,
+  prev: readonly [number, number],
+  next: readonly [number, number],
+  side: number,
+  t: number,
+  strokeWidth: number,
+  createdZoom: number,
+  origin: readonly [number, number],
+): void {
+  // The offsets from the origin, computed at 64-bit precision
+  target[at] = pos[0] - origin[0];
+  target[at + 1] = pos[1] - origin[1];
+  target[at + 2] = color[0];
+  target[at + 3] = color[1];
+  target[at + 4] = color[2];
+  target[at + 5] = color[3];
+  target[at + 6] = 1; // type = stroke
+  target[at + 7] = prev[0] - origin[0];
+  target[at + 8] = prev[1] - origin[1];
+  target[at + 9] = next[0] - origin[0];
+  target[at + 10] = next[1] - origin[1];
+  target[at + 11] = side;
+  target[at + 12] = t;
+  target[at + 13] = strokeWidth;
+  target[at + 14] = createdZoom;
+}
+
+/**
+ * The variant of the program that draws rows held as columns, with its own uniform locations
+ */
+interface RowPolygonProgram {
+  readonly program: WebGLProgram;
+  readonly projection: ProjectionUniformManager;
+  readonly viewport: WebGLUniformLocation | null;
+  readonly zoom: WebGLUniformLocation | null;
+  readonly miterLimit: WebGLUniformLocation | null;
+  readonly sizeScale: WebGLUniformLocation | null;
+  readonly opacity: WebGLUniformLocation | null;
+  readonly state: RowStateLocations;
+}
+
+/**
  * SDFPolygonRenderer
  *
  * @internal
@@ -177,6 +282,12 @@ export class SDFPolygonRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram | null = null;
   private variantName = '';
+  /** The shader data the program was made with (the variant of the rows is made from it) */
+  private shaderData: ShaderData | null = null;
+  /** The variant of the program that draws rows held as columns (made on its first use) */
+  private rowProgram: RowPolygonProgram | null = null;
+  /** Where the GPU memory this renderer allocates is recorded */
+  private readonly ledger: GpuLedger | undefined;
 
   // Projection uniform management
   private projectionUniformManager: ProjectionUniformManager;
@@ -226,6 +337,7 @@ export class SDFPolygonRenderer {
     this.pixelRatio = pixelRatio;
     this.terrain = scope.terrain ?? new TerrainContext();
     this.earcutCache = scope.earcut ?? new EarcutCache();
+    this.ledger = scope.gpu;
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(this.terrain);
@@ -262,7 +374,51 @@ export class SDFPolygonRenderer {
 
       // Set up the VAO
       this.setupVAO();
+
+      // The variant of the rows is made again from the new shader data when it is next used
+      this.shaderData = shaderData;
+      this.disposeRowProgram();
     }
+  }
+
+  /**
+   * Makes the variant of the program that draws rows held as columns, for the shader data of
+   * the program (once per variant)
+   *
+   * @returns Whether it can draw rows (false before the first `ensureShader`)
+   * @internal
+   */
+  ensureRowProgram(): boolean {
+    if (this.rowProgram) return true;
+    const shaderData = this.shaderData;
+    if (!shaderData) return false;
+    const gl = this.gl;
+    const program = this.createShaderProgram(
+      shaderData.vertexShaderPrelude,
+      shaderData.define,
+      true,
+    );
+    const projection = new ProjectionUniformManager(gl, { surface: true }).useTerrainState(
+      this.terrain,
+    );
+    projection.getLocations(program);
+    this.rowProgram = {
+      program,
+      projection,
+      viewport: gl.getUniformLocation(program, 'u_viewport'),
+      zoom: gl.getUniformLocation(program, 'u_zoom'),
+      miterLimit: gl.getUniformLocation(program, 'u_miterLimit'),
+      sizeScale: gl.getUniformLocation(program, 'u_size_scale'),
+      opacity: gl.getUniformLocation(program, 'u_opacity'),
+      state: rowStateLocations(gl, program),
+    };
+    return true;
+  }
+
+  private disposeRowProgram(): void {
+    if (!this.rowProgram) return;
+    this.gl.deleteProgram(this.rowProgram.program);
+    this.rowProgram = null;
   }
 
   /**
@@ -325,16 +481,17 @@ export class SDFPolygonRenderer {
   /**
    * Creates the shader program
    */
-  private createShaderProgram(prelude: string, define: string): WebGLProgram {
+  private createShaderProgram(prelude: string, define: string, rows = false): WebGLProgram {
     const projTransitionUniform = getProjectionTransitionUniform(prelude);
     // Vertex shader
     // a_type: 0=fill, 1=stroke
     // fill: uses only a_pos and a_color
     // stroke: uses a_pos, a_color, a_prev, a_next, a_side and a_extra
     const vertexSource = `#version 300 es
+${rows ? '#define TABLE_ROWS' : ''}
 ${prelude}
 ${define}
-${projTransitionUniform}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}
 
 layout(location = 0) in vec2 a_pos;       // current position (relative, 64-bit on CPU)
 layout(location = 1) in vec4 a_color;     // color (RGBA)
@@ -343,6 +500,9 @@ layout(location = 3) in vec2 a_prev;      // previous vertex (relative coords, f
 layout(location = 4) in vec2 a_next;      // next vertex (relative coords, for stroke)
 layout(location = 5) in float a_side;     // left or right (for stroke: 1=left, -1=right)
 layout(location = 6) in vec3 a_extra;     // x=t(0-1), y=strokeWidth, z=createdZoom
+#ifdef TABLE_ROWS
+layout(location = 7) in float a_row;      // the number of the row in its group
+#endif
 
 uniform vec2 u_viewport;
 uniform float u_zoom;
@@ -355,13 +515,30 @@ out float v_dist;         // the SDF distance (for stroke)
 out float v_halfWidth;    // the half width of the line (for stroke)
 
 void main() {
+#ifdef TABLE_ROWS
+    // The state of the row: a hidden row draws nothing, a moving one is translated
+    uint rowState = readRowState(a_row);
+    if (rowStateHidden(rowState)) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    vec2 rowShift = rowStateTranslation(rowState);
+    vec2 pos = a_pos + rowShift;
+    vec2 prev = a_prev + rowShift;
+    vec2 next = a_next + rowShift;
+#else
+    vec2 pos = a_pos;
+    vec2 prev = a_prev;
+    vec2 next = a_next;
+#endif
+
     // The shading sample position is passed in both the fill and the outline branch (so
     // that no undefined varying is left; only the fill fragment actually reads it)
-    emitShadeOffset(a_pos);
+    emitShadeOffset(pos);
 
     if (a_type < 0.5) {
         // Fill: high precision version (uses relative coords computed at 64-bit precision on CPU)
-        gl_Position = project_position_to_clipspace_from_offset(a_pos, u_projection_matrix);
+        gl_Position = project_position_to_clipspace_from_offset(pos, u_projection_matrix);
         v_color = a_color;
         v_type = 0.0;
         v_dist = 0.0;
@@ -369,9 +546,9 @@ void main() {
     } else {
         // Stroke: line rendering with the HHAA method (high precision version)
         // Compute the clip coordinates (uses the relative coords already computed on the CPU side)
-        vec4 clipPos = project_position_to_clipspace_from_offset(a_pos, u_projection_matrix);
-        vec4 clipPrev = project_position_to_clipspace_from_offset(a_prev, u_projection_matrix);
-        vec4 clipNext = project_position_to_clipspace_from_offset(a_next, u_projection_matrix);
+        vec4 clipPos = project_position_to_clipspace_from_offset(pos, u_projection_matrix);
+        vec4 clipPrev = project_position_to_clipspace_from_offset(prev, u_projection_matrix);
+        vec4 clipNext = project_position_to_clipspace_from_offset(next, u_projection_matrix);
 
         // NDC coordinates
         vec2 ndcPos = clipPos.xy / clipPos.w;
@@ -490,11 +667,18 @@ void main() {
    *
    * The same layout is used by immediate mode and retained mode.
    */
-  private setupVertexAttribs(): void {
+  private setupVertexAttribs(rows = false): void {
     const gl = this.gl;
 
     // stride: pos(2) + color(4) + type(1) + prev(2) + next(2) + side(1) + extra(3) = 15 floats = 60 bytes
-    const stride = 60;
+    // (64 bytes with the number of the row for a batch of rows held as columns)
+    const stride = rows ? ROW_POLYGON_STRIDE * 4 : 60;
+
+    // a_row: location 7 (rows held as columns only)
+    if (rows) {
+      gl.enableVertexAttribArray(7);
+      gl.vertexAttribPointer(7, 1, gl.FLOAT, false, stride, VERTEX_STRIDE * 4);
+    }
 
     // a_pos: location 0
     gl.enableVertexAttribArray(0);
@@ -565,6 +749,7 @@ void main() {
     // Transfer the data to the buffer
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
 
     // Draw
     gl.useProgram(this.program);
@@ -577,6 +762,7 @@ void main() {
     // The ELEMENT_ARRAY_BUFFER binding is VAO state, so the transfer is done after
     // binding the VAO
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.indexBuffer, 'polygons', 'buffer', indexData.byteLength);
     drawFillWithTerrainCull(gl, this.terrain, () => {
       gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_INT, 0);
     });
@@ -651,6 +837,7 @@ void main() {
     const vertexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
+    this.ledger?.record(vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
 
     this.setupVertexAttribs();
 
@@ -658,6 +845,7 @@ void main() {
     const indexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW);
+    this.ledger?.record(indexBuffer, 'polygons', 'buffer', indexData.byteLength);
 
     gl.bindVertexArray(null);
 
@@ -724,10 +912,148 @@ void main() {
   }
 
   /**
+   * Creates a polygon batch of rows held as columns, of a known size, to be filled in slices
+   *
+   * The vertex and the index buffers are allocated at their size at once, and
+   * {@link writeRetainedRows} fills them a slice at a time with `bufferSubData`, so a batch of
+   * many rows is one buffer and one draw however many slices built it.
+   *
+   * @param vertexCount The number of vertices ({@link ROW_POLYGON_STRIDE} floats each)
+   * @param indexCount The number of indices
+   * @param origin The origin the positions are relative to
+   * @param rowFirst Where the indices of each row of the batch start (rows + 1 entries)
+   * @returns The batch, or null when it would draw nothing
+   * @internal
+   */
+  createRetainedRows(
+    vertexCount: number,
+    indexCount: number,
+    origin: [number, number],
+    rowFirst: Int32Array,
+  ): RetainedPolygonBatch | null {
+    if (indexCount === 0 || vertexCount === 0) return null;
+    const gl = this.gl;
+    const vao = gl.createVertexArray()!;
+    gl.bindVertexArray(vao);
+
+    const vertexBytes = vertexCount * ROW_POLYGON_STRIDE * 4;
+    const vertexBuffer = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertexBytes, gl.STATIC_DRAW);
+    this.ledger?.record(vertexBuffer, 'polygons', 'buffer', vertexBytes);
+    this.setupVertexAttribs(true);
+
+    const indexBytes = indexCount * 4;
+    const indexBuffer = gl.createBuffer()!;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexBytes, gl.STATIC_DRAW);
+    this.ledger?.record(indexBuffer, 'polygons', 'buffer', indexBytes);
+
+    gl.bindVertexArray(null);
+    return {
+      rowFirst,
+      vao,
+      vertexBuffer,
+      indexBuffer,
+      indexCount,
+      origin: normalizeOrigin(origin),
+      widthZoom: null,
+    };
+  }
+
+  /**
+   * Writes a slice of the vertices and the indices of a batch made by
+   * {@link createRetainedRows}
+   *
+   * @param vertices The vertices of the slice ({@link ROW_POLYGON_STRIDE} floats each)
+   * @param firstVertex The vertex the slice starts at
+   * @param indices The indices of the slice (into the vertices of the whole batch)
+   * @param firstIndex The index the slice starts at
+   * @internal
+   */
+  writeRetainedRows(
+    batch: RetainedPolygonBatch,
+    vertices: Float32Array,
+    firstVertex: number,
+    indices: Uint32Array,
+    firstIndex: number,
+  ): void {
+    const gl = this.gl;
+    // The binding of ELEMENT_ARRAY_BUFFER is a state of the vertex array, so the one of the
+    // batch is bound for the write
+    gl.bindVertexArray(batch.vao);
+    if (vertices.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, batch.vertexBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, firstVertex * ROW_POLYGON_STRIDE * 4, vertices);
+    }
+    if (indices.length > 0) {
+      gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, firstIndex * 4, indices);
+    }
+    gl.bindVertexArray(null);
+  }
+
+  /**
+   * Draws the rows `[fromRow, toRow)` of a polygon batch of rows held as columns
+   *
+   * The indices of a row are contiguous (its fill, then its outline), so a range of rows is one
+   * range of indices. The state of the rows (hidden, moving) is read from the texture of their
+   * group.
+   *
+   * @internal
+   */
+  drawRetainedRange(
+    batch: RetainedPolygonBatch,
+    fromRow: number,
+    toRow: number,
+    zoom: number,
+    projectionData: ProjectionData,
+    viewport: [number, number],
+    rowState: RowStateBinding,
+    factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  ): void {
+    const rowFirst = batch.rowFirst;
+    if (!rowFirst || !this.ensureRowProgram() || !this.rowProgram) return;
+    const first = rowFirst[fromRow];
+    const count = rowFirst[toRow] - first;
+    if (count <= 0) return;
+
+    const gl = this.gl;
+    const row = this.rowProgram;
+    gl.useProgram(row.program);
+    const cameraUniforms = this.offsetUniforms;
+    if (cameraUniforms) {
+      row.projection.setUniforms(projectionData, zoom, cameraUniforms, [
+        batch.origin[0] - cameraUniforms.centerLngLat[0],
+        batch.origin[1] - cameraUniforms.centerLngLat[1],
+      ]);
+    } else {
+      row.projection.setUniforms(
+        projectionData,
+        zoom,
+        calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array),
+      );
+    }
+    if (row.viewport) gl.uniform2f(row.viewport, viewport[0], viewport[1]);
+    if (row.zoom) gl.uniform1f(row.zoom, batch.widthZoom ?? zoom);
+    if (row.miterLimit) gl.uniform1f(row.miterLimit, RENDERING_DEFAULTS.MITER_LIMIT);
+    if (row.sizeScale) gl.uniform1f(row.sizeScale, factors.scale);
+    if (row.opacity) gl.uniform1f(row.opacity, factors.opacity);
+    bindRowState(gl, row.state, rowState);
+
+    gl.bindVertexArray(batch.vao);
+    drawFillWithTerrainCull(gl, this.terrain, () => {
+      gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, first * 4);
+    });
+    gl.bindVertexArray(null);
+  }
+
+  /**
    * Disposes of a retained-mode polygon batch
    */
   disposeRetained(batch: RetainedPolygonBatch): void {
     const gl = this.gl;
+    this.ledger?.release(batch.vertexBuffer);
+    this.ledger?.release(batch.indexBuffer);
     gl.deleteVertexArray(batch.vao);
     gl.deleteBuffer(batch.vertexBuffer);
     gl.deleteBuffer(batch.indexBuffer);
@@ -916,19 +1242,14 @@ void main() {
         const pointCount = record.fillCoords.length / 2;
 
         for (let i = 0; i < pointCount; i++) {
-          // Compute the offset from the center at 64-bit precision
-          const offset = calculateLngLatOffset(
-            [record.fillCoords[i * 2], record.fillCoords[i * 2 + 1]],
+          writePolygonFillVertex(
+            vertexData,
+            (base + i) * VERTEX_STRIDE,
+            record.fillCoords[i * 2],
+            record.fillCoords[i * 2 + 1],
             centerLngLat,
+            fillColor,
           );
-          const at = (base + i) * VERTEX_STRIDE;
-          vertexData[at] = offset[0];
-          vertexData[at + 1] = offset[1];
-          vertexData[at + 2] = fillColor[0];
-          vertexData[at + 3] = fillColor[1];
-          vertexData[at + 4] = fillColor[2];
-          vertexData[at + 5] = fillColor[3];
-          // type = fill(0), and prev/next/side/extra stay 0
         }
 
         for (let i = 0; i < record.fillIndices.length; i++) {
@@ -959,7 +1280,7 @@ void main() {
             const nextNext = ring[(i + 2) % n];
 
             // The left and right of the start point (curr)
-            this.writeStrokeVertex(
+            writePolygonStrokeVertex(
               vertexData,
               base * VERTEX_STRIDE,
               curr,
@@ -972,7 +1293,7 @@ void main() {
               record.createdZoom,
               centerLngLat,
             );
-            this.writeStrokeVertex(
+            writePolygonStrokeVertex(
               vertexData,
               (base + 1) * VERTEX_STRIDE,
               curr,
@@ -986,7 +1307,7 @@ void main() {
               centerLngLat,
             );
             // The left and right of the end point (next)
-            this.writeStrokeVertex(
+            writePolygonStrokeVertex(
               vertexData,
               (base + 2) * VERTEX_STRIDE,
               next,
@@ -999,7 +1320,7 @@ void main() {
               record.createdZoom,
               centerLngLat,
             );
-            this.writeStrokeVertex(
+            writePolygonStrokeVertex(
               vertexData,
               (base + 3) * VERTEX_STRIDE,
               next,
@@ -1071,44 +1392,6 @@ void main() {
   }
 
   /**
-   * Writes a stroke vertex directly into the vertex array (relative coordinates)
-   */
-  private writeStrokeVertex(
-    target: Float32Array,
-    at: number,
-    pos: [number, number],
-    color: [number, number, number, number],
-    prev: [number, number],
-    next: [number, number],
-    side: number,
-    t: number,
-    strokeWidth: number,
-    createdZoom: number,
-    centerLngLat: [number, number],
-  ): void {
-    // Compute the offset from the center at 64-bit precision
-    const posOffset = calculateLngLatOffset(pos, centerLngLat);
-    const prevOffset = calculateLngLatOffset(prev, centerLngLat);
-    const nextOffset = calculateLngLatOffset(next, centerLngLat);
-
-    target[at] = posOffset[0];
-    target[at + 1] = posOffset[1];
-    target[at + 2] = color[0];
-    target[at + 3] = color[1];
-    target[at + 4] = color[2];
-    target[at + 5] = color[3];
-    target[at + 6] = 1; // type = stroke
-    target[at + 7] = prevOffset[0];
-    target[at + 8] = prevOffset[1];
-    target[at + 9] = nextOffset[0];
-    target[at + 10] = nextOffset[1];
-    target[at + 11] = side;
-    target[at + 12] = t;
-    target[at + 13] = strokeWidth;
-    target[at + 14] = createdZoom;
-  }
-
-  /**
    * Disposes of the resources
    */
   dispose(): void {
@@ -1118,11 +1401,14 @@ void main() {
       gl.deleteProgram(this.program);
       this.program = null;
     }
+    this.disposeRowProgram();
     if (this.vertexBuffer) {
+      this.ledger?.release(this.vertexBuffer);
       gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }
     if (this.indexBuffer) {
+      this.ledger?.release(this.indexBuffer);
       gl.deleteBuffer(this.indexBuffer);
       this.indexBuffer = null;
     }

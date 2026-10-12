@@ -23,6 +23,16 @@ export const INSTANCE_STRIDE = 12;
 export const INSTANCE_BYTES = INSTANCE_STRIDE * 4;
 
 /**
+ * Floats per instance of a batch of rows held as columns: the 12 of an instance and the number
+ * of the row in its row group
+ *
+ * @internal
+ */
+export const ROW_LINE_STRIDE = 13;
+/** @internal */
+export const ROW_LINE_BYTES = ROW_LINE_STRIDE * 4;
+
+/**
  * The upper bound on subdivision points
  *
  * When terrain is enabled, a single segment is split into at most this many parts to draw it.
@@ -334,37 +344,25 @@ export function buildPackedLineBatchArrays(
   let maxSegmentMeters = 0;
   coordOffset = 0;
   for (let i = 0; i < count; i++) {
-    const first = start[i];
-    const n = end[i] - first;
-    const width = lines.strokeWidth[i];
-    const strokeWidth = width * (width < 0 ? screenDpr : contentDpr);
-    const createdZoom = lines.createdZoom[i];
-    const c = i * 4;
-    let linesofar = 0;
-    for (let k = 0; k < n - 1; k++) {
-      const ax = coords[(first + k) * stride];
-      const ay = coords[(first + k) * stride + 1];
-      const bx = coords[(first + k + 1) * stride];
-      const by = coords[(first + k + 1) * stride + 1];
-      const segmentLength = screenPixelDistanceXY(ax, ay, bx, by, zoom) * screenDpr;
-      const meters = segmentMetersXY(ax, ay, bx, by);
-      if (meters > maxSegmentMeters) maxSegmentMeters = meters;
-
-      const base = (instanceIdx + k) * INSTANCE_STRIDE;
-      instanceData[base + 0] = coordOffset + k;
-      instanceData[base + 1] = coordOffset + k + 1;
-      instanceData[base + 2] = k > 0 ? coordOffset + k - 1 : -1;
-      instanceData[base + 3] = k + 1 < n - 1 ? coordOffset + k + 2 : -1;
-      instanceData[base + 4] = linesofar;
-      instanceData[base + 5] = strokeWidth;
-      instanceData[base + 6] = createdZoom;
-      instanceData[base + 7] = segmentLength;
-      instanceData[base + 8] = lines.color[c];
-      instanceData[base + 9] = lines.color[c + 1];
-      instanceData[base + 10] = lines.color[c + 2];
-      instanceData[base + 11] = lines.color[c + 3];
-      linesofar += segmentLength;
-    }
+    const n = end[i] - start[i];
+    const meters = writePackedLineInstances(
+      instanceData,
+      INSTANCE_STRIDE,
+      instanceIdx,
+      coordOffset,
+      coords,
+      stride,
+      start[i],
+      end[i],
+      zoom,
+      screenDpr,
+      contentDpr,
+      lines.strokeWidth[i],
+      lines.createdZoom[i],
+      lines.color,
+      i * 4,
+    );
+    if (meters > maxSegmentMeters) maxSegmentMeters = meters;
     instanceIdx += n - 1;
     coordOffset += n;
   }
@@ -377,6 +375,94 @@ export function buildPackedLineBatchArrays(
     maxSegmentMeters,
     maxSegmentMercator: maxInstanceSegmentMercator(instanceData, totalInstances, zoom, screenDpr),
   };
+}
+
+/**
+ * Writes the instances (one per segment) of one line of a coordinate buffer: what
+ * `buildPackedLineBatchArrays` writes for it
+ *
+ * @param target The instance array
+ * @param targetStride The floats per instance in `target` (the floats past the 12 of an
+ *   instance are not written)
+ * @param instanceStart The index of the first instance of the line in `target`
+ * @param coordOffset The index of the first coordinate of the line in the coordinate texels
+ * @param coords The coordinate buffer the line is read from (interleaved)
+ * @param stride The number of values per coordinate in `coords`
+ * @param start The first coordinate of the line in `coords`
+ * @param end The end of the line in `coords` (exclusive)
+ * @param width The width in CSS px, with the sign convention of `LineBatchItemBase`
+ * @param color The instance colors (4 values from `colorAt`)
+ * @returns The length of the longest segment of the line (meters, approximate)
+ * @internal
+ */
+export function writePackedLineInstances(
+  target: Float32Array,
+  targetStride: number,
+  instanceStart: number,
+  coordOffset: number,
+  coords: Float64Array,
+  stride: number,
+  start: number,
+  end: number,
+  zoom: number,
+  screenDpr: number,
+  contentDpr: number,
+  width: number,
+  createdZoom: number,
+  color: ArrayLike<number>,
+  colorAt: number,
+): number {
+  const n = end - start;
+  const strokeWidth = width * (width < 0 ? screenDpr : contentDpr);
+  let linesofar = 0;
+  let maxSegmentMeters = 0;
+  for (let k = 0; k < n - 1; k++) {
+    const ax = coords[(start + k) * stride];
+    const ay = coords[(start + k) * stride + 1];
+    const bx = coords[(start + k + 1) * stride];
+    const by = coords[(start + k + 1) * stride + 1];
+    const segmentLength = screenPixelDistanceXY(ax, ay, bx, by, zoom) * screenDpr;
+    const meters = segmentMetersXY(ax, ay, bx, by);
+    if (meters > maxSegmentMeters) maxSegmentMeters = meters;
+
+    const base = (instanceStart + k) * targetStride;
+    target[base + 0] = coordOffset + k;
+    target[base + 1] = coordOffset + k + 1;
+    target[base + 2] = k > 0 ? coordOffset + k - 1 : -1;
+    target[base + 3] = k + 1 < n - 1 ? coordOffset + k + 2 : -1;
+    target[base + 4] = linesofar;
+    target[base + 5] = strokeWidth;
+    target[base + 6] = createdZoom;
+    target[base + 7] = segmentLength;
+    target[base + 8] = color[colorAt];
+    target[base + 9] = color[colorAt + 1];
+    target[base + 10] = color[colorAt + 2];
+    target[base + 11] = color[colorAt + 3];
+    linesofar += segmentLength;
+  }
+  return maxSegmentMeters;
+}
+
+/**
+ * The length of the longest segment of written instances on the Mercator plane (world units),
+ * for instances of any stride
+ *
+ * @internal
+ */
+export function maxSegmentMercatorOf(
+  instanceData: Float32Array,
+  stride: number,
+  instanceCount: number,
+  zoom: number,
+  dashPixelRatio: number,
+): number {
+  let max = 0;
+  for (let i = 0; i < instanceCount; i++) {
+    const length = instanceData[i * stride + 7];
+    if (length > max) max = length;
+  }
+  const world = WORLD_TILE_SIZE * 2 ** zoom * dashPixelRatio;
+  return world > 0 ? max / world : 0;
 }
 
 /**

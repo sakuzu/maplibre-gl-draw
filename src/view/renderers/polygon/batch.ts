@@ -15,6 +15,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import type { Coordinate } from '../../../store/types.js';
 import { EarcutCache } from '../../cache/earcut.js';
 import { getSurfaceTessellationStep, tessellateSurfaceFill } from '../../globe-subdivision.js';
+import type { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -59,6 +60,8 @@ export interface PolygonRendererScope {
   terrain?: TerrainContext;
   /** Triangulation results keyed by feature id (a private cache when omitted) */
   earcut?: EarcutCache;
+  /** Where the GPU memory the renderer allocates is recorded (nothing is recorded when omitted) */
+  gpu?: GpuLedger;
 }
 
 /** @internal */

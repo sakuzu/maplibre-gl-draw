@@ -177,13 +177,28 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
   withLabel('PointInstanceRenderer', () =>
     new PointInstanceRenderer(mapStub, gl).ensureShader(shaderData),
   );
+  withLabel('PointInstanceRenderer (rows)', () => {
+    const renderer = new PointInstanceRenderer(mapStub, gl);
+    renderer.ensureShader(shaderData);
+    expect(renderer.ensureRowProgram()).toBe(true);
+  });
   withLabel('PointShapeRenderer', () =>
     new PointShapeRenderer(mapStub, gl).ensureShader(shaderData),
   );
   withLabel('SDFPolygonRenderer', () => new SDFPolygonRenderer(gl).ensureShader(shaderData));
+  withLabel('SDFPolygonRenderer (rows)', () => {
+    const renderer = new SDFPolygonRenderer(gl);
+    renderer.ensureShader(shaderData);
+    expect(renderer.ensureRowProgram()).toBe(true);
+  });
   withLabel('PolygonBatchRenderer', () => new PolygonBatchRenderer(gl).ensureShader(shaderData));
   withLabel('FillShaderManager', () => new FillShaderManager(gl).ensureShader(shaderData));
   withLabel('SDFLineRenderer', () => new SDFLineRenderer(mapStub, gl).ensureShader(shaderData));
+  withLabel('SDFLineRenderer (rows)', () => {
+    const renderer = new SDFLineRenderer(mapStub, gl);
+    renderer.ensureShader(shaderData);
+    expect(renderer.ensureRowProgram()).toBe(true);
+  });
   withLabel('QuadShader', () => new QuadShader(gl).ensureShader(shaderData));
   withLabel('DrapeRenderer', () => {
     expect(new DrapeRenderer(gl).ensure(shaderData, 16)).toBe(true);
@@ -346,17 +361,19 @@ describe('shader programs on a real WebGL2', () => {
       ),
     );
     // 11 renderers with one program each and the drape of a quad with two (image and paper);
-    // the image and the paper share one call site
+    // the image and the paper share one call site. The point, the line and the polygon
+    // renderers also build the variant that draws rows held as columns at the same call site;
+    // each variant is recorded with the program it is a variant of
     expect(sites).toHaveLength(12);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(13);
+    expect(programs).toHaveLength(19);
   });
 
   it(
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(26);
+      expect(programs.length).toBe(38);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

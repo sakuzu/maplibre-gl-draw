@@ -110,6 +110,12 @@ export interface LineBatchShape {
  * @internal
  */
 export interface RetainedLineBatch {
+  /**
+   * For a batch of rows held as columns, where the instances of each row start: row `r` of the
+   * batch has the instances `[rowFirst[r], rowFirst[r + 1])` (rows + 1 entries). Undefined for
+   * any other batch
+   */
+  readonly rowFirst?: Int32Array;
   /** The VAO, with the instance attributes already configured */
   readonly vao: WebGLVertexArrayObject;
   /** The quad vertex buffer (dedicated to this batch) */

@@ -16,6 +16,7 @@
 
 import { EarcutCache } from '../cache/earcut.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 
@@ -28,6 +29,8 @@ export interface RenderScope {
   readonly earcut: EarcutCache;
   /** Evaluated style rules keyed by feature id */
   readonly styleRules: StyleRuleCache;
+  /** The GPU memory the renderers of the draw instance allocate */
+  readonly gpu: GpuLedger;
 }
 
 /**
@@ -39,5 +42,6 @@ export function createRenderScope(selection: SelectionScope): RenderScope {
     terrain: new TerrainContext(),
     earcut: new EarcutCache(),
     styleRules: new StyleRuleCache(),
+    gpu: new GpuLedger(),
   };
 }

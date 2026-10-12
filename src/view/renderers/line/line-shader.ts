@@ -17,21 +17,25 @@
  */
 
 import { getProjectionTransitionUniform, OFFSET_MODE_GLSL } from '../../shaders/helpers.js';
+import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
 
 /**
  * The vertex shader source of the SDF line program
  *
  * @param prelude The vertex shader prelude maplibre hands to the custom layer
  * @param define The defines of the projection variant
+ * @param rows Whether it is the variant that draws rows held as columns (it reads the number of
+ *   the row of each instance and the state of the rows)
  *
  * @internal
  */
-export function buildLineVertexSource(prelude: string, define: string): string {
+export function buildLineVertexSource(prelude: string, define: string, rows = false): string {
   const projTransitionUniform = getProjectionTransitionUniform(prelude);
   return `#version 300 es
+${rows ? '#define TABLE_ROWS' : ''}
 ${prelude}
 ${define}
-${projTransitionUniform}${OFFSET_MODE_GLSL}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}
 
 // Strip vertex attributes
 layout(location = 0) in float a_side;    // 1=left, -1=right
@@ -46,6 +50,11 @@ layout(location = 2) in vec4 a_indices;
 //          for dashes), y=original line width (px), z=createdZoom, w=segment length
 layout(location = 3) in vec4 a_extra;
 layout(location = 4) in vec4 a_color;    // line color (opacity already folded in)
+#ifdef TABLE_ROWS
+layout(location = 5) in float a_row;     // the number of the row in its group
+// The translation of the row of this instance (its moving set), added to every coordinate read
+vec2 g_row_shift = vec2(0.0);
+#endif
 
 // Uniforms
 uniform float u_width;        // line width (pixels) - for individual draws
@@ -74,7 +83,11 @@ out vec4 v_color;        // line color (instance attribute)
 vec2 getCoordOffset(int idx) {
     int x = idx % int(u_tex_size);
     int y = idx / int(u_tex_size);
+#ifdef TABLE_ROWS
+    return texelFetch(u_coord_tex, ivec2(x, y), 0).xy + g_row_shift;
+#else
     return texelFetch(u_coord_tex, ivec2(x, y), 0).xy;
+#endif
 }
 
 // Project the relative coordinate to get clip-space coordinates (high-precision version)
@@ -122,6 +135,16 @@ vec2 screenToClipOffset(vec2 screenOffset, float w) {
 }
 
 void main() {
+#ifdef TABLE_ROWS
+    // The state of the row: a hidden row draws nothing, a moving one is translated
+    uint rowState = readRowState(a_row);
+    if (rowStateHidden(rowState)) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    g_row_shift = rowStateTranslation(rowState);
+#endif
+
     // Get the indices
     int startIdx = int(a_indices.x);
     int endIdx = int(a_indices.y);

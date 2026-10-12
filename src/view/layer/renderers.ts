@@ -113,11 +113,21 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   const strokeRenderer = new StrokeRenderer(mapInstance, gl, pixelRatio, terrain);
   const outlineRenderer = new AnchoredOutlineRenderer(mapInstance, gl, pixelRatio, terrain);
   const sdfLineRenderer = new SDFLineRenderer(mapInstance, gl, pixelRatio, terrain);
+  sdfLineRenderer.useLedger(scope.gpu);
   const pointShapeRenderer = new PointShapeRenderer(mapInstance, gl, pixelRatio, terrain);
-  const pointInstanceRenderer = new PointInstanceRenderer(mapInstance, gl, pixelRatio, terrain);
+  const pointInstanceRenderer = new PointInstanceRenderer(
+    mapInstance,
+    gl,
+    pixelRatio,
+    terrain,
+    scope.gpu,
+  );
   const polygonScope = { terrain, earcut: scope.earcut };
   const polygonBatchRenderer = new PolygonBatchRenderer(gl, polygonScope);
-  const sdfPolygonRenderer = new SDFPolygonRenderer(gl, pixelRatio, polygonScope);
+  const sdfPolygonRenderer = new SDFPolygonRenderer(gl, pixelRatio, {
+    ...polygonScope,
+    gpu: scope.gpu,
+  });
   const fillShaderManager = new FillShaderManager(gl, terrain);
 
   const selectionExtensions = scope.selection.extensions;
