@@ -20,7 +20,13 @@ import type { LayersCollection } from './layers.js';
 import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
-import type { LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
+import type {
+  GpuMemoryDiagnostics,
+  LayerStackEntry,
+  Mode,
+  TableDiagnostics,
+  TerrainDiagnostics,
+} from './state.js';
 
 /** The options of {@link Draw.transact} */
 export interface TransactOptions {
@@ -139,6 +145,10 @@ export interface Draw {
   readonly debug: {
     /** The state the terrain was drawn with. */
     terrain(): TerrainDiagnostics;
+    /** The GPU memory the drawing holds. */
+    gpu(): GpuMemoryDiagnostics;
+    /** The hooks of measurement of the drawing of the layers held as rows of columns. */
+    tables(): TableDiagnostics;
   };
 
   // Lifecycle

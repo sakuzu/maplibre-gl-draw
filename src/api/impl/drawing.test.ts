@@ -6,7 +6,19 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMapStub, createSyntheticInput } from '../../test-utils.js';
+import {
+  createFeatureTablesStore,
+  featureTablesInternals,
+} from '../../feature-table/feature-tables.js';
+import { MemoryContractStore } from '../../store/memory.js';
+import { createRowGroupBuilder } from '../../table/row-group-builder.js';
+import {
+  createMapStub,
+  createSyntheticInput,
+  feature,
+  orderKey,
+  rowOfFeature,
+} from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -51,6 +63,40 @@ describe('hasPendingWork and debug.terrain', () => {
     expect(terrain.render.atlasSize).toHaveLength(2);
     expect(terrain.drape).toMatchObject({ used: false, reason: 'not-evaluated', featureCount: 0 });
     expect(Object.isFrozen(terrain)).toBe(true);
+  });
+});
+
+describe('debug.gpu and debug.tables', () => {
+  it('reports no GPU memory before anything is drawn', () => {
+    draw = createDraw(createMapStub().map);
+    const gpu = draw.debug.gpu();
+    expect(gpu).toEqual({ bytes: 0, bufferBytes: 0, textureBytes: 0, byRenderer: {} });
+    expect(Object.isFrozen(gpu)).toBe(true);
+  });
+
+  it('writes the state of the rows of the tables of the Store', () => {
+    const { tables, writer } = createFeatureTablesStore();
+    const builder = createRowGroupBuilder();
+    ['a', 'b'].forEach((id, i) => {
+      builder.addRow(rowOfFeature(feature(id, 'Point', [i, i]), orderKey(i)));
+    });
+    writer.adopt('rows', builder.finish());
+    const contract = new MemoryContractStore();
+    Object.defineProperty(contract, 'tables', { value: tables });
+    draw = createDraw(createMapStub().map, { store: contract, initDefaultLayer: false });
+
+    const debug = draw.debug.tables();
+    const handle = tables.handleOf('b') as number;
+    debug.setRowsHidden([handle], true);
+    debug.setRowsMoving([handle], 2);
+    debug.setMoveTranslation(2, 0.5, -0.5);
+    const internals = featureTablesInternals(tables);
+    const group = internals?.layerTable('rows')?.groupAt(0);
+    expect(group?.gpuState[1]).toBe(1 | (2 << 1));
+    expect(internals?.states.translation(2)).toEqual([0.5, -0.5]);
+    // Nothing is drawn yet: the recording starts empty
+    expect(debug.recordDraws()).toEqual([]);
+    debug.stopRecording();
   });
 });
 

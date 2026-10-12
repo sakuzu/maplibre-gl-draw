@@ -116,6 +116,69 @@ export interface LayerStackEntry {
 }
 
 /**
+ * The GPU memory the drawing of the instance holds, for diagnostics: the buffers and the
+ * textures its renderers allocated and have not deleted. It is a lower bound of what the page
+ * uses on the GPU: the base map and the elevation data of maplibre are not in it.
+ */
+export interface GpuMemoryDiagnostics {
+  /** The bytes of every buffer and texture */
+  readonly bytes: number;
+  /** The bytes of the buffers */
+  readonly bufferBytes: number;
+  /** The bytes of the textures */
+  readonly textureBytes: number;
+  /** The bytes per renderer (`points`, `lines`, `polygons`, `row-state`) */
+  readonly byRenderer: Readonly<Record<string, number>>;
+}
+
+/**
+ * One range of rows of a layer held as rows of columns, drawn in one draw, as the record of
+ * the draws gives it
+ */
+export interface TableDrawnRange {
+  /** The layer */
+  readonly layerId: string;
+  /** The handle of the row group */
+  readonly group: number;
+  /** The place of the row group in the order of its layer */
+  readonly groupIndex: number;
+  /** How the rows are drawn: from a retained batch of their kind, or at once */
+  readonly kind: 'polygon' | 'line' | 'point' | 'immediate';
+  /** The first row of the range in its group */
+  readonly from: number;
+  /** The end of the range (exclusive) */
+  readonly to: number;
+}
+
+/**
+ * The hooks of measurement of the drawing of the layers held as rows of columns. They are for
+ * measuring and testing the drawing; their effects follow it and carry a weaker promise.
+ */
+export interface TableDiagnostics {
+  /**
+   * Cuts the ranges drawn of every layer held as rows at `count` places spread over its rows in
+   * view (0 for none): every cut draws a range in two draws, as something drawn between two rows
+   * would
+   */
+  setArtificialCuts(count: number): void;
+  /**
+   * Records the ranges drawn from the next frame on, in the order they are drawn, into the
+   * array it returns, until `stopRecording`
+   */
+  recordDraws(): readonly TableDrawnRange[];
+  /** Stops the recording of the ranges drawn */
+  stopRecording(): void;
+  /** Hides or shows rows by their handles, in this instance only */
+  setRowsHidden(handles: ArrayLike<number>, hidden: boolean): void;
+  /** Marks or unmarks rows as selected in bulk */
+  setRowsMarked(handles: ArrayLike<number>, marked: boolean): void;
+  /** Puts rows into a moving set (1 to 3), or takes them out of any (0) */
+  setRowsMoving(handles: ArrayLike<number>, set: number): void;
+  /** Sets the translation of a moving set (1 to 3), in degrees of longitude and latitude */
+  setMoveTranslation(set: number, dLng: number, dLat: number): void;
+}
+
+/**
  * The state the terrain was drawn with, for diagnostics. Its fields follow the drawing and
  * carry a weaker promise than the rest of the API.
  */
