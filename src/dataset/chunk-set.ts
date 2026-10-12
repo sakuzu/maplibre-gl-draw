@@ -21,15 +21,22 @@ import { resolvePixelRatio } from '../shared/utils/pixel-ratio.js';
 import { getSurfaceTessellationStep } from '../view/globe-subdivision.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
-import { boundsCenter, rebasedRetainedOrigin } from '../view/shaders/retained-origin.js';
+import {
+  advanceChunkBuilds,
+  type ChunkSchedulerHost,
+  chunkOrigin,
+  createChunkBuildBudget,
+  invalidateChunk,
+  type RetainedChunkJob,
+  type RetainedChunkState,
+} from '../view/retained/chunk-scheduler.js';
 import { getAnchorElevationGeneration } from '../view/terrain/anchor.js';
 import type { TerrainContext } from '../view/terrain/context.js';
 import { isTerrainCameraMoving, reportTerrainCoarsening } from '../view/terrain/state.js';
 import { mercatorX, mercatorY, type TessellationStep } from '../view/terrain/tessellation.js';
 import { tilingSignature } from '../view/terrain/tiling.js';
-import { boundsIntersect, type DisplayChunk } from './chunk.js';
+import type { DisplayChunk } from './chunk.js';
 import {
-  type ChunkBuildJob,
   type ChunkCollector,
   type CollectOptions,
   createChunkBuildJob,
@@ -117,31 +124,20 @@ function chunkTilingKey(chunk: DisplayChunk, step: TessellationStep): string {
 const CHUNK_BUILD_BUDGET_MS = 12;
 
 /**
- * A monotonic clock (it works even when the test environment has no performance)
- */
-function nowMs(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-/**
  * A chunk and the state of its retained batches
  *
- * batches being null means "not built yet, or a rebuild is needed".
+ * batches being null means "not built yet, or a rebuild is needed". The building over the
+ * frames (the job, the origins, the budget) is shared with the other retained chunks
+ * (`view/retained/chunk-scheduler.ts`); what is kept here is what the batches of a dataset
+ * assume.
  */
-interface DisplayChunkState {
+interface DisplayChunkState extends RetainedChunkState<DisplayChunkBatches> {
   readonly chunk: DisplayChunk;
-  batches: DisplayChunkBatches | null;
   /**
    * The step of the terrain subdivision when this chunk was baked (mercator; 0 = baked without
    * terrain)
    */
   builtGrid: number;
-  /**
-   * The build in progress (advanced in slices by the budget of the frame)
-   *
-   * `batches` (the previous version) keeps being drawn while it runs.
-   */
-  job: ChunkBuildJob | null;
   /** The step that the build in progress assumes */
   jobGrid: number;
   /** The fingerprint of the tile composition that the build in progress assumes */
@@ -162,17 +158,6 @@ interface DisplayChunkState {
    * chunks whose fingerprint changed leaves no surface cut with the step of the old composition.
    */
   builtTilingKey: string | null;
-  /** The origin the batches were built with (null before the first build) */
-  origin: [number, number] | null;
-  /** The origin the build in progress uses */
-  jobOrigin: [number, number] | null;
-  /**
-   * The origin chosen for the view (null = the center of the chunk bounds)
-   *
-   * Seen at high zoom, a chunk that spreads widely leaves a visible Float32 error far from its
-   * origin, so it is built again around the view (`view/shaders/retained-origin.ts`).
-   */
-  viewOrigin: [number, number] | null;
   /**
    * The receiver of the completion notification of the triangulation (only the chunks that
    * contain a huge polygon have one)
@@ -308,6 +293,8 @@ export class DisplayChunkSet {
     this.lastPending = chunks.length > 0;
     this.chunks = chunks.map((chunk) => ({
       chunk,
+      bounds: chunk.bounds,
+      stale: false,
       batches: null,
       job: null,
       jobGrid: 0,
@@ -348,48 +335,26 @@ export class DisplayChunkSet {
     const step = getSurfaceTessellationStep(terrain, 'fill');
     const drapedFills = this.host.drapedFills();
     const drawn = this.host.drawnRows();
-    const budget = this.host.buildBudgetMs ?? CHUNK_BUILD_BUDGET_MS;
-    const budgetStart = nowMs();
-    let builtHere = 0;
-    /** Whether more may still be built in this frame (at least one is built) */
-    const canBuild = (): boolean => builtHere === 0 || nowMs() - budgetStart < budget;
+    const budget = createChunkBuildBudget(this.host.buildBudgetMs ?? CHUNK_BUILD_BUDGET_MS);
+    // Building a new chunk is also deferred until the camera stops (treated the same as a
+    // re-bake). Zooming out lets new chunks enter all at once as the view widens (137 of them
+    // measured), and a build of 20 to 50 ms per step while moving makes the gesture stutter
+    // (measured). Starting to build while moving leaves a blank until it is finished anyway, so
+    // building after it stops costs only one beat at the start. The drawing of the existing
+    // batches continues as before (the appearance is unchanged). A job in progress is not
+    // advanced while the camera is moving either (a single step can blow through the budget, and
+    // paying it during a gesture always stutters).
     const settled = !isTerrainCameraMoving(terrain);
-    /** Whether anything is left over (the next frame is requested by itself) */
-    let pending = false;
 
-    for (const state of this.chunks) {
-      if (!boundsIntersect(state.chunk.bounds, bounds)) continue;
-
-      // Whether a rebuild is needed. If it is, a job is started and advanced by the budget of the
-      // frame. The batches of the previous version keep being drawn until the job finishes, so
-      // even a large surface covering the view does not stall a frame and the picture being drawn
-      // is not missing anything.
+    const host: ChunkSchedulerHost<DisplayChunkState, DisplayChunkBatches> = {
       // A chunk whose way of handing over the polygons and lines changed is re-baked as well (the
       // analytic drape being switched on or off)
-      // A chunk seen far from its origin at high zoom is built again around the view (the batches
-      // it has keep being drawn until then)
-      const rebased =
-        state.batches !== null && !state.job
-          ? rebasedRetainedOrigin(chunkOrigin(state), state.chunk.bounds, bounds, zoom)
-          : null;
-      if (rebased) state.viewOrigin = rebased;
-      const stale =
-        state.batches !== null &&
-        (needsRetessellation(state, step) || state.builtDraped !== drapedFills || rebased !== null);
-      // Building a new chunk is also deferred until the camera stops (treated the same as a
-      // re-bake). Zooming out lets new chunks enter all at once as the view widens (137 of them
-      // measured), and a build of 20 to 50 ms per step while moving makes the gesture stutter
-      // (measured). Starting to build while moving leaves a blank until it is finished anyway, so
-      // building after it stops costs only one beat at the start. The drawing of the existing
-      // batches continues below as before (the appearance is unchanged).
-      if (!settled && (state.job || !state.batches || stale)) pending = true;
-      if (settled && !state.job && (!state.batches || stale)) {
-        const origin = state.viewOrigin ?? boundsCenter(state.chunk.bounds);
-        state.jobOrigin = origin;
+      isStale: (state) => needsRetessellation(state, step) || state.builtDraped !== drapedFills,
+      startJob: (state, origin) => {
         // Nothing is walked here: the job walks the rows of the chunk when it is stepped, within
         // the budget of the frame (walking every visible chunk at once would put the resolution
         // of the styles of the whole view on one frame)
-        state.job = createChunkBuildJob(
+        const job = createChunkBuildJob(
           this.host.collector(
             state.chunk.rows,
             {
@@ -406,69 +371,51 @@ export class DisplayChunkSet {
         state.jobGrid = step?.grid ?? 0;
         state.jobTilingKey = step ? chunkTilingKey(state.chunk, step) : null;
         state.jobDraped = drapedFills;
-      }
-
-      // A job in progress is not advanced while the camera is moving either (a single step can
-      // blow through the budget, and paying it during a gesture always stutters).
-      if (state.job && !settled) pending = true;
-      if (state.job && settled) {
-        if (canBuild()) {
-          builtHere++;
-          const done = state.job.step(budgetStart + budget, nowMs);
-          if (done) {
-            const built = state.job.take();
-            state.job = null;
-            if (built) {
-              // The old version is discarded only after the new one is complete (no flicker)
-              if (state.batches) disposeChunkBatches(state.batches, renderers);
-              state.batches = built;
-              state.origin = state.jobOrigin;
-              state.builtGrid = state.jobGrid;
-              state.builtTilingKey = state.jobTilingKey;
-              state.builtDraped = state.jobDraped;
-              state.pointsMask = state.jobMask;
-            }
-            // When it could not be built (the shaders are not initialized) it is rebuilt on the
-            // next frame
-          } else {
-            pending = true;
-          }
-        } else {
-          pending = true;
+        return toRetainedJob(job, renderers);
+      },
+      adoptJob: (state) => {
+        state.builtGrid = state.jobGrid;
+        state.builtTilingKey = state.jobTilingKey;
+        state.builtDraped = state.jobDraped;
+        state.pointsMask = state.jobMask;
+      },
+      disposeBatches: (batches) => disposeChunkBatches(batches, renderers),
+      draw: (state) => {
+        const batches = state.batches as DisplayChunkBatches;
+        let complete = true;
+        // The points follow the rows drawn now before the chunk is drawn, in every frame, while
+        // the camera moves as well: until they do, the points of another zoom band would be
+        // drawn at this scale (after a large zoom out, piled up into a solid patch). Only the
+        // point part is rebuilt, so the cost is a walk over the rows of the chunk plus the
+        // packing of the points it draws, which the thinning bounds by what fits on screen. A
+        // chunk whose rows are drawn alike in both masks (no point, or no change of its points)
+        // rebuilds nothing
+        if (state.pointsMask !== drawn && !this.rebuildPoints(state, renderers, drawn)) {
+          complete = false;
         }
-      }
 
-      // A chunk that has never been built has nothing to draw at this point
-      if (!state.batches) continue;
+        // Report to the depth bias how coarse the shape being drawn is. If the step has got
+        // finer than when it was baked, the shape being drawn is coarse by that ratio
+        if (step && state.builtGrid > step.grid) {
+          reportTerrainCoarsening(terrain, state.builtGrid / step.grid);
+        }
 
-      // The points follow the rows drawn now before the chunk is drawn, in every frame, while
-      // the camera moves as well: until they do, the points of another zoom band would be drawn
-      // at this scale (after a large zoom out, piled up into a solid patch). Only the point part
-      // is rebuilt, so the cost is a walk over the rows of the chunk plus the packing of the
-      // points it draws, which the thinning bounds by what fits on screen. A chunk whose rows are
-      // drawn alike in both masks (no point, or no change of its points) rebuilds nothing
-      if (state.pointsMask !== drawn && !this.rebuildPoints(state, renderers, drawn)) {
-        pending = true;
-      }
+        drawChunkBatches(batches, renderers, zoom, projectionData, factors);
 
-      // Report to the depth bias how coarse the shape being drawn is. If the step has got finer
-      // than when it was baked, the shape being drawn is coarse by that ratio
-      if (step && state.builtGrid > step.grid) {
-        reportTerrainCoarsening(terrain, state.builtGrid / step.grid);
-      }
+        // The features that cannot be retained are drawn immediately, right after the retained
+        // batches of the chunk, the points last (with the same factors as the retained batches)
+        const { fallback, pointFallback } = batches;
+        if (fallback.length > 0 || pointFallback.length > 0) {
+          target.beginFrame(projectionData, zoom, undefined, factors);
+          for (const feature of fallback) target.processFeature(feature, false);
+          for (const feature of pointFallback) target.processFeature(feature, false);
+          target.endFrame();
+        }
+        return complete;
+      },
+    };
 
-      drawChunkBatches(state.batches, renderers, zoom, projectionData, factors);
-
-      // The features that cannot be retained are drawn immediately, right after the retained
-      // batches of the chunk, the points last (with the same factors as the retained batches)
-      const { fallback, pointFallback } = state.batches;
-      if (fallback.length > 0 || pointFallback.length > 0) {
-        target.beginFrame(projectionData, zoom, undefined, factors);
-        for (const feature of fallback) target.processFeature(feature, false);
-        for (const feature of pointFallback) target.processFeature(feature, false);
-        target.endFrame();
-      }
-    }
+    const pending = advanceChunkBuilds(this.chunks, { bounds, zoom, settled, budget }, host);
 
     // If any chunk was left unbuilt, one more frame is asked for
     this.lastPending = pending;
@@ -517,14 +464,17 @@ export class DisplayChunkSet {
   private invalidate(state: DisplayChunkState): void {
     // The build in progress is discarded too. Now that the contents changed, what is half built
     // is stale
-    if (state.job) {
-      if (this.renderers) state.job.dispose(this.renderers);
-      state.job = null;
+    const renderers = this.renderers;
+    if (renderers) {
+      invalidateChunk<DisplayChunkState, DisplayChunkBatches>(
+        state,
+        { disposeBatches: (batches) => disposeChunkBatches(batches, renderers) },
+        false,
+      );
+      return;
     }
-    if (!state.batches) return;
-    if (this.renderers) {
-      disposeChunkBatches(state.batches, this.renderers);
-    }
+    // Without renderers there is nothing of the GPU to release: only the references go
+    state.job = null;
     state.batches = null;
   }
 
@@ -689,14 +639,15 @@ export class DisplayChunkSet {
 }
 
 /**
- * The origin of the relative coordinates of the built batches of a chunk
- *
- * The coordinates of a retained batch are baked relative to this origin. Passing a different
- * origin to the re-bake of the points alone (rebuildChunkPoints) than to the build would shift
- * every re-baked point by the difference of the origins, so both read the origin recorded with
- * the batches. A build starts from the center of the chunk bounds, or from the origin chosen for
- * the view.
+ * A build of the batches of a dataset as the building over the frames takes it
  */
-function chunkOrigin(state: DisplayChunkState): [number, number] {
-  return state.origin ?? boundsCenter(state.chunk.bounds);
+function toRetainedJob(
+  job: ReturnType<typeof createChunkBuildJob>,
+  renderers: RetainedRendererSet,
+): RetainedChunkJob<DisplayChunkBatches> {
+  return {
+    step: (deadline, now) => job.step(deadline, now),
+    take: () => job.take(),
+    dispose: () => job.dispose(renderers),
+  };
 }
