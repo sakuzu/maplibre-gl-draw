@@ -102,7 +102,7 @@ export function rowGeometry(group: RowGroup, row: number): Geometry | null {
  */
 export function rowPoint(group: RowGroup, row: number): Coordinate | null {
   const reader = geometryReaderOf(group, row);
-  if (!reader || reader.type !== 'Point') return null;
+  if (reader?.type !== 'Point') return null;
   return reader.position(group.data.geometry.offsets[row]);
 }
 
