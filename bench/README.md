@@ -64,7 +64,8 @@ The same features drawn two ways: held as rows of columns (`mode=table`)
 or as features of the Store (`mode=store`), on a map with a background
 layer only (no network), in a fixed 1280 x 800 map. The features are made
 in the page; in `mode=table` a Worker builds them into row groups and
-hands them to the page without a copy.
+hands them to the page without a copy, and the rows are held by an
+in-memory Store of rows (`createTableMemoryStore`).
 
 Open it from the root of the repository:
 
@@ -128,10 +129,22 @@ and the next versions of the row groups did):
 | `members` | Members of each of them | `50` |
 | `moving` | Version builds while moving, ms | `0` |
 | `worker` | `1`: merges in a Worker | `1` |
+| `bigArea` | Vertices of a large area under the rows | `0` |
 
 The edits are `color1`, `colorSlide`, `ruleSlide`, `attr`, `point`,
 `longLine`, `corner` and `finish` (a building written in the middle of the
-order), one change per frame. The changes of others are written in place
+order), one change per frame. The edits of a feature at a time are made
+as the select mode makes them: `hover` moves the pointer over the map
+(the events of the mouse sent to the canvas, a move per frame, the time
+of each move measured), `click` clicks a building (the time from the
+click to the frame its handles are drawn in), `vertexAdd` drags a
+midpoint of a building selected (the vertex put, moved over 6 frames as
+the middle of the drag, then ended), `vertexRemove` puts a vertex and
+takes it off, and `delete` selects a feature and deletes it. `bigArea`
+puts a large area of that many vertices under every row once the map is
+open (an administrative area under the buildings), for `hover`.
+
+The changes of others are written in place
 (`color`, `attr`, `position`, `corner`) or placed elsewhere: `reorder`
 puts rows in another place of the order, `group` puts groups of features
 in another place, `vertex` adds a vertex past the place of a building, and

@@ -72,9 +72,19 @@ export interface TableBenchPageParams extends TableBenchParams {
   readonly moving: number;
   /** Whether the large merges and builds of rows run in a Worker of the page */
   readonly worker: boolean;
+  /**
+   * The vertices of a large area put under every row (an administrative area, a land use: what
+   * the pointer moves over between the buildings; 0 for none)
+   */
+  readonly bigArea: number;
 }
 
-/** The edits a page repeats */
+/**
+ * The edits a page repeats: written to the rows (`color1` to `finish`), and made as the select
+ * mode makes them, a feature at a time (`hover` to `delete`): the pointer moved over the map, a
+ * click that selects and shows the handles, a vertex added by a drag of a midpoint, a vertex taken
+ * off and put back, a feature selected and deleted
+ */
 export const EDIT_OPS = [
   'color1',
   'colorSlide',
@@ -84,6 +94,11 @@ export const EDIT_OPS = [
   'longLine',
   'corner',
   'finish',
+  'hover',
+  'click',
+  'vertexAdd',
+  'vertexRemove',
+  'delete',
 ] as const;
 
 /** An edit a page repeats */
@@ -148,6 +163,7 @@ export function parseParams(search: string): TableBenchPageParams {
     members: Math.max(1, number('members', 50)),
     moving: number('moving', 0),
     worker: params.get('worker') !== '0',
+    bigArea: number('bigArea', 0),
   };
 }
 
@@ -428,4 +444,25 @@ export function candidatesOf(features: readonly BenchFeature[]): BenchCandidates
     if (i % step === 0) ids.push(feature.id);
   });
   return { point, line, polygon, ids, points, polygons };
+}
+
+/**
+ * A large area of `vertices` vertices around the extent of the rows (a ring a little outside it,
+ * waving so that it has as many vertices as asked)
+ */
+export function bigAreaOf(extent: [number, number, number, number], vertices: number): Geometry {
+  const [west, south, east, north] = extent;
+  const cx = (west + east) / 2;
+  const cy = (south + north) / 2;
+  const rx = ((east - west) / 2) * 1.1 + 1e-3;
+  const ry = ((north - south) / 2) * 1.1 + 1e-3;
+  const n = Math.max(4, vertices - 1);
+  const ring: [number, number][] = [];
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const wave = 1 + 0.02 * Math.sin(k * 0.7);
+    ring.push([cx + rx * wave * Math.cos(a), cy + ry * wave * Math.sin(a)]);
+  }
+  ring.push(ring[0]);
+  return { type: 'Polygon', coordinates: [ring] };
 }

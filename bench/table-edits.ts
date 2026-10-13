@@ -16,6 +16,12 @@
  * through the writer of their tables, as the implementation of a Store writes them; features of
  * the Store through `draw.features` and `draw.groups`, as it is drawn today, to compare.
  *
+ * The edits of a feature at a time are made as the select mode makes them: the pointer moved
+ * over the map and a click are sent to the canvas as the events of the mouse (the time each takes
+ * is measured: the move, and the click to the frame its handles are drawn in), and the edits of a
+ * feature selected go through the Store as the select mode writes them (the middle of a drag,
+ * then its end).
+ *
  * Each run measures the frames before, during and after it, the JS heap and the GPU memory (and
  * the highest heap during it), and what the writes, the deltas and the versions of the row groups
  * hold and did (`draw.debug.tables().editStats()`).
@@ -27,6 +33,7 @@ import type {
   FeatureTables,
   FeatureTablesWriter,
   RowField,
+  Store,
   TableEditStats,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Geometry, Position } from 'geojson';
@@ -50,6 +57,8 @@ export interface EditTarget {
   /** The tables of the page (rows held as columns), or null for features of the Store */
   readonly tables: FeatureTables | null;
   readonly writer: FeatureTablesWriter | null;
+  /** The Store, with its writes (the edits of a feature at a time write it as the modes do) */
+  readonly store: Store;
   readonly candidates: BenchCandidates;
 }
 
@@ -69,6 +78,11 @@ export interface EditResult {
   readonly changes: number;
   /** The highest JS heap during the run (MB; null when the browser does not tell) */
   readonly peakHeapMb: number | null;
+  /**
+   * The time of each input of an edit of a feature at a time (ms): the handling of a move of the
+   * pointer, or a click to the frame its handles are drawn in (absent for the other edits)
+   */
+  readonly inputMs?: { readonly mean: number; readonly max: number; readonly count: number };
   /** Why the run could not be made (absent when it was) */
   readonly error?: string;
 }
@@ -351,6 +365,171 @@ function stepsOf(
         );
       };
     }
+    case 'hover':
+    case 'click':
+    case 'vertexAdd':
+    case 'vertexRemove':
+    case 'delete':
+      return featureSteps(target, op, inputs);
+  }
+}
+
+/** The times of the inputs of the edits of a feature at a time, as they are made (ms) */
+const inputs: number[] = [];
+
+/** Sends an event of the mouse to the canvas of the map, at a point of the map (CSS px) */
+function mouse(
+  map: maplibregl.Map,
+  type: 'mousemove' | 'mousedown' | 'mouseup' | 'click',
+  x: number,
+  y: number,
+  buttons = 0,
+): void {
+  const canvas = map.getCanvas();
+  const rect = canvas.getBoundingClientRect();
+  canvas.dispatchEvent(
+    new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + x,
+      clientY: rect.top + y,
+      button: 0,
+      buttons,
+      view: window,
+    }),
+  );
+}
+
+/** A position inside a feature (the mean of the corners of a polygon, a point, a vertex of a line) */
+function insideOf(feature: Feature): Position | null {
+  const geometry = feature.geometry;
+  switch (geometry.type) {
+    case 'Point':
+      return geometry.coordinates;
+    case 'LineString':
+      return geometry.coordinates[Math.floor(geometry.coordinates.length / 2)];
+    case 'Polygon': {
+      const ring = geometry.coordinates[0].slice(0, -1);
+      if (ring.length === 0) return null;
+      const x = ring.reduce((sum, p) => sum + p[0], 0) / ring.length;
+      const y = ring.reduce((sum, p) => sum + p[1], 0) / ring.length;
+      return [x, y];
+    }
+    default:
+      return null;
+  }
+}
+
+/** A polygon with a vertex put after its first corner, at an offset of the middle of its first edge */
+function withVertex(geometry: Geometry, offset: number): Geometry {
+  if (geometry.type !== 'Polygon') return geometry;
+  const ring = geometry.coordinates[0].slice();
+  const [a, b] = ring;
+  ring.splice(1, 0, [(a[0] + b[0]) / 2 + offset, (a[1] + b[1]) / 2 + offset]);
+  return { type: 'Polygon', coordinates: [ring, ...geometry.coordinates.slice(1)] };
+}
+
+/** A polygon without the vertex after its first corner (as long as 3 corners stay) */
+function withoutVertex(geometry: Geometry): Geometry | null {
+  if (geometry.type !== 'Polygon') return null;
+  const ring = geometry.coordinates[0].slice();
+  if (ring.length <= 4) return null;
+  ring.splice(1, 1);
+  return { type: 'Polygon', coordinates: [ring, ...geometry.coordinates.slice(1)] };
+}
+
+/**
+ * The steps of the edits of a feature at a time, made as the select mode makes them (the times
+ * of their inputs go to `times`)
+ */
+function featureSteps(
+  target: EditTarget,
+  op: 'hover' | 'click' | 'vertexAdd' | 'vertexRemove' | 'delete',
+  times: number[],
+): ((i: number) => Promise<void>) | string {
+  const { map, store, candidates } = target;
+  const polygons = candidates.polygons.length > 0 ? candidates.polygons : candidates.ids;
+  if (polygons.length === 0) return 'no feature';
+  switch (op) {
+    case 'hover': {
+      // Around the center of the map, a move per frame: the cursor follows what it is over
+      const canvas = map.getCanvas();
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      return async (i) => {
+        const a = i * 0.21;
+        const r = Math.min(width, height) * (0.1 + 0.3 * ((i % 50) / 50));
+        const t0 = performance.now();
+        mouse(map, 'mousemove', width / 2 + r * Math.cos(a), height / 2 + r * Math.sin(a));
+        times.push(performance.now() - t0);
+      };
+    }
+    case 'click':
+      // A building clicked, to the frame its handles are drawn in
+      return async (i) => {
+        const id = polygons[i % polygons.length];
+        const feature = featureOf(target, id);
+        const inside = feature ? insideOf(feature) : null;
+        if (!inside) return;
+        map.jumpTo({ center: [inside[0], inside[1]] });
+        await nextFrame();
+        const point = map.project([inside[0], inside[1]]);
+        const t0 = performance.now();
+        mouse(map, 'mousedown', point.x, point.y, 1);
+        mouse(map, 'mouseup', point.x, point.y);
+        mouse(map, 'click', point.x, point.y);
+        await nextFrame();
+        await nextFrame();
+        times.push(performance.now() - t0);
+      };
+    case 'vertexAdd': {
+      // A drag of a midpoint of a building selected: the vertex put, moved over frames, ended
+      const id = candidates.polygon ?? polygons[0];
+      return async (i) => {
+        store.setSelection('feature', [id]);
+        const feature = store.getFeature(id);
+        if (!feature) return;
+        const start = withVertex(feature.geometry, 0);
+        store.updateFeature(id, { geometry: start });
+        const d = (i % 2 === 0 ? 1 : -1) * 1e-6;
+        for (let f = 1; f <= 6; f++) {
+          store.updateFeature(
+            id,
+            { geometry: withVertex(feature.geometry, f * d) },
+            {
+              isIntermediate: true,
+            },
+          );
+          await nextFrame();
+        }
+        store.updateFeature(id, { geometry: withVertex(feature.geometry, 6 * d) });
+      };
+    }
+    case 'vertexRemove': {
+      // A vertex of a building selected taken off, then put back
+      const id = candidates.polygon ?? polygons[0];
+      return async () => {
+        store.setSelection('feature', [id]);
+        const feature = store.getFeature(id);
+        if (!feature) return;
+        const fewer = withoutVertex(withVertex(feature.geometry, 0));
+        if (fewer) store.updateFeature(id, { geometry: withVertex(feature.geometry, 0) });
+        await nextFrame();
+        if (fewer) store.updateFeature(id, { geometry: fewer });
+      };
+    }
+    case 'delete': {
+      // A feature selected and deleted
+      let next = 0;
+      return async () => {
+        while (next < polygons.length && !store.getFeature(polygons[next])) next++;
+        const id = polygons[next++];
+        if (!id) return;
+        store.setSelection('feature', [id]);
+        await nextFrame();
+        store.deleteFeature(id);
+      };
+    }
   }
 }
 
@@ -448,9 +627,10 @@ export async function runEdit(
   op: EditOp,
   params: TableBenchPageParams,
 ): Promise<EditResult> {
+  inputs.length = 0;
   const steps = stepsOf(target, op, params);
   if (typeof steps === 'string') return failed(target, `${op} x${params.reps}`, steps);
-  return measured(target, `${op} x${params.reps}`, async (sample) => {
+  const result = await measured(target, `${op} x${params.reps}`, async (sample) => {
     for (let i = 0; i < params.reps; i++) {
       await steps(i);
       await nextFrame();
@@ -458,6 +638,15 @@ export async function runEdit(
     }
     return params.reps;
   });
+  if (inputs.length === 0) return result;
+  return {
+    ...result,
+    inputMs: {
+      mean: inputs.reduce((a, b) => a + b, 0) / inputs.length,
+      max: Math.max(...inputs),
+      count: inputs.length,
+    },
+  };
 }
 
 /** Sends the changes of others of a kind at a rate for a time, and measures it */

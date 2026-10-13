@@ -32,15 +32,18 @@
 
 import {
   createDraw,
-  createFeatureTables,
+  createTableMemoryStore,
   type Draw,
   type FeatureTablesWorker,
+  type RowField,
+  type Store,
 } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import {
   type BenchCandidates,
   type BenchFeature,
   benchFeature,
+  bigAreaOf,
   CENTER,
   candidatesOf,
   EDIT_OPS,
@@ -65,7 +68,6 @@ import {
   wait,
 } from './table-measure';
 import type { RowsWorkerRequest } from './table-rows-worker';
-import { TableStore } from './table-store';
 import type { TableWorkerRequest, TableWorkerResult } from './table-worker';
 
 // Worker URL setup for v6 (side effect). Required before the Map is created.
@@ -135,6 +137,7 @@ for (const [key, value] of Object.entries({
   members: String(params.members),
   moving: String(params.moving),
   worker: params.worker ? '1' : '0',
+  bigArea: String(params.bigArea),
 })) {
   const field = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
   if (field) field.value = value;
@@ -191,18 +194,24 @@ function rowsWorker(): FeatureTablesWorker {
   };
 }
 
-const tablesOfPage =
+// The rows are held by an in-memory Store of rows: its tables are drawn, its writer takes the row
+// groups in and writes the changes of others
+const ofRows =
   params.mode === 'table'
-    ? createFeatureTables(params.worker ? { worker: rowsWorker() } : {})
+    ? createTableMemoryStore(params.worker ? { worker: rowsWorker() } : {})
     : null;
-const store = tablesOfPage ? new TableStore(tablesOfPage.tables) : undefined;
+const tablesOfPage =
+  ofRows?.store.tables !== undefined
+    ? { tables: ofRows.store.tables, writer: ofRows.writer }
+    : null;
+const store = ofRows?.store;
 store?.createLayer({
   id: LAYER_ID,
   name: LAYER_ID,
   visible: true,
   locked: false,
   opacity: 1,
-  items: [],
+  kind: 'table',
   styleRule: undefined,
   metadata: undefined,
 });
@@ -350,6 +359,46 @@ async function open(result: TableBenchResult): Promise<void> {
   await settle();
   result.open.firstDraw = performance.now() - d0;
   result.open.total = performance.now() - t0;
+  if (params.bigArea > 0 && opened) {
+    const b0 = performance.now();
+    putBigArea(opened.extent);
+    await settle();
+    result.open.bigArea = performance.now() - b0;
+  }
+}
+
+/** Puts a large area under every row (the first item of the layer) */
+function putBigArea(extent: [number, number, number, number]): void {
+  const geometry = bigAreaOf(extent, params.bigArea);
+  const style = { fillColor: '#bfd3c1', fillOpacity: 1, strokeColor: '#5b7f63', strokeWidth: 2 };
+  if (tablesOfPage) {
+    // A key before the keys of the rows (`k...`)
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode('bigArea');
+    const [handle] = tablesOfPage.writer.allocateHandles({
+      offsets: Int32Array.of(0, bytes.length),
+      bytes,
+    });
+    tablesOfPage.writer.apply({
+      handles: Int32Array.of(handle),
+      fields: new Map<RowField, unknown[]>([
+        ['type', ['Polygon']],
+        ['layerId', [LAYER_ID]],
+        ['geometry', [geometry]],
+        ['order', ['a']],
+        ['style', [style]],
+      ]),
+    });
+    return;
+  }
+  draw.features.create({
+    id: 'bigArea',
+    type: 'Polygon',
+    geometry,
+    layerId: LAYER_ID,
+    style,
+  } as never);
+  draw.features.move('bigArea', { layerId: LAYER_ID, index: 0 });
 }
 
 /** Eases the camera and waits for the end of the move */
@@ -530,6 +579,9 @@ function renderEdits(edits: readonly EditResult[]): string {
       `cuts (last frame) ${b.cuts}`,
       `versions swapped ${b.versionsSwapped - a.versionsSwapped} (most held ${b.versionsMostPending}, last merge ${fmt(b.lastMergeMs, 2)} ms)`,
       `peak heap ${fmt(edit.peakHeapMb)} MB`,
+      edit.inputMs
+        ? `input ${fmt(edit.inputMs.mean, 2)} ms (max ${fmt(edit.inputMs.max, 2)}, ${edit.inputMs.count} inputs)`
+        : '',
       `CPU of the rows per frame ${fmt(edit.frameCpuMs.mean, 2)} ms (max ${fmt(edit.frameCpuMs.max, 2)})`,
       edit.error ? `error: ${edit.error}` : '',
     ].filter((fact) => fact !== '');
@@ -553,6 +605,8 @@ function editTarget(): EditTarget | null {
     layerId: LAYER_ID,
     tables: tablesOfPage?.tables ?? null,
     writer: tablesOfPage?.writer ?? null,
+    // The Store the instance writes (`getStore` gives the Store itself, typed as its view)
+    store: draw.getStore() as unknown as Store,
     candidates: opened.candidates,
   };
 }

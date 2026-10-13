@@ -95,8 +95,14 @@
             <option value="longLine">a vertex of the longest line moved</option>
             <option value="corner">a corner of a building moved</option>
             <option value="finish">a building finished in the middle of the order</option>
+            <option value="hover">the pointer moved over the map (one move per frame)</option>
+            <option value="click">a click that selects a building, to its handles</option>
+            <option value="vertexAdd">a vertex added by a drag of a midpoint</option>
+            <option value="vertexRemove">a vertex taken off and put back</option>
+            <option value="delete">a feature selected and deleted</option>
           </select>
         </label>
+        <label>large area under the rows (vertices) <input name="bigArea" type="number" min="0"></label>
         <label>reps <input name="reps" type="number" min="1"></label>
         <label>rule (key:breaks) <input name="rule" type="text"></label>
         <label>changes of others
