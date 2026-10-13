@@ -405,11 +405,22 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     });
 
     // The row groups given to the tables are taken in over the frames: a frame is asked for
-    // when they start waiting
-    engine.unwatchTables =
-      featureTablesInternals(store.tables)?.onPendingWork(() =>
-        engine.mapInstance?.triggerRepaint(),
-      ) ?? null;
+    // when they start waiting. The rows written in place are written into the chunks that draw
+    // them before the next frame
+    const tables = featureTablesInternals(store.tables);
+    if (tables) {
+      const unwatchWork = tables.onPendingWork(() => engine.mapInstance?.triggerRepaint());
+      const unwatchWrites = tables.onRowsWritten((layerId, writes) => {
+        engine.tableRetained?.rowsWritten(layerId, writes);
+        engine.mapInstance?.triggerRepaint();
+      });
+      engine.unwatchTables = () => {
+        unwatchWork();
+        unwatchWrites();
+      };
+    } else {
+      engine.unwatchTables = null;
+    }
 
     watchContextLoss(mapInstance);
 

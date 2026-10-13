@@ -18,7 +18,7 @@
 import RBush from 'rbush';
 import type { BoundingBox } from '../shared/types/model.js';
 import { searchPackedRTree } from '../table/packed-rtree.js';
-import type { RowGroupData } from '../table/row-group-types.js';
+import { ROW_FLAG_DELETED, type RowGroupData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
 import type { RowGroupHandle } from './types.js';
@@ -163,6 +163,25 @@ export function widenBounds(
   };
 }
 
+/** An item that is a row */
+const ITEM_KIND_ROW = 0;
+/** An item that is a group of features */
+const ITEM_KIND_GROUP = 1;
+
+/**
+ * The items of a layer in their order, and the members of its groups of features
+ *
+ * @internal
+ */
+export interface LayerItems {
+  /** The kind of each item (0: a row, 1: a group of features) */
+  readonly kinds: Uint8Array;
+  /** The handle of the row or of the group of each item */
+  readonly handles: Int32Array;
+  /** The handles of the rows of each group of features, in their order */
+  readonly members: ReadonlyMap<number, Int32Array>;
+}
+
 /** A row of a layer moved since its group was built, in the index of the moved rows */
 interface MovedRow {
   minX: number;
@@ -184,6 +203,8 @@ export class LayerTable {
   private readonly indexOf = new Map<RowGroupHandle, number>();
   private rows = 0;
   private revision = 0;
+  /** The items of the layer in their order, made when first read after a change */
+  private items: LayerItems | null = null;
   /** The rows moved since their group was built, by handle (7.4 of the design) */
   private readonly moved = new Map<number, MovedRow>();
   private movedIndex: RBush<MovedRow> | null = null;
@@ -268,6 +289,58 @@ export class LayerTable {
     this.rows += data.length;
     this.reindex();
     this.revision++;
+    this.items = null;
+  }
+
+  /**
+   * The items of the layer in their order: its rows outside a group of features and its groups
+   * of features (one item at the place of their members, which follow each other), deleted rows
+   * left out; with the members of each group in their order. Made again when read after a change
+   * of the rows (`touchItems`)
+   */
+  itemsOf(): LayerItems {
+    if (this.items) return this.items;
+    const kinds: number[] = [];
+    const handles: number[] = [];
+    const members = new Map<number, number[]>();
+    let last = -1;
+    for (const handle of this.order) {
+      const data = (this.groups.get(handle) as RowGroup).data;
+      for (let r = 0; r < data.length; r++) {
+        if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) continue;
+        const group = data.groups[r];
+        if (group < 0) {
+          kinds.push(ITEM_KIND_ROW);
+          handles.push(data.handles[r]);
+          last = -1;
+          continue;
+        }
+        let list = members.get(group);
+        if (!list) {
+          list = [];
+          members.set(group, list);
+        }
+        list.push(data.handles[r]);
+        if (group !== last) {
+          kinds.push(ITEM_KIND_GROUP);
+          handles.push(group);
+          last = group;
+        }
+      }
+    }
+    const byGroup = new Map<number, Int32Array>();
+    for (const [group, list] of members) byGroup.set(group, Int32Array.from(list));
+    this.items = {
+      kinds: Uint8Array.from(kinds),
+      handles: Int32Array.from(handles),
+      members: byGroup,
+    };
+    return this.items;
+  }
+
+  /** Makes the items be made again when next read (a row deleted, a row of another group) */
+  touchItems(): void {
+    this.items = null;
   }
 
   /**

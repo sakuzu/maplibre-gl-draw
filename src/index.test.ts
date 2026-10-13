@@ -26,6 +26,15 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'ITEM_GROUP',
+  'ITEM_ROW',
+  'ItemRefs',
+  'RowApplyOptions',
+  'RowCursor',
+  'RowField',
+  'RowFieldValues',
+  'RowPatch',
+  'TableScanOptions',
   'CompanionProvider',
   'createDraw',
   'createFeatureTables',

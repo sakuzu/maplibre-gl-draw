@@ -32,6 +32,7 @@ import type { RetainedRendererSet } from '../renderers/retained.js';
 import {
   type RowSpriteSource,
   type RowsChunkData,
+  type RowsChunkLayout,
   readRowsInstance,
 } from '../renderers/rows/rows-format.js';
 import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
@@ -215,7 +216,7 @@ function setup(
   const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   const made: RowsChunkData[] = [];
-  const released: RowsChunkData[] = [];
+  const released: RowsChunkLayout[] = [];
   const createChunk = rows.createChunk.bind(rows);
   rows.createChunk = (data) => {
     made.push(data);

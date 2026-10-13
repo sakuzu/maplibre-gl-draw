@@ -19,6 +19,7 @@ import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { BBox } from '../geometry/types.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
+import type { UpdateSource } from './extension/store.js';
 import type { Feature, FeatureType } from './model.js';
 
 /**
@@ -60,6 +61,103 @@ export interface LayerTableView {
   getDrawnRowsRevision(): number;
   /** The handles of `count` rows from the `start`-th one, in the order of the layer */
   rowsInOrder(start: number, count: number): Int32Array;
+  /**
+   * The number of items of the layer: its rows outside a group of features, and its groups of
+   * features (a group is one item, at the place of its members), deleted rows left out
+   */
+  readonly itemCount: number;
+  /** `count` items from the `start`-th one, in the order of the layer */
+  itemsInOrder(start: number, count: number): ItemRefs;
+  /** The number of the rows of a group of features in this layer (deleted rows left out) */
+  groupMemberCount(group: number): number;
+  /**
+   * The handles of `count` rows of a group of features from the `start`-th one, in the order of
+   * the layer (they follow each other at the place of the group)
+   */
+  groupMembersInOrder(group: number, start: number, count: number): Int32Array;
+}
+
+/** An item of {@link ItemRefs} that is a row (its handle is a {@link RowHandle}) */
+export const ITEM_ROW = 0;
+/** An item of {@link ItemRefs} that is a group of features (its handle is the handle of the group) */
+export const ITEM_GROUP = 1;
+
+/**
+ * Items of a layer, in their order: rows and groups of features.
+ */
+export interface ItemRefs {
+  /** The kind of each item: {@link ITEM_ROW} or {@link ITEM_GROUP} */
+  readonly kinds: Uint8Array;
+  /** The handle of each item: of its row, or of its group */
+  readonly handles: Int32Array;
+}
+
+/**
+ * What {@link FeatureTables.scan} reads.
+ */
+export interface TableScanOptions {
+  /** The layers read, in this order (every layer that holds rows when omitted) */
+  readonly layerIds?: readonly string[];
+  /** Only the rows whose bbox meets this box, `[west, south, east, north]` */
+  readonly bbox?: BBox;
+  /**
+   * `layer` (the default): the rows of each layer in its order; `any`: in no order, which costs
+   * less when a box is given
+   */
+  readonly order?: 'layer' | 'any';
+  /** The number of handles read at a time (1,024 when omitted) */
+  readonly batch?: number;
+}
+
+/**
+ * Reads the handles of rows a batch at a time.
+ */
+export interface RowCursor {
+  /** The handles of the next rows (null once every row is read) */
+  next(): Int32Array | null;
+}
+
+/**
+ * A field of a row a {@link RowPatch} writes: a value of the feature of the row, or an attribute
+ * (`property:<key>`).
+ */
+export type RowField =
+  | 'type'
+  | 'layerId'
+  | 'groupId'
+  | 'order'
+  | 'member'
+  | 'geometry'
+  | 'visible'
+  | 'locked'
+  | 'style'
+  | `property:${string}`;
+
+/**
+ * The values of a field, one per row of the patch: as the feature of the row holds them (a
+ * GeoJSON geometry, a style, a boolean; for an attribute its value, `undefined` taking the key
+ * off the row).
+ */
+export type RowFieldValues = readonly unknown[];
+
+/**
+ * Values written to rows of a document, by the implementation of the Store.
+ */
+export interface RowPatch {
+  /** The rows written */
+  readonly handles: Int32Array;
+  /** The values of each field written, one per row */
+  readonly fields: ReadonlyMap<RowField, RowFieldValues>;
+  /** Non-zero for a row deleted */
+  readonly deleted?: Uint8Array;
+}
+
+/**
+ * The options of {@link FeatureTablesWriter.apply}.
+ */
+export interface RowApplyOptions {
+  /** Where the change comes from */
+  readonly source?: UpdateSource;
 }
 
 /**
@@ -72,6 +170,11 @@ export interface FeatureTables {
   handleOf(id: string): RowHandle | undefined;
   /** The id of the row of a handle (undefined for an unknown handle) */
   idOf(handle: RowHandle): string | undefined;
+  /**
+   * Reads the handles of the rows of layers, a batch at a time (the deleted rows left out); read
+   * their values with {@link LayerTableView}.
+   */
+  scan(options?: TableScanOptions): RowCursor;
 }
 
 /**
@@ -102,6 +205,23 @@ export interface FeatureTablesWriter {
    *   when a row names a group of features that is not known (nothing is queued then)
    */
   adopt(layerId: string, groups: readonly RowGroupData[]): void;
+  /**
+   * Writes values of rows, after the implementation of the Store recorded them.
+   *
+   * The geometry, the style, shown and locked, the attributes and the deletion of a row are
+   * written in place: what fits the columns of its row group is written into them, the rest kept
+   * with the group and read before its columns (every reader of the rows reads the values
+   * written). The drawing writes the rows into the chunks that draw them before its next frame.
+   *
+   * The fields that move a row in the order of its layer or to another layer (`type`, `layerId`,
+   * `groupId`, `order`, `member`), the attributes the cutting of the rows into chunks reads (the
+   * created zoom), and new rows are not written in place: they are not taken yet, and a patch
+   * that has one is refused whole.
+   *
+   * @throws when a field is not taken yet, when a handle names no row, or when a value cannot be
+   *   held (nothing is written then)
+   */
+  apply(patch: RowPatch, options?: RowApplyOptions): void;
 }
 
 /**

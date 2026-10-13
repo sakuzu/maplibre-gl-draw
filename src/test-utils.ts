@@ -20,6 +20,7 @@ import { createLayers } from './api/impl/layers.js';
 import { createSelection } from './api/impl/selection.js';
 import type { ResourceDeps } from './api/impl/shared.js';
 import { withLocksIgnored } from './api/impl/shared.js';
+import type { FeatureTables, FeatureTablesWriter } from './api/tables.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
@@ -502,7 +503,12 @@ export function tablesOfFeatures(
   layerId: string,
   features: readonly Feature[],
   targetRows?: number,
-): { internals: FeatureTablesInternals; table: LayerTable } {
+): {
+  internals: FeatureTablesInternals;
+  table: LayerTable;
+  tables: FeatureTables;
+  writer: FeatureTablesWriter;
+} {
   const { tables, writer } = createFeatureTablesStore();
   const builder = createRowGroupBuilder({ targetRows });
   features.forEach((feature, i) => {
@@ -511,7 +517,7 @@ export function tablesOfFeatures(
   writer.adopt(layerId, builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
   internals.flushAdoption();
-  return { internals, table: internals.layerTable(layerId) as LayerTable };
+  return { internals, table: internals.layerTable(layerId) as LayerTable, tables, writer };
 }
 
 /** A feature of the tests */

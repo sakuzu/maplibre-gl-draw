@@ -41,6 +41,7 @@ import {
 import { type RowsChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { TerrainContext } from '../terrain/context.js';
+import { setTerrainCameraMoving } from '../terrain/state.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
 
@@ -116,6 +117,8 @@ function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
     buildBudgetMs: options.budgetMs ?? Number.POSITIVE_INFINITY,
     pixelRatio: options.pixelRatio ?? 1,
   });
+  // The rows written through the writer reach the drawing as in an instance
+  tables.internals.onRowsWritten((layerId, writes) => renderer.rowsWritten(layerId, writes));
   /** One frame; returns the ranges drawn */
   const frame = (): TableDrawRecord[] => {
     renderer.prerender();
@@ -472,5 +475,61 @@ describe('the styles resolved again', () => {
       if (record.some((entry) => entry.kind === 'immediate')) cut = true;
     }
     expect(cut).toBe(true);
+  });
+});
+
+describe('the styles of rows written again and again', () => {
+  /** A patch of the style of one row */
+  const styled = (handle: number, style: FeatureStyle) => ({
+    handles: Int32Array.of(handle),
+    fields: new Map([['style' as const, [style]]]),
+  });
+
+  it('keeps the styles to the ones the rows use while a color changes again and again', () => {
+    const features = scene();
+    const live = drawn(features);
+    const palette = live.made[0].data.palette;
+    const held = palette.size;
+    const styles = live.internals.styles.size;
+    const handle = live.internals.ids.handleOf('point');
+    let style: FeatureStyle = {};
+    for (let i = 0; i < 100; i++) {
+      style = { pointColor: `#${(i * 2_654_435).toString(16).padStart(6, '0').slice(-6)}` };
+      live.writer.apply(styled(handle, style));
+      live.frame();
+    }
+    expect(palette.size).toBeLessThanOrEqual(held + 1);
+    expect(live.internals.styles.size).toBeLessThanOrEqual(styles + 1);
+    features[1] = { ...features[1], style };
+    expect(live.read()).toEqual(drawn(features).read());
+  });
+
+  it('never gives a number a chunk kept drawing names to another style', () => {
+    const features = scene();
+    const live = drawn(features);
+    const chunk = live.made[0];
+    const palette = chunk.data.palette;
+    // The chunk is to be built again, and keeps drawing (the camera moves: it is not built)
+    live.renderer.invalidateAll(true);
+    setTerrainCameraMoving(terrain, true);
+    const handle = live.internals.ids.handleOf('point');
+    const named = (): Array<[number, number[]]> =>
+      Array.from(chunk.data.rowStyle)
+        .filter((n) => n >= 0)
+        .map((n) => [n, Array.from(palette.values.subarray(n * 16, n * 16 + 16))]);
+    for (let i = 0; i < 30; i++) {
+      const before = named();
+      live.writer.apply(
+        styled(handle, { pointColor: `#00${(i * 7).toString(16).padStart(2, '0')}ff` }),
+      );
+      live.frame();
+      // Every number the chunk names is held, with the values it had (the point's own row aside)
+      for (const [n, values] of before) {
+        if (!Array.from(chunk.data.rowStyle).includes(n)) continue;
+        expect(palette.usesOf(n)).toBeGreaterThan(0);
+        expect(Array.from(palette.values.subarray(n * 16, n * 16 + 16))).toEqual(values);
+      }
+    }
+    setTerrainCameraMoving(terrain, false);
   });
 });

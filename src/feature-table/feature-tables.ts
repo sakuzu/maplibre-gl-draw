@@ -14,17 +14,28 @@ import type {
   FeatureTables,
   FeatureTablesOptions,
   FeatureTablesWriter,
+  ItemRefs,
   LayerTableView,
+  RowApplyOptions,
+  RowCursor,
   RowHandle,
+  RowPatch,
+  TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
-import type { Feature, FeatureType } from '../shared/types/model.js';
-import { ROW_FLAG_DELETED, ROW_FLAG_VISIBLE, type RowGroupData } from '../table/row-group-types.js';
+import { drawPropertyKey } from '../shared/properties.js';
+import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
+import {
+  ROW_FLAG_DELETED,
+  ROW_FLAG_LOCKED,
+  ROW_FLAG_VISIBLE,
+  type RowGroupData,
+} from '../table/row-group-types.js';
 import { utf8ColumnLength } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
-import { createRowGroup, LayerTable, type RowGroup } from './layer-table.js';
+import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
 import { type RowReadContext, rowFeature, rowPoint, rowType, rowValue } from './row-read.js';
 import {
   RowStateSets,
@@ -35,8 +46,33 @@ import {
   STATE_UNIFORM,
   toGpuState,
 } from './row-state.js';
+import {
+  type GeometryWrite,
+  isRadiusKey,
+  refreshRowShape,
+  writeRowGeometry,
+  writeRowValue,
+} from './row-write.js';
 import { StyleTable } from './style-table.js';
-import type { RowGroupHandle, TableWorkBudget } from './types.js';
+import {
+  ROW_WRITE_GEOMETRY,
+  ROW_WRITE_STATE,
+  ROW_WRITE_STYLE,
+  ROW_WRITE_VALUES,
+  type RowGroupHandle,
+  type RowWrite,
+  type TableWorkBudget,
+} from './types.js';
+import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
+
+/** The key of the created zoom: the cutting of the rows into chunks reads it */
+const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
+
+/** The fields of a row that are not written in place yet (they move the row in the order) */
+const FIELDS_NOT_IN_PLACE = new Set(['type', 'layerId', 'groupId', 'order', 'member']);
+
+/** The number of handles a scan reads at a time when not told */
+const SCAN_BATCH = 1024;
 
 /**
  * Creates the tables of the features of a document, as its reading and writing sides (the
@@ -53,10 +89,12 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     layer: (layerId) => store.view(layerId),
     handleOf: (id) => store.handleOf(id),
     idOf: (handle) => store.ids.idOf(handle),
+    scan: (options) => store.scan(options ?? {}),
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
     adopt: (layerId, groups) => store.adopt(layerId, groups),
+    apply: (patch, options) => store.apply(patch, options),
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
@@ -103,6 +141,18 @@ export interface FeatureTablesInternals {
    * @returns The function that stops the calls
    */
   onPendingWork(listener: () => void): () => void;
+  /**
+   * Calls `listener` with the rows of a layer written in place, so the drawing writes them
+   * into the chunks that draw them
+   *
+   * @returns The function that stops the calls
+   */
+  onRowsWritten(listener: (layerId: string, writes: readonly RowWrite[]) => void): () => void;
+  /**
+   * The row groups whose values written in place hold more than `OVERRIDE_BYTES_LIMIT` bytes:
+   * they are due for their next version
+   */
+  readonly groupsDue: ReadonlySet<RowGroupHandle>;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -135,6 +185,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The row groups given to `adopt` and not taken in yet, in the order they were given */
   private readonly adoptions: Array<{ layer: LayerTable; data: RowGroupData }> = [];
   private readonly workListeners = new Set<() => void>();
+  private readonly writeListeners = new Set<
+    (layerId: string, writes: readonly RowWrite[]) => void
+  >();
+  readonly groupsDue = new Set<RowGroupHandle>();
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -249,6 +303,195 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return () => {
       this.workListeners.delete(listener);
     };
+  }
+
+  onRowsWritten(listener: (layerId: string, writes: readonly RowWrite[]) => void): () => void {
+    this.writeListeners.add(listener);
+    return () => {
+      this.writeListeners.delete(listener);
+    };
+  }
+
+  /** Reads the handles of the rows of layers a batch at a time */
+  scan(options: TableScanOptions): RowCursor {
+    const layers = (options.layerIds ?? [...this.layers.keys()])
+      .map((id) => this.layers.get(id))
+      .filter((layer): layer is LayerTable => layer !== undefined);
+    const batch = Math.max(1, Math.floor(options.batch ?? SCAN_BATCH));
+    const bbox = options.bbox;
+    const ordered = options.order !== 'any';
+    let layerAt = 0;
+    let groupAt = 0;
+    let rows: number[] | null = null;
+    let rowAt = 0;
+    const found: number[] = [];
+    return {
+      next: (): Int32Array | null => {
+        const out: number[] = [];
+        while (out.length < batch && layerAt < layers.length) {
+          const layer = layers[layerAt];
+          if (groupAt >= layer.groupCount) {
+            layerAt++;
+            groupAt = 0;
+            rows = null;
+            continue;
+          }
+          const group = layer.groupAt(groupAt);
+          if (!rows) {
+            if (bbox) {
+              found.length = 0;
+              layer.searchRows(group, bbox[0], bbox[1], bbox[2], bbox[3], found);
+              if (ordered) found.sort((a, b) => a - b);
+              rows = found;
+            } else {
+              rows = [];
+            }
+            rowAt = 0;
+          }
+          const length = bbox ? rows.length : group.data.length;
+          while (out.length < batch && rowAt < length) {
+            const row = bbox ? rows[rowAt] : rowAt;
+            rowAt++;
+            if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) continue;
+            out.push(group.data.handles[row]);
+          }
+          if (rowAt >= length) {
+            groupAt++;
+            rows = null;
+          }
+        }
+        return out.length > 0 ? Int32Array.from(out) : null;
+      },
+    };
+  }
+
+  /**
+   * Writes values of rows in place (see `FeatureTablesWriter.apply`): every value is checked
+   * before anything is written, then the rows are written and the drawing is told
+   */
+  apply(patch: RowPatch, _options: RowApplyOptions = {}): void {
+    const { handles, fields, deleted } = patch;
+    // The checks: what is not written in place yet, and rows that are not in the tables
+    for (const [field, values] of fields) {
+      if (FIELDS_NOT_IN_PLACE.has(field)) {
+        throw new Error(`FeatureTables: the field "${field}" is not written in place yet`);
+      }
+      if (field === `property:${CREATED_ZOOM_KEY}`) {
+        throw new Error(
+          `FeatureTables: the attribute "${CREATED_ZOOM_KEY}" is not written in place yet`,
+        );
+      }
+      if (values.length !== handles.length) {
+        throw new Error(
+          `FeatureTables: "${field}" has ${values.length} values for ${handles.length} rows`,
+        );
+      }
+    }
+    if (deleted && deleted.length !== handles.length) {
+      throw new Error('FeatureTables: deleted has another length than the rows');
+    }
+    const places: Array<{ layer: LayerTable; group: RowGroup; row: number }> = [];
+    for (const handle of handles) {
+      const placed = this.rowGroups.get(this.ids.mainGroup(handle));
+      if (!placed) {
+        throw new Error(
+          `FeatureTables: no row has the handle ${handle} (new rows are not written in place yet)`,
+        );
+      }
+      places.push({ layer: placed.layer, group: placed.group, row: this.ids.mainRow(handle) });
+    }
+    // The values are made what the columns hold before anything is written
+    const styles = fields.get('style');
+    const styleNumbers = styles?.map((style) => this.styles.intern((style ?? {}) as FeatureStyle));
+    const geometries = fields.get('geometry');
+    geometries?.forEach((geometry, i) => {
+      if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) {
+        throw new Error(`FeatureTables: the geometry of the row ${handles[i]} is not a geometry`);
+      }
+    });
+
+    const writes = new Map<string, RowWrite[]>();
+    const touched = new Set<RowGroup>();
+    let stateChanged = false;
+    places.forEach(({ layer, group, row }, i) => {
+      const data = group.data;
+      let what = 0;
+      let shape: GeometryWrite = { sameShape: true, from: 0, to: 0 };
+      const keys: string[] = [];
+      if (geometries) {
+        shape = writeRowGeometry(layer, group, row, geometries[i] as never);
+        what |= ROW_WRITE_GEOMETRY;
+        stateChanged = true;
+      }
+      if (styleNumbers) {
+        const next = styleNumbers[i];
+        const old = data.styles[row];
+        if (next !== old) {
+          this.styles.retain(next);
+          this.styles.release(old);
+          data.styles[row] = next;
+          what |= ROW_WRITE_STYLE;
+        }
+      }
+      let flags = data.flags[row];
+      const visible = fields.get('visible');
+      if (visible)
+        flags = visible[i] === false ? flags & ~ROW_FLAG_VISIBLE : flags | ROW_FLAG_VISIBLE;
+      const locked = fields.get('locked');
+      if (locked) flags = locked[i] === true ? flags | ROW_FLAG_LOCKED : flags & ~ROW_FLAG_LOCKED;
+      if (deleted && deleted[i] !== 0) flags |= ROW_FLAG_DELETED;
+      if (flags !== data.flags[row]) {
+        if ((flags & ROW_FLAG_DELETED) !== (data.flags[row] & ROW_FLAG_DELETED)) layer.touchItems();
+        data.flags[row] = flags;
+        this.writeState(group, row);
+        group.stateVersion++;
+        what |= ROW_WRITE_STATE;
+        stateChanged = true;
+      }
+      for (const [field, values] of fields) {
+        if (!field.startsWith('property:')) continue;
+        const key = field.slice('property:'.length);
+        if (!writeRowValue(group, row, key, values[i])) continue;
+        what |= ROW_WRITE_VALUES;
+        keys.push(key);
+        if (isRadiusKey(group, row, key)) {
+          // The ring of a Circle follows its radius
+          const ring = refreshRowShape(layer, group, row);
+          shape = { sameShape: ring.sameTriangles, from: 0, to: ring.ring };
+          what |= ROW_WRITE_GEOMETRY;
+          stateChanged = true;
+        }
+      }
+      if (what === 0) return;
+      touched.add(group);
+      let list = writes.get(layer.layerId);
+      if (!list) {
+        list = [];
+        writes.set(layer.layerId, list);
+      }
+      list.push({
+        group: group.handle,
+        row,
+        what,
+        sameShape: shape.sameShape,
+        from: shape.from,
+        to: shape.to,
+        keys,
+      });
+    });
+    // A style interned for a row that kept its own is not held by any row
+    if (styleNumbers) {
+      for (const number of styleNumbers) {
+        if (this.styles.usesOf(number) === 0) this.styles.release(number);
+      }
+    }
+    for (const group of touched) {
+      if (overrideBytesOf(group) > OVERRIDE_BYTES_LIMIT) this.groupsDue.add(group.handle);
+    }
+    if (stateChanged) this.revisionCount++;
+    for (const [layerId, list] of writes) {
+      for (const listener of this.writeListeners) listener(layerId, list);
+    }
   }
 
   /** Takes in one row group: the handles, the numbers of its styles, the state of its rows */
@@ -432,6 +675,28 @@ class LayerTableViewImpl implements LayerTableView {
       skip = 0;
     }
     return out;
+  }
+
+  get itemCount(): number {
+    return this.table.itemsOf().kinds.length;
+  }
+
+  itemsInOrder(start: number, count: number): ItemRefs {
+    const items = this.table.itemsOf();
+    const from = Math.max(0, Math.min(start, items.kinds.length));
+    const to = Math.max(from, Math.min(items.kinds.length, from + Math.max(0, count)));
+    return { kinds: items.kinds.slice(from, to), handles: items.handles.slice(from, to) };
+  }
+
+  groupMemberCount(group: number): number {
+    return this.table.itemsOf().members.get(group)?.length ?? 0;
+  }
+
+  groupMembersInOrder(group: number, start: number, count: number): Int32Array {
+    const members = this.table.itemsOf().members.get(group);
+    if (!members) return new Int32Array(0);
+    const from = Math.max(0, Math.min(start, members.length));
+    return members.slice(from, Math.max(from, Math.min(members.length, from + Math.max(0, count))));
   }
 
   /** The group and row of a handle, when its row is in this layer */
