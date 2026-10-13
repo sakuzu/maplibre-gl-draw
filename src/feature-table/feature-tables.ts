@@ -34,7 +34,11 @@ import type {
 import type { BBox } from '../geometry/types.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { BoundingBox, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
-import { createRowGroupBuilder, type RowInput } from '../table/row-group-builder.js';
+import {
+  createRowGroupBuilder,
+  ROW_GROUP_TARGET_ROWS,
+  type RowInput,
+} from '../table/row-group-builder.js';
 import { mergeRowGroup } from '../table/row-group-merge.js';
 import {
   ROW_FLAG_DELETED,
@@ -42,7 +46,8 @@ import {
   ROW_FLAG_VISIBLE,
   type RowGroupData,
 } from '../table/row-group-types.js';
-import { utf8ColumnLength, utf8String } from '../table/utf8-column.js';
+import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
+import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
@@ -112,6 +117,23 @@ const SCAN_BATCH = 1024;
 
 /** A size no group of rows reaches: the rows of a delta are one group */
 const UNBOUNDED = Number.MAX_SAFE_INTEGER;
+
+/**
+ * The fewest new rows of one write built into row groups of their own rather than put in the
+ * delta (fewer go to the delta, drawn from the frame they are written in; a first estimate, to be
+ * set from measured data)
+ *
+ * @internal
+ */
+export const CREATE_GROUP_MIN_ROWS = 64;
+
+/**
+ * The frames the new rows of a creation wait for more written after them before they are built
+ * (the writes of a large import come a part at a time)
+ *
+ * @internal
+ */
+export const CREATE_WAIT_FRAMES = 2;
 
 /**
  * Creates the tables of the features of a document, as its reading and writing sides (the
@@ -282,6 +304,22 @@ interface DeltaInput {
   readonly input: RowInput;
 }
 
+/**
+ * New rows of a layer built into row groups of their own (6.5 of the design): a run of keys no
+ * row of the layer is within, at a place between two groups (or before the first, after the
+ * last), gathered over the writes that continue it
+ */
+interface Creation {
+  readonly layer: LayerTable;
+  readonly rows: DeltaInput[];
+  /** The keys of the first and the last row */
+  first: RowKeySource;
+  last: RowKeySource;
+  /** The frames since a row was added */
+  idle: number;
+  status: 'gathering' | 'building' | 'done';
+}
+
 /** What a change wrote to the rows of one layer, as it is gathered */
 interface LayerChangeDraft {
   readonly created: number[];
@@ -309,7 +347,16 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The number of the last change written (the rows of the delta keep the one they were in) */
   private writeCount = 0;
   /** The row groups given to `adopt` and not taken in yet, in the order they were given */
-  private readonly adoptions: Array<{ layer: LayerTable; data: RowGroupData }> = [];
+  private readonly adoptions: Array<{
+    layer: LayerTable;
+    data: RowGroupData;
+    /** Whether the group is new rows written (put in the delta when it cannot be taken in) */
+    created?: boolean;
+  }> = [];
+  /** The new rows built into groups of their own, being gathered or built */
+  private readonly creations: Creation[] = [];
+  /** The creation of each row in one */
+  private readonly creationOf = new Map<RowHandle, Creation>();
   private readonly workListeners = new Set<() => void>();
   private readonly writeListeners = new Set<
     (layerId: string, writes: readonly RowWrite[]) => void
@@ -357,10 +404,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   get hasPendingWork(): boolean {
-    return this.adoptions.length > 0 || this.versions.hasWork;
+    return this.adoptions.length > 0 || this.creations.length > 0 || this.versions.hasWork;
   }
 
   advanceVersions(budget: TableWorkBudget): void {
+    this.advanceCreations(budget, true);
     this.versions.advance(budget);
   }
 
@@ -369,7 +417,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   flushVersions(): void {
-    const unbounded: TableWorkBudget = { canStep: () => true, step: (work) => work(Infinity) };
+    const unbounded = UNBOUNDED_BUDGET;
+    this.flushAdoption();
     for (let i = 0; i < 64 && (i === 0 || this.versions.hasWork); i++) {
       const before = this.versions.swapped;
       this.versions.advance(unbounded, false);
@@ -510,13 +559,19 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   advanceAdoption(budget: TableWorkBudget): boolean {
     while (this.adoptions.length > 0 && budget.canStep()) {
-      const next = this.adoptions.shift() as { layer: LayerTable; data: RowGroupData };
+      const next = this.adoptions.shift() as {
+        layer: LayerTable;
+        data: RowGroupData;
+        created?: boolean;
+      };
       budget.step(() => {
         try {
           this.adoptGroup(next.layer, next.data);
         } catch (error) {
-          // There is no caller to throw to any more: the group is left out
-          console.error(error);
+          // New rows written go to the delta; a group given to `adopt` is left out (there is no
+          // caller to throw to any more)
+          if (next.created) this.createdToDelta(next.layer, next.data);
+          else console.error(error);
         }
       });
     }
@@ -524,10 +579,250 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   flushAdoption(): void {
+    this.advanceCreations(UNBOUNDED_BUDGET, false);
     while (this.adoptions.length > 0) {
-      const next = this.adoptions.shift() as { layer: LayerTable; data: RowGroupData };
-      this.adoptGroup(next.layer, next.data);
+      const next = this.adoptions.shift() as {
+        layer: LayerTable;
+        data: RowGroupData;
+        created?: boolean;
+      };
+      try {
+        this.adoptGroup(next.layer, next.data);
+      } catch (error) {
+        if (!next.created) throw error;
+        this.createdToDelta(next.layer, next.data);
+      }
     }
+  }
+
+  // === New rows built into groups of their own ===
+
+  /**
+   * Builds the creations whose rows stopped coming (or that reached the size of a group) into
+   * row groups, in the Worker of the host when it has one, and queues them to be taken in
+   *
+   * @param wait Whether a creation waits for more rows (false: every one is built now)
+   */
+  private advanceCreations(budget: TableWorkBudget, wait: boolean): void {
+    for (const creation of [...this.creations]) {
+      if (creation.status !== 'gathering') continue;
+      creation.idle++;
+      // Rows keep coming: the groups of the target size are built, the rest keeps gathering (so
+      // a long import is not cut into a group per write)
+      if (wait && creation.idle <= CREATE_WAIT_FRAMES) this.splitCreation(creation);
+    }
+    for (const creation of [...this.creations]) {
+      if (creation.status !== 'gathering') continue;
+      if (wait && creation.idle <= CREATE_WAIT_FRAMES) continue;
+      const worker = this.worker;
+      if (worker && wait) {
+        creation.status = 'building';
+        const inputs = creation.rows.map((row) => row.input);
+        worker.build(inputs, { groups: this.groups.keyList() }).then(
+          (groups) => {
+            if (creation.status !== 'building') return;
+            this.queueCreation(creation, groups);
+          },
+          (error) => {
+            console.error(error);
+            if (creation.status === 'building') this.creationToDelta(creation);
+          },
+        );
+        continue;
+      }
+      if (!budget.canStep()) break;
+      budget.step(() => this.queueCreation(creation, this.buildCreation(creation)));
+    }
+  }
+
+  /**
+   * Takes the first rows of a creation, as many as whole groups of the target size, into a
+   * creation of their own (built at once), the rest staying
+   */
+  private splitCreation(creation: Creation): void {
+    if (creation.rows.length < ROW_GROUP_TARGET_ROWS) return;
+    const keys = keySourceOf(creation.rows.map((row) => row.input));
+    const order = creation.rows.map((_, i) => i);
+    order.sort((a, b) => compareRowKeys(keys, a, keys, b, this.groups));
+    const whole = order.length - (order.length % ROW_GROUP_TARGET_ROWS);
+    if (whole === 0) return;
+    const rows = order.map((i) => creation.rows[i]);
+    const head: Creation = {
+      ...creation,
+      rows: rows.slice(0, whole),
+      first: oneKey(keys, order[0]),
+      last: oneKey(keys, order[whole - 1]),
+    };
+    // Built in this pass
+    head.idle = CREATE_WAIT_FRAMES + 1;
+    this.creations.splice(this.creations.indexOf(creation), 0, head);
+    for (const row of head.rows) this.creationOf.set(row.handle, head);
+    creation.rows.length = 0;
+    creation.rows.push(...rows.slice(whole));
+    if (creation.rows.length === 0) {
+      this.endCreation(creation);
+      return;
+    }
+    creation.first = oneKey(keys, order[whole]);
+  }
+
+  /** Builds the rows of a creation into row groups on the main thread */
+  private buildCreation(creation: Creation): RowGroupData[] {
+    const builder = createRowGroupBuilder({ groups: this.groups.keyList() });
+    for (const row of creation.rows) builder.addRow(row.input);
+    return builder.finish();
+  }
+
+  /** Queues the groups of a creation built, to be taken in */
+  private queueCreation(creation: Creation, groups: RowGroupData[]): void {
+    this.endCreation(creation);
+    const wasPending = this.adoptions.length > 0;
+    for (const data of groups) this.adoptions.push({ layer: creation.layer, data, created: true });
+    if (!wasPending && this.adoptions.length > 0) this.notifyWork();
+  }
+
+  private endCreation(creation: Creation): void {
+    creation.status = 'done';
+    const at = this.creations.indexOf(creation);
+    if (at >= 0) this.creations.splice(at, 1);
+    for (const row of creation.rows) {
+      if (this.creationOf.get(row.handle) === creation) this.creationOf.delete(row.handle);
+    }
+  }
+
+  /** Builds and takes in a creation now (a row of it is written before it is built) */
+  private finishCreationNow(creation: Creation): void {
+    const groups = this.buildCreation(creation);
+    this.endCreation(creation);
+    for (const data of groups) {
+      try {
+        this.adoptGroup(creation.layer, data);
+      } catch {
+        this.createdToDelta(creation.layer, data);
+      }
+    }
+  }
+
+  /** Puts the rows of a creation into the delta (it could not be built) */
+  private creationToDelta(creation: Creation): void {
+    this.endCreation(creation);
+    this.rebuildDelta(creation.layer, new Set(), creation.rows, ++this.writeCount);
+    this.revisionCount++;
+  }
+
+  /** Puts the rows of a group of new rows that could not be taken in into the delta */
+  private createdToDelta(layer: LayerTable, data: RowGroupData): void {
+    this.numberStyles(data);
+    data.handles.set(this.ids.allocate(data.ids, data.idHashes));
+    const group = createRowGroup(-1, data);
+    const rows: DeltaInput[] = [];
+    for (let r = 0; r < data.length; r++) {
+      const handle = data.handles[r];
+      if (this.placeOf(handle)) continue;
+      rows.push({ handle, input: rowInputOf(this.readContext, group, r) });
+    }
+    this.rebuildDelta(layer, new Set(), rows, ++this.writeCount);
+    this.revisionCount++;
+  }
+
+  /**
+   * Takes new rows of one write into a creation when their keys are a run no row of the layer is
+   * within, at a place between two groups: a new one when they are many, or the creation at the
+   * same place whose rows they follow
+   *
+   * @returns Whether they were taken (they go to the delta otherwise)
+   */
+  private tryCreate(layer: LayerTable, rows: DeltaInput[]): boolean {
+    const keys = keySourceOf(rows.map((row) => row.input));
+    const order = rows.map((_, i) => i);
+    order.sort((a, b) => compareRowKeys(keys, a, keys, b, this.groups));
+    const first = order[0];
+    const last = order[order.length - 1];
+    if (!this.withinGap(layer, keys, first, keys, last)) return false;
+    const cmp = (a: RowKeySource, i: number, b: RowKeySource, j: number): number =>
+      compareRowKeys(a, i, b, j, this.groups);
+    // The creation whose rows these follow, with no row of the layer between them
+    let target: Creation | null = null;
+    for (const creation of this.creations) {
+      if (creation.layer !== layer) continue;
+      const before = cmp(creation.last, 0, keys, first) < 0;
+      const after = cmp(keys, last, creation.first, 0) < 0;
+      // Within the run of another creation: not a run of its own
+      if (!before && !after) return false;
+      if (
+        before &&
+        creation.status === 'gathering' &&
+        (!target || cmp(target.last, 0, creation.last, 0) < 0)
+      ) {
+        target = creation;
+      }
+    }
+    if (target && !this.withinGap(layer, target.first, 0, keys, last)) target = null;
+    // Rows of the delta within the run (from the last row of the creation continued)
+    const from = target ? target.last : keys;
+    if (this.deltaWithin(layer, from, target ? 0 : first, keys, last)) return false;
+    if (target && target.rows.length >= ROW_GROUP_TARGET_ROWS) target = null;
+    if (!target) {
+      if (rows.length < CREATE_GROUP_MIN_ROWS) return false;
+      target = {
+        layer,
+        rows: [],
+        first: oneKey(keys, first),
+        last: oneKey(keys, last),
+        idle: 0,
+        status: 'gathering',
+      };
+      this.creations.push(target);
+    } else {
+      target.last = oneKey(keys, last);
+      target.idle = 0;
+    }
+    for (const row of rows) {
+      target.rows.push(row);
+      this.creationOf.set(row.handle, target);
+    }
+    this.notifyWork();
+    return true;
+  }
+
+  /**
+   * Whether a run of keys `[first, last]` falls between two groups of a layer (or before the
+   * first, after the last): no row of a group is within it
+   */
+  private withinGap(
+    layer: LayerTable,
+    firstKeys: RowKeySource,
+    first: number,
+    lastKeys: RowKeySource,
+    last: number,
+  ): boolean {
+    if (layer.groupCount === 0) return true;
+    const a = layer.positionOfKey(firstKeys, first);
+    const b = layer.positionOfKey(lastKeys, last);
+    if (!a || !b || a.group !== b.group || a.slot !== b.slot || a.slot % 2 === 1) return false;
+    const g = layer.orderOf(a.group);
+    return a.slot === 2 * layer.groupAt(g).data.length || (g === 0 && a.slot === 0);
+  }
+
+  /** Whether a row of the delta of a layer has a key within `[from, to]` of two sources */
+  private deltaWithin(
+    layer: LayerTable,
+    fromKeys: RowKeySource,
+    from: number,
+    toKeys: RowKeySource,
+    to: number,
+  ): boolean {
+    const delta = layer.delta.group;
+    if (!delta) return false;
+    for (let k = 0; k < delta.data.length; k++) {
+      if (
+        compareRowKeys(fromKeys, from, delta.data, k, this.groups) <= 0 &&
+        compareRowKeys(delta.data, k, toKeys, to, this.groups) <= 0
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   onPendingWork(listener: () => void): () => void {
@@ -694,6 +989,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
         throw new Error(`FeatureTables: the ${name} of the row ${handles[i]} is not a string`);
       });
     }
+    // A row of a creation written before it is built: the creation is built now
+    for (const handle of handles) {
+      const creation = this.creationOf.get(handle);
+      if (creation) this.finishCreationNow(creation);
+    }
     const places = Array.from(handles, (handle) => this.placeOf(handle));
     places.forEach((place, i) => {
       if (place) return;
@@ -724,6 +1024,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const touched = new Set<RowGroup>();
     const moving = new Map<LayerTable, DeltaInput[]>();
     const leaving = new Map<LayerTable, Set<RowHandle>>();
+    const fresh = new Map<LayerTable, DeltaInput[]>();
     const changes = new Map<string, LayerChangeDraft>();
     let stateChanged = false;
     let created = false;
@@ -772,9 +1073,20 @@ class FeatureTablesStore implements FeatureTablesInternals {
         list.push(write);
         continue;
       }
-      // Placed elsewhere, or new: a copy in the delta of its layer
+      // Placed elsewhere, or new: a copy in the delta of its layer (many new rows next to each
+      // other are built into groups of their own instead)
       const input = this.patchedInput(handle, place, i, fields, deleted, groupHandles);
       const layer = this.layerOf(targetLayer as string);
+      if (!place) {
+        let list = fresh.get(layer);
+        if (!list) {
+          list = [];
+          fresh.set(layer, list);
+        }
+        list.push({ handle, input });
+        created = true;
+        continue;
+      }
       let list = moving.get(layer);
       if (!list) {
         list = [];
@@ -805,6 +1117,16 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.versions.markDue(group.handle);
       }
       this.versions.checkMoved(group);
+    }
+    // The new rows: a run of their own built into groups, or into the delta
+    for (const [layer, list] of fresh) {
+      if (this.tryCreate(layer, list)) continue;
+      let into = moving.get(layer);
+      if (!into) {
+        into = [];
+        moving.set(layer, into);
+      }
+      into.push(...list);
     }
     // The deltas
     const layers = new Set<LayerTable>([...moving.keys(), ...leaving.keys()]);
@@ -1335,6 +1657,34 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     this.revisionCount++;
   }
+}
+
+/** A budget without limit */
+const UNBOUNDED_BUDGET: TableWorkBudget = {
+  canStep: () => true,
+  step: (work) => work(Number.POSITIVE_INFINITY),
+};
+
+/** The keys of the order of rows given to the builder */
+function keySourceOf(inputs: readonly RowInput[]): RowKeySource {
+  return {
+    ids: utf8ColumnFromStrings(inputs.map((input) => input.id)),
+    itemKeys: utf8ColumnFromStrings(inputs.map((input) => input.order)),
+    memberKeys: utf8ColumnFromStrings(
+      inputs.map((input) => ((input.group ?? -1) >= 0 ? (input.member ?? '') : '')),
+    ),
+    groups: Int32Array.from(inputs, (input) => input.group ?? -1),
+  };
+}
+
+/** The keys of one row of a source, as a source of one row */
+function oneKey(keys: RowKeySource, row: number): RowKeySource {
+  return {
+    ids: utf8ColumnFromStrings([utf8String(keys.ids, row)]),
+    itemKeys: utf8ColumnFromStrings([utf8String(keys.itemKeys, row)]),
+    memberKeys: utf8ColumnFromStrings([utf8String(keys.memberKeys, row)]),
+    groups: Int32Array.of(keys.groups[row]),
+  };
 }
 
 /** The union of two extents (null when both are) */

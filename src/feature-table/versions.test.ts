@@ -207,7 +207,8 @@ describe('the next versions of the row groups', () => {
     const { tables, writer, internals, groupHandleOf } = tablesOfReference(reference, ['a'], 4);
     const table = internals.layerTable('a');
     expect(table?.groupCount).toBe(3);
-    // 9,000 new rows in the range of the last group: cut into groups of the target rows
+    // 9,000 new rows within the range of the middle group (between p5 and p6): into the delta,
+    // and the next version of the group cut into groups of the target rows
     const ids = Array.from({ length: 9000 }, (_, i) => `n${i}`);
     const handles = writer.allocateHandles(utfColumn(ids));
     writer.apply(
@@ -215,16 +216,17 @@ describe('the next versions of the row groups', () => {
         type: ids.map(() => 'Point'),
         layerId: ids.map(() => 'a'),
         geometry: ids.map((_, i) => ({ type: 'Point', coordinates: [i, 1] })),
-        order: ids.map((_, i) => `${key(8000)}${String(i).padStart(5, '0')}`),
+        order: ids.map((_, i) => `${key(5000)}${String(i).padStart(5, '0')}`),
       }),
     );
+    expect(internals.deltaRowCount()).toBe(9000);
     ids.forEach((id, i) => {
       reference.rows.set(id, {
         id,
         layerId: 'a',
         type: 'Point',
         geometry: { type: 'Point', coordinates: [i, 1] },
-        order: `${key(8000)}${String(i).padStart(5, '0')}`,
+        order: `${key(5000)}${String(i).padStart(5, '0')}`,
         groupId: undefined,
         member: '',
         style: {},
