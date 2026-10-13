@@ -339,6 +339,22 @@ describe('RowsRenderer', () => {
     expect(Array.from(textures[0].args[8] as Float32Array)).toEqual([9, 9]);
   });
 
+  it('keeps none of the packed arrays of a chunk once they are on the GPU', () => {
+    const mock = recordingGL();
+    const renderer = new RowsRenderer(null, mock.gl, 1);
+    renderer.ensureShader(SHADER_DATA);
+    const data = chunkData(4);
+    const chunk = renderer.createChunk(data);
+    expect(chunk.packed).toBe(data);
+    renderer.flushUploads();
+    expect(chunk.packed).toBeNull();
+    // What it keeps: the places of the rows and their styles, not the arrays written
+    for (const key of ['instances', 'points', 'coords', 'rowStyles']) {
+      expect(key in chunk.data).toBe(false);
+    }
+    expect(chunk.data.rowFirst).toBe(data.rowFirst);
+  });
+
   it('writes into the packed arrays of a chunk not uploaded yet', () => {
     const mock = recordingGL();
     const renderer = new RowsRenderer(null, mock.gl, 1);

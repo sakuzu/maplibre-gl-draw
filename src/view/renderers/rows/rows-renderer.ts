@@ -46,6 +46,7 @@ import {
   ROWS_STYLE_TEXELS,
   ROWS_STYLE_WIDTH,
   type RowsChunkData,
+  type RowsChunkLayout,
   type RowsPalette,
   writeCollapsedInstance,
 } from './rows-format.js';
@@ -80,8 +81,13 @@ interface SizedTexture {
  * @internal
  */
 export interface RowsChunk {
-  /** The packed arrays (kept for the writes in place) */
-  readonly data: RowsChunkData;
+  /** Where each row is in the chunk, and what it is drawn with */
+  readonly data: RowsChunkLayout;
+  /**
+   * The packed arrays until they are written to the GPU (null after: the chunk keeps no copy of
+   * them, and what is written in place is held in `writes` until the next upload)
+   */
+  packed: RowsChunkData | null;
   /** Whether it is written to the GPU (it can be drawn) */
   uploaded: boolean;
   vao: WebGLVertexArrayObject | null;
@@ -286,7 +292,8 @@ export class RowsRenderer {
    */
   createChunk(data: RowsChunkData): RowsChunk {
     const chunk: RowsChunk = {
-      data,
+      data: layoutOf(data),
+      packed: data,
       uploaded: false,
       vao: null,
       instanceBuffer: null,
@@ -478,16 +485,17 @@ export class RowsRenderer {
     source: ArrayLike<number>,
     at = 0,
   ): void {
-    const data = chunk.data;
+    const packed = chunk.packed;
     if (!chunk.uploaded) {
+      if (!packed) return;
       const array =
         target === 'instances'
-          ? data.instances
+          ? packed.instances
           : target === 'points'
-            ? data.points
+            ? packed.points
             : target === 'coords'
-              ? data.coords
-              : data.rowStyles;
+              ? packed.coords
+              : packed.rowStyles;
       const floats =
         target === 'coords'
           ? 2
@@ -909,15 +917,16 @@ export class RowsRenderer {
 
   /** Writes a chunk: its buffers, its textures and its vertex array */
   private uploadChunk(chunk: RowsChunk): void {
-    if (chunk.disposed) return;
+    const data = chunk.packed;
+    if (chunk.disposed || !data) return;
     const gl = this.gl;
-    const data = chunk.data;
 
     const instances = data.instances.subarray(0, data.instanceCount * ROWS_INSTANCE_FLOATS);
     const instanceBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instances, gl.STATIC_DRAW);
     this.ledger?.record(instanceBuffer, LEDGER_OWNER, 'buffer', instances.byteLength);
+    this.uploadedBytes += instances.byteLength;
     chunk.instanceBuffer = instanceBuffer;
 
     if (data.pointCount > 0) {
@@ -926,6 +935,7 @@ export class RowsRenderer {
       gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
       this.ledger?.record(pointBuffer, LEDGER_OWNER, 'buffer', points.byteLength);
+      this.uploadedBytes += points.byteLength;
       chunk.pointBuffer = pointBuffer;
     }
 
@@ -958,6 +968,8 @@ export class RowsRenderer {
     chunk.pointedFirst = 0;
 
     chunk.uploaded = true;
+    // The packed arrays are on the GPU: the chunk keeps none of them
+    chunk.packed = null;
   }
 
   /** Makes a float texture of `count` texels of `floats` floats and writes them */
@@ -975,6 +987,7 @@ export class RowsRenderer {
     const texture = createFloatTexture(gl, internalFormat, width, height);
     if (!texture) return null;
     this.ledger?.record(texture, LEDGER_OWNER, 'texture', textureBytes(width, height, floats * 4));
+    this.uploadedBytes += width * height * floats * 4;
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,
@@ -1039,6 +1052,24 @@ export class RowsRenderer {
     texture(chunk.coords, gl.RG, writes.coords);
     texture(chunk.rowStyles, gl.RGBA, writes.rowStyles);
   }
+}
+
+/** What a chunk keeps of its packed arrays (not the arrays written to the GPU) */
+function layoutOf(data: RowsChunkData): RowsChunkLayout {
+  return {
+    origin: data.origin,
+    rowBase: data.rowBase,
+    rows: data.rows,
+    instanceCount: data.instanceCount,
+    pointCount: data.pointCount,
+    coordCount: data.coordCount,
+    rowFirst: data.rowFirst,
+    pointFirst: data.pointFirst,
+    coordFirst: data.coordFirst,
+    rowStyle: data.rowStyle,
+    palette: data.palette,
+    sprites: data.sprites,
+  };
 }
 
 /**

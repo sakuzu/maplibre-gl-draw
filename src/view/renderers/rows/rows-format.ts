@@ -265,43 +265,55 @@ export class RowsPalette {
 }
 
 /**
- * The packed arrays of a chunk of rows, kept with it for the writes in place
+ * What a chunk of rows keeps once it is on the GPU: where each row is in it (its place: its
+ * instances, the instances of its points and its coordinates) and the style of each row, the
+ * counts and what it is drawn with. A place is as large as what its row was packed with, and a
+ * row written in place fills it or less (`RowsRenderer.patchRows`)
  *
  * @internal
  */
-export interface RowsChunkData {
+export interface RowsChunkLayout {
   /** The origin the coordinates are offsets from (rounded to Float32) */
   readonly origin: [number, number];
   /** The first row of the chunk in its row group */
   readonly rowBase: number;
   /** The number of rows of the chunk */
   readonly rows: number;
-  /** The instances, {@link ROWS_INSTANCE_FLOATS} floats each */
-  readonly instances: Float32Array;
   readonly instanceCount: number;
-  /** The instances of the points only, in the order of the rows (the drape draws them alone) */
-  readonly points: Float32Array;
   readonly pointCount: number;
-  /** The coordinates, 2 floats each */
-  readonly coords: Float32Array;
   readonly coordCount: number;
-  /** The style of each row, {@link ROWS_ROW_STYLE_FLOATS} floats per row */
-  readonly rowStyles: Float32Array;
-  /**
-   * The number of the resolved style of each row (-1 for a row without one): the rows the chunk
-   * counts in its palette
-   */
-  readonly rowStyle: Int32Array;
   /** Where the instances of each row start (rows + 1 entries) */
   readonly rowFirst: Int32Array;
   /** Where the point instances of each row start (rows + 1 entries) */
   readonly pointFirst: Int32Array;
   /** Where the coordinates of each row start (rows + 1 entries) */
   readonly coordFirst: Int32Array;
+  /**
+   * The number of the resolved style of each row (-1 for a row without one): the rows the chunk
+   * counts in its palette
+   */
+  readonly rowStyle: Int32Array;
   /** The values of the styles the rows name */
   readonly palette: RowsPalette;
   /** The pictures the sprites of the chunk are read from (null when it has none) */
   readonly sprites: RowSpriteSource | null;
+}
+
+/**
+ * The packed arrays of a chunk of rows, as it is made: what it keeps, and the arrays written to
+ * the GPU (dropped once they are written)
+ *
+ * @internal
+ */
+export interface RowsChunkData extends RowsChunkLayout {
+  /** The instances, {@link ROWS_INSTANCE_FLOATS} floats each */
+  readonly instances: Float32Array;
+  /** The instances of the points only, in the order of the rows (the drape draws them alone) */
+  readonly points: Float32Array;
+  /** The coordinates, 2 floats each */
+  readonly coords: Float32Array;
+  /** The style of each row, {@link ROWS_ROW_STYLE_FLOATS} floats per row */
+  readonly rowStyles: Float32Array;
 }
 
 /**
