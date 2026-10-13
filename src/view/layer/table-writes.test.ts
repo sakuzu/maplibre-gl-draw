@@ -42,7 +42,7 @@ import { type RowsChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js
 import { beginRenderFrame } from '../shaders/frame.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
-import { TableLayerRenderer } from './table-retained.js';
+import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
 
 const LAYER: Layer = {
   id: 'layer',
@@ -67,9 +67,22 @@ beforeEach(() => {
   terrain = new TerrainContext();
 });
 
+/** How a scene is drawn */
+interface DrawnOptions {
+  /** The layer (its style rule) */
+  readonly layer?: Layer;
+  /** The time the builds take per frame (unbounded when omitted) */
+  readonly budgetMs?: number;
+  /** The rows of a row group */
+  readonly targetRows?: number;
+  /** The rendering pixel ratio, read every frame */
+  readonly pixelRatio?: () => number;
+}
+
 /** The tables of features drawn in one draw on a context that keeps what the GPU holds */
-function drawn(features: readonly Feature[]) {
-  const tables = tablesOfFeatures('layer', features);
+function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
+  const tables = tablesOfFeatures('layer', features, options.targetRows);
+  const view = { layer: options.layer ?? LAYER };
   const mock = memoryGL();
   const rows = new RowsRenderer(null, mock.gl, 1, terrain);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
@@ -100,20 +113,26 @@ function drawn(features: readonly Feature[]) {
     gl: mock.gl,
     terrain,
     requestRepaint: () => {},
-    buildBudgetMs: Number.POSITIVE_INFINITY,
+    buildBudgetMs: options.budgetMs ?? Number.POSITIVE_INFINITY,
+    pixelRatio: options.pixelRatio ?? 1,
   });
-  const frame = (): void => {
+  /** One frame; returns the ranges drawn */
+  const frame = (): TableDrawRecord[] => {
     renderer.prerender();
     beginRenderFrame();
     renderer.beginFrame();
+    const record: TableDrawRecord[] = [];
+    renderer.recordDraws(record);
     renderer.drawLayer(
       tables.internals,
       tables.table,
-      LAYER,
+      view.layer,
       { projectionData: PROJECTION, zoom: 10, bounds: undefined },
       deps,
     );
+    renderer.recordDraws(null);
     renderer.endFrame();
+    return record;
   };
   /** Frames until everything is built and written, and one more */
   const settle = (): void => {
@@ -130,7 +149,7 @@ function drawn(features: readonly Feature[]) {
       .filter((chunk) => chunk.uploaded && !chunk.disposed)
       .sort((a, b) => a.data.rowBase - b.data.rowBase)
       .flatMap((chunk) => readChunk(mock, chunk));
-  return { ...tables, renderer, frame, settle, read, made };
+  return { ...tables, renderer, frame, settle, read, made, view, deps, mock, rows };
 }
 
 /** A row as a chunk holds it on the GPU */
@@ -382,5 +401,76 @@ describe('the writes in place of the rows drawn in one draw', () => {
     // The places of the rows did not move
     expect(data.rowFirst[1]).toBeGreaterThan(0);
     expect(ROWS_INSTANCE_FLOATS).toBe(8);
+  });
+});
+
+/** The rows a record covers, in order, as `group:row` */
+function coverage(record: TableDrawRecord[]): string[] {
+  const out: string[] = [];
+  for (const entry of record) {
+    for (let row = entry.from; row < entry.to; row++) out.push(`${entry.groupIndex}:${row}`);
+  }
+  return out;
+}
+
+/** Points with a value each, in groups of 8 rows */
+function valued(count: number): Feature[] {
+  return Array.from({ length: count }, (_, i) =>
+    feature(`p${i}`, 'Point', [i * 0.001, 0], { properties: { kind: i % 3 === 0 ? 'a' : 'b' } }),
+  );
+}
+
+describe('the styles resolved again', () => {
+  const rule = (a: string): Layer => ({
+    ...LAYER,
+    styleRule: { kind: 'categorical', property: 'kind', map: { a }, other: '#996633' },
+  });
+
+  it('resolves the styles of a new style rule a group at a time, with the chunks and the palette kept', () => {
+    const features = valued(40);
+    const live = drawn(features, { layer: rule('#336699'), budgetMs: 0, targetRows: 8 });
+    const chunks = live.made.length;
+    const palette = live.made[0].data.palette;
+    live.view.layer = rule('#ff0000');
+    // One group a frame (a budget of one step), every row drawn in every frame
+    const all = coverage(live.frame());
+    expect(all.length).toBe(40);
+    for (let i = 0; i < 6; i++) expect(coverage(live.frame())).toEqual(all);
+    live.settle();
+    expect(live.made.length).toBe(chunks);
+    expect(live.made.every((chunk) => chunk.data.palette === palette)).toBe(true);
+    expect(live.read()).toEqual(drawn(features, { layer: rule('#ff0000'), targetRows: 8 }).read());
+    // The styles of the rule before are taken back as their rows left them
+    expect(palette.size).toBe(2);
+  });
+
+  it('writes the values of the styles again for a new pixel ratio, the chunks kept', () => {
+    let ratio = 1;
+    const features = scene();
+    const live = drawn(features, { pixelRatio: () => ratio });
+    const chunks = live.made.length;
+    ratio = 2;
+    live.settle();
+    expect(live.made.length).toBe(chunks);
+    expect(live.read()).toEqual(drawn(features, { pixelRatio: () => 2 }).read());
+  });
+
+  it('keeps drawing the chunks of a group cut again until the new ones are built', () => {
+    const features = scene();
+    const live = drawn(features, { budgetMs: 0 });
+    const all = coverage(live.frame());
+    // A provider of companions for the line: it is drawn at once from now on
+    live.deps.companions.register({
+      id: 'test',
+      has: (f: Feature) => f.id === 'line',
+      draw: () => {},
+    } as never);
+    let cut = false;
+    for (let i = 0; i < 6; i++) {
+      const record = live.frame();
+      expect(coverage(record)).toEqual(all);
+      if (record.some((entry) => entry.kind === 'immediate')) cut = true;
+    }
+    expect(cut).toBe(true);
   });
 });

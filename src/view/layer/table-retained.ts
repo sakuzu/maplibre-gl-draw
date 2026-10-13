@@ -51,7 +51,7 @@ import {
 } from '../../feature-table/types.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
-import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import {
@@ -236,6 +236,11 @@ interface GroupChunks<C> {
   chunks: C[];
   /** The generation of the classification of the layer they were cut with */
   generation: number;
+  /**
+   * The chunks of the cut before (other ranges), drawn until the chunks of the new cut are built
+   * in view (null when there are none)
+   */
+  retiring: C[] | null;
 }
 
 /** What is kept for a row group */
@@ -252,6 +257,8 @@ interface GroupCache {
   uploadedVersion: number;
   /** What a draw of the rows of the group binds (made again with a new texture) */
   binding: RowStateBinding | null;
+  /** The generation of the styles of the layer the styles of its rows were resolved with */
+  styleGeneration: number;
 }
 
 /** What is kept for a layer */
@@ -265,6 +272,11 @@ interface LayerCache {
   spriteRevisions: string;
   /** Advances whenever the rows are to be classified again */
   generation: number;
+  /**
+   * Advances whenever the styles of the rows are to be resolved again (a new style rule, new
+   * pictures): the groups resolve them again a group at a time, within the budget of the frames
+   */
+  styleGeneration: number;
   /** What the rows are packed with (made again with new slots) */
   context: RowPackContext | null;
   /** The styles of the drawing in one draw (made again with new slots or a new pixel ratio) */
@@ -520,8 +532,11 @@ export class TableLayerRenderer {
     this.prepared = false;
     this.budget = createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
     this.pending = false;
+    // A new pixel ratio: the batches by kind hold their widths and are built again (drawn until
+    // then); the chunks drawn in one draw keep theirs, the values of their styles are written
+    // again (`ensureRowsStyles`)
     const dpr = resolvePixelRatio(this.options.pixelRatio);
-    if (this.builtPixelRatio !== null && this.builtPixelRatio !== dpr) this.invalidateAll(true);
+    if (this.builtPixelRatio !== null && this.builtPixelRatio !== dpr) this.invalidateByKind();
     this.builtPixelRatio = dpr;
   }
 
@@ -661,15 +676,43 @@ export class TableLayerRenderer {
         pass.groupIndex = g;
         pass.binding = groupCache.binding;
 
+        // The styles of the rows are resolved again a group at a time, within the budget (the
+        // group keeps drawing the styles it has until then)
+        if (groupCache.styleGeneration !== cache.styleGeneration) {
+          if (budget.canStep()) budget.step(() => this.restyleGroup(cache, groupCache));
+          else this.pending = true;
+        }
+
         const choice = choices[g];
+        const own = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
         if (choice !== drawing) {
           // The chunks of the drawing are built without being drawn, and the group is drawn
           // with the chunks of the other drawing, as they are
           pass.drawing = false;
           this.advance(tables, layer, frame, deps, settled, drawing);
           pass.drawing = true;
-          this.drawBuilt(tables, layer, frame, deps, settled, choice, bounds);
+          const theirs = choice === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+          if (theirs) {
+            this.drawBuilt(
+              tables,
+              layer,
+              frame,
+              deps,
+              settled,
+              theirs.retiring ?? theirs.chunks,
+              bounds,
+            );
+          }
+        } else if (own?.retiring && !builtInView(own.chunks, bounds)) {
+          // Cut again: the chunks of the new cut are built without being drawn, and the group is
+          // drawn with the chunks of the cut before until they are built in view
+          pass.drawing = false;
+          this.advance(tables, layer, frame, deps, settled, drawing);
+          pass.drawing = true;
+          this.drawBuilt(tables, layer, frame, deps, settled, own.retiring, bounds);
+          this.pending = true;
         } else {
+          if (own?.retiring) this.retire(own);
           this.advance(tables, layer, frame, deps, settled, drawing);
         }
       }
@@ -698,6 +741,69 @@ export class TableLayerRenderer {
         for (const chunk of allChunks(groupCache)) this.invalidateChunk(chunk, keepDrawing);
       }
       if (!keepDrawing) cache.slots = null;
+    }
+  }
+
+  /** Makes the batches by kind again (they keep being drawn until the new ones are built) */
+  private invalidateByKind(): void {
+    for (const cache of this.layers.values()) {
+      for (const groupCache of cache.groups.values()) {
+        for (const chunk of allChunks(groupCache)) {
+          if (chunk.type === 'retained') this.invalidateChunk(chunk, true);
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolves the styles of the rows of a group again (a new style rule, new pictures): in one
+   * draw, a row whose style changed within the layout of its instances is written by its style,
+   * another packed again into its place (a row that does not fit makes its chunk build again,
+   * drawn until then), and a chunk being built builds again; the batches by kind are built again
+   */
+  private restyleGroup(cache: LayerCache, groupCache: GroupCache): void {
+    groupCache.styleGeneration = cache.styleGeneration;
+    if (groupCache.byKind) {
+      for (const chunk of groupCache.byKind.chunks) {
+        if (chunk.type === 'retained') this.invalidateChunk(chunk, true);
+      }
+    }
+    const rows = this.renderers?.rows;
+    const rowsStyles = cache.rowsStyles;
+    if (!groupCache.oneDraw || !rows || !rowsStyles || !cache.context) return;
+    const context = this.packContext(groupCache, cache);
+    const group = groupCache.group;
+    for (const chunk of groupCache.oneDraw.chunks) {
+      if (chunk.type !== 'rows') continue;
+      if (chunk.job) {
+        this.invalidateChunk(chunk, true);
+        continue;
+      }
+      const gpu = chunk.batches;
+      if (!gpu) continue;
+      if (gpu.data.palette !== rowsStyles.palette) {
+        this.invalidateChunk(chunk, true);
+        continue;
+      }
+      for (let local = 0; local < gpu.data.rows; local++) {
+        const row = chunk.range.from + local;
+        const held = gpu.data.rowStyle[local];
+        const style = resolveRowStyle(group, row, context);
+        if (style === held) continue;
+        if (style >= 0 && held >= 0 && rowsStyles.layoutOf(style) === rowsStyles.layoutOf(held)) {
+          rowsStyles.palette.retain(style);
+          rows.patchRowStyle(gpu, local, style, styleCreatedZoom(group, row, rowsStyles, style));
+          continue;
+        }
+        const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
+        collectRow(group, row, 0, draft, gpu.data.origin, context);
+        const patch = draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites);
+        if (!rows.patchRows(gpu, local, patch)) {
+          draft.releaseStyles();
+          this.invalidateChunk(chunk, true);
+          break;
+        }
+      }
     }
   }
 
@@ -938,6 +1044,7 @@ export class TableLayerRenderer {
         companionsGeneration: -1,
         spriteRevisions: '',
         generation: 0,
+        styleGeneration: 0,
         context: null,
         rowsStyles: null,
         layer: null,
@@ -951,15 +1058,25 @@ export class TableLayerRenderer {
     cache.tables = tables;
     const companions = deps.companions;
     const spriteRevisions = spriteRevisionsOf(deps.customRenderers);
-    const classificationChanged =
+    // What the classification reads: the resolution of the styles, the providers of companions,
+    // the pictures of the custom types. A new style rule only changes the colors, so the rows
+    // keep their classification and only their styles are resolved again
+    const reclassified =
+      cache.slots === null ||
+      cache.slots.resolver !== renderers.styles ||
+      cache.companionsGeneration !== companions.generation() ||
+      cache.spriteRevisions !== spriteRevisions;
+    const restyled =
       cache.slots === null ||
       cache.slots.resolver !== renderers.styles ||
       cache.rule !== layer.styleRule ||
-      cache.companionsGeneration !== companions.generation() ||
       cache.spriteRevisions !== spriteRevisions;
-    if (classificationChanged) {
+    if (restyled) {
       cache.slots = new RowStyleSlots(renderers.styles, tables.styles, layer.styleRule);
       cache.rule = layer.styleRule;
+      cache.styleGeneration++;
+    }
+    if (reclassified) {
       cache.companionsGeneration = companions.generation();
       cache.spriteRevisions = spriteRevisions;
       cache.generation++;
@@ -984,14 +1101,18 @@ export class TableLayerRenderer {
         texture: null,
         uploadedVersion: -1,
         binding: null,
+        // Its chunks are built with the styles as they are resolved now
+        styleGeneration: cache.styleGeneration,
       });
     }
     return cache;
   }
 
   /**
-   * The styles of the drawing in one draw of a layer, made again with new slots or a new pixel
-   * ratio (the chunks built with the old ones keep them until they are built again)
+   * The styles of the drawing in one draw of a layer: kept with their numbers for a new style
+   * rule (the rows resolve their styles again, `restyleGroup`) and for a new pixel ratio (their
+   * values are written again), made again only with a new resolution of the styles (the chunks
+   * built with the old ones keep them until they are built again)
    */
   private ensureRowsStyles(
     cache: LayerCache,
@@ -1001,12 +1122,9 @@ export class TableLayerRenderer {
     const slots = cache.slots as RowStyleSlots;
     const current = cache.rowsStyles;
     const pixelRatio = this.options.pixelRatio;
-    if (
-      current &&
-      current.slots === slots &&
-      current.screenRatio === resolvePixelRatio(pixelRatio) &&
-      current.contentRatio === resolveContentPixelRatio(pixelRatio)
-    ) {
+    if (current && current.slots.resolver === slots.resolver) {
+      current.slots = slots;
+      current.setPixelRatio(pixelRatio);
       return;
     }
     if (current) rows.retirePalette(current.palette);
@@ -1029,6 +1147,32 @@ export class TableLayerRenderer {
   ): TableChunk[] {
     const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
     if (held && held.generation === cache.generation) return held.chunks;
+    // A group cut before is cut again within the budget of the frames (it keeps drawing its
+    // chunks until then); a group cut for the first time is cut now
+    const budget = this.budget;
+    if (held && budget) {
+      if (!budget.canStep()) {
+        this.pending = true;
+        return held.chunks;
+      }
+      return budget.step(() =>
+        this.cutGroup(cache, groupCache, drawing, tables, table, layer, deps, held),
+      );
+    }
+    return this.cutGroup(cache, groupCache, drawing, tables, table, layer, deps, held);
+  }
+
+  /** Cuts the rows of a group into chunks for a drawing (see `chunksOf`) */
+  private cutGroup(
+    cache: LayerCache,
+    groupCache: GroupCache,
+    drawing: Drawing,
+    tables: FeatureTablesInternals,
+    table: LayerTable,
+    layer: Layer,
+    deps: StoreRetainedDrawDeps,
+    held: GroupChunks<TableChunk> | null,
+  ): TableChunk[] {
     const group = groupCache.group;
     const oneDraw = drawing === 'one-draw';
     const sprites = new Map<number, RowSpriteSource>();
@@ -1047,37 +1191,57 @@ export class TableLayerRenderer {
       undefined,
       oneDraw ? (row) => sprites.get(row) : undefined,
     );
-    if (oneDraw) {
-      groupCache.sprites = sprites;
-      const chunks = held
-        ? (this.reuseChunks(held.chunks, ranges) as OneDrawChunk[])
-        : (ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[]);
-      groupCache.oneDraw = { chunks, generation: cache.generation };
-      return chunks;
-    }
-    const chunks = held
-      ? (this.reuseChunks(held.chunks, ranges) as KindChunk[])
-      : (ranges.flatMap((range) => this.makeChunk(range)) as KindChunk[]);
-    groupCache.byKind = { chunks, generation: cache.generation };
-    return chunks;
+    if (oneDraw) groupCache.sprites = sprites;
+    const next: GroupChunks<TableChunk> = held
+      ? this.reuseChunks(held, ranges, oneDraw)
+      : { chunks: ranges.flatMap((range) => this.makeChunk(range)), generation: 0, retiring: null };
+    next.generation = cache.generation;
+    if (oneDraw) groupCache.oneDraw = next as GroupChunks<OneDrawChunk>;
+    else groupCache.byKind = next as GroupChunks<KindChunk>;
+    return next.chunks;
   }
 
-  /** The chunks of new ranges: a chunk of the same rows and kind is kept (and built again) */
-  private reuseChunks(old: TableChunk[], ranges: OrderedChunkRange[]): TableChunk[] {
-    const same =
-      old.length === ranges.length &&
-      old.every(
-        (chunk, i) =>
-          chunk.range.kind === ranges[i].kind &&
-          chunk.range.from === ranges[i].from &&
-          chunk.range.to === ranges[i].to,
-      );
-    if (same) {
-      for (const chunk of old) this.invalidateChunk(chunk, true);
-      return old;
+  /**
+   * The chunks of new ranges. A chunk of the same rows and kind is kept: as it is in one draw
+   * (its rows resolve their styles again when the styles changed), built again by kind (the
+   * batches by kind hold their styles). When the ranges changed, the chunks of the cut before
+   * keep being drawn until the new ones are built in view (`retiring`)
+   */
+  private reuseChunks(
+    held: GroupChunks<TableChunk>,
+    ranges: OrderedChunkRange[],
+    oneDraw: boolean,
+  ): GroupChunks<TableChunk> {
+    // The chunks drawn now: the cut before when one is still being replaced
+    const drawn = held.retiring ?? held.chunks;
+    const byRange = new Map<string, TableChunk>();
+    for (const chunk of [...held.chunks, ...drawn]) byRange.set(rangeKey(chunk.range), chunk);
+    const chunks = ranges.flatMap((range) => {
+      const kept = byRange.get(rangeKey(range));
+      if (!kept) return this.makeChunk(range);
+      if (!oneDraw) this.invalidateChunk(kept, true);
+      return [kept];
+    });
+    // The chunks of the last cut not kept are released (they were never drawn)
+    const kept = new Set(chunks);
+    for (const chunk of held.chunks) {
+      if (!kept.has(chunk) && !drawn.includes(chunk)) this.invalidateChunk(chunk, false);
     }
-    for (const chunk of old) this.invalidateChunk(chunk, false);
-    return ranges.flatMap((range) => this.makeChunk(range));
+    const same = chunks.length === drawn.length && chunks.every((chunk, i) => chunk === drawn[i]);
+    if (same) return { chunks, generation: held.generation, retiring: null };
+    return { chunks, generation: held.generation, retiring: drawn };
+  }
+
+  /**
+   * Releases the chunks of the cut before of a group once the chunks of the new cut are built in
+   * view (the ones the new cut kept stay)
+   */
+  private retire(held: GroupChunks<TableChunk>): void {
+    const retiring = held.retiring;
+    if (!retiring) return;
+    const kept = new Set(held.chunks);
+    for (const chunk of retiring) if (!kept.has(chunk)) this.invalidateChunk(chunk, false);
+    held.retiring = null;
   }
 
   /** A chunk for a range of rows (none for a range without a bbox) */
@@ -1141,7 +1305,9 @@ export class TableLayerRenderer {
   private releaseChunks(groupCache: GroupCache, drawing: Drawing): void {
     const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
     if (!held) return;
-    for (const chunk of held.chunks) this.invalidateChunk(chunk, false);
+    for (const chunk of new Set([...held.chunks, ...(held.retiring ?? [])])) {
+      this.invalidateChunk(chunk, false);
+    }
     if (drawing === 'one-draw') groupCache.oneDraw = null;
     else groupCache.byKind = null;
   }
@@ -1265,15 +1431,12 @@ export class TableLayerRenderer {
     frame: TableLayerFrame,
     deps: StoreRetainedDrawDeps,
     settled: boolean,
-    drawing: Drawing,
+    chunks: readonly TableChunk[],
     bounds: BoundingBox,
   ): void {
     const pass = this.pass;
-    const groupCache = pass.groupCache as GroupCache;
-    const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
-    if (!held) return;
     const run = (pass.renderers as RetainedRendererSet).run;
-    for (const chunk of held.chunks) {
+    for (const chunk of chunks) {
       if (chunk.type === 'immediate') {
         // Outside the run, as in `advance`
         run?.end();
@@ -1515,10 +1678,22 @@ function styleCreatedZoom(
   return rowCreatedZoom(group, row);
 }
 
+/** The key of a range of rows (its kind and its rows) */
+function rangeKey(range: OrderedChunkRange): string {
+  return `${range.kind}:${range.from}:${range.to}`;
+}
+
 /** Every chunk of a group, of both drawings */
 function* allChunks(groupCache: GroupCache): Generator<TableChunk> {
-  if (groupCache.byKind) yield* groupCache.byKind.chunks;
-  if (groupCache.oneDraw) yield* groupCache.oneDraw.chunks;
+  for (const held of [groupCache.byKind, groupCache.oneDraw]) {
+    if (!held) continue;
+    yield* held.chunks;
+    // The chunks of the cut before not in the new one
+    if (held.retiring) {
+      const kept = new Set<TableChunk>(held.chunks);
+      for (const chunk of held.retiring) if (!kept.has(chunk)) yield chunk;
+    }
+  }
 }
 
 /**
