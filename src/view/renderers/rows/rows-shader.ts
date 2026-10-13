@@ -108,15 +108,14 @@ flat out vec4 v_color2;
 // A point: radius, outer radius, ink, shape. A segment: half width, length on screen. An edge
 // of an outline: half width. A sprite: ink
 flat out vec4 v_params;
-// A dashed segment: the dash, the period (CSS px), CSS px per device pixel along the segment,
-// the position of its start on the line (CSS px)
-flat out vec4 v_dash;
+// A dashed segment: the dash, the period (CSS px), CSS px per device pixel along the segment
+flat out vec3 v_dash;
 // A dashed segment: x the position of the end of the line when the segment is its last one
 // (-1 otherwise), y 1 for a dashed segment (0 otherwise)
 flat out vec2 v_dash_end;
-// A point: the offset in device pixels. A segment: the signed distance from its center line and
-// the position along it. An edge of an outline: the signed distance. A sprite: the texture
-// coordinates
+// A point: the offset in device pixels. A segment: the signed distance from its center line, the
+// position along it, and for a dashed one its position on the line (CSS px). An edge of an
+// outline: the signed distance. A sprite: the texture coordinates
 out vec4 v_geom;
 
 // The translation of the row of the instance (its moving set), added to every coordinate read
@@ -326,7 +325,8 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         capOffset = segmentDir * expandedHalfWidth;
         linePos = screenSegmentLength + expandedHalfWidth;
     }
-    vec2 totalClipOffset = screenToClipOffset(screenOffset + capOffset, currentClip.w);
+    vec2 vertexOffset = screenOffset + capOffset;
+    vec2 totalClipOffset = screenToClipOffset(vertexOffset, currentClip.w);
     gl_Position = currentClip + vec4(totalClipOffset, 0.0, 0.0);
 
     v_color = color * ink;
@@ -347,8 +347,16 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         float scale = pow(2.0, u_zoom);
         float startCss = a_tail.w * scale;
         float lengthCss = dashLength0(startOffset, endOffset) * scale;
-        v_dash = vec4(dash, dash + gap, lengthCss / screenSegmentLength, startCss);
+        float cssPerPx = lengthCss / screenSegmentLength;
+        v_dash = vec3(dash, dash + gap, cssPerPx);
         v_dash_end = vec2(nextIdx < 0 ? startCss + lengthCss : -1.0, 1.0);
+        // The position of this vertex on the line: its projection on the segment. A corner of a
+        // miter lies ahead of or behind the end of the segment, so the position along the strip
+        // (linePos, the end of the segment at both corners) would shear the dashes of the whole
+        // segment by up to the length of the miter; the projection is exact everywhere in it,
+        // as the dashes cut on the CPU are
+        float along = t * screenSegmentLength + dot(vertexOffset, segmentDir);
+        v_geom.z = startCss + along * cssPerPx;
     }
 }
 
@@ -411,7 +419,7 @@ void main() {
     v_color = vec4(0.0);
     v_color2 = vec4(0.0);
     v_params = vec4(0.0);
-    v_dash = vec4(0.0);
+    v_dash = vec3(0.0);
     v_dash_end = vec2(-1.0, 0.0);
     v_geom = vec4(0.0);
 
@@ -461,7 +469,7 @@ flat in int v_kind;
 flat in vec4 v_color;
 flat in vec4 v_color2;
 flat in vec4 v_params;
-flat in vec4 v_dash;
+flat in vec3 v_dash;
 flat in vec2 v_dash_end;
 in vec4 v_geom;
 
@@ -528,7 +536,7 @@ vec4 shadeSegment() {
             float back = atEnd <= dash ? 0.0 : (atEnd - dash) / cssPerPx;
             coverage = capCoverage(d, endDist + back, w);
         } else {
-            float pos = v_dash.w + linePos * cssPerPx;
+            float pos = v_geom.z;
             float m = mod(pos, period);
             if (m <= dash) {
                 float left = clamp(d - w + 0.5, 0.0, 1.0);
