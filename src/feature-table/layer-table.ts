@@ -68,6 +68,11 @@ export interface RowGroup {
   unindexedCount: number;
   /** Whether the group holds the rows of the delta of its layer (not a group of the order) */
   readonly delta: boolean;
+  /**
+   * Whether the group holds new rows read before their own row groups are taken in (neither a
+   * group of the order nor the delta: it is read, not drawn)
+   */
+  readonly pending: boolean;
 }
 
 /**
@@ -102,6 +107,7 @@ export function createRowGroup(
   handle: RowGroupHandle,
   data: RowGroupData,
   delta = false,
+  pending = false,
 ): RowGroup {
   return {
     handle,
@@ -117,6 +123,7 @@ export function createRowGroup(
     unindexed: null,
     unindexedCount: 0,
     delta,
+    pending,
   };
 }
 
@@ -225,6 +232,21 @@ export interface DeltaPlaces {
   readonly cuts: Int32Array;
 }
 
+/**
+ * The rows of a layer read outside its groups, in the order of their keys: the rows of its delta
+ * and its new rows read before their groups are taken in
+ */
+interface ReadExtras {
+  /** The group each row is read from */
+  readonly groups: readonly RowGroup[];
+  /** The row of each in its group */
+  readonly rows: Int32Array;
+  /** The place of each among the rows of the groups of the layer */
+  readonly places: DeltaPlaces;
+  /** The entry of each row of each group (-1 for none) */
+  readonly entries: ReadonlyMap<RowGroup, Int32Array>;
+}
+
 /** A row of a layer moved since its group was built, in the index of the moved rows */
 interface MovedRow {
   minX: number;
@@ -258,6 +280,12 @@ export class LayerTable {
   private movedIndex: RBush<MovedRow> | null = null;
   /** The rows of the layer changed since their groups were built */
   readonly delta: DeltaRows;
+  /** The new rows read before their own groups are taken in (`setPendingSource`) */
+  private pendingSource: (() => readonly RowGroup[]) | null = null;
+  private pendingRevision = 0;
+  /** The rows read outside the groups, and what they were found with */
+  private extras: ReadExtras | null = null;
+  private extrasKey = '';
 
   /**
    * @param layerId The layer
@@ -395,26 +423,28 @@ export class LayerTable {
 
   /**
    * The rows of the layer in their order: the rows of its groups read there (not the ones read
-   * from the delta, nor the ones waiting for another group), and the rows of the delta at their
-   * places, deleted rows included. Made again when read after a change (`touchItems`)
+   * from the delta, nor the ones waiting for another group), the rows of the delta and the new
+   * rows read before their groups are taken in at their places, deleted rows included. Made again
+   * when read after a change (`touchItems`)
    */
   rowOrder(): LayerOrder {
     if (this.ordered) return this.ordered;
     const handles: number[] = [];
     const groups: RowGroup[] = [];
     const rows: number[] = [];
-    const delta = this.delta.group;
-    const places = this.deltaPlaces();
+    const extras = this.readExtras();
+    const places = extras.places;
     let next = 0;
     const flush = (g: number, before: number): void => {
-      if (!delta) return;
       while (
-        next < delta.data.length &&
+        next < extras.rows.length &&
         (places.groups[next] < g || (places.groups[next] === g && places.cuts[next] <= before))
       ) {
-        handles.push(delta.data.handles[next]);
-        groups.push(delta);
-        rows.push(next);
+        const group = extras.groups[next];
+        const row = extras.rows[next];
+        handles.push(group.data.handles[row]);
+        groups.push(group);
+        rows.push(row);
         next++;
       }
     };
@@ -433,6 +463,92 @@ export class LayerTable {
     flush(Number.MAX_SAFE_INTEGER, 0);
     this.ordered = { handles: Int32Array.from(handles), groups, rows: Int32Array.from(rows) };
     return this.ordered;
+  }
+
+  /**
+   * Sets where the new rows of the layer read before their own groups are taken in come from: row
+   * groups in no particular order whose runs of keys do not overlap (`touchPending` when they
+   * change)
+   */
+  setPendingSource(source: () => readonly RowGroup[]): void {
+    this.pendingSource = source;
+    this.touchPending();
+  }
+
+  /** Makes the order and the searches read the new rows read before their groups again */
+  touchPending(): void {
+    this.pendingRevision++;
+    this.touchItems();
+  }
+
+  /**
+   * The rows read outside the groups of the layer, in the order of their keys: the rows of the
+   * delta and the new rows read before their groups are taken in, with their places among the
+   * rows of the groups (found again when the groups, the delta, the new rows or the keys of the
+   * groups of features changed)
+   */
+  private readExtras(): ReadExtras {
+    const key = `${this.revision}:${this.delta.revision}:${this.groupKeys.revision ?? 0}:${this.pendingRevision}`;
+    if (this.extras && this.extrasKey === key) return this.extras;
+    const delta = this.delta.group;
+    const pending = (this.pendingSource?.() ?? [])
+      .filter((group) => group.data.length > 0)
+      .sort((a, b) => compareRowKeys(a.data, 0, b.data, 0, this.groupKeys));
+    const groups: RowGroup[] = [];
+    const rows: number[] = [];
+    const deltaLength = delta?.data.length ?? 0;
+    let d = 0;
+    let p = 0;
+    let pr = 0;
+    while (d < deltaLength || p < pending.length) {
+      const fromDelta =
+        p >= pending.length ||
+        (d < deltaLength &&
+          compareRowKeys((delta as RowGroup).data, d, pending[p].data, pr, this.groupKeys) < 0);
+      if (fromDelta) {
+        groups.push(delta as RowGroup);
+        rows.push(d++);
+        continue;
+      }
+      groups.push(pending[p]);
+      rows.push(pr++);
+      if (pr >= pending[p].data.length) {
+        p++;
+        pr = 0;
+      }
+    }
+    const n = rows.length;
+    const placeGroups = new Int32Array(n).fill(-1);
+    const cuts = new Int32Array(n);
+    const deltaPlaces = this.deltaPlaces();
+    const entries = new Map<RowGroup, Int32Array>();
+    for (let k = 0; k < n; k++) {
+      const group = groups[k];
+      const row = rows[k];
+      let list = entries.get(group);
+      if (!list) {
+        list = new Int32Array(group.data.length).fill(-1);
+        entries.set(group, list);
+      }
+      list[row] = k;
+      if (group === delta) {
+        placeGroups[k] = deltaPlaces.groups[row];
+        cuts[k] = deltaPlaces.cuts[row];
+        continue;
+      }
+      const place = this.positionOfKey(group.data, row);
+      if (!place) continue;
+      placeGroups[k] = this.orderOf(place.group);
+      cuts[k] = (place.slot + 1) >> 1;
+    }
+    this.extras = {
+      groups,
+      rows: Int32Array.from(rows),
+      places: { groups: placeGroups, cuts },
+      entries,
+    };
+    this.extrasKey = key;
+    return this.extras;
   }
 
   /**
@@ -634,8 +750,8 @@ export class LayerTable {
 
   /**
    * The rows of the layer whose bbox meets a box, in the order of the layer: the rows of its
-   * groups read there and the rows of its delta at their places (the moved ones where they are
-   * now)
+   * groups read there, and the rows of its delta and its new rows read before their groups are
+   * taken in at their places (the moved ones where they are now)
    *
    * @param visit Receives each row, in order, with the group it is read from
    */
@@ -646,13 +762,20 @@ export class LayerTable {
     maxY: number,
     visit: (group: RowGroup, row: number) => void,
   ): void {
-    const delta = this.delta.group;
+    const extras = this.readExtras();
     const hits: number[] = [];
-    if (delta) {
-      this.searchRows(delta, minX, minY, maxX, maxY, hits);
+    if (extras.rows.length > 0) {
+      const found: number[] = [];
+      for (const [group, entries] of extras.entries) {
+        found.length = 0;
+        this.searchRows(group, minX, minY, maxX, maxY, found);
+        for (const row of found) {
+          if (entries[row] >= 0) hits.push(entries[row]);
+        }
+      }
       hits.sort((a, b) => a - b);
     }
-    const places = this.deltaPlaces();
+    const places = extras.places;
     let next = 0;
     const flush = (g: number, before: number): void => {
       while (
@@ -660,7 +783,7 @@ export class LayerTable {
         (places.groups[hits[next]] < g ||
           (places.groups[hits[next]] === g && places.cuts[hits[next]] <= before))
       ) {
-        visit(delta as RowGroup, hits[next]);
+        visit(extras.groups[hits[next]], extras.rows[hits[next]]);
         next++;
       }
     };

@@ -319,13 +319,33 @@ interface DeltaInput {
  */
 interface Creation {
   readonly layer: LayerTable;
+  /** Its rows not taken in yet */
   readonly rows: DeltaInput[];
   /** The keys of the first and the last row */
   first: RowKeySource;
   last: RowKeySource;
   /** The frames since a row was added */
   idle: number;
-  status: 'gathering' | 'building' | 'done';
+  /**
+   * Gathering rows, being built in a Worker, built and queued to be taken in, or ended (taken
+   * in, or put in the delta)
+   */
+  status: 'gathering' | 'building' | 'queued' | 'done';
+  /** The number of its row groups queued and not taken in yet */
+  queued: number;
+  /**
+   * Its rows not taken in yet, built to be read (not drawn) until they are: made when first read
+   * after a change of its rows (`dropReading`)
+   */
+  reading: { readonly group: RowGroup; readonly rows: ReadonlyMap<RowHandle, number> } | null;
+}
+
+/** A row group given to `adopt`, or built of new rows, waiting to be taken in */
+interface Adoption {
+  readonly layer: LayerTable;
+  readonly data: RowGroupData;
+  /** The new rows written the group is built of (put in the delta when it cannot be taken in) */
+  readonly creation?: Creation;
 }
 
 /** What a change wrote to the rows of one layer, as it is gathered */
@@ -355,12 +375,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The number of the last change written (the rows of the delta keep the one they were in) */
   private writeCount = 0;
   /** The row groups given to `adopt` and not taken in yet, in the order they were given */
-  private readonly adoptions: Array<{
-    layer: LayerTable;
-    data: RowGroupData;
-    /** Whether the group is new rows written (put in the delta when it cannot be taken in) */
-    created?: boolean;
-  }> = [];
+  private readonly adoptions: Adoption[] = [];
   /** The new rows built into groups of their own, being gathered or built */
   private readonly creations: Creation[] = [];
   /** The creation of each row in one */
@@ -492,6 +507,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     let layer = this.layers.get(layerId);
     if (!layer) {
       layer = new LayerTable(layerId, this.groups, this.layerList.length, this.nextGroup++);
+      const table = layer;
+      layer.setPendingSource(() => this.pendingGroups(table));
       this.layers.set(layerId, layer);
       this.layerList.push(layer);
     }
@@ -517,8 +534,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (group) return { layer, group, row: this.ids.deltaSlot(handle) };
     }
     const placed = this.rowGroups.get(this.ids.mainGroup(handle));
-    if (!placed) return undefined;
-    return { layer: placed.layer, group: placed.group, row: this.ids.mainRow(handle) };
+    if (placed) return { layer: placed.layer, group: placed.group, row: this.ids.mainRow(handle) };
+    // A new row read from its creation until its group is taken in
+    const creation = this.creationOf.get(handle);
+    const reading = creation ? this.readingOf(creation) : null;
+    const row = reading?.rows.get(handle);
+    if (!creation || !reading || row === undefined) return undefined;
+    return { layer: creation.layer, group: reading.group, row };
   }
 
   handleOf(id: string): RowHandle | undefined {
@@ -573,19 +595,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   advanceAdoption(budget: TableWorkBudget): boolean {
     while (this.adoptions.length > 0 && budget.canStep()) {
-      const next = this.adoptions.shift() as {
-        layer: LayerTable;
-        data: RowGroupData;
-        created?: boolean;
-      };
+      const next = this.adoptions.shift() as Adoption;
       budget.step(() => {
         try {
-          this.adoptGroup(next.layer, next.data);
+          this.takeIn(next);
         } catch (error) {
-          // New rows written go to the delta; a group given to `adopt` is left out (there is no
-          // caller to throw to any more)
-          if (next.created) this.createdToDelta(next.layer, next.data);
-          else console.error(error);
+          // A group given to `adopt` is left out (there is no caller to throw to any more)
+          console.error(error);
         }
       });
     }
@@ -594,19 +610,46 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   flushAdoption(): void {
     this.advanceCreations(UNBOUNDED_BUDGET, false);
-    while (this.adoptions.length > 0) {
-      const next = this.adoptions.shift() as {
-        layer: LayerTable;
-        data: RowGroupData;
-        created?: boolean;
-      };
-      try {
-        this.adoptGroup(next.layer, next.data);
-      } catch (error) {
-        if (!next.created) throw error;
-        this.createdToDelta(next.layer, next.data);
-      }
+    while (this.adoptions.length > 0) this.takeIn(this.adoptions.shift() as Adoption);
+  }
+
+  /**
+   * Takes in a row group waiting: a group of new rows written that cannot be taken in goes to the
+   * delta, and its rows are no longer read from their creation
+   *
+   * @throws when a group given to `adopt` cannot be taken in
+   */
+  private takeIn(adoption: Adoption): void {
+    const creation = adoption.creation;
+    if (!creation) {
+      this.adoptGroup(adoption.layer, adoption.data);
+      return;
     }
+    try {
+      this.adoptGroup(adoption.layer, adoption.data);
+    } catch {
+      this.createdToDelta(adoption.layer, adoption.data);
+    }
+    this.settleCreated(creation, adoption.data);
+  }
+
+  /**
+   * Takes the rows of a group of a creation taken in (or put in the delta) out of the creation,
+   * and ends it once its last group is
+   */
+  private settleCreated(creation: Creation, data: RowGroupData): void {
+    const taken = new Set<RowHandle>();
+    for (let r = 0; r < data.length; r++) {
+      const handle = data.handles[r];
+      taken.add(handle);
+      if (this.creationOf.get(handle) === creation) this.creationOf.delete(handle);
+    }
+    const kept = creation.rows.filter((row) => !taken.has(row.handle));
+    creation.rows.length = 0;
+    creation.rows.push(...kept);
+    this.dropReading(creation);
+    creation.queued--;
+    if (creation.queued <= 0) this.endCreation(creation);
   }
 
   // === New rows built into groups of their own ===
@@ -666,6 +709,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       rows: rows.slice(0, whole),
       first: oneKey(keys, order[0]),
       last: oneKey(keys, order[whole - 1]),
+      reading: null,
     };
     // Built in this pass
     head.idle = CREATE_WAIT_FRAMES + 1;
@@ -673,6 +717,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const row of head.rows) this.creationOf.set(row.handle, head);
     creation.rows.length = 0;
     creation.rows.push(...rows.slice(whole));
+    this.dropReading(creation);
     if (creation.rows.length === 0) {
       this.endCreation(creation);
       return;
@@ -687,14 +732,23 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return builder.finish();
   }
 
-  /** Queues the groups of a creation built, to be taken in */
+  /**
+   * Queues the groups of a creation built, to be taken in (its rows are read from it until they
+   * are)
+   */
   private queueCreation(creation: Creation, groups: RowGroupData[]): void {
-    this.endCreation(creation);
+    if (groups.length === 0) {
+      this.endCreation(creation);
+      return;
+    }
+    creation.status = 'queued';
+    creation.queued = groups.length;
     const wasPending = this.adoptions.length > 0;
-    for (const data of groups) this.adoptions.push({ layer: creation.layer, data, created: true });
+    for (const data of groups) this.adoptions.push({ layer: creation.layer, data, creation });
     if (!wasPending && this.adoptions.length > 0) this.notifyWork();
   }
 
+  /** Ends a creation: its rows not taken in are no longer read from it */
   private endCreation(creation: Creation): void {
     creation.status = 'done';
     const at = this.creations.indexOf(creation);
@@ -702,19 +756,65 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const row of creation.rows) {
       if (this.creationOf.get(row.handle) === creation) this.creationOf.delete(row.handle);
     }
+    this.dropReading(creation);
   }
 
-  /** Builds and takes in a creation now (a row of it is written before it is built) */
+  /** Builds and takes in a creation now (a row of it is written before it is taken in) */
   private finishCreationNow(creation: Creation): void {
+    if (creation.status === 'queued') {
+      // Its groups are built: they are taken in now, before the groups queued before them
+      const own = this.adoptions.filter((adoption) => adoption.creation === creation);
+      for (const adoption of own) this.adoptions.splice(this.adoptions.indexOf(adoption), 1);
+      for (const adoption of own) this.takeIn(adoption);
+      return;
+    }
     const groups = this.buildCreation(creation);
-    this.endCreation(creation);
-    for (const data of groups) {
-      try {
-        this.adoptGroup(creation.layer, data);
-      } catch {
-        this.createdToDelta(creation.layer, data);
+    creation.status = 'queued';
+    creation.queued = groups.length;
+    if (groups.length === 0) this.endCreation(creation);
+    for (const data of groups) this.takeIn({ layer: creation.layer, data, creation });
+  }
+
+  /**
+   * The new rows of a layer not taken in yet, built to be read: one group per creation of the
+   * layer (made when first read after a change of its rows)
+   */
+  private pendingGroups(layer: LayerTable): RowGroup[] {
+    const out: RowGroup[] = [];
+    for (const creation of this.creations) {
+      if (creation.layer !== layer || creation.rows.length === 0) continue;
+      const reading = this.readingOf(creation);
+      if (reading) out.push(reading.group);
+    }
+    return out;
+  }
+
+  /** The rows of a creation not taken in yet, built to be read (made when first read) */
+  private readingOf(creation: Creation): Creation['reading'] {
+    if (creation.reading || creation.rows.length === 0) return creation.reading;
+    const data = this.buildRows(creation.rows.map((row) => row.input));
+    if (!data) return null;
+    const group = createRowGroup(-1, data, false, true);
+    const rows = new Map<RowHandle, number>();
+    for (let r = 0; r < data.length; r++) {
+      rows.set(data.handles[r], r);
+      this.styles.retain(data.styles[r]);
+    }
+    creation.reading = { group, rows };
+    for (let r = 0; r < data.length; r++) this.writeState(group, r);
+    return creation.reading;
+  }
+
+  /** Drops what was built to read the rows of a creation (its rows changed) */
+  private dropReading(creation: Creation): void {
+    const reading = creation.reading;
+    creation.reading = null;
+    if (reading) {
+      for (let r = 0; r < reading.group.data.length; r++) {
+        this.styles.release(reading.group.data.styles[r]);
       }
     }
+    creation.layer.touchPending();
   }
 
   /** Puts the rows of a creation into the delta (it could not be built) */
@@ -785,6 +885,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
         last: oneKey(keys, last),
         idle: 0,
         status: 'gathering',
+        queued: 0,
+        reading: null,
       };
       this.creations.push(target);
     } else {
@@ -795,6 +897,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       target.rows.push(row);
       this.creationOf.set(row.handle, target);
     }
+    this.dropReading(target);
     this.notifyWork();
     return true;
   }
@@ -986,6 +1089,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (group < 0) throw new Error(`FeatureTables: the group "${id}" is unknown`);
       return group;
     });
+    // A row of a creation written before it is taken in: the creation is taken in now
+    for (const handle of handles) {
+      const creation = this.creationOf.get(handle);
+      if (creation) this.finishCreationNow(creation);
+    }
     const strings: Array<[string, readonly unknown[] | undefined, boolean]> = [
       ['type', types, false],
       ['layerId', layerIds, false],
@@ -1002,11 +1110,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
         }
         throw new Error(`FeatureTables: the ${name} of the row ${handles[i]} is not a string`);
       });
-    }
-    // A row of a creation written before it is built: the creation is built now
-    for (const handle of handles) {
-      const creation = this.creationOf.get(handle);
-      if (creation) this.finishCreationNow(creation);
     }
     const places = Array.from(handles, (handle) => this.placeOf(handle));
     places.forEach((place, i) => {
@@ -1253,6 +1356,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
+    // The new rows read from their creations are built again with the groups as they are now
+    for (const creation of this.creations) this.dropReading(creation);
     for (const group of removed) {
       if (!this.groupNamed(group)) this.groups.delete(group);
     }
@@ -1587,6 +1692,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const replacedGroups = new Set<RowGroup>(version.replaces);
     if (version.orders) {
       for (const [group, order] of version.orders) this.groups.setOrder(group, order);
+      for (const creation of this.creations) this.dropReading(creation);
     }
     layer.replaceGroups(version.replaces, groups);
     for (const old of version.replaces) {
@@ -1877,7 +1983,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const featureGroup = data.groups[row];
     if (featureGroup >= 0 && !this.groups.isVisible(featureGroup)) state |= STATE_HIDDEN_GROUP;
     if (rowType(data, row) === 'Circle') state |= STATE_UNIFORM;
-    if (!group.delta) {
+    if (!group.delta && !group.pending) {
       // The copy of a row read elsewhere: in the delta, or in another group until it is in this
       if (this.ids.deltaLayer(handle) >= 0) state |= STATE_HIDDEN_DELTA;
       if (this.ids.mainGroup(handle) !== group.handle) state |= STATE_HIDDEN_WAIT;
@@ -1900,6 +2006,16 @@ class FeatureTablesStore implements FeatureTablesInternals {
       this.writeState(delta, this.ids.deltaSlot(handle));
       delta.stateVersion++;
     }
+    this.refreshPending(handle);
+  }
+
+  /** Makes the state of a new row read from its creation again (when it is built to be read) */
+  private refreshPending(handle: RowHandle): void {
+    const reading = this.creationOf.get(handle)?.reading;
+    const row = reading?.rows.get(handle);
+    if (!reading || row === undefined) return;
+    this.writeState(reading.group, row);
+    reading.group.stateVersion++;
   }
 
   /** Makes the copies of the rows whose state changed again */
@@ -1916,6 +2032,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.writeState(delta, this.ids.deltaSlot(handle));
         delta.stateVersion++;
       }
+      this.refreshPending(handle);
     }
     this.revisionCount++;
   }
