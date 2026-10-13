@@ -126,6 +126,16 @@ export class GroupTable implements GroupKeySource {
     this.revisionCount++;
   }
 
+  /** Writes the key of the order of a group */
+  setOrder(group: GroupHandle, order: string): void {
+    const entry = this.entries.get(group);
+    if (!entry || entry.order === order) return;
+    entry.order = order;
+    entry.orderVersion++;
+    this.stale = true;
+    this.revisionCount++;
+  }
+
   /** Takes a group out */
   delete(group: GroupHandle): void {
     const old = this.entries.get(group);

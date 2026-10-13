@@ -81,6 +81,7 @@ const MAIN = [
   'FeatureStyleResolved',
   'FeatureTables',
   'FeatureTablesOptions',
+  'FeatureTablesWorker',
   'FeatureTablesWriter',
   'featureToGeoJSON',
   'FeatureType',

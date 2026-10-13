@@ -1,0 +1,635 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The next versions of the row groups (`GroupVersions`)
+ *
+ * A row group never changes its shape: a row of it placed elsewhere, a new row in its range, its
+ * values written in place past a limit, its rows moved far, are kept beside it (the delta, the
+ * overrides, the index of the moved rows) until the next version of the group takes them. The
+ * next version is the rows of the group that stay and the rows of the delta whose keys fall in
+ * its range, merged in the order of the layer (`mergeRowGroup`, on the main thread or in the
+ * Worker of the host), and cut into groups of the target sizes when it grew past twice them. A
+ * small group is merged with its neighbor.
+ *
+ * A version goes through: started (its groups locked, the number of the last change it takes
+ * from the delta kept), built (its columns are made), uploaded (every side that draws the rows
+ * has its GPU side, `GroupVersionReceiver`), and swapped. The swap replaces the groups in one
+ * step, in the pass before the main one of the frame its GPU side is up in: the rows it took
+ * leave the delta, the values written in place of its groups since it started are written again
+ * into it, and the copies of the state of its rows are made again. Until then the groups it
+ * replaces are read and drawn.
+ *
+ * A row moved from a group A to a group B is in the next version of B before A has its next
+ * version when B goes first: there it waits (its copy in B is hidden and not read, the row is
+ * read from the delta) until A has its next version, which hands the row to B. Each group is
+ * replaced on its own, whatever order they go in.
+ */
+
+import type { BoundingBox, RowsChange } from '../shared/types/model.js';
+import type { RowGroupBuilderOptions, RowInput } from '../table/row-group-builder.js';
+import { ROW_GROUP_TARGET_ROWS, ROW_GROUP_TARGET_VERTICES } from '../table/row-group-builder.js';
+import { mergeRowGroup, type RowGroupMerge } from '../table/row-group-merge.js';
+import type { RowGroupData } from '../table/row-group-types.js';
+import { createRowGroup, type LayerTable, type RowGroup } from './layer-table.js';
+import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './types.js';
+
+/**
+ * The work the tables hand to a Worker of the host: the functions of the
+ * `@sakuzu/maplibre-gl-draw/table` subpath, run there on copies of the columns.
+ *
+ * @example A Worker of the host
+ * ```ts
+ * // in the Worker
+ * import { createRowGroupBuilder, mergeRowGroup, rowGroupTransferList } from '@sakuzu/maplibre-gl-draw/table';
+ * self.onmessage = ({ data }) => {
+ *   const groups = data.merge ? mergeRowGroup(data.merge) : build(data.rows, data.options);
+ *   self.postMessage({ id: data.id, groups }, rowGroupTransferList(groups));
+ * };
+ * ```
+ */
+export interface FeatureTablesWorker {
+  /** Merges rows of row groups (`mergeRowGroup`): the next version of row groups */
+  merge(merge: RowGroupMerge): Promise<RowGroupData[]>;
+  /** Builds rows into row groups (`createRowGroupBuilder`): many new rows written at once */
+  build(rows: readonly RowInput[], options: RowGroupBuilderOptions): Promise<RowGroupData[]>;
+}
+
+/**
+ * The frames the changes of a group are gathered for before its next version starts (a first
+ * estimate, to be set from measured data)
+ *
+ * @internal
+ */
+export const VERSION_WAIT_FRAMES = 2;
+
+/**
+ * The rows a next version is merged with on the main thread at most; larger ones go to the
+ * Worker of the host when it has one
+ *
+ * @internal
+ */
+export const FOLD_INLINE_ROWS = 8192;
+
+/**
+ * The bytes the versions started and not swapped yet may hold together (a whole-layer change
+ * goes a group at a time within it)
+ *
+ * @internal
+ */
+export const PENDING_VERSION_BYTES = 64 * 1024 * 1024;
+
+/** The bytes a row of a version is counted as (4.10 of the design: a polygon of 5 corners) */
+const ROW_BYTES = 342;
+
+/**
+ * The share of the rows of a group moved since it was built past which the group is due for its
+ * next version (the moved ones are searched in the index of the moved rows of the layer)
+ *
+ * @internal
+ */
+export const MOVED_ROWS_SHARE = 1 / 8;
+
+/** The number of moved rows a group always keeps before it is due */
+const MOVED_ROWS_MIN = 64;
+
+/** Where a version is in its life */
+export type GroupVersionStatus = 'building' | 'built' | 'uploaded' | 'swapped' | 'dropped';
+
+/**
+ * A next version of row groups of a layer
+ *
+ * @internal
+ */
+export interface GroupVersion {
+  readonly id: number;
+  readonly layer: LayerTable;
+  /** The groups it replaces, in their order (none for the first group of a layer) */
+  readonly replaces: readonly RowGroup[];
+  /** The groups of the version once built */
+  groups: RowGroup[] | null;
+  /** The number of the last change it took from the delta */
+  readonly deltaNumber: number;
+  /** The keys of the groups of features of its rows it was started with (`keyGeneration`) */
+  readonly keys: string;
+  /** The keys of groups of features the swap puts in (a reorder; null for none) */
+  readonly orders: ReadonlyMap<GroupHandle, string> | null;
+  status: GroupVersionStatus;
+  /**
+   * Whether it went in without waiting for part of its GPU side (a side that draws the rows in
+   * parts, a draped drawing: what it does not wait for keeps its old copy until it is made)
+   */
+  partial: boolean;
+  /** The values written in place of the rows of its groups since it started, in their order */
+  readonly log: InPlaceEntry[];
+}
+
+/** A write in place of a row of a group whose next version is being made */
+export interface InPlaceEntry {
+  readonly handle: RowHandle;
+  readonly fields: ReadonlyMap<string, unknown>;
+  readonly deleted: boolean;
+}
+
+/**
+ * A side that draws the rows: the versions wait for its GPU side before they are swapped
+ *
+ * @internal
+ */
+export interface GroupVersionReceiver {
+  /**
+   * Whether the GPU side of a version built is up: `true`, `'partial'` when the side does not
+   * wait for part of it, or `false`
+   */
+  uploaded(version: GroupVersion): boolean | 'partial';
+  /** The version replaced its groups */
+  swapped(version: GroupVersion): void;
+  /** The version was dropped (its groups are not replaced) */
+  dropped(version: GroupVersion): void;
+}
+
+/**
+ * What the versions read and write of the tables
+ *
+ * @internal
+ */
+export interface VersionHost {
+  /** The layers */
+  layers(): Iterable<LayerTable>;
+  /** The number of the last change written */
+  readonly writeNumber: number;
+  /** The handle a new group gets */
+  nextGroupHandle(): RowGroupHandle;
+  /** Whether the row of a handle has a copy in a delta */
+  inDelta(handle: RowHandle): boolean;
+  /** The group of the copy of the row of a handle read in a group (-1 for none) */
+  mainGroup(handle: RowHandle): RowGroupHandle;
+  /** The values of a row with what was written in place, as the builder takes them */
+  rowInput(group: RowGroup, row: number): RowInput;
+  /** Builds rows into one row group, numbered and with their handles (null for none) */
+  buildRows(inputs: readonly RowInput[]): RowGroupData | null;
+  /** The keys of the order of the groups of features */
+  readonly groupKeys: RowGroupMerge['groups'];
+  /** The version of the key of the order of a group of features */
+  orderVersionOf(group: GroupHandle): number;
+  /** Puts the groups of a version in place of the ones it replaces (see `GroupVersions.swap`) */
+  swapIn(version: GroupVersion, waiting: WaitingCopies): RowsChange | null;
+  /** Counts the styles of the rows of groups as used (or not any more) */
+  retainStyles(data: RowGroupData, count: 1 | -1): void;
+  /** The Worker of the host (none: everything on the main thread) */
+  readonly worker: FeatureTablesWorker | undefined;
+  /** Asks for a frame (work is left) */
+  requestWork(): void;
+  /** Reports a version that went wrong (there is no caller to throw to) */
+  report(error: unknown): void;
+}
+
+/**
+ * The copies of rows waiting in a group for the next version of the group they came from: by
+ * handle, the group and the row, and the number of the change the version took from the delta
+ *
+ * @internal
+ */
+export type WaitingCopies = Map<RowHandle, { group: RowGroup; row: number; number: number }>;
+
+/**
+ * The next versions of the row groups of the tables
+ *
+ * @internal
+ */
+export class GroupVersions {
+  /** The versions started and not swapped or dropped */
+  private readonly pending = new Map<number, GroupVersion>();
+  /** The version each group being replaced is locked by */
+  private readonly locked = new Map<RowGroupHandle, GroupVersion>();
+  /** The groups due for their next version, with the frame they were first seen due in */
+  private readonly due = new Map<RowGroupHandle, number>();
+  /** The groups whose next version goes first (the frames cut them too much) */
+  private readonly urged = new Set<RowGroupHandle>();
+  private readonly receivers = new Set<GroupVersionReceiver>();
+  readonly waiting: WaitingCopies = new Map();
+  private frame = 0;
+  private nextId = 1;
+  /** The versions swapped (diagnostics) */
+  swapped = 0;
+  /** The time the last merge on the main thread took (ms) */
+  lastMergeMs = 0;
+
+  constructor(private readonly host: VersionHost) {}
+
+  /** Whether a version is started and not swapped, a group is due, or a delta has rows */
+  get hasWork(): boolean {
+    if (this.pending.size > 0 || this.due.size > 0) return true;
+    for (const layer of this.host.layers()) if (layer.delta.length > 0) return true;
+    return false;
+  }
+
+  /** The versions built and waiting for the GPU side, of a layer (of every layer when omitted) */
+  built(layer?: LayerTable): GroupVersion[] {
+    const out: GroupVersion[] = [];
+    for (const version of this.pending.values()) {
+      if (version.status !== 'built' && version.status !== 'uploaded') continue;
+      if (!layer || version.layer === layer) out.push(version);
+    }
+    return out;
+  }
+
+  /** The version a group is locked by (undefined when none) */
+  lockOf(group: RowGroupHandle): GroupVersion | undefined {
+    return this.locked.get(group);
+  }
+
+  /** Adds a side that draws the rows; returns the function that takes it out */
+  attach(receiver: GroupVersionReceiver): () => void {
+    this.receivers.add(receiver);
+    return () => {
+      this.receivers.delete(receiver);
+    };
+  }
+
+  /** Marks groups due for their next version first (the frames cut them too much) */
+  urge(groups: Iterable<RowGroupHandle>): void {
+    for (const group of groups) this.urged.add(group);
+    this.host.requestWork();
+  }
+
+  /** Marks a group due for its next version */
+  markDue(group: RowGroupHandle): void {
+    if (!this.due.has(group)) this.due.set(group, this.frame);
+  }
+
+  /**
+   * Records a write in place of a row of a group being replaced, to write it again into the
+   * next version when it is swapped in
+   */
+  logWrite(group: RowGroupHandle, entry: InPlaceEntry): void {
+    this.locked.get(group)?.log.push(entry);
+  }
+
+  /**
+   * Starts the next versions of the groups due, and builds them on the main thread within the
+   * budget (a large one in the Worker of the host). Without a side that draws the rows, a
+   * version built is swapped at once
+   *
+   * @param wait Whether the changes are gathered for a few frames first (false: start every
+   *   version due now, the hosts without frames and the tests)
+   */
+  advance(budget: TableWorkBudget, wait = true): void {
+    this.frame++;
+    this.findDue();
+    const order = [...this.due].sort(([a, af], [b, bf]) => {
+      const urgent = Number(this.urged.has(b)) - Number(this.urged.has(a));
+      return urgent !== 0 ? urgent : af - bf;
+    });
+    for (const [handle, since] of order) {
+      if (!budget.canStep()) break;
+      if (wait && !this.urged.has(handle) && this.frame - since < VERSION_WAIT_FRAMES) continue;
+      if (this.locked.has(handle)) continue;
+      const found = this.findGroup(handle);
+      if (!found) {
+        this.due.delete(handle);
+        continue;
+      }
+      if (this.pendingBytes() + found.group.data.length * ROW_BYTES > PENDING_VERSION_BYTES) {
+        // The ones started are swapped first
+        if (this.pending.size > 0) break;
+      }
+      budget.step(() => this.start(found.layer, found.group));
+    }
+    // The first group of a layer that has only rows of its delta
+    for (const layer of this.host.layers()) {
+      if (layer.groupCount > 0 || !layer.delta.group || !budget.canStep()) continue;
+      if ([...this.pending.values()].some((v) => v.layer === layer)) continue;
+      budget.step(() => this.startGroups(layer, []));
+    }
+    if (this.receivers.size === 0) this.swapReady();
+    if (this.hasWork) this.host.requestWork();
+  }
+
+  /**
+   * Swaps in the versions built whose GPU side every side that draws the rows has (called in
+   * the pass before the main one, after the uploads)
+   *
+   * @returns The rows the swaps wrote (null when none was swapped)
+   */
+  swapReady(): RowsChange[] {
+    const out: RowsChange[] = [];
+    for (const version of [...this.pending.values()]) {
+      if (version.status !== 'built' && version.status !== 'uploaded') continue;
+      let partial = false;
+      let ready = true;
+      for (const receiver of this.receivers) {
+        const answer = receiver.uploaded(version);
+        if (answer === false) ready = false;
+        if (answer === 'partial') partial = true;
+      }
+      if (!ready) continue;
+      version.status = 'uploaded';
+      version.partial = partial;
+      const change = this.swap(version);
+      if (change) out.push(change);
+    }
+    return out;
+  }
+
+  /** Drops the version a group is locked by (its groups are cut or reordered meanwhile) */
+  dropLock(group: RowGroupHandle): void {
+    const version = this.locked.get(group);
+    if (version) this.drop(version);
+  }
+
+  // === The versions ===
+
+  /**
+   * The groups that need their next version, found from the rows of the deltas: the group a row
+   * of a delta comes into, and the group its copy left (in this layer or another)
+   */
+  private findDue(): void {
+    for (const layer of this.host.layers()) {
+      const delta = layer.delta.group;
+      if (!delta) continue;
+      const places = layer.deltaPlaces();
+      for (let k = 0; k < delta.data.length; k++) {
+        const g = places.groups[k];
+        if (g >= 0) this.markDue(layer.groupAt(g).handle);
+        const main = this.host.mainGroup(delta.data.handles[k]);
+        if (main >= 0) this.markDue(main);
+      }
+    }
+  }
+
+  /**
+   * Marks a group due when many of its rows moved since it was built (they are searched in the
+   * index of the moved rows of the layer, 7.4 of the design)
+   */
+  checkMoved(group: RowGroup): void {
+    const moved = Math.max(MOVED_ROWS_MIN, group.data.length * MOVED_ROWS_SHARE);
+    if (group.unindexedCount > moved) this.markDue(group.handle);
+  }
+
+  private findGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | null {
+    for (const layer of this.host.layers()) {
+      const group = layer.group(handle);
+      if (group) return { layer, group };
+    }
+    return null;
+  }
+
+  private pendingBytes(): number {
+    let rows = 0;
+    for (const version of this.pending.values()) {
+      for (const group of version.replaces) rows += group.data.length;
+    }
+    return rows * ROW_BYTES;
+  }
+
+  /** Starts the next version of a group, with its neighbor when it is small */
+  private start(layer: LayerTable, group: RowGroup): void {
+    const groups = [group];
+    const data = group.data;
+    if (
+      data.length < ROW_GROUP_TARGET_ROWS / 4 &&
+      data.vertexCount < ROW_GROUP_TARGET_VERTICES / 4 &&
+      layer.groupCount > 1
+    ) {
+      const at = layer.orderOf(group.handle);
+      const neighbor = at + 1 < layer.groupCount ? layer.groupAt(at + 1) : layer.groupAt(at - 1);
+      if (!this.locked.has(neighbor.handle)) {
+        if (layer.orderOf(neighbor.handle) > at) groups.push(neighbor);
+        else groups.unshift(neighbor);
+      }
+    }
+    this.startGroups(layer, groups);
+  }
+
+  /**
+   * Starts the next version of groups next to each other in the order (none: the first group of
+   * a layer from its delta): takes their rows that stay and the rows of the delta in their range,
+   * and merges them on the main thread, or in the Worker of the host when they are many
+   */
+  private startGroups(
+    layer: LayerTable,
+    groups: RowGroup[],
+    orders: ReadonlyMap<GroupHandle, string> | null = null,
+  ): void {
+    const host = this.host;
+    const version: GroupVersion = {
+      id: this.nextId++,
+      layer,
+      replaces: groups,
+      groups: null,
+      deltaNumber: host.writeNumber,
+      keys: '',
+      orders,
+      status: 'building',
+      partial: false,
+      log: [],
+    };
+    for (const group of groups) {
+      this.locked.set(group.handle, version);
+      this.due.delete(group.handle);
+      this.urged.delete(group.handle);
+    }
+    const merge = this.mergeOf(layer, groups);
+    (version as { keys: string }).keys = this.keysOf(merge);
+    this.pending.set(version.id, version);
+    const rows = merge.rows.length / 2;
+    const worker = host.worker;
+    if (worker && rows > FOLD_INLINE_ROWS) {
+      worker.merge(merge).then(
+        (built) => {
+          if (version.status !== 'building') return;
+          // The keys of the groups of features of its rows changed meanwhile: dropped (the
+          // rows are in another order), and the groups are due again
+          if (this.keysOf(merge) !== version.keys) {
+            this.drop(version);
+            for (const group of groups) this.markDue(group.handle);
+            return;
+          }
+          this.finish(version, built);
+          host.requestWork();
+        },
+        (error) => {
+          host.report(error);
+          this.drop(version);
+        },
+      );
+      return;
+    }
+    const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.finish(version, mergeRowGroup(merge));
+    this.lastMergeMs =
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
+  }
+
+  /** What a next version merges: the rows that stay, and the rows of the delta in its range */
+  private mergeOf(layer: LayerTable, groups: readonly RowGroup[]): RowGroupMerge {
+    const host = this.host;
+    const sources: RowGroupData[] = [];
+    const pairs: number[] = [];
+    const inputs: RowInput[] = [];
+    for (const group of groups) {
+      const source = sources.length;
+      sources.push(group.data);
+      for (let r = 0; r < group.data.length; r++) {
+        const handle = group.data.handles[r];
+        // A row with a copy in a delta is read there, and a copy waiting for another group is
+        // not the row
+        if (host.inDelta(handle) || host.mainGroup(handle) !== group.handle) continue;
+        if (writtenInPlace(group, r)) inputs.push(host.rowInput(group, r));
+        else pairs.push(source, r);
+      }
+    }
+    // The rows of the delta whose places are in the range of the groups
+    const delta = layer.delta.group;
+    if (delta) {
+      const places = layer.deltaPlaces();
+      const indices = new Set(groups.map((group) => layer.orderOf(group.handle)));
+      if (groups.length === 0) indices.add(-1);
+      const source = sources.length;
+      sources.push(delta.data);
+      for (let k = 0; k < delta.data.length; k++) {
+        if (!indices.has(places.groups[k])) continue;
+        if (writtenInPlace(delta, k)) inputs.push(host.rowInput(delta, k));
+        else pairs.push(source, k);
+      }
+    }
+    if (inputs.length > 0) {
+      const built = host.buildRows(inputs);
+      if (built) {
+        sources.push(built);
+        for (let r = 0; r < built.length; r++) pairs.push(sources.length - 1, r);
+      }
+    }
+    return { sources, rows: Int32Array.from(pairs), groups: host.groupKeys, cutPast: 2 };
+  }
+
+  /**
+   * The versions of the keys of the groups of features the rows of a merge name (a version built
+   * with other keys has its rows in another order)
+   */
+  private keysOf(merge: RowGroupMerge): string {
+    const groups = new Set<GroupHandle>();
+    for (let i = 0; i < merge.rows.length; i += 2) {
+      const group = merge.sources[merge.rows[i]].groups[merge.rows[i + 1]];
+      if (group >= 0) groups.add(group);
+    }
+    return [...groups]
+      .sort((a, b) => a - b)
+      .map((group) => `${group}:${this.host.orderVersionOf(group)}`)
+      .join(',');
+  }
+
+  /** Makes the groups of a version built (their styles counted while they are held) */
+  private finish(version: GroupVersion, built: RowGroupData[]): void {
+    const host = this.host;
+    const reuse = version.replaces.length === 1 && built.length === 1;
+    version.groups = built.map((data) => {
+      host.retainStyles(data, 1);
+      const handle = reuse ? version.replaces[0].handle : host.nextGroupHandle();
+      return createRowGroup(handle, data);
+    });
+    version.status = 'built';
+  }
+
+  /** Puts a version in place of its groups (see the module) */
+  private swap(version: GroupVersion): RowsChange | null {
+    for (const group of version.replaces) {
+      if (version.layer.group(group.handle) !== group) {
+        this.drop(version);
+        return null;
+      }
+    }
+    const change = this.host.swapIn(version, this.waiting);
+    this.release(version);
+    version.status = 'swapped';
+    this.swapped++;
+    for (const receiver of this.receivers) receiver.swapped(version);
+    return change;
+  }
+
+  /** Drops a version: its groups are not replaced, and are due again */
+  private drop(version: GroupVersion): void {
+    if (version.status === 'dropped' || version.status === 'swapped') return;
+    for (const group of version.groups ?? []) this.host.retainStyles(group.data, -1);
+    this.release(version);
+    version.status = 'dropped';
+    for (const group of version.replaces) this.markDue(group.handle);
+    for (const receiver of this.receivers) receiver.dropped(version);
+  }
+
+  private release(version: GroupVersion): void {
+    this.pending.delete(version.id);
+    for (const group of version.replaces) {
+      if (this.locked.get(group.handle) === version) this.locked.delete(group.handle);
+    }
+  }
+
+  /** Starts a version of groups with the keys of groups of features replaced (a reorder) */
+  startReorder(
+    layer: LayerTable,
+    groups: RowGroup[],
+    built: RowGroupData[],
+    orders: ReadonlyMap<GroupHandle, string>,
+  ): GroupVersion {
+    for (const group of groups) this.dropLock(group.handle);
+    const version: GroupVersion = {
+      id: this.nextId++,
+      layer,
+      replaces: groups,
+      groups: null,
+      deltaNumber: this.host.writeNumber,
+      keys: '',
+      orders,
+      status: 'building',
+      partial: false,
+      log: [],
+    };
+    for (const group of groups) {
+      this.locked.set(group.handle, version);
+      this.due.delete(group.handle);
+    }
+    this.pending.set(version.id, version);
+    const host = this.host;
+    version.groups = built.map((data) => {
+      host.retainStyles(data, 1);
+      return createRowGroup(host.nextGroupHandle(), data);
+    });
+    version.status = 'built';
+    if (this.receivers.size === 0) this.swapReady();
+    host.requestWork();
+    return version;
+  }
+
+  /** The versions pending that put keys of a group of features in */
+  reordersOf(group: GroupHandle): GroupVersion[] {
+    return [...this.pending.values()].filter((version) => version.orders?.has(group));
+  }
+
+  /** The bounds of the groups a version replaces and of its new ones */
+  static boundsOf(version: GroupVersion): BoundingBox | null {
+    let out: BoundingBox | null = null;
+    for (const group of [...version.replaces, ...(version.groups ?? [])]) {
+      const b = group.bounds;
+      if (!b) continue;
+      out = out
+        ? {
+            minX: Math.min(out.minX, b.minX),
+            minY: Math.min(out.minY, b.minY),
+            maxX: Math.max(out.maxX, b.maxX),
+            maxY: Math.max(out.maxY, b.maxY),
+          }
+        : { ...b };
+    }
+    return out;
+  }
+}
+
+/** Whether a row holds values written in place (it is built again with them) */
+function writtenInPlace(group: RowGroup, row: number): boolean {
+  return (
+    group.values?.has(row) === true ||
+    group.geometries?.geometry(row) !== undefined ||
+    group.geometries?.rowTriangles(row) !== undefined
+  );
+}

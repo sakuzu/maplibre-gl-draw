@@ -851,7 +851,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       if (drape.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
       if (engine.tableRetained?.hasPendingWork) return true;
-      if (featureTablesInternals(store.tables)?.hasPendingAdoption) return true;
+      if (featureTablesInternals(store.tables)?.hasPendingWork) return true;
       for (const renderer of dynamicOverlayRenderers) {
         if (renderer.hasPendingWork?.()) return true;
       }

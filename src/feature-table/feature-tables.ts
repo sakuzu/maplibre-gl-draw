@@ -18,6 +18,7 @@
 import type {
   FeatureTables,
   FeatureTablesOptions,
+  FeatureTablesWorker,
   FeatureTablesWriter,
   ItemRefs,
   LayerRowsChange,
@@ -32,7 +33,7 @@ import type {
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import { drawPropertyKey } from '../shared/properties.js';
-import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
+import type { BoundingBox, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { createRowGroupBuilder, type RowInput } from '../table/row-group-builder.js';
 import { mergeRowGroup } from '../table/row-group-merge.js';
 import {
@@ -83,6 +84,13 @@ import {
   type TableWorkBudget,
 } from './types.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
+import {
+  type GroupVersion,
+  type GroupVersionReceiver,
+  GroupVersions,
+  type VersionHost,
+  type WaitingCopies,
+} from './versions.js';
 
 /** The key of the created zoom: the cutting of the rows into chunks reads it */
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
@@ -218,6 +226,40 @@ export interface FeatureTablesInternals {
   movedRowCount(): number;
   /** The rows held by the deltas of every layer */
   deltaRowCount(): number;
+  /** Whether work is left: row groups to take in, next versions of row groups to make */
+  readonly hasPendingWork: boolean;
+  /**
+   * Starts the next versions of the row groups due and builds them within the budget of the
+   * frame (`versions.ts`); without a side that draws the rows attached, a version built is
+   * swapped at once
+   */
+  advanceVersions(budget: TableWorkBudget): void;
+  /**
+   * Swaps in the next versions built whose GPU side every side that draws the rows has (the
+   * pass before the main one of a frame, after its uploads)
+   */
+  swapVersions(): void;
+  /**
+   * Starts, builds and swaps every next version due at once, as far as the sides that draw the
+   * rows let (a host without frames, the tests)
+   */
+  flushVersions(): void;
+  /** The next versions built and waiting for the GPU side, of a layer */
+  builtVersions(layerId: string): GroupVersion[];
+  /** Adds a side that draws the rows: the versions wait for its GPU side */
+  attachReceiver(receiver: GroupVersionReceiver): () => void;
+  /** Makes the next versions of groups go first (the frames cut them too much) */
+  urgeVersions(groups: Iterable<RowGroupHandle>): void;
+  /**
+   * Calls `listener` with the extent of the rows whose drawing changed (rows of a delta that came
+   * in, left or were written, row groups replaced): what a side that draws the rows in tiles
+   * makes again
+   *
+   * @returns The function that stops the calls
+   */
+  onTouched(listener: (layerId: string, bounds: BoundingBox) => void): () => void;
+  /** What the versions did: swapped so far, pending, the time of the last merge (ms) */
+  versionStats(): { swapped: number; pending: number; lastMergeMs: number };
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -273,12 +315,101 @@ class FeatureTablesStore implements FeatureTablesInternals {
     (layerId: string, writes: readonly RowWrite[]) => void
   >();
   private readonly deltaListeners = new Set<(layerId: string) => void>();
+  private readonly touchListeners = new Set<(layerId: string, bounds: BoundingBox) => void>();
   readonly groupsDue = new Set<RowGroupHandle>();
+  private readonly versions: GroupVersions;
+  private readonly worker: FeatureTablesWorker | undefined;
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
     this.readContext = { styles: this.styles, groups: this.groups, strings: this.strings };
+    this.worker = options.worker;
+    this.versions = new GroupVersions(this.versionHost());
+  }
+
+  /** What the versions read and write of the tables */
+  private versionHost(): VersionHost {
+    const store = this;
+    return {
+      layers: () => this.layers.values(),
+      get writeNumber() {
+        return store.writeCount;
+      },
+      nextGroupHandle: () => this.nextGroup++,
+      inDelta: (handle) => this.ids.deltaLayer(handle) >= 0,
+      mainGroup: (handle) => this.ids.mainGroup(handle),
+      rowInput: (group, row) => rowInputOf(this.readContext, group, row),
+      buildRows: (inputs) => this.buildRows(inputs),
+      groupKeys: this.groups,
+      orderVersionOf: (group) => this.groups.orderVersionOf(group),
+      swapIn: (version, waiting) => this.swapIn(version, waiting),
+      retainStyles: (data, count) => {
+        for (let r = 0; r < data.length; r++) {
+          if (count > 0) this.styles.retain(data.styles[r]);
+          else this.styles.release(data.styles[r]);
+        }
+      },
+      worker: this.worker,
+      requestWork: () => this.notifyWork(),
+      report: (error) => console.error(error),
+    };
+  }
+
+  get hasPendingWork(): boolean {
+    return this.adoptions.length > 0 || this.versions.hasWork;
+  }
+
+  advanceVersions(budget: TableWorkBudget): void {
+    this.versions.advance(budget);
+  }
+
+  swapVersions(): void {
+    this.versions.swapReady();
+  }
+
+  flushVersions(): void {
+    const unbounded: TableWorkBudget = { canStep: () => true, step: (work) => work(Infinity) };
+    for (let i = 0; i < 64 && (i === 0 || this.versions.hasWork); i++) {
+      const before = this.versions.swapped;
+      this.versions.advance(unbounded, false);
+      this.versions.swapReady();
+      if (this.versions.swapped === before && this.versions.built().length > 0) break;
+    }
+  }
+
+  builtVersions(layerId: string): GroupVersion[] {
+    const layer = this.layers.get(layerId);
+    return layer ? this.versions.built(layer) : [];
+  }
+
+  attachReceiver(receiver: GroupVersionReceiver): () => void {
+    return this.versions.attach(receiver);
+  }
+
+  urgeVersions(groups: Iterable<RowGroupHandle>): void {
+    this.versions.urge(groups);
+  }
+
+  onTouched(listener: (layerId: string, bounds: BoundingBox) => void): () => void {
+    this.touchListeners.add(listener);
+    return () => {
+      this.touchListeners.delete(listener);
+    };
+  }
+
+  versionStats(): { swapped: number; pending: number; lastMergeMs: number } {
+    return {
+      swapped: this.versions.swapped,
+      pending: this.versions.built().length,
+      lastMergeMs: this.versions.lastMergeMs,
+    };
+  }
+
+  /** Tells the sides that draw in tiles the extent of rows whose drawing changed */
+  private touch(layerId: string, bounds: BoundingBox | null): void {
+    if (!bounds || this.touchListeners.size === 0) return;
+    for (const listener of this.touchListeners) listener(layerId, bounds);
   }
 
   get revision(): number {
@@ -616,9 +747,20 @@ class FeatureTablesStore implements FeatureTablesInternals {
       } else change.updated.push(handle);
 
       if (!placed && place) {
-        // Written in place
+        // Written in place (and written again into the next version of its group when one is
+        // being made)
+        if (!place.group.delta && this.versions.lockOf(place.group.handle)) {
+          const values = new Map<string, unknown>();
+          for (const [field, list] of fields) values.set(field, list[i]);
+          this.versions.logWrite(place.group.handle, {
+            handle,
+            fields: values,
+            deleted: deleted?.[i] ? true : false,
+          });
+        }
         const write = this.writeInPlace(place, i, fields, deleted, styleNumbers);
         if (!write) continue;
+        if (write.what & ROW_WRITE_GEOMETRY) this.touch(place.layer.layerId, place.group.bounds);
         if (write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STATE)) stateChanged = true;
         touched.add(place.group);
         if (place.group.delta) place.layer.delta.setWritten(place.row, number);
@@ -657,9 +799,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     for (const group of touched) {
-      if (!group.delta && overrideBytesOf(group) > OVERRIDE_BYTES_LIMIT) {
+      if (group.delta) continue;
+      if (overrideBytesOf(group) > OVERRIDE_BYTES_LIMIT) {
         this.groupsDue.add(group.handle);
+        this.versions.markDue(group.handle);
       }
+      this.versions.checkMoved(group);
     }
     // The deltas
     const layers = new Set<LayerTable>([...moving.keys(), ...leaving.keys()]);
@@ -850,6 +995,149 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
+   * Puts the groups of a next version in place of the ones it replaces, in one step: the rows of
+   * the version are read from it (a row whose copy is still read in another group waits in it),
+   * a row that left the groups replaced and waits in another group is handed to it, the rows of
+   * the deltas the version took leave them, the values written in place since it started are
+   * written again into it, and the copies of the state of its rows are made again
+   */
+  private swapIn(version: GroupVersion, waiting: WaitingCopies): RowsChange | null {
+    const layer = version.layer;
+    const groups = version.groups ?? [];
+    const replaced = new Set(version.replaces.map((group) => group.handle));
+    const replacedGroups = new Set<RowGroup>(version.replaces);
+    if (version.orders) {
+      for (const [group, order] of version.orders) this.groups.setOrder(group, order);
+    }
+    layer.replaceGroups(version.replaces, groups);
+    for (const old of version.replaces) {
+      this.rowGroups.delete(old.handle);
+      this.groupsDue.delete(old.handle);
+    }
+    for (const group of groups) this.rowGroups.set(group.handle, { layer, group });
+    const leaving = new Map<LayerTable, Set<RowHandle>>();
+    const leave = (handle: RowHandle): void => {
+      const serial = this.ids.deltaLayer(handle);
+      if (serial < 0) return;
+      const delta = this.layerList[serial];
+      let set = leaving.get(delta);
+      if (!set) {
+        set = new Set();
+        leaving.set(delta, set);
+      }
+      set.add(handle);
+    };
+    const takes = (handle: RowHandle, number: number): boolean => {
+      const serial = this.ids.deltaLayer(handle);
+      if (serial < 0) return false;
+      return this.layerList[serial].delta.writtenOf(this.ids.deltaSlot(handle)) <= number;
+    };
+    // The rows of the version
+    const inNew = new Set<RowHandle>();
+    for (const group of groups) {
+      const data = group.data;
+      for (let r = 0; r < data.length; r++) {
+        const handle = data.handles[r];
+        inNew.add(handle);
+        const main = this.ids.mainGroup(handle);
+        if (main < 0 || replaced.has(main)) {
+          this.ids.setMain(handle, group.handle, r);
+          waiting.delete(handle);
+        } else {
+          // Read in another group until that one has its next version
+          waiting.set(handle, { group, row: r, number: version.deltaNumber });
+        }
+      }
+    }
+    // The rows that left the groups replaced
+    const handed: Array<{ group: RowGroup; row: number }> = [];
+    for (const old of version.replaces) {
+      const data = old.data;
+      for (let r = 0; r < data.length; r++) {
+        const handle = data.handles[r];
+        if (inNew.has(handle) || !replaced.has(this.ids.mainGroup(handle))) continue;
+        const copy = waiting.get(handle);
+        if (copy && this.rowGroups.get(copy.group.handle)?.group === copy.group) {
+          this.ids.setMain(handle, copy.group.handle, copy.row);
+          waiting.delete(handle);
+          handed.push(copy);
+          if (takes(handle, copy.number)) leave(handle);
+        } else {
+          this.ids.setMain(handle, -1, -1);
+        }
+      }
+    }
+    // The rows of the deltas the version took
+    for (const group of groups) {
+      const data = group.data;
+      for (let r = 0; r < data.length; r++) {
+        const handle = data.handles[r];
+        if (this.ids.mainGroup(handle) === group.handle && takes(handle, version.deltaNumber)) {
+          leave(handle);
+        }
+      }
+    }
+    // A copy waiting in a group replaced waits in the version, or not any more
+    for (const [handle, copy] of waiting) {
+      if (replacedGroups.has(copy.group)) waiting.delete(handle);
+    }
+    for (const old of version.replaces) {
+      for (let r = 0; r < old.data.length; r++) this.styles.release(old.data.styles[r]);
+    }
+    for (const group of groups) {
+      for (let r = 0; r < group.data.length; r++) this.writeState(group, r);
+      group.stateVersion++;
+    }
+    for (const copy of handed) {
+      this.writeState(copy.group, copy.row);
+      copy.group.stateVersion++;
+      this.rowGroups.get(copy.group.handle)?.layer.touchItems();
+    }
+    for (const [delta, set] of leaving) this.rebuildDelta(delta, set, [], this.writeCount);
+    // The values written in place since the version started
+    const writes = new Map<string, RowWrite[]>();
+    for (const entry of version.log) {
+      const place = this.placeOf(entry.handle);
+      if (!place || place.group.delta || !groups.includes(place.group)) continue;
+      const fields = new Map<RowField, unknown[]>();
+      for (const [field, value] of entry.fields) fields.set(field as RowField, [value]);
+      const style = fields.get('style');
+      const numbers = style ? [this.styles.intern((style[0] ?? {}) as FeatureStyle)] : undefined;
+      const write = this.writeInPlace(
+        place,
+        0,
+        fields,
+        entry.deleted ? Uint8Array.of(1) : undefined,
+        numbers,
+      );
+      if (numbers && this.styles.usesOf(numbers[0]) === 0) this.styles.release(numbers[0]);
+      if (!write) continue;
+      let list = writes.get(place.layer.layerId);
+      if (!list) {
+        list = [];
+        writes.set(place.layer.layerId, list);
+      }
+      list.push(write);
+    }
+    if (version.orders) {
+      // The rows of the deltas in the order of the new keys
+      for (const other of this.layers.values()) {
+        if (other.delta.group && !leaving.has(other)) {
+          this.rebuildDelta(other, new Set(), [], this.writeCount);
+        }
+      }
+      for (const other of this.layers.values()) other.touchItems();
+    }
+    layer.touchItems();
+    this.revisionCount++;
+    for (const [layerId, list] of writes) {
+      for (const listener of this.writeListeners) listener(layerId, list);
+    }
+    this.touch(layer.layerId, GroupVersions.boundsOf(version));
+    return null;
+  }
+
+  /**
    * Makes the rows of the delta of a layer again: its rows but the ones leaving it, and the rows
    * coming into it (written in the change `number`). A row of the delta written in place is
    * built again with its values, so the new rows hold no values written in place
@@ -922,6 +1210,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     delta.rebuild(group, written);
     layer.touchItems();
+    this.touch(layer.layerId, unionBounds(old?.bounds ?? null, group?.bounds ?? null));
     // The copies the rows leaving the delta had in their groups are read again
     for (const handle of leaving) {
       if (this.ids.deltaLayer(handle) < 0) this.refreshCopies(handle);
@@ -1046,6 +1335,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     this.revisionCount++;
   }
+}
+
+/** The union of two extents (null when both are) */
+function unionBounds(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    minX: Math.min(a.minX, b.minX),
+    minY: Math.min(a.minY, b.minY),
+    maxX: Math.max(a.maxX, b.maxX),
+    maxY: Math.max(a.maxY, b.maxY),
+  };
 }
 
 /** The draft of the change of a layer */

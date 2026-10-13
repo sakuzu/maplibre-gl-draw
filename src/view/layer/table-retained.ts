@@ -50,6 +50,7 @@ import {
   type RowGroupHandle,
   type RowWrite,
 } from '../../feature-table/types.js';
+import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -213,6 +214,11 @@ export interface TableLayerRendererOptions {
   readonly buildBudgetMs?: number;
   /** The features made from rows that are kept ({@link IMMEDIATE_CACHE_LIMIT} when omitted) */
   readonly immediateCacheLimit?: number;
+  /**
+   * The time the chunks of the next versions of row groups may take to build in a frame while
+   * the camera moves (0, the default: they are built once it is still, as every chunk is)
+   */
+  readonly versionBudgetWhileMovingMs?: number;
   /** Asks for another frame */
   readonly requestRepaint: () => void;
 }
@@ -318,6 +324,9 @@ interface LayerCache {
   deltaStale: boolean;
   /** The view the layer was drawn in last (what a pending version waits for) */
   bounds: BoundingBox;
+  /** The drawing the layer was drawn with last, and the frame */
+  drawing: Drawing;
+  drawnFrame: number;
 }
 
 /** A row written in place, waiting for the pass before the main one of the next frame */
@@ -407,6 +416,18 @@ export class TableLayerRenderer {
   private readonly layers = new Map<string, LayerCache>();
   private renderers: RetainedRendererSet | null = null;
   private budget: ChunkBuildBudget | null = null;
+  /** The frames begun */
+  private frameCount = 0;
+  /** The tables the drawing waits the next versions of the row groups of (and the detach) */
+  private readonly attached = new Map<FeatureTablesInternals, () => void>();
+  /** What is kept for the groups of the next versions built, until they are swapped in */
+  private readonly pendingCaches = new Map<GroupVersion, GroupCache[]>();
+  /** What the next versions of the row groups ask of the drawing */
+  private readonly receiver: GroupVersionReceiver = {
+    uploaded: (version) => this.versionUploaded(version),
+    swapped: (version) => this.versionSwapped(version),
+    dropped: (version) => this.versionDropped(version),
+  };
   private pending = false;
   private cachedFeatures = 0;
   private builtPixelRatio: number | null = null;
@@ -525,12 +546,28 @@ export class TableLayerRenderer {
    */
   prerender(): void {
     const start = chunkClock();
+    this.prepareUploads();
+    this.prepared = true;
+    this.prerenderMs = chunkClock() - start;
+  }
+
+  /**
+   * Writes everything queued to the GPU, then swaps in the next versions of the row groups whose
+   * GPU side is up, and writes what the swaps changed (the rows of the deltas they took, the
+   * values written in place since they started, the state of their rows): in one pass, so a
+   * version is drawn from the frame its groups are replaced in
+   */
+  private prepareUploads(): void {
     this.applyWrites();
     this.packDeltas();
     this.uploadStates();
     this.renderers?.rows?.flushUploads();
-    this.prepared = true;
-    this.prerenderMs = chunkClock() - start;
+    if (this.attached.size === 0) return;
+    for (const tables of this.attached.keys()) tables.swapVersions();
+    this.applyWrites();
+    this.packDeltas();
+    this.uploadStates();
+    this.renderers?.rows?.flushUploads();
   }
 
   /** What the writes in place did, the styles the drawing holds and the time of the last frame */
@@ -610,12 +647,8 @@ export class TableLayerRenderer {
    */
   beginFrame(): void {
     // A frame that had no pass before its main one writes what was queued now
-    if (!this.prepared) {
-      this.applyWrites();
-      this.packDeltas();
-      this.uploadStates();
-      this.renderers?.rows?.flushUploads();
-    }
+    if (!this.prepared) this.prepareUploads();
+    this.frameCount++;
     this.prepared = false;
     this.lastDrawMs = this.drawMs;
     this.drawMs = 0;
@@ -634,10 +667,14 @@ export class TableLayerRenderer {
    * frame is asked for when groups are left)
    */
   advanceTables(tables: FeatureTablesInternals): void {
-    if (!tables.hasPendingAdoption) return;
+    // The next versions of the row groups wait for the chunks of the drawing
+    if (!this.attached.has(tables)) this.attached.set(tables, tables.attachReceiver(this.receiver));
+    if (!tables.hasPendingWork) return;
     const budget = this.budget ?? createChunkBuildBudget(TABLE_BUILD_BUDGET_MS);
     this.budget = budget;
-    if (tables.advanceAdoption(budget)) this.pending = true;
+    if (tables.hasPendingAdoption && tables.advanceAdoption(budget)) this.pending = true;
+    tables.advanceVersions(budget);
+    if (tables.hasPendingWork) this.pending = true;
   }
 
   /** Ends a frame: another one is asked for when a build is left */
@@ -736,6 +773,8 @@ export class TableLayerRenderer {
     // The rows of the delta, at their places among the groups (drawn as they are packed, or at
     // once while they are not)
     cache.bounds = bounds;
+    cache.drawing = drawing;
+    cache.drawnFrame = this.frameCount;
     const inserts = this.deltaInserts(table);
     const pass = this.pass;
     pass.delta = cache.delta?.group === table.delta.group && !cache.deltaStale ? cache.delta : null;
@@ -821,6 +860,9 @@ export class TableLayerRenderer {
       pass.inserts = inserts.get(-1) ?? null;
       pass.insertAt = 0;
       this.drawInserts(Number.MAX_SAFE_INTEGER);
+      // The chunks of the next versions of the groups, built without being drawn
+      pass.inserts = null;
+      this.advanceVersions(cache, tables, table, layer, deps, drawing, settled);
     } finally {
       run?.end();
       this.drawMs += chunkClock() - started;
@@ -841,6 +883,108 @@ export class TableLayerRenderer {
       pass.deps = null;
       pass.tables = null;
     }
+    // Too many cuts: the next versions of the groups with the most go first
+    if (this.writeStats.cuts > SPLIT_BUDGET) {
+      const counts = [...inserts]
+        .filter(([g]) => g >= 0)
+        .map(([g, list]) => [table.groupAt(g).handle, list.length] as const)
+        .sort((a, b) => b[1] - a[1]);
+      tables.urgeVersions(counts.map(([handle]) => handle));
+    }
+  }
+
+  // === The next versions of the row groups ===
+
+  /**
+   * Builds the chunks of the next versions of the groups of a layer that are built and wait for
+   * their GPU side, without drawing them (within the budget, once the camera is still unless the
+   * drawing is given a budget for them while it moves)
+   */
+  private advanceVersions(
+    cache: LayerCache,
+    tables: FeatureTablesInternals,
+    table: LayerTable,
+    layer: Layer,
+    deps: StoreRetainedDrawDeps,
+    drawing: Drawing,
+    settled: boolean,
+  ): void {
+    const versions = tables.builtVersions(table.layerId);
+    if (versions.length === 0) return;
+    const pass = this.pass;
+    const schedule = this.schedule;
+    const moving = this.options.versionBudgetWhileMovingMs ?? 0;
+    if (!settled && moving > 0) {
+      schedule.settled = true;
+      schedule.budget = createChunkBuildBudget(moving);
+    }
+    pass.drawing = false;
+    for (const version of versions) {
+      let caches = this.pendingCaches.get(version);
+      if (!caches) {
+        caches = (version.groups ?? []).map((group) => newGroupCache(group, cache.styleGeneration));
+        this.pendingCaches.set(version, caches);
+      }
+      for (const groupCache of caches) {
+        pass.group = groupCache.group;
+        pass.groupCache = groupCache;
+        pass.groupIndex = -1;
+        if (groupCache.styleGeneration !== cache.styleGeneration) {
+          this.restyleGroup(cache, groupCache);
+        }
+        this.chunksOf(cache, groupCache, drawing, tables, table, layer, deps);
+        this.advance(tables, settled, drawing);
+      }
+    }
+    pass.drawing = true;
+    schedule.settled = settled;
+    schedule.budget = this.budget as ChunkBuildBudget;
+  }
+
+  /**
+   * Whether the GPU side of a next version is up: every chunk of the drawing of its layer that
+   * meets the view is built (a layer not drawn last frame waits for nothing)
+   */
+  private versionUploaded(version: GroupVersion): boolean {
+    const cache = this.layers.get(version.layer.layerId);
+    if (!cache || cache.drawnFrame < this.frameCount - 1) return true;
+    const caches = this.pendingCaches.get(version);
+    const groups = version.groups ?? [];
+    if (!caches || caches.length !== groups.length) return false;
+    for (const groupCache of caches) {
+      const held = cache.drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+      if (!held || held.generation !== cache.generation) return false;
+      if (!builtInView(held.chunks, cache.bounds)) return false;
+    }
+    return true;
+  }
+
+  /** A next version replaced its groups: its chunks are the ones of its groups from now */
+  private versionSwapped(version: GroupVersion): void {
+    const caches = this.pendingCaches.get(version) ?? [];
+    this.pendingCaches.delete(version);
+    const cache = this.layers.get(version.layer.layerId);
+    if (!cache) {
+      for (const groupCache of caches) this.disposeGroup(groupCache);
+      return;
+    }
+    for (const old of version.replaces) {
+      const groupCache = cache.groups.get(old.handle);
+      if (groupCache?.group !== old) continue;
+      this.disposeGroup(groupCache);
+      cache.groups.delete(old.handle);
+    }
+    const groups = version.groups ?? [];
+    groups.forEach((group, i) => {
+      const groupCache = caches[i];
+      if (groupCache?.group === group) cache.groups.set(group.handle, groupCache);
+    });
+  }
+
+  /** A next version was dropped: its chunks are released */
+  private versionDropped(version: GroupVersion): void {
+    for (const groupCache of this.pendingCaches.get(version) ?? []) this.disposeGroup(groupCache);
+    this.pendingCaches.delete(version);
   }
 
   /**
@@ -932,6 +1076,12 @@ export class TableLayerRenderer {
   /** Releases every GPU resource (the batches are built again on the next draw) */
   dispose(renderers?: RetainedRendererSet): void {
     if (renderers) this.renderers = renderers;
+    for (const detach of this.attached.values()) detach();
+    this.attached.clear();
+    for (const caches of this.pendingCaches.values()) {
+      for (const groupCache of caches) this.disposeGroup(groupCache);
+    }
+    this.pendingCaches.clear();
     for (const cache of this.layers.values()) {
       for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache);
       if (cache.delta) this.disposeGroup(cache.delta);
@@ -1212,6 +1362,8 @@ export class TableLayerRenderer {
         delta: null,
         deltaStale: false,
         bounds: WORLD,
+        drawing: 'one-draw',
+        drawnFrame: -1,
       };
       this.layers.set(table.layerId, cache);
     }

@@ -16,6 +16,9 @@
  *   places
  * - Writes of every kind at random over the frames: what is drawn is the rows of the layer in
  *   their order, every frame
+ * - The next versions of the groups: their chunks are built without being drawn, and they are
+ *   swapped in the pass before the main one of the frame they are up in; every frame draws the
+ *   rows of the layer in their order, once each (14.1 of the design, 6.3)
  */
 
 import type { Geometry } from 'geojson';
@@ -103,7 +106,7 @@ function features(count: number, seed: number): Feature[] {
 }
 
 /** The tables of features drawn in one draw, the writes reaching the drawing */
-function setup(list: Feature[], targetRows = 16) {
+function setup(list: Feature[], targetRows = 16, versions = false) {
   const tables = tablesOfFeatures('layer', list, targetRows);
   const mock = memoryGL();
   const rows = new RowsRenderer(null, mock.gl, 1, terrain);
@@ -163,6 +166,8 @@ function setup(list: Feature[], targetRows = 16) {
     renderer.prerender();
     beginRenderFrame();
     renderer.beginFrame();
+    // The row groups taken in and the next versions advanced, as an instance does every frame
+    if (versions) renderer.advanceTables(tables.internals);
     const record: TableDrawRecord[] = [];
     renderer.recordDraws(record);
     atOnce.length = 0;
@@ -457,6 +462,40 @@ describe('the drawing of the rows of the delta', () => {
         const full = live.frame();
         expect(drawnIds(full.record, live.table)).toEqual(shown);
       }
+    }
+  });
+
+  it('draws every row once in every frame while the next versions are built and swapped', () => {
+    for (const seed of [41, 42]) {
+      const random = seededRandom(seed);
+      const list = features(300, seed);
+      const live = setup(list, 32, true);
+      live.frame();
+      for (let step = 0; step < 80; step++) {
+        if (random() < 0.5) {
+          const order = live.table.rowOrder();
+          const handle = order.handles[Math.floor(random() * order.handles.length)];
+          const pick = random();
+          if (pick < 0.6) {
+            live.writer.apply(
+              patchOf([handle], { order: [orderKey(Math.floor(random() * 300)) + 'm'] }),
+            );
+          } else if (pick < 0.8) {
+            live.writer.apply(patchOf([handle], { style: [{ strokeColor: '#00ff00' }] }));
+          } else {
+            live.writer.apply(patchOf([handle], { 'property:n': [step] }));
+          }
+        }
+        const { record } = live.frame();
+        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+      }
+      // Once nothing is written, the versions take every row of the delta
+      for (let i = 0; i < 20 && live.internals.hasPendingWork; i++) live.frame();
+      const { record } = live.frame();
+      expect(live.internals.deltaRowCount()).toBe(0);
+      expect(live.internals.versionStats().swapped).toBeGreaterThan(3);
+      expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+      expect(record.some((entry) => entry.delta)).toBe(false);
     }
   });
 });

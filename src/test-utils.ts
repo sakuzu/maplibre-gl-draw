@@ -20,7 +20,13 @@ import { createLayers } from './api/impl/layers.js';
 import { createSelection } from './api/impl/selection.js';
 import type { ResourceDeps } from './api/impl/shared.js';
 import { withLocksIgnored } from './api/impl/shared.js';
-import type { FeatureTables, FeatureTablesWriter } from './api/tables.js';
+import type {
+  FeatureTables,
+  FeatureTablesOptions,
+  FeatureTablesWriter,
+  RowField,
+  RowPatch,
+} from './api/tables.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
@@ -41,6 +47,7 @@ import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import type { SnapResult } from './snapping/types.js';
 import type { Store } from './store/store.js';
 import { createRowGroupBuilder, type RowInput } from './table/row-group-builder.js';
+import { utf8ColumnFromStrings } from './table/utf8-column.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
 import type { ImageRenderer } from './view/renderers/image.js';
 import type { SDFLineRenderer } from './view/renderers/line/sdf-line.js';
@@ -798,4 +805,234 @@ export function expectTablesMatch(
       expect(feature?.layerId).toBe(layerId);
     }
   }
+}
+
+/** A patch of rows */
+export function rowPatch(
+  handles: number[],
+  fields: Record<string, unknown[]>,
+  deleted?: number[],
+): RowPatch {
+  return {
+    handles: Int32Array.from(handles),
+    fields: new Map(Object.entries(fields) as Array<[RowField, unknown[]]>),
+    deleted: deleted ? Uint8Array.from(deleted) : undefined,
+  };
+}
+
+/** The key of the order of a number (they sort as the numbers do) */
+export function referenceKey(n: number): string {
+  return `k${String(Math.floor(n)).padStart(7, '0')}`;
+}
+
+/** Tables of the rows of a reference, in row groups of `targetRows` */
+export function tablesOfReference(
+  reference: ReferenceRows,
+  layerIds: readonly string[],
+  targetRows = 8,
+  options: FeatureTablesOptions = {},
+) {
+  const { tables, writer } = createFeatureTablesStore(options);
+  const internals = featureTablesInternals(tables);
+  if (!internals) throw new Error('no internals');
+  const groupHandles = new Map<string, number>();
+  for (const [id, group] of reference.groups) {
+    const handle = groupHandles.size + 100;
+    groupHandles.set(id, handle);
+    internals.groups.set(handle, {
+      id,
+      order: group.order,
+      layerId: group.layerId,
+      visible: group.visible,
+      locked: false,
+    });
+  }
+  const groupKeys = [...reference.groups].map(([id, group]) => ({
+    handle: groupHandles.get(id) as number,
+    id,
+    order: group.order,
+  }));
+  for (const layerId of layerIds) {
+    const builder = createRowGroupBuilder({ groups: groupKeys, targetRows });
+    for (const row of reference.rows.values()) {
+      if (row.layerId !== layerId) continue;
+      builder.addRow({
+        id: row.id,
+        type: row.type,
+        geometry: row.geometry,
+        order: row.order,
+        member: row.groupId !== undefined ? row.member : undefined,
+        group: row.groupId !== undefined ? groupHandles.get(row.groupId) : undefined,
+        style: row.style,
+        properties: row.properties,
+        visible: row.visible,
+        locked: row.locked,
+        deleted: row.deleted,
+      });
+    }
+    if (builder.length > 0) writer.adopt(layerId, builder.finish());
+  }
+  internals.flushAdoption();
+  const groupHandleOf = (id: string): number => groupHandles.get(id) as number;
+  return { tables, writer, internals, groupHandleOf };
+}
+
+/** A geometry at random of a type (a point, a line, a polygon) */
+export function randomRowGeometry(random: () => number, type: string): Geometry {
+  const x = random() * 10;
+  const y = random() * 10;
+  if (type === 'Point') return { type: 'Point', coordinates: [x, y] };
+  if (type === 'LineString') {
+    const n = 2 + Math.floor(random() * 4);
+    return {
+      type: 'LineString',
+      coordinates: Array.from({ length: n }, (_, k) => [x + k * 0.1, y + random() * 0.1]),
+    };
+  }
+  const n = 3 + Math.floor(random() * 4);
+  const ring = Array.from({ length: n }, (_, k) => {
+    const a = (k / n) * Math.PI * 2;
+    return [x + Math.cos(a), y + Math.sin(a)];
+  });
+  ring.push(ring[0]);
+  return { type: 'Polygon', coordinates: [ring] };
+}
+
+const REFERENCE_TYPES = ['Point', 'LineString', 'Polygon'];
+
+/** A row of the reference at random */
+export function randomReferenceRow(
+  random: () => number,
+  id: string,
+  layerId: string,
+): ReferenceRow {
+  const type = REFERENCE_TYPES[Math.floor(random() * REFERENCE_TYPES.length)];
+  return {
+    id,
+    layerId,
+    type,
+    geometry: randomRowGeometry(random, type),
+    order: referenceKey(random() * 1e6),
+    groupId: undefined,
+    member: '',
+    style: { strokeColor: '#ff0000' },
+    properties: { n: Math.floor(random() * 100) },
+    visible: true,
+    locked: false,
+    deleted: false,
+  };
+}
+
+/** A reference of `count` rows over layers, with two groups of features in the first layer */
+export function randomReference(
+  random: () => number,
+  count: number,
+  layerIds: readonly string[],
+): ReferenceRows {
+  const reference = new ReferenceRows();
+  reference.groups.set('ga', { order: referenceKey(250_000), layerId: layerIds[0], visible: true });
+  reference.groups.set('gb', { order: referenceKey(750_000), layerId: layerIds[0], visible: true });
+  for (let i = 0; i < count; i++) {
+    const row = randomReferenceRow(random, `r${i}`, layerIds[i % layerIds.length]);
+    if (row.layerId === layerIds[0] && i % 7 === 0) {
+      row.groupId = i % 2 === 0 ? 'ga' : 'gb';
+      row.member = referenceKey(random() * 1e6);
+    }
+    reference.rows.set(row.id, row);
+  }
+  return reference;
+}
+
+/**
+ * Writes of every kind at random, to the tables and to the reference alike: the geometry, the
+ * style, an attribute, the key, the layer, the group of features, a new row, a deletion, shown,
+ * and a row put into the delta as it is
+ */
+export function randomRowWrites(
+  random: () => number,
+  setup: {
+    readonly tables: FeatureTables;
+    readonly writer: FeatureTablesWriter;
+    readonly internals: FeatureTablesInternals;
+    readonly reference: ReferenceRows;
+    readonly layerIds: readonly string[];
+  },
+) {
+  const { tables, writer, internals, reference, layerIds } = setup;
+  let created = 0;
+  const step = (n: number): void => {
+    const ids = [...reference.rows.values()].filter((row) => !row.deleted).map((row) => row.id);
+    if (ids.length === 0) return;
+    const id = ids[Math.floor(random() * ids.length)];
+    const row = reference.rows.get(id) as ReferenceRow;
+    const handle = tables.handleOf(id) as number;
+    const pick = random();
+    if (pick < 0.15) {
+      const geometry = randomRowGeometry(random, row.type);
+      writer.apply(rowPatch([handle], { geometry: [geometry] }));
+      row.geometry = geometry;
+    } else if (pick < 0.25) {
+      const style = {
+        strokeColor: `#${Math.floor(random() * 0xffffff)
+          .toString(16)
+          .padStart(6, '0')}`,
+      };
+      writer.apply(rowPatch([handle], { style: [style] }));
+      row.style = style;
+    } else if (pick < 0.35) {
+      const value = random() < 0.3 ? undefined : `v${n}`;
+      writer.apply(rowPatch([handle], { 'property:name': [value] }));
+      if (value === undefined) delete row.properties.name;
+      else row.properties = { ...row.properties, name: value };
+    } else if (pick < 0.5) {
+      const order = referenceKey(random() * 1e6);
+      writer.apply(rowPatch([handle], { order: [order] }));
+      row.order = order;
+    } else if (pick < 0.6) {
+      const layerId = layerIds[Math.floor(random() * layerIds.length)];
+      const order = referenceKey(random() * 1e6);
+      writer.apply(
+        rowPatch([handle], {
+          layerId: [layerId],
+          order: [order],
+          groupId: [undefined],
+          member: [undefined],
+        }),
+      );
+      Object.assign(row, { layerId, order, groupId: undefined, member: '' });
+    } else if (pick < 0.68 && row.layerId === layerIds[0]) {
+      const groupId = random() < 0.5 ? 'ga' : 'gb';
+      const member = referenceKey(random() * 1e6);
+      writer.apply(rowPatch([handle], { groupId: [groupId], member: [member] }));
+      Object.assign(row, { groupId, member });
+    } else if (pick < 0.78) {
+      const fresh = `n${created++}`;
+      const [freshHandle] = writer.allocateHandles(utf8ColumnFromStrings([fresh]));
+      const next = randomReferenceRow(
+        random,
+        fresh,
+        layerIds[Math.floor(random() * layerIds.length)],
+      );
+      writer.apply(
+        rowPatch([freshHandle], {
+          type: [next.type],
+          layerId: [next.layerId],
+          geometry: [next.geometry],
+          order: [next.order],
+          style: [next.style],
+          'property:n': [next.properties.n],
+        }),
+      );
+      reference.rows.set(fresh, next);
+    } else if (pick < 0.85) {
+      writer.apply(rowPatch([handle], {}, [1]));
+      row.deleted = true;
+    } else if (pick < 0.92) {
+      internals.toDelta([handle]);
+    } else {
+      writer.apply(rowPatch([handle], { visible: [!row.visible] }));
+      row.visible = !row.visible;
+    }
+  };
+  return { step };
 }

@@ -16,6 +16,7 @@
  */
 
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
+import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
 import type { LayerRowsChange, RowField, RowsChange } from '../shared/types/model.js';
 import type { RowGroupData } from '../table/row-group-types.js';
@@ -23,7 +24,7 @@ import type { Utf8Column } from '../table/utf8-column.js';
 import type { UpdateSource } from './extension/store.js';
 import type { Feature, FeatureType } from './model.js';
 
-export type { LayerRowsChange, RowField, RowsChange };
+export type { FeatureTablesWorker, LayerRowsChange, RowField, RowsChange };
 
 /**
  * The handle of a row: a number the document gives a row the first time it sees its id, and
@@ -223,6 +224,11 @@ export interface FeatureTablesWriter {
 export interface FeatureTablesOptions {
   /** The number of strings read from the columns that are kept (50,000 when omitted) */
   readonly stringCacheSize?: number;
+  /**
+   * Where the large merges and builds of rows run (on the main thread, within the time of the
+   * frames, when omitted)
+   */
+  readonly worker?: FeatureTablesWorker;
 }
 
 /**

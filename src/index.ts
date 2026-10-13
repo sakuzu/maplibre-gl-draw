@@ -162,6 +162,7 @@ export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
 export type {
   FeatureTables,
   FeatureTablesOptions,
+  FeatureTablesWorker,
   FeatureTablesWriter,
   ItemRefs,
   LayerRowsChange,
