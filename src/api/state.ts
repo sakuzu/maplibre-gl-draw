@@ -185,6 +185,44 @@ export interface TableDiagnostics {
   setRowsMoving(handles: ArrayLike<number>, set: number): void;
   /** Sets the translation of a moving set (1 to 3), in degrees of longitude and latitude */
   setMoveTranslation(set: number, dLng: number, dLat: number): void;
+  /** What the writes of rows in place hold and did, for the measurement of the edits */
+  editStats(): TableEditStats;
+}
+
+/**
+ * What the writes of rows in place hold and did since the instance was made: the styles kept,
+ * the values written in place, the bytes written to the GPU, how the rows written reached the
+ * chunks that draw them, and the time of the last frame
+ */
+export interface TableEditStats {
+  /** The distinct styles of the rows (the table of styles of the tables) */
+  readonly styles: number;
+  /** The resolved styles the drawing holds, over every layer */
+  readonly resolvedStyles: number;
+  /** The bytes the values written in place hold, not folded into their row groups yet */
+  readonly overrideBytes: number;
+  /** The row groups whose values written in place are past their limit */
+  readonly groupsDue: number;
+  /** The rows moved since their row groups were built */
+  readonly movedRows: number;
+  /** The bytes the drawing of the rows wrote to the GPU (chunks, writes in place, styles) */
+  readonly uploadedBytes: number;
+  /** The rows written in place into the chunks that draw them */
+  readonly inPlace: number;
+  /** Of them, the rows written by the positions of their coordinates only */
+  readonly coordsOnly: number;
+  /** Of them, the rows written by their style only */
+  readonly styleOnly: number;
+  /** The rows that did not fit their places: their chunks were built again */
+  readonly rebuilt: number;
+  /** The rows of a chunk being built: its build started again */
+  readonly restarted: number;
+  /** The rows classified otherwise: their row groups were cut again */
+  readonly reclassified: number;
+  /** The time of the last pass before the main one (the writes and the uploads), in ms */
+  readonly prerenderMs: number;
+  /** The time the layers held as rows took to draw in the last frame, in ms */
+  readonly drawMs: number;
 }
 
 /**

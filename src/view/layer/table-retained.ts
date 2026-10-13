@@ -77,6 +77,7 @@ import {
   advanceChunkBuild,
   type ChunkBuildBudget,
   type ChunkSchedulerHost,
+  chunkClock,
   createChunkBuildBudget,
   invalidateChunk,
   type RetainedChunkJob,
@@ -367,6 +368,10 @@ export class TableLayerRenderer {
   /** Whether the uploads of the frame were written before its main pass */
   private prepared = false;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
+  /** The time of the last pass before the main one, and of the drawing of the frames (ms) */
+  private prerenderMs = 0;
+  private drawMs = 0;
+  private lastDrawMs = 0;
   /** The rows written in place since the last pass before the main one, by layer and group */
   private readonly written = new Map<string, Map<RowGroupHandle, Map<number, PendingWrite>>>();
   /** What the writes in place did */
@@ -460,10 +465,31 @@ export class TableLayerRenderer {
    * styles, the writes in place). Called before the main pass of the frame
    */
   prerender(): void {
+    const start = chunkClock();
     this.applyWrites();
     this.uploadStates();
     this.renderers?.rows?.flushUploads();
     this.prepared = true;
+    this.prerenderMs = chunkClock() - start;
+  }
+
+  /** What the writes in place did, the styles the drawing holds and the time of the last frame */
+  editStats(): {
+    resolvedStyles: number;
+    uploadedBytes: number;
+    writes: Readonly<TableWriteStats>;
+    prerenderMs: number;
+    drawMs: number;
+  } {
+    let resolvedStyles = 0;
+    for (const cache of this.layers.values()) resolvedStyles += cache.rowsStyles?.size ?? 0;
+    return {
+      resolvedStyles,
+      uploadedBytes: this.renderers?.rows?.uploadedBytes ?? 0,
+      writes: { ...this.writeStats },
+      prerenderMs: this.prerenderMs,
+      drawMs: this.lastDrawMs,
+    };
   }
 
   /**
@@ -530,6 +556,8 @@ export class TableLayerRenderer {
       this.renderers?.rows?.flushUploads();
     }
     this.prepared = false;
+    this.lastDrawMs = this.drawMs;
+    this.drawMs = 0;
     this.budget = createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
     this.pending = false;
     // A new pixel ratio: the batches by kind hold their widths and are built again (drawn until
@@ -663,6 +691,7 @@ export class TableLayerRenderer {
     // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), ended
     // around the rows drawn at once and with the layer
     const run = renderers.run;
+    const started = chunkClock();
     run?.begin();
     try {
       for (let g = 0; g < table.groupCount; g++) {
@@ -718,6 +747,7 @@ export class TableLayerRenderer {
       }
     } finally {
       run?.end();
+      this.drawMs += chunkClock() - started;
       // Nothing of the layer is held past its drawing
       pass.frame = null;
       pass.renderers = null;

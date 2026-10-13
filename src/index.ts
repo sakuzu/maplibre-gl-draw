@@ -125,6 +125,7 @@ export type {
   GpuMemoryDiagnostics,
   TableDiagnostics,
   TableDrawnRange,
+  TableEditStats,
   VertexRef,
   VertexSelection,
 } from './api/state.js';

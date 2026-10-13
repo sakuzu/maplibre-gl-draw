@@ -500,6 +500,10 @@ describe('the styles of rows written again and again', () => {
     }
     expect(palette.size).toBeLessThanOrEqual(held + 1);
     expect(live.internals.styles.size).toBeLessThanOrEqual(styles + 1);
+    // What the measurement reads: the styles held, and the bytes of the style of one row each
+    const stats = live.renderer.editStats();
+    expect(stats.resolvedStyles).toBe(palette.size);
+    expect(stats.writes.styleOnly).toBe(100);
     features[1] = { ...features[1], style };
     expect(live.read()).toEqual(drawn(features).read());
   });

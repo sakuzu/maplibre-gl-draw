@@ -35,6 +35,7 @@ const MAIN = [
   'RowFieldValues',
   'RowPatch',
   'TableScanOptions',
+  'TableEditStats',
   'CompanionProvider',
   'createDraw',
   'createFeatureTables',

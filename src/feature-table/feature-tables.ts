@@ -153,6 +153,10 @@ export interface FeatureTablesInternals {
    * they are due for their next version
    */
   readonly groupsDue: ReadonlySet<RowGroupHandle>;
+  /** The bytes the values written in place of every row group hold */
+  overrideBytes(): number;
+  /** The rows moved since their row groups were built, over every layer */
+  movedRowCount(): number;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -303,6 +307,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return () => {
       this.workListeners.delete(listener);
     };
+  }
+
+  overrideBytes(): number {
+    let bytes = 0;
+    for (const { group } of this.rowGroups.values()) bytes += overrideBytesOf(group);
+    return bytes;
+  }
+
+  movedRowCount(): number {
+    let count = 0;
+    for (const layer of this.layers.values()) count += layer.movedRowCount;
+    return count;
   }
 
   onRowsWritten(listener: (layerId: string, writes: readonly RowWrite[]) => void): () => void {

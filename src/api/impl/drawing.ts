@@ -28,6 +28,7 @@ import type {
   LayerStackEntry,
   TableDiagnostics,
   TableDrawnRange,
+  TableEditStats,
   TerrainDiagnostics,
 } from '../state.js';
 import type { Engine } from './engine.js';
@@ -81,6 +82,27 @@ export function createDrawing(
     setMoveTranslation(set, dLng, dLat) {
       states()?.setTranslation(set, dLng, dLat);
       repaint();
+    },
+    editStats(): TableEditStats {
+      const internals = featureTablesInternals(store.tables);
+      const renderer = customLayer.getTableRenderer();
+      const drawing = renderer?.editStats();
+      return Object.freeze({
+        styles: internals?.styles.size ?? 0,
+        resolvedStyles: drawing?.resolvedStyles ?? 0,
+        overrideBytes: internals?.overrideBytes() ?? 0,
+        groupsDue: internals?.groupsDue.size ?? 0,
+        movedRows: internals?.movedRowCount() ?? 0,
+        uploadedBytes: drawing?.uploadedBytes ?? 0,
+        inPlace: drawing?.writes.inPlace ?? 0,
+        coordsOnly: drawing?.writes.coordsOnly ?? 0,
+        styleOnly: drawing?.writes.styleOnly ?? 0,
+        rebuilt: drawing?.writes.rebuilt ?? 0,
+        restarted: drawing?.writes.restarted ?? 0,
+        reclassified: drawing?.writes.reclassified ?? 0,
+        prerenderMs: drawing?.prerenderMs ?? 0,
+        drawMs: drawing?.drawMs ?? 0,
+      });
     },
   };
   return {
