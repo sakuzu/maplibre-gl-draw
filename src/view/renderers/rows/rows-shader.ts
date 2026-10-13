@@ -23,7 +23,7 @@
  * attributes at its first instance, so the place of an instance in a draw means nothing.
  */
 
-import { RENDERING_DEFAULTS } from '../../../shared/math/index.js';
+import { DEFAULT_TILE_SIZE, RENDERING_DEFAULTS } from '../../../shared/math/index.js';
 import { getProjectionTransitionUniform, OFFSET_MODE_GLSL } from '../../shaders/helpers.js';
 import {
   TERRAIN_SHADE_FRAGMENT_GLSL,
@@ -156,7 +156,7 @@ float dashLength0(vec2 a, vec2 b) {
     vec2 base = u_origin_shift + u_center_lnglat;
     float latitude = (a.y + b.y) * 0.5 + base.y;
     float cosLatitude = max(cos(latitude * PI / 180.0), 1e-6);
-    float perDegree = 512.0 / 360.0;
+    float perDegree = ${glslFloat(DEFAULT_TILE_SIZE)} / 360.0;
     return length(vec2((b.x - a.x) * perDegree, (b.y - a.y) * perDegree / cosLatitude));
 }
 

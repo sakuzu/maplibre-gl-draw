@@ -647,7 +647,9 @@ export class RowsRenderer {
     const data = chunk.data;
     const rowStyles = (chunk.rowStyles as SizedTexture).texture;
     const styles = (data.palette.gpu as SizedTexture).texture;
-    const sprites = data.sprites ? (data.sprites.texture ?? this.emptySpriteTexture()) : null;
+    // The unit of the pictures is always given one of this renderer's textures (also for a chunk
+    // without pictures): a texture left there by other drawing could be the one drawn into
+    const sprites = data.sprites?.texture ?? this.emptySpriteTexture();
     let unitMoved = false;
     if (bound.rowStyles !== rowStyles) {
       gl.activeTexture(gl.TEXTURE0 + UNIT_ROW_STYLES);
