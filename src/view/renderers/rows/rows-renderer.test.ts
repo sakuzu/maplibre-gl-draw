@@ -295,7 +295,8 @@ describe('RowsRenderer', () => {
     expect(palette.gpu).not.toBeNull();
     renderer.disposeChunk(chunk);
     expect(palette.gpu).toBeNull();
-    expect(ledger.snapshot().byOwner.rows).toBe(corners);
+    // The corners and the empty picture (made with the first upload) stay with the renderer
+    expect(ledger.snapshot().byOwner.rows).toBe(corners + 4);
     renderer.dispose();
     expect(ledger.snapshot().byOwner.rows).toBeUndefined();
   });

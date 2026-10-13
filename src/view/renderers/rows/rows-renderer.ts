@@ -301,6 +301,7 @@ export class RowsRenderer {
    * in place. Called before the main pass of the frame
    */
   flushUploads(): void {
+    if (this.queued.size > 0) this.ensureEmptySprites();
     for (const palette of this.palettes) {
       if (palette.uploaded < palette.count) this.uploadPalette(palette);
     }
@@ -472,7 +473,10 @@ export class RowsRenderer {
       this.ledger?.release(this.cornerBuffer);
       gl.deleteBuffer(this.cornerBuffer);
     }
-    if (this.emptySprites) gl.deleteTexture(this.emptySprites);
+    if (this.emptySprites) {
+      this.ledger?.release(this.emptySprites);
+      gl.deleteTexture(this.emptySprites);
+    }
     this.emptySprites = null;
   }
 
@@ -650,7 +654,7 @@ export class RowsRenderer {
     const styles = (data.palette.gpu as SizedTexture).texture;
     // The unit of the pictures is always given one of this renderer's textures (also for a chunk
     // without pictures): a texture left there by other drawing could be the one drawn into
-    const sprites = data.sprites?.texture ?? this.emptySpriteTexture();
+    const sprites = data.sprites?.texture ?? this.emptySprites;
     let unitMoved = false;
     if (bound.rowStyles !== rowStyles) {
       gl.activeTexture(gl.TEXTURE0 + UNIT_ROW_STYLES);
@@ -678,18 +682,20 @@ export class RowsRenderer {
     if (epoch < 0) bound.epoch = -1;
   }
 
-  /** A transparent picture of one texel (for sprites whose texture is not there) */
-  private emptySpriteTexture(): WebGLTexture | null {
-    if (this.emptySprites) return this.emptySprites;
+  /**
+   * Makes the transparent picture of one texel drawn for sprites whose texture is not there (and
+   * bound for the chunks without sprites), once, with the uploads
+   */
+  private ensureEmptySprites(): void {
+    if (this.emptySprites) return;
     const gl = this.gl;
     const texture = gl.createTexture();
-    if (!texture) return null;
-    gl.activeTexture(gl.TEXTURE0 + UNIT_SPRITES);
+    if (!texture) return;
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
     this.emptySprites = texture;
-    return texture;
   }
 
   // === Uploads ===
@@ -702,8 +708,8 @@ export class RowsRenderer {
     let from = palette.uploaded;
     if (!palette.gpu || palette.gpu.height < height) {
       // A new texture with room for twice the lines, written from the first style
-      this.deletePaletteTexture(palette);
       const lines = Math.max(height, (palette.gpu?.height ?? 0) * 2, 1);
+      this.deletePaletteTexture(palette);
       const texture = createFloatTexture(gl, gl.RGBA32F, ROWS_STYLE_WIDTH, lines);
       if (!texture) return;
       this.ledger?.record(
