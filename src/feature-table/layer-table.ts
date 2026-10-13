@@ -21,8 +21,13 @@ import { searchPackedRTree } from '../table/packed-rtree.js';
 import { ROW_FLAG_DELETED, type RowGroupData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
+import { DeltaRows } from './delta.js';
+import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
 import type { RowGroupHandle } from './types.js';
 import type { GeometryOverrides, ValueOverrides } from './value-overrides.js';
+
+/** The bits of the state of a row whose copy in its group is not the row (it is read elsewhere) */
+const STATE_ELSEWHERE = STATE_HIDDEN_DELTA | STATE_HIDDEN_WAIT;
 
 /**
  * A row group as a layer holds it
@@ -59,6 +64,10 @@ export interface RowGroup {
    * the first
    */
   unindexed: Uint8Array | null;
+  /** The number of rows marked in `unindexed` */
+  unindexedCount: number;
+  /** Whether the group holds the rows of the delta of its layer (not a group of the order) */
+  readonly delta: boolean;
 }
 
 /**
@@ -89,7 +98,11 @@ export interface TablePosition {
  *
  * @internal
  */
-export function createRowGroup(handle: RowGroupHandle, data: RowGroupData): RowGroup {
+export function createRowGroup(
+  handle: RowGroupHandle,
+  data: RowGroupData,
+  delta = false,
+): RowGroup {
   return {
     handle,
     data,
@@ -102,6 +115,8 @@ export function createRowGroup(handle: RowGroupHandle, data: RowGroupData): RowG
     values: null,
     geometries: null,
     unindexed: null,
+    unindexedCount: 0,
+    delta,
   };
 }
 
@@ -182,6 +197,34 @@ export interface LayerItems {
   readonly members: ReadonlyMap<number, Int32Array>;
 }
 
+/**
+ * The rows of a layer in their order: the rows of its groups that are read there, and the rows
+ * of its delta at their places
+ *
+ * @internal
+ */
+export interface LayerOrder {
+  /** The handle of each row */
+  readonly handles: Int32Array;
+  /** The group each row is read from (a group of the layer, or the group of its delta) */
+  readonly groups: readonly RowGroup[];
+  /** The row of each in its group */
+  readonly rows: Int32Array;
+}
+
+/**
+ * Where the rows of the delta of a layer are drawn and read: before row `cuts[k]` of the group
+ * at `groups[k]` of the order (the rows of the delta are in their order, so the places are too)
+ *
+ * @internal
+ */
+export interface DeltaPlaces {
+  /** The place of the group of each row of the delta in the order of the layer (-1: no group) */
+  readonly groups: Int32Array;
+  /** The row of that group the row of the delta comes before (its length: after every row) */
+  readonly cuts: Int32Array;
+}
+
 /** A row of a layer moved since its group was built, in the index of the moved rows */
 interface MovedRow {
   minX: number;
@@ -205,21 +248,39 @@ export class LayerTable {
   private revision = 0;
   /** The items of the layer in their order, made when first read after a change */
   private items: LayerItems | null = null;
+  /** The rows in their order, made when first read after a change */
+  private ordered: LayerOrder | null = null;
+  /** The places of the rows of the delta, and what they were found with */
+  private places: DeltaPlaces | null = null;
+  private placesKey = '';
   /** The rows moved since their group was built, by handle (7.4 of the design) */
   private readonly moved = new Map<number, MovedRow>();
   private movedIndex: RBush<MovedRow> | null = null;
+  /** The rows of the layer changed since their groups were built */
+  readonly delta: DeltaRows;
 
   /**
    * @param layerId The layer
    * @param groupKeys The keys of the groups of features the rows name
+   * @param serial The number of the layer among the layers of its tables
+   * @param deltaHandle The handle of the group of its delta
    */
   constructor(
     readonly layerId: string,
-    private readonly groupKeys: GroupKeySource,
-  ) {}
+    private readonly groupKeys: GroupKeySource & { readonly revision?: number },
+    readonly serial = 0,
+    deltaHandle: RowGroupHandle = -1,
+  ) {
+    this.delta = new DeltaRows(deltaHandle);
+  }
 
-  /** The number of rows */
+  /** The number of rows read in the layer (deleted ones included until they are dropped) */
   get rowCount(): number {
+    return this.rowOrder().handles.length;
+  }
+
+  /** The number of rows held by the groups of the layer, the copies not read included */
+  get groupRowCount(): number {
     return this.rows;
   }
 
@@ -289,7 +350,111 @@ export class LayerTable {
     this.rows += data.length;
     this.reindex();
     this.revision++;
-    this.items = null;
+    this.touchItems();
+  }
+
+  /**
+   * Replaces row groups of the layer by others (the next versions of groups, groups cut or
+   * joined, the order of their rows changed) and puts the groups in the order of their rows
+   *
+   * @throws when the rows of two groups overlap
+   */
+  replaceGroups(
+    before: readonly RowGroup[],
+    after: readonly RowGroup[],
+    groupKeys: GroupKeySource = this.groupKeys,
+  ): void {
+    for (const group of before) {
+      if (this.groups.get(group.handle) !== group) {
+        throw new Error('LayerTable: a group replaced is not in the layer');
+      }
+      this.groups.delete(group.handle);
+      this.rows -= group.data.length;
+      this.dropMoved(group);
+    }
+    for (const group of after) {
+      if (group.data.length === 0) continue;
+      this.groups.set(group.handle, group);
+      this.rows += group.data.length;
+    }
+    const groups = [...this.groups.values()];
+    groups.sort((a, b) => compareRowKeys(a.data, 0, b.data, 0, groupKeys));
+    for (let i = 1; i < groups.length; i++) {
+      const a = groups[i - 1].data;
+      const b = groups[i].data;
+      if (compareRowKeys(a, a.length - 1, b, 0, groupKeys) >= 0) {
+        throw new Error('LayerTable: the rows of two groups overlap');
+      }
+    }
+    this.order.length = 0;
+    for (const group of groups) this.order.push(group.handle);
+    this.reindex();
+    this.revision++;
+    this.touchItems();
+  }
+
+  /**
+   * The rows of the layer in their order: the rows of its groups read there (not the ones read
+   * from the delta, nor the ones waiting for another group), and the rows of the delta at their
+   * places, deleted rows included. Made again when read after a change (`touchItems`)
+   */
+  rowOrder(): LayerOrder {
+    if (this.ordered) return this.ordered;
+    const handles: number[] = [];
+    const groups: RowGroup[] = [];
+    const rows: number[] = [];
+    const delta = this.delta.group;
+    const places = this.deltaPlaces();
+    let next = 0;
+    const flush = (g: number, before: number): void => {
+      if (!delta) return;
+      while (
+        next < delta.data.length &&
+        (places.groups[next] < g || (places.groups[next] === g && places.cuts[next] <= before))
+      ) {
+        handles.push(delta.data.handles[next]);
+        groups.push(delta);
+        rows.push(next);
+        next++;
+      }
+    };
+    for (let g = 0; g < this.order.length; g++) {
+      const group = this.groupAt(g);
+      const data = group.data;
+      for (let r = 0; r < data.length; r++) {
+        flush(g, r);
+        if ((group.state[r] & STATE_ELSEWHERE) !== 0) continue;
+        handles.push(data.handles[r]);
+        groups.push(group);
+        rows.push(r);
+      }
+      flush(g, data.length);
+    }
+    flush(Number.MAX_SAFE_INTEGER, 0);
+    this.ordered = { handles: Int32Array.from(handles), groups, rows: Int32Array.from(rows) };
+    return this.ordered;
+  }
+
+  /**
+   * The places of the rows of the delta among the rows of the groups (found again when the
+   * groups, the delta or the keys of the groups of features changed)
+   */
+  deltaPlaces(): DeltaPlaces {
+    const delta = this.delta.group;
+    const key = `${this.revision}:${this.delta.revision}:${this.groupKeys.revision ?? 0}`;
+    if (this.places && this.placesKey === key) return this.places;
+    const n = delta?.data.length ?? 0;
+    const groups = new Int32Array(n).fill(-1);
+    const cuts = new Int32Array(n);
+    for (let k = 0; k < n; k++) {
+      const place = this.positionOfKey((delta as RowGroup).data, k);
+      if (!place) continue;
+      groups[k] = this.orderOf(place.group);
+      cuts[k] = (place.slot + 1) >> 1;
+    }
+    this.places = { groups, cuts };
+    this.placesKey = key;
+    return this.places;
   }
 
   /**
@@ -304,9 +469,11 @@ export class LayerTable {
     const handles: number[] = [];
     const members = new Map<number, number[]>();
     let last = -1;
-    for (const handle of this.order) {
-      const data = (this.groups.get(handle) as RowGroup).data;
-      for (let r = 0; r < data.length; r++) {
+    const order = this.rowOrder();
+    for (let i = 0; i < order.handles.length; i++) {
+      const data = order.groups[i].data;
+      const r = order.rows[i];
+      {
         if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) continue;
         const group = data.groups[r];
         if (group < 0) {
@@ -338,9 +505,13 @@ export class LayerTable {
     return this.items;
   }
 
-  /** Makes the items be made again when next read (a row deleted, a row of another group) */
+  /**
+   * Makes the items and the order be made again when next read (a row deleted, a row of another
+   * group, a row of the delta)
+   */
   touchItems(): void {
     this.items = null;
+    this.ordered = null;
   }
 
   /**
@@ -404,11 +575,15 @@ export class LayerTable {
   moveRow(group: RowGroup, row: number, bounds: Float64Array): void {
     const handle = group.data.handles[row];
     group.unindexed ??= new Uint8Array(group.data.length);
+    if (group.unindexed[row] === 0) group.unindexedCount++;
     group.unindexed[row] = 1;
     this.movedIndex ??= new RBush<MovedRow>();
     const index = this.movedIndex;
     const old = this.moved.get(handle);
-    if (old) index.remove(old);
+    if (old) {
+      index.remove(old);
+      this.moved.delete(handle);
+    }
     const at = row * 4;
     if (Number.isNaN(bounds[at])) {
       this.moved.delete(handle);
@@ -454,6 +629,63 @@ export class LayerTable {
       for (const entry of this.movedIndex.search({ minX, minY, maxX, maxY })) {
         if (entry.group === group) out.push(entry.row);
       }
+    }
+  }
+
+  /**
+   * The rows of the layer whose bbox meets a box, in the order of the layer: the rows of its
+   * groups read there and the rows of its delta at their places (the moved ones where they are
+   * now)
+   *
+   * @param visit Receives each row, in order, with the group it is read from
+   */
+  searchInOrder(
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    visit: (group: RowGroup, row: number) => void,
+  ): void {
+    const delta = this.delta.group;
+    const hits: number[] = [];
+    if (delta) {
+      this.searchRows(delta, minX, minY, maxX, maxY, hits);
+      hits.sort((a, b) => a - b);
+    }
+    const places = this.deltaPlaces();
+    let next = 0;
+    const flush = (g: number, before: number): void => {
+      while (
+        next < hits.length &&
+        (places.groups[hits[next]] < g ||
+          (places.groups[hits[next]] === g && places.cuts[hits[next]] <= before))
+      ) {
+        visit(delta as RowGroup, hits[next]);
+        next++;
+      }
+    };
+    const rows: number[] = [];
+    for (let g = 0; g < this.order.length; g++) {
+      const group = this.groupAt(g);
+      rows.length = 0;
+      this.searchRows(group, minX, minY, maxX, maxY, rows);
+      rows.sort((a, b) => a - b);
+      for (const row of rows) {
+        flush(g, row);
+        if ((group.state[row] & STATE_ELSEWHERE) === 0) visit(group, row);
+      }
+      flush(g, group.data.length);
+    }
+    flush(Number.MAX_SAFE_INTEGER, 0);
+  }
+
+  /** Takes the rows of a group out of the index of the moved rows (the group left the layer) */
+  dropMoved(group: RowGroup): void {
+    if (group.unindexedCount === 0 || !this.movedIndex) return;
+    for (const [handle, entry] of this.moved) {
+      if (entry.group !== group) continue;
+      this.movedIndex.remove(entry);
+      this.moved.delete(handle);
     }
   }
 

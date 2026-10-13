@@ -734,6 +734,52 @@ export interface StoreChange {
    * document from elsewhere sets it); it survives the folding of a transaction
    */
   reset?: boolean;
+  /**
+   * The rows held as columns written (a Store that holds its features as rows puts here what its
+   * writer returned); a feature is in `features` or here, never in both
+   */
+  rows?: RowsChange;
+}
+
+/**
+ * A field of a row a patch of rows writes: a value of the feature of the row, or an attribute
+ * (`property:<key>`).
+ */
+export type RowField =
+  | 'type'
+  | 'layerId'
+  | 'groupId'
+  | 'order'
+  | 'member'
+  | 'geometry'
+  | 'visible'
+  | 'locked'
+  | 'style'
+  | `property:${string}`;
+
+/**
+ * The rows of one layer a change created, updated or deleted, by handle.
+ */
+export interface LayerRowsChange {
+  /** The rows created */
+  readonly created: Int32Array;
+  /** The rows updated (a row that came from another layer included) */
+  readonly updated: Int32Array;
+  /** The rows deleted */
+  readonly deleted: Int32Array;
+  /** The fields written */
+  readonly fields: ReadonlySet<RowField>;
+  /** The keys of the styles that changed */
+  readonly styleKeys: ReadonlySet<string>;
+}
+
+/**
+ * The rows a change wrote, by layer: what the writer of the rows (`FeatureTablesWriter.apply`) returns, for the
+ * implementation of the Store to put in its notification (`StoreChange.rows`).
+ */
+export interface RowsChange {
+  /** The rows of each layer */
+  readonly layers: ReadonlyMap<string, LayerRowsChange>;
 }
 
 /**

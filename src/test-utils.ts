@@ -7,7 +7,7 @@
 
 import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { Draw } from './api/draw.js';
 import type { ModeFactory } from './api/extension/mode.js';
 import type { ExtensionsCollections } from './api/extensions.js';
@@ -655,4 +655,147 @@ export function memoryGL() {
     },
   }) as unknown as WebGL2RenderingContext;
   return { gl, calls, buffers, textures };
+}
+
+/**
+ * A row of the reference of the tests of the rows held as columns: what a row is, as a plain
+ * object
+ */
+export interface ReferenceRow {
+  readonly id: string;
+  layerId: string;
+  type: string;
+  geometry: Geometry;
+  order: string;
+  /** The id of its group of features (undefined outside a group) */
+  groupId: string | undefined;
+  member: string;
+  style: Record<string, unknown>;
+  properties: Record<string, unknown>;
+  visible: boolean;
+  locked: boolean;
+  deleted: boolean;
+}
+
+/**
+ * The reference the rows held as columns are compared with: every row as a plain object, put in
+ * the order of its layer by sorting (no groups of rows, no delta, nothing written in place)
+ */
+export class ReferenceRows {
+  readonly rows = new Map<string, ReferenceRow>();
+  /** The groups of features: their keys, their layers and whether they are shown */
+  readonly groups = new Map<string, { order: string; layerId: string; visible: boolean }>();
+
+  /** The rows of a layer in its order (the deleted ones included) */
+  inOrder(layerId: string): ReferenceRow[] {
+    const itemKey = (row: ReferenceRow): string =>
+      row.groupId !== undefined ? (this.groups.get(row.groupId)?.order ?? '') : row.order;
+    const itemId = (row: ReferenceRow): string => row.groupId ?? row.id;
+    const compare = (a: string, b: string): number => compareBytes(a, b);
+    return [...this.rows.values()]
+      .filter((row) => row.layerId === layerId)
+      .sort(
+        (a, b) =>
+          compare(itemKey(a), itemKey(b)) ||
+          compare(itemId(a), itemId(b)) ||
+          (a.groupId !== undefined || b.groupId !== undefined ? compare(a.member, b.member) : 0) ||
+          compare(a.id, b.id),
+      );
+  }
+
+  /** The rows of a layer and its groups, as the items of the layer are read */
+  items(layerId: string): Array<{ kind: 'row' | 'group'; id: string }> {
+    const out: Array<{ kind: 'row' | 'group'; id: string }> = [];
+    let last: string | undefined;
+    for (const row of this.inOrder(layerId)) {
+      if (row.deleted) continue;
+      if (row.groupId === undefined) {
+        out.push({ kind: 'row', id: row.id });
+        last = undefined;
+      } else if (row.groupId !== last) {
+        out.push({ kind: 'group', id: row.groupId });
+        last = row.groupId;
+      }
+    }
+    return out;
+  }
+}
+
+/** The order of two strings by their UTF-8 bytes */
+function compareBytes(a: string, b: string): number {
+  const encoder = new TextEncoder();
+  const x = encoder.encode(a);
+  const y = encoder.encode(b);
+  const n = Math.min(x.length, y.length);
+  for (let i = 0; i < n; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return x.length - y.length;
+}
+
+/**
+ * Expects the tables to read as the reference: the rows of every layer in their order (by
+ * `scan` and `rowsInOrder`), the items and the members of the groups in their order, and the
+ * values of every row
+ *
+ * @param groupHandleOf The handle of a group of features by its id
+ */
+export function expectTablesMatch(
+  tables: FeatureTables,
+  reference: ReferenceRows,
+  layerIds: readonly string[],
+  groupHandleOf: (id: string) => number,
+): void {
+  const idsOf = (handles: ArrayLike<number>): string[] =>
+    Array.from(handles, (handle) => tables.idOf(handle) as string);
+  for (const layerId of layerIds) {
+    const rows = reference.inOrder(layerId);
+    const view = tables.layer(layerId);
+    if (!view) {
+      expect(rows).toEqual([]);
+      continue;
+    }
+    // Every row, the deleted ones included
+    expect(idsOf(view.rowsInOrder(0, 1_000_000))).toEqual(rows.map((row) => row.id));
+    expect(view.rowCount).toBe(rows.length);
+    // The rows that are not deleted, a batch at a time
+    const scanned: number[] = [];
+    const cursor = tables.scan({ layerIds: [layerId], batch: 7 });
+    for (let batch = cursor.next(); batch; batch = cursor.next()) scanned.push(...batch);
+    const live = rows.filter((row) => !row.deleted);
+    expect(idsOf(scanned)).toEqual(live.map((row) => row.id));
+    // The items and the members of the groups
+    const items = view.itemsInOrder(0, 1_000_000);
+    const expected = reference.items(layerId);
+    expect(
+      Array.from(items.kinds, (kind, i) =>
+        kind === 0
+          ? { kind: 'row', id: tables.idOf(items.handles[i]) }
+          : { kind: 'group', id: items.handles[i] },
+      ),
+    ).toEqual(
+      expected.map((item) =>
+        item.kind === 'row' ? item : { kind: 'group', id: groupHandleOf(item.id) },
+      ),
+    );
+    for (const item of expected) {
+      if (item.kind !== 'group') continue;
+      const members = live.filter((row) => row.groupId === item.id).map((row) => row.id);
+      expect(idsOf(view.groupMembersInOrder(groupHandleOf(item.id), 0, 1_000_000))).toEqual(
+        members,
+      );
+    }
+    // The values of every row
+    for (const row of live) {
+      const handle = tables.handleOf(row.id);
+      expect(handle).toBeDefined();
+      const feature = view.getRow(handle as number);
+      expect(feature?.type).toBe(row.type);
+      expect(feature?.geometry).toEqual(row.geometry);
+      expect(feature?.style).toEqual(row.style);
+      expect(feature?.properties).toEqual(row.properties);
+      expect(feature?.visible).toBe(row.visible);
+      expect(feature?.locked).toBe(row.locked);
+      expect(feature?.groupId).toBe(row.groupId);
+      expect(feature?.layerId).toBe(layerId);
+    }
+  }
 }

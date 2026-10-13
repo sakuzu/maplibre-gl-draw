@@ -9,8 +9,8 @@
  * - The items of a layer are its rows outside a group and its groups, each at its place, with
  *   the members of a group in their order
  * - `writer.apply` writes the geometry, the style, shown, locked, the attributes and the deletion
- *   of rows in place, and tells the drawing; it refuses whole a patch with a field it does not
- *   write in place yet, an attribute the cutting of the rows reads, or a row it does not hold
+ *   of rows in place, and tells the drawing; it refuses whole a patch with a row it does not
+ *   hold (a new row without what it needs), or a group of features it does not know
  * - Writes at random, applied to the tables and to a list of features: every read of the tables
  *   gives the features
  */
@@ -21,6 +21,7 @@ import { ITEM_GROUP, ITEM_ROW, type RowField, type RowPatch } from '../api/table
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STATE, ROW_WRITE_STYLE, type RowWrite } from './types.js';
@@ -180,14 +181,9 @@ describe('writer.apply', () => {
     expect(internals.styles.size).toBe(2);
   });
 
-  it('refuses whole a patch with a field it does not write in place yet, or a row it does not hold', () => {
+  it('refuses whole a patch with a row it does not hold, or a group of features it does not know', () => {
     const { tables, writer, internals } = tablesOfFeatures('layer', points(3));
     const handle = internals.ids.handleOf('p1');
-    for (const field of ['order', 'layerId', 'groupId', 'member', 'type'] as RowField[]) {
-      expect(() => writer.apply(patchOf([handle], field, ['x']))).toThrow(/not written in place/);
-    }
-    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
-    expect(() => writer.apply(patchOf([handle], created, [12]))).toThrow(/not written in place/);
     // A known row and an unknown one: nothing is written
     const patch: RowPatch = {
       handles: Int32Array.of(handle, 999),
@@ -195,6 +191,18 @@ describe('writer.apply', () => {
     };
     expect(() => writer.apply(patch)).toThrow(/no row/);
     expect(tables.layer('layer')?.valueAt(handle, 'name')).toBeUndefined();
+    // A new row without what it needs
+    const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
+    expect(() => writer.apply(patchOf([fresh], 'property:name', ['x']))).toThrow(
+      /a new row needs type, layerId, geometry, order/,
+    );
+    expect(() => writer.apply(patchOf([handle], 'groupId', ['nobody']))).toThrow(/unknown/);
+    expect(internals.deltaRowCount()).toBe(0);
+    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
+    expect(internals.placeOf(handle)?.group.delta).toBe(false);
+    writer.apply(patchOf([handle], created, [12]));
+    // The created zoom is read by the cutting of the rows: the row is placed again
+    expect(internals.placeOf(handle)?.group.delta).toBe(true);
   });
 
   it('marks a group due for its next version past the limit of its overrides', () => {

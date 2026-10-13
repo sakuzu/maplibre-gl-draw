@@ -53,6 +53,8 @@ export class IdIndex {
   private rowOf: Int32Array = new Int32Array(64).fill(-1);
   /** The place of each handle among the changed rows (-1 for none) */
   private deltaOf: Int32Array = new Int32Array(64).fill(-1);
+  /** The layer of the changed rows each handle is among (-1 for none) */
+  private deltaLayerOf: Int32Array = new Int32Array(64).fill(-1);
   /** The number of handles given */
   private count = 0;
 
@@ -130,6 +132,7 @@ export class IdIndex {
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
     this.deltaOf[handle] = -1;
+    this.deltaLayerOf[handle] = -1;
   }
 
   /**
@@ -164,10 +167,24 @@ export class IdIndex {
     return handle >= 0 && handle < this.count ? this.deltaOf[handle] : -1;
   }
 
+  /** The layer of the changed rows a handle is among (-1 for none) */
+  deltaLayer(handle: RowHandle): number {
+    return handle >= 0 && handle < this.count ? this.deltaLayerOf[handle] : -1;
+  }
+
   /** Records where the row of a handle is */
   setMain(handle: RowHandle, group: RowGroupHandle, row: number): void {
     this.groupOf[handle] = group;
     this.rowOf[handle] = row;
+  }
+
+  /**
+   * Records the place of a handle among the changed rows of a layer (`layer` and `slot` -1 for
+   * none)
+   */
+  setDelta(handle: RowHandle, layer: number, slot: number): void {
+    this.deltaLayerOf[handle] = layer;
+    this.deltaOf[handle] = slot;
   }
 
   // === The table ===
@@ -200,6 +217,7 @@ export class IdIndex {
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
     this.deltaOf[handle] = -1;
+    this.deltaLayerOf[handle] = -1;
     if ((this.used + 1) * 2 > this.slots.length) this.rehash();
     const mask = this.slots.length - 1;
     let slot = hash & mask;
@@ -240,6 +258,7 @@ export class IdIndex {
     this.groupOf = grow(this.groupOf, size, -1);
     this.rowOf = grow(this.rowOf, size, -1);
     this.deltaOf = grow(this.deltaOf, size, -1);
+    this.deltaLayerOf = grow(this.deltaLayerOf, size, -1);
   }
 }
 

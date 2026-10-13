@@ -27,10 +27,14 @@ export const STATE_HIDDEN_INVISIBLE = 1 << 1;
 export const STATE_HIDDEN_DELETED = 1 << 2;
 /** Its group of features is not shown */
 export const STATE_HIDDEN_GROUP = 1 << 3;
+/** The row is drawn from the delta of its layer (a copy written since its group was built) */
+export const STATE_HIDDEN_DELTA = 1 << 4;
 /**
- * The bits of every reason a row is hidden. Bits 4 to 7 are kept for the reasons the rows
- * changed since their group was built will add
+ * The row moved into this group from another, whose next version is not in yet: the row is
+ * read and drawn where it is now (the delta) until then
  */
+export const STATE_HIDDEN_WAIT = 1 << 5;
+/** The bits of every reason a row is hidden (bits 6 and 7 are kept for more) */
 export const STATE_HIDDEN_MASK = 0xff;
 /** Marked as selected in bulk */
 export const STATE_BULK = 1 << 8;

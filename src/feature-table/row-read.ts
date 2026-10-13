@@ -12,7 +12,13 @@
 
 import type { Geometry } from 'geojson';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
-import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowGroupData } from '../table/row-group-types.js';
+import type { RowInput } from '../table/row-group-builder.js';
+import {
+  ROW_FLAG_DELETED,
+  ROW_FLAG_LOCKED,
+  ROW_FLAG_VISIBLE,
+  type RowGroupData,
+} from '../table/row-group-types.js';
 import { utf8String } from '../table/utf8-column.js';
 import {
   readNumberValue,
@@ -190,5 +196,30 @@ export function rowFeature(
     style: context.styles.get(data.styles[row]),
     locked: (data.flags[row] & ROW_FLAG_LOCKED) !== 0,
     visible: (data.flags[row] & ROW_FLAG_VISIBLE) !== 0,
+  };
+}
+
+/**
+ * A row as the builder of the row groups takes it: its values as they are read now (what was
+ * written in place included), to build it again on its own
+ *
+ * @internal
+ */
+export function rowInputOf(context: RowReadContext, group: RowGroup, row: number): RowInput {
+  const data = group.data;
+  const flags = data.flags[row];
+  const groupHandle = data.groups[row];
+  return {
+    id: utf8String(data.ids, row),
+    type: rowType(data, row),
+    geometry: rowGeometry(group, row),
+    order: utf8String(data.itemKeys, row),
+    member: groupHandle >= 0 ? utf8String(data.memberKeys, row) : undefined,
+    group: groupHandle,
+    style: context.styles.get(data.styles[row]) as Readonly<Record<string, unknown>>,
+    properties: rowProperties(group, row),
+    visible: (flags & ROW_FLAG_VISIBLE) !== 0,
+    locked: (flags & ROW_FLAG_LOCKED) !== 0,
+    deleted: (flags & ROW_FLAG_DELETED) !== 0,
   };
 }

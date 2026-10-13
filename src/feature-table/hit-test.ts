@@ -5,8 +5,8 @@
  * The hit testing of the rows of a layer held as columns
  *
  * The candidates are the rows whose bbox meets the box of the click (the spatial index of each
- * row group, and the index of the rows moved since their group was built), tested from the front of the order: the last group first, the last row of a group
- * first. Only the candidates become features, to be tested by the same tests as the features of
+ * row group and of the delta of the layer, and the index of the rows moved since their group was
+ * built), tested from the front of the order. Only the candidates become features, to be tested by the same tests as the features of
  * the Store; the feature of a candidate is made for the test and dropped. A hidden row (not
  * shown, deleted, hidden by this client) is not a candidate.
  */
@@ -57,20 +57,16 @@ export function hitTestLayerTable(
 ): TableRowHit | null {
   const [x, y] = input.coordinate;
   const reach = input.reach;
-  const rows: number[] = [];
-  for (let g = table.groupCount - 1; g >= 0; g--) {
-    const group = table.groupAt(g);
-    rows.length = 0;
-    table.searchRows(group, x - reach, y - reach, x + reach, y + reach, rows);
-    if (rows.length === 0) continue;
-    // The front first: the rows of a group are in the order they are drawn
-    rows.sort((a, b) => b - a);
-    for (const row of rows) {
-      if ((group.state[row] & STATE_HIDDEN_MASK) !== 0) continue;
-      const feature = rowFeature(internals.readContext, table.layerId, group, row);
-      if (input.test(feature, input.coordinate, input.toleranceOf(feature))) {
-        return { group, row, feature };
-      }
+  const candidates: Array<{ group: RowGroup; row: number }> = [];
+  table.searchInOrder(x - reach, y - reach, x + reach, y + reach, (group, row) => {
+    if ((group.state[row] & STATE_HIDDEN_MASK) === 0) candidates.push({ group, row });
+  });
+  // The front first: the rows are found in the order they are drawn
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const { group, row } = candidates[i];
+    const feature = rowFeature(internals.readContext, table.layerId, group, row);
+    if (input.test(feature, input.coordinate, input.toleranceOf(feature))) {
+      return { group, row, feature };
     }
   }
   return null;

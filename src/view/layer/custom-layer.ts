@@ -367,6 +367,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // source, written every frame, so a change of the opacity alone keeps the binning.
       const affectsDrape =
         changes.features !== undefined ||
+        changes.rows !== undefined ||
         (changes.layers !== undefined && !isOpacityOnlyLayersChange(changes.layers)) ||
         changes.groups !== undefined ||
         changes.layerReorder !== undefined ||
@@ -414,9 +415,12 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         engine.tableRetained?.rowsWritten(layerId, writes);
         engine.mapInstance?.triggerRepaint();
       });
+      // The rows of a delta are packed again before the next frame
+      const unwatchDelta = tables.onDeltaChanged(() => engine.mapInstance?.triggerRepaint());
       engine.unwatchTables = () => {
         unwatchWork();
         unwatchWrites();
+        unwatchDelta();
       };
     } else {
       engine.unwatchTables = null;

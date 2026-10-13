@@ -17,10 +17,13 @@
 
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { BBox } from '../geometry/types.js';
+import type { LayerRowsChange, RowField, RowsChange } from '../shared/types/model.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
 import type { UpdateSource } from './extension/store.js';
 import type { Feature, FeatureType } from './model.js';
+
+export type { LayerRowsChange, RowField, RowsChange };
 
 /**
  * The handle of a row: a number the document gives a row the first time it sees its id, and
@@ -118,22 +121,6 @@ export interface RowCursor {
 }
 
 /**
- * A field of a row a {@link RowPatch} writes: a value of the feature of the row, or an attribute
- * (`property:<key>`).
- */
-export type RowField =
-  | 'type'
-  | 'layerId'
-  | 'groupId'
-  | 'order'
-  | 'member'
-  | 'geometry'
-  | 'visible'
-  | 'locked'
-  | 'style'
-  | `property:${string}`;
-
-/**
  * The values of a field, one per row of the patch: as the feature of the row holds them (a
  * GeoJSON geometry, a style, a boolean; for an attribute its value, `undefined` taking the key
  * off the row).
@@ -213,15 +200,21 @@ export interface FeatureTablesWriter {
    * with the group and read before its columns (every reader of the rows reads the values
    * written). The drawing writes the rows into the chunks that draw them before its next frame.
    *
-   * The fields that move a row in the order of its layer or to another layer (`type`, `layerId`,
-   * `groupId`, `order`, `member`), the attributes the cutting of the rows into chunks reads (the
-   * created zoom), and new rows are not written in place: they are not taken yet, and a patch
-   * that has one is refused whole.
+   * A row whose change moves it in the order of its layer or to another layer (`type`,
+   * `layerId`, `groupId`, `order`, `member`, or an attribute the cutting of the rows into chunks
+   * reads, the created zoom) goes to the rows of its layer changed since their groups were built
+   * (the delta), and so does a new row: a handle that names no row, with at least its `type`,
+   * `layerId`, `geometry` and `order` (the other fields take the defaults of a feature). The
+   * readers read the row there at once, and the drawing draws it at its place in the order; the
+   * next version of the row group its key falls in takes it, over the frames. New rows whose keys
+   * are one run that no row of the layer is within are built into row groups of their own
+   * instead, and are drawn once built.
    *
-   * @throws when a field is not taken yet, when a handle names no row, or when a value cannot be
-   *   held (nothing is written then)
+   * @returns The rows written, by layer
+   * @throws when a handle names no row and a field a new row needs is missing, when a group of
+   *   features is unknown, or when a value cannot be held (nothing is written then)
    */
-  apply(patch: RowPatch, options?: RowApplyOptions): void;
+  apply(patch: RowPatch, options?: RowApplyOptions): RowsChange;
 }
 
 /**

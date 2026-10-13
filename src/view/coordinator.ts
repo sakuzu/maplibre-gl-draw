@@ -51,6 +51,7 @@ function shouldRepaint(changes: StoreChange): boolean {
   // A repaint is required if any of the following changed
   return !!(
     changes.features || // creation, update or deletion of features
+    changes.rows || // rows held as columns written
     changes.layers || // layer changes
     changes.groups || // group changes (reordering, show/hide)
     changes.layerReorder || // reordering of items within a layer

@@ -164,6 +164,7 @@ export type {
   FeatureTablesOptions,
   FeatureTablesWriter,
   ItemRefs,
+  LayerRowsChange,
   LayerTableView,
   RowApplyOptions,
   RowCursor,
@@ -171,6 +172,7 @@ export type {
   RowFieldValues,
   RowHandle,
   RowPatch,
+  RowsChange,
   TableScanOptions,
 } from './api/tables.js';
 export { createFeatureTables, ITEM_GROUP, ITEM_ROW } from './api/tables.js';

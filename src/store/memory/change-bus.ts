@@ -24,7 +24,15 @@
  * the last state, so as the diff of a single flush it means the same as before folding.
  */
 
-import type { Group, Layer, StoreChange, UpdateSource } from '../types.js';
+import type {
+  Group,
+  Layer,
+  LayerRowsChange,
+  RowField,
+  RowsChange,
+  StoreChange,
+  UpdateSource,
+} from '../types.js';
 
 export type StoreListener = (changes: StoreChange) => void;
 
@@ -93,6 +101,41 @@ function appendGroupUpdates(
   return list;
 }
 
+/**
+ * Folds the rows written by two changes of a transaction: one entry per row, a row created and
+ * deleted within the transaction dropped
+ */
+export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
+  const layers = new Map<string, LayerRowsChange>(a.layers);
+  for (const [layerId, next] of b.layers) {
+    const before = layers.get(layerId);
+    if (!before) {
+      layers.set(layerId, next);
+      continue;
+    }
+    const created = new Set([...before.created, ...next.created]);
+    const deleted = new Set([...before.deleted, ...next.deleted]);
+    const updated = new Set([...before.updated, ...next.updated]);
+    for (const handle of [...deleted]) {
+      if (!created.has(handle)) continue;
+      created.delete(handle);
+      deleted.delete(handle);
+      updated.delete(handle);
+    }
+    for (const handle of [...updated]) {
+      if (created.has(handle) || deleted.has(handle)) updated.delete(handle);
+    }
+    layers.set(layerId, {
+      created: Int32Array.from(created),
+      updated: Int32Array.from(updated),
+      deleted: Int32Array.from(deleted),
+      fields: new Set<RowField>([...before.fields, ...next.fields]),
+      styleKeys: new Set([...before.styleKeys, ...next.styleKeys]),
+    });
+  }
+  return { layers };
+}
+
 function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateIndex): void {
   // features
   if (changes.features) {
@@ -147,6 +190,11 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.uiStateChanged) target.uiStateChanged = true;
   if (changes.reset === true) target.reset = true;
   if (changes.metadata) target.metadata = changes.metadata;
+
+  // rows held as columns (one entry per row)
+  if (changes.rows) {
+    target.rows = target.rows ? mergeRowsChanges(target.rows, changes.rows) : changes.rows;
+  }
 
   // files
   if (changes.files) {
