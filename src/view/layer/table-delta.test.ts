@@ -44,7 +44,7 @@ import { beginRenderFrame } from '../shaders/frame.js';
 import { TerrainContext } from '../terrain/context.js';
 import { setTerrainCameraMoving } from '../terrain/state.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
-import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
+import { SPLIT_BUDGET, type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
 
 const LAYER: Layer = {
   id: 'layer',
@@ -612,5 +612,39 @@ describe('the drawing of the rows of the delta', () => {
       for (let i = 0; i < 12 && live.internals.hasPendingWork; i++) live.frame();
       expect(live.internals.deltaRowCount()).toBe(0);
     }
+  });
+
+  it('starts the versions of the groups cut past the budget of the cuts first', () => {
+    const seen: number[] = [];
+    for (const scattered of [10, 120]) {
+      const list = features(400, 46).map((f) =>
+        f.type === 'Image' ? feature(f.id, 'Point', [1, 1]) : f,
+      );
+      const live = setup(list, 64, true);
+      live.frame();
+      live.frame();
+      // Rows put at places spread over the layer: as many cuts in the frames
+      const handles = Array.from(
+        { length: scattered },
+        (_, i) => live.tables.handleOf(list[i].id) as number,
+      );
+      live.writer.apply(
+        patchOf(handles, {
+          order: handles.map((_, i) => `${orderKey(Math.floor((i * 397) % 400))}c${i}`),
+        }),
+      );
+      live.frame();
+      const cuts = live.renderer.writeStats.cuts;
+      seen.push(cuts);
+      live.frame();
+      // Past the budget, the versions start in the next frame; within it, they wait
+      const started =
+        live.internals.versionStats().swapped + live.internals.builtVersions('layer').length;
+      if (cuts > SPLIT_BUDGET) expect(started).toBeGreaterThan(0);
+      else expect(started).toBe(0);
+    }
+    // Both sides of the budget were seen
+    expect(Math.min(...seen)).toBeLessThanOrEqual(SPLIT_BUDGET);
+    expect(Math.max(...seen)).toBeGreaterThan(SPLIT_BUDGET);
   });
 });
