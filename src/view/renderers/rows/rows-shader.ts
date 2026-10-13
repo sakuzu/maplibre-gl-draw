@@ -539,7 +539,7 @@ vec4 shadeSegment() {
                 // the line goes on to it)
                 float along = m - dash;
                 float toNext = period - m;
-                if (v_dash_end.x < 0.0 || pos + toNext <= v_dash_end.x) along = min(along, toNext);
+                if (v_dash_end.x < 0.0 || pos + toNext < v_dash_end.x) along = min(along, toNext);
                 coverage = capCoverage(d, along / cssPerPx, w);
             }
         }

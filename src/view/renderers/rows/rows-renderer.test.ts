@@ -23,6 +23,7 @@ import { ROW_STATE_WIDTH, type RowStateBinding } from '../row-state.js';
 import {
   ROWS_INSTANCE_BYTES,
   ROWS_KIND,
+  type RowSpriteSource,
   type RowsChunkData,
   RowsPalette,
   writeRowsInstance,
@@ -297,6 +298,46 @@ describe('RowsRenderer', () => {
     expect(ledger.snapshot().byOwner.rows).toBe(corners);
     renderer.dispose();
     expect(ledger.snapshot().byOwner.rows).toBeUndefined();
+  });
+
+  it('draws the pictures of an extension from its texture, sized by its distance scale', () => {
+    const mock = recordingGL();
+    const renderer = new RowsRenderer(null, mock.gl, 1);
+    renderer.ensureShader(SHADER_DATA);
+    const pictures = { id: 'pictures' } as unknown as WebGLTexture;
+    const sprites: RowSpriteSource = {
+      texture: pictures,
+      revision: 1,
+      sprite: () => null,
+      distanceScale: { base: 0.5, factor: 0.5, min: 0, max: 4 },
+    };
+    const chunk = renderer.createChunk({ ...chunkData(2), sprites });
+    renderer.flushUploads();
+    beginRenderFrame();
+    const at = mock.calls.length;
+    renderer.drawRange(chunk, 0, 2, 14, PROJECTION, binding());
+    const calls = mock.calls.slice(at);
+    // The texture of the pictures is bound on its unit (4), and the unit 0 is active again
+    const unit = calls.findIndex(
+      (c) => c.name === 'activeTexture' && c.args[0] === 'TEXTURE0'.length + 4,
+    );
+    expect(unit).toBeGreaterThanOrEqual(0);
+    expect(calls[unit + 1]).toEqual({ name: 'bindTexture', args: ['TEXTURE_2D'.length, pictures] });
+    const scale = calls.find(
+      (c) => c.name === 'uniform4f' && (c.args[0] as { name: string }).name === 'u_sprite_scale',
+    );
+    expect(scale?.args.slice(1)).toEqual([0.5, 0.5, 0, 4]);
+    // A chunk without pictures binds the empty picture of the renderer, and no scale
+    const plain = renderer.createChunk(chunkData(2));
+    renderer.flushUploads();
+    const before = mock.calls.length;
+    renderer.drawRange(plain, 0, 2, 14, PROJECTION, binding());
+    const after = mock.calls.slice(before);
+    expect(after.some((c) => c.name === 'bindTexture' && c.args[1] === pictures)).toBe(false);
+    const none = after.find(
+      (c) => c.name === 'uniform4f' && (c.args[0] as { name: string }).name === 'u_sprite_scale',
+    );
+    expect(none?.args.slice(1)).toEqual([1, 0, 1, 1]);
   });
 
   it('makes a chunk released before its upload without writing it', () => {
