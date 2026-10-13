@@ -186,6 +186,15 @@ interface DeltaInsert {
 export const SPLIT_BUDGET = 64;
 
 /**
+ * The coordinates a chunk of the rows of a delta holds at most: none, so the delta of a layer is
+ * one chunk (whether to cut a large delta is decided from measured data; a number here cuts it
+ * as the chunks of the groups are cut)
+ *
+ * @internal
+ */
+export const DELTA_CHUNK_VERTICES = Number.POSITIVE_INFINITY;
+
+/**
  * The frame a layer is drawn in
  *
  * @internal
@@ -2105,7 +2114,7 @@ export class TableLayerRenderer {
             oneDraw: true,
             onSprite: (r, source) => sprites.set(r, source),
           }),
-        Number.POSITIVE_INFINITY,
+        DELTA_CHUNK_VERTICES,
         (row) => sprites.get(row),
       );
       deltaCache.sprites = sprites;
