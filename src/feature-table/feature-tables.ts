@@ -19,7 +19,6 @@ import type {
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import type { Feature, FeatureType } from '../shared/types/model.js';
-import { searchPackedRTree } from '../table/packed-rtree.js';
 import { ROW_FLAG_DELETED, ROW_FLAG_VISIBLE, type RowGroupData } from '../table/row-group-types.js';
 import { utf8ColumnLength } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
@@ -367,7 +366,7 @@ class LayerTableViewImpl implements LayerTableView {
     for (let g = 0; g < this.table.groupCount; g++) {
       const group = this.table.groupAt(g);
       rows.length = 0;
-      searchPackedRTree(group.data.index, bbox[0], bbox[1], bbox[2], bbox[3], rows);
+      this.table.searchRows(group, bbox[0], bbox[1], bbox[2], bbox[3], rows);
       rows.sort((a, b) => a - b);
       for (const row of rows) {
         if ((group.state[row] & STATE_HIDDEN_MASK) === 0) out.push(group.data.handles[row]);

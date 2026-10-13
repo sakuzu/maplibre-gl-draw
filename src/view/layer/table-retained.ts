@@ -36,7 +36,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
-import { rowFeature } from '../../feature-table/row-read.js';
+import { rowFeature, rowHasGeometry } from '../../feature-table/row-read.js';
 import {
   MOVE_SETS,
   STATE_HIDDEN_MASK,
@@ -1145,10 +1145,9 @@ export class TableLayerRenderer {
           const end = Math.min(count, chunk.filled + SLICE_ROWS);
           for (let i = chunk.filled; i < end; i++) {
             const row = from + i;
-            features[i] =
-              group.data.geometry.types[row] < 0
-                ? null
-                : rowFeature(tables.readContext, layerId, group, row);
+            features[i] = rowHasGeometry(group, row)
+              ? rowFeature(tables.readContext, layerId, group, row)
+              : null;
           }
           this.cachedFeatures += end - chunk.filled;
           chunk.filled = end;
@@ -1169,7 +1168,7 @@ export class TableLayerRenderer {
       let feature = chunk.features && i < chunk.filled ? chunk.features[i] : null;
       if (!feature) {
         // A row not kept is made when it is in view
-        if (group.data.geometry.types[row] < 0 || !rowInView(rowBounds, row, bounds)) continue;
+        if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
         feature = rowFeature(tables.readContext, layerId, group, row);
       }
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;

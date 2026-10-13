@@ -19,8 +19,14 @@
  */
 
 import type { RowGroup } from '../../feature-table/layer-table.js';
-import { geometryReaderOf } from '../../feature-table/layer-table.js';
-import { rowNumber, rowType, rowValue } from '../../feature-table/row-read.js';
+import { geometryAt } from '../../feature-table/layer-table.js';
+import {
+  rowHasGeometry,
+  rowNumber,
+  rowTriangles,
+  rowType,
+  rowValue,
+} from '../../feature-table/row-read.js';
 import type { StyleTable } from '../../feature-table/style-table.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { drawPropertyKey } from '../../shared/properties.js';
@@ -294,9 +300,9 @@ export function rowCreatedZoom(group: RowGroup, row: number): number | undefined
  * @internal
  */
 export function pointInstancesOf(group: RowGroup, row: number): number {
-  const reader = geometryReaderOf(group, row);
-  if (!reader) return 0;
-  const at = group.data.geometry.offsets[row];
+  const geometry = geometryAt(group, row);
+  if (!geometry) return 0;
+  const { reader, at } = geometry;
   if (reader.type === 'Point') return 1;
   if (reader.type === 'MultiPoint') return reader.vertexStart(at + 1) - reader.vertexStart(at);
   return 0;
@@ -316,8 +322,11 @@ export function writePointRow(
   origin: readonly [number, number],
   context: RowPackContext,
 ): number {
-  const reader = geometryReaderOf(group, row);
-  if (!reader || (reader.type !== 'Point' && reader.type !== 'MultiPoint')) return 0;
+  const geometry = geometryAt(group, row);
+  if (!geometry || (geometry.reader.type !== 'Point' && geometry.reader.type !== 'MultiPoint')) {
+    return 0;
+  }
+  const { reader, at } = geometry;
   const data = group.data;
   const slot = context.slots.point(
     data.styles[row],
@@ -329,7 +338,6 @@ export function writePointRow(
   if (!shape) return 0;
   const code = pointShapeCode(shape);
   const dpr = resolvePixelRatio(context.pixelRatio);
-  const at = data.geometry.offsets[row];
   const first = reader.vertexStart(at);
   const end = reader.vertexStart(at + 1);
   const coords = reader.coords;
@@ -371,9 +379,9 @@ export function linePartsOf(
   row: number,
   out: number[],
 ): GeometryColumnReader | undefined {
-  const reader = geometryReaderOf(group, row);
-  if (!reader) return undefined;
-  const at = group.data.geometry.offsets[row];
+  const geometry = geometryAt(group, row);
+  if (!geometry) return undefined;
+  const { reader, at } = geometry;
   const o = reader.offsets;
   if (reader.type === 'LineString') {
     if (o[0][at + 1] - o[0][at] >= 2) out.push(o[0][at], o[0][at + 1]);
@@ -559,9 +567,9 @@ export function planPolygonRow(
 ): PolygonRowPlan | null {
   const data = group.data;
   const type = rowType(data, row);
-  const reader = geometryReaderOf(group, row);
-  if (!reader) return null;
-  const at = data.geometry.offsets[row];
+  const geometry = geometryAt(group, row);
+  if (!geometry) return null;
+  const { reader, at } = geometry;
 
   // The polygons of the row: their rings as offsets into coordinates
   const polygons: Array<{
@@ -663,30 +671,6 @@ export function planPolygonRow(
     vertexCount,
     indexCount,
   };
-}
-
-/** The indices of the triangles of the fill of a row */
-function rowTriangles(group: RowGroup, row: number): Uint16Array | Uint32Array {
-  const t = group.data.triangles;
-  const start = t.offsets[row];
-  const end = t.offsets[row + 1];
-  if (end > start) return t.indices.subarray(start, end);
-  const wide = indexOfRow(t.wideRows, row);
-  if (wide < 0) return t.indices.subarray(start, start);
-  return t.wideIndices.subarray(t.wideOffsets[wide], t.wideOffsets[wide + 1]);
-}
-
-/** The place of a row in an ascending list of rows (-1 when it is not there) */
-function indexOfRow(rows: Int32Array, row: number): number {
-  let lo = 0;
-  let hi = rows.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (rows[mid] === row) return mid;
-    if (rows[mid] < row) lo = mid + 1;
-    else hi = mid - 1;
-  }
-  return -1;
 }
 
 /**
@@ -1079,7 +1063,7 @@ export function collectRow(
   const data = group.data;
   const styleAt = i * ROWS_ROW_STYLE_FLOATS;
   draft.rowStyles.fill(0, styleAt, styleAt + ROWS_ROW_STYLE_FLOATS);
-  if (data.geometry.types[row] >= 0) {
+  if (rowHasGeometry(group, row)) {
     const type = rowType(data, row);
     switch (type) {
       case 'Point':
@@ -1129,8 +1113,11 @@ function collectPointRow(
   origin: readonly [number, number],
   context: RowsPackContext,
 ): void {
-  const reader = geometryReaderOf(group, row);
-  if (!reader || (reader.type !== 'Point' && reader.type !== 'MultiPoint')) return;
+  const geometry = geometryAt(group, row);
+  if (!geometry || (geometry.reader.type !== 'Point' && geometry.reader.type !== 'MultiPoint')) {
+    return;
+  }
+  const { reader, at } = geometry;
   const data = group.data;
   const source = context.spriteSourceOf(row);
   let kind: RowsKind;
@@ -1151,7 +1138,6 @@ function collectPointRow(
   // A shape that is not instanced makes the row a run drawn at once; it is not packed
   if (style === null) return;
   writeRowStyle(draft, styleAt, style, undefined);
-  const at = data.geometry.offsets[row];
   const coords = reader.coords;
   const stride = reader.dimensions;
   for (let v = reader.vertexStart(at); v < reader.vertexStart(at + 1); v++) {

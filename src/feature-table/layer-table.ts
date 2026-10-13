@@ -15,11 +15,14 @@
  * once keeps its meaning until the group is replaced.
  */
 
+import RBush from 'rbush';
 import type { BoundingBox } from '../shared/types/model.js';
+import { searchPackedRTree } from '../table/packed-rtree.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
 import type { RowGroupHandle } from './types.js';
+import type { GeometryOverrides, ValueOverrides } from './value-overrides.js';
 
 /**
  * A row group as a layer holds it
@@ -37,12 +40,36 @@ export interface RowGroup {
   readonly gpuState: Uint8Array;
   /** Changes with every change of the state of a row of the group */
   stateVersion: number;
-  /** The union of the bboxes of the rows (null when no row has a geometry) */
-  readonly bounds: BoundingBox | null;
+  /**
+   * The union of the bboxes of the rows (null when no row has a geometry). A row written in
+   * place only widens it
+   */
+  bounds: BoundingBox | null;
   /** The column of each attribute key */
   readonly propertyIndex: ReadonlyMap<string, number>;
   /** The reader of each geometry column of the group (made on the first read) */
   readers: GeometryColumnReader[] | null;
+  /** The attributes written in place since the group was built (null before the first) */
+  values: ValueOverrides | null;
+  /** The geometry written in place that does not fit the columns (null before the first) */
+  geometries: GeometryOverrides | null;
+  /**
+   * The rows moved since the group was built: 1 for a row the spatial index of the group no
+   * longer finds where it is (its layer finds it in its index of the moved rows). Null before
+   * the first
+   */
+  unindexed: Uint8Array | null;
+}
+
+/**
+ * The geometry column a row is read from and its row there
+ *
+ * @internal
+ */
+export interface RowGeometryAt {
+  readonly reader: GeometryColumnReader;
+  /** The row in the column */
+  readonly at: number;
 }
 
 /**
@@ -72,21 +99,78 @@ export function createRowGroup(handle: RowGroupHandle, data: RowGroupData): RowG
     bounds: unionOfRows(data.rowBounds),
     propertyIndex: new Map(data.properties.keys.map((key, i) => [key, i])),
     readers: null,
+    values: null,
+    geometries: null,
+    unindexed: null,
   };
 }
 
 /**
- * The geometry column of a row (undefined for a row without a geometry)
+ * The bytes the values written in place of a group hold (attributes and geometry together)
  *
  * @internal
  */
-export function geometryReaderOf(group: RowGroup, row: number): GeometryColumnReader | undefined {
+export function overrideBytesOf(group: RowGroup): number {
+  return (group.values?.bytes ?? 0) + (group.geometries?.bytes ?? 0);
+}
+
+/**
+ * The geometry column of a row and its row there: the geometry written in place of another
+ * shape when there is one, the column of the group otherwise (undefined for a row without a
+ * geometry)
+ *
+ * @internal
+ */
+export function geometryAt(group: RowGroup, row: number): RowGeometryAt | undefined {
+  const written = group.geometries?.geometry(row);
+  if (written) return { reader: written, at: 0 };
+  return columnGeometryAt(group, row);
+}
+
+/**
+ * The geometry column of the group a row is in and its row there, without what was written in
+ * place (undefined for a row without a geometry in the columns)
+ *
+ * @internal
+ */
+export function columnGeometryAt(group: RowGroup, row: number): RowGeometryAt | undefined {
   const child = group.data.geometry.types[row];
   if (child < 0) return undefined;
   group.readers ??= group.data.geometry.children.map(
     (column, k) => new GeometryColumnReader(column, undefined, `geometry.children[${k}]`),
   );
-  return group.readers[child];
+  return { reader: group.readers[child], at: group.data.geometry.offsets[row] };
+}
+
+/**
+ * Widens a bbox to hold another (null widens nothing)
+ *
+ * @internal
+ */
+export function widenBounds(
+  bounds: BoundingBox | null,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): BoundingBox {
+  if (!bounds) return { minX, minY, maxX, maxY };
+  return {
+    minX: Math.min(bounds.minX, minX),
+    minY: Math.min(bounds.minY, minY),
+    maxX: Math.max(bounds.maxX, maxX),
+    maxY: Math.max(bounds.maxY, maxY),
+  };
+}
+
+/** A row of a layer moved since its group was built, in the index of the moved rows */
+interface MovedRow {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  readonly group: RowGroup;
+  readonly row: number;
 }
 
 /**
@@ -100,6 +184,9 @@ export class LayerTable {
   private readonly indexOf = new Map<RowGroupHandle, number>();
   private rows = 0;
   private revision = 0;
+  /** The rows moved since their group was built, by handle (7.4 of the design) */
+  private readonly moved = new Map<number, MovedRow>();
+  private movedIndex: RBush<MovedRow> | null = null;
 
   /**
    * @param layerId The layer
@@ -230,6 +317,71 @@ export class LayerTable {
     if (ai !== bi) return ai - bi;
     if (a.slot !== b.slot) return a.slot - b.slot;
     return a.k - b.k;
+  }
+
+  /** The number of rows moved since their groups were built */
+  get movedRowCount(): number {
+    return this.moved.size;
+  }
+
+  /**
+   * Records that a row moved since its group was built, with its new bbox: the spatial index of
+   * its group no longer finds it, the index of the moved rows of the layer does
+   */
+  moveRow(group: RowGroup, row: number, bounds: Float64Array): void {
+    const handle = group.data.handles[row];
+    group.unindexed ??= new Uint8Array(group.data.length);
+    group.unindexed[row] = 1;
+    this.movedIndex ??= new RBush<MovedRow>();
+    const index = this.movedIndex;
+    const old = this.moved.get(handle);
+    if (old) index.remove(old);
+    const at = row * 4;
+    if (Number.isNaN(bounds[at])) {
+      this.moved.delete(handle);
+      return;
+    }
+    const entry: MovedRow = {
+      minX: bounds[at],
+      minY: bounds[at + 1],
+      maxX: bounds[at + 2],
+      maxY: bounds[at + 3],
+      group,
+      row,
+    };
+    this.moved.set(handle, entry);
+    index.insert(entry);
+  }
+
+  /**
+   * The rows of a group whose bbox meets a box, read from the spatial index of the group and the
+   * index of the rows moved (in no particular order)
+   *
+   * @param out Receives the rows (it is not cleared)
+   */
+  searchRows(
+    group: RowGroup,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    out: number[],
+  ): void {
+    const mark = out.length;
+    searchPackedRTree(group.data.index, minX, minY, maxX, maxY, out);
+    const unindexed = group.unindexed;
+    if (unindexed) {
+      let kept = mark;
+      for (let i = mark; i < out.length; i++) {
+        if (unindexed[out[i]] === 0) out[kept++] = out[i];
+      }
+      out.length = kept;
+    }
+    if (this.movedIndex && this.moved.size > 0) {
+      for (const entry of this.movedIndex.search({ minX, minY, maxX, maxY })) {
+        if (entry.group === group) out.push(entry.row);
+      }
+    }
   }
 
   private reindex(): void {

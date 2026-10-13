@@ -18,8 +18,8 @@
  */
 
 import type { RowGroup } from '../../feature-table/layer-table.js';
-import { geometryReaderOf } from '../../feature-table/layer-table.js';
-import { rowType } from '../../feature-table/row-read.js';
+import { geometryAt } from '../../feature-table/layer-table.js';
+import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -89,7 +89,7 @@ export function classifyRow(
   context: RowClassifyContext,
 ): TableRunKind | null {
   const data = group.data;
-  if (data.geometry.types[row] < 0) return null;
+  if (!rowHasGeometry(group, row)) return null;
   const type = rowType(data, row);
   const oneDraw = context.oneDraw === true;
 
@@ -110,7 +110,7 @@ export function classifyRow(
   if (custom) {
     // A point drawn with a picture of its extension (a style without one is drawn at once)
     const source = renderer?.rowSprites as RowSpriteSource;
-    const reader = geometryReaderOf(group, row);
+    const reader = geometryAt(group, row)?.reader;
     const points = reader?.type === 'Point' || reader?.type === 'MultiPoint';
     if (!points || !slots.sprite(source, data.styles[row])) return 'immediate';
     context.onSprite?.(row, source);
@@ -235,9 +235,9 @@ export function partitionRowGroup(
 
 /** The number of coordinates a row draws (the estimate of its work) */
 function rowVertexCount(group: RowGroup, row: number): number {
-  const reader = geometryReaderOf(group, row);
-  if (!reader) return 0;
+  const geometry = geometryAt(group, row);
+  if (!geometry) return 0;
+  const { reader, at } = geometry;
   if (rowType(group.data, row) === 'Circle' && reader.type === 'Point') return CIRCLE_VERTICES;
-  const at = group.data.geometry.offsets[row];
   return reader.vertexStart(at + 1) - reader.vertexStart(at);
 }

@@ -5,17 +5,25 @@
  * Reading the values of a row held as columns
  *
  * A row becomes a feature only when one is asked for (a hit, the features drawn at once, a
- * reader that needs one); the drawing and the hit testing read its columns as they are.
+ * reader that needs one); the drawing and the hit testing read its columns as they are. Every
+ * read looks first at what was written of the row in place since its group was built
+ * (`value-overrides.ts`), then at the columns.
  */
 
 import type { Geometry } from 'geojson';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
 import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowGroupData } from '../table/row-group-types.js';
 import { utf8String } from '../table/utf8-column.js';
-import { readNumberValue, readValue, type ValueStringCache } from '../table/value-column.js';
+import {
+  readNumberValue,
+  readValue,
+  VALUE_NUMBER,
+  type ValueStringCache,
+} from '../table/value-column.js';
 import type { GroupTable } from './group-table.js';
-import { geometryReaderOf, type RowGroup } from './layer-table.js';
+import { geometryAt, type RowGroup } from './layer-table.js';
 import type { StyleTable } from './style-table.js';
+import { decodeOverrideValue } from './value-overrides.js';
 
 /**
  * What reading a row needs besides the row
@@ -48,6 +56,8 @@ export function rowValue(
   key: string,
   strings?: ValueStringCache,
 ): unknown {
+  const written = group.values?.get(row, key);
+  if (written) return decodeOverrideValue(written);
   const column = group.propertyIndex.get(key);
   if (column === undefined) return undefined;
   return readValue(group.data.properties.columns[column], row, strings);
@@ -59,6 +69,8 @@ export function rowValue(
  * @internal
  */
 export function rowNumber(group: RowGroup, row: number, key: string): number | undefined {
+  const written = group.values?.get(row, key);
+  if (written) return written.tag === VALUE_NUMBER ? written.number : undefined;
   const column = group.propertyIndex.get(key);
   if (column === undefined) return undefined;
   return readNumberValue(group.data.properties.columns[column], row);
@@ -80,7 +92,55 @@ export function rowProperties(
     const value = readValue(columns[i], row, strings);
     if (value !== undefined) out[keys[i]] = value;
   }
+  group.values?.forEach(row, (key, written) => {
+    const value = decodeOverrideValue(written);
+    if (value === undefined) delete out[key];
+    else out[key] = value;
+  });
   return out;
+}
+
+/**
+ * Whether a row has a geometry
+ *
+ * @internal
+ */
+export function rowHasGeometry(group: RowGroup, row: number): boolean {
+  return group.data.geometry.types[row] >= 0 || group.geometries?.geometry(row) !== undefined;
+}
+
+/**
+ * The indices of the triangles of the fill of a row (the ones written in place when there are)
+ *
+ * @internal
+ */
+export function rowTriangles(group: RowGroup, row: number): Uint16Array | Uint32Array {
+  const written = group.geometries?.rowTriangles(row);
+  if (written) return written;
+  const t = group.data.triangles;
+  const start = t.offsets[row];
+  const end = t.offsets[row + 1];
+  if (end > start) return t.indices.subarray(start, end);
+  const wide = indexOfRow(t.wideRows, row);
+  if (wide < 0) return t.indices.subarray(start, start);
+  return t.wideIndices.subarray(t.wideOffsets[wide], t.wideOffsets[wide + 1]);
+}
+
+/**
+ * The place of a row in an ascending list of rows (-1 when it is not there)
+ *
+ * @internal
+ */
+export function indexOfRow(rows: Int32Array, row: number): number {
+  let lo = 0;
+  let hi = rows.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid] === row) return mid;
+    if (rows[mid] < row) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
 }
 
 /**
@@ -89,9 +149,9 @@ export function rowProperties(
  * @internal
  */
 export function rowGeometry(group: RowGroup, row: number): Geometry | null {
-  const reader = geometryReaderOf(group, row);
-  if (!reader) return null;
-  const at = group.data.geometry.offsets[row];
+  const geometry = geometryAt(group, row);
+  if (!geometry) return null;
+  const { reader, at } = geometry;
   return { type: reader.type, coordinates: reader.coordinatesOf(at) } as Geometry;
 }
 
@@ -101,9 +161,9 @@ export function rowGeometry(group: RowGroup, row: number): Geometry | null {
  * @internal
  */
 export function rowPoint(group: RowGroup, row: number): Coordinate | null {
-  const reader = geometryReaderOf(group, row);
-  if (reader?.type !== 'Point') return null;
-  return reader.position(group.data.geometry.offsets[row]);
+  const geometry = geometryAt(group, row);
+  if (geometry?.reader.type !== 'Point') return null;
+  return geometry.reader.position(geometry.at);
 }
 
 /**

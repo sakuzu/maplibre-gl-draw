@@ -5,14 +5,13 @@
  * The hit testing of the rows of a layer held as columns
  *
  * The candidates are the rows whose bbox meets the box of the click (the spatial index of each
- * row group), tested from the front of the order: the last group first, the last row of a group
+ * row group, and the index of the rows moved since their group was built), tested from the front of the order: the last group first, the last row of a group
  * first. Only the candidates become features, to be tested by the same tests as the features of
  * the Store; the feature of a candidate is made for the test and dropped. A hidden row (not
  * shown, deleted, hidden by this client) is not a candidate.
  */
 
 import type { Coordinate, Feature } from '../shared/types/model.js';
-import { searchPackedRTree } from '../table/packed-rtree.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import type { LayerTable, RowGroup } from './layer-table.js';
 import { rowFeature } from './row-read.js';
@@ -62,7 +61,7 @@ export function hitTestLayerTable(
   for (let g = table.groupCount - 1; g >= 0; g--) {
     const group = table.groupAt(g);
     rows.length = 0;
-    searchPackedRTree(group.data.index, x - reach, y - reach, x + reach, y + reach, rows);
+    table.searchRows(group, x - reach, y - reach, x + reach, y + reach, rows);
     if (rows.length === 0) continue;
     // The front first: the rows of a group are in the order they are drawn
     rows.sort((a, b) => b - a);

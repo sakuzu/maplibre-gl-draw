@@ -15,13 +15,19 @@
  * groups and sends them with `rowGroupTransferList`.
  */
 
-import earcut from 'earcut';
-import type { Geometry, Position } from 'geojson';
-import { generateCirclePolygon } from '../geometry/circle.js';
+import type { Geometry } from 'geojson';
 import { readDrawProperty } from '../shared/properties.js';
 import { encodeCanonicalValue } from './canonical-value.js';
 import { buildPackedRTree } from './packed-rtree.js';
-import { polygonRingRuns } from './polygon-rings.js';
+import {
+  circleRingCoords,
+  polygonRanges,
+  type RowGeometry,
+  ringOffsetsOf,
+  toRowGeometry,
+  triangulateRow,
+  WIDE_VERTICES,
+} from './row-geometry.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
@@ -57,9 +63,6 @@ export const ROW_GROUP_TARGET_ROWS = 4096;
  * chunk (`CHUNK_TARGET_VERTICES`), to be set from measured data.
  */
 export const ROW_GROUP_TARGET_VERTICES = 40_000;
-
-/** The number of vertices of a fill below which its indices take 16 bits */
-const WIDE_VERTICES = 65_536;
 
 /**
  * A group the rows can belong to: its handle, its id and the key of its order
@@ -139,21 +142,6 @@ export interface RowGroupBuilder {
    * @throws when a row names a group the options do not give
    */
   finish(): RowGroupData[];
-}
-
-/** The geometry of one row as the builder keeps it until it is cut into groups */
-interface RowGeometry {
-  readonly type: GeometryType;
-  /** The coordinates (two values each) */
-  readonly coords: Float64Array;
-  /**
-   * The sizes of the levels: [] for Point, LineString and MultiPoint; the number of coordinates
-   * of each ring (part) for Polygon and MultiLineString; for MultiPolygon the number of rings of
-   * each polygon followed by the number of coordinates of each ring
-   */
-  readonly parts: readonly number[];
-  /** The number of rings per polygon of a MultiPolygon */
-  readonly polygons: readonly number[];
 }
 
 /**
@@ -501,38 +489,11 @@ function buildGroup(
   };
 }
 
-/** The offsets from a ring to its first coordinate, over every ring of a polygon geometry */
-function ringOffsetsOf(geometry: RowGeometry): Int32Array {
-  const offsets = new Int32Array(geometry.parts.length + 1);
-  for (let i = 0; i < geometry.parts.length; i++) offsets[i + 1] = offsets[i] + geometry.parts[i];
-  return offsets;
-}
-
-/** The rings of each polygon of a polygon geometry, as `[first ring, end ring)` */
-function polygonRanges(geometry: RowGeometry): Array<[number, number]> {
-  if (geometry.type === 'Polygon') return [[0, geometry.parts.length]];
-  const out: Array<[number, number]> = [];
-  let ring = 0;
-  for (const count of geometry.polygons) {
-    out.push([ring, ring + count]);
-    ring += count;
-  }
-  return out;
-}
-
 /** The coordinates of the ring of a Circle, or null for any other row */
 function circleRing(row: RowInput, geometry: RowGeometry): Float64Array | null {
   if (row.type !== 'Circle' || geometry.type !== 'Point') return null;
   const radius = readDrawProperty(row.properties, 'radiusMeters');
-  if (!radius || radius <= 0) return null;
-  const ring = generateCirclePolygon([geometry.coords[0], geometry.coords[1]], radius);
-  if (ring.length === 0) return null;
-  const coords = new Float64Array(ring.length * 2);
-  for (let i = 0; i < ring.length; i++) {
-    coords[i * 2] = ring[i][0];
-    coords[i * 2 + 1] = ring[i][1];
-  }
-  return coords;
+  return circleRingCoords([geometry.coords[0], geometry.coords[1]], radius ?? 0);
 }
 
 /** The number of coordinates a row draws (the estimate of the work of a group) */
@@ -590,7 +551,6 @@ class TriangleWriter {
   private readonly wideRows: number[] = [];
   private readonly wideOffsets: number[] = [0];
   private wideIndices: number[] = [];
-  private readonly runs: number[] = [];
 
   constructor(length: number) {
     this.offsets = new Int32Array(length + 1);
@@ -613,27 +573,7 @@ class TriangleWriter {
     ringOffsets: Int32Array,
     polygons: ReadonlyArray<readonly [number, number]>,
   ): void {
-    const out: number[] = [];
-    let base = 0;
-    for (const [ringStart, ringEnd] of polygons) {
-      const runs = this.runs;
-      runs.length = 0;
-      const count = polygonRingRuns(coords, 2, ringOffsets, ringStart, ringEnd, runs);
-      if (count === 0) continue;
-      const flat: number[] = new Array(count * 2);
-      const holes: number[] = [];
-      let at = 0;
-      for (let k = 0; k < runs.length; k += 2) {
-        if (k > 0) holes.push(at);
-        for (let v = runs[k]; v < runs[k + 1]; v++) {
-          flat[at * 2] = coords[v * 2];
-          flat[at * 2 + 1] = coords[v * 2 + 1];
-          at++;
-        }
-      }
-      for (const index of earcut(flat, holes)) out.push(index + base);
-      base += count;
-    }
+    const { indices: out, vertices: base } = triangulateRow(coords, ringOffsets, polygons);
     if (base >= WIDE_VERTICES) {
       this.wideRows.push(row);
       for (const index of out) this.wideIndices.push(index);
@@ -714,44 +654,6 @@ function groupKeySource(groups: readonly RowGroupKey[]): GroupKeySource | null {
     keys: utf8ColumnFromStrings(groups.map((group) => group.order)),
     entryOf: (handle) => entries.get(handle) ?? -1,
   };
-}
-
-/** The geometry of a row as the builder keeps it */
-function toRowGeometry(geometry: Geometry): RowGeometry {
-  const positions: number[] = [];
-  const push = (position: Position): void => {
-    positions.push(Number(position[0]), Number(position[1]));
-  };
-  const parts: number[] = [];
-  const polygons: number[] = [];
-  switch (geometry.type) {
-    case 'Point':
-      push(geometry.coordinates);
-      break;
-    case 'LineString':
-    case 'MultiPoint':
-      for (const position of geometry.coordinates) push(position);
-      break;
-    case 'Polygon':
-    case 'MultiLineString':
-      for (const ring of geometry.coordinates) {
-        for (const position of ring) push(position);
-        parts.push(ring.length);
-      }
-      break;
-    case 'MultiPolygon':
-      for (const polygon of geometry.coordinates) {
-        for (const ring of polygon) {
-          for (const position of ring) push(position);
-          parts.push(ring.length);
-        }
-        polygons.push(polygon.length);
-      }
-      break;
-    default:
-      throw new Error(`RowGroupBuilder: a ${geometry.type} geometry cannot be a row`);
-  }
-  return { type: geometry.type, coords: Float64Array.from(positions), parts, polygons };
 }
 
 function growInt32(array: Int32Array, length: number): Int32Array {

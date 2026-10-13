@@ -172,6 +172,7 @@ describe('the table subpath', () => {
       'table/partition.ts',
       'table/polygon-rings.ts',
       'table/prepare.ts',
+      'table/row-geometry.ts',
       'table/row-group-builder.ts',
       'table/row-group-types.ts',
       'table/row-keys.ts',
