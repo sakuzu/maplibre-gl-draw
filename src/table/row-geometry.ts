@@ -128,13 +128,17 @@ export function circleRingCoords(center: [number, number], radius: number): Floa
 }
 
 /**
- * The triangles of the fills of the polygons of a row, as indices into the vertices of its
- * fill (the rings drawn of each polygon in turn, `polygon-rings.ts`)
+ * The triangles of the fills of the polygons of a row, in pairs, as indices into the vertices of
+ * its fill (the rings drawn of each polygon in turn, `polygon-rings.ts`)
+ *
+ * The triangles of each polygon are the ones earcut makes, paired as the fill draws them in
+ * strips of 4 vertices (`pairTriangles`): 4 indices per pair, a lone triangle with its third
+ * index twice. The pairs of a polygon come before the pairs of the next.
  *
  * @param coords The coordinates (two values each)
  * @param ringOffsets The offsets from a ring to its first coordinate
  * @param polygons The rings of each polygon, `[first, end)`
- * @returns The indices and the number of vertices of the fill
+ * @returns The indices of the pairs and the number of vertices of the fill
  * @internal
  */
 export function triangulateRow(
@@ -160,10 +164,79 @@ export function triangulateRow(
         at++;
       }
     }
-    for (const index of earcut(flat, holes)) out.push(index + base);
+    const triangles = earcut(flat, holes);
+    pairTriangles(triangles, 0, triangles.length, 0, (a, b, c, d) => {
+      out.push(a + base, b + base, c + base, d + base);
+    });
     base += count;
   }
   return { indices: out, vertices: base };
+}
+
+/**
+ * Pairs the triangles of a polygon that share an edge, for the fill drawn in strips of 4
+ * vertices: a pair `(a, b, c, d)` is the triangles `(a, b, c)` and `(c, b, d)`, which share the
+ * edge `b, c` and keep the winding of the triangles they were; a triangle without a partner is
+ * `(a, b, c, c)` (the second triangle has no area). The triangles of a polygon do not overlap and
+ * have one color, so how they are paired changes no pixel.
+ *
+ * @param triangles The indices of the triangles, 3 per triangle
+ * @param from The first index of the triangles of the polygon
+ * @param to The end of its indices
+ * @param base What the indices of the polygon are counted from (subtracted from them)
+ * @param emit Receives each pair (or triangle) as indices counted from `base`
+ * @internal
+ */
+export function pairTriangles(
+  triangles: ArrayLike<number>,
+  from: number,
+  to: number,
+  base: number,
+  emit: (a: number, b: number, c: number, d: number) => void,
+): void {
+  const count = (to - from) / 3;
+  if (count <= 0) return;
+  // The triangle of each directed edge, by its two ends
+  const edges = new Map<number, number>();
+  let span = 1;
+  for (let t = from; t < to; t++) span = Math.max(span, triangles[t] - base + 1);
+  const key = (u: number, v: number) => u * span + v;
+  for (let t = 0; t < count; t++) {
+    const at = from + t * 3;
+    const a = triangles[at] - base;
+    const b = triangles[at + 1] - base;
+    const c = triangles[at + 2] - base;
+    edges.set(key(a, b), t);
+    edges.set(key(b, c), t);
+    edges.set(key(c, a), t);
+  }
+  const used = new Uint8Array(count);
+  for (let t = 0; t < count; t++) {
+    if (used[t]) continue;
+    used[t] = 1;
+    const at = from + t * 3;
+    const v = [triangles[at] - base, triangles[at + 1] - base, triangles[at + 2] - base];
+    let paired = false;
+    // An edge `p, q` of this triangle is shared with the triangle that has `q, p`
+    for (let e = 0; e < 3 && !paired; e++) {
+      const p = v[e];
+      const q = v[(e + 1) % 3];
+      const other = edges.get(key(q, p));
+      if (other === undefined || used[other]) continue;
+      const o = from + other * 3;
+      const w = [triangles[o] - base, triangles[o + 1] - base, triangles[o + 2] - base];
+      // The corner of the other triangle off the shared edge
+      let d = -1;
+      for (const x of w) if (x !== p && x !== q) d = x;
+      if (d < 0) continue;
+      used[other] = 1;
+      paired = true;
+      // This triangle as (r, p, q): the shared edge is p -> q, its third corner r
+      const r = v[(e + 2) % 3];
+      emit(r, p, q, d);
+    }
+    if (!paired) emit(v[0], v[1], v[2], v[2]);
+  }
 }
 
 /**

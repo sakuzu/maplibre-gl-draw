@@ -9,6 +9,7 @@ import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { decodeCanonicalValue } from './canonical-value.js';
 import { searchPackedRTree } from './packed-rtree.js';
+import { pairTriangles } from './row-geometry.js';
 import { createRowGroupBuilder, type RowInput, rowGroupTransferList } from './row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
@@ -42,7 +43,16 @@ function coordinatesOf(group: RowGroupData, r: number): unknown {
   return column.coordinatesOf(group.geometry.offsets[r]);
 }
 
-/** The indices of the triangles of a row */
+/** The triangles earcut makes, in the pairs the builder keeps them in */
+function paired(triangles: readonly number[], base = 0): number[] {
+  const out: number[] = [];
+  pairTriangles(triangles, 0, triangles.length, 0, (a, b, c, d) => {
+    out.push(a + base, b + base, c + base, d + base);
+  });
+  return out;
+}
+
+/** The indices of the pairs of triangles of a row */
 function trianglesOf(group: RowGroupData, r: number): number[] {
   const t = group.triangles;
   const wide = Array.from(t.wideRows).indexOf(r);
@@ -221,7 +231,7 @@ describe('createRowGroupBuilder', () => {
     );
     const [group] = builder.finish();
     const input = buildEarcutInput(rings as [number, number][][]);
-    expect(trianglesOf(group, 0)).toEqual(earcut(input.flatCoords, input.holeIndices));
+    expect(trianglesOf(group, 0)).toEqual(paired(earcut(input.flatCoords, input.holeIndices)));
     expect(trianglesOf(group, 1)).toEqual([]);
   });
 
@@ -245,8 +255,8 @@ describe('createRowGroupBuilder', () => {
     const first = buildEarcutInput([a as [number, number][]]);
     const second = buildEarcutInput([b as [number, number][]]);
     expect(trianglesOf(group, 0)).toEqual([
-      ...earcut(first.flatCoords, first.holeIndices),
-      ...earcut(second.flatCoords, second.holeIndices).map((index) => index + 3),
+      ...paired(earcut(first.flatCoords, first.holeIndices)),
+      ...paired(earcut(second.flatCoords, second.holeIndices), 3),
     ]);
   });
 
@@ -257,7 +267,7 @@ describe('createRowGroupBuilder', () => {
     const [group] = builder.finish();
     const ring = generateCirclePolygon([139.7, 35.7], 1000);
     const input = buildEarcutInput([ring]);
-    expect(trianglesOf(group, 0)).toEqual(earcut(input.flatCoords, input.holeIndices));
+    expect(trianglesOf(group, 0)).toEqual(paired(earcut(input.flatCoords, input.holeIndices)));
     expect(group.typeNames[group.types[0]]).toBe('Circle');
     // The bbox is the one of the circle, not of its center
     expect(group.rowBounds[2] - group.rowBounds[0]).toBeGreaterThan(0.01);
@@ -290,10 +300,14 @@ describe('createRowGroupBuilder', () => {
     const groups = builder.finish();
     const big = groups[0];
     expect(Array.from(big.triangles.wideRows)).toEqual([0]);
-    expect(trianglesOf(big, 0).length).toBe((n - 2) * 3);
-    expect(Math.max(...trianglesOf(big, 0).slice(0, 5000))).toBeLessThan(n);
+    // The n - 2 triangles of the ring, in pairs (a lone triangle has its third index twice)
+    const pairs = trianglesOf(big, 0);
+    let triangles = 0;
+    for (let i = 0; i < pairs.length; i += 4) triangles += pairs[i + 2] === pairs[i + 3] ? 1 : 2;
+    expect(triangles).toBe(n - 2);
+    expect(Math.max(...pairs.slice(0, 5000))).toBeLessThan(n);
     const small = groups[groups.length - 1];
-    expect(trianglesOf(small, small.length - 1)).toHaveLength(3);
+    expect(trianglesOf(small, small.length - 1)).toHaveLength(4);
   });
 
   it('shares the styles of the rows and writes the flags', () => {

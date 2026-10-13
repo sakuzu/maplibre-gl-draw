@@ -556,9 +556,11 @@ export interface PolygonPart {
   readonly runs: number[];
   /** The number of coordinates of the rings drawn (the vertices of the fill) */
   readonly vertices: number;
-  /** The triangles of the fill: indices `[from, to)` of the indices of the row */
+  /** The pairs of triangles of the fill: indices `[from, to)` of the indices of the row */
   readonly triangleFrom: number;
   readonly triangleTo: number;
+  /** The number of triangles of the pairs (a lone triangle is a pair of one) */
+  readonly triangleCount: number;
   /** The first vertex of the fill of this polygon among the vertices of the fill of the row */
   readonly base: number;
 }
@@ -571,7 +573,10 @@ export interface PolygonPart {
 export interface PolygonRowPlan {
   readonly parts: readonly PolygonPart[];
   readonly slot: PolygonSlot;
-  /** The indices of the triangles of the row (into the vertices of its fill) */
+  /**
+   * The indices of the pairs of triangles of the row (into the vertices of its fill; 4 per pair,
+   * `TriangleCache`)
+   */
   readonly triangles: Uint16Array | Uint32Array;
   readonly createdZoom: number | undefined;
   /** The vertices and the indices the row adds to a batch */
@@ -665,8 +670,13 @@ export function planPolygonRow(
     );
     if (vertices === 0) continue;
     // The triangles of this polygon are the ones that point into its vertices
+    // The pairs of this polygon are the ones that point into its vertices
     const triangleFrom = t;
-    while (t < triangles.length && triangles[t] < base + vertices) t += 3;
+    let triangleCount = 0;
+    while (t < triangles.length && triangles[t] < base + vertices) {
+      triangleCount += triangles[t + 2] === triangles[t + 3] ? 1 : 2;
+      t += 4;
+    }
     const part: PolygonPart = {
       coords: polygon.coords,
       stride: polygon.stride,
@@ -674,12 +684,13 @@ export function planPolygonRow(
       vertices,
       triangleFrom,
       triangleTo: t,
+      triangleCount,
       base,
     };
     parts.push(part);
     if (part.triangleTo > part.triangleFrom) {
       vertexCount += vertices;
-      indexCount += part.triangleTo - part.triangleFrom;
+      indexCount += part.triangleCount * 3;
     }
     if (slot.hasStroke) {
       vertexCount += vertices * 4;
@@ -750,8 +761,19 @@ export function writePolygonRow(
           v++;
         }
       }
-      for (let t = part.triangleFrom; t < part.triangleTo; t++) {
-        indices[i++] = triangles[t] - part.base + n;
+      // Each pair is its two triangles (a lone triangle is one)
+      for (let t = part.triangleFrom; t < part.triangleTo; t += 4) {
+        const a = triangles[t] - part.base + n;
+        const b = triangles[t + 1] - part.base + n;
+        const c = triangles[t + 2] - part.base + n;
+        const d = triangles[t + 3] - part.base + n;
+        indices[i++] = a;
+        indices[i++] = b;
+        indices[i++] = c;
+        if (d === c) continue;
+        indices[i++] = c;
+        indices[i++] = b;
+        indices[i++] = d;
       }
       n += part.vertices;
     }
@@ -1387,11 +1409,19 @@ function collectPolygonRow(
         draft.coord(coords[c * stride] - origin[0], coords[c * stride + 1] - origin[1]);
       }
     }
-    // 1. The fill, in pairs of triangles
+    // 1. The fill, in the pairs of triangles of its triangulation
     if (fill) {
-      pairTriangles(triangles, part.triangleFrom, part.triangleTo, part.base, (a, b, c, d) => {
-        draft.instance(ROWS_KIND.fill, row, base + a, base + b, base + c, base + d);
-      });
+      const shift = base - part.base;
+      for (let t = part.triangleFrom; t < part.triangleTo; t += 4) {
+        draft.instance(
+          ROWS_KIND.fill,
+          row,
+          triangles[t] + shift,
+          triangles[t + 1] + shift,
+          triangles[t + 2] + shift,
+          triangles[t + 3] + shift,
+        );
+      }
     }
     // 2. The outline: the edges of every ring
     if (solidOutline || dashedOutline) {
@@ -1423,71 +1453,5 @@ function collectPolygonRow(
         ringBase += count;
       }
     }
-  }
-}
-
-/**
- * Pairs the triangles of a polygon that share an edge, for the fill drawn in strips of 4
- * vertices: a pair `(a, b, c, d)` is the triangles `(a, b, c)` and `(c, b, d)`, which share the
- * edge `b, c` and keep the winding of the triangles they were; a triangle without a partner is
- * `(a, b, c, c)` (the second triangle has no area). The triangles of a polygon do not overlap and
- * have one color, so how they are paired changes no pixel.
- *
- * @param triangles The indices of the triangles, 3 per triangle
- * @param from The first index of the triangles of the polygon
- * @param to The end of its indices
- * @param base What the indices of the polygon are counted from (subtracted from them)
- * @param emit Receives each pair (or triangle) as indices counted from `base`
- * @internal
- */
-export function pairTriangles(
-  triangles: ArrayLike<number>,
-  from: number,
-  to: number,
-  base: number,
-  emit: (a: number, b: number, c: number, d: number) => void,
-): void {
-  const count = (to - from) / 3;
-  if (count <= 0) return;
-  // The triangle of each directed edge, by its two ends
-  const edges = new Map<number, number>();
-  let span = 1;
-  for (let t = from; t < to; t++) span = Math.max(span, triangles[t] - base + 1);
-  const key = (u: number, v: number) => u * span + v;
-  for (let t = 0; t < count; t++) {
-    const at = from + t * 3;
-    const a = triangles[at] - base;
-    const b = triangles[at + 1] - base;
-    const c = triangles[at + 2] - base;
-    edges.set(key(a, b), t);
-    edges.set(key(b, c), t);
-    edges.set(key(c, a), t);
-  }
-  const used = new Uint8Array(count);
-  for (let t = 0; t < count; t++) {
-    if (used[t]) continue;
-    used[t] = 1;
-    const at = from + t * 3;
-    const v = [triangles[at] - base, triangles[at + 1] - base, triangles[at + 2] - base];
-    let paired = false;
-    // An edge `p, q` of this triangle is shared with the triangle that has `q, p`
-    for (let e = 0; e < 3 && !paired; e++) {
-      const p = v[e];
-      const q = v[(e + 1) % 3];
-      const other = edges.get(key(q, p));
-      if (other === undefined || used[other]) continue;
-      const o = from + other * 3;
-      const w = [triangles[o] - base, triangles[o + 1] - base, triangles[o + 2] - base];
-      // The corner of the other triangle off the shared edge
-      let d = -1;
-      for (const x of w) if (x !== p && x !== q) d = x;
-      if (d < 0) continue;
-      used[other] = 1;
-      paired = true;
-      // This triangle as (r, p, q): the shared edge is p -> q, its third corner r
-      const r = v[(e + 2) % 3];
-      emit(r, p, q, d);
-    }
-    if (!paired) emit(v[0], v[1], v[2], v[2]);
   }
 }

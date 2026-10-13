@@ -73,6 +73,20 @@ function withoutRow(data: Float32Array, stride: number, count: number): number[]
   return out;
 }
 
+/**
+ * The triangles of an index array, each turned to start at its smallest index (the winding kept)
+ * and sorted
+ */
+function trianglesOf(indices: ArrayLike<number>): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < indices.length; i += 3) {
+    const t = [indices[i], indices[i + 1], indices[i + 2]];
+    const k = t.indexOf(Math.min(...t));
+    out.push([t[k], t[(k + 1) % 3], t[(k + 2) % 3]].join(','));
+  }
+  return out.sort();
+}
+
 /** The number of the row of every instance */
 function rowsOf(data: Float32Array, stride: number, count: number): number[] {
   return Array.from({ length: count }, (_, i) => data[i * stride + stride - 1]);
@@ -264,7 +278,10 @@ describe('the packing of the polygons of the rows', () => {
     expect(withoutRow(vertices, ROW_POLYGON_STRIDE, vertexCount)).toEqual(
       Array.from(store.vertices),
     );
-    expect(Array.from(indices)).toEqual(Array.from(store.indices));
+    // The same triangles with the same windings: the fills are taken from the pairs of their
+    // triangulation, so their triangles come in the order of the pairs
+    expect(indices.length).toBe(store.indices.length);
+    expect(trianglesOf(indices)).toEqual(trianglesOf(store.indices));
     // The rows of the vertices, in the order of the rows
     const rows = rowsOf(vertices, ROW_POLYGON_STRIDE, vertexCount);
     expect([...new Set(rows)]).toEqual([0, 1, 2, 3, 5]);

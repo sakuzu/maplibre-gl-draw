@@ -26,12 +26,15 @@ export const ROW_FLAG_LOCKED = 2;
 export const ROW_FLAG_DELETED = 4;
 
 /**
- * The triangulation of the fills of the rows of a group
+ * The triangulation of the fills of the rows of a group, in pairs of triangles
  *
  * The triangles of a row are indices into the vertices of its fill: the rings of each of its
  * polygons in turn, without the closing coordinate of a ring, leaving out a ring of fewer than 3
- * coordinates (and a polygon whose outer ring has fewer than 3). A row of fewer than 65,536 such
- * vertices keeps its indices in `indices`; a larger one in `wideIndices`.
+ * coordinates (and a polygon whose outer ring has fewer than 3). They are held in pairs, as the
+ * fill draws them in strips of 4 vertices: 4 indices `(a, b, c, d)` per pair, the triangles
+ * `(a, b, c)` and `(c, b, d)` sharing the edge `b, c`, and a triangle without a partner as
+ * `(a, b, c, c)`. The pairs of a polygon of the row come before the pairs of the next. A row of
+ * fewer than 65,536 such vertices keeps its indices in `indices`; a larger one in `wideIndices`.
  */
 export interface TriangleCache {
   /** Where the indices of each row start in `indices` (rows + 1 values) */

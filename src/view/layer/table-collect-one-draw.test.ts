@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
+import { pairTriangles } from '../../table/row-geometry.js';
 import { ValueStringCache } from '../../table/value-column.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { dashSegmentLength } from '../renderers/line/dash.js';
@@ -38,7 +39,6 @@ import {
   collectRow,
   createLineRowArrays,
   linePartsOf,
-  pairTriangles,
   planPolygonRow,
   pointInstancesOf,
   type RowPackContext,
