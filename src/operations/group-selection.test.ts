@@ -10,6 +10,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ObjectLayer } from '../shared/types/model.js';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { MemoryStore } from '../store/memory.js';
 import type { Feature } from '../store/types.js';
@@ -63,7 +64,7 @@ describe('groupSelection', () => {
     expect(groupId).toBe('grp-1');
     expect(store.getFeature('f1')?.groupId).toBe('grp-1');
     expect(store.getFeature('f2')?.groupId).toBe('grp-1');
-    expect(store.getLayer('l1')?.items).toContain('grp-1');
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toContain('grp-1');
   });
 
   it('rejects regrouping a feature that belongs to a group that really exists', () => {
@@ -91,7 +92,7 @@ describe('groupSelection', () => {
     expect(groupId).toBe('grp-1');
     expect(store.getFeature('f1')?.groupId).toBe('grp-1');
     expect(store.getFeature('f2')?.groupId).toBe('grp-1');
-    expect(store.getLayer('l1')?.items).toContain('grp-1');
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toContain('grp-1');
   });
 
   it('adds the group to order even for a stale feature missing from order (orphan)', () => {
@@ -105,6 +106,6 @@ describe('groupSelection', () => {
 
     expect(groupId).toBe('grp-1');
     // The group is not missing from order even when no selected feature is in order
-    expect(store.getLayer('l1')?.items).toEqual(['grp-1']);
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toEqual(['grp-1']);
   });
 });

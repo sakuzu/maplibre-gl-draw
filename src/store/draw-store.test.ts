@@ -8,6 +8,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { toStore } from './draw-store.js';
 import { MemoryContractStore, MemoryStore } from './memory.js';
@@ -115,13 +116,19 @@ describe('the objects the in-memory store returns', () => {
     store.reorderInLayer('a', 'l1', 1);
     store.createFeature(point('c'));
 
-    expect(before.items).toEqual(['a', 'b']);
-    expect(store.getLayer('l1')?.items).toEqual(['b', 'a', 'c']);
-    expect(updated[updated.length - 1]?.items).toEqual(['b', 'a', 'c']);
+    expect((before as ObjectLayer).items).toEqual(['a', 'b']);
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toEqual(['b', 'a', 'c']);
+    expect((updated[updated.length - 1] as ObjectLayer | undefined)?.items).toEqual([
+      'b',
+      'a',
+      'c',
+    ]);
     const notified = updated[0];
     store.createFeature(point('d'));
-    expect(notified.items).toEqual(['b', 'a', 'c']);
-    expect(() => ((store.getLayer('l1') as Layer).items as string[]).push('x')).toThrow(TypeError);
+    expect((notified as ObjectLayer).items).toEqual(['b', 'a', 'c']);
+    expect(() =>
+      ((store.getLayer('l1') as Layer as ObjectLayer).items as string[]).push('x'),
+    ).toThrow(TypeError);
   });
 
   it('keeps a bulk load inside one transaction linear (one copy of the order per notification)', () => {
@@ -135,7 +142,7 @@ describe('the objects the in-memory store returns', () => {
     });
     const elapsed = performance.now() - started;
 
-    expect(store.getLayer('l1')?.items).toHaveLength(count);
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toHaveLength(count);
     expect(elapsed).toBeLessThan(5000);
   });
 });

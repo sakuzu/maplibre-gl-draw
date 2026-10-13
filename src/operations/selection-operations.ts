@@ -9,6 +9,7 @@
  */
 
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
+import { listedItems, listedMembers } from '../shared/utils/listed-items.js';
 import { isFeatureLocked, isGroupLocked } from '../store/lock.js';
 import type { Store } from '../store/store.js';
 import type { FeatureCoordinates, VertexSelection } from '../store/types.js';
@@ -77,8 +78,11 @@ export function deleteSelectedItems(store: Store): boolean {
 
   if (selection.type === 'group') {
     // Locked groups (themselves / the layer they belong to) are not deleted
-    const findLayerOfGroup = (groupId: string) =>
-      store.listLayers().find((l) => l.items.includes(groupId));
+    // The layer of a group is the one it names
+    const findLayerOfGroup = (groupId: string) => {
+      const group = store.getGroup(groupId);
+      return group ? store.getLayer(group.layerId) : undefined;
+    };
     const groupIds = selection.ids.filter((groupId) => {
       const group = store.getGroup(groupId);
       return group !== undefined && !isGroupLocked(group, findLayerOfGroup);
@@ -91,14 +95,15 @@ export function deleteSelectedItems(store: Store): boolean {
         if (!group) continue;
         // Delete the unlocked contents of the group. The group itself is deleted automatically
         // the moment the last feature is removed.
-        for (const featureId of [...group.featureIds]) {
+        for (const featureId of [...listedMembers(group)]) {
           const feature = store.getFeature(featureId);
           if (feature && isFeatureLocked(feature, store)) continue;
           store.deleteFeature(featureId);
         }
         // When an empty group (a group with no contents) was selected, delete the group itself
         // (a group that keeps locked members stays)
-        if (store.getGroup(groupId)?.featureIds.length === 0) {
+        const left = store.getGroup(groupId);
+        if (left && listedMembers(left).length === 0) {
           store.deleteGroup(groupId);
         }
       }
@@ -133,7 +138,7 @@ export function deleteSelectedItems(store: Store): boolean {
 function holdsLockedItem(store: Store, layerId: string): boolean {
   const layer = store.getLayer(layerId);
   if (!layer) return false;
-  for (const itemId of layer.items) {
+  for (const itemId of listedItems(layer)) {
     const group = store.getGroup(itemId);
     if (group?.locked) return true;
   }

@@ -8,6 +8,7 @@
 
 import type { Polygon } from 'geojson';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
@@ -69,7 +70,7 @@ function codeOf(fn: () => unknown): string | undefined {
 
 /** The IDs of the items of a layer */
 function itemsOf(layerId: string): readonly string[] {
-  return store.getLayer(layerId)?.items ?? [];
+  return (store.getLayer(layerId) as ObjectLayer | undefined)?.items ?? [];
 }
 
 beforeEach(() => {
@@ -165,7 +166,7 @@ describe('create', () => {
     });
     const created = features.create(point('n', { groupId: 'g' }));
     expect(created?.layerId).toBe('l2');
-    expect(store.getGroup('g')?.featureIds).toEqual(['m', 'n']);
+    expect((store.getGroup('g') as ObjectGroup | undefined)?.featureIds).toEqual(['m', 'n']);
   });
 
   it('throws the codes of the contract and stores nothing', () => {
@@ -379,13 +380,13 @@ describe('move and moveMany', () => {
   it('moves a feature out of its group into a layer', () => {
     features.move('b', { layerId: 'l2' });
     expect(features.get('b')?.groupId).toBeUndefined();
-    expect(store.getGroup('g')?.featureIds).toEqual(['c']);
+    expect((store.getGroup('g') as ObjectGroup | undefined)?.featureIds).toEqual(['c']);
     expect(itemsOf('l2')).toEqual(['d', 'b']);
   });
 
   it('moves a feature into a group at the index', () => {
     features.move('d', { groupId: 'g', index: 1 });
-    expect(store.getGroup('g')?.featureIds).toEqual(['b', 'd', 'c']);
+    expect((store.getGroup('g') as ObjectGroup | undefined)?.featureIds).toEqual(['b', 'd', 'c']);
     expect(features.get('d')).toMatchObject({ groupId: 'g', layerId: 'l1' });
     expect(itemsOf('l2')).toEqual([]);
   });
@@ -412,7 +413,12 @@ describe('move and moveMany', () => {
     notifications.length = 0;
     features.moveMany(['a', 'd'], { groupId: 'g' });
     expect(notifications).toHaveLength(1);
-    expect(store.getGroup('g')?.featureIds).toEqual(['b', 'c', 'a', 'd']);
+    expect((store.getGroup('g') as ObjectGroup | undefined)?.featureIds).toEqual([
+      'b',
+      'c',
+      'a',
+      'd',
+    ]);
   });
 
   it('throws for a missing feature or target and a wrong target, moving nothing', () => {

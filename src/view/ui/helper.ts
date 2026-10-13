@@ -7,6 +7,7 @@
  * Helper functions for obtaining the selected features and computing the bounding box.
  */
 
+import { tableGroupMemberIds, tableLayerFeatureIds } from '../../feature-table/item-ids.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import type { BoundingBoxCoords, SelectionExtensionRegistry } from './selection-ui/index.js';
@@ -34,7 +35,7 @@ export function getSelectedFeatureIds(store: Store): readonly string[] {
     case 'feature':
       return selection.ids;
     case 'group':
-      return selection.ids.flatMap((id) => store.getGroup(id)?.featureIds ?? []);
+      return selection.ids.flatMap((id) => groupFeatureIds(store, id));
     case 'layer':
       return selection.ids.flatMap((id) => featureIdsInLayer(store, id));
     default:
@@ -42,17 +43,25 @@ export function getSelectedFeatureIds(store: Store): readonly string[] {
   }
 }
 
-// All feature IDs under a layer (the features in order + the members of the groups).
+// The feature IDs of a group (read from the rows for a group of a layer held as rows)
+function groupFeatureIds(store: Store, groupId: string): readonly string[] {
+  const group = store.getGroup(groupId);
+  if (!group) return [];
+  return group.kind === 'table' ? tableGroupMemberIds(store.tables, group) : group.featureIds;
+}
+
+// All feature IDs under a layer (the features in order + the members of the groups; read from
+// the rows for a layer held as rows).
 function featureIdsInLayer(store: Store, layerId: string): string[] {
   const layer = store.getLayer(layerId);
   if (!layer) return [];
+  if (layer.kind === 'table') return tableLayerFeatureIds(store.tables, layerId);
   const ids: string[] = [];
   for (const itemId of layer.items) {
     if (store.getFeature(itemId)) {
       ids.push(itemId);
     } else {
-      const group = store.getGroup(itemId);
-      if (group) ids.push(...group.featureIds);
+      ids.push(...groupFeatureIds(store, itemId));
     }
   }
   return ids;

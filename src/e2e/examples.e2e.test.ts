@@ -25,6 +25,7 @@ import { parquetMetadata } from 'hyparquet';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { ObjectGroup } from '../shared/types/model.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   click,
@@ -454,7 +455,11 @@ describe('the examples', () => {
           active: w.draw.layers.getActive()?.id,
           parcelsVisible: w.draw.layers.get(w.layerIds.parcels)?.visible,
           paths: w.draw.layers.get(w.layerIds.paths)?.opacity,
-          group: { id: group?.id, size: group?.featureIds.length, locked: group?.locked },
+          group: {
+            id: group?.id,
+            size: (group as ObjectGroup | undefined)?.featureIds.length,
+            locked: group?.locked,
+          },
         };
       });
     const before = await state();

@@ -6,6 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
@@ -133,7 +134,7 @@ describe('draw.selection', () => {
   it('groups the selected features and ungroups the selected groups', () => {
     selection.set('feature', ['a', 'line']);
     const group = selection.group();
-    expect(group?.featureIds).toEqual(['a', 'line']);
+    expect((group as ObjectGroup | undefined)?.featureIds).toEqual(['a', 'line']);
     selection.set('group', [group?.id ?? '']);
     expect(selection.ungroup()).toBe(true);
     expect(store.getGroup(group?.id ?? '')).toBeUndefined();
@@ -150,7 +151,7 @@ describe('draw.selection', () => {
     expect(store.getFeature('a')?.layerId).toBe('l2');
     selection.set('group', ['g']);
     expect(selection.move({ layerId: 'l2', index: 0 })).toBe(true);
-    expect(store.getLayer('l2')?.items).toEqual(['g', 'a']);
+    expect((store.getLayer('l2') as ObjectLayer | undefined)?.items).toEqual(['g', 'a']);
     expect(codeOf(() => selection.move({ layerId: 'x' }))).toBe('not-found');
     selection.clear();
     expect(selection.move({ layerId: 'l1' })).toBe(false);

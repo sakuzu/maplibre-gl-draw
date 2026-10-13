@@ -7,6 +7,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
@@ -56,7 +57,7 @@ function addPoint(id: string, layerId = 'l1'): void {
 }
 
 function itemsOf(layerId: string): readonly string[] {
-  return store.getLayer(layerId)?.items ?? [];
+  return (store.getLayer(layerId) as ObjectLayer | undefined)?.items ?? [];
 }
 
 beforeEach(() => {

@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { ObjectLayer } from '../../../shared/types/model.js';
 import { MemoryStore } from '../../../store/memory.js';
 import type { Data } from '../../../store/types.js';
 import { createResourceDeps } from '../../../test-utils.js';
@@ -225,8 +226,18 @@ describe('upgradeNativeData', () => {
   it('renames the order of a layer to items', () => {
     const { layers } = upgrade(document2());
 
-    expect(layers?.[0].items).toEqual(['p', 'c', 'i', 'line', 'fh', 'poly', 'mp', 'arrow', 'g1']);
-    expect(layers?.[1].items).toEqual([]);
+    expect((layers?.[0] as ObjectLayer | undefined)?.items).toEqual([
+      'p',
+      'c',
+      'i',
+      'line',
+      'fh',
+      'poly',
+      'mp',
+      'arrow',
+      'g1',
+    ]);
+    expect((layers?.[1] as ObjectLayer | undefined)?.items).toEqual([]);
     expect(layers?.[0]).not.toHaveProperty('order');
   });
 
@@ -280,7 +291,7 @@ describe('loading native data of version 2', () => {
       },
       style: {},
     });
-    expect(store.getLayer('l1')?.items).toEqual([
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toEqual([
       'p',
       'c',
       'i',

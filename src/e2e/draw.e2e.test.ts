@@ -14,6 +14,7 @@
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Feature } from '../index.js';
+import type { ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { browserTimeout } from '../test-utils.js';
 import {
@@ -630,14 +631,14 @@ describe('the stacking order on a real map', () => {
       const { draw } = window as unknown as E2EWindow;
       draw.options.update({ isExternalEntry: (id) => id.startsWith('base:') });
       const [first] = draw.layers.list();
-      const itemsBefore = [...first.items];
+      const itemsBefore = [...(first as ObjectLayer).items];
       draw.layers.create({ id: 'e2e-second' });
       draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layer-order' });
       draw.layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
       const placed = {
         order: [...draw.getStore().getLayerOrder()],
         runs: draw.getLayerStack().map(({ from, to }) => [from, to]),
-        items: draw.layers.list().map((layer) => [...layer.items]),
+        items: draw.layers.list().map((layer) => [...(layer as ObjectLayer).items]),
       };
       draw.layers.delete('e2e-second');
       draw.datasets.remove('e2e-parcels');

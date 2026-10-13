@@ -15,6 +15,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import type { SnapResult } from '../../api/state.js';
+import type { ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import { createModeHarness, pointerInput } from '../../test-utils.js';
@@ -105,7 +106,7 @@ function addStoreLine(id: string, coordinates: Coordinate[], visible = true): vo
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer('l1', { items: [...layer.items, id] });
+  if (layer) store.updateLayer('l1', { items: [...(layer as ObjectLayer).items, id] });
 }
 
 /** Adds a polyline to a dataset */

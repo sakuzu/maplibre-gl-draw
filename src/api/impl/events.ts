@@ -21,6 +21,8 @@ import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitt
 import type { Store } from '../../store/store.js';
 import type {
   FeatureCoordinates,
+  Group,
+  Layer,
   StoreChange,
   Feature as StoredFeature,
   VertexSelection as StoredVertexSelection,
@@ -245,7 +247,7 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
   // A reorder within a layer changes its items
   if (changes.layerReorder && !updatedLayers.has(changes.layerReorder.layerId)) {
     const layer = store.getLayer(changes.layerReorder.layerId);
-    if (layer) {
+    if (layer && layer.kind !== 'table') {
       hub.emit('layer.updated', {
         layer,
         previous: { ...layer, items: [...changes.layerReorder.previous] },
@@ -271,7 +273,7 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
   // A reorder within a group changes its features
   if (changes.groupReorder && !updatedGroups.has(changes.groupReorder.groupId)) {
     const group = store.getGroup(changes.groupReorder.groupId);
-    if (group) {
+    if (group && group.kind !== 'table') {
       hub.emit('group.updated', {
         group,
         previous: { ...group, featureIds: [...changes.groupReorder.previous] },
@@ -318,27 +320,40 @@ function describeMove(
     ? changes.groups?.updated?.find((u) => u.id === previous.groupId)?.previous
     : undefined;
   const from: MoveTarget = previous.groupId
-    ? withIndex({ groupId: previous.groupId }, previousGroup?.featureIds, previous.id)
-    : withIndex({ layerId: previous.layerId }, previousLayer?.items, previous.id);
+    ? withIndex({ groupId: previous.groupId }, membersOf(previousGroup), previous.id)
+    : withIndex({ layerId: previous.layerId }, itemsOf(previousLayer), previous.id);
 
   let to: MoveTarget;
   if (feature.groupId) {
     to = withIndex(
       { groupId: feature.groupId },
-      store.getGroup(feature.groupId)?.featureIds,
+      membersOf(store.getGroup(feature.groupId)),
       feature.id,
     );
   } else if (previous.groupId && previous.layerId === feature.layerId) {
     // Out of its group, in the same layer
-    to = withIndex({ groupId: null }, store.getLayer(feature.layerId)?.items, feature.id);
+    to = withIndex({ groupId: null }, itemsOf(store.getLayer(feature.layerId)), feature.id);
   } else {
     to = withIndex(
       { layerId: feature.layerId },
-      store.getLayer(feature.layerId)?.items,
+      itemsOf(store.getLayer(feature.layerId)),
       feature.id,
     );
   }
   return { from, to };
+}
+
+/**
+ * The items a layer lists (undefined for no layer, or a layer held as rows: a place in it is
+ * not an index)
+ */
+function itemsOf(layer: Layer | undefined): readonly string[] | undefined {
+  return layer && layer.kind !== 'table' ? layer.items : undefined;
+}
+
+/** The members a group lists (undefined for no group, or a group of a layer held as rows) */
+function membersOf(group: Group | undefined): readonly string[] | undefined {
+  return group && group.kind !== 'table' ? group.featureIds : undefined;
 }
 
 /** A target with the position of the ID in the list, when the list holds it */

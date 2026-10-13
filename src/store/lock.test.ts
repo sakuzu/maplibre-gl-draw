@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { ObjectLayer } from '../shared/types/model.js';
 import { isFeatureLocked, isGroupLocked, isInteractionBlocked } from './lock.js';
 import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer } from './types.js';
@@ -130,7 +131,7 @@ describe('isInteractionBlocked', () => {
 
 describe('isGroupLocked', () => {
   const findLayerOfGroup = (store: MemoryStore) => (groupId: string) =>
-    store.listLayers().find((l) => l.items.includes(groupId));
+    store.listLayers().find((l) => (l as ObjectLayer).items.includes(groupId));
 
   it('is true if the group itself is locked', () => {
     const store = makeStore();

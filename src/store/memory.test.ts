@@ -8,6 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ObjectGroup, ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { MemoryStore } from './memory.js';
 import type { Feature, Group, Layer, StoreChange, StyleRule } from './types.js';
@@ -94,7 +95,9 @@ describe('MemoryStore', () => {
         const feature = createTestFeature('feature-1');
         store.createFeature(feature);
 
-        expect(store.getLayer('layer-1')?.items).toContain('feature-1');
+        expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toContain(
+          'feature-1',
+        );
       });
 
       it('a feature belonging to a group is added to group.featureIds', () => {
@@ -104,7 +107,9 @@ describe('MemoryStore', () => {
         const feature = createTestFeature('feature-1', { groupId: 'group-1' });
         store.createFeature(feature);
 
-        expect(store.getGroup('group-1')?.featureIds).toContain('feature-1');
+        expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toContain(
+          'feature-1',
+        );
       });
 
       it('notifies the listener with the correct StoreChange', () => {
@@ -159,7 +164,9 @@ describe('MemoryStore', () => {
 
         // group-1 became empty when its last feature left, so it is deleted automatically
         expect(store.getGroup('group-1')).toBeUndefined();
-        expect(store.getGroup('group-2')?.featureIds).toContain('feature-1');
+        expect((store.getGroup('group-2') as ObjectGroup | undefined)?.featureIds).toContain(
+          'feature-1',
+        );
       });
 
       it('notifies the listener with the states before and after', () => {
@@ -230,7 +237,9 @@ describe('MemoryStore', () => {
       it('is removed from the order of the layer automatically on deletion', () => {
         store.deleteFeature('feature-1');
 
-        expect(store.getLayer('layer-1')?.items).not.toContain('feature-1');
+        expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).not.toContain(
+          'feature-1',
+        );
       });
 
       it('is removed from group.featureIds on deletion (an emptied group is deleted)', () => {
@@ -485,7 +494,11 @@ describe('MemoryStore', () => {
       it('changes the order of the items in a layer', () => {
         store.reorderInLayer('feature-3', 'layer-1', 0);
 
-        expect(store.getLayer('layer-1')?.items).toEqual(['feature-3', 'feature-1', 'feature-2']);
+        expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([
+          'feature-3',
+          'feature-1',
+          'feature-2',
+        ]);
       });
 
       it('throws an error for an item ID that does not exist', () => {
@@ -551,7 +564,7 @@ describe('MemoryStore', () => {
         );
 
         expect(store.getGroup('group-1')?.layerId).toBe('layer-1');
-        expect(store.getLayer('layer-1')?.items).toContain('group-1');
+        expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toContain('group-1');
       });
 
       it('takes the layer that lists it when it is created', () => {
@@ -569,7 +582,7 @@ describe('MemoryStore', () => {
         store.subscribe(listener);
 
         store.transact(() => {
-          const from = store.getLayer('layer-1')?.items ?? [];
+          const from = (store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [];
           store.updateLayer('layer-1', { items: from.filter((id) => id !== 'group-1') });
           store.updateLayer('layer-2', { items: ['group-1'] });
         });
@@ -590,7 +603,9 @@ describe('MemoryStore', () => {
         const listener = vi.fn();
         store.subscribe(listener);
 
-        store.updateLayer('layer-1', { items: [...(store.getLayer('layer-1')?.items ?? [])] });
+        store.updateLayer('layer-1', {
+          items: [...((store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [])],
+        });
 
         const changes: StoreChange = listener.mock.calls[0][0];
         expect(changes.groups).toBeUndefined();
@@ -681,7 +696,10 @@ describe('MemoryStore', () => {
 
         // Check group.featureIds as well
         const groupBeforeDelete = store.getGroup('group-1');
-        expect(groupBeforeDelete?.featureIds).toEqual(['feature-1', 'feature-2']);
+        expect((groupBeforeDelete as ObjectGroup | undefined)?.featureIds).toEqual([
+          'feature-1',
+          'feature-2',
+        ]);
 
         store.transact(() => {
           store.deleteGroup('group-1');
@@ -701,7 +719,7 @@ describe('MemoryStore', () => {
       it('changes the order of the features in a group', () => {
         store.reorderInGroup('feature-3', 'group-1', 0);
 
-        expect(store.getGroup('group-1')?.featureIds).toEqual([
+        expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual([
           'feature-3',
           'feature-1',
           'feature-2',
@@ -893,8 +911,12 @@ describe('MemoryStore', () => {
       const updated = changes.layers?.updated ?? [];
       expect(updated).toHaveLength(1);
       // previous is the first state and layer is the last state
-      expect(updated[0].previous.items).toEqual([]);
-      expect(updated[0].layer.items).toEqual(['feature-1', 'feature-2', 'feature-3']);
+      expect((updated[0].previous as ObjectLayer).items).toEqual([]);
+      expect((updated[0].layer as ObjectLayer).items).toEqual([
+        'feature-1',
+        'feature-2',
+        'feature-3',
+      ]);
     });
 
     it('with several layers, folding is independent for each layer', () => {
@@ -911,8 +933,8 @@ describe('MemoryStore', () => {
       const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.layers?.updated ?? [];
       expect(updated.map((u) => u.id)).toEqual(['layer-1', 'layer-2']);
-      expect(updated[0].layer.items).toEqual(['feature-1', 'feature-3']);
-      expect(updated[1].layer.items).toEqual(['feature-2']);
+      expect((updated[0].layer as ObjectLayer).items).toEqual(['feature-1', 'feature-3']);
+      expect((updated[1].layer as ObjectLayer).items).toEqual(['feature-2']);
     });
 
     it('groups.updated for the same group is folded into one entry', () => {
@@ -930,8 +952,8 @@ describe('MemoryStore', () => {
       const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.groups?.updated ?? [];
       expect(updated).toHaveLength(1);
-      expect(updated[0].previous.featureIds).toEqual([]);
-      expect(updated[0].group.featureIds).toEqual(['feature-1', 'feature-2']);
+      expect((updated[0].previous as ObjectGroup).featureIds).toEqual([]);
+      expect((updated[0].group as ObjectGroup).featureIds).toEqual(['feature-1', 'feature-2']);
     });
 
     it('the order snapshots retained by a bulk creation are not quadratic', () => {
@@ -949,7 +971,8 @@ describe('MemoryStore', () => {
       const updated = changes.layers?.updated ?? [];
       // Before folding, each entry held two copies of the whole order, so the total was O(N^2).
       const retainedEntries = updated.reduce(
-        (sum, u) => sum + u.layer.items.length + u.previous.items.length,
+        (sum, u) =>
+          sum + (u.layer as ObjectLayer).items.length + (u.previous as ObjectLayer).items.length,
         0,
       );
       expect(retainedEntries).toBeLessThanOrEqual(count * 2);
@@ -1253,7 +1276,7 @@ describe('MemoryStore', () => {
       store.createFeature(createTestFeature('f-2'));
       store.createFeature(createTestFeature('f-3'));
 
-      const order = store.getLayer('layer-1')?.items ?? [];
+      const order = (store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [];
       expectNoDuplicates(order);
       expect(order).toEqual(['f-1', 'f-2', 'f-3']);
     });
@@ -1265,7 +1288,7 @@ describe('MemoryStore', () => {
 
       store.deleteFeature('f-1');
 
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-2']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-2']);
     });
 
     it('addition and deletion still work after replacing order with updateLayer', () => {
@@ -1281,13 +1304,16 @@ describe('MemoryStore', () => {
       // f-1, dropped by the replacement, is not in order, so recreating it appends it once.
       store.createFeature(createTestFeature('f-1b'));
 
-      const order = store.getLayer('layer-1')?.items ?? [];
+      const order = (store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [];
       expectNoDuplicates(order);
       expect(order).toEqual(['f-2', 'f-9', 'f-1b']);
 
       // An ID put there by the replacement is also removed reliably by the deletion path.
       store.deleteFeature('f-9');
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-2', 'f-1b']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([
+        'f-2',
+        'f-1b',
+      ]);
     });
 
     it('addition and deletion still work after reorderInLayer (content is unchanged)', () => {
@@ -1297,13 +1323,17 @@ describe('MemoryStore', () => {
       store.createFeature(createTestFeature('f-3'));
 
       store.reorderInLayer('f-3', 'layer-1', 0);
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-3', 'f-1', 'f-2']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([
+        'f-3',
+        'f-1',
+        'f-2',
+      ]);
 
       store.deleteFeature('f-1');
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-3', 'f-2']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-3', 'f-2']);
 
       store.createFeature(createTestFeature('f-4'));
-      const order = store.getLayer('layer-1')?.items ?? [];
+      const order = (store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [];
       expectNoDuplicates(order);
       expect(order).toEqual(['f-3', 'f-2', 'f-4']);
     });
@@ -1317,14 +1347,17 @@ describe('MemoryStore', () => {
       store.createGroup(createTestGroup({ featureIds: ['f-1', 'f-2'] }));
       store.updateLayer('layer-1', { items: ['group-1'] });
 
-      expectNoDuplicates(store.getGroup('group-1')?.featureIds ?? []);
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1', 'f-2']);
+      expectNoDuplicates((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds ?? []);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual([
+        'f-1',
+        'f-2',
+      ]);
       expect(store.getFeature('f-1')?.groupId).toBe('group-1');
 
       // Ungrouping: the members take the place of the group ID in the order of the layer
       store.deleteGroup('group-1');
       expect(store.getGroup('group-1')).toBeUndefined();
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-1', 'f-2']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-1', 'f-2']);
       expect(store.getFeature('f-1')?.groupId).toBeUndefined();
 
       // After ungrouping, put the members back into order and recreate the group with the
@@ -1333,17 +1366,17 @@ describe('MemoryStore', () => {
       store.createGroup(createTestGroup({ featureIds: ['f-1'] }));
       store.updateLayer('layer-1', { items: ['group-1', 'f-2'] });
 
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1']);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual(['f-1']);
 
       // An addition to the recreated group also happens only once
       store.updateFeature('f-2', { groupId: 'group-1' });
-      const featureIds = store.getGroup('group-1')?.featureIds ?? [];
+      const featureIds = (store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds ?? [];
       expectNoDuplicates(featureIds);
       expect(featureIds).toEqual(['f-1', 'f-2']);
 
       // What was added can be removed through the same path
       store.updateFeature('f-2', { groupId: undefined });
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1']);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual(['f-1']);
     });
 
     it('adding the same ID to a group made with populated featureIds does not duplicate', () => {
@@ -1353,11 +1386,11 @@ describe('MemoryStore', () => {
       store.createFeature(createTestFeature('f-1', { groupId: 'group-1' }));
       store.createFeature(createTestFeature('f-2', { groupId: 'group-1' }));
 
-      const featureIds = store.getGroup('group-1')?.featureIds ?? [];
+      const featureIds = (store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds ?? [];
       expectNoDuplicates(featureIds);
       expect(featureIds).toEqual(['f-1', 'f-2']);
       // A feature belonging to a group is not listed in the order of the layer
-      expect(store.getLayer('layer-1')?.items).toEqual(['group-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['group-1']);
     });
 
     it('addition and deletion still work after replacing featureIds with updateGroup', () => {
@@ -1370,13 +1403,13 @@ describe('MemoryStore', () => {
 
       // Setting groupId on f-2, put there by the replacement, does not duplicate it
       store.updateFeature('f-2', { groupId: 'group-1' });
-      const featureIds = store.getGroup('group-1')?.featureIds ?? [];
+      const featureIds = (store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds ?? [];
       expectNoDuplicates(featureIds);
       expect(featureIds).toEqual(['f-1', 'f-2']);
 
       // An ID put there by the replacement is also removed reliably by the deletion path
       store.updateFeature('f-2', { groupId: undefined });
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1']);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual(['f-1']);
     });
 
     it('deleting a group makes the group ID disappear entirely from the order of the layer', () => {
@@ -1386,12 +1419,12 @@ describe('MemoryStore', () => {
       store.updateLayer('layer-1', { items: ['x'] });
 
       store.deleteGroup('x');
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-1']);
 
       // "x" is a released ID. An item with the same ID can be added to order (no leftover
       // rejects it).
       store.createFeature(createTestFeature('x'));
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-1', 'x']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-1', 'x']);
     });
 
     it('an ID removed from order / featureIds can be put back into the same container', () => {
@@ -1402,9 +1435,9 @@ describe('MemoryStore', () => {
 
       // Layer: delete, then recreate with the same ID (the group took the place of f-1)
       store.deleteFeature('f-2');
-      expect(store.getLayer('layer-1')?.items).toEqual(['group-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['group-1']);
       store.createFeature(createTestFeature('f-2'));
-      const order = store.getLayer('layer-1')?.items ?? [];
+      const order = (store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [];
       expectNoDuplicates(order);
       expect(order).toEqual(['group-1', 'f-2']);
 
@@ -1412,9 +1445,9 @@ describe('MemoryStore', () => {
       // start from a state with two members)
       store.updateFeature('f-2', { groupId: 'group-1' });
       store.updateFeature('f-1', { groupId: undefined });
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-2']);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual(['f-2']);
       store.updateFeature('f-1', { groupId: 'group-1' });
-      const featureIds = store.getGroup('group-1')?.featureIds ?? [];
+      const featureIds = (store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds ?? [];
       expectNoDuplicates(featureIds);
       expect(featureIds).toEqual(['f-2', 'f-1']);
     });
@@ -1425,11 +1458,11 @@ describe('MemoryStore', () => {
       store.deleteLayer('layer-1');
 
       store.createLayer(createTestLayer());
-      expect(store.getLayer('layer-1')?.items).toEqual([]);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([]);
 
       // A leftover from the deleted layer must not suppress the addition
       store.createFeature(createTestFeature('f-1'));
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-1']);
     });
   });
 
@@ -1473,14 +1506,14 @@ describe('MemoryStore', () => {
 
       store.updateFeature('f-1', { layerId: 'layer-2' });
 
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-2']);
-      expect(store.getLayer('layer-2')?.items).toEqual(['f-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-2']);
+      expect((store.getLayer('layer-2') as ObjectLayer | undefined)?.items).toEqual(['f-1']);
       expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-2', 'f-1']);
 
       // A later deletion removes it from the layer it is in, leaving no orphan ID behind
       store.deleteFeature('f-1');
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-2']);
-      expect(store.getLayer('layer-2')?.items).toEqual([]);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-2']);
+      expect((store.getLayer('layer-2') as ObjectLayer | undefined)?.items).toEqual([]);
     });
 
     it('updateFeature throws for a layer that does not exist and changes nothing', () => {
@@ -1490,7 +1523,7 @@ describe('MemoryStore', () => {
         'Layer with id "nolayer" not found',
       );
       expect(store.getFeature('f-1')?.layerId).toBe('layer-1');
-      expect(store.getLayer('layer-1')?.items).toEqual(['f-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['f-1']);
     });
 
     it('changing layerId of a grouped feature keeps it in its group', () => {
@@ -1500,8 +1533,8 @@ describe('MemoryStore', () => {
 
       store.updateFeature('f-1', { layerId: 'layer-2' });
 
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1']);
-      expect(store.getLayer('layer-2')?.items).toEqual([]);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual(['f-1']);
+      expect((store.getLayer('layer-2') as ObjectLayer | undefined)?.items).toEqual([]);
     });
 
     it('setting groupId takes a standalone feature out of the layer order', () => {
@@ -1512,8 +1545,11 @@ describe('MemoryStore', () => {
 
       store.updateFeature('f-2', { groupId: 'group-1' });
 
-      expect(store.getLayer('layer-1')?.items).toEqual(['group-1']);
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1', 'f-2']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['group-1']);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual([
+        'f-1',
+        'f-2',
+      ]);
       expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-1', 'f-2']);
     });
 
@@ -1525,8 +1561,11 @@ describe('MemoryStore', () => {
 
       store.updateFeature('f-2', { groupId: undefined });
 
-      expect(store.getGroup('group-1')?.featureIds).toEqual(['f-1']);
-      expect(store.getLayer('layer-1')?.items).toEqual(['group-1', 'f-2']);
+      expect((store.getGroup('group-1') as ObjectGroup | undefined)?.featureIds).toEqual(['f-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([
+        'group-1',
+        'f-2',
+      ]);
       expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['f-1', 'f-2']);
     });
 
@@ -1538,11 +1577,13 @@ describe('MemoryStore', () => {
       store.transact(() => {
         store.updateFeature('f-1', { layerId: 'layer-2' });
         const target = store.getLayer('layer-2');
-        store.updateLayer('layer-2', { items: ['f-1', ...(target?.items ?? [])] });
+        store.updateLayer('layer-2', {
+          items: ['f-1', ...((target as ObjectLayer | undefined)?.items ?? [])],
+        });
       });
 
-      expect(store.getLayer('layer-1')?.items).toEqual(['a']);
-      expect(store.getLayer('layer-2')?.items).toEqual(['f-1', 'b']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual(['a']);
+      expect((store.getLayer('layer-2') as ObjectLayer | undefined)?.items).toEqual(['f-1', 'b']);
     });
 
     it('a group that no layer lists takes the place of its first member', () => {
@@ -1552,7 +1593,10 @@ describe('MemoryStore', () => {
 
       store.createGroup(createTestGroup({ featureIds: ['f-1', 'f-2'] }));
 
-      expect(store.getLayer('layer-1')?.items).toEqual(['a', 'group-1']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([
+        'a',
+        'group-1',
+      ]);
       expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['a', 'f-1', 'f-2']);
     });
 
@@ -1566,7 +1610,12 @@ describe('MemoryStore', () => {
 
       store.deleteGroup('group-1');
 
-      expect(store.getLayer('layer-1')?.items).toEqual(['a', 'f-1', 'f-2', 'b']);
+      expect((store.getLayer('layer-1') as ObjectLayer | undefined)?.items).toEqual([
+        'a',
+        'f-1',
+        'f-2',
+        'b',
+      ]);
       expect(store.listFeaturesInOrder().map((f) => f.id)).toEqual(['a', 'f-1', 'f-2', 'b']);
     });
   });

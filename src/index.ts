@@ -86,12 +86,18 @@ export type {
   FeatureType,
   FileData,
   Group,
+  GroupFields,
   Layer,
+  LayerFields,
   LegendEntry,
   LineStyle,
   Metadata,
+  ObjectGroup,
+  ObjectLayer,
   PointShape,
   StyleRule,
+  TableGroup,
+  TableLayer,
 } from './api/model.js';
 export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 
@@ -161,9 +167,11 @@ export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
 // Features held as rows of columns
 export type {
   FeatureTables,
+  FeatureTablesHooks,
   FeatureTablesOptions,
   FeatureTablesWorker,
   FeatureTablesWriter,
+  HeldWriteOptions,
   ItemRefs,
   LayerRowsChange,
   LayerTableView,

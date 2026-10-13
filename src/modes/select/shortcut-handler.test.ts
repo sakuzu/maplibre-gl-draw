@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { groupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
+import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../store/memory.js';
@@ -242,7 +243,7 @@ describe('handleDeleteShortcut never removes a locked feature', () => {
 
     expect(store.getFeature('f1')).toBeUndefined();
     expect(store.getFeature('f2')).toBeDefined();
-    expect(store.getGroup('g1')?.featureIds).toEqual(['f2']);
+    expect((store.getGroup('g1') as ObjectGroup | undefined)?.featureIds).toEqual(['f2']);
   });
 
   it('a layer holding a locked feature or a locked group is not deleted', () => {
@@ -418,7 +419,11 @@ describe('the group shortcut places the group where groupSelection does', () => 
     const viaApi = build();
     groupSelection(viaApi, () => 'g', new AutoNameGenerator(viaApi));
 
-    expect(viaKey.getLayer('l1')?.items).toEqual(viaApi.getLayer('l1')?.items);
-    expect(viaKey.getGroup('g')?.featureIds).toEqual(viaApi.getGroup('g')?.featureIds);
+    expect((viaKey.getLayer('l1') as ObjectLayer | undefined)?.items).toEqual(
+      (viaApi.getLayer('l1') as ObjectLayer | undefined)?.items,
+    );
+    expect((viaKey.getGroup('g') as ObjectGroup | undefined)?.featureIds).toEqual(
+      (viaApi.getGroup('g') as ObjectGroup | undefined)?.featureIds,
+    );
   });
 });

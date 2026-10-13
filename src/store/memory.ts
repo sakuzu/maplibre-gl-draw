@@ -31,6 +31,8 @@ import type {
   Layer,
   Metadata,
   Mode,
+  ObjectGroup,
+  ObjectLayer,
   Selection,
   SelectionType,
   StoreChange,
@@ -124,10 +126,10 @@ export class MemoryContractStore implements StoreContract {
     return this.#apply(() => this.#document.deleteFeature(id));
   }
   createLayer(layer: Layer): boolean {
-    return this.#apply(() => this.#document.createLayer(layer));
+    return this.#apply(() => this.#document.createLayer(objectLayerOf(layer)));
   }
   updateLayer(id: string, updates: Partial<Layer>): boolean {
-    return this.#apply(() => this.#document.updateLayer(id, updates));
+    return this.#apply(() => this.#document.updateLayer(id, objectLayerFields(updates)));
   }
   deleteLayer(id: string): boolean {
     return this.#apply(() => this.#document.deleteLayer(id));
@@ -142,10 +144,10 @@ export class MemoryContractStore implements StoreContract {
     return this.#apply(() => this.#document.reorderInGroup(featureId, groupId, newIndex));
   }
   createGroup(group: Group): boolean {
-    return this.#apply(() => this.#document.createGroup(group));
+    return this.#apply(() => this.#document.createGroup(objectGroupOf(group)));
   }
   updateGroup(id: string, updates: Partial<Group>): boolean {
-    return this.#apply(() => this.#document.updateGroup(id, updates));
+    return this.#apply(() => this.#document.updateGroup(id, objectGroupFields(updates)));
   }
   deleteGroup(id: string): boolean {
     return this.#apply(() => this.#document.deleteGroup(id));
@@ -234,8 +236,8 @@ export class MemoryContractStore implements StoreContract {
  */
 export class MemoryDocumentStore implements DocumentStore {
   readonly #features = new Map<string, Feature>();
-  readonly #layers = new Map<string, Layer>();
-  readonly #groups = new Map<string, Group>();
+  readonly #layers = new Map<string, ObjectLayer>();
+  readonly #groups = new Map<string, ObjectGroup>();
   #layerOrder: string[] = [];
   #metadata: Metadata = {};
 
@@ -406,20 +408,20 @@ export class MemoryDocumentStore implements DocumentStore {
   // Layer
   // ============================================================================
 
-  getLayer(id: string): Layer | undefined {
+  getLayer(id: string): ObjectLayer | undefined {
     return this.#layers.get(id);
   }
 
-  listLayers(): Layer[] {
+  listLayers(): ObjectLayer[] {
     return Array.from(this.#layers.values());
   }
 
-  createLayer(layer: Layer): void {
+  createLayer(layer: ObjectLayer): void {
     if (this.#layers.has(layer.id)) {
       throw new Error(`Layer with id "${layer.id}" already exists`);
     }
     // The order stays open for the members created in the same notification
-    const stored: Layer = { ...frozenFields(layer), items: [...layer.items] };
+    const stored: ObjectLayer = { ...frozenFields(layer), items: [...layer.items] };
     this.#layers.set(layer.id, stored);
     this.#freshLayers.add(layer.id);
     this.#layerOrderIndex.set(layer.id, new Set(layer.items));
@@ -429,15 +431,15 @@ export class MemoryDocumentStore implements DocumentStore {
     // The created entry is the layer as it was created (the stored one may still gain members
     // in the same notification)
     const created = Object.freeze({ ...stored, items: Object.freeze([...stored.items]) });
-    this.#bus.merge({ layers: { created: [created as Layer] } });
+    this.#bus.merge({ layers: { created: [created as ObjectLayer] } });
   }
 
-  updateLayer(id: string, updates: Partial<Layer>): void {
+  updateLayer(id: string, updates: Partial<ObjectLayer>): void {
     const previous = this.#layers.get(id);
     if (!previous) {
       throw new Error(`Layer with id "${id}" not found`);
     }
-    const updated: Layer = {
+    const updated: ObjectLayer = {
       ...previous,
       ...frozenFields(updates),
       id,
@@ -561,28 +563,32 @@ export class MemoryDocumentStore implements DocumentStore {
   // Group
   // ============================================================================
 
-  getGroup(id: string): Group | undefined {
+  getGroup(id: string): ObjectGroup | undefined {
     return this.#groups.get(id);
   }
 
-  listGroups(): Group[] {
+  listGroups(): ObjectGroup[] {
     return Array.from(this.#groups.values());
   }
 
-  createGroup(group: Group): void {
+  createGroup(group: ObjectGroup): void {
     if (this.#groups.has(group.id)) {
       throw new Error(`Group with id "${group.id}" already exists`);
     }
     this.#withinOperation(() => this.#createGroup(group));
   }
 
-  #createGroup(group: Group): void {
+  #createGroup(group: ObjectGroup): void {
     const featureIdsCopy = [...group.featureIds];
     // The layer of a group is the layer that lists it; a group that no layer lists yet is
     // placed in the layer of its first member at the end of the operation
     const layerId =
       this.#layerListing(group.id) ?? this.#firstMemberLayer(featureIdsCopy) ?? group.layerId;
-    const stored: Group = { ...frozenFields(group), layerId, featureIds: [...featureIdsCopy] };
+    const stored: ObjectGroup = {
+      ...frozenFields(group),
+      layerId,
+      featureIds: [...featureIdsCopy],
+    };
     this.#groups.set(group.id, stored);
     this.#freshGroups.add(group.id);
     this.#groupFeatureIndex.set(group.id, new Set(featureIdsCopy));
@@ -601,17 +607,19 @@ export class MemoryDocumentStore implements DocumentStore {
 
     this.#bus.merge({
       groups: {
-        created: [Object.freeze({ ...stored, featureIds: Object.freeze(featureIdsCopy) }) as Group],
+        created: [
+          Object.freeze({ ...stored, featureIds: Object.freeze(featureIdsCopy) }) as ObjectGroup,
+        ],
       },
     });
   }
 
-  updateGroup(id: string, updates: Partial<Group>): void {
+  updateGroup(id: string, updates: Partial<ObjectGroup>): void {
     const previous = this.#groups.get(id);
     if (!previous) {
       throw new Error(`Group with id "${id}" not found`);
     }
-    const updated: Group = {
+    const updated: ObjectGroup = {
       ...previous,
       ...frozenFields(updates),
       id,
@@ -748,7 +756,7 @@ export class MemoryDocumentStore implements DocumentStore {
    * would make the amount copied during a bulk import O(N^2) and reach the heap limit.
    * previous is the state before the first change of the notification.
    */
-  #mutateLayerOrder(current: Layer, mutate: (order: string[]) => void): void {
+  #mutateLayerOrder(current: ObjectLayer, mutate: (order: string[]) => void): void {
     const hadUpdate = this.#bus.hasPendingLayerUpdate(current.id);
     const fresh = this.#freshLayers.has(current.id);
     const previous = hadUpdate
@@ -762,7 +770,7 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** The group.featureIds version of #mutateLayerOrder */
-  #mutateGroupFeatureIds(current: Group, mutate: (featureIds: string[]) => void): void {
+  #mutateGroupFeatureIds(current: ObjectGroup, mutate: (featureIds: string[]) => void): void {
     const hadUpdate = this.#bus.hasPendingGroupUpdate(current.id);
     const fresh = this.#freshGroups.has(current.id);
     const previous = hadUpdate
@@ -776,9 +784,9 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** The layer's copy for the current notification (made on the first change) */
-  #writableLayer(current: Layer): Layer & { items: string[] } {
+  #writableLayer(current: ObjectLayer): ObjectLayer & { items: string[] } {
     // A layer copied for this notification has its own array until it is frozen
-    if (this.#freshLayers.has(current.id)) return current as Layer & { items: string[] };
+    if (this.#freshLayers.has(current.id)) return current as ObjectLayer & { items: string[] };
     const layer = { ...current, items: [...current.items] };
     this.#layers.set(layer.id, layer);
     this.#freshLayers.add(layer.id);
@@ -786,9 +794,9 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** The group's copy for the current notification (made on the first change) */
-  #writableGroup(current: Group): Group & { featureIds: string[] } {
+  #writableGroup(current: ObjectGroup): ObjectGroup & { featureIds: string[] } {
     // A group copied for this notification has its own array until it is frozen
-    if (this.#freshGroups.has(current.id)) return current as Group & { featureIds: string[] };
+    if (this.#freshGroups.has(current.id)) return current as ObjectGroup & { featureIds: string[] };
     const group = { ...current, featureIds: [...current.featureIds] };
     this.#groups.set(group.id, group);
     this.#freshGroups.add(group.id);
@@ -816,7 +824,7 @@ export class MemoryDocumentStore implements DocumentStore {
    * On the regular paths (createLayer / updateLayer) it is always registered already, so this
    * lazy construction is a defensive fallback.
    */
-  #layerOrderSet(layer: Layer): Set<string> {
+  #layerOrderSet(layer: ObjectLayer): Set<string> {
     let index = this.#layerOrderIndex.get(layer.id);
     if (!index) {
       index = new Set(layer.items);
@@ -826,7 +834,7 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** Returns the content set of group.featureIds (the group version of #layerOrderSet) */
-  #groupFeatureSet(group: Group): Set<string> {
+  #groupFeatureSet(group: ObjectGroup): Set<string> {
     let index = this.#groupFeatureIndex.get(group.id);
     if (!index) {
       index = new Set(group.featureIds);
@@ -910,7 +918,7 @@ export class MemoryDocumentStore implements DocumentStore {
   }
 
   /** Moves every group the items of the layer list to the layer (`Group.layerId`) */
-  #syncGroupLayers(layer: Layer): void {
+  #syncGroupLayers(layer: ObjectLayer): void {
     if (this.#groups.size === 0) return;
     for (const itemId of layer.items) {
       if (this.#groups.has(itemId)) this.#setGroupLayer(itemId, layer.id);
@@ -1054,4 +1062,30 @@ function frozenFields<T extends object>(value: T): T {
   const copy = { ...value } as Record<string, unknown>;
   for (const key of Object.keys(copy)) copy[key] = frozenCopy(copy[key]);
   return copy as T;
+}
+
+/** A layer given to a Store of objects, as a layer of objects (one held as rows lists no item) */
+function objectLayerOf(layer: Layer): ObjectLayer {
+  if (layer.kind !== 'table') return layer;
+  const { kind: _kind, ...fields } = layer;
+  return { ...fields, items: [] };
+}
+
+/** A group given to a Store of objects, as a group of objects (one of rows lists no member) */
+function objectGroupOf(group: Group): ObjectGroup {
+  if (group.kind !== 'table') return group;
+  const { kind: _kind, ...fields } = group;
+  return { ...fields, featureIds: [] };
+}
+
+/** The fields a write changes of a layer of objects (a kind of rows is not one of them) */
+function objectLayerFields(updates: Partial<Layer>): Partial<ObjectLayer> {
+  const { kind: _kind, ...rest } = updates;
+  return rest;
+}
+
+/** The fields a write changes of a group of objects (a kind of rows is not one of them) */
+function objectGroupFields(updates: Partial<Group>): Partial<ObjectGroup> {
+  const { kind: _kind, ...rest } = updates;
+  return rest;
 }

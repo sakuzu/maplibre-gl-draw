@@ -430,14 +430,9 @@ export type StyleRule =
     };
 
 /**
- * A layer of the document: an ordered list of features and groups, with its own visibility,
- * lock and style rule
- *
- * Every feature belongs to one layer. The layers are stacked in the order of
- * `getLayerOrder()`, and within a layer the items are stacked in the order of `items`. New
- * features are drawn into the active layer.
+ * What every layer of the document has: its visibility, lock, opacity and style rule
  */
-export interface Layer {
+export interface LayerFields {
   /** The ID of the layer, unique within the document */
   id: string;
   /** The display name */
@@ -466,13 +461,6 @@ export interface Layer {
    * layer at opacity 0 can still be selected.
    */
   opacity: number;
-  /**
-   * The IDs of the standalone features and of the groups in the layer, back to front (the
-   * last is the frontmost)
-   *
-   * A feature in a group is listed in `Group.featureIds` instead.
-   */
-  items: readonly string[];
   /** Free-form data of the host, saved and exported with the layer */
   metadata: Record<string, unknown> | undefined;
   /**
@@ -485,12 +473,44 @@ export interface Layer {
 }
 
 /**
- * A group of features within one layer, selected, moved and stacked as a unit
+ * A layer of the document whose features are objects: an ordered list of features and groups
  *
- * A group is listed in `Layer.items` of its layer like a feature, and its members are listed
- * in `featureIds` (each member has `groupId` set).
+ * Every feature belongs to one layer. The layers are stacked in the order of
+ * `getLayerOrder()`, and within a layer the items are stacked in the order of `items`. New
+ * features are drawn into the active layer.
  */
-export interface Group {
+export interface ObjectLayer extends LayerFields {
+  /** Not set: a layer of objects */
+  kind?: undefined;
+  /**
+   * The IDs of the standalone features and of the groups in the layer, back to front (the
+   * last is the frontmost)
+   *
+   * A feature in a group is listed in `Group.featureIds` instead.
+   */
+  items: readonly string[];
+}
+
+/**
+ * A layer of the document a Store holds as rows of columns (`StoreView.tables`): its items are
+ * read from its rows (`LayerTableView.itemsInOrder`), not listed in it
+ */
+export interface TableLayer extends LayerFields {
+  /** A layer held as rows */
+  kind: 'table';
+}
+
+/**
+ * A layer of the document, with its own visibility, lock and style rule: a layer of objects,
+ * which lists its items, or a layer held as rows, whose items are read from its rows (a Store
+ * holds every layer one way or the other)
+ */
+export type Layer = ObjectLayer | TableLayer;
+
+/**
+ * What every group of features has
+ */
+export interface GroupFields {
   /** The ID of the group, unique within the document */
   id: string;
   /**
@@ -502,8 +522,6 @@ export interface Group {
   layerId: string;
   /** The display name */
   name: string;
-  /** The IDs of the members, back to front (the last is the frontmost) */
-  featureIds: readonly string[];
   /**
    * Whether the group is locked (every member is then locked, see {@link isFeatureLocked})
    */
@@ -511,6 +529,34 @@ export interface Group {
   /** Whether the group is shown (a hidden group hides every member) */
   visible: boolean;
 }
+
+/**
+ * A group of features within one layer of objects, selected, moved and stacked as a unit
+ *
+ * A group is listed in `Layer.items` of its layer like a feature, and its members are listed
+ * in `featureIds` (each member has `groupId` set).
+ */
+export interface ObjectGroup extends GroupFields {
+  /** Not set: a group of a layer of objects */
+  kind?: undefined;
+  /** The IDs of the members, back to front (the last is the frontmost) */
+  featureIds: readonly string[];
+}
+
+/**
+ * A group of features of a layer held as rows: its members are read from the rows
+ * (`LayerTableView.groupMembersInOrder`), not listed in it
+ */
+export interface TableGroup extends GroupFields {
+  /** A group of a layer held as rows */
+  kind: 'table';
+}
+
+/**
+ * A group of features within one layer, selected, moved and stacked as a unit: a group of a
+ * layer of objects, which lists its members, or a group of a layer held as rows
+ */
+export type Group = ObjectGroup | TableGroup;
 
 /**
  * The geometry being drawn, before it is committed as a feature

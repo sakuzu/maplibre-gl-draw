@@ -5,6 +5,7 @@
  * `draw.layers`: the layers of the document
  */
 
+import { listedItems } from '../../shared/utils/listed-items.js';
 import type { Store } from '../../store/store.js';
 import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
 import { DrawError } from '../errors.js';
@@ -213,7 +214,7 @@ export function createLayers(
 function holdsLock(store: Store, layer: StoredLayer): boolean {
   if (locksIgnored(store)) return false;
   if (layer.locked) return true;
-  for (const itemId of layer.items) {
+  for (const itemId of listedItems(layer)) {
     if (store.getGroup(itemId)?.locked) return true;
   }
   return store

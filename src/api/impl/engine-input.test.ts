@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents } from '../events.js';
@@ -63,8 +64,8 @@ describe('image.requested', () => {
 describe('selection.ungroup', () => {
   /** The layer of the document, its items, and the members of every group */
   const snapshot = () => ({
-    items: draw.layers.list().map((layer) => [...layer.items]),
-    groups: draw.groups.list().map((group) => [group.id, [...group.featureIds]]),
+    items: draw.layers.list().map((layer) => [...(layer as ObjectLayer).items]),
+    groups: draw.groups.list().map((group) => [group.id, [...(group as ObjectGroup).featureIds]]),
     grouped: draw.features.list().map((feature) => [feature.id, feature.groupId]),
   });
 

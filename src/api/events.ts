@@ -12,7 +12,7 @@ import type { Position } from 'geojson';
 import type { Dataset, DatasetRow } from './datasets.js';
 import type { DrawError } from './errors.js';
 import type { Hit } from './extension/provider.js';
-import type { UpdateSource } from './extension/store.js';
+import type { StoreView, UpdateSource } from './extension/store.js';
 import type {
   Feature,
   FeatureInput,
@@ -32,6 +32,7 @@ import type {
   SnapResult,
   VertexSelection,
 } from './state.js';
+import type { RowsChange } from './tables.js';
 
 /** A point on the screen, as `[x, y]` in CSS pixels. */
 export type ScreenPoint = [number, number];
@@ -100,6 +101,17 @@ export interface DocumentChange {
   metadata?: { metadata: Metadata; previous: Metadata };
   /** The embedded files created and deleted */
   files?: { created?: FileData[]; deleted?: FileData[] };
+  /**
+   * The rows of the layers held as rows of columns written ({@link StoreView.tables}); a feature
+   * is in `features` or here, never in both
+   */
+  rows?: RowsChange;
+  /**
+   * The rows held as columns made features for this client (`added`, their features) and no
+   * longer (`removed`, their ids): not a change of the document. A row deleted is in
+   * `features.deleted`, never in `removed`
+   */
+  held?: { added: Feature[]; removed: string[] };
 }
 
 /**

@@ -13,6 +13,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initialBearingDegrees } from '../geometry/distance.js';
+import type { ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
@@ -87,7 +88,7 @@ function putFeature(
   store.createFeature(feature);
   const layer = store.getLayer(feature.layerId);
   if (layer) {
-    store.updateLayer(layer.id, { items: [...layer.items, feature.id] });
+    store.updateLayer(layer.id, { items: [...(layer as ObjectLayer).items, feature.id] });
   }
   spatialIndex.insert(feature);
   return feature;

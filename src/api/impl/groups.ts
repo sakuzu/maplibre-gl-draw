@@ -5,9 +5,14 @@
  * `draw.groups`: the groups of the document
  */
 
+import { listedItems } from '../../shared/utils/listed-items.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Store } from '../../store/store.js';
-import type { Feature as StoredFeature, Group as StoredGroup } from '../../store/types.js';
+import type {
+  ObjectGroup,
+  Feature as StoredFeature,
+  Group as StoredGroup,
+} from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
@@ -51,7 +56,8 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
   const inOrder = (): StoredGroup[] => {
     const result: StoredGroup[] = [];
     for (const layerId of store.getLayerOrder()) {
-      for (const itemId of store.getLayer(layerId)?.items ?? []) {
+      const layer = store.getLayer(layerId);
+      for (const itemId of layer ? listedItems(layer) : []) {
         const group = store.getGroup(itemId);
         if (group) result.push(group);
       }
@@ -68,7 +74,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     return inOrder().filter((group) => matches(group, entries));
   };
 
-  const createOne = (prepared: StoredGroup): void => insertGroup(store, prepared);
+  const createOne = (prepared: ObjectGroup): void => insertGroup(store, prepared);
 
   return {
     get: (id) => store.getGroup(id),
@@ -176,20 +182,21 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
  *
  * @internal
  */
-export function insertGroup(store: Store, prepared: StoredGroup): void {
+export function insertGroup(store: Store, prepared: ObjectGroup): void {
   const members = new Set(prepared.featureIds);
   const layer = store.getLayer(prepared.layerId);
   if (layer) {
     // The group takes the place of its frontmost member standing in the layer
     let at = -1;
-    for (let i = layer.items.length - 1; i >= 0; i--) {
-      if (members.has(layer.items[i])) {
+    const listed = listedItems(layer);
+    for (let i = listed.length - 1; i >= 0; i--) {
+      if (members.has(listed[i])) {
         at = i;
         break;
       }
     }
     const items: string[] = [];
-    layer.items.forEach((itemId, i) => {
+    listed.forEach((itemId, i) => {
       if (i === at) items.push(prepared.id);
       if (!members.has(itemId)) items.push(itemId);
     });
@@ -200,7 +207,7 @@ export function insertGroup(store: Store, prepared: StoredGroup): void {
 }
 
 /** The fields of a group that do not depend on its features */
-export type GroupShell = Omit<StoredGroup, 'layerId' | 'featureIds'>;
+export type GroupShell = Omit<ObjectGroup, 'layerId' | 'featureIds'>;
 
 /**
  * Checks the fields of a group input other than its features and builds them: its ID, taken
@@ -248,7 +255,7 @@ function prepareGroup(
   input: GroupInput,
   pending: ReadonlySet<string>,
   claimed: ReadonlySet<string>,
-): StoredGroup {
+): ObjectGroup {
   const { store } = deps;
   requireRecord(input, 'The input');
   const ids = requireIds(input.featureIds, 'featureIds');

@@ -515,7 +515,7 @@ function createShownLookup(document: StoreContract): (type: SelectionType, id: s
     let shown = groups.get(id);
     if (shown === undefined) {
       const group = document.getGroup(id);
-      const layerId = group ? groupLayerId(document, group) : undefined;
+      const layerId = group?.layerId;
       shown =
         group?.visible === true &&
         !ui.isHidden(id) &&
@@ -533,15 +533,6 @@ function createShownLookup(document: StoreContract): (type: SelectionType, id: s
     if (feature.groupId && !groupShown(feature.groupId)) return false;
     return layerShown(feature.layerId);
   };
-}
-
-/** The layer of a group: the one of its members, or the layer that lists an empty group */
-function groupLayerId(document: StoreContract, group: Group): string | undefined {
-  for (const featureId of group.featureIds) {
-    const feature = document.getFeature(featureId);
-    if (feature) return feature.layerId;
-  }
-  return document.listLayers().find((layer) => layer.items.includes(group.id))?.id;
 }
 
 /** Whether two coordinate values are equal, position by position */

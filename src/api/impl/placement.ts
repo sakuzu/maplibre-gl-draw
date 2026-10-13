@@ -8,6 +8,7 @@
  * themselves, and `index` is their position within the destination once they have left it.
  */
 
+import { listedItems, listedMembers } from '../../shared/utils/listed-items.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
 import type { MoveTarget } from '../model.js';
@@ -87,7 +88,7 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
           store.updateFeature(feature.id, { layerId, groupId: undefined });
         }
       }
-      const items = (store.getLayer(layerId)?.items ?? []).filter((id) => !moved.has(id));
+      const items = itemsOf(store, layerId).filter((id) => !moved.has(id));
       store.updateLayer(layerId, { items: insertAt(items, ids, target.index) });
       return;
     }
@@ -99,9 +100,7 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
           store.updateFeature(feature.id, { layerId: group.layerId, groupId: group.id });
         }
       }
-      const featureIds = (store.getGroup(group.id)?.featureIds ?? []).filter(
-        (id) => !moved.has(id),
-      );
+      const featureIds = membersOf(store, group.id).filter((id) => !moved.has(id));
       store.updateGroup(group.id, { featureIds: insertAt(featureIds, ids, target.index) });
       return;
     }
@@ -114,7 +113,7 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
       byLayer.set(feature.layerId, list);
     }
     for (const [layerId, inLayer] of byLayer) {
-      const before = [...(store.getLayer(layerId)?.items ?? [])];
+      const before = itemsOf(store, layerId);
       const blocks = new Map<string, string[]>();
       for (const feature of inLayer) {
         if (feature.groupId === undefined) continue;
@@ -136,7 +135,7 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
       } else {
         const layerIds = inLayer.map((feature) => feature.id);
         const inThisLayer = new Set(layerIds);
-        items = (store.getLayer(layerId)?.items ?? []).filter((id) => !inThisLayer.has(id));
+        items = itemsOf(store, layerId).filter((id) => !inThisLayer.has(id));
         insertAt(items, layerIds, target.index);
       }
       store.updateLayer(layerId, { items });
@@ -158,13 +157,27 @@ export function moveGroups(store: Store, groups: Group[], layer: Layer, index?: 
       if (group.layerId === layer.id) continue;
       const source = store.getLayer(group.layerId);
       if (source) {
-        store.updateLayer(source.id, { items: source.items.filter((id) => id !== group.id) });
+        store.updateLayer(source.id, {
+          items: listedItems(source).filter((id) => id !== group.id),
+        });
       }
-      for (const featureId of group.featureIds) {
+      for (const featureId of listedMembers(group)) {
         store.updateFeature(featureId, { layerId: layer.id });
       }
     }
-    const items = (store.getLayer(layer.id)?.items ?? []).filter((id) => !moved.has(id));
+    const items = itemsOf(store, layer.id).filter((id) => !moved.has(id));
     store.updateLayer(layer.id, { items: insertAt(items, ids, index) });
   });
+}
+
+/** A copy of the items a layer lists (none for no layer; refused for a layer held as rows) */
+function itemsOf(store: Store, layerId: string): string[] {
+  const layer = store.getLayer(layerId);
+  return layer ? [...listedItems(layer)] : [];
+}
+
+/** A copy of the members a group lists (none for no group; refused for a group of rows) */
+function membersOf(store: Store, groupId: string): string[] {
+  const group = store.getGroup(groupId);
+  return group ? [...listedMembers(group)] : [];
 }

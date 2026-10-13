@@ -6,6 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
 import type { DocumentResource } from '../document.js';
@@ -231,7 +232,7 @@ describe('draw.document', () => {
     expect(store.getFeature('a')?.geometry).toEqual({ type: 'Point', coordinates: [5, 6] });
     expect(store.listGroups()).toEqual([]);
     expect(store.listLayers().map((l) => l.id)).toEqual(['l1']);
-    expect(store.getLayer('l1')?.items).toEqual(['a']);
+    expect((store.getLayer('l1') as ObjectLayer | undefined)?.items).toEqual(['a']);
   });
 
   it('loads a document of the library in one transaction', async () => {
@@ -344,7 +345,7 @@ describe('document.loadMany', () => {
     const group = store.getGroup(results?.[1]?.groupId ?? '');
     expect(group).toMatchObject({ name: 'folder', layerId: 'L', featureIds: ['q'] });
     expect(store.getFeature('q')).toMatchObject({ layerId: 'L', groupId: group?.id });
-    expect(store.getLayer('L')?.items).toEqual(['p', group?.id]);
+    expect((store.getLayer('L') as ObjectLayer | undefined)?.items).toEqual(['p', group?.id]);
     // A layer no item creates is still not found, and nothing is written
     await expect(
       doc.loadMany([

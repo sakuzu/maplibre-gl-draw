@@ -11,6 +11,7 @@
 import type { DrawPropertyName } from '../../../shared/properties.js';
 import { setDrawProperty } from '../../../shared/properties.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
+import { listedItems, listedMembers } from '../../../shared/utils/listed-items.js';
 import type { Store } from '../../../store/store.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../../store/types.js';
 import type { GeometryDeps } from './types.js';
@@ -45,7 +46,8 @@ function planPlacement(
   removedIds: ReadonlySet<string>,
 ): ResultPlacement {
   const group = anchor.groupId ? store.getGroup(anchor.groupId) : undefined;
-  const container = group ? group.featureIds : (store.getLayer(anchor.layerId)?.items ?? []);
+  const layer = store.getLayer(anchor.layerId);
+  const container = group ? listedMembers(group) : layer ? listedItems(layer) : [];
   const anchorIndex = container.indexOf(anchor.id);
   const precedingIds = anchorIndex < 0 ? container : container.slice(0, anchorIndex);
   const precedingCount = precedingIds.filter((id) => !removedIds.has(id)).length;
@@ -67,7 +69,7 @@ function moveToPlacement(store: Store, resultId: string, placement: ResultPlacem
   if (placement.groupId) {
     const group = store.getGroup(placement.groupId);
     if (!group) return;
-    const featureIds = group.featureIds.filter((id) => id !== resultId);
+    const featureIds = listedMembers(group).filter((id) => id !== resultId);
     featureIds.splice(placement.index, 0, resultId);
     store.updateGroup(placement.groupId, { featureIds });
     return;
@@ -75,7 +77,7 @@ function moveToPlacement(store: Store, resultId: string, placement: ResultPlacem
 
   const layer = store.getLayer(placement.layerId);
   if (!layer) return;
-  const order = layer.items.filter((id) => id !== resultId);
+  const order = listedItems(layer).filter((id) => id !== resultId);
   order.splice(placement.index, 0, resultId);
   store.updateLayer(placement.layerId, { items: order });
 }

@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
 import type { Dataset, DatasetRow } from '../../dataset/types.js';
 import { resolveMessages } from '../../messages.js';
+import type { ObjectLayer } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
@@ -89,7 +90,7 @@ function addStoreFeature(id: string, type: string, coordinates: FeatureCoordinat
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer(layer.id, { items: [...layer.items, id] });
+  if (layer) store.updateLayer(layer.id, { items: [...(layer as ObjectLayer).items, id] });
   spatialIndex.insert(feature);
   return feature;
 }

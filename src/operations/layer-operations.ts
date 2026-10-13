@@ -8,9 +8,10 @@
  * features from a group, and grouping / ungrouping the selected features.
  */
 
+import { listedItems, listedMembers } from '../shared/utils/listed-items.js';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import type { Store } from '../store/store.js';
-import type { Feature, Group } from '../store/types.js';
+import type { Feature, ObjectGroup } from '../store/types.js';
 
 /**
  * Deletes the group if it has become empty (the standard behavior of canvas tools).
@@ -18,7 +19,7 @@ import type { Feature, Group } from '../store/types.js';
  */
 function deleteGroupIfEmpty(store: Store, groupId: string): void {
   const group = store.getGroup(groupId);
-  if (group && group.featureIds.length === 0) {
+  if (group && listedMembers(group).length === 0) {
     store.deleteGroup(groupId);
   }
 }
@@ -38,7 +39,7 @@ export function takeOutOfGroup(store: Store, featureId: string): void {
   // Find the layer the group belongs to
   let layerId: string | null = null;
   for (const layer of store.listLayers()) {
-    if (layer.items.includes(group.id)) {
+    if (listedItems(layer).includes(group.id)) {
       layerId = layer.id;
       break;
     }
@@ -46,7 +47,7 @@ export function takeOutOfGroup(store: Store, featureId: string): void {
 
   store.transact(() => {
     // Remove the feature from the group
-    const newFeatureIds = group.featureIds.filter((id) => id !== featureId);
+    const newFeatureIds = listedMembers(group).filter((id) => id !== featureId);
     store.updateGroup(group.id, { featureIds: newFeatureIds });
 
     // Remove the groupId from the feature
@@ -56,8 +57,8 @@ export function takeOutOfGroup(store: Store, featureId: string): void {
     if (layerId) {
       const layer = store.getLayer(layerId);
       if (layer) {
-        const groupIndex = layer.items.indexOf(group.id);
-        const newOrder = [...layer.items];
+        const groupIndex = listedItems(layer).indexOf(group.id);
+        const newOrder = [...listedItems(layer)];
         newOrder.splice(groupIndex + 1, 0, featureId);
         store.updateLayer(layerId, { items: newOrder });
       }
@@ -112,7 +113,7 @@ export function groupSelection(
   const groupId = generateFeatureId();
   const groupName = autoNameGenerator.generateGroupName();
 
-  const group: Group = {
+  const group: ObjectGroup = {
     id: groupId,
     layerId,
     name: groupName,
@@ -127,16 +128,17 @@ export function groupSelection(
     if (layer) {
       // Find the frontmost one (the largest index) among the selected features
       let frontmostSelectedId: string | null = null;
-      for (let i = layer.items.length - 1; i >= 0; i--) {
-        if (selectedIds.includes(layer.items[i])) {
-          frontmostSelectedId = layer.items[i];
+      const items = listedItems(layer);
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (selectedIds.includes(items[i])) {
+          frontmostSelectedId = items[i];
           break;
         }
       }
 
       // Build the new order (insert the group at the position of the frontmost selected feature)
       const newOrder: string[] = [];
-      for (const id of layer.items) {
+      for (const id of items) {
         if (selectedIds.includes(id)) {
           // Insert the group at the position of the frontmost selected feature
           if (id === frontmostSelectedId) {
@@ -175,7 +177,7 @@ function dissolveGroup(store: Store, groupId: string): void {
   // Identify the layer the group belongs to
   let targetLayerId: string | null = null;
   for (const layer of store.listLayers()) {
-    if (layer.items.includes(groupId)) {
+    if (listedItems(layer).includes(groupId)) {
       targetLayerId = layer.id;
       break;
     }
@@ -187,9 +189,9 @@ function dissolveGroup(store: Store, groupId: string): void {
   // position
   const layer = store.getLayer(targetLayerId);
   if (layer) {
-    const groupIndex = layer.items.indexOf(groupId);
-    const newOrder = [...layer.items];
-    newOrder.splice(groupIndex, 1, ...group.featureIds);
+    const groupIndex = listedItems(layer).indexOf(groupId);
+    const newOrder = [...listedItems(layer)];
+    newOrder.splice(groupIndex, 1, ...listedMembers(group));
     store.updateLayer(targetLayerId, { items: newOrder });
   }
 

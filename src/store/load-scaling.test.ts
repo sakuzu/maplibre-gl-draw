@@ -24,7 +24,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDocument } from '../api/impl/document.js';
 import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
-import type { FeatureCoordinates } from '../shared/types/model.js';
+import type { FeatureCoordinates, ObjectLayer } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createResourceDeps } from '../test-utils.js';
 import { MemoryStore } from './memory.js';
@@ -113,7 +113,7 @@ function generate(count: number): Data {
       groupIds.push(gid);
       cursor += size;
     }
-    layers[li].items = [...groupIds, ...ids.slice(cursor)];
+    (layers[li] as ObjectLayer).items = [...groupIds, ...ids.slice(cursor)];
   }
   return { version: '3.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
 }

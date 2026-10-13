@@ -13,6 +13,7 @@
 
 import { readDrawProperty, setDrawProperty } from '../../../shared/properties.js';
 import { createId } from '../../../shared/utils/id.js';
+import { listedMembers } from '../../../shared/utils/listed-items.js';
 import type { Feature, FileData, Group } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import type { GroupInput, LayerInput, ParsedDocument } from '../../model.js';
@@ -275,7 +276,7 @@ function parseGroups(
   const membersOf = new Map<string, Set<string>>(groups.map((group) => [group.id, new Set()]));
   for (const group of groups) {
     const members = membersOf.get(group.id);
-    for (const id of group.featureIds) if (groupOf.get(id) === group.id) members?.add(id);
+    for (const id of listedMembers(group)) if (groupOf.get(id) === group.id) members?.add(id);
   }
   for (const [id, groupId] of groupOf) membersOf.get(groupId)?.add(id);
   const result: GroupInput[] = [];

@@ -18,7 +18,7 @@ import type { DisplayInteractions } from '../dataset/interaction.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
 import { SelectMode } from '../modes/select/mode.js';
-import type { FeatureCoordinates } from '../shared/types/model.js';
+import type { FeatureCoordinates, ObjectLayer } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createSnapService } from '../snapping/service.js';
 import type { SnapContext, SnapService } from '../snapping/types.js';
@@ -163,7 +163,7 @@ function putFeature(id: string, type: string, coordinates: FeatureCoordinates): 
   };
   store.createFeature(feature);
   const layer = store.getLayer('l1');
-  if (layer) store.updateLayer('l1', { items: [...layer.items, id] });
+  if (layer) store.updateLayer('l1', { items: [...(layer as ObjectLayer).items, id] });
   spatialIndex.insert(feature);
 }
 

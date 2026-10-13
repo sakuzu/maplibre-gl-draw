@@ -18,9 +18,10 @@
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
-import type { LayerRowsChange, RowField, RowsChange, StoreChange } from '../shared/types/model.js';
+import type { LayerRowsChange, RowField, RowsChange } from '../shared/types/model.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
+import type { DocumentChange } from './events.js';
 import type { UpdateSource } from './extension/store.js';
 import type { Feature, FeatureType } from './model.js';
 
@@ -297,7 +298,7 @@ export interface FeatureTablesHooks {
    * at once outside one): the rows written (`rows`), the rows made features and no longer
    * (`held`), and the changes of the features of the rows held (`features`)
    */
-  emit(change: StoreChange): void;
+  emit(change: DocumentChange): void;
 }
 
 /**
