@@ -125,7 +125,10 @@ function hasVertexAt(shape: HitShape, x: number, y: number): boolean {
  *
  * @internal
  */
-export function tableLayerHasLockedRow(tables: FeatureTables | undefined, layerId: string): boolean {
+export function tableLayerHasLockedRow(
+  tables: FeatureTables | undefined,
+  layerId: string,
+): boolean {
   const internals = featureTablesInternals(tables);
   const table = internals?.layerTable(layerId);
   if (!table) return false;
