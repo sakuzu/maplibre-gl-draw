@@ -175,8 +175,8 @@ export class StoreRetainedCache {
     // The opacity of the layer is multiplied in at draw time (the batches do not bake it)
     const factors = layerDrawFactors(layer);
 
-    // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), forgotten
-    // before the features drawn at once and ended with the layer
+    // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), ended
+    // around the features drawn at once and with the layer
     const run = deps.renderers.run;
     run?.begin();
     try {
@@ -192,8 +192,9 @@ export class StoreRetainedCache {
           // Thin per feature as well, but only when the range to thin against is decided.
           // The spatial index query becomes necessary for the first time here.
           const visibleIds = viewportBounds ? deps.getVisibleIds?.() : undefined;
-          // What draws the features at once may change any of the state of the run
-          deps.renderers.run?.forget();
+          // The features are drawn at once outside the run: what draws them may change any of
+          // the state of the run, and some of it draws without the run
+          run?.end();
           drawFeaturesImmediate(
             this.store,
             chunk.featureIds,
@@ -203,6 +204,7 @@ export class StoreRetainedCache {
             deps,
             visibleIds,
           );
+          run?.begin();
           continue;
         }
 

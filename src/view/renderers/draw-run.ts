@@ -17,12 +17,17 @@
  *   and the run unbinds it once, when it ends
  *
  * The run only remembers what it set itself. Anything else that draws (maplibre between the
- * slots, the immediate mode, the renderers of the extensions, the analytic drape) may change any
- * of it, so the side that draws the run calls `forget()` before it hands the context to anything
- * else, and `end()` when the run is over: both unbind the vertex array left bound and forget
- * everything, so the next draw writes it all again. Outside a run (`begin()` not called) every
+ * slots, the renderers of the extensions, the analytic drape) may change any of it, so the side
+ * that draws the run calls `forget()` before it hands the context to anything else, and `end()`
+ * when the run is over: both unbind the vertex array left bound and forget everything, so the
+ * next draw writes it all again. Outside a run (`begin()` not called) every
  * draw sets everything and unbinds its vertex array, as a lone draw always did. A frame that
  * starts while a run is open (an exception skipped its end) forgets what it remembered as well.
+ *
+ * `forget()` is enough only for what draws without the renderers of the run. The immediate mode
+ * draws with them and with renderers that set their program themselves, one after another, so
+ * what the run remembers from one of its draws is stale at the next: it is drawn outside the run
+ * (`end()` before it, `begin()` after it), where every draw sets everything.
  *
  * The uniforms are not here: they belong to the programs, which only these renderers use, and
  * each renderer remembers what it wrote to its programs (`shaders/frame.ts`).

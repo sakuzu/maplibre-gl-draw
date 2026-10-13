@@ -529,8 +529,8 @@ export class TableLayerRenderer {
     schedule.settled = settled;
     schedule.budget = budget;
 
-    // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), forgotten
-    // before the rows drawn at once and ended with the layer
+    // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), ended
+    // around the rows drawn at once and with the layer
     const run = renderers.run;
     run?.begin();
     try {
@@ -975,9 +975,11 @@ export class TableLayerRenderer {
     for (const chunk of held.chunks) {
       if (chunk.type === 'immediate') {
         if (!pass.drawing) continue;
-        // What draws the rows at once may change any of the state of the run
-        run?.forget();
+        // The rows are drawn at once outside the run: what draws them may change any of the
+        // state of the run, and some of it draws without the run
+        run?.end();
         this.drawImmediate(tables, layer, chunk, frame, deps, settled);
+        run?.begin();
         continue;
       }
       const pending =
@@ -1005,8 +1007,10 @@ export class TableLayerRenderer {
     const run = (pass.renderers as RetainedRendererSet).run;
     for (const chunk of held.chunks) {
       if (chunk.type === 'immediate') {
-        run?.forget();
+        // Outside the run, as in `advance`
+        run?.end();
         this.drawImmediate(tables, layer, chunk, frame, deps, settled);
+        run?.begin();
       } else if (chunk.batches && meets(chunk.bounds, bounds)) {
         if (chunk.type === 'rows') this.drawOneDraw(chunk);
         else this.drawRetained(chunk);

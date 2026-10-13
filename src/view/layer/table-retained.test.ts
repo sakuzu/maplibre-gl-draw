@@ -381,7 +381,7 @@ describe('the order of the drawing of a layer held as rows', () => {
 });
 
 describe('the run of the retained draws of a layer', () => {
-  it('is opened around the layer, forgotten before every chunk drawn at once, and ended', () => {
+  it('is opened around the layer, ended around every chunk drawn at once, and ended', () => {
     const { frame, renderers, deps, draws, immediate } = setup(interleaved(300, 9), 50);
     frame(); // builds
     const events: string[] = [];
@@ -413,13 +413,24 @@ describe('the run of the retained draws of a layer', () => {
     expect(immediate.length - drawnAtOnce).toBeGreaterThan(0);
     expect(events[0]).toBe('begin');
     expect(events[events.length - 1]).toBe('end');
-    expect(events.filter((event) => event === 'begin' || event === 'end')).toEqual([
-      'begin',
-      'end',
-    ]);
-    // Every run of features drawn at once comes right after the run is forgotten
+    expect(events).not.toContain('forget');
+    // The retained draws are made in the run, the features drawn at once outside it, and the
+    // run is opened again after them
+    let open = false;
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      if (event === 'begin') open = true;
+      else if (event === 'end') open = false;
+      else if (event === 'draw') expect(open).toBe(true);
+      else if (event === 'immediate') {
+        expect(open).toBe(false);
+        expect(['end', 'immediate']).toContain(events[i - 1]);
+      }
+    }
     for (let i = 1; i < events.length; i++) {
-      if (events[i] === 'immediate') expect(['forget', 'immediate']).toContain(events[i - 1]);
+      if (events[i] === 'draw' && events[i - 1] !== 'draw') {
+        expect(events[i - 1]).toBe('begin');
+      }
     }
   });
 

@@ -828,7 +828,7 @@ describe('z-order', () => {
     expect(order).toEqual(['retained:g1', 'immediate:img', 'retained:l1']);
   });
 
-  it('the retained draws of a layer are one run, forgotten before the immediate drawing', () => {
+  it('the retained draws of a layer are a run, ended around the immediate drawing', () => {
     const order: string[] = [];
     const h = createHarness(
       [makeFeature('g1', 'Polygon'), makeFeature('img', 'Image'), makeFeature('l1', 'LineString')],
@@ -861,8 +861,9 @@ describe('z-order', () => {
     expect(order).toEqual([
       'begin',
       'retained:g1',
-      'forget',
+      'end',
       'immediate:img',
+      'begin',
       'retained:l1',
       'end',
     ]);
