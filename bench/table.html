@@ -78,10 +78,49 @@
             <option value="400">400 MB (iPhone)</option>
           </select>
         </label>
+        <label>data (file of bench/data/) <input name="data" type="text" placeholder="made in the page"></label>
+        <label>order
+          <select name="shuffle">
+            <option value="0">as in the file</option>
+            <option value="1">at random</option>
+          </select>
+        </label>
+        <label>edit
+          <select name="op">
+            <option value="color1">a color changed</option>
+            <option value="colorSlide">a color slid</option>
+            <option value="ruleSlide">the steps of the rule slid</option>
+            <option value="attr">an attribute written</option>
+            <option value="point">a point moved</option>
+            <option value="longLine">a vertex of the longest line moved</option>
+            <option value="corner">a corner of a building moved</option>
+          </select>
+        </label>
+        <label>reps <input name="reps" type="number" min="1"></label>
+        <label>rule (key:breaks) <input name="rule" type="text"></label>
+        <label>changes of others
+          <select name="remote">
+            <option value="color">colors</option>
+            <option value="attr">attributes</option>
+            <option value="position">positions of points</option>
+            <option value="corner">corners of buildings</option>
+          </select>
+        </label>
+        <label>rate (rows/s)
+          <select name="rate">
+            <option value="1">1</option>
+            <option value="10">10</option>
+            <option value="100">100</option>
+            <option value="1000">1000</option>
+          </select>
+        </label>
+        <label>seconds <input name="seconds" type="number" min="1"></label>
         <button type="submit">Apply (reload)</button>
       </form>
       <button id="confirm" type="button" hidden>Confirm more than 100,000 features</button>
       <button id="start" type="button">Start</button>
+      <button id="edit" type="button">Edit</button>
+      <button id="stream" type="button">Stream</button>
       <div id="status">Starting...</div>
       <div id="result"></div>
     </div>

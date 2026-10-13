@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The features of the measurement of the layers held as rows, made in the page (no network)
+ * The features of the measurement of the layers held as rows
  *
  * The page and its Worker make the same features from the same parameters: the Worker builds
  * them into row groups, the page loads them into the Store as features, so both ways of holding
- * them draw the same map.
+ * them draw the same map. The features are made in the page (no network), or read from a
+ * GeoJSON file put in `bench/data/` (`data=<file>`: a FeatureCollection, or one feature per line
+ * for a name ending in `.ndjson` or `.geojsonl`), from the same origin. Nothing is fetched from
+ * elsewhere.
  */
+
+import type { Geometry } from 'geojson';
 
 /** What the features are made of */
 export interface TableBenchParams {
@@ -19,6 +24,10 @@ export interface TableBenchParams {
   readonly styles: number;
   /** Whether the fills, the lines and the points are translucent */
   readonly translucent: boolean;
+  /** The file of `bench/data/` the features are read from (made in the page when empty) */
+  readonly data: string;
+  /** Whether the rows are put in an order at random rather than in the order of the file */
+  readonly shuffle: boolean;
 }
 
 /** The parameters of the page */
@@ -34,7 +43,42 @@ export interface TableBenchPageParams extends TableBenchParams {
   readonly cuts: number;
   /** The heap the run stops at (MB) */
   readonly limitMb: number;
+  /** The edit the edit button repeats (`EDIT_OPS`) */
+  readonly op: EditOp;
+  /** The times an edit is repeated */
+  readonly reps: number;
+  /** The kind of the changes of others the stream button sends */
+  readonly remote: RemoteKind;
+  /** The rows the stream changes per second */
+  readonly rate: number;
+  /** The seconds the stream runs */
+  readonly seconds: number;
+  /**
+   * The style rule the sliding of the rule moves: a graduated rule on an attribute of numbers
+   * (`key:break,break,...`)
+   */
+  readonly rule: { readonly key: string; readonly breaks: readonly number[] };
 }
+
+/** The edits a page repeats */
+export const EDIT_OPS = [
+  'color1',
+  'colorSlide',
+  'ruleSlide',
+  'attr',
+  'point',
+  'longLine',
+  'corner',
+] as const;
+
+/** An edit a page repeats */
+export type EditOp = (typeof EDIT_OPS)[number];
+
+/** The kinds of the changes of others the stream sends */
+export const REMOTE_KINDS = ['color', 'attr', 'position', 'corner'] as const;
+
+/** A kind of the changes of others */
+export type RemoteKind = (typeof REMOTE_KINDS)[number];
 
 const KINDS = ['point', 'line', 'polygon5', 'polygon50', 'mixed'] as const;
 
@@ -47,15 +91,28 @@ export function parseParams(search: string): TableBenchPageParams {
   };
   const kind = KINDS.find((k) => k === params.get('kind')) ?? 'mixed';
   const n = Math.max(1, number('n', 10_000));
+  const [ruleKey, ruleBreaks] = (params.get('rule') ?? 'value:25,50,75').split(':');
+  const breaks = (ruleBreaks ?? '')
+    .split(',')
+    .map(Number)
+    .filter((value) => Number.isFinite(value));
   return {
     n,
     kind,
     styles: Math.max(1, Math.min(n, number('styles', 1))),
     translucent: params.get('alpha') !== '0',
+    data: (params.get('data') ?? '').replace(/[^\w.-]/g, ''),
+    shuffle: params.get('shuffle') === '1',
     mode: params.get('mode') === 'store' ? 'store' : 'table',
     drawing: params.get('drawing') === 'by-kind' ? 'by-kind' : 'one-draw',
     cuts: number('cuts', 0),
     limitMb: Math.max(1, number('limit', 1024)),
+    op: EDIT_OPS.find((op) => op === params.get('op')) ?? 'color1',
+    reps: Math.max(1, number('reps', 100)),
+    remote: REMOTE_KINDS.find((kind) => kind === params.get('remote')) ?? 'color',
+    rate: Math.max(1, number('rate', 10)),
+    seconds: Math.max(1, number('seconds', 10)),
+    rule: { key: ruleKey || 'value', breaks: breaks.length > 0 ? breaks : [25, 50, 75] },
   };
 }
 
@@ -77,11 +134,8 @@ export function extentOf(params: TableBenchParams): [number, number, number, num
 /** One feature as both ways of holding it take it */
 export interface BenchFeature {
   readonly id: string;
-  readonly type: 'Point' | 'LineString' | 'Polygon';
-  readonly geometry:
-    | { type: 'Point'; coordinates: [number, number] }
-    | { type: 'LineString'; coordinates: [number, number][] }
-    | { type: 'Polygon'; coordinates: [number, number][][] };
+  readonly type: Geometry['type'];
+  readonly geometry: Geometry;
   readonly style: Record<string, unknown>;
   readonly properties: Record<string, unknown>;
   /** The key of its order (the features are in the order of their number) */
@@ -189,4 +243,154 @@ function hslHex(h: number, s: number, l: number): string {
       .toString(16)
       .padStart(2, '0');
   return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+// === Features read from a file ===
+
+/** The geometry types a row holds */
+const ROW_GEOMETRIES = new Set([
+  'Point',
+  'MultiPoint',
+  'LineString',
+  'MultiLineString',
+  'Polygon',
+  'MultiPolygon',
+]);
+
+/**
+ * The features of a GeoJSON text: a FeatureCollection, or one feature per line (`ndjson`).
+ * A feature without a geometry a row holds is left out; the ids are made unique by their place
+ */
+export function featuresOfText(
+  text: string,
+  lines: boolean,
+  params: TableBenchParams,
+): BenchFeature[] {
+  const styles = stylesOf(params);
+  const raw: Array<{ id?: unknown; geometry?: Geometry | null; properties?: unknown }> = lines
+    ? text
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+    : (JSON.parse(text).features ?? []);
+  const out: BenchFeature[] = [];
+  const count = raw.length;
+  // The order of the rows: the one of the file, or one at random (the same for a seed)
+  const order = Array.from({ length: count }, (_, i) => i);
+  if (params.shuffle) {
+    let seed = 1;
+    for (let i = count - 1; i > 0; i--) {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      const j = seed % (i + 1);
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+  for (let i = 0; i < count; i++) {
+    const feature = raw[i];
+    const geometry = feature.geometry;
+    if (!geometry || !ROW_GEOMETRIES.has(geometry.type)) continue;
+    const properties =
+      feature.properties && typeof feature.properties === 'object'
+        ? (feature.properties as Record<string, unknown>)
+        : {};
+    out.push({
+      id: `${i}:${String(feature.id ?? '')}`,
+      type: geometry.type,
+      geometry,
+      style: styles[i % styles.length],
+      properties: withoutNulls(properties),
+      order: `k${String(order[i]).padStart(9, '0')}`,
+    });
+  }
+  return out;
+}
+
+/** The attributes without their nested nulls kept as they are (a value of a row is any JSON) */
+function withoutNulls(properties: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (value === undefined) continue;
+    if (typeof value === 'number' && !Number.isFinite(value)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+/** The extent of features, `[west, south, east, north]` */
+export function extentOfFeatures(
+  features: readonly BenchFeature[],
+): [number, number, number, number] {
+  let west = Number.POSITIVE_INFINITY;
+  let south = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  const visit = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === 'number') {
+      const [x, y] = value as number[];
+      if (x < west) west = x;
+      if (x > east) east = x;
+      if (y < south) south = y;
+      if (y > north) north = y;
+      return;
+    }
+    for (const item of value) visit(item);
+  };
+  for (const feature of features) {
+    visit((feature.geometry as { coordinates?: unknown }).coordinates);
+  }
+  if (west > east) return [CENTER[0], CENTER[1], CENTER[0], CENTER[1]];
+  return [west, south, east, north];
+}
+
+// === The rows the edits change ===
+
+/** The rows the edits and the stream change, chosen once */
+export interface BenchCandidates {
+  /** A point (its first) */
+  readonly point: string | null;
+  /** The line of the most vertices */
+  readonly line: string | null;
+  /** A polygon of the fewest corners of 4 or more (a building) */
+  readonly polygon: string | null;
+  /** Rows at random (up to 2,000) */
+  readonly ids: readonly string[];
+  /** Points at random (up to 2,000) */
+  readonly points: readonly string[];
+  /** Polygons at random (up to 2,000) */
+  readonly polygons: readonly string[];
+}
+
+/** The rows the edits change, from the features */
+export function candidatesOf(features: readonly BenchFeature[]): BenchCandidates {
+  let point: string | null = null;
+  let line: string | null = null;
+  let lineVertices = 0;
+  let polygon: string | null = null;
+  let polygonCorners = Number.POSITIVE_INFINITY;
+  const ids: string[] = [];
+  const points: string[] = [];
+  const polygons: string[] = [];
+  const step = Math.max(1, Math.floor(features.length / 2000));
+  features.forEach((feature, i) => {
+    const geometry = feature.geometry;
+    if (geometry.type === 'Point') {
+      point ??= feature.id;
+      if (i % step === 0) points.push(feature.id);
+    } else if (geometry.type === 'LineString') {
+      if (geometry.coordinates.length > lineVertices) {
+        lineVertices = geometry.coordinates.length;
+        line = feature.id;
+      }
+    } else if (geometry.type === 'Polygon') {
+      const corners = geometry.coordinates[0].length - 1;
+      if (corners >= 4 && corners < polygonCorners) {
+        polygonCorners = corners;
+        polygon = feature.id;
+      }
+      if (i % step === 0) polygons.push(feature.id);
+    }
+    if (i % step === 0) ids.push(feature.id);
+  });
+  return { point, line, polygon, ids, points, polygons };
 }

@@ -6,46 +6,61 @@
  *
  * The same features are drawn either from rows of columns (`mode=table`: a Worker builds the
  * row groups, the Store hands out the tables) or as features of the Store, drawn as before
- * (`mode=store`). The rows are drawn in one draw per chunk, or by kind with `drawing=by-kind`. "Start" runs the measurement: it opens the map, shows the whole of it, stops
- * at zoom 14, then pans and zooms, and reports the time each step of the opening took, the
- * intervals of the animation frames (median, 95th percentile, longest) of every phase, the
- * memory and the GPU memory of the drawing. The run stops when the JS heap goes past the limit,
- * and reports what it measured until then.
+ * (`mode=store`). The rows are drawn in one draw per chunk, or by kind with `drawing=by-kind`.
+ * The features are made in the page, or read from a GeoJSON file of `bench/data/`
+ * (`data=<file>`, in the order of the file or at random with `shuffle=1`).
  *
- * The map has no base map (a background layer only), so nothing is fetched from the network.
+ * "Start" runs the measurement: it opens the map, shows the whole of it, stops at zoom 14, then
+ * pans and zooms, and reports the time each step of the opening took, the intervals of the
+ * animation frames (median, 95th percentile, longest) of every phase, the memory and the GPU
+ * memory of the drawing. The run stops when the JS heap goes past the limit, and reports what it
+ * measured until then.
  *
- * For automation the results are also on `window.benchResult`, and `window.runTableBench()`
- * runs the measurement.
+ * Once the map is open, "Edit" repeats an edit (`op`, `reps` times, one change per frame) and
+ * "Stream" sends changes of others (`remote`, `rate` rows per second for `seconds`), each
+ * measured before, during and after (`table-edits.ts`).
+ *
+ * The map has no base map (a background layer only), so nothing is fetched from another origin.
+ *
+ * For automation the results are also on `window.benchResult`, `window.runTableBench()` runs the
+ * measurement, and `window.runTableEdit(op)` and `window.runTableStream(kind, rate)` an edit and
+ * a stream (on the map opened by the measurement).
  */
 
 import { createDraw, createFeatureTables, type Draw } from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import {
+  type BenchCandidates,
+  type BenchFeature,
   benchFeature,
   CENTER,
+  candidatesOf,
+  EDIT_OPS,
+  type EditOp,
   extentOf,
+  extentOfFeatures,
+  featuresOfText,
   parseParams,
+  REMOTE_KINDS,
+  type RemoteKind,
   stylesOf,
   type TableBenchPageParams,
 } from './table-data';
+import { type EditResult, type EditTarget, runEdit, runStream } from './table-edits';
+import {
+  heapMb,
+  MB,
+  nextFrame,
+  type PhaseResult,
+  phaseOf,
+  recordFrames,
+  wait,
+} from './table-measure';
 import { TableStore } from './table-store';
-import type { TableWorkerResult } from './table-worker';
+import type { TableWorkerRequest, TableWorkerResult } from './table-worker';
 
 // Worker URL setup for v6 (side effect). Required before the Map is created.
 import './maplibre-setup';
-
-/** The statistics of the frames of one phase */
-interface PhaseResult {
-  readonly name: string;
-  readonly frames: number;
-  readonly medianMs: number;
-  readonly p95Ms: number;
-  readonly maxMs: number;
-  /** The JS heap at the end of the phase (MB; null when the browser does not tell) */
-  readonly heapMb: number | null;
-  /** The GPU memory of the drawing at the end of the phase (MB) */
-  readonly gpuMb: number;
-}
 
 interface TableBenchResult {
   readonly params: TableBenchPageParams;
@@ -56,6 +71,8 @@ interface TableBenchResult {
   readonly memory: { afterOpenMb: number | null; endMb: number | null };
   /** The GPU memory of the drawing at the end, per renderer (MB) */
   readonly gpu: Record<string, number>;
+  /** The edits and the streams run on the map opened */
+  readonly edits: EditResult[];
   /** Why the run stopped early (absent when it ran to the end) */
   stopped?: string;
 }
@@ -64,17 +81,14 @@ declare global {
   interface Window {
     benchResult?: TableBenchResult;
     runTableBench: () => Promise<TableBenchResult>;
+    runTableEdit: (op?: EditOp) => Promise<EditResult | null>;
+    runTableStream: (kind?: RemoteKind, rate?: number) => Promise<EditResult | null>;
     benchMap: maplibregl.Map;
-  }
-  interface Performance {
-    memory?: { usedJSHeapSize: number };
-    measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>;
   }
 }
 
 const params = parseParams(location.search);
 const LAYER_ID = 'bench';
-const MB = 1024 * 1024;
 
 const statusEl = document.getElementById('status') as HTMLElement;
 const resultEl = document.getElementById('result') as HTMLElement;
@@ -96,6 +110,14 @@ for (const [key, value] of Object.entries({
   alpha: params.translucent ? '1' : '0',
   cuts: String(params.cuts),
   limit: String(params.limitMb),
+  data: params.data,
+  shuffle: params.shuffle ? '1' : '0',
+  op: params.op,
+  reps: String(params.reps),
+  remote: params.remote,
+  rate: String(params.rate),
+  seconds: String(params.seconds),
+  rule: `${params.rule.key}:${params.rule.breaks.join(',')}`,
 })) {
   const field = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
   if (field) field.value = value;
@@ -153,15 +175,6 @@ if (params.drawing === 'by-kind') draw.debug.tables().setDrawingByKind(true);
 
 // === Measuring ===
 
-const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-const nextFrame = (): Promise<number> => new Promise((resolve) => requestAnimationFrame(resolve));
-
-/** The JS heap now (MB; null when the browser does not tell) */
-function heapMb(): number | null {
-  const memory = performance.memory;
-  return memory ? memory.usedJSHeapSize / MB : null;
-}
-
 /** The memory of the page as the browser measures it (MB; null when it cannot) */
 async function measuredMemoryMb(): Promise<number | null> {
   if (!crossOriginIsolated || !performance.measureUserAgentSpecificMemory) return null;
@@ -189,40 +202,29 @@ async function settle(timeoutMs = 120_000): Promise<void> {
   }
 }
 
-/** The intervals of the frames while `run` goes, drawing every frame */
-async function recordFrames(run: () => Promise<void>): Promise<number[]> {
-  const intervals: number[] = [];
-  let last = performance.now();
-  let alive = true;
-  const tick = (now: number): void => {
-    intervals.push(now - last);
-    last = now;
-    map.triggerRepaint();
-    if (alive) requestAnimationFrame(tick);
-  };
-  requestAnimationFrame((now) => {
-    last = now;
-    requestAnimationFrame(tick);
-  });
-  await run();
-  alive = false;
-  return intervals;
-}
+/** The address of the file the features are read from (null for features made in the page) */
+const dataUrl = params.data ? new URL(`./data/${params.data}`, location.href).href : null;
 
-/** The statistics of the intervals of a phase */
-function phaseOf(name: string, intervals: number[]): PhaseResult {
-  const sorted = [...intervals].sort((a, b) => a - b);
-  const pick = (p: number): number =>
-    sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
-  return {
-    name,
-    frames: intervals.length,
-    medianMs: pick(0.5),
-    p95Ms: pick(0.95),
-    maxMs: sorted.length === 0 ? 0 : sorted[sorted.length - 1],
-    heapMb: heapMb(),
-    gpuMb: draw.debug.gpu().bytes / MB,
-  };
+/** What the map opened holds: the extent of its features and the rows the edits change */
+let opened: { extent: [number, number, number, number]; candidates: BenchCandidates } | null = null;
+
+/** The features of the page, for the Store (made in the page, or read from the file) */
+async function pageFeatures(): Promise<BenchFeature[]> {
+  if (dataUrl) {
+    const response = await fetch(dataUrl);
+    if (!response.ok) throw new Error(`${dataUrl}: ${response.status}`);
+    const features = featuresOfText(
+      await response.text(),
+      /\.(ndjson|geojsonl)$/.test(dataUrl),
+      params,
+    );
+    // The Store draws them in the order of their keys, as the rows are
+    return features.sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
+  }
+  const styles = stylesOf(params);
+  const features: BenchFeature[] = [];
+  for (let i = 0; i < params.n; i++) features.push(benchFeature(params, styles, i));
+  return features;
 }
 
 /** Opens the map: the features held as rows or as features of the Store */
@@ -232,19 +234,28 @@ async function open(result: TableBenchResult): Promise<void> {
     const worker = new Worker(new URL('./table-worker.ts', import.meta.url), { type: 'module' });
     const response = await new Promise<TableWorkerResult>((resolve) => {
       worker.onmessage = (event: MessageEvent<TableWorkerResult>) => resolve(event.data);
-      worker.postMessage({
-        n: params.n,
-        kind: params.kind,
-        styles: params.styles,
-        translucent: params.translucent,
-      });
+      const request: TableWorkerRequest = {
+        params: {
+          n: params.n,
+          kind: params.kind,
+          styles: params.styles,
+          translucent: params.translucent,
+          data: params.data,
+          shuffle: params.shuffle,
+        },
+        dataUrl,
+      };
+      worker.postMessage(request);
     });
     worker.terminate();
+    if (response.error) throw new Error(response.error);
     const received = performance.now();
+    result.open.rows = response.count;
     result.open.generate = response.generateMs;
     result.open.addRows = response.addMs;
     result.open.buildGroups = response.buildMs;
     result.open.workerTotal = received - t0;
+    opened = { extent: response.extent, candidates: response.candidates };
     if (overLimit()) return;
     // The groups are queued here and taken in over the frames (within their budget), so the
     // time of taking them in is part of the first drawing below
@@ -253,23 +264,24 @@ async function open(result: TableBenchResult): Promise<void> {
     result.open.adoptQueue = performance.now() - a0;
   } else {
     const g0 = performance.now();
-    const styles = stylesOf(params);
-    const features = [];
-    for (let i = 0; i < params.n; i++) {
-      const f = benchFeature(params, styles, i);
-      features.push({
-        id: f.id,
-        type: f.type,
-        geometry: f.geometry,
-        layerId: LAYER_ID,
-        groupId: undefined,
-        properties: f.properties,
-        style: f.style,
-        locked: false,
-        visible: true,
-      });
-    }
+    const made = await pageFeatures();
+    const features = made.map((f) => ({
+      id: f.id,
+      type: f.type,
+      geometry: f.geometry,
+      layerId: LAYER_ID,
+      groupId: undefined,
+      properties: f.properties,
+      style: f.style,
+      locked: false,
+      visible: true,
+    }));
+    result.open.rows = features.length;
     result.open.generate = performance.now() - g0;
+    opened = {
+      extent: dataUrl ? extentOfFeatures(made) : extentOf(params),
+      candidates: candidatesOf(made),
+    };
     if (overLimit()) return;
     const l0 = performance.now();
     await draw.document.load({
@@ -314,6 +326,7 @@ async function runTableBench(): Promise<TableBenchResult> {
     phases: [],
     memory: { afterOpenMb: null, endMb: null },
     gpu: {},
+    edits: [],
   };
   window.benchResult = result;
   const finish = (stopped?: string): TableBenchResult => {
@@ -333,8 +346,14 @@ async function runTableBench(): Promise<TableBenchResult> {
 
   setStatus('Opening...');
   // The frames of the opening: the longest one is the longest the page stops while it opens
-  const openIntervals = await recordFrames(() => open(result));
-  result.phases.push(phaseOf('opening', openIntervals));
+  let failure: string | null = null;
+  const openIntervals = await recordFrames(map, () =>
+    open(result).catch((error) => {
+      failure = String(error);
+    }),
+  );
+  result.phases.push(phaseOf(draw, 'opening', openIntervals));
+  if (failure) return finish(`the features could not be read: ${failure}`);
   render(result);
   if (overLimit())
     return finish(
@@ -344,7 +363,8 @@ async function runTableBench(): Promise<TableBenchResult> {
   if (params.mode === 'table' && params.cuts > 0)
     draw.debug.tables().setArtificialCuts(params.cuts);
 
-  const [west, south, east, north] = extentOf(params);
+  const [west, south, east, north] = opened?.extent ?? extentOf(params);
+  const center: [number, number] = opened ? [(west + east) / 2, (south + north) / 2] : CENTER;
   const phases: Array<[string, () => Promise<void>]> = [
     [
       'whole map',
@@ -363,7 +383,7 @@ async function runTableBench(): Promise<TableBenchResult> {
     [
       'stopped at z14',
       async () => {
-        map.jumpTo({ center: CENTER, zoom: 14 });
+        map.jumpTo({ center, zoom: 14 });
         await settle();
         await wait(3000);
       },
@@ -372,17 +392,17 @@ async function runTableBench(): Promise<TableBenchResult> {
       'pan and zoom',
       async () => {
         const span = Math.min(east - west, 0.2);
-        await ease({ center: [CENTER[0] + span / 2, CENTER[1]] });
-        await ease({ center: [CENTER[0] + span / 2, CENTER[1]], zoom: 15 });
-        await ease({ center: [CENTER[0] - span / 2, CENTER[1] + span / 4], zoom: 13 });
-        await ease({ center: CENTER, zoom: 14 });
+        await ease({ center: [center[0] + span / 2, center[1]] });
+        await ease({ center: [center[0] + span / 2, center[1]], zoom: 15 });
+        await ease({ center: [center[0] - span / 2, center[1] + span / 4], zoom: 13 });
+        await ease({ center, zoom: 14 });
       },
     ],
   ];
   for (const [name, run] of phases) {
     setStatus(`Measuring: ${name}`);
-    const intervals = await recordFrames(run);
-    result.phases.push(phaseOf(name, intervals));
+    const intervals = await recordFrames(map, run);
+    result.phases.push(phaseOf(draw, name, intervals));
     render(result);
     if (overLimit())
       return finish(
@@ -427,8 +447,110 @@ function render(result: TableBenchResult): void {
       ])}
     </table>
     ${result.stopped ? `<p class="stopped">Stopped: ${result.stopped}</p>` : ''}
+    ${renderEdits(result.edits)}
   `;
 }
+
+/** The table of the edits and the streams run: the frames before, during and after each */
+function renderEdits(edits: readonly EditResult[]): string {
+  if (edits.length === 0) return '';
+  const fmt = (value: number | null, digits = 1): string =>
+    value === null ? '-' : value.toFixed(digits);
+  const cells = edits.flatMap((edit) => {
+    const a = edit.statsBefore;
+    const b = edit.statsAfter;
+    const sum = (phase: PhaseResult): number | null =>
+      phase.heapMb === null ? null : phase.heapMb + phase.gpuMb;
+    const phases = [edit.before, edit.during, edit.after].map((phase, k) => [
+      k === 0 ? edit.name : '',
+      ['before', 'during', 'after'][k],
+      fmt(phase.medianMs),
+      fmt(phase.p95Ms),
+      fmt(phase.maxMs),
+      fmt(phase.heapMb),
+      fmt(phase.gpuMb, 2),
+      fmt(sum(phase)),
+    ]);
+    const facts = [
+      `changes ${edit.changes}`,
+      `styles ${a.styles} → ${b.styles}`,
+      `resolved ${a.resolvedStyles} → ${b.resolvedStyles}`,
+      `overrides ${fmt(a.overrideBytes / 1024)} → ${fmt(b.overrideBytes / 1024)} KB`,
+      `uploaded ${fmt((b.uploadedBytes - a.uploadedBytes) / 1024)} KB`,
+      `in place ${b.inPlace - a.inPlace} (coords ${b.coordsOnly - a.coordsOnly}, style ${
+        b.styleOnly - a.styleOnly
+      })`,
+      `rebuilt ${b.rebuilt - a.rebuilt}`,
+      `restarted ${b.restarted - a.restarted}`,
+      `cut again ${b.reclassified - a.reclassified}`,
+      `CPU of the rows per frame ${fmt(edit.frameCpuMs.mean, 2)} ms (max ${fmt(edit.frameCpuMs.max, 2)})`,
+      edit.error ? `error: ${edit.error}` : '',
+    ].filter((fact) => fact !== '');
+    return [...phases, ['', facts.join(' / '), '', '', '', '', '', '']];
+  });
+  return `
+    <table>
+      <tr><th>Edit</th><th>phase</th><th>median ms</th><th>p95 ms</th><th>max ms</th><th>heap MB</th><th>GPU MB</th><th>heap + GPU MB</th></tr>
+      ${cells.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+    </table>
+  `;
+}
+
+/** What the edits write to (null before the map is opened) */
+function editTarget(): EditTarget | null {
+  if (!opened) return null;
+  return {
+    mode: params.mode,
+    draw,
+    map,
+    layerId: LAYER_ID,
+    tables: tablesOfPage?.tables ?? null,
+    writer: tablesOfPage?.writer ?? null,
+    candidates: opened.candidates,
+  };
+}
+
+/** Runs an edit (or a stream) on the map opened, and adds its result to the results */
+async function runEditOf(
+  name: string,
+  run: (target: EditTarget) => Promise<EditResult>,
+): Promise<EditResult | null> {
+  const target = editTarget();
+  const result = window.benchResult;
+  if (!target || !result) {
+    setStatus('Open the map first (Start)');
+    return null;
+  }
+  editButton.disabled = true;
+  streamButton.disabled = true;
+  setStatus(`Measuring: ${name}`);
+  try {
+    const edit = await run(target);
+    result.edits.push(edit);
+    render(result);
+    setStatus(edit.error ? `Not run: ${edit.error}` : 'Done');
+    return edit;
+  } finally {
+    editButton.disabled = false;
+    streamButton.disabled = false;
+  }
+}
+
+const editButton = document.getElementById('edit') as HTMLButtonElement;
+const streamButton = document.getElementById('stream') as HTMLButtonElement;
+
+window.runTableEdit = (op = params.op) =>
+  runEditOf(op, (target) => runEdit(target, EDIT_OPS.includes(op) ? op : params.op, params));
+window.runTableStream = (kind = params.remote, rate = params.rate) =>
+  runEditOf(`stream ${kind}`, (target) =>
+    runStream(target, REMOTE_KINDS.includes(kind) ? kind : params.remote, { ...params, rate }),
+  );
+editButton.addEventListener('click', () => {
+  void window.runTableEdit();
+});
+streamButton.addEventListener('click', () => {
+  void window.runTableStream();
+});
 
 window.runTableBench = runTableBench;
 startButton.addEventListener('click', () => {
