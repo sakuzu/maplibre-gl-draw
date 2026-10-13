@@ -49,8 +49,11 @@ export interface RetainedChunkJob<B> {
  * @internal
  */
 export interface RetainedChunkState<B> {
-  /** The extent of the chunk (the culling and the default origin) */
-  readonly bounds: BoundingBox;
+  /**
+   * The extent of the chunk (the culling and the default origin). A write in place of a row of
+   * the chunk only widens it
+   */
+  bounds: BoundingBox;
   /** The batches drawn (null before the first build, or once discarded) */
   batches: B | null;
   /** The build in progress */

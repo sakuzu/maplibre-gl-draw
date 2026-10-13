@@ -105,6 +105,22 @@ export function writeRowsInstance(
 }
 
 /**
+ * Writes an instance that draws nothing: a fill whose four corners are one coordinate. The
+ * instances of a row its packing no longer fills (a row written in place with fewer) are these,
+ * so the row keeps its place in the chunk and draws only what it has
+ *
+ * @param coord A coordinate of the row (any: the instance has no area)
+ */
+export function writeCollapsedInstance(
+  target: Float32Array,
+  at: number,
+  row: number,
+  coord: number,
+): void {
+  writeRowsInstance(target, at, ROWS_KIND.fill, row, coord, coord, coord, coord);
+}
+
+/**
  * One instance read back
  *
  * @internal

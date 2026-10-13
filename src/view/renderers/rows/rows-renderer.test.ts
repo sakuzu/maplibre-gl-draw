@@ -26,6 +26,7 @@ import {
   type RowSpriteSource,
   type RowsChunkData,
   RowsPalette,
+  readRowsInstance,
   writeRowsInstance,
 } from './rows-format.js';
 import { RowsRenderer } from './rows-renderer.js';
@@ -115,6 +116,39 @@ function chunkData(rows: number, palette = new RowsPalette()): RowsChunkData {
     coordFirst: rowFirst.slice(),
     palette,
     sprites: null,
+  };
+}
+
+/**
+ * Rows `[from, from + counts.length)` of a chunk of `chunkData` packed again on their own with
+ * `counts[r]` points each
+ */
+function rowsPatch(data: RowsChunkData, from: number, counts: number[]): RowsChunkData {
+  const rows = counts.length;
+  const rowFirst = new Int32Array(rows + 1);
+  for (let r = 0; r < rows; r++) rowFirst[r + 1] = rowFirst[r] + counts[r];
+  const count = rowFirst[rows];
+  const instances = new Float32Array(count * 8);
+  for (let r = 0, i = 0; r < rows; r++) {
+    for (let k = 0; k < counts[r]; k++, i++) {
+      writeRowsInstance(instances, i, ROWS_KIND.point, from + r, i, -1, -1, -1);
+    }
+  }
+  return {
+    ...data,
+    rowBase: from,
+    rows,
+    instances,
+    instanceCount: count,
+    points: instances.slice(),
+    pointCount: count,
+    coords: new Float32Array(count * 2).fill(5),
+    coordCount: count,
+    rowStyles: new Float32Array(rows * 4).fill(1),
+    rowStyle: new Int32Array(rows).fill(-1),
+    rowFirst,
+    pointFirst: rowFirst.slice(),
+    coordFirst: rowFirst.slice(),
   };
 }
 
@@ -233,50 +267,90 @@ describe('RowsRenderer', () => {
     expect(mock.count('drawArraysInstanced', at)).toBe(1);
   });
 
-  it('writes rows in place only when they have the instances the chunk holds', () => {
+  it('writes rows in place when they fit their places, the rest of a place collapsed', () => {
     const mock = recordingGL();
     const renderer = new RowsRenderer(null, mock.gl, 1);
     renderer.ensureShader(SHADER_DATA);
     const data = chunkData(4);
     const chunk = renderer.createChunk(data);
     renderer.flushUploads();
+    const held = data.coords.slice();
 
-    // Rows 2 and 3 packed again on their own, at new places and with another style
-    const rows = {
-      ...data,
-      rows: 2,
-      rowBase: 2,
-      instances: new Float32Array(7 * 8),
-      instanceCount: 7,
-      pointCount: 7,
-      coords: new Float32Array(7 * 2).fill(5),
-      coordCount: 7,
-      rowStyles: Float32Array.of(1, 12, 1, 0, 1, 12, 1, 0),
-      rowFirst: Int32Array.of(0, 3, 7),
-      pointFirst: Int32Array.of(0, 3, 7),
-      coordFirst: Int32Array.of(0, 3, 7),
-    };
-    for (let i = 0; i < 7; i++) {
-      writeRowsInstance(rows.instances, i, ROWS_KIND.point, i < 3 ? 2 : 3, i, -1, -1, -1);
-    }
+    // Row 2 (3 points) packed again with 3, row 3 (4 points) with 2: both fit their places
+    const counts = [3, 2];
+    const patch = rowsPatch(data, 2, counts);
     const at = mock.calls.length;
-    expect(renderer.patchRows(chunk, 2, rows)).toBe(true);
-    expect(Array.from(data.coords.subarray(6, 20))).toEqual(Array(14).fill(5));
-    expect(Array.from(data.rowStyles.subarray(8, 16))).toEqual([1, 12, 1, 0, 1, 12, 1, 0]);
-    // Uploaded with the next flush, not before
-    expect(mock.count('texSubImage2D', at)).toBe(0);
+    expect(renderer.patchRows(chunk, 2, patch)).toBe(true);
+    // Nothing is uploaded before the next flush, and the packed arrays are not written
+    expect(mock.calls.length).toBe(at);
+    expect(Array.from(data.coords)).toEqual(Array.from(held));
     expect(renderer.hasPendingUploads).toBe(true);
     renderer.flushUploads();
-    expect(mock.count('texSubImage2D', at)).toBe(2);
+    const calls = mock.calls.slice(at);
+    // The instances of the places of the two rows (7), the ones of their points, in one write
+    // each; their coordinates written (5) and their styles (2), one run of a line each
+    const buffers = calls.filter((c) => c.name === 'bufferSubData');
+    expect(buffers.map((c) => [c.args[1], (c.args[2] as Float32Array).length / 8])).toEqual([
+      [3 * ROWS_INSTANCE_BYTES, 7],
+      [3 * ROWS_INSTANCE_BYTES, 7],
+    ]);
+    const textures = calls.filter((c) => c.name === 'texSubImage2D');
+    // x, y, width, height of each upload: the coordinates 3 to 5 and 6, 7, then the two styles
+    expect(textures.map((c) => c.args.slice(2, 6))).toEqual([
+      [3, 0, 5, 1],
+      [2, 0, 2, 1],
+    ]);
+    // The last two instances of row 3 draw nothing: a fill of one coordinate
+    const instances = buffers[0].args[2] as Float32Array;
+    for (const i of [5, 6]) {
+      const instance = readRowsInstance(instances, i);
+      expect(instance.kind).toBe(ROWS_KIND.fill);
+      expect(new Set(instance.indices).size).toBe(1);
+      expect(instance.row).toBe(3);
+    }
+    // The coordinates of the instances are numbered in the places of their rows
+    expect(readRowsInstance(instances, 3).indices[0]).toBe(6);
 
-    // Another kind, another number of instances, or another palette: refused, nothing written
-    const kind = { ...rows, instances: rows.instances.slice() };
-    writeRowsInstance(kind.instances, 0, ROWS_KIND.fill, 2, 0, 1, 2, 2);
-    const coords = data.coords.slice();
-    expect(renderer.patchRows(chunk, 2, kind)).toBe(false);
-    expect(renderer.patchRows(chunk, 2, { ...rows, instanceCount: 6 })).toBe(false);
-    expect(renderer.patchRows(chunk, 2, { ...rows, palette: new RowsPalette() })).toBe(false);
-    expect(Array.from(data.coords)).toEqual(Array.from(coords));
+    // A row with more than its place holds, or another palette: refused, nothing written
+    const later = mock.calls.length;
+    expect(renderer.patchRows(chunk, 2, rowsPatch(data, 2, [4, 1]))).toBe(false);
+    expect(renderer.patchRows(chunk, 2, { ...patch, palette: new RowsPalette() })).toBe(false);
+    expect(renderer.hasPendingUploads).toBe(false);
+    renderer.flushUploads();
+    expect(mock.count('bufferSubData', later)).toBe(0);
+  });
+
+  it('uploads a texel written many times once, and only the texels written', () => {
+    const mock = recordingGL();
+    const renderer = new RowsRenderer(null, mock.gl, 1);
+    renderer.ensureShader(SHADER_DATA);
+    const data = chunkData(4);
+    const chunk = renderer.createChunk(data);
+    renderer.flushUploads();
+    const at = mock.calls.length;
+    for (let i = 0; i < 10; i++) renderer.patchCoords(chunk, 4, [i, i]);
+    renderer.patchCoords(chunk, 8, [1, 1, 2, 2]);
+    renderer.flushUploads();
+    const textures = mock.calls.slice(at).filter((c) => c.name === 'texSubImage2D');
+    expect(textures.map((c) => c.args.slice(2, 6))).toEqual([
+      [4, 0, 1, 1],
+      [8, 0, 2, 1],
+    ]);
+    expect(Array.from(textures[0].args[8] as Float32Array)).toEqual([9, 9]);
+  });
+
+  it('writes into the packed arrays of a chunk not uploaded yet', () => {
+    const mock = recordingGL();
+    const renderer = new RowsRenderer(null, mock.gl, 1);
+    renderer.ensureShader(SHADER_DATA);
+    const data = chunkData(3);
+    const chunk = renderer.createChunk(data);
+    renderer.patchCoords(chunk, 1, [7, 8]);
+    expect(Array.from(data.coords.subarray(2, 4))).toEqual([7, 8]);
+    const at = mock.calls.length;
+    renderer.flushUploads();
+    expect(mock.count('texSubImage2D', at)).toBe(3);
+    expect(mock.count('bufferSubData', at)).toBe(0);
   });
 
   it('records what it allocates in the ledger and takes it out when released', () => {

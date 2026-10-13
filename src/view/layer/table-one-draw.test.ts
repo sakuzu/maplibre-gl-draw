@@ -21,6 +21,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { LayerTable } from '../../feature-table/layer-table.js';
+import { ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -450,7 +451,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     expect(record.every((entry) => entry.kind === 'rows' || entry.kind === 'immediate')).toBe(true);
   });
 
-  it('writes the style of a row in place, and refuses a row drawn at once', () => {
+  it('writes the style of a row written in place into its chunk, and makes a row drawn at once again', () => {
     const features = [
       feature('a', 'Point', [1, 1]),
       feature('b', 'Point', [2, 2], { style: { pointColor: '#ff0000' } }),
@@ -461,14 +462,19 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     frame();
     const group = table.groupAt(0);
     const data = made[0];
-    const before = data.rowStyles[0];
-    // Row 0 takes the style of row 1
+    expect(data.rowStyle[0]).not.toBe(data.rowStyle[1]);
+    // Row 0 takes the style of row 1, and the image is written: both are taken before the
+    // next frame
     group.data.styles[0] = group.data.styles[1];
-    expect(renderer.patchRows('layer', group.handle, 0, 1)).toBe(true);
-    expect(data.rowStyles[0]).toBe(data.rowStyles[4]);
-    expect(data.rowStyles[0]).not.toBe(before);
-    expect(renderer.patchRows('layer', group.handle, 2, 3)).toBe(false);
-    expect(renderer.patchRows('missing', group.handle, 0, 1)).toBe(false);
+    const write = { sameShape: true, from: 0, to: 0, keys: [] };
+    renderer.rowsWritten('layer', [
+      { group: group.handle, row: 0, what: ROW_WRITE_STYLE, ...write },
+      { group: group.handle, row: 2, what: ROW_WRITE_STYLE, ...write },
+    ]);
+    expect(data.rowStyle[0]).not.toBe(data.rowStyle[1]);
+    frame();
+    expect(data.rowStyle[0]).toBe(data.rowStyle[1]);
+    expect(renderer.writeStats).toMatchObject({ inPlace: 1, styleOnly: 1, rebuilt: 0 });
   });
 
   it('draws the points of an extension with pictures in the chunks, among the other rows', () => {

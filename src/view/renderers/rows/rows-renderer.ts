@@ -47,8 +47,10 @@ import {
   ROWS_STYLE_WIDTH,
   type RowsChunkData,
   type RowsPalette,
+  writeCollapsedInstance,
 } from './rows-format.js';
 import { buildRowsFragmentSource, buildRowsVertexSource, ROWS_MITER_LIMIT } from './rows-shader.js';
+import { TexelWrites } from './rows-writes.js';
 
 /** The texture units of the program (the state of the rows is on its own unit, 1) */
 const UNIT_COORDS = 0;
@@ -90,11 +92,22 @@ export interface RowsChunk {
   rowStyles: SizedTexture | null;
   /** The instance the instance attributes of its vertex array point at */
   pointedFirst: number;
-  /** The coordinates written in place and not uploaded yet, as `[from, to)` pairs */
-  readonly coordPatches: number[];
-  /** The rows whose style was written in place and not uploaded yet, as `[from, to)` pairs */
-  readonly rowStylePatches: number[];
+  /** The writes in place since the last upload (null before the first) */
+  writes: RowsChunkWrites | null;
   disposed: boolean;
+}
+
+/**
+ * The writes in place of a chunk waiting to be uploaded: the instances (and the instances of the
+ * points), the coordinates and the styles of the rows written since the last upload
+ *
+ * @internal
+ */
+export interface RowsChunkWrites {
+  readonly instances: TexelWrites;
+  readonly points: TexelWrites;
+  readonly coords: TexelWrites;
+  readonly rowStyles: TexelWrites;
 }
 
 /** The uniforms of the program that are not the projection */
@@ -203,6 +216,8 @@ export class RowsRenderer {
     sprites: null,
   };
   private readonly originShift: [number, number] = [0, 0];
+  /** One instance (or texel) being written */
+  private readonly scratch = new Float32Array(ROWS_INSTANCE_FLOATS);
   /** The bytes written to the GPU by the uploads so far (buffers and textures) */
   uploadedBytes = 0;
   private bearingFrame = -1;
@@ -279,8 +294,7 @@ export class RowsRenderer {
       coords: null,
       rowStyles: null,
       pointedFirst: -1,
-      coordPatches: [],
-      rowStylePatches: [],
+      writes: null,
       disposed: false,
     };
     data.palette.refs++;
@@ -314,15 +328,20 @@ export class RowsRenderer {
   }
 
   /**
-   * Writes rows of a chunk in place: rows packed again whose instances are the ones the chunk
-   * holds (the same kinds and coordinates numbered alike), with new coordinates and styles. The
-   * write reaches the GPU with the next `flushUploads`
+   * Writes rows of a chunk in place, when they fit their places in it
+   *
+   * Every row of a chunk has a place (its instances, the instances of its points and its
+   * coordinates, `rowFirst`, `pointFirst` and `coordFirst`), as large as what it was packed with.
+   * A row packed again fits when it has no more of each than its place holds: its instances are
+   * written over the ones of its place, the rest of the place is filled with instances that draw
+   * nothing, and its coordinates and its style are written. The write reaches the GPU with the
+   * next `flushUploads`
    *
    * @param fromRow The first row written, in the chunk
    * @param patch The rows `[fromRow, fromRow + patch.rows)` packed again on their own, with the
-   *   palette of the chunk
-   * @returns false when the rows do not have the same instances (nothing is written: the rows
-   *   have to be built again)
+   *   palette of the chunk (the chunk takes over the counting of their styles)
+   * @returns false when a row does not fit its place (nothing is written: the rows have to be
+   *   built again)
    */
   patchRows(chunk: RowsChunk, fromRow: number, patch: RowsChunkData): boolean {
     const data = chunk.data;
@@ -330,47 +349,162 @@ export class RowsRenderer {
     if (chunk.disposed || fromRow < 0 || toRow > data.rows || patch.palette !== data.palette) {
       return false;
     }
-    const firstInstance = data.rowFirst[fromRow];
-    const instances = data.rowFirst[toRow] - firstInstance;
-    const firstCoord = data.coordFirst[fromRow];
-    const coords = data.coordFirst[toRow] - firstCoord;
-    if (
-      patch.instanceCount !== instances ||
-      patch.coordCount !== coords ||
-      patch.pointCount !== data.pointFirst[toRow] - data.pointFirst[fromRow]
-    ) {
-      return false;
-    }
-    for (let r = 0; r <= patch.rows; r++) {
-      if (patch.rowFirst[r] !== data.rowFirst[fromRow + r] - firstInstance) return false;
-      if (patch.coordFirst[r] !== data.coordFirst[fromRow + r] - firstCoord) return false;
-    }
-    // Every instance the same, but for the shift of the numbers of the coordinates
-    for (let i = 0; i < instances; i++) {
-      const a = (firstInstance + i) * ROWS_INSTANCE_FLOATS;
-      const b = i * ROWS_INSTANCE_FLOATS;
-      for (let k = 0; k < ROWS_INSTANCE_FLOATS; k++) {
-        const held = data.instances[a + k];
-        let packed = patch.instances[b + k];
-        if (k >= 1 && k <= 4 && packed >= 0) packed += firstCoord;
-        if (held !== packed) return false;
+    for (let r = 0; r < patch.rows; r++) {
+      const row = fromRow + r;
+      if (
+        patch.rowFirst[r + 1] - patch.rowFirst[r] > data.rowFirst[row + 1] - data.rowFirst[row] ||
+        patch.pointFirst[r + 1] - patch.pointFirst[r] >
+          data.pointFirst[row + 1] - data.pointFirst[row] ||
+        patch.coordFirst[r + 1] - patch.coordFirst[r] >
+          data.coordFirst[row + 1] - data.coordFirst[row]
+      ) {
+        return false;
       }
     }
-    // The rows take the styles the patch counted, and stop counting the ones they had
+    const scratch = this.scratch;
     for (let r = 0; r < patch.rows; r++) {
-      const old = data.rowStyle[fromRow + r];
+      const row = fromRow + r;
+      const coordBase = data.coordFirst[row];
+      const shift = coordBase - patch.coordFirst[r];
+      // The instances, their coordinates numbered in the place of the row, the rest collapsed
+      const write = (
+        packed: Float32Array,
+        from: number,
+        to: number,
+        placeFrom: number,
+        placeTo: number,
+        target: 'instances' | 'points',
+      ): void => {
+        for (let i = placeFrom; i < placeTo; i++) {
+          const source = from + i - placeFrom;
+          if (source < to) {
+            const at = source * ROWS_INSTANCE_FLOATS;
+            scratch[0] = packed[at];
+            for (let k = 1; k <= 4; k++) {
+              const index = packed[at + k];
+              scratch[k] = index >= 0 ? index + shift : index;
+            }
+            scratch[5] = packed[at + 5];
+            scratch[6] = packed[at + 6];
+            scratch[7] = packed[at + 7];
+          } else {
+            writeCollapsedInstance(scratch, 0, data.rowBase + row, coordBase);
+          }
+          this.writeTexel(chunk, target, i, scratch);
+        }
+      };
+      write(
+        patch.instances,
+        patch.rowFirst[r],
+        patch.rowFirst[r + 1],
+        data.rowFirst[row],
+        data.rowFirst[row + 1],
+        'instances',
+      );
+      write(
+        patch.points,
+        patch.pointFirst[r],
+        patch.pointFirst[r + 1],
+        data.pointFirst[row],
+        data.pointFirst[row + 1],
+        'points',
+      );
+      for (let c = patch.coordFirst[r]; c < patch.coordFirst[r + 1]; c++) {
+        this.writeTexel(chunk, 'coords', c + shift, patch.coords, c * 2);
+      }
+      this.writeTexel(chunk, 'rowStyles', row, patch.rowStyles, r * ROWS_ROW_STYLE_FLOATS);
+      // The row takes the style the patch counted, and stops counting the one it had
+      const old = data.rowStyle[row];
       if (old >= 0) data.palette.release(old);
-      data.rowStyle[fromRow + r] = patch.rowStyle[r];
+      data.rowStyle[row] = patch.rowStyle[r];
     }
-    data.coords.set(patch.coords.subarray(0, coords * 2), firstCoord * 2);
-    data.rowStyles.set(
-      patch.rowStyles.subarray(0, patch.rows * ROWS_ROW_STYLE_FLOATS),
-      fromRow * ROWS_ROW_STYLE_FLOATS,
-    );
-    if (coords > 0) chunk.coordPatches.push(firstCoord, firstCoord + coords);
-    if (patch.rows > 0) chunk.rowStylePatches.push(fromRow, toRow);
-    if (chunk.uploaded) this.patched.add(chunk);
     return true;
+  }
+
+  /**
+   * Writes coordinates of a chunk in place (the positions only: the rows keep their instances).
+   * The write reaches the GPU with the next `flushUploads`
+   *
+   * @param coordFrom The first coordinate written, in the chunk
+   * @param values The coordinates, 2 floats each (offsets from the origin of the chunk)
+   * @param count The number of coordinates (all of `values` when omitted)
+   */
+  patchCoords(
+    chunk: RowsChunk,
+    coordFrom: number,
+    values: ArrayLike<number>,
+    count?: number,
+  ): void {
+    if (chunk.disposed) return;
+    const n = count ?? values.length / 2;
+    for (let c = 0; c < n; c++) this.writeTexel(chunk, 'coords', coordFrom + c, values, c * 2);
+  }
+
+  /**
+   * Writes the style of a row of a chunk in place (its instances stay: the new style has the
+   * layout of the old one). The chunk takes over the counting of the style given
+   *
+   * @param row The row, in the chunk
+   * @param style The number of its resolved style (counted by the caller for the chunk)
+   * @param createdZoom Its created zoom (undefined for a width fixed on screen)
+   */
+  patchRowStyle(
+    chunk: RowsChunk,
+    row: number,
+    style: number,
+    createdZoom: number | undefined,
+  ): void {
+    if (chunk.disposed) return;
+    const data = chunk.data;
+    const scratch = this.scratch;
+    scratch[0] = style;
+    scratch[1] = createdZoom ?? 0;
+    scratch[2] = createdZoom === undefined ? 0 : 1;
+    scratch[3] = 0;
+    this.writeTexel(chunk, 'rowStyles', row, scratch);
+    const old = data.rowStyle[row];
+    if (old >= 0) data.palette.release(old);
+    data.rowStyle[row] = style;
+  }
+
+  /**
+   * Writes a texel (or an instance): into the packed arrays of a chunk not uploaded yet, into the
+   * writes of the next upload otherwise
+   */
+  private writeTexel(
+    chunk: RowsChunk,
+    target: 'instances' | 'points' | 'coords' | 'rowStyles',
+    texel: number,
+    source: ArrayLike<number>,
+    at = 0,
+  ): void {
+    const data = chunk.data;
+    if (!chunk.uploaded) {
+      const array =
+        target === 'instances'
+          ? data.instances
+          : target === 'points'
+            ? data.points
+            : target === 'coords'
+              ? data.coords
+              : data.rowStyles;
+      const floats =
+        target === 'coords'
+          ? 2
+          : target === 'rowStyles'
+            ? ROWS_ROW_STYLE_FLOATS
+            : ROWS_INSTANCE_FLOATS;
+      for (let k = 0; k < floats; k++) array[texel * floats + k] = source[at + k];
+      return;
+    }
+    chunk.writes ??= {
+      instances: new TexelWrites(ROWS_INSTANCE_FLOATS),
+      points: new TexelWrites(ROWS_INSTANCE_FLOATS),
+      coords: new TexelWrites(2),
+      rowStyles: new TexelWrites(ROWS_ROW_STYLE_FLOATS),
+    };
+    chunk.writes[target].write(texel, source, at);
+    this.patched.add(chunk);
   }
 
   /** Releases a chunk (and its palette, when the palette is retired and this was its last) */
@@ -823,9 +957,6 @@ export class RowsRenderer {
     chunk.vao = vao;
     chunk.pointedFirst = 0;
 
-    // The writes in place made before the upload are in the arrays already
-    chunk.coordPatches.length = 0;
-    chunk.rowStylePatches.length = 0;
     chunk.uploaded = true;
   }
 
@@ -859,42 +990,54 @@ export class RowsRenderer {
     return { texture, width, height };
   }
 
-  /** Uploads the writes in place of a chunk (the lines of its textures they touch) */
+  /**
+   * Uploads the writes in place of a chunk: each run of texels written that follow each other on
+   * a line of a texture once (a line written many times in a frame is uploaded once, and only the
+   * texels written), and each run of instances written that follow each other once
+   */
   private uploadPatches(chunk: RowsChunk): void {
-    if (chunk.disposed || !chunk.uploaded) return;
+    const writes = chunk.writes;
+    if (chunk.disposed || !chunk.uploaded || !writes) return;
     const gl = this.gl;
-    const data = chunk.data;
-    const write = (
-      texture: SizedTexture | null,
-      format: number,
-      floats: number,
-      values: Float32Array,
-      ranges: number[],
-    ): void => {
-      if (!texture) return;
-      gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-      for (let i = 0; i < ranges.length; i += 2) {
-        const firstLine = Math.floor(ranges[i] / texture.width);
-        const lastLine = Math.floor((ranges[i + 1] - 1) / texture.width);
-        const lineFloats = texture.width * floats;
+    const buffer = (target: WebGLBuffer | null, values: TexelWrites): void => {
+      if (values.size === 0) return;
+      if (!target) {
+        values.clear();
+        return;
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, target);
+      values.drain(Number.POSITIVE_INFINITY, (_line, first, run) => {
+        gl.bufferSubData(gl.ARRAY_BUFFER, first * ROWS_INSTANCE_BYTES, run);
+        this.uploadedBytes += run.byteLength;
+      });
+    };
+    buffer(chunk.instanceBuffer, writes.instances);
+    buffer(chunk.pointBuffer, writes.points);
+    const texture = (target: SizedTexture | null, format: number, values: TexelWrites): void => {
+      if (values.size === 0) return;
+      if (!target) {
+        values.clear();
+        return;
+      }
+      gl.bindTexture(gl.TEXTURE_2D, target.texture);
+      values.drain(target.width, (line, first, run) => {
         gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
-          0,
-          firstLine,
-          texture.width,
-          lastLine - firstLine + 1,
+          first,
+          line,
+          run.length / values.floats,
+          1,
           format,
           gl.FLOAT,
-          paddedRange(values, firstLine * lineFloats, (lastLine + 1) * lineFloats),
+          run,
         );
-      }
+        this.uploadedBytes += run.byteLength;
+      });
       gl.bindTexture(gl.TEXTURE_2D, null);
     };
-    write(chunk.coords, gl.RG, 2, data.coords, chunk.coordPatches);
-    write(chunk.rowStyles, gl.RGBA, ROWS_ROW_STYLE_FLOATS, data.rowStyles, chunk.rowStylePatches);
-    chunk.coordPatches.length = 0;
-    chunk.rowStylePatches.length = 0;
+    texture(chunk.coords, gl.RG, writes.coords);
+    texture(chunk.rowStyles, gl.RGBA, writes.rowStyles);
   }
 }
 

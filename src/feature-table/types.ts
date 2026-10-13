@@ -39,3 +39,34 @@ export interface TableWorkBudget {
    */
   step<T>(work: (deadline: number) => T): T;
 }
+
+/** A write of the geometry of a row (its coordinates, and the ring of a Circle) */
+export const ROW_WRITE_GEOMETRY = 1;
+/** A write of the style of a row */
+export const ROW_WRITE_STYLE = 2;
+/** A write of attributes of a row */
+export const ROW_WRITE_VALUES = 4;
+/** A write of what is in the state of a row (shown, locked, deleted) */
+export const ROW_WRITE_STATE = 8;
+
+/**
+ * What was written in place of a row, as the drawing is told of it
+ *
+ * @internal
+ */
+export interface RowWrite {
+  /** The row group and the row */
+  readonly group: RowGroupHandle;
+  readonly row: number;
+  /** What was written: `ROW_WRITE_GEOMETRY`, `ROW_WRITE_STYLE`, ... */
+  readonly what: number;
+  /**
+   * For a geometry written: whether the row kept its shape (only the positions of its
+   * coordinates changed), and the coordinates that moved, `[from, to)` from its first
+   */
+  readonly sameShape: boolean;
+  readonly from: number;
+  readonly to: number;
+  /** The keys of the attributes written (empty for none) */
+  readonly keys: readonly string[];
+}

@@ -563,3 +563,90 @@ export function seededRandom(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** A texture as {@link memoryGL} holds it */
+export interface MemoryTexture {
+  readonly width: number;
+  readonly height: number;
+  /** The values per texel */
+  readonly channels: number;
+  readonly data: Float32Array;
+}
+
+/**
+ * A WebGL2 context that keeps what is written to its buffers and its float textures, to read
+ * back what the GPU holds (no drawing). Its constants are the lengths of their names, so
+ * `RG32F`, `RGBA32F` and `R8UI` are told apart by the size of a texel; the calls are recorded
+ */
+export function memoryGL() {
+  const calls: Array<{ name: string; args: unknown[] }> = [];
+  const buffers = new Map<object, Float32Array>();
+  const textures = new Map<object, MemoryTexture>();
+  let next = 1;
+  let buffer: object | null = null;
+  let texture: object | null = null;
+  const channelsOf = (internalFormat: number): number =>
+    internalFormat === 'RG32F'.length ? 2 : internalFormat === 'RGBA32F'.length ? 4 : 1;
+  const target: Record<string, unknown> = {
+    drawingBufferWidth: 800,
+    drawingBufferHeight: 600,
+  };
+  const handlers: Record<string, (...args: unknown[]) => unknown> = {
+    bindBuffer: (_target, object) => {
+      buffer = object as object | null;
+    },
+    bufferData: (_target, data) => {
+      if (buffer && data instanceof Float32Array) buffers.set(buffer, data.slice());
+    },
+    bufferSubData: (_target, offset, data) => {
+      const held = buffer ? buffers.get(buffer) : undefined;
+      if (held && data instanceof Float32Array) held.set(data, (offset as number) / 4);
+    },
+    bindTexture: (_target, object) => {
+      texture = object as object | null;
+    },
+    texStorage2D: (_target, _levels, internalFormat, width, height) => {
+      if (!texture) return;
+      const channels = channelsOf(internalFormat as number);
+      textures.set(texture, {
+        width: width as number,
+        height: height as number,
+        channels,
+        data: new Float32Array((width as number) * (height as number) * channels),
+      });
+    },
+    texSubImage2D: (_target, _level, x, y, width, height, _format, _type, data) => {
+      const held = texture ? textures.get(texture) : undefined;
+      if (!held || !ArrayBuffer.isView(data)) return;
+      const values = data as unknown as ArrayLike<number>;
+      const w = width as number;
+      for (let row = 0; row < (height as number); row++) {
+        for (let col = 0; col < w; col++) {
+          for (let k = 0; k < held.channels; k++) {
+            held.data[
+              (((y as number) + row) * held.width + (x as number) + col) * held.channels + k
+            ] = values[(row * w + col) * held.channels + k];
+          }
+        }
+      }
+    },
+  };
+  const gl = new Proxy(target, {
+    get(t, prop: string) {
+      if (prop in t) return t[prop];
+      if (/^[A-Z_0-9]+$/.test(prop)) return prop.length;
+      return (...args: unknown[]) => {
+        calls.push({ name: prop, args });
+        if (prop.startsWith('create')) return { id: next++ };
+        const handler = handlers[prop];
+        if (handler) return handler(...args);
+        if (prop === 'getExtension') return null;
+        if (prop === 'getProgramParameter') return true;
+        if (prop === 'getUniformLocation') return { name: args[1] };
+        if (prop === 'getParameter') return 4;
+        return undefined;
+      };
+    },
+  }) as unknown as WebGL2RenderingContext;
+  return { gl, calls, buffers, textures };
+}

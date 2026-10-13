@@ -35,7 +35,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
+import { type LayerTable, type RowGroup, widenBounds } from '../../feature-table/layer-table.js';
 import { rowFeature, rowHasGeometry } from '../../feature-table/row-read.js';
 import {
   MOVE_SETS,
@@ -43,7 +43,12 @@ import {
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
 } from '../../feature-table/row-state.js';
-import type { RowGroupHandle } from '../../feature-table/types.js';
+import {
+  ROW_WRITE_GEOMETRY,
+  ROW_WRITE_STYLE,
+  type RowGroupHandle,
+  type RowWrite,
+} from '../../feature-table/types.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -88,11 +93,15 @@ import {
   type PolygonRowPlan,
   planPolygonRow,
   pointInstancesOf,
+  ROWS_LAYOUT,
+  RowCoordsDraft,
   type RowPackContext,
   RowStyleSlots,
   RowsDraft,
   type RowsPackContext,
   RowsStyles,
+  resolveRowStyle,
+  rowCreatedZoom,
   writeLineRow,
   writePointRow,
   writePolygonRow,
@@ -260,6 +269,41 @@ interface LayerCache {
   context: RowPackContext | null;
   /** The styles of the drawing in one draw (made again with new slots or a new pixel ratio) */
   rowsStyles: RowsStyles | null;
+  /** What the layer was drawn with last (the writes in place read it) */
+  layer: Layer | null;
+  deps: StoreRetainedDrawDeps | null;
+  tables: FeatureTablesInternals | null;
+}
+
+/** A row written in place, waiting for the pass before the main one of the next frame */
+interface PendingWrite {
+  what: number;
+  sameShape: boolean;
+  from: number;
+  to: number;
+  keys: Set<string> | null;
+}
+
+/**
+ * What the writes in place of the rows did since the drawing was made: how many rows were
+ * written in place, of them how many by their coordinates or their style only, and how many
+ * did not fit their places and made their chunk build again
+ *
+ * @internal
+ */
+export interface TableWriteStats {
+  /** The rows written in place in a chunk drawn in one draw */
+  inPlace: number;
+  /** Of them, the rows written by the positions of their coordinates only */
+  coordsOnly: number;
+  /** Of them, the rows written by their style only */
+  styleOnly: number;
+  /** The rows that did not fit their places (their chunk is built again) */
+  rebuilt: number;
+  /** The rows whose chunk was being built (the build starts again) */
+  restarted: number;
+  /** The rows classified otherwise (the chunks of their group are cut again) */
+  reclassified: number;
 }
 
 /**
@@ -311,7 +355,21 @@ export class TableLayerRenderer {
   /** Whether the uploads of the frame were written before its main pass */
   private prepared = false;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
-  private readonly scratch: { parts: number[] } = { parts: [] };
+  /** The rows written in place since the last pass before the main one, by layer and group */
+  private readonly written = new Map<string, Map<RowGroupHandle, Map<number, PendingWrite>>>();
+  /** What the writes in place did */
+  readonly writeStats: TableWriteStats = {
+    inPlace: 0,
+    coordsOnly: 0,
+    styleOnly: 0,
+    rebuilt: 0,
+    restarted: 0,
+    reclassified: 0,
+  };
+  private readonly scratch: { parts: number[]; coords: Float32Array } = {
+    parts: [],
+    coords: new Float32Array(2),
+  };
   /** The drawing chosen for each group of the layer being drawn */
   private readonly choices: Drawing[] = [];
   /** What the draws of the layer and the group being drawn read (set per layer and group) */
@@ -390,8 +448,61 @@ export class TableLayerRenderer {
    * styles, the writes in place). Called before the main pass of the frame
    */
   prerender(): void {
+    this.applyWrites();
     this.renderers?.rows?.flushUploads();
     this.prepared = true;
+  }
+
+  /**
+   * Takes rows written in place: they are written into the chunks that draw them in the pass
+   * before the main one of the next frame (`prerender`), all of a frame at once
+   *
+   * @param layerId The layer of the rows
+   */
+  rowsWritten(layerId: string, writes: readonly RowWrite[]): void {
+    if (writes.length === 0) return;
+    let groups = this.written.get(layerId);
+    if (!groups) {
+      groups = new Map();
+      this.written.set(layerId, groups);
+    }
+    for (const write of writes) {
+      let rows = groups.get(write.group);
+      if (!rows) {
+        rows = new Map();
+        groups.set(write.group, rows);
+      }
+      const held = rows.get(write.row);
+      if (!held) {
+        rows.set(write.row, {
+          what: write.what,
+          sameShape: write.sameShape,
+          from: write.from,
+          to: write.to,
+          keys: write.keys.length > 0 ? new Set(write.keys) : null,
+        });
+        continue;
+      }
+      if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
+        if ((held.what & ROW_WRITE_GEOMETRY) !== 0) {
+          held.sameShape &&= write.sameShape;
+          if (write.to > write.from) {
+            held.from = held.to > held.from ? Math.min(held.from, write.from) : write.from;
+            held.to = Math.max(held.to, write.to);
+          }
+        } else {
+          held.sameShape = write.sameShape;
+          held.from = write.from;
+          held.to = write.to;
+        }
+      }
+      held.what |= write.what;
+      if (write.keys.length > 0) {
+        held.keys ??= new Set();
+        for (const key of write.keys) held.keys.add(key);
+      }
+    }
+    this.options.requestRepaint();
   }
 
   /**
@@ -400,7 +511,10 @@ export class TableLayerRenderer {
    */
   beginFrame(): void {
     // A frame that had no pass before its main one writes what was queued now
-    if (!this.prepared) this.renderers?.rows?.flushUploads();
+    if (!this.prepared) {
+      this.applyWrites();
+      this.renderers?.rows?.flushUploads();
+    }
     this.prepared = false;
     this.budget = createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
     this.pending = false;
@@ -605,46 +719,177 @@ export class TableLayerRenderer {
     this.renderers = null;
   }
 
+  // === The writes in place ===
+
   /**
-   * Writes rows of a group in place in the chunks drawn in one draw: they are packed again from
-   * their columns and their coordinates and styles written over the ones of their chunk, which
-   * reach the GPU before the next frame is drawn
-   *
-   * @param fromRow The first row written, in its group
-   * @param toRow The end of the rows written (exclusive)
-   * @returns false when the rows cannot be written in place: their instances changed (another
-   *   kind, other coordinates, another number of them), their chunk is being built or drawn by
-   *   kind, or they are drawn at once. Nothing is written then, and the rows have to be built
-   *   again
+   * Writes the rows written in place since the last pass into the chunks that draw them: a row
+   * that keeps its shape by its coordinates only, a row whose style changed within the layout of
+   * its instances by its style only, another row packed again into its place in its chunk when it
+   * fits. A row that does not fit makes its chunk build again (the chunk keeps drawing until the
+   * new one is built), a row classified otherwise makes the chunks of its group cut again, and a
+   * row of a chunk being built makes the build start again from its columns
    */
-  patchRows(layerId: string, group: RowGroupHandle, fromRow: number, toRow: number): boolean {
-    const cache = this.layers.get(layerId);
-    const groupCache = cache?.groups.get(group);
-    const rows = this.renderers?.rows;
-    if (!cache || !groupCache || !rows || !cache.context || !cache.rowsStyles) return false;
-    const chunks = groupCache.oneDraw?.chunks;
-    if (!chunks) return false;
-    for (const chunk of chunks) {
-      const from = Math.max(fromRow, chunk.range.from);
-      const to = Math.min(toRow, chunk.range.to);
-      if (from >= to) continue;
-      if (chunk.type !== 'rows' || chunk.job) return false;
-      const gpu = chunk.batches;
-      // A chunk not built yet is built from the columns as they are
-      if (!gpu) continue;
-      if (chunk.stale || gpu.data.palette !== cache.rowsStyles.palette) return false;
-      const draft = new RowsDraft(to - from, from, undefined, gpu.data.palette);
-      const context = this.packContext(groupCache, cache);
-      for (let row = from; row < to; row++) {
-        collectRow(groupCache.group, row, row - from, draft, gpu.data.origin, context);
-      }
-      const patch = draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites);
-      if (!rows.patchRows(gpu, from - chunk.range.from, patch)) {
-        draft.releaseStyles();
-        return false;
+  private applyWrites(): void {
+    if (this.written.size === 0) return;
+    for (const [layerId, groups] of this.written) {
+      const cache = this.layers.get(layerId);
+      if (!cache) continue;
+      for (const [handle, rows] of groups) {
+        const groupCache = cache.groups.get(handle);
+        if (!groupCache) continue;
+        for (const [row, write] of rows) this.applyWrite(cache, groupCache, row, write);
       }
     }
-    return true;
+    this.written.clear();
+  }
+
+  /** Writes one row written in place into the chunks that draw it */
+  private applyWrite(
+    cache: LayerCache,
+    groupCache: GroupCache,
+    row: number,
+    write: PendingWrite,
+  ): void {
+    const group = groupCache.group;
+    const drawn = this.writeIsDrawn(cache, write);
+    // The drawing by kind and the rows drawn at once read their rows when they are built
+    for (const chunk of allChunks(groupCache)) {
+      if (row < chunk.range.from || row >= chunk.range.to) continue;
+      if (chunk.type === 'immediate') {
+        if (chunk.features && row - chunk.range.from < chunk.filled && cache.tables) {
+          // The feature kept for the row is made again from its columns
+          chunk.features[row - chunk.range.from] = rowHasGeometry(group, row)
+            ? rowFeature(cache.tables.readContext, cache.layer?.id ?? '', group, row)
+            : null;
+        }
+      } else if (chunk.type === 'retained' && drawn) {
+        this.invalidateChunk(chunk, true);
+      }
+    }
+    if (!drawn) return;
+    const chunk = groupCache.oneDraw?.chunks.find((c) => row >= c.range.from && row < c.range.to);
+    if (chunk?.type !== 'rows') return;
+    const stats = this.writeStats;
+    if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
+      // The extent of the chunk only widens, so a row moved out of it is not culled with it
+      const b = group.data.rowBounds;
+      const at = row * 4;
+      if (!Number.isNaN(b[at])) {
+        chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+      }
+    }
+    if (chunk.job) {
+      // Being built: the build starts again from the columns as written
+      this.invalidateChunk(chunk, true);
+      stats.restarted++;
+      return;
+    }
+    const gpu = chunk.batches;
+    const rows = this.renderers?.rows;
+    const rowsStyles = cache.rowsStyles;
+    if (!gpu || !rows || !rowsStyles || !cache.context) return;
+    if (gpu.data.palette !== rowsStyles.palette) {
+      this.invalidateChunk(chunk, true);
+      stats.rebuilt++;
+      return;
+    }
+    if (!this.classifiedAlike(cache, groupCache, row)) {
+      // Another kind of run (drawn at once, or with other pictures): the group is cut again
+      if (groupCache.oneDraw) groupCache.oneDraw.generation = -1;
+      stats.reclassified++;
+      return;
+    }
+    const context = this.packContext(groupCache, cache);
+    const local = row - chunk.range.from;
+    const held = gpu.data.rowStyle[local];
+    const styleWritten =
+      (write.what & ROW_WRITE_STYLE) !== 0 || this.ruleKeyWritten(cache, write.keys);
+
+    // The positions only: the row keeps its shape and its style, and is not dashed
+    if (
+      (write.what & ROW_WRITE_GEOMETRY) !== 0 &&
+      write.sameShape &&
+      !styleWritten &&
+      (rowsStyles.layoutOf(held) & ROWS_LAYOUT.dashed) === 0
+    ) {
+      if (write.to > write.from) {
+        const firstCoord = gpu.data.coordFirst[local];
+        const coords = this.scratch.coords;
+        const draft = new RowCoordsDraft(write.from, write.to, (n, x, y) => {
+          coords[0] = x;
+          coords[1] = y;
+          rows.patchCoords(gpu, firstCoord + n, coords, 1);
+        });
+        collectRow(group, row, 0, draft, gpu.data.origin, context);
+      }
+      stats.inPlace++;
+      stats.coordsOnly++;
+      return;
+    }
+
+    // The style only: a style of the same layout of instances
+    if ((write.what & ROW_WRITE_GEOMETRY) === 0) {
+      const style = resolveRowStyle(group, row, context);
+      if (style === held) return;
+      if (style >= 0 && held >= 0 && rowsStyles.layoutOf(style) === rowsStyles.layoutOf(held)) {
+        rowsStyles.palette.retain(style);
+        rows.patchRowStyle(gpu, local, style, styleCreatedZoom(group, row, rowsStyles, style));
+        stats.inPlace++;
+        stats.styleOnly++;
+        return;
+      }
+    }
+
+    // The row packed again into its place, when it fits
+    const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
+    collectRow(group, row, 0, draft, gpu.data.origin, context);
+    if (
+      rows.patchRows(gpu, local, draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites))
+    ) {
+      stats.inPlace++;
+      return;
+    }
+    draft.releaseStyles();
+    this.invalidateChunk(chunk, true);
+    stats.rebuilt++;
+  }
+
+  /** Whether a write changes what is drawn of a row (its geometry, its style, its rule color) */
+  private writeIsDrawn(cache: LayerCache, write: PendingWrite): boolean {
+    if ((write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0) return true;
+    return this.ruleKeyWritten(cache, write.keys);
+  }
+
+  /** Whether an attribute the style rule of the layer reads is among the keys written */
+  private ruleKeyWritten(cache: LayerCache, keys: ReadonlySet<string> | null): boolean {
+    const rule = cache.layer?.styleRule;
+    if (!keys || !rule || rule.kind === 'single') return false;
+    return keys.has(rule.property);
+  }
+
+  /**
+   * Whether a row is classified as its chunk was cut: drawn in one draw, with the pictures of the
+   * source it had (J13 of the design: a write that changes the kind of the run of a row cannot
+   * be written in place)
+   */
+  private classifiedAlike(cache: LayerCache, groupCache: GroupCache, row: number): boolean {
+    const tables = cache.tables;
+    const deps = cache.deps;
+    const layer = cache.layer;
+    if (!tables || !deps || !layer || !cache.slots) return false;
+    let source: RowSpriteSource | undefined;
+    const kind = classifyRow(groupCache.group, row, {
+      slots: cache.slots,
+      customTypes: deps.customRenderers,
+      companions: deps.companions as FeatureCompanionRegistry,
+      featureOf: (rows, r) => rowFeature(tables.readContext, layer.id, rows, r),
+      layer,
+      oneDraw: true,
+      onSprite: (_r, found) => {
+        source = found;
+      },
+    });
+    return kind === 'rows' && source === groupCache.sprites.get(row);
   }
 
   // === Hooks of tests and measurements ===
@@ -693,9 +938,15 @@ export class TableLayerRenderer {
         generation: 0,
         context: null,
         rowsStyles: null,
+        layer: null,
+        deps: null,
+        tables: null,
       };
       this.layers.set(table.layerId, cache);
     }
+    cache.layer = layer;
+    cache.deps = deps;
+    cache.tables = tables;
     const companions = deps.companions;
     const spriteRevisions = spriteRevisionsOf(deps.customRenderers);
     const classificationChanged =
@@ -1237,6 +1488,21 @@ export class TableLayerRenderer {
     }
     return out;
   }
+}
+
+/**
+ * The created zoom a row writes with its style (none for a point or a picture, whose size is
+ * fixed on screen)
+ */
+function styleCreatedZoom(
+  group: RowGroup,
+  row: number,
+  styles: RowsStyles,
+  style: number,
+): number | undefined {
+  const kind = styles.layoutOf(style) & 7;
+  if (kind === ROWS_LAYOUT.point || kind === ROWS_LAYOUT.sprite) return undefined;
+  return rowCreatedZoom(group, row);
 }
 
 /** Every chunk of a group, of both drawings */

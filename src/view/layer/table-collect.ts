@@ -19,7 +19,7 @@
  */
 
 import type { RowGroup } from '../../feature-table/layer-table.js';
-import { geometryAt } from '../../feature-table/layer-table.js';
+import { geometryAt, type RowGeometryAt } from '../../feature-table/layer-table.js';
 import {
   rowHasGeometry,
   rowNumber,
@@ -563,6 +563,11 @@ export interface PolygonPart {
   readonly triangleCount: number;
   /** The first vertex of the fill of this polygon among the vertices of the fill of the row */
   readonly base: number;
+  /**
+   * The coordinate of `coords` the row starts at: the coordinates of a part are told by their
+   * place from it (the ones of the ring of a Circle by their place in the ring)
+   */
+  readonly first: number;
 }
 
 /**
@@ -609,6 +614,8 @@ export function planPolygonRow(
     from: number;
     to: number;
   }> = [];
+  // The first coordinate of the row (the ring of a Circle starts at 0)
+  let first = 0;
   if (type === 'Circle' && reader.type === 'Point') {
     const radius = rowNumber(group, row, RADIUS_KEY);
     if (!radius || radius <= 0) return null;
@@ -623,6 +630,7 @@ export function planPolygonRow(
     polygons.push({ coords, stride: 2, rings: Int32Array.of(0, ring.length), from: 0, to: 1 });
   } else if (reader.type === 'Polygon') {
     const o = reader.offsets;
+    first = reader.vertexStart(at);
     polygons.push({
       coords: reader.coords,
       stride: reader.dimensions,
@@ -632,6 +640,7 @@ export function planPolygonRow(
     });
   } else if (reader.type === 'MultiPolygon') {
     const o = reader.offsets;
+    first = reader.vertexStart(at);
     for (let p = o[0][at]; p < o[0][at + 1]; p++) {
       polygons.push({
         coords: reader.coords,
@@ -669,7 +678,6 @@ export function planPolygonRow(
       runs,
     );
     if (vertices === 0) continue;
-    // The triangles of this polygon are the ones that point into its vertices
     // The pairs of this polygon are the ones that point into its vertices
     const triangleFrom = t;
     let triangleCount = 0;
@@ -686,6 +694,7 @@ export function planPolygonRow(
       triangleTo: t,
       triangleCount,
       base,
+      first,
     };
     parts.push(part);
     if (part.triangleTo > part.triangleFrom) {
@@ -1152,8 +1161,13 @@ export class RowsDraft {
     this.rowStyle.fill(-1);
   }
 
-  /** Adds a coordinate (an offset from the origin) and returns its number */
-  coord(x: number, y: number): number {
+  /**
+   * Adds a coordinate (an offset from the origin) and returns its number
+   *
+   * @param _source The place of the coordinate among the coordinates of its row, from its first
+   *   (the ring of a Circle from the first of the ring); -1 for none
+   */
+  coord(x: number, y: number, _source = -1): number {
     const at = this.coordCount * 2;
     if (at + 2 > this.coords.length) this.coords = grown(this.coords, at + 2);
     this.coords[at] = x;
@@ -1208,6 +1222,38 @@ export class RowsDraft {
       sprites,
     };
   }
+}
+
+/**
+ * Packs the coordinates of one row and hands on the ones of a range of its coordinates: what a
+ * write of the positions of a row that keeps its shape writes (the coordinates are numbered as
+ * the packing of the row numbers them, from its first)
+ *
+ * @internal
+ */
+export class RowCoordsDraft extends RowsDraft {
+  /**
+   * @param from The first coordinate of the row handed on (counted as `coord` counts it)
+   * @param to The end of the coordinates handed on
+   * @param emit Receives the number of each coordinate in the packing of the row and its values
+   */
+  constructor(
+    private readonly from: number,
+    private readonly to: number,
+    private readonly emit: (coord: number, x: number, y: number) => void,
+  ) {
+    super(1, 0, 4, null);
+  }
+
+  override coord(x: number, y: number, source = -1): number {
+    const number = this.coordCount++;
+    if (source >= this.from && source < this.to) this.emit(number, x, y);
+    return number;
+  }
+
+  override instance(): void {}
+
+  override setRowStyle(): void {}
 }
 
 /** A Float32Array of at least `length` floats with the values of `array` */
@@ -1302,31 +1348,83 @@ function collectPointRow(
     return;
   }
   const { reader, at } = geometry;
-  const data = group.data;
-  const source = context.spriteSourceOf(row);
-  let kind: RowsKind;
-  let style: number | null;
-  if (source) {
-    const sprite = context.slots.sprite(source, data.styles[row]);
-    if (!sprite) return;
-    kind = ROWS_KIND.sprite;
-    style = context.rowsStyles.sprite(source, sprite, data.styles[row]);
-  } else {
-    kind = ROWS_KIND.point;
-    style = context.rowsStyles.point(
-      data.styles[row],
-      rowType(data, row),
-      context.slots.ruleColorOf(group, row, context.strings),
-    );
-  }
+  const resolved = pointStyleOf(group, row, context);
   // A shape that is not instanced makes the row a run drawn at once; it is not packed
-  if (style === null) return;
+  if (!resolved) return;
+  const { kind, style } = resolved;
   writeRowStyle(draft, styleAt, style, undefined);
   const coords = reader.coords;
   const stride = reader.dimensions;
-  for (let v = reader.vertexStart(at); v < reader.vertexStart(at + 1); v++) {
-    const index = draft.coord(coords[v * stride] - origin[0], coords[v * stride + 1] - origin[1]);
+  const first = reader.vertexStart(at);
+  for (let v = first; v < reader.vertexStart(at + 1); v++) {
+    const index = draft.coord(
+      coords[v * stride] - origin[0],
+      coords[v * stride + 1] - origin[1],
+      v - first,
+    );
     draft.instance(kind, row, index, -1, -1, -1);
+  }
+}
+
+/**
+ * The kind of the instances of a point row and its resolved style: a picture of the source of
+ * pictures of the row, or the built-in point (null for a row that is not packed: a picture the
+ * source does not give, a shape that is not instanced)
+ */
+function pointStyleOf(
+  group: RowGroup,
+  row: number,
+  context: RowsPackContext,
+): { kind: RowsKind; style: number } | null {
+  const data = group.data;
+  const source = context.spriteSourceOf(row);
+  if (source) {
+    const sprite = context.slots.sprite(source, data.styles[row]);
+    if (!sprite) return null;
+    return {
+      kind: ROWS_KIND.sprite,
+      style: context.rowsStyles.sprite(source, sprite, data.styles[row]),
+    };
+  }
+  const style = context.rowsStyles.point(
+    data.styles[row],
+    rowType(data, row),
+    context.slots.ruleColorOf(group, row, context.strings),
+  );
+  return style === null ? null : { kind: ROWS_KIND.point, style };
+}
+
+/**
+ * The resolved style a row is packed with (-1 for a row packed without one: no geometry, a
+ * polygon with neither a fill seen nor an outline, a point not packed), as `collectRow` resolves
+ * it: what tells whether a change of the style of a row only changes its style
+ *
+ * @internal
+ */
+export function resolveRowStyle(group: RowGroup, row: number, context: RowsPackContext): number {
+  if (!rowHasGeometry(group, row)) return -1;
+  const data = group.data;
+  const type = rowType(data, row);
+  const ruleColor = (): string | null => context.slots.ruleColorOf(group, row, context.strings);
+  switch (type) {
+    case 'LineString':
+    case 'Freehand':
+    case 'MultiLineString':
+      return context.rowsStyles.line(data.styles[row], type, ruleColor());
+    case 'Polygon':
+    case 'MultiPolygon':
+    case 'Circle': {
+      const color = ruleColor();
+      const slot = context.slots.polygon(data.styles[row], type, color);
+      if (!slot.hasStroke && slot.fillColor[3] <= 0) return -1;
+      return context.rowsStyles.polygon(data.styles[row], type, color);
+    }
+    default: {
+      const reader = geometryAt(group, row)?.reader;
+      if (reader?.type !== 'Point' && reader?.type !== 'MultiPoint') return -1;
+      if (type !== 'Point' && type !== 'MultiPoint' && !context.spriteSourceOf(row)) return -1;
+      return pointStyleOf(group, row, context)?.style ?? -1;
+    }
   }
 }
 
@@ -1341,6 +1439,7 @@ function collectLineRow(
   const parts: number[] = [];
   const reader = linePartsOf(group, row, parts);
   if (!reader || parts.length === 0) return;
+  const rowFirst = reader.vertexStart((geometryAt(group, row) as RowGeometryAt).at);
   const data = group.data;
   const ruleColor = context.slots.ruleColorOf(group, row, context.strings);
   const type = rowType(data, row);
@@ -1354,7 +1453,7 @@ function collectLineRow(
     const end = parts[k + 1];
     const base = draft.coordCount;
     for (let v = start; v < end; v++) {
-      draft.coord(coords[v * stride] - origin[0], coords[v * stride + 1] - origin[1]);
+      draft.coord(coords[v * stride] - origin[0], coords[v * stride + 1] - origin[1], v - rowFirst);
     }
     const n = end - start;
     // The length of the part before each segment, as the dashes measure it (zoom 0)
@@ -1406,7 +1505,11 @@ function collectPolygonRow(
     const { coords, stride, runs } = part;
     for (let k = 0; k < runs.length; k += 2) {
       for (let c = runs[k]; c < runs[k + 1]; c++) {
-        draft.coord(coords[c * stride] - origin[0], coords[c * stride + 1] - origin[1]);
+        draft.coord(
+          coords[c * stride] - origin[0],
+          coords[c * stride + 1] - origin[1],
+          c - part.first,
+        );
       }
     }
     // 1. The fill, in the pairs of triangles of its triangulation
