@@ -43,6 +43,7 @@ import {
   queryFeatures,
   segmentIntersectsBBox,
 } from './shared.js';
+import { createTableEdgeSnapProvider, createTableVertexSnapProvider } from './table.js';
 
 export type { StoreSnapProviderDeps } from './shared.js';
 
@@ -163,7 +164,8 @@ export interface BuiltInSnapProvidersOptions {
 
 /**
  * Builds the full set of built-in providers (in the order vertex -> edge ->
- * intersection -> guide)
+ * intersection -> guide, then the vertices and the edges of the rows held as columns, whose
+ * intersections the intersection provider makes too)
  *
  * @internal
  */
@@ -181,5 +183,7 @@ export function createBuiltInSnapProviders(
       options.getNorthStepDegrees ?? (() => DEFAULT_SNAP_OPTIONS.guideStepDegrees),
       { tileSize: options.tileSize, messages },
     ),
+    createTableVertexSnapProvider(deps),
+    createTableEdgeSnapProvider(deps),
   ];
 }

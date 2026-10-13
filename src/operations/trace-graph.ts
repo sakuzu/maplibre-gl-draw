@@ -106,9 +106,14 @@ function nodeKey(coordinate: Coordinate): string {
  *
  * @param features The features to build from (pass only the visible ones)
  * @param bbox The extent in degrees; only the edges that touch it are taken in
+ * @param edges Lists more edges (the rows held as columns, read on their columns) the same way
  * @returns The graph. It has no nodes when no edge falls in `bbox`
  */
-export function buildTraceGraph(features: readonly Feature[], bbox: BoundingBox): TraceGraph {
+export function buildTraceGraph(
+  features: readonly Feature[],
+  bbox: BoundingBox,
+  edges?: (visit: (start: Coordinate, end: Coordinate) => void) => void,
+): TraceGraph {
   const nodes = new Map<string, TraceGraphNode>();
   const seenEdges = new Set<string>();
 
@@ -148,6 +153,10 @@ export function buildTraceGraph(features: readonly Feature[], bbox: BoundingBox)
       addEdge(start, end);
     });
   }
+  edges?.((start, end) => {
+    if (!segmentIntersectsBBox(start, end, bbox)) return;
+    addEdge(start, end);
+  });
 
   return { nodes };
 }

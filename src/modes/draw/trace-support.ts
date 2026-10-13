@@ -22,9 +22,12 @@ import type { Geometry } from 'geojson';
 import type { ModeContext } from '../../api/extension/context.js';
 import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import type { Feature as PublicFeature } from '../../api/model.js';
+import { heldFeaturesInOrder } from '../../feature-table/held-order.js';
+import { forEachSnapRow, rowHasEdges, rowSegmentsInBBox } from '../../feature-table/snap-rows.js';
 import { resolveVertexCoordinates } from '../../operations/shared-vertex.js';
 import type { TraceGraphEndpoint } from '../../operations/trace-graph.js';
 import { buildTraceGraph, findTracePath } from '../../operations/trace-graph.js';
+import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { degreesPerPixel } from '../../snapping/geometry.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
@@ -78,6 +81,11 @@ export interface TraceSource {
   geometryOf(anchor: TraceAnchor): Geometry | null;
   /** The visible features of the document and the rows of the datasets within an extent */
   features(bbox: BoundingBox): Feature[];
+  /**
+   * Lists the edges of the visible rows held as columns within an extent, read on their columns
+   * (a Store that holds its features as rows; its features are the rows held)
+   */
+  edges?(bbox: BoundingBox, visit: (start: Coordinate, end: Coordinate) => void): void;
 }
 
 /** A feature of the document or a row, in the shape the graph is built from */
@@ -122,8 +130,14 @@ export function traceSourceOf(ctx: ModeContext): TraceSource {
     },
     features(bbox) {
       const extent: [number, number, number, number] = [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY];
-      const features = draw.features
-        .list({ bbox: extent })
+      // A Store of rows: its features are the rows held (the others are listed as edges)
+      const features = (
+        store.tables
+          ? heldFeaturesInOrder(store.tables, store.getLayerOrder()).filter((feature) =>
+              intersectsExtent(feature, bbox),
+            )
+          : draw.features.list({ bbox: extent })
+      )
         .filter(shown)
         .map((feature) => feature as Feature);
       for (const { row } of ctx.listTraceRows(extent)) {
@@ -131,7 +145,37 @@ export function traceSourceOf(ctx: ModeContext): TraceSource {
       }
       return features;
     },
+    edges(bbox, visit) {
+      const tables = store.tables;
+      if (!tables) return;
+      const hidden = store.listHidden();
+      forEachSnapRow(
+        tables,
+        bbox,
+        (layerId, groupId) => {
+          if (!store.getLayer(layerId)?.visible || hidden.has(layerId)) return false;
+          if (groupId === undefined) return true;
+          return store.getGroup(groupId)?.visible !== false && !hidden.has(groupId);
+        },
+        () => false,
+        (row) => {
+          if (!rowHasEdges(row.type)) return;
+          rowSegmentsInBBox(row, bbox, (start, end) => visit(start, end));
+        },
+      );
+    },
   };
+}
+
+/** Whether the extent of a feature meets a box */
+function intersectsExtent(feature: PublicFeature, bbox: BoundingBox): boolean {
+  const extent = getBoundingBox(feature as Feature);
+  return (
+    extent.minX <= bbox.maxX &&
+    extent.maxX >= bbox.minX &&
+    extent.minY <= bbox.maxY &&
+    extent.maxY >= bbox.minY
+  );
 }
 
 /**
@@ -229,5 +273,11 @@ export function computeTracePath(
   if (!fromEndpoint || !toEndpoint) return null;
 
   const bbox = traceBounds(source, fromEndpoint.coordinate, toEndpoint.coordinate);
-  return findTracePath(buildTraceGraph(source.features(bbox), bbox), fromEndpoint, toEndpoint);
+  const edges = source.edges;
+  const graph = buildTraceGraph(
+    source.features(bbox),
+    bbox,
+    edges ? (visit) => edges(bbox, visit) : undefined,
+  );
+  return findTracePath(graph, fromEndpoint, toEndpoint);
 }

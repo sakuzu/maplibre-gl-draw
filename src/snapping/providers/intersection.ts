@@ -36,6 +36,7 @@ import {
   queryFeatures,
   segmentIntersectsBBox,
 } from './shared.js';
+import { collectRowSegments } from './table.js';
 
 /**
  * The dependencies of the intersection provider
@@ -81,6 +82,8 @@ function collectNearbySegments(
 
     if (segments.length > 0) result.push({ featureId: feature.id, segments });
   }
+  // The rows held as columns, read on their columns
+  result.push(...collectRowSegments(deps, bbox, ctx));
 
   return result;
 }
