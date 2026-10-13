@@ -104,7 +104,7 @@ for (const [key, value] of Object.entries({
 const LARGE = 100_000;
 
 /** The GPU memory (MB) the drawing may allocate before a run stops */
-const GPU_LIMIT_MB = 500;
+const GPU_LIMIT_MB = 800;
 if (params.n > LARGE) {
   startButton.disabled = true;
   confirmButton.hidden = false;
