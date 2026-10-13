@@ -739,6 +739,13 @@ export interface StoreChange {
    * writer returned); a feature is in `features` or here, never in both
    */
   rows?: RowsChange;
+  /**
+   * The rows held as columns made features for this client (`added`, their features) and no
+   * longer (`removed`, their ids): not a change of the document, so what records or sends the
+   * changes of the document does not read it. A row is held while it is selected or edited; a
+   * row deleted is in `features.deleted`, never in `removed`
+   */
+  held?: { added: Feature[]; removed: string[] };
 }
 
 /**

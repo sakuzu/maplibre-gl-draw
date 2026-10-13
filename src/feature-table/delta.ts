@@ -13,7 +13,8 @@
  *
  * Every row of the delta has the number of the change it was last written in, so the next
  * version of a group, which takes the rows of the delta written up to a number when it starts,
- * leaves the rows written after it in the delta. Every row also has a copy number for the
+ * leaves the rows written after it in the delta. A row held as a feature has the number
+ * `Infinity` while it is held: no version takes it. Every row also has a copy number for the
  * drawings that number the copies of the rows (a draped drawing keeps one element per copy): it
  * is given when the row comes into the delta and kept until it leaves, whatever the rows are made
  * again around it.
@@ -64,6 +65,22 @@ export class DeltaRows {
   /** Records the number a row is written in */
   setWritten(row: number, number: number): void {
     this.written[row] = number;
+  }
+
+  /**
+   * Whether a row is kept in the delta whatever version comes (a row held as a feature: its
+   * number is `Infinity` while it is held)
+   */
+  isKept(row: number): boolean {
+    return this.written[row] === Number.POSITIVE_INFINITY;
+  }
+
+  /** Whether a row of the delta can go to the next version of its group (one is not kept) */
+  hasFoldable(): boolean {
+    for (let r = 0; r < this.written.length; r++) {
+      if (this.written[r] !== Number.POSITIVE_INFINITY) return true;
+    }
+    return false;
   }
 
   /** The copy number of a handle in the delta (-1 for a handle not in it) */

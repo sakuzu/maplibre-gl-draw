@@ -234,7 +234,7 @@ export class GroupVersions {
   /** Whether a version is started and not swapped, a group is due, or a delta has rows */
   get hasWork(): boolean {
     if (this.pending.size > 0 || this.due.size > 0) return true;
-    for (const layer of this.host.layers()) if (layer.delta.length > 0) return true;
+    for (const layer of this.host.layers()) if (layer.delta.hasFoldable()) return true;
     return false;
   }
 
@@ -312,7 +312,7 @@ export class GroupVersions {
     }
     // The first group of a layer that has only rows of its delta
     for (const layer of this.host.layers()) {
-      if (layer.groupCount > 0 || !layer.delta.group || !budget.canStep()) continue;
+      if (layer.groupCount > 0 || !layer.delta.hasFoldable() || !budget.canStep()) continue;
       if ([...this.pending.values()].some((v) => v.layer === layer)) continue;
       budget.step(() => this.startGroups(layer, []));
     }
@@ -364,6 +364,8 @@ export class GroupVersions {
       if (!delta) continue;
       const places = layer.deltaPlaces();
       for (let k = 0; k < delta.data.length; k++) {
+        // A row held as a feature stays in the delta until it is no longer held
+        if (layer.delta.isKept(k)) continue;
         const g = places.groups[k];
         if (g >= 0) this.markDue(layer.groupAt(g).handle);
         const main = this.host.mainGroup(delta.data.handles[k]);

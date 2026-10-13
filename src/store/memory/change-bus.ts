@@ -136,6 +136,27 @@ export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
   return { layers };
 }
 
+/**
+ * Folds the rows made features and no longer of two changes of a transaction into the difference
+ * between the state before the first and after the second
+ */
+export function mergeHeld(
+  a: NonNullable<StoreChange['held']>,
+  b: NonNullable<StoreChange['held']>,
+): NonNullable<StoreChange['held']> {
+  const added = new Map(a.added.map((feature) => [feature.id, feature]));
+  const removed = new Set(a.removed);
+  for (const id of b.removed) {
+    if (added.has(id)) added.delete(id);
+    else removed.add(id);
+  }
+  for (const feature of b.added) {
+    if (removed.has(feature.id)) removed.delete(feature.id);
+    else added.set(feature.id, feature);
+  }
+  return { added: [...added.values()], removed: [...removed] };
+}
+
 function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateIndex): void {
   // features
   if (changes.features) {
@@ -194,6 +215,11 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   // rows held as columns (one entry per row)
   if (changes.rows) {
     target.rows = target.rows ? mergeRowsChanges(target.rows, changes.rows) : changes.rows;
+  }
+
+  // rows made features and no longer (the difference over the transaction)
+  if (changes.held) {
+    target.held = target.held ? mergeHeld(target.held, changes.held) : changes.held;
   }
 
   // files

@@ -17,9 +17,11 @@
 
 import type {
   FeatureTables,
+  FeatureTablesHooks,
   FeatureTablesOptions,
   FeatureTablesWorker,
   FeatureTablesWriter,
+  HeldWriteOptions,
   ItemRefs,
   LayerRowsChange,
   LayerTableView,
@@ -34,7 +36,13 @@ import type {
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import { drawPropertyKey } from '../shared/properties.js';
-import type { BoundingBox, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
+import type {
+  BoundingBox,
+  Feature,
+  FeatureStyle,
+  FeatureType,
+  StoreChange,
+} from '../shared/types/model.js';
 import {
   createRowGroupBuilder,
   ROW_GROUP_TARGET_ROWS,
@@ -153,12 +161,15 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     handleOf: (id) => store.handleOf(id),
     idOf: (handle) => store.ids.idOf(handle),
     scan: (options) => store.scan(options ?? {}),
+    hold: (owner, ids) => store.hold(owner, ids),
+    heldFeature: (id) => store.heldFeature(id),
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
     adopt: (layerId, groups) => store.adopt(layerId, groups),
     apply: (patch, options) => store.apply(patch, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
+    writeHeld: (id, feature, options) => store.writeHeld(id, feature, options),
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
@@ -290,6 +301,15 @@ export interface FeatureTablesInternals {
   versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number };
   /** Sets the bytes the versions held at once may take (the tests, the measurements) */
   setPendingVersionBytes(bytes: number): void;
+  /** Whether the row of a handle is held as a feature */
+  isHeld(handle: RowHandle): boolean;
+  /** The handles of the rows held as features */
+  heldHandles(): IterableIterator<RowHandle>;
+  /**
+   * The values of a row held without the ones an edit wrote in its middle and did not end
+   * (undefined for an id not held): what an undone edit writes back
+   */
+  heldCommitted(id: string): Feature | undefined;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -338,6 +358,16 @@ interface Creation {
    * after a change of its rows (`dropReading`)
    */
   reading: { readonly group: RowGroup; readonly rows: ReadonlyMap<RowHandle, number> } | null;
+}
+
+/** A row held as a feature */
+interface HeldRow {
+  /** The feature given for it */
+  feature: Feature;
+  /** Its values without the ones an edit wrote in its middle and did not end */
+  committed: Feature;
+  /** The fields an edit wrote in its middle and did not end */
+  readonly intermediate: Set<RowField>;
 }
 
 /** A row group given to `adopt`, or built of new rows, waiting to be taken in */
@@ -389,12 +419,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
+  private readonly hooks: FeatureTablesHooks | undefined;
+  /** The rows held as features, by owner */
+  private readonly holders = new Map<string, ReadonlySet<RowHandle>>();
+  /** The rows held, with their features */
+  private readonly heldRows = new Map<RowHandle, HeldRow>();
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
     this.readContext = { styles: this.styles, groups: this.groups, strings: this.strings };
     this.worker = options.worker;
+    this.hooks = options.hooks;
     this.versions = new GroupVersions(this.versionHost());
   }
 
@@ -1052,22 +1088,268 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * Writes values of rows (see `FeatureTablesWriter.apply`): every value is checked before
-   * anything is written; then the rows are written in place, and the rows placed elsewhere and
-   * the new ones are put in the delta of their layer, and the drawing is told
+   * Writes values of rows (see `FeatureTablesWriter.apply`). A row held as a feature gets its
+   * feature written too, notified as a change of the feature rather than of the row; the fields
+   * an edit of it writes in its middle are kept for when the edit ends (`HeldWriteOptions`)
    */
   apply(patch: RowPatch, _options: RowApplyOptions = {}): RowsChange {
-    const { handles, fields, deleted } = patch;
-    const n = handles.length;
-    // The checks
-    for (const [field, values] of fields) {
+    const drafts = new Map<string, LayerChangeDraft>();
+    const heldWritten: Array<{ handle: RowHandle; fields: Map<RowField, unknown> }> = [];
+    if (this.heldRows.size === 0) {
+      this.applyPatch(patch, drafts);
+    } else {
+      // The rows held are written one at a time, without the fields an edit holds apart
+      const plain: number[] = [];
+      const kept: Array<{ i: number; handle: RowHandle; fields: Map<RowField, unknown> }> = [];
+      for (let i = 0; i < patch.handles.length; i++) {
+        const handle = patch.handles[i];
+        if (!this.heldRows.has(handle)) {
+          plain.push(i);
+          continue;
+        }
+        const fields = new Map<RowField, unknown>();
+        for (const [field, values] of patch.fields) fields.set(field, values[i]);
+        kept.push({ i, handle, fields });
+      }
+      this.checkRows(patch);
+      if (plain.length > 0) this.applyPatch(subsetPatch(patch, plain), drafts);
+      for (const { i, handle, fields } of kept) {
+        const held = this.heldRows.get(handle) as HeldRow;
+        const written = new Map<RowField, readonly unknown[]>();
+        for (const [field, value] of fields) {
+          if (!held.intermediate.has(field)) written.set(field, [value]);
+        }
+        const deleted = patch.deleted?.[i] ? Uint8Array.of(1) : undefined;
+        this.applyPatch({ handles: Int32Array.of(handle), fields: written, deleted }, drafts);
+        heldWritten.push({ handle, fields });
+      }
+    }
+    const features = this.heldChanges(heldWritten, drafts);
+    const change: RowsChange = { layers: finishChanges(drafts) };
+    if (this.hooks) {
+      if (change.layers.size > 0) this.hooks.emit({ rows: change });
+      if (features) this.hooks.emit({ features });
+    }
+    return change;
+  }
+
+  /**
+   * The changes of the features of rows held that a write wrote, taken out of the rows written:
+   * a row deleted is no longer held (by any owner), and its feature is deleted; the feature of a
+   * row written is made again from the row (which keeps the values of an edit in its middle), and
+   * the values the edit ends with are written over what was written
+   */
+  private heldChanges(
+    written: ReadonlyArray<{ handle: RowHandle; fields: Map<RowField, unknown> }>,
+    drafts: Map<string, LayerChangeDraft>,
+  ): StoreChange['features'] | null {
+    if (written.length === 0) return null;
+    const updated: Array<{ id: string; feature: Feature; previous: Feature }> = [];
+    const deletedFeatures: Feature[] = [];
+    const handles = new Set<RowHandle>();
+    for (const { handle, fields } of written) {
+      const held = this.heldRows.get(handle);
+      if (!held) continue;
+      handles.add(handle);
+      const place = this.placeOf(handle);
+      if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
+        this.forgetHeld(handle);
+        deletedFeatures.push(held.feature);
+        continue;
+      }
+      const previous = held.feature;
+      held.feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
+      held.committed = featureWithFields(held.committed, fields);
+      updated.push({ id: previous.id, feature: held.feature, previous });
+    }
+    // A row is in the change of its feature or of its row, not both
+    for (const draft of drafts.values()) {
+      for (const list of [draft.created, draft.updated, draft.deleted]) {
+        for (let k = list.length - 1; k >= 0; k--) if (handles.has(list[k])) list.splice(k, 1);
+      }
+    }
+    for (const [layerId, draft] of [...drafts]) {
+      if (draft.created.length + draft.updated.length + draft.deleted.length === 0) {
+        drafts.delete(layerId);
+      }
+    }
+    if (updated.length === 0 && deletedFeatures.length === 0) return null;
+    return {
+      ...(updated.length > 0 && { updated }),
+      ...(deletedFeatures.length > 0 && { deleted: deletedFeatures }),
+    };
+  }
+
+  /**
+   * Checks the shape of a patch: one value per row in every field (the values are checked where
+   * they are written)
+   */
+  private checkPatch(patch: RowPatch): void {
+    const n = patch.handles.length;
+    for (const [field, values] of patch.fields) {
       if (values.length !== n) {
         throw new Error(`FeatureTables: "${field}" has ${values.length} values for ${n} rows`);
       }
     }
-    if (deleted && deleted.length !== n) {
+    if (patch.deleted && patch.deleted.length !== n) {
       throw new Error('FeatureTables: deleted has another length than the rows');
     }
+  }
+
+  // === The rows held as features ===
+
+  hold(owner: string, ids: readonly string[]): void {
+    const next = new Set<RowHandle>();
+    for (const id of ids) {
+      const handle = this.handleOf(id);
+      if (handle !== undefined) next.add(handle);
+    }
+    const before = this.holders.get(owner);
+    if (next.size === 0) this.holders.delete(owner);
+    else this.holders.set(owner, next);
+    const added: Feature[] = [];
+    const removed: string[] = [];
+    for (const handle of next) {
+      if (this.heldRows.has(handle)) continue;
+      const feature = this.holdRow(handle);
+      if (feature) added.push(feature);
+    }
+    for (const handle of before ?? []) {
+      if (next.has(handle) || !this.heldRows.has(handle) || this.namedByOwner(handle)) continue;
+      const id = this.releaseRow(handle);
+      if (id !== undefined) removed.push(id);
+    }
+    if (this.hooks && (added.length > 0 || removed.length > 0)) {
+      this.hooks.emit({ held: { added, removed } });
+    }
+  }
+
+  heldFeature(id: string): Feature | undefined {
+    const handle = this.ids.handleOf(id);
+    return handle >= 0 ? this.heldRows.get(handle)?.feature : undefined;
+  }
+
+  /** Whether the row of a handle is held as a feature */
+  isHeld(handle: RowHandle): boolean {
+    return this.heldRows.has(handle);
+  }
+
+  /** The handles of the rows held as features */
+  heldHandles(): IterableIterator<RowHandle> {
+    return this.heldRows.keys();
+  }
+
+  /**
+   * The values of a row held without the ones of an edit in its middle (undefined for an id not
+   * held)
+   */
+  heldCommitted(id: string): Feature | undefined {
+    const handle = this.ids.handleOf(id);
+    return handle >= 0 ? this.heldRows.get(handle)?.committed : undefined;
+  }
+
+  writeHeld(id: string, feature: Feature, options: HeldWriteOptions = {}): void {
+    const handle = this.ids.handleOf(id);
+    const held = handle >= 0 ? this.heldRows.get(handle) : undefined;
+    if (!held) throw new Error(`FeatureTables: the row "${id}" is not held`);
+    if (feature.id !== id)
+      throw new Error(`FeatureTables: the feature of "${id}" names another id`);
+    if (
+      feature.layerId !== held.feature.layerId ||
+      (feature.groupId ?? undefined) !== (held.feature.groupId ?? undefined)
+    ) {
+      throw new Error(
+        `FeatureTables: the layer and the group of "${id}" are written with apply, with its key`,
+      );
+    }
+    const fields = featureFields(held.feature, feature);
+    if (fields.size > 0) {
+      const columns = new Map<RowField, readonly unknown[]>();
+      for (const [field, value] of fields) columns.set(field, [value]);
+      this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
+    }
+    const previous = held.feature;
+    held.feature = feature;
+    if (options.intermediate) {
+      for (const field of fields.keys()) held.intermediate.add(field);
+    } else {
+      held.committed = feature;
+      held.intermediate.clear();
+    }
+    this.hooks?.emit({
+      features: {
+        updated: [
+          { id, feature, previous, ...(options.intermediate === true && { isIntermediate: true }) },
+        ],
+      },
+    });
+  }
+
+  /** Makes a row a feature held (null for a row that cannot be read) */
+  private holdRow(handle: RowHandle): Feature | null {
+    const place = this.placeOf(handle);
+    if (!place) return null;
+    const feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
+    this.heldRows.set(handle, { feature, committed: feature, intermediate: new Set() });
+    // Its copy in the delta stays there until it is no longer held
+    if (place.group.delta) place.layer.delta.setWritten(place.row, Number.POSITIVE_INFINITY);
+    return feature;
+  }
+
+  /** Whether an owner names the row of a handle */
+  private namedByOwner(handle: RowHandle): boolean {
+    for (const handles of this.holders.values()) if (handles.has(handle)) return true;
+    return false;
+  }
+
+  /**
+   * Makes a row held a row only: the values an edit wrote in its middle and did not end are
+   * written back to the ones before it, and its copy in the delta can go to the next version of
+   * its group
+   *
+   * @returns Its id
+   */
+  private releaseRow(handle: RowHandle): string | undefined {
+    const held = this.heldRows.get(handle);
+    if (!held) return undefined;
+    this.heldRows.delete(handle);
+    if (held.intermediate.size > 0) {
+      const back = featureFields(held.feature, held.committed);
+      const columns = new Map<RowField, readonly unknown[]>();
+      for (const [field, value] of back) columns.set(field, [value]);
+      if (columns.size > 0) {
+        this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
+      }
+    }
+    const serial = this.ids.deltaLayer(handle);
+    if (serial >= 0) {
+      this.layerList[serial].delta.setWritten(this.ids.deltaSlot(handle), ++this.writeCount);
+      this.notifyWork();
+    }
+    return held.feature.id;
+  }
+
+  /** Takes a row out of every owner, without writing it (it was deleted) */
+  private forgetHeld(handle: RowHandle): void {
+    this.heldRows.delete(handle);
+    for (const [owner, handles] of [...this.holders]) {
+      if (!handles.has(handle)) continue;
+      const next = new Set(handles);
+      next.delete(handle);
+      if (next.size === 0) this.holders.delete(owner);
+      else this.holders.set(owner, next);
+    }
+  }
+
+  /**
+   * Checks the values of a patch before anything is written: one value per row in every field,
+   * the geometries, the groups of features, the keys, and what a new row cannot be without
+   *
+   * @returns The handle of the group of features of each row, when the patch writes them
+   */
+  private checkRows(patch: RowPatch): number[] | undefined {
+    const { handles, fields } = patch;
+    this.checkPatch(patch);
     const geometries = fields.get('geometry');
     geometries?.forEach((geometry, i) => {
       if (geometry === undefined) return;
@@ -1089,11 +1371,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (group < 0) throw new Error(`FeatureTables: the group "${id}" is unknown`);
       return group;
     });
-    // A row of a creation written before it is taken in: the creation is taken in now
-    for (const handle of handles) {
-      const creation = this.creationOf.get(handle);
-      if (creation) this.finishCreationNow(creation);
-    }
+    const places = Array.from(handles, (handle) => this.placeOf(handle));
     const strings: Array<[string, readonly unknown[] | undefined, boolean]> = [
       ['type', types, false],
       ['layerId', layerIds, false],
@@ -1102,16 +1380,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
     ];
     for (const [name, values, optional] of strings) {
       values?.forEach((value, i) => {
-        if (
-          typeof value === 'string' ||
-          (value === undefined && (optional || !!this.placeOf(handles[i])))
-        ) {
+        if (typeof value === 'string' || (value === undefined && (optional || !!places[i]))) {
           return;
         }
         throw new Error(`FeatureTables: the ${name} of the row ${handles[i]} is not a string`);
       });
     }
-    const places = Array.from(handles, (handle) => this.placeOf(handle));
     places.forEach((place, i) => {
       if (place) return;
       if (!this.ids.has(handles[i])) {
@@ -1132,6 +1406,25 @@ class FeatureTablesStore implements FeatureTablesInternals {
         );
       }
     });
+    return groupHandles;
+  }
+
+  /**
+   * Writes values of rows: every value is checked before anything is written; then the rows are
+   * written in place, and the rows placed elsewhere and the new ones are put in the delta of
+   * their layer, and the drawing is told
+   */
+  private applyPatch(patch: RowPatch, changes: Map<string, LayerChangeDraft>): void {
+    const { handles, fields, deleted } = patch;
+    const n = handles.length;
+    const groupHandles = this.checkRows(patch);
+    const layerIds = fields.get('layerId');
+    // A row of a creation written before it is taken in: the creation is taken in now
+    for (const handle of handles) {
+      const creation = this.creationOf.get(handle);
+      if (creation) this.finishCreationNow(creation);
+    }
+    const places = Array.from(handles, (handle) => this.placeOf(handle));
     // The values are made what the columns hold before anything is written
     const styles = fields.get('style');
     const styleNumbers = styles?.map((style) => this.styles.intern((style ?? {}) as FeatureStyle));
@@ -1142,7 +1435,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const moving = new Map<LayerTable, DeltaInput[]>();
     const leaving = new Map<LayerTable, Set<RowHandle>>();
     const fresh = new Map<LayerTable, DeltaInput[]>();
-    const changes = new Map<string, LayerChangeDraft>();
     let stateChanged = false;
     let created = false;
 
@@ -1181,7 +1473,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
         if (write.what & ROW_WRITE_GEOMETRY) this.touch(place.layer.layerId, place.group.bounds);
         if (write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STATE)) stateChanged = true;
         touched.add(place.group);
-        if (place.group.delta) place.layer.delta.setWritten(place.row, number);
+        if (place.group.delta) {
+          place.layer.delta.setWritten(
+            place.row,
+            this.heldRows.has(handle) ? Number.POSITIVE_INFINITY : number,
+          );
+        }
         let list = writes.get(place.layer.layerId);
         if (!list) {
           list = [];
@@ -1257,7 +1554,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const [layerId, list] of writes) {
       for (const listener of this.writeListeners) listener(layerId, list);
     }
-    return { layers: finishChanges(changes) };
   }
 
   /**
@@ -1880,7 +2176,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const written = new Float64Array(group?.data.length ?? 0);
     if (group) {
       for (let r = 0; r < group.data.length; r++) {
-        written[r] = writtenOf.get(group.data.handles[r]) ?? number;
+        const handle = group.data.handles[r];
+        // A row held as a feature stays in the delta until it is no longer held
+        written[r] = this.heldRows.has(handle)
+          ? Number.POSITIVE_INFINITY
+          : (writtenOf.get(handle) ?? number);
         this.styles.retain(group.data.styles[r]);
       }
     }
@@ -2240,4 +2540,88 @@ class LayerTableViewImpl implements LayerTableView {
     if (!place || place.layer !== this.table) return null;
     return { group: place.group, row: place.row };
   }
+}
+
+/** The rows `rows` of a patch, as a patch */
+function subsetPatch(patch: RowPatch, rows: readonly number[]): RowPatch {
+  const fields = new Map<RowField, readonly unknown[]>();
+  for (const [field, values] of patch.fields) {
+    fields.set(
+      field,
+      rows.map((i) => values[i]),
+    );
+  }
+  return {
+    handles: Int32Array.from(rows, (i) => patch.handles[i]),
+    fields,
+    deleted: patch.deleted ? Uint8Array.from(rows, (i) => patch.deleted?.[i] ?? 0) : undefined,
+  };
+}
+
+/**
+ * The fields of a row a feature writes over another feature of the row (its layer and group of
+ * features are not among them: they are written with the key of the order)
+ */
+function featureFields(before: Feature, after: Feature): Map<RowField, unknown> {
+  const out = new Map<RowField, unknown>();
+  if (after.type !== before.type) out.set('type', after.type);
+  if (after.geometry !== before.geometry) out.set('geometry', after.geometry);
+  if (after.style !== before.style) out.set('style', after.style ?? {});
+  if ((after.visible !== false) !== (before.visible !== false)) {
+    out.set('visible', after.visible !== false);
+  }
+  if ((after.locked === true) !== (before.locked === true))
+    out.set('locked', after.locked === true);
+  const a = (before.properties ?? {}) as Record<string, unknown>;
+  const b = (after.properties ?? {}) as Record<string, unknown>;
+  if (a !== b) {
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (a[key] !== b[key]) out.set(`property:${key}`, b[key]);
+    }
+  }
+  return out;
+}
+
+/** A feature with the values of fields of its row written over it */
+function featureWithFields(feature: Feature, fields: ReadonlyMap<RowField, unknown>): Feature {
+  if (fields.size === 0) return feature;
+  const out = { ...feature } as { -readonly [K in keyof Feature]: Feature[K] };
+  let properties: Record<string, unknown> | null = null;
+  for (const [field, value] of fields) {
+    if (value === undefined && !field.startsWith('property:')) continue;
+    switch (field) {
+      case 'type':
+        out.type = value as FeatureType;
+        break;
+      case 'layerId':
+        out.layerId = value as string;
+        break;
+      case 'groupId':
+        out.groupId = (value as string | null) || undefined;
+        break;
+      case 'geometry':
+        out.geometry = value as Feature['geometry'];
+        break;
+      case 'style':
+        out.style = (value ?? {}) as FeatureStyle;
+        break;
+      case 'visible':
+        out.visible = value !== false;
+        break;
+      case 'locked':
+        out.locked = value === true;
+        break;
+      case 'order':
+      case 'member':
+        break;
+      default: {
+        properties ??= { ...(feature.properties ?? {}) };
+        const key = field.slice('property:'.length);
+        if (value === undefined) delete properties[key];
+        else properties[key] = value;
+      }
+    }
+  }
+  if (properties) out.properties = properties;
+  return out as Feature;
 }

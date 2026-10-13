@@ -18,7 +18,7 @@
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
-import type { LayerRowsChange, RowField, RowsChange } from '../shared/types/model.js';
+import type { LayerRowsChange, RowField, RowsChange, StoreChange } from '../shared/types/model.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
 import type { UpdateSource } from './extension/store.js';
@@ -181,6 +181,35 @@ export interface FeatureTables {
    * their values with {@link LayerTableView}.
    */
   scan(options?: TableScanOptions): RowCursor;
+  /**
+   * Makes rows features for this client: the rows `owner` names are now these (the ones it named
+   * before and no other owner names are no longer). A row held is a {@link Feature} the Store
+   * gives as it is (`heldFeature`) until it is no longer held; it stays a row of the table, drawn
+   * from the table while it is not changed. The change is notified as `held`, not as a change of
+   * the document. An id of no row, or of a deleted one, is not held.
+   *
+   * The instance holds the rows selected and edited (`core:selection`) and, for a moment, the row
+   * a click is on (`core:pointer`).
+   *
+   * @param owner Who holds the rows
+   * @param ids The ids of the rows it holds (none: it holds no row any more)
+   */
+  hold(owner: string, ids: readonly string[]): void;
+  /** The feature of a row held (undefined for an id not held) */
+  heldFeature(id: string): Feature | undefined;
+}
+
+/**
+ * The options of {@link FeatureTablesWriter.writeHeld}.
+ */
+export interface HeldWriteOptions {
+  /**
+   * Whether the values are a state in the middle of an edit (a drag), always followed by the
+   * values it ends with: the rows show them, and the values of others written meanwhile into the
+   * fields it writes are kept apart until it ends (written when it is no longer held without an
+   * end, the row is shown with its values before the edit)
+   */
+  readonly intermediate?: boolean;
 }
 
 /**
@@ -248,6 +277,27 @@ export interface FeatureTablesWriter {
    *   (nothing is written then)
    */
   applyGroups(patch: TableGroupPatch, options?: RowApplyOptions): void;
+  /**
+   * Writes the feature of a row held, after the implementation of the Store recorded it: the
+   * feature is what `heldFeature` gives from now on, and its values are written to the row as
+   * `apply` writes them (the layer and the group of features are written with `apply`, with the
+   * key of the order, not here). The change is notified as an update of the feature.
+   *
+   * @throws when the row is not held, or the feature names another id, layer or group
+   */
+  writeHeld(id: string, feature: Feature, options?: HeldWriteOptions): void;
+}
+
+/**
+ * How the tables add to the notifications of the Store that holds them
+ */
+export interface FeatureTablesHooks {
+  /**
+   * Adds what the tables changed to the notification of the transaction of the Store (notified
+   * at once outside one): the rows written (`rows`), the rows made features and no longer
+   * (`held`), and the changes of the features of the rows held (`features`)
+   */
+  emit(change: StoreChange): void;
 }
 
 /**
@@ -261,6 +311,11 @@ export interface FeatureTablesOptions {
    * frames, when omitted)
    */
   readonly worker?: FeatureTablesWorker;
+  /**
+   * How the tables add to the notifications of the Store (without them, `apply` only returns
+   * the rows written, and the rows held and their features are not notified)
+   */
+  readonly hooks?: FeatureTablesHooks;
 }
 
 /**

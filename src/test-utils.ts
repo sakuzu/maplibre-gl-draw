@@ -510,13 +510,14 @@ export function tablesOfFeatures(
   layerId: string,
   features: readonly Feature[],
   targetRows?: number,
+  options?: FeatureTablesOptions,
 ): {
   internals: FeatureTablesInternals;
   table: LayerTable;
   tables: FeatureTables;
   writer: FeatureTablesWriter;
 } {
-  const { tables, writer } = createFeatureTablesStore();
+  const { tables, writer } = createFeatureTablesStore(options);
   const builder = createRowGroupBuilder({ targetRows });
   features.forEach((feature, i) => {
     builder.addRow(rowOfFeature(feature, orderKey(i)));
