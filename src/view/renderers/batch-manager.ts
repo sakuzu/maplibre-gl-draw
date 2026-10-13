@@ -38,6 +38,7 @@ import type { PointStyle } from './point/point-shape.js';
 import type { PolygonBatchData, PolygonBatchRenderer } from './polygon/batch.js';
 import type { SDFPolygonBatchData, SDFPolygonRenderer } from './polygon/sdf-polygon.js';
 import type { RetainedRendererSet } from './retained.js';
+import type { RowsRenderer } from './rows/rows-renderer.js';
 
 /**
  * The Point shapes that support instancing (circle, square, triangle, star)
@@ -65,6 +66,8 @@ export interface BatchManagerDeps {
   sdfLineRenderer: SDFLineRenderer;
   polygonBatchRenderer: PolygonBatchRenderer;
   sdfPolygonRenderer: SDFPolygonRenderer;
+  /** The rows of the layers held as rows, of every kind in one draw (by kind when omitted) */
+  rowsRenderer?: RowsRenderer;
   /** The terrain state of the draw instance (occlusion of the points; flat when omitted) */
   terrain?: TerrainContext;
 }
@@ -203,6 +206,7 @@ export class BatchManager {
   private sdfLineRenderer: SDFLineRenderer;
   private polygonBatchRenderer: PolygonBatchRenderer;
   private sdfPolygonRenderer: SDFPolygonRenderer;
+  private readonly rowsRenderer: RowsRenderer | undefined;
   /** The terrain state of the draw instance (occlusion of the points) */
   private terrain: TerrainContext;
 
@@ -257,6 +261,7 @@ export class BatchManager {
     this.sdfLineRenderer = deps.sdfLineRenderer;
     this.polygonBatchRenderer = deps.polygonBatchRenderer;
     this.sdfPolygonRenderer = deps.sdfPolygonRenderer;
+    this.rowsRenderer = deps.rowsRenderer;
     this.terrain = deps.terrain ?? new TerrainContext();
   }
 
@@ -298,6 +303,7 @@ export class BatchManager {
       styles: this.featureDrawer,
       viewport: (): [number, number] => [this.gl.drawingBufferWidth, this.gl.drawingBufferHeight],
       run: retainedDrawRun(this.gl),
+      ...(this.rowsRenderer ? { rows: this.rowsRenderer } : {}),
     };
     return this.retainedRenderers;
   }

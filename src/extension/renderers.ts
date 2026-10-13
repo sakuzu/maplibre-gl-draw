@@ -17,6 +17,7 @@ import type { Feature } from '../shared/types/model.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
 import type { FillShaderManager } from '../view/renderers/polygon/fill.js';
+import type { RowSpriteSource } from '../view/renderers/rows/rows-format.js';
 import type { TerrainContext } from '../view/terrain/context.js';
 
 /**
@@ -119,6 +120,15 @@ export interface FeatureTypeRenderer {
    * features it refuses. Every feature of the type when it is left out.
    */
   appliesTo?(feature: Feature): boolean;
+
+  /**
+   * The pictures it draws its points with, for the layers held as rows: such a point is drawn
+   * with the other rows of its chunk, in their order and in their draw, from the texture and
+   * the picture of its style given here, rather than at once by `draw`. A point whose style
+   * has no picture is drawn by `draw`. Optional: without it every feature it takes is drawn by
+   * `draw`
+   */
+  readonly rowSprites?: RowSpriteSource;
 }
 
 /**

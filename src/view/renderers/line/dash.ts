@@ -43,15 +43,33 @@ function calculateDistance(
   zoom: number,
   tileSize: number = DEFAULT_TILE_SIZE,
 ): number {
+  return dashSegmentLength(p1[0], p1[1], p2[0], p2[1], zoom, tileSize);
+}
+
+/**
+ * The length of a segment in screen px at a zoom, as the dashes measure it ({@link
+ * splitIntoDashes}): the latitude is stretched by the cosine of the latitude at the middle of
+ * the segment
+ *
+ * @internal
+ */
+export function dashSegmentLength(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  zoom: number,
+  tileSize: number = DEFAULT_TILE_SIZE,
+): number {
   const pixelsPerLngDegree = (tileSize * 2 ** zoom) / 360;
   // Determine the stretch per degree from the latitude at the middle of the interval (the
   // mapping is affine within the interval, so interpolating with the ratio computed here still
   // gives exactly the same intersection positions)
-  const latitude = (p1[1] + p2[1]) / 2;
+  const latitude = (ay + by) / 2;
   const cosLatitude = Math.max(Math.cos(latitude * RADIANS_PER_DEGREE), 1e-6);
 
-  const x = (p2[0] - p1[0]) * pixelsPerLngDegree;
-  const y = ((p2[1] - p1[1]) * pixelsPerLngDegree) / cosLatitude;
+  const x = (bx - ax) * pixelsPerLngDegree;
+  const y = ((by - ay) * pixelsPerLngDegree) / cosLatitude;
   return Math.hypot(x, y);
 }
 

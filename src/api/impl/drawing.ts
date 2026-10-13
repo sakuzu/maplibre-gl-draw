@@ -62,6 +62,10 @@ export function createDrawing(
     stopRecording() {
       customLayer.getTableRenderer()?.recordDraws(null);
     },
+    setDrawingByKind(byKind) {
+      customLayer.getTableRenderer()?.setDrawingByKind(byKind);
+      repaint();
+    },
     setRowsHidden(handles, hidden) {
       states()?.setHidden(Int32Array.from(handles), hidden);
       repaint();

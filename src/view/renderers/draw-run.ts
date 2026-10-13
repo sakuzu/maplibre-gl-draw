@@ -52,12 +52,28 @@ export class RetainedDrawRun {
   private unitZero = false;
   /** Whether a draw of the run left its vertex array bound */
   private vertexArrayLeft = false;
+  /** Advances whenever the remembered state is forgotten */
+  private generation = 0;
 
   constructor(private readonly gl: WebGL2RenderingContext) {}
 
   /** Whether a run is open */
   get isOpen(): boolean {
     return this.open;
+  }
+
+  /**
+   * A number that changes whenever the state is forgotten (a run begins or is told to forget,
+   * a frame starts): a renderer that keeps state of its own between the draws of a run (the
+   * textures on units the run does not track) trusts it only while this number is the one it
+   * saw, in an open run
+   */
+  get epoch(): number {
+    if (this.open && getRenderFrame() !== this.frame) {
+      this.clear();
+      this.frame = getRenderFrame();
+    }
+    return this.generation;
   }
 
   /**
@@ -142,6 +158,7 @@ export class RetainedDrawRun {
 
   /** Forgets the state remembered (what a draw left bound is still unbound by `forget`) */
   private clear(): void {
+    this.generation++;
     this.program = null;
     this.rowState = null;
     this.unitZero = false;

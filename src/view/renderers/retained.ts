@@ -25,6 +25,7 @@ import type { FeatureDrawer } from './drawer.js';
 import type { SDFLineRenderer } from './line/sdf-line.js';
 import type { PointInstanceRenderer } from './point/point-instance.js';
 import type { SDFPolygonRenderer } from './polygon/sdf-polygon.js';
+import type { RowsRenderer } from './rows/rows-renderer.js';
 
 /** Retained-mode API for lines */
 export type RetainedLineRenderer = Pick<
@@ -73,6 +74,11 @@ export interface RetainedRendererSet {
   styles: RetainedStyleResolver;
   /** Pixel size of the render target [width, height] */
   viewport(): [number, number];
+  /**
+   * The renderer that draws rows of every kind in one draw (the layers held as rows are drawn
+   * by it where it can; without it they are drawn with the renderers of their kinds)
+   */
+  readonly rows?: RowsRenderer;
   /**
    * The run of the retained draws of the context of the renderers. The side that draws a layer's
    * batches one after another opens a run around them, forgets it before anything else draws in

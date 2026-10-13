@@ -26,6 +26,7 @@ import { PointShapeRenderer } from '../renderers/point/point-shape.js';
 import { PolygonBatchRenderer } from '../renderers/polygon/batch.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
+import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
 import { ShaderInitializer } from '../shaders/initializer.js';
 import { QuadShader } from '../shaders/quad.js';
@@ -50,6 +51,8 @@ export interface Renderers {
   pointInstanceRenderer: PointInstanceRenderer;
   polygonBatchRenderer: PolygonBatchRenderer;
   sdfPolygonRenderer: SDFPolygonRenderer;
+  /** The rows of the layers held as rows, of every kind in one draw */
+  rowsRenderer: RowsRenderer;
   fillShaderManager: FillShaderManager;
   selectionUIRenderer: SelectionUIRenderer;
   selectionHandlesRenderer: SelectionHandlesRenderer;
@@ -128,6 +131,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     ...polygonScope,
     gpu: scope.gpu,
   });
+  const rowsRenderer = new RowsRenderer(mapInstance, gl, pixelRatio, terrain, scope.gpu);
   const fillShaderManager = new FillShaderManager(gl, terrain);
 
   const selectionExtensions = scope.selection.extensions;
@@ -200,6 +204,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     sdfLineRenderer,
     polygonBatchRenderer,
     sdfPolygonRenderer,
+    rowsRenderer,
     fillShaderManager,
   });
 
@@ -210,6 +215,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     sdfLineRenderer,
     polygonBatchRenderer,
     sdfPolygonRenderer,
+    rowsRenderer,
     terrain,
   });
 
@@ -224,6 +230,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     pointInstanceRenderer,
     polygonBatchRenderer,
     sdfPolygonRenderer,
+    rowsRenderer,
     fillShaderManager,
     selectionUIRenderer,
     selectionHandlesRenderer,
@@ -266,6 +273,7 @@ const GPU_OWNERS = [
   'sdfLineRenderer',
   'polygonBatchRenderer',
   'sdfPolygonRenderer',
+  'rowsRenderer',
   'fillShaderManager',
 ] as const satisfies readonly GpuOwnerKey[];
 

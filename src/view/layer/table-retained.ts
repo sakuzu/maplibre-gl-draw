@@ -5,22 +5,29 @@
  * The drawing of the layers held as rows of columns (`TableLayerRenderer`)
  *
  * A layer held as rows is drawn in the order of its rows: its row groups in their order, and
- * the GPU chunks of a group (`table-partition.ts`) in theirs. A chunk is a run of rows of one
- * kind: polygons, lines and points are retained batches built from the columns
- * (`table-collect.ts`); the rows that cannot be retained (dashed lines, images, custom types,
- * features with companions, shapes that are not instanced) are drawn at once, from features made
- * from the rows and kept up to a number. A chunk outside the view is skipped, which keeps the
- * order since a chunk is a run of the order.
+ * the GPU chunks of a group (`table-partition.ts`) in theirs. A chunk outside the view is
+ * skipped, which keeps the order since a chunk is a run of the order. It is drawn one of two ways:
  *
- * The batches are built over the frames within a budget (`view/retained/chunk-scheduler.ts`),
- * and a chunk invalidated (a new rendering pixel ratio, a new style rule) keeps drawing its
- * batches until the new ones are built.
+ * - in one draw (`renderers/rows/`), on a flat map: a chunk holds rows of every kind, points,
+ *   lines, dashed lines, polygons and the points an extension draws with pictures, and is drawn
+ *   in one draw whatever kinds its rows are; it ends only where a row is drawn at once
+ * - by kind, elsewhere (the terrain, the globe): a chunk is a run of rows of one kind, and
+ *   polygons, solid lines and points are retained batches of the renderers of their kinds
+ *   (`table-collect.ts`)
  *
- * The state of the rows (hidden, moving) is not in the batches: every row group has a texture
- * of one byte per row (`renderers/row-state.ts`), written from the copy of the state of the
- * group whenever it changes, and the variant of the programs reads it. A batch draws any range
- * of its rows in one draw, so a chunk can be drawn in parts with something in between, at the
- * cost of one more draw per cut.
+ * In both, the rows that cannot be in a chunk (images, custom types, features with companions,
+ * shapes that are not instanced, and by kind the dashed lines) are drawn at once, from features
+ * made from the rows and kept up to a number.
+ *
+ * The chunks are built over the frames within a budget (`view/retained/chunk-scheduler.ts`),
+ * and a chunk invalidated (a new rendering pixel ratio, a new style rule) keeps drawing until the
+ * new one is built. When the drawing of a group changes (the terrain comes or goes), the group is
+ * drawn with the chunks of the drawing it had until those of the new one are built in view.
+ *
+ * The state of the rows (hidden, moving) is not in the chunks: every row group has a texture of
+ * one byte per row (`renderers/row-state.ts`), written from the copy of the state of the group
+ * whenever it changes, and the programs read it. A chunk draws any range of its rows in one draw,
+ * so it can be drawn in parts with something in between, at the cost of one more draw per cut.
  *
  * For tests and measurements it can record the ranges it draws in order (`recordDraws`) and cut
  * the ranges it draws at a number of places spread over the rows in view (`setArtificialCuts`).
@@ -39,7 +46,7 @@ import {
 import type { RowGroupHandle } from '../../feature-table/types.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
-import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import {
@@ -47,7 +54,7 @@ import {
   NEUTRAL_DRAW_FACTORS,
   type RetainedDrawFactors,
 } from '../renderers/draw-factors.js';
-import { ROW_LINE_STRIDE } from '../renderers/line/line-geometry.js';
+import { normalizeOrigin, ROW_LINE_STRIDE } from '../renderers/line/line-geometry.js';
 import type { RetainedLineBatch } from '../renderers/line/line-types.js';
 import { type RetainedPointBatch, ROW_POINT_STRIDE } from '../renderers/point/point-instance.js';
 import { type RetainedPolygonBatch, ROW_POLYGON_STRIDE } from '../renderers/polygon/sdf-polygon.js';
@@ -59,6 +66,8 @@ import {
   type RowStateTexture,
   uploadRowState,
 } from '../renderers/row-state.js';
+import { type RowSpriteSource, RowsPalette } from '../renderers/rows/rows-format.js';
+import type { RowsChunk as RowsGpuChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import {
   advanceChunkBuild,
   type ChunkBuildBudget,
@@ -70,9 +79,9 @@ import {
 } from '../retained/chunk-scheduler.js';
 import type { TerrainContext } from '../terrain/context.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
-import type { RunKind } from './store-retained-classify.js';
 import { drawImmediateFeatures, type StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import {
+  collectRow,
   createLineRowArrays,
   linePartsOf,
   lineRowsMercatorLength,
@@ -81,11 +90,19 @@ import {
   pointInstancesOf,
   type RowPackContext,
   RowStyleSlots,
+  RowsDraft,
+  type RowsPackContext,
+  RowsStyles,
   writeLineRow,
   writePointRow,
   writePolygonRow,
 } from './table-collect.js';
-import { classifyRow, type OrderedChunkRange, partitionRowGroup } from './table-partition.js';
+import {
+  classifyRow,
+  type OrderedChunkRange,
+  partitionRowGroup,
+  type TableRunKind,
+} from './table-partition.js';
 
 /**
  * The time the builds of the batches of the rows may take in one frame (ms)
@@ -123,8 +140,8 @@ export interface TableDrawRecord {
   readonly group: RowGroupHandle;
   /** The place of the group in the order of its layer */
   readonly groupIndex: number;
-  /** The kind of the chunk */
-  readonly kind: RunKind;
+  /** The kind of the chunk (`rows` for a chunk drawn in one draw) */
+  readonly kind: TableRunKind;
   /** The first row drawn in its group */
   readonly from: number;
   /** The end of the rows drawn (exclusive) */
@@ -170,9 +187,15 @@ type TableChunkBatch =
   | { readonly kind: 'line'; readonly batch: RetainedLineBatch | null }
   | { readonly kind: 'polygon'; readonly batch: RetainedPolygonBatch | null };
 
-/** A retained chunk of rows */
+/** A retained chunk of rows of one kind (the drawing by kind) */
 interface RetainedRowsChunk extends RetainedChunkState<TableChunkBatch> {
   readonly type: 'retained';
+  readonly range: OrderedChunkRange;
+}
+
+/** A chunk of rows of every kind drawn in one draw */
+interface OneDrawRowsChunk extends RetainedChunkState<RowsGpuChunk> {
+  readonly type: 'rows';
   readonly range: OrderedChunkRange;
 }
 
@@ -186,12 +209,35 @@ interface ImmediateRowsChunk {
   filled: number;
 }
 
-type RowsChunk = RetainedRowsChunk | ImmediateRowsChunk;
+/** A chunk of the drawing by kind */
+type KindChunk = RetainedRowsChunk | ImmediateRowsChunk;
+/** A chunk of the drawing in one draw */
+type OneDrawChunk = OneDrawRowsChunk | ImmediateRowsChunk;
+/** A chunk of either drawing */
+type TableChunk = KindChunk | OneDrawRowsChunk;
+
+/**
+ * The two ways a layer held as rows is drawn: in one draw per chunk with rows of every kind
+ * (`RowsRenderer`, on a flat map), or with one renderer per kind and a chunk per run of a kind
+ */
+type Drawing = 'one-draw' | 'by-kind';
+
+/** The chunks of a group for one drawing, and the classification they were cut with */
+interface GroupChunks<C> {
+  chunks: C[];
+  /** The generation of the classification of the layer they were cut with */
+  generation: number;
+}
 
 /** What is kept for a row group */
 interface GroupCache {
   readonly group: RowGroup;
-  chunks: RowsChunk[];
+  /** The chunks of the drawing by kind (null until it is used) */
+  byKind: GroupChunks<KindChunk> | null;
+  /** The chunks of the drawing in one draw (null until it is used) */
+  oneDraw: GroupChunks<OneDrawChunk> | null;
+  /** The rows drawn with the pictures of an extension, with their source (the one draw) */
+  sprites: Map<number, RowSpriteSource>;
   texture: RowStateTexture | null;
   /** The version of the state the texture holds (-1 before the first upload) */
   uploadedVersion: number;
@@ -206,13 +252,19 @@ interface LayerCache {
   slots: RowStyleSlots | null;
   rule: Layer['styleRule'];
   companionsGeneration: number;
+  /** The revisions of the sources of pictures the classification read */
+  spriteRevisions: string;
+  /** Advances whenever the rows are to be classified again */
+  generation: number;
   /** What the rows are packed with (made again with new slots) */
   context: RowPackContext | null;
+  /** The styles of the drawing in one draw (made again with new slots or a new pixel ratio) */
+  rowsStyles: RowsStyles | null;
 }
 
 /**
  * What the draws of a layer and of a group read: set once per layer and once per group, and
- * read by the one host of the chunks, so that drawing a chunk makes no object
+ * read by the hosts of the chunks, so that drawing a chunk makes no object
  */
 interface DrawPass {
   layerId: string;
@@ -220,12 +272,16 @@ interface DrawPass {
   factors: RetainedDrawFactors;
   renderers: RetainedRendererSet | null;
   context: RowPackContext | null;
+  rowsStyles: RowsStyles | null;
   /** The size of the render target, read once per layer */
   viewport: [number, number];
-  cutsOf: Map<RetainedRowsChunk, number[]> | null;
+  cutsOf: Map<TableChunk, number[]> | null;
   group: RowGroup | null;
+  groupCache: GroupCache | null;
   groupIndex: number;
   binding: RowStateBinding | null;
+  /** Whether the chunks advanced are drawn (false while the other drawing draws the group) */
+  drawing: boolean;
 }
 
 /** The frame of the chunk scheduler, set once per layer */
@@ -250,8 +306,14 @@ export class TableLayerRenderer {
   private builtPixelRatio: number | null = null;
   private cuts = 0;
   private record: TableDrawRecord[] | null = null;
+  /** Whether the layers are drawn by kind even where they can be drawn in one draw */
+  private byKind = false;
+  /** Whether the uploads of the frame were written before its main pass */
+  private prepared = false;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
   private readonly scratch: { parts: number[] } = { parts: [] };
+  /** The drawing chosen for each group of the layer being drawn */
+  private readonly choices: Drawing[] = [];
   /** What the draws of the layer and the group being drawn read (set per layer and group) */
   private readonly pass: DrawPass = {
     layerId: '',
@@ -259,11 +321,14 @@ export class TableLayerRenderer {
     factors: NEUTRAL_DRAW_FACTORS,
     renderers: null,
     context: null,
+    rowsStyles: null,
     viewport: [0, 0],
     cutsOf: null,
     group: null,
+    groupCache: null,
     groupIndex: 0,
     binding: null,
+    drawing: true,
   };
   /** The frame the chunks of the layer being drawn are built and drawn in (set per layer) */
   private readonly schedule: SchedulerFrame = {
@@ -272,8 +337,10 @@ export class TableLayerRenderer {
     settled: true,
     budget: createChunkBuildBudget(0),
   };
-  /** What the building of the chunks asks of the layer and the group being drawn */
+  /** What the building of the chunks by kind asks of the layer and the group being drawn */
   private readonly host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch>;
+  /** What the building of the chunks drawn in one draw asks of them */
+  private readonly oneDrawHost: ChunkSchedulerHost<OneDrawRowsChunk, RowsGpuChunk>;
 
   constructor(private readonly options: TableLayerRendererOptions) {
     const pass = this.pass;
@@ -283,14 +350,31 @@ export class TableLayerRenderer {
         this.startJob(
           pass.group as RowGroup,
           state.range,
-          origin,
+          normalizeOrigin(origin),
           pass.context as RowPackContext,
           pass.renderers as RetainedRendererSet,
         ),
       adoptJob: () => {},
       disposeBatches: (batches) => disposeBatch(batches, pass.renderers as RetainedRendererSet),
       draw: (state) => {
-        this.drawRetained(state);
+        if (pass.drawing) this.drawRetained(state);
+        return true;
+      },
+    };
+    this.oneDrawHost = {
+      isStale: () => false,
+      startJob: (state, origin) =>
+        oneDrawJob(
+          pass.group as RowGroup,
+          state.range,
+          normalizeOrigin(origin),
+          this.packContext(pass.groupCache as GroupCache),
+          (pass.renderers as RetainedRendererSet).rows as RowsRenderer,
+        ),
+      adoptJob: () => {},
+      disposeBatches: (chunk) => pass.renderers?.rows?.disposeChunk(chunk),
+      draw: (state) => {
+        if (pass.drawing) this.drawOneDraw(state);
         return true;
       },
     };
@@ -298,7 +382,16 @@ export class TableLayerRenderer {
 
   /** Whether the last frame left a build unfinished */
   get hasPendingWork(): boolean {
-    return this.pending;
+    return this.pending || this.renderers?.rows?.hasPendingUploads === true;
+  }
+
+  /**
+   * Writes what the drawing in one draw queued to the GPU (the chunks built, the values of the
+   * styles, the writes in place). Called before the main pass of the frame
+   */
+  prerender(): void {
+    this.renderers?.rows?.flushUploads();
+    this.prepared = true;
   }
 
   /**
@@ -306,6 +399,9 @@ export class TableLayerRenderer {
    * rendering pixel ratio changed (they keep being drawn until then)
    */
   beginFrame(): void {
+    // A frame that had no pass before its main one writes what was queued now
+    if (!this.prepared) this.renderers?.rows?.flushUploads();
+    this.prepared = false;
     this.budget = createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
     this.pending = false;
     const dpr = resolvePixelRatio(this.options.pixelRatio);
@@ -326,11 +422,18 @@ export class TableLayerRenderer {
 
   /** Ends a frame: another one is asked for when a build is left */
   endFrame(): void {
-    if (this.pending) this.options.requestRepaint();
+    if (this.hasPendingWork) this.options.requestRepaint();
   }
 
   /**
    * Draws a layer held as rows, in the order of its rows
+   *
+   * On a flat map, where the renderer of the drawing in one draw is there and its program is
+   * ready, every chunk of rows is drawn in one draw; elsewhere (the terrain, the globe) the rows
+   * are drawn with the renderers of their kinds. A group whose chunks of one drawing are not
+   * built yet in view is drawn with the chunks of the other while they are, so nothing goes
+   * missing when the drawing changes, and the chunks of the other drawing are released once
+   * those of the drawing used are built.
    *
    * @param tables The tables the layer is in
    * @param table The rows of the layer
@@ -343,7 +446,21 @@ export class TableLayerRenderer {
     deps: StoreRetainedDrawDeps,
   ): void {
     const renderers = deps.renderers;
-    if (!canDrawRows(renderers)) return;
+    const rows = renderers.rows ?? null;
+    const terrain = this.options.terrain;
+    const flat = !terrain.renderState.active && terrain.globeGrids === null;
+    const oneDrawUsable = rows !== null && flat && rows.ready;
+    // The program compiles: frames are asked for until it is ready
+    if (rows !== null && flat && !oneDrawUsable && rows.compiling) this.pending = true;
+    const byKindUsable = canDrawRows(renderers);
+    let drawing: Drawing;
+    if (oneDrawUsable && !this.byKind) drawing = 'one-draw';
+    else if (byKindUsable) drawing = 'by-kind';
+    else if (oneDrawUsable) drawing = 'one-draw';
+    else return;
+    const usable = (d: Drawing): boolean => (d === 'one-draw' ? oneDrawUsable : byKindUsable);
+    const other: Drawing = drawing === 'one-draw' ? 'by-kind' : 'one-draw';
+
     this.renderers = renderers;
     const budget = this.budget ?? createChunkBuildBudget(TABLE_BUILD_BUDGET_MS);
     this.budget = budget;
@@ -362,6 +479,7 @@ export class TableLayerRenderer {
         terrain: this.options.terrain,
       };
     }
+    if (rows) this.ensureRowsStyles(cache, rows);
     this.translations[0] = 0;
     this.translations[1] = 0;
     for (let k = 1; k <= MOVE_SETS; k++) {
@@ -372,14 +490,39 @@ export class TableLayerRenderer {
 
     const bounds = frame.bounds ?? WORLD;
     const settled = !isTerrainCameraMoving(this.options.terrain);
+
+    // The drawing of each group: the one of the layer, or the other while its chunks in view
+    // are not built and those of the other are. Once its chunks in view are built, the chunks
+    // of the other drawing are released
+    const choices = this.choices;
+    choices.length = 0;
+    for (let g = 0; g < table.groupCount; g++) {
+      const groupCache = cache.groups.get(table.groupAt(g).handle);
+      if (!groupCache) {
+        choices.push(drawing);
+        continue;
+      }
+      const own = this.chunksOf(cache, groupCache, drawing, tables, table, layer, deps);
+      const theirs = drawing === 'one-draw' ? groupCache.byKind : groupCache.oneDraw;
+      const ownBuilt = builtInView(own, bounds);
+      if (!ownBuilt && theirs && usable(other) && builtInView(theirs.chunks, bounds)) {
+        choices.push(other);
+      } else {
+        choices.push(drawing);
+        if (ownBuilt && theirs) this.releaseChunks(groupCache, other);
+      }
+    }
+
     const pass = this.pass;
     pass.layerId = table.layerId;
     pass.frame = frame;
     pass.factors = layerDrawFactors(layer);
     pass.renderers = renderers;
     pass.context = cache.context;
+    pass.rowsStyles = cache.rowsStyles;
     pass.viewport = renderers.viewport();
     pass.cutsOf = this.cuts > 0 ? this.placeCuts(table, cache, bounds) : null;
+    pass.drawing = true;
     const schedule = this.schedule;
     schedule.bounds = bounds;
     schedule.zoom = frame.zoom;
@@ -398,17 +541,20 @@ export class TableLayerRenderer {
         const binding = this.stateBinding(groupCache);
         if (!binding) continue;
         pass.group = group;
+        pass.groupCache = groupCache;
         pass.groupIndex = g;
         pass.binding = binding;
 
-        for (const chunk of groupCache.chunks) {
-          if (chunk.type === 'immediate') {
-            // What draws the rows at once may change any of the state of the run
-            run?.forget();
-            this.drawImmediate(tables, table.layerId, layer, group, g, chunk, frame, deps, settled);
-            continue;
-          }
-          if (advanceChunkBuild(chunk, schedule, this.host)) this.pending = true;
+        const choice = choices[g];
+        if (choice !== drawing) {
+          // The chunks of the drawing are built without being drawn, and the group is drawn
+          // with the chunks of the other drawing, as they are
+          pass.drawing = false;
+          this.advance(tables, layer, frame, deps, settled, drawing);
+          pass.drawing = true;
+          this.drawBuilt(tables, layer, frame, deps, settled, choice, bounds);
+        } else {
+          this.advance(tables, layer, frame, deps, settled, drawing);
         }
       }
     } finally {
@@ -417,9 +563,12 @@ export class TableLayerRenderer {
       pass.frame = null;
       pass.renderers = null;
       pass.context = null;
+      pass.rowsStyles = null;
       pass.group = null;
+      pass.groupCache = null;
       pass.binding = null;
       pass.cutsOf = null;
+      pass.drawing = true;
     }
   }
 
@@ -428,10 +577,9 @@ export class TableLayerRenderer {
    * are built, without it they are released at once
    */
   invalidateAll(keepDrawing = true): void {
-    const renderers = this.renderers;
     for (const cache of this.layers.values()) {
       for (const groupCache of cache.groups.values()) {
-        for (const chunk of groupCache.chunks) this.invalidateChunk(chunk, renderers, keepDrawing);
+        for (const chunk of allChunks(groupCache)) this.invalidateChunk(chunk, keepDrawing);
       }
       if (!keepDrawing) cache.slots = null;
     }
@@ -448,13 +596,52 @@ export class TableLayerRenderer {
   /** Releases every GPU resource (the batches are built again on the next draw) */
   dispose(renderers?: RetainedRendererSet): void {
     if (renderers) this.renderers = renderers;
-    const r = this.renderers;
     for (const cache of this.layers.values()) {
-      for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache, r);
+      for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache);
+      if (cache.rowsStyles) this.renderers?.rows?.retirePalette(cache.rowsStyles.palette);
     }
     this.layers.clear();
     this.cachedFeatures = 0;
     this.renderers = null;
+  }
+
+  /**
+   * Writes rows of a group in place in the chunks drawn in one draw: they are packed again from
+   * their columns and their coordinates and styles written over the ones of their chunk, which
+   * reach the GPU before the next frame is drawn
+   *
+   * @param fromRow The first row written, in its group
+   * @param toRow The end of the rows written (exclusive)
+   * @returns false when the rows cannot be written in place: their instances changed (another
+   *   kind, other coordinates, another number of them), their chunk is being built or drawn by
+   *   kind, or they are drawn at once. Nothing is written then, and the rows have to be built
+   *   again
+   */
+  patchRows(layerId: string, group: RowGroupHandle, fromRow: number, toRow: number): boolean {
+    const cache = this.layers.get(layerId);
+    const groupCache = cache?.groups.get(group);
+    const rows = this.renderers?.rows;
+    if (!cache || !groupCache || !rows || !cache.context || !cache.rowsStyles) return false;
+    const chunks = groupCache.oneDraw?.chunks;
+    if (!chunks) return false;
+    for (const chunk of chunks) {
+      const from = Math.max(fromRow, chunk.range.from);
+      const to = Math.min(toRow, chunk.range.to);
+      if (from >= to) continue;
+      if (chunk.type !== 'rows' || chunk.job) return false;
+      const gpu = chunk.batches;
+      // A chunk not built yet is built from the columns as they are
+      if (!gpu) continue;
+      if (chunk.stale || gpu.data.palette !== cache.rowsStyles.palette) return false;
+      const draft = new RowsDraft(to - from, from);
+      const context = this.packContext(groupCache, cache);
+      for (let row = from; row < to; row++) {
+        collectRow(groupCache.group, row, row - from, draft, gpu.data.origin, context);
+      }
+      const patch = draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites);
+      if (!rows.patchRows(gpu, from - chunk.range.from, patch)) return false;
+    }
+    return true;
   }
 
   // === Hooks of tests and measurements ===
@@ -474,9 +661,17 @@ export class TableLayerRenderer {
     this.record = record;
   }
 
+  /**
+   * Draws the layers by kind even where they can be drawn in one draw (true), or in one draw
+   * where they can (false, the default), to compare the two
+   */
+  setDrawingByKind(byKind: boolean): void {
+    this.byKind = byKind;
+  }
+
   // === The caches ===
 
-  /** The cache of a layer, made again where its groups or its classification changed */
+  /** The cache of a layer, classified again when what its classification read changed */
   private layerCache(
     tables: FeatureTablesInternals,
     table: LayerTable,
@@ -491,62 +686,124 @@ export class TableLayerRenderer {
         slots: null,
         rule: undefined,
         companionsGeneration: -1,
+        spriteRevisions: '',
+        generation: 0,
         context: null,
+        rowsStyles: null,
       };
       this.layers.set(table.layerId, cache);
     }
     const companions = deps.companions;
+    const spriteRevisions = spriteRevisionsOf(deps.customRenderers);
     const classificationChanged =
       cache.slots === null ||
       cache.slots.resolver !== renderers.styles ||
       cache.rule !== layer.styleRule ||
-      cache.companionsGeneration !== companions.generation();
+      cache.companionsGeneration !== companions.generation() ||
+      cache.spriteRevisions !== spriteRevisions;
     if (classificationChanged) {
       cache.slots = new RowStyleSlots(renderers.styles, tables.styles, layer.styleRule);
       cache.rule = layer.styleRule;
       cache.companionsGeneration = companions.generation();
+      cache.spriteRevisions = spriteRevisions;
+      cache.generation++;
     }
-    const slots = cache.slots as RowStyleSlots;
 
     // The groups that left the layer are released
     for (const [handle, groupCache] of cache.groups) {
       if (table.group(handle) !== groupCache.group) {
-        this.disposeGroup(groupCache, this.renderers);
+        this.disposeGroup(groupCache);
         cache.groups.delete(handle);
       }
     }
-    // The groups that came in are cut into chunks; with a new classification every group is cut
-    // again, and a chunk that keeps its rows and its kind keeps drawing until it is built again
+    // The groups that came in are kept (their chunks are cut when a drawing first needs them)
     for (let g = 0; g < table.groupCount; g++) {
       const group = table.groupAt(g);
-      const existing = cache.groups.get(group.handle);
-      if (existing && !classificationChanged) continue;
-      const ranges = partitionRowGroup(group, (row) =>
-        classifyRow(group, row, {
-          slots,
-          customTypes: deps.customRenderers,
-          companions: companions as FeatureCompanionRegistry,
-          featureOf: (rows, r) => rowFeature(tables.readContext, table.layerId, rows, r),
-          layer,
-        }),
-      );
-      if (existing) {
-        existing.chunks = this.reuseChunks(existing.chunks, ranges);
-      } else {
-        cache.groups.set(group.handle, {
-          group,
-          chunks: ranges.flatMap((range) => this.makeChunk(range)),
-          texture: null,
-          uploadedVersion: -1,
-          binding: null,
-        });
-      }
+      if (cache.groups.has(group.handle)) continue;
+      cache.groups.set(group.handle, {
+        group,
+        byKind: null,
+        oneDraw: null,
+        sprites: new Map(),
+        texture: null,
+        uploadedVersion: -1,
+        binding: null,
+      });
     }
     return cache;
   }
 
+  /**
+   * The styles of the drawing in one draw of a layer, made again with new slots or a new pixel
+   * ratio (the chunks built with the old ones keep them until they are built again)
+   */
+  private ensureRowsStyles(cache: LayerCache, rows: RowsRenderer): void {
+    const slots = cache.slots as RowStyleSlots;
+    const current = cache.rowsStyles;
+    const pixelRatio = this.options.pixelRatio;
+    if (
+      current &&
+      current.slots === slots &&
+      current.screenRatio === resolvePixelRatio(pixelRatio) &&
+      current.contentRatio === resolveContentPixelRatio(pixelRatio)
+    ) {
+      return;
+    }
+    if (current) rows.retirePalette(current.palette);
+    cache.rowsStyles = new RowsStyles(slots, new RowsPalette(), pixelRatio);
+  }
+
+  /**
+   * The chunks of a group for a drawing, cut when the drawing first needs them and cut again
+   * when the classification changed (a chunk that keeps its rows and its kind keeps drawing until
+   * it is built again)
+   */
+  private chunksOf(
+    cache: LayerCache,
+    groupCache: GroupCache,
+    drawing: Drawing,
+    tables: FeatureTablesInternals,
+    table: LayerTable,
+    layer: Layer,
+    deps: StoreRetainedDrawDeps,
+  ): TableChunk[] {
+    const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+    if (held && held.generation === cache.generation) return held.chunks;
+    const group = groupCache.group;
+    const oneDraw = drawing === 'one-draw';
+    const sprites = new Map<number, RowSpriteSource>();
+    const ranges = partitionRowGroup(
+      group,
+      (row) =>
+        classifyRow(group, row, {
+          slots: cache.slots as RowStyleSlots,
+          customTypes: deps.customRenderers,
+          companions: deps.companions as FeatureCompanionRegistry,
+          featureOf: (rows, r) => rowFeature(tables.readContext, table.layerId, rows, r),
+          layer,
+          oneDraw,
+          onSprite: (r, source) => sprites.set(r, source),
+        }),
+      undefined,
+      oneDraw ? (row) => sprites.get(row) : undefined,
+    );
+    if (oneDraw) {
+      groupCache.sprites = sprites;
+      const chunks = held
+        ? (this.reuseChunks(held.chunks, ranges) as OneDrawChunk[])
+        : (ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[]);
+      groupCache.oneDraw = { chunks, generation: cache.generation };
+      return chunks;
+    }
+    const chunks = held
+      ? (this.reuseChunks(held.chunks, ranges) as KindChunk[])
+      : (ranges.flatMap((range) => this.makeChunk(range)) as KindChunk[]);
+    groupCache.byKind = { chunks, generation: cache.generation };
+    return chunks;
+  }
+
   /** The chunks of new ranges: a chunk of the same rows and kind is kept (and built again) */
-  private reuseChunks(old: RowsChunk[], ranges: OrderedChunkRange[]): RowsChunk[] {
+  private reuseChunks(old: TableChunk[], ranges: OrderedChunkRange[]): TableChunk[] {
     const same =
       old.length === ranges.length &&
       old.every(
@@ -556,43 +813,56 @@ export class TableLayerRenderer {
           chunk.range.to === ranges[i].to,
       );
     if (same) {
-      for (const chunk of old) this.invalidateChunk(chunk, this.renderers, true);
+      for (const chunk of old) this.invalidateChunk(chunk, true);
       return old;
     }
-    for (const chunk of old) this.invalidateChunk(chunk, this.renderers, false);
+    for (const chunk of old) this.invalidateChunk(chunk, false);
     return ranges.flatMap((range) => this.makeChunk(range));
   }
 
   /** A chunk for a range of rows (none for a range without a bbox) */
-  private makeChunk(range: OrderedChunkRange): RowsChunk[] {
+  private makeChunk(range: OrderedChunkRange): TableChunk[] {
     if (range.kind === 'immediate') {
       return [{ type: 'immediate', range, features: null, filled: 0 }];
     }
     if (!range.bounds) return [];
+    const state = {
+      range,
+      bounds: range.bounds,
+      batches: null,
+      job: null,
+      origin: null,
+      jobOrigin: null,
+      viewOrigin: null,
+      stale: false,
+    };
     return [
-      {
-        type: 'retained',
-        range,
-        bounds: range.bounds,
-        batches: null,
-        job: null,
-        origin: null,
-        jobOrigin: null,
-        viewOrigin: null,
-        stale: false,
-      },
+      range.kind === 'rows'
+        ? ({ type: 'rows', ...state } as OneDrawRowsChunk)
+        : ({ type: 'retained', ...state } as RetainedRowsChunk),
     ];
   }
 
-  private invalidateChunk(
-    chunk: RowsChunk,
-    renderers: RetainedRendererSet | null,
-    keepDrawing: boolean,
-  ): void {
+  private invalidateChunk(chunk: TableChunk, keepDrawing: boolean): void {
     if (chunk.type === 'immediate') {
       this.cachedFeatures -= chunk.filled;
       chunk.features = null;
       chunk.filled = 0;
+      return;
+    }
+    const renderers = this.renderers;
+    if (chunk.type === 'rows') {
+      const rows = renderers?.rows;
+      if (!rows) {
+        chunk.job = null;
+        chunk.batches = null;
+        return;
+      }
+      invalidateChunk<OneDrawRowsChunk, RowsGpuChunk>(
+        chunk,
+        { disposeBatches: (gpu) => rows.disposeChunk(gpu) },
+        keepDrawing,
+      );
       return;
     }
     if (!renderers) {
@@ -607,9 +877,18 @@ export class TableLayerRenderer {
     );
   }
 
-  private disposeGroup(groupCache: GroupCache, renderers: RetainedRendererSet | null): void {
-    for (const chunk of groupCache.chunks) this.invalidateChunk(chunk, renderers, false);
-    groupCache.chunks = [];
+  /** Releases the chunks of a group for a drawing */
+  private releaseChunks(groupCache: GroupCache, drawing: Drawing): void {
+    const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+    if (!held) return;
+    for (const chunk of held.chunks) this.invalidateChunk(chunk, false);
+    if (drawing === 'one-draw') groupCache.oneDraw = null;
+    else groupCache.byKind = null;
+  }
+
+  private disposeGroup(groupCache: GroupCache): void {
+    this.releaseChunks(groupCache, 'by-kind');
+    this.releaseChunks(groupCache, 'one-draw');
     if (groupCache.texture) {
       deleteRowStateTexture(this.options.gl, groupCache.texture, this.options.ledger);
       groupCache.texture = null;
@@ -641,9 +920,22 @@ export class TableLayerRenderer {
     return groupCache.binding;
   }
 
+  /** What the rows of a group are packed with for the drawing in one draw */
+  private packContext(groupCache: GroupCache, cache?: LayerCache): RowsPackContext {
+    const pass = this.pass;
+    const context = (cache?.context ?? pass.context) as RowPackContext;
+    const rowsStyles = (cache?.rowsStyles ?? pass.rowsStyles) as RowsStyles;
+    const sprites = groupCache.sprites;
+    return {
+      ...context,
+      rowsStyles,
+      spriteSourceOf: (row) => sprites.get(row),
+    };
+  }
+
   // === The builds ===
 
-  /** Starts the build of the batch of a retained chunk */
+  /** Starts the build of the batch of a retained chunk of one kind */
   private startJob(
     group: RowGroup,
     range: OrderedChunkRange,
@@ -663,20 +955,106 @@ export class TableLayerRenderer {
 
   // === The draws ===
 
+  /**
+   * Builds and draws the chunks of the group being drawn for a drawing, in their order (the
+   * rows drawn at once among them; nothing is drawn while the pass does not draw)
+   */
+  private advance(
+    tables: FeatureTablesInternals,
+    layer: Layer,
+    frame: TableLayerFrame,
+    deps: StoreRetainedDrawDeps,
+    settled: boolean,
+    drawing: Drawing,
+  ): void {
+    const pass = this.pass;
+    const groupCache = pass.groupCache as GroupCache;
+    const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+    if (!held) return;
+    const run = (pass.renderers as RetainedRendererSet).run;
+    for (const chunk of held.chunks) {
+      if (chunk.type === 'immediate') {
+        if (!pass.drawing) continue;
+        // What draws the rows at once may change any of the state of the run
+        run?.forget();
+        this.drawImmediate(tables, layer, chunk, frame, deps, settled);
+        continue;
+      }
+      const pending =
+        chunk.type === 'rows'
+          ? advanceChunkBuild(chunk, this.schedule, this.oneDrawHost)
+          : advanceChunkBuild(chunk, this.schedule, this.host);
+      if (pending) this.pending = true;
+    }
+  }
+
+  /** Draws the chunks of the group being drawn for a drawing as they are built, in view */
+  private drawBuilt(
+    tables: FeatureTablesInternals,
+    layer: Layer,
+    frame: TableLayerFrame,
+    deps: StoreRetainedDrawDeps,
+    settled: boolean,
+    drawing: Drawing,
+    bounds: BoundingBox,
+  ): void {
+    const pass = this.pass;
+    const groupCache = pass.groupCache as GroupCache;
+    const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+    if (!held) return;
+    const run = (pass.renderers as RetainedRendererSet).run;
+    for (const chunk of held.chunks) {
+      if (chunk.type === 'immediate') {
+        run?.forget();
+        this.drawImmediate(tables, layer, chunk, frame, deps, settled);
+      } else if (chunk.batches && meets(chunk.bounds, bounds)) {
+        if (chunk.type === 'rows') this.drawOneDraw(chunk);
+        else this.drawRetained(chunk);
+      }
+    }
+  }
+
   /** Draws a retained chunk of the group being drawn, in ranges cut at the places given */
   private drawRetained(state: RetainedRowsChunk): void {
     if (!state.batches?.batch) return;
+    this.drawCut(state, (from, to) => this.drawRange(state, from, to));
+  }
+
+  /** Draws a chunk drawn in one draw of the group being drawn, in ranges cut at the places given */
+  private drawOneDraw(state: OneDrawRowsChunk): void {
+    if (!state.batches) return;
+    this.drawCut(state, (from, to) => this.drawOneDrawRange(state, from, to));
+  }
+
+  /** Draws the rows of a chunk in ranges cut at the places the pass gives for it */
+  private drawCut(state: TableChunk, draw: (from: number, to: number) => void): void {
     const rows = state.range.to - state.range.from;
     const cuts = this.pass.cutsOf?.get(state);
     let from = 0;
     if (cuts) {
       for (const cut of cuts) {
         if (cut <= from) continue;
-        this.drawRange(state, from, cut);
+        draw(from, cut);
         from = cut;
       }
     }
-    if (rows > from) this.drawRange(state, from, rows);
+    if (rows > from) draw(from, rows);
+  }
+
+  /** Draws the rows `[from, to)` of a chunk drawn in one draw of the group being drawn */
+  private drawOneDrawRange(state: OneDrawRowsChunk, from: number, to: number): void {
+    const pass = this.pass;
+    const { projectionData, zoom } = pass.frame as TableLayerFrame;
+    (pass.renderers as RetainedRendererSet).rows?.drawRange(
+      state.batches as RowsGpuChunk,
+      from,
+      to,
+      zoom,
+      projectionData,
+      pass.binding as RowStateBinding,
+      pass.factors,
+    );
+    this.recordRange('rows', state.range.from + from, state.range.from + to);
   }
 
   /** Draws the rows `[from, to)` of a retained chunk of the group being drawn */
@@ -722,28 +1100,34 @@ export class TableLayerRenderer {
         );
         break;
     }
+    this.recordRange(state.range.kind, state.range.from + from, state.range.from + to);
+  }
+
+  /** Records a range drawn of the group being drawn */
+  private recordRange(kind: TableRunKind, from: number, to: number): void {
+    const pass = this.pass;
     this.record?.push({
       layerId: pass.layerId,
       group: (pass.group as RowGroup).handle,
       groupIndex: pass.groupIndex,
-      kind: state.range.kind,
-      from: state.range.from + from,
-      to: state.range.from + to,
+      kind,
+      from,
+      to,
     });
   }
 
   /** Draws a chunk of rows at once, from the features of its rows */
   private drawImmediate(
     tables: FeatureTablesInternals,
-    layerId: string,
     layer: Layer,
-    group: RowGroup,
-    groupIndex: number,
     chunk: ImmediateRowsChunk,
     frame: TableLayerFrame,
     deps: StoreRetainedDrawDeps,
     settled: boolean,
   ): void {
+    const pass = this.pass;
+    const layerId = pass.layerId;
+    const group = pass.group as RowGroup;
     const { from, to } = chunk.range;
     const count = to - from;
     // The features of the rows are made over the frames, within the budget, while they fit
@@ -790,32 +1174,35 @@ export class TableLayerRenderer {
     if (features.length > 0) {
       drawImmediateFeatures(features, layer, frame.projectionData, frame.zoom, deps);
     }
-    this.record?.push({ layerId, group: group.handle, groupIndex, kind: 'immediate', from, to });
+    this.recordRange('immediate', from, to);
   }
 
   /**
    * The places the drawn ranges of a layer are cut at: `cuts` places spread evenly over the
-   * places between two rows of the retained chunks in view, as rows of each chunk (a cut is
-   * never at the start of a chunk, so every cut is one more draw)
+   * places between two rows of the retained chunks in view of the drawing chosen for each group,
+   * as rows of each chunk (a cut is never at the start of a chunk, so every cut is one more draw)
    */
   private placeCuts(
     table: LayerTable,
     cache: LayerCache,
     bounds: BoundingBox,
-  ): Map<RetainedRowsChunk, number[]> {
-    const visible: RetainedRowsChunk[] = [];
+  ): Map<TableChunk, number[]> {
+    const visible: TableChunk[] = [];
     let interior = 0;
     for (let g = 0; g < table.groupCount; g++) {
       const groupCache = cache.groups.get(table.groupAt(g).handle);
       if (!groupCache) continue;
-      for (const chunk of groupCache.chunks) {
-        if (chunk.type !== 'retained' || !chunk.batches?.batch) continue;
+      const held = this.choices[g] === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
+      if (!held) continue;
+      for (const chunk of held.chunks) {
+        if (chunk.type === 'immediate' || !chunk.batches) continue;
+        if (chunk.type === 'retained' && !chunk.batches.batch) continue;
         if (!meets(chunk.bounds, bounds)) continue;
         visible.push(chunk);
         interior += chunk.range.to - chunk.range.from - 1;
       }
     }
-    const out = new Map<RetainedRowsChunk, number[]>();
+    const out = new Map<TableChunk, number[]>();
     const n = Math.min(this.cuts, interior);
     let chunkIndex = 0;
     let before = 0;
@@ -840,6 +1227,86 @@ export class TableLayerRenderer {
     }
     return out;
   }
+}
+
+/** Every chunk of a group, of both drawings */
+function* allChunks(groupCache: GroupCache): Generator<TableChunk> {
+  if (groupCache.byKind) yield* groupCache.byKind.chunks;
+  if (groupCache.oneDraw) yield* groupCache.oneDraw.chunks;
+}
+
+/**
+ * Whether every chunk of a drawing that meets the view has its batches (the rows drawn at once
+ * need none)
+ */
+function builtInView(chunks: readonly TableChunk[], bounds: BoundingBox): boolean {
+  for (const chunk of chunks) {
+    if (chunk.type === 'immediate') continue;
+    if (!chunk.batches && meets(chunk.bounds, bounds)) return false;
+  }
+  return true;
+}
+
+/**
+ * The revisions of the sources of pictures of the custom types (the rows are classified again
+ * when one changes)
+ */
+function spriteRevisionsOf(customTypes: ReadonlyMap<string, unknown>): string {
+  let out = '';
+  for (const [type, renderer] of customTypes) {
+    const source = (renderer as { rowSprites?: RowSpriteSource }).rowSprites;
+    if (source) out += `${type}\u0000${source.revision}\u0000`;
+  }
+  return out;
+}
+
+/**
+ * Builds a chunk drawn in one draw: its rows are packed a slice at a time, then the chunk is
+ * made and waits for the pass before the main one of a later frame to write it to the GPU (it is
+ * drawn from the frame after that)
+ */
+function oneDrawJob(
+  group: RowGroup,
+  range: OrderedChunkRange,
+  origin: [number, number],
+  context: RowsPackContext,
+  rows: RowsRenderer,
+): RetainedChunkJob<RowsGpuChunk> {
+  const count = range.to - range.from;
+  const draft = new RowsDraft(count, range.from, range.vertices);
+  // The pictures of the chunk come from one source (`partitionRowGroup`)
+  let sprites: RowSpriteSource | null = null;
+  for (let row = range.from; row < range.to && !sprites; row++) {
+    sprites = context.spriteSourceOf(row) ?? null;
+  }
+  const palette = context.rowsStyles.palette;
+  let next = 0;
+  let chunk: RowsGpuChunk | null = null;
+  let done = false;
+  return {
+    step(deadline, now) {
+      if (!chunk) {
+        while (next < count) {
+          const end = Math.min(count, next + SLICE_ROWS);
+          for (; next < end; next++) {
+            collectRow(group, range.from + next, next, draft, origin, context);
+          }
+          if (now() >= deadline) break;
+        }
+        if (next < count) return false;
+        chunk = rows.createChunk(draft.finish(origin, palette, sprites));
+        return false;
+      }
+      done = chunk.uploaded;
+      return done;
+    },
+    take: () => (done ? chunk : null),
+    dispose: () => {
+      if (chunk) rows.disposeChunk(chunk);
+      chunk = null;
+      done = false;
+    },
+  };
 }
 
 /** Whether the renderers can build and draw batches of rows */

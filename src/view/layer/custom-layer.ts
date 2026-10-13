@@ -746,6 +746,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       const { gl } = engine;
       if (!gl || !engine.renderers || gl.isContextLost()) return;
       engine.preparedTerrainState = terrainResolver.resolve(gl);
+      // The textures and buffers of the rows drawn in one draw are written here too, for the
+      // same reason
+      engine.tableRetained?.prerender();
     },
 
     // The first argument also accepts WebGL1, to match the declaration of CustomRenderMethod

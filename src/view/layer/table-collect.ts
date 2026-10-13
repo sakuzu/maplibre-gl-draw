@@ -32,6 +32,7 @@ import { polygonRingRuns } from '../../table/polygon-rings.js';
 import type { GeometryColumnReader } from '../../table/table.js';
 import type { ValueStringCache } from '../../table/value-column.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
+import { dashSegmentLength } from '../renderers/line/dash.js';
 import {
   maxSegmentMercatorOf,
   ROW_LINE_STRIDE,
@@ -52,6 +53,19 @@ import {
   writePolygonStrokeVertex,
 } from '../renderers/polygon/sdf-polygon.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
+import {
+  ROWS_DASH,
+  ROWS_INSTANCE_FLOATS,
+  ROWS_KIND,
+  ROWS_ROW_STYLE_FLOATS,
+  ROWS_STYLE_FLOATS,
+  type RowSprite,
+  type RowSpriteSource,
+  type RowsChunkData,
+  type RowsKind,
+  type RowsPalette,
+  writeRowsInstance,
+} from '../renderers/rows/rows-format.js';
 import { applyRuleColor, evaluateStyleRuleValue, type StyleRuleChannel } from '../style-rule.js';
 import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
@@ -94,6 +108,13 @@ export interface PolygonSlot {
   readonly dashedStroke: boolean;
   /** The width of the outline in CSS px */
   readonly strokeWidth: number;
+  /** The pattern of the outline */
+  readonly lineStyle: 'solid' | 'dashed' | 'dotted';
+  /**
+   * The color a dashed outline is drawn with, as the lines draw it (`toLineInstanceColor` of the
+   * color of the outline and its opacity)
+   */
+  readonly dashedColor: Color;
 }
 
 /**
@@ -108,6 +129,11 @@ export class RowStyleSlots {
   private readonly polygons = new Map<string, PolygonSlot>();
   /** The rule color of each value of the attribute the rule reads */
   private readonly ruleColors = new Map<unknown, string>();
+  /** The pictures of each source of pictures, for its revision */
+  private readonly sprites = new Map<
+    RowSpriteSource,
+    { revision: number; sprites: Map<number, RowSprite | null> }
+  >();
 
   /**
    * @param resolver The resolution of the styles of the features
@@ -183,10 +209,30 @@ export class RowStyleSlots {
         hasStroke,
         dashedStroke: strokeStyle.opacity > 0 && strokeStyle.lineStyle !== 'solid',
         strokeWidth: strokeStyle.width,
+        lineStyle: strokeStyle.lineStyle,
+        dashedColor: toLineInstanceColor(strokeStyle.color, strokeStyle.opacity),
       };
       this.polygons.set(key, slot);
     }
     return slot;
+  }
+
+  /**
+   * The picture a source of pictures gives the points of a style (null for points it draws at
+   * once), asked once per source, revision and style
+   */
+  sprite(source: RowSpriteSource, style: number): RowSprite | null {
+    let bySource = this.sprites.get(source);
+    if (!bySource || bySource.revision !== source.revision) {
+      bySource = { revision: source.revision, sprites: new Map() };
+      this.sprites.set(source, bySource);
+    }
+    let sprite = bySource.sprites.get(style);
+    if (sprite === undefined) {
+      sprite = source.sprite(this.styles.get(style)) ?? null;
+      bySource.sprites.set(style, sprite);
+    }
+    return sprite;
   }
 
   /**
@@ -752,5 +798,548 @@ export function writePolygonRow(
         }
       }
     }
+  }
+}
+
+// === The rows drawn in one draw ===
+
+/**
+ * The resolved styles of the rows of a layer as the values of a palette: each style, type of
+ * feature and rule color (and each picture of a source of pictures) is resolved once and gets a
+ * number, its values written once (`rows-format.ts`). The widths and sizes are in device pixels
+ * of the pixel ratio it was made with.
+ *
+ * @internal
+ */
+export class RowsStyles {
+  private readonly numbers = new Map<string, number>();
+  private readonly values = new Float32Array(ROWS_STYLE_FLOATS);
+  /** Device pixels per CSS px of the sizes fixed on screen */
+  readonly screenRatio: number;
+  /** Device pixels per CSS px of the widths that follow the zoom */
+  readonly contentRatio: number;
+
+  constructor(
+    readonly slots: RowStyleSlots,
+    readonly palette: RowsPalette,
+    pixelRatio: PixelRatioInput | undefined,
+  ) {
+    this.screenRatio = resolvePixelRatio(pixelRatio);
+    this.contentRatio = resolveContentPixelRatio(pixelRatio);
+  }
+
+  /**
+   * The number of the style of a point: its fill, its stroke, then its radius, its stroke width
+   * and the code of its shape (null for a shape that is not instanced)
+   */
+  point(style: number, type: FeatureType, ruleColor: string | null): number | null {
+    const key = `p${slotKey(style, type, ruleColor)}`;
+    const known = this.numbers.get(key);
+    if (known !== undefined) return known;
+    const slot = this.slots.point(style, type, ruleColor);
+    if (!slot.shape) return null;
+    const v = this.cleared();
+    const packed = slot.packed;
+    for (let i = 0; i < 8; i++) v[i] = packed[i];
+    v[8] = packed[8] * this.screenRatio;
+    v[9] = packed[9] * this.screenRatio;
+    v[10] = pointShapeCode(slot.shape);
+    return this.add(key);
+  }
+
+  /**
+   * The number of the style of a line: its color, then its width that follows the zoom, its
+   * width fixed on screen (negative), its width in CSS px and its pattern
+   */
+  line(style: number, type: FeatureType, ruleColor: string | null): number {
+    const key = `l${slotKey(style, type, ruleColor)}`;
+    const known = this.numbers.get(key);
+    if (known !== undefined) return known;
+    const slot = this.slots.line(style, type, ruleColor);
+    const v = this.cleared();
+    for (let i = 0; i < 4; i++) v[i] = slot.color[i];
+    this.widths(v, 4, slot.stroke.width, slot.stroke.lineStyle);
+    return this.add(key);
+  }
+
+  /**
+   * The number of the style of a polygon: its fill, the color of its outline, the widths of its
+   * outline (as a line's) and the color of a dashed outline
+   */
+  polygon(style: number, type: FeatureType, ruleColor: string | null): number {
+    const key = `g${slotKey(style, type, ruleColor)}`;
+    const known = this.numbers.get(key);
+    if (known !== undefined) return known;
+    const slot = this.slots.polygon(style, type, ruleColor);
+    const v = this.cleared();
+    for (let i = 0; i < 4; i++) {
+      v[i] = slot.fillColor[i];
+      v[4 + i] = slot.strokeColor[i];
+      v[12 + i] = slot.dashedColor[i];
+    }
+    this.widths(v, 8, slot.strokeWidth, slot.dashedStroke ? slot.lineStyle : 'solid');
+    return this.add(key);
+  }
+
+  /**
+   * The number of the style of a picture: its rectangle in the texture, then its half size in
+   * CSS px and its bearing
+   */
+  sprite(source: RowSpriteSource, sprite: RowSprite, style: number): number {
+    const key = `s${this.sourceNumber(source)}\u0000${style}\u0000${source.revision}`;
+    const known = this.numbers.get(key);
+    if (known !== undefined) return known;
+    const v = this.cleared();
+    for (let i = 0; i < 4; i++) v[i] = sprite.uv[i];
+    v[4] = sprite.halfWidth;
+    v[5] = sprite.halfHeight;
+    v[6] = sprite.direction >= 0 ? sprite.direction : -1;
+    return this.add(key);
+  }
+
+  private readonly sources = new Map<RowSpriteSource, number>();
+
+  private sourceNumber(source: RowSpriteSource): number {
+    let number = this.sources.get(source);
+    if (number === undefined) {
+      number = this.sources.size;
+      this.sources.set(source, number);
+    }
+    return number;
+  }
+
+  /** Writes the widths of a line or an outline from `at` */
+  private widths(
+    v: Float32Array,
+    at: number,
+    width: number,
+    lineStyle: 'solid' | 'dashed' | 'dotted',
+  ): void {
+    // The width that follows the zoom, and the one fixed on screen (the negative convention):
+    // the row picks one by whether it has a created zoom
+    v[at] = width * this.contentRatio;
+    v[at + 1] = -width * this.screenRatio;
+    v[at + 2] = width;
+    v[at + 3] = ROWS_DASH[lineStyle];
+  }
+
+  private cleared(): Float32Array {
+    this.values.fill(0);
+    return this.values;
+  }
+
+  private add(key: string): number {
+    const number = this.palette.add(this.values);
+    this.numbers.set(key, number);
+    return number;
+  }
+}
+
+/**
+ * What packing the rows of a layer into chunks drawn in one draw needs
+ *
+ * @internal
+ */
+export interface RowsPackContext extends RowPackContext {
+  /** The styles of the layer as the values of a palette */
+  readonly rowsStyles: RowsStyles;
+  /**
+   * The source of the pictures a row of the group packed is drawn with (undefined for a row
+   * drawn as its built-in kind)
+   */
+  spriteSourceOf(row: number): RowSpriteSource | undefined;
+}
+
+/**
+ * The arrays of a chunk of rows being packed: the instances, the coordinates, the style of each
+ * row, and where each row starts in them
+ *
+ * @internal
+ */
+export class RowsDraft {
+  instances: Float32Array;
+  instanceCount = 0;
+  points: Float32Array;
+  pointCount = 0;
+  coords: Float32Array;
+  coordCount = 0;
+  readonly rowStyles: Float32Array;
+  readonly rowFirst: Int32Array;
+  readonly pointFirst: Int32Array;
+  readonly coordFirst: Int32Array;
+
+  /**
+   * @param rows The rows of the chunk
+   * @param rowBase The first row of the chunk in its group
+   * @param coords The coordinates expected (the arrays grow past it)
+   */
+  constructor(
+    readonly rows: number,
+    readonly rowBase: number,
+    coords = 64,
+  ) {
+    this.coords = new Float32Array(Math.max(coords, 4) * 2);
+    this.instances = new Float32Array(Math.max(coords, 4) * 2 * ROWS_INSTANCE_FLOATS);
+    this.points = new Float32Array(4 * ROWS_INSTANCE_FLOATS);
+    this.rowStyles = new Float32Array(Math.max(rows, 1) * ROWS_ROW_STYLE_FLOATS);
+    this.rowFirst = new Int32Array(rows + 1);
+    this.pointFirst = new Int32Array(rows + 1);
+    this.coordFirst = new Int32Array(rows + 1);
+  }
+
+  /** Adds a coordinate (an offset from the origin) and returns its number */
+  coord(x: number, y: number): number {
+    const at = this.coordCount * 2;
+    if (at + 2 > this.coords.length) this.coords = grown(this.coords, at + 2);
+    this.coords[at] = x;
+    this.coords[at + 1] = y;
+    return this.coordCount++;
+  }
+
+  /** Adds an instance (and to the instances of the points, for a point or a picture) */
+  instance(
+    kind: RowsKind,
+    row: number,
+    i0: number,
+    i1: number,
+    i2: number,
+    i3: number,
+    extra = 0,
+  ): void {
+    if ((this.instanceCount + 1) * ROWS_INSTANCE_FLOATS > this.instances.length) {
+      this.instances = grown(this.instances, (this.instanceCount + 1) * ROWS_INSTANCE_FLOATS);
+    }
+    writeRowsInstance(this.instances, this.instanceCount++, kind, row, i0, i1, i2, i3, extra);
+    if (kind === ROWS_KIND.point || kind === ROWS_KIND.sprite) {
+      if ((this.pointCount + 1) * ROWS_INSTANCE_FLOATS > this.points.length) {
+        this.points = grown(this.points, (this.pointCount + 1) * ROWS_INSTANCE_FLOATS);
+      }
+      writeRowsInstance(this.points, this.pointCount++, kind, row, i0, i1, i2, i3, extra);
+    }
+  }
+
+  /** The packed arrays of the chunk */
+  finish(
+    origin: [number, number],
+    palette: RowsPalette,
+    sprites: RowSpriteSource | null,
+  ): RowsChunkData {
+    return {
+      origin,
+      rowBase: this.rowBase,
+      rows: this.rows,
+      instances: this.instances,
+      instanceCount: this.instanceCount,
+      points: this.points,
+      pointCount: this.pointCount,
+      coords: this.coords,
+      coordCount: this.coordCount,
+      rowStyles: this.rowStyles,
+      rowFirst: this.rowFirst,
+      pointFirst: this.pointFirst,
+      coordFirst: this.coordFirst,
+      palette,
+      sprites,
+    };
+  }
+}
+
+/** A Float32Array of at least `length` floats with the values of `array` */
+function grown(array: Float32Array, length: number): Float32Array {
+  let size = Math.max(array.length * 2, 16);
+  while (size < length) size *= 2;
+  const out = new Float32Array(size);
+  out.set(array);
+  return out;
+}
+
+/**
+ * Packs a row into a chunk drawn in one draw: its style, then its instances in the order they
+ * are drawn, and its coordinates
+ *
+ * - a point: one instance per point (a picture when its row is drawn with pictures)
+ * - a line: one instance per segment of each part, the parts in order; a dashed line carries the
+ *   length of its part before each segment
+ * - a polygon: for each polygon of the row in order, the pairs of triangles of its fill (when
+ *   its fill is seen), then the edges of its rings, the outer ring first (when it has an outline;
+ *   a dashed outline is drawn as lines, each ring from its first coordinate)
+ *
+ * @param i The row in the chunk (`row - draft.rowBase`)
+ * @param origin The origin the coordinates are offsets from
+ * @internal
+ */
+export function collectRow(
+  group: RowGroup,
+  row: number,
+  i: number,
+  draft: RowsDraft,
+  origin: readonly [number, number],
+  context: RowsPackContext,
+): void {
+  const data = group.data;
+  const styleAt = i * ROWS_ROW_STYLE_FLOATS;
+  draft.rowStyles.fill(0, styleAt, styleAt + ROWS_ROW_STYLE_FLOATS);
+  if (data.geometry.types[row] >= 0) {
+    const type = rowType(data, row);
+    switch (type) {
+      case 'Point':
+      case 'MultiPoint':
+        collectPointRow(group, row, styleAt, draft, origin, context);
+        break;
+      case 'LineString':
+      case 'Freehand':
+      case 'MultiLineString':
+        collectLineRow(group, row, styleAt, draft, origin, context);
+        break;
+      case 'Polygon':
+      case 'MultiPolygon':
+      case 'Circle':
+        collectPolygonRow(group, row, styleAt, draft, origin, context);
+        break;
+      default: {
+        // A custom type drawn with pictures holds points
+        if (context.spriteSourceOf(row))
+          collectPointRow(group, row, styleAt, draft, origin, context);
+        break;
+      }
+    }
+  }
+  draft.rowFirst[i + 1] = draft.instanceCount;
+  draft.pointFirst[i + 1] = draft.pointCount;
+  draft.coordFirst[i + 1] = draft.coordCount;
+}
+
+/** Writes the style of a row: the number of its style, its created zoom and whether it has one */
+function writeRowStyle(
+  draft: RowsDraft,
+  at: number,
+  style: number,
+  createdZoom: number | undefined,
+): void {
+  draft.rowStyles[at] = style;
+  draft.rowStyles[at + 1] = createdZoom ?? 0;
+  draft.rowStyles[at + 2] = createdZoom === undefined ? 0 : 1;
+}
+
+function collectPointRow(
+  group: RowGroup,
+  row: number,
+  styleAt: number,
+  draft: RowsDraft,
+  origin: readonly [number, number],
+  context: RowsPackContext,
+): void {
+  const reader = geometryReaderOf(group, row);
+  if (!reader || (reader.type !== 'Point' && reader.type !== 'MultiPoint')) return;
+  const data = group.data;
+  const source = context.spriteSourceOf(row);
+  let kind: RowsKind;
+  let style: number | null;
+  if (source) {
+    const sprite = context.slots.sprite(source, data.styles[row]);
+    if (!sprite) return;
+    kind = ROWS_KIND.sprite;
+    style = context.rowsStyles.sprite(source, sprite, data.styles[row]);
+  } else {
+    kind = ROWS_KIND.point;
+    style = context.rowsStyles.point(
+      data.styles[row],
+      rowType(data, row),
+      context.slots.ruleColorOf(group, row, context.strings),
+    );
+  }
+  // A shape that is not instanced makes the row a run drawn at once; it is not packed
+  if (style === null) return;
+  writeRowStyle(draft, styleAt, style, undefined);
+  const at = data.geometry.offsets[row];
+  const coords = reader.coords;
+  const stride = reader.dimensions;
+  for (let v = reader.vertexStart(at); v < reader.vertexStart(at + 1); v++) {
+    const index = draft.coord(coords[v * stride] - origin[0], coords[v * stride + 1] - origin[1]);
+    draft.instance(kind, row, index, -1, -1, -1);
+  }
+}
+
+function collectLineRow(
+  group: RowGroup,
+  row: number,
+  styleAt: number,
+  draft: RowsDraft,
+  origin: readonly [number, number],
+  context: RowsPackContext,
+): void {
+  const parts: number[] = [];
+  const reader = linePartsOf(group, row, parts);
+  if (!reader || parts.length === 0) return;
+  const data = group.data;
+  const ruleColor = context.slots.ruleColorOf(group, row, context.strings);
+  const type = rowType(data, row);
+  const style = context.rowsStyles.line(data.styles[row], type, ruleColor);
+  writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
+  const dashed = context.slots.line(data.styles[row], type, ruleColor).stroke.lineStyle !== 'solid';
+  const coords = reader.coords;
+  const stride = reader.dimensions;
+  for (let k = 0; k < parts.length; k += 2) {
+    const start = parts[k];
+    const end = parts[k + 1];
+    const base = draft.coordCount;
+    for (let v = start; v < end; v++) {
+      draft.coord(coords[v * stride] - origin[0], coords[v * stride + 1] - origin[1]);
+    }
+    const n = end - start;
+    // The length of the part before each segment, as the dashes measure it (zoom 0)
+    let before = 0;
+    for (let s = 0; s < n - 1; s++) {
+      draft.instance(
+        ROWS_KIND.segment,
+        row,
+        s > 0 ? base + s - 1 : -1,
+        base + s,
+        base + s + 1,
+        s + 2 < n ? base + s + 2 : -1,
+        dashed ? before : 0,
+      );
+      if (dashed) {
+        const a = (start + s) * stride;
+        const b = (start + s + 1) * stride;
+        before += dashSegmentLength(coords[a], coords[a + 1], coords[b], coords[b + 1], 0);
+      }
+    }
+  }
+}
+
+function collectPolygonRow(
+  group: RowGroup,
+  row: number,
+  styleAt: number,
+  draft: RowsDraft,
+  origin: readonly [number, number],
+  context: RowsPackContext,
+): void {
+  const plan = planPolygonRow(group, row, context);
+  if (!plan) return;
+  const { slot, triangles } = plan;
+  const data = group.data;
+  const style = context.rowsStyles.polygon(
+    data.styles[row],
+    rowType(data, row),
+    context.slots.ruleColorOf(group, row, context.strings),
+  );
+  writeRowStyle(draft, styleAt, style, plan.createdZoom);
+  const solidOutline = slot.hasStroke && !slot.dashedStroke;
+  const dashedOutline = slot.hasStroke && slot.dashedStroke;
+  for (const part of plan.parts) {
+    const fill = part.triangleTo > part.triangleFrom && slot.fillColor[3] > 0;
+    if (!fill && !slot.hasStroke) continue;
+    // The coordinates of the rings of the polygon, read by its fill and its outline alike
+    const base = draft.coordCount;
+    const { coords, stride, runs } = part;
+    for (let k = 0; k < runs.length; k += 2) {
+      for (let c = runs[k]; c < runs[k + 1]; c++) {
+        draft.coord(coords[c * stride] - origin[0], coords[c * stride + 1] - origin[1]);
+      }
+    }
+    // 1. The fill, in pairs of triangles
+    if (fill) {
+      pairTriangles(triangles, part.triangleFrom, part.triangleTo, part.base, (a, b, c, d) => {
+        draft.instance(ROWS_KIND.fill, row, base + a, base + b, base + c, base + d);
+      });
+    }
+    // 2. The outline: the edges of every ring
+    if (solidOutline || dashedOutline) {
+      let ringBase = base;
+      for (let k = 0; k < runs.length; k += 2) {
+        const count = runs[k + 1] - runs[k];
+        const at = (j: number) => ringBase + (((j % count) + count) % count);
+        let before = 0;
+        for (let j = 0; j < count; j++) {
+          if (solidOutline) {
+            draft.instance(ROWS_KIND.outline, row, at(j - 1), at(j), at(j + 1), at(j + 2));
+            continue;
+          }
+          // A dashed ring is a line from its first coordinate around back to it, with a round
+          // end at both ends of it, as the dashes of a ring are cut
+          draft.instance(
+            ROWS_KIND.dashedOutline,
+            row,
+            j > 0 ? at(j - 1) : -1,
+            at(j),
+            at(j + 1),
+            j + 1 < count ? at(j + 2) : -1,
+            before,
+          );
+          const a = (runs[k] + j) * stride;
+          const b = (runs[k] + ((j + 1) % count)) * stride;
+          before += dashSegmentLength(coords[a], coords[a + 1], coords[b], coords[b + 1], 0);
+        }
+        ringBase += count;
+      }
+    }
+  }
+}
+
+/**
+ * Pairs the triangles of a polygon that share an edge, for the fill drawn in strips of 4
+ * vertices: a pair `(a, b, c, d)` is the triangles `(a, b, c)` and `(c, b, d)`, which share the
+ * edge `b, c` and keep the winding of the triangles they were; a triangle without a partner is
+ * `(a, b, c, c)` (the second triangle has no area). The triangles of a polygon do not overlap and
+ * have one color, so how they are paired changes no pixel.
+ *
+ * @param triangles The indices of the triangles, 3 per triangle
+ * @param from The first index of the triangles of the polygon
+ * @param to The end of its indices
+ * @param base What the indices of the polygon are counted from (subtracted from them)
+ * @param emit Receives each pair (or triangle) as indices counted from `base`
+ * @internal
+ */
+export function pairTriangles(
+  triangles: ArrayLike<number>,
+  from: number,
+  to: number,
+  base: number,
+  emit: (a: number, b: number, c: number, d: number) => void,
+): void {
+  const count = (to - from) / 3;
+  if (count <= 0) return;
+  // The triangle of each directed edge, by its two ends
+  const edges = new Map<number, number>();
+  let span = 1;
+  for (let t = from; t < to; t++) span = Math.max(span, triangles[t] - base + 1);
+  const key = (u: number, v: number) => u * span + v;
+  for (let t = 0; t < count; t++) {
+    const at = from + t * 3;
+    const a = triangles[at] - base;
+    const b = triangles[at + 1] - base;
+    const c = triangles[at + 2] - base;
+    edges.set(key(a, b), t);
+    edges.set(key(b, c), t);
+    edges.set(key(c, a), t);
+  }
+  const used = new Uint8Array(count);
+  for (let t = 0; t < count; t++) {
+    if (used[t]) continue;
+    used[t] = 1;
+    const at = from + t * 3;
+    const v = [triangles[at] - base, triangles[at + 1] - base, triangles[at + 2] - base];
+    let paired = false;
+    // An edge `p, q` of this triangle is shared with the triangle that has `q, p`
+    for (let e = 0; e < 3 && !paired; e++) {
+      const p = v[e];
+      const q = v[(e + 1) % 3];
+      const other = edges.get(key(q, p));
+      if (other === undefined || used[other]) continue;
+      const o = from + other * 3;
+      const w = [triangles[o] - base, triangles[o + 1] - base, triangles[o + 2] - base];
+      // The corner of the other triangle off the shared edge
+      let d = -1;
+      for (const x of w) if (x !== p && x !== q) d = x;
+      if (d < 0) continue;
+      used[other] = 1;
+      paired = true;
+      // This triangle as (r, p, q): the shared edge is p -> q, its third corner r
+      const r = v[(e + 2) % 3];
+      emit(r, p, q, d);
+    }
+    if (!paired) emit(v[0], v[1], v[2], v[2]);
   }
 }

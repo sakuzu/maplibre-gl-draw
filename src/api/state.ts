@@ -127,7 +127,7 @@ export interface GpuMemoryDiagnostics {
   readonly bufferBytes: number;
   /** The bytes of the textures */
   readonly textureBytes: number;
-  /** The bytes per renderer (`points`, `lines`, `polygons`, `row-state`) */
+  /** The bytes per renderer (`points`, `lines`, `polygons`, `rows`, `row-state`) */
   readonly byRenderer: Readonly<Record<string, number>>;
 }
 
@@ -142,8 +142,11 @@ export interface TableDrawnRange {
   readonly group: number;
   /** The place of the row group in the order of its layer */
   readonly groupIndex: number;
-  /** How the rows are drawn: from a retained batch of their kind, or at once */
-  readonly kind: 'polygon' | 'line' | 'point' | 'immediate';
+  /**
+   * How the rows are drawn: in one draw with rows of every kind (`rows`), from a retained batch
+   * of their kind, or at once
+   */
+  readonly kind: 'rows' | 'polygon' | 'line' | 'point' | 'immediate';
   /** The first row of the range in its group */
   readonly from: number;
   /** The end of the range (exclusive) */
@@ -168,6 +171,12 @@ export interface TableDiagnostics {
   recordDraws(): readonly TableDrawnRange[];
   /** Stops the recording of the ranges drawn */
   stopRecording(): void;
+  /**
+   * Draws the layers held as rows with one renderer per kind of geometry and a chunk per run of
+   * a kind (true), as on the terrain and the globe, even where they are drawn in one draw per
+   * chunk with rows of every kind (false, the default): to compare the two
+   */
+  setDrawingByKind(byKind: boolean): void;
   /** Hides or shows rows by their handles, in this instance only */
   setRowsHidden(handles: ArrayLike<number>, hidden: boolean): void;
   /** Marks or unmarks rows as selected in bulk */
