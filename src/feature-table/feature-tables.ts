@@ -167,6 +167,7 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     scan: (options) => store.scan(options ?? {}),
     hold: (owner, ids) => store.hold(owner, ids),
     heldFeature: (id) => store.heldFeature(id),
+    overlay: (owner, features) => store.overlay(owner, features),
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
@@ -374,6 +375,16 @@ interface HeldRow {
   readonly intermediate: Set<RowField>;
 }
 
+/** A feature drawn over a row for this client */
+interface OverlayEntry {
+  /** The row of the delta it is drawn as */
+  readonly handle: RowHandle;
+  /** Its layer */
+  readonly layer: LayerTable;
+  /** The row it is drawn over (undefined for a feature of no row) */
+  readonly over: RowHandle | undefined;
+}
+
 /** A row group given to `adopt`, or built of new rows, waiting to be taken in */
 interface Adoption {
   readonly layer: LayerTable;
@@ -424,6 +435,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
   private readonly hooks: FeatureTablesHooks | undefined;
+  /** The features drawn over rows for this client, by owner and by id */
+  private readonly overlays = new Map<string, Map<string, OverlayEntry>>();
+  /** The rows of the deltas that are features drawn over rows (drawn, not read) */
+  private readonly drawnOnlyRows = new Set<RowHandle>();
+  /** The rows a feature is drawn over */
+  private overlaidRows = new Set<RowHandle>();
   /** The rows held as features, by owner */
   private readonly holders = new Map<string, ReadonlySet<RowHandle>>();
   /** The rows held, with their features */
@@ -448,6 +465,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       },
       nextGroupHandle: () => this.nextGroup++,
       inDelta: (handle) => this.ids.deltaLayer(handle) >= 0,
+      drawnOnly: (handle) => this.drawnOnlyRows.has(handle),
       mainGroup: (handle) => this.ids.mainGroup(handle),
       rowInput: (group, row) => rowInputOf(this.readContext, group, row),
       buildRows: (inputs) => this.buildRows(inputs),
@@ -549,6 +567,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       layer = new LayerTable(layerId, this.groups, this.layerList.length, this.nextGroup++);
       const table = layer;
       layer.setPendingSource(() => this.pendingGroups(table));
+      layer.setDrawnOnly((handle) => this.drawnOnlyRows.has(handle));
       this.layers.set(layerId, layer);
       this.layerList.push(layer);
     }
@@ -1287,6 +1306,99 @@ class FeatureTablesStore implements FeatureTablesInternals {
         ],
       },
     });
+  }
+
+  // === The features drawn over rows for this client ===
+
+  /**
+   * Draws features in the places of rows, for this client only (see `FeatureTables.overlay`): a
+   * feature is a row of the delta of its layer drawn and not read (`drawnOnlyRows`), with the
+   * keys of the row it is drawn over (at the end of its layer for a feature of no row), and the
+   * row it is drawn over is not drawn (`STATE_HIDDEN_OVERLAY`). The rows are not written
+   */
+  overlay(owner: string, features: readonly Feature[]): void {
+    const before = this.overlays.get(owner) ?? new Map<string, OverlayEntry>();
+    const next = new Map<string, OverlayEntry>();
+    const leaving = new Map<LayerTable, Set<RowHandle>>();
+    const coming = new Map<LayerTable, DeltaInput[]>();
+    const leave = (layer: LayerTable, handle: RowHandle): void => {
+      let set = leaving.get(layer);
+      if (!set) {
+        set = new Set();
+        leaving.set(layer, set);
+      }
+      set.add(handle);
+    };
+    for (const feature of features) {
+      const id = `\u0000overlay\u0000${owner}\u0000${feature.id}`;
+      const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
+      const over = this.handleOf(feature.id);
+      const place = over === undefined ? undefined : this.placeOf(over);
+      const layer = this.layerOf(feature.layerId);
+      const base: RowInput = place
+        ? rowInputOf(this.readContext, place.group, place.row)
+        : { id, type: feature.type, geometry: null, order: this.keyAfterLast(layer) };
+      const input: RowInput = {
+        ...base,
+        id,
+        type: feature.type,
+        geometry: feature.geometry,
+        style: (feature.style ?? {}) as Readonly<Record<string, unknown>>,
+        properties: feature.properties ?? {},
+        visible: feature.visible !== false,
+        locked: feature.locked === true,
+        deleted: false,
+      };
+      const previous = before.get(feature.id);
+      if (previous && previous.layer !== layer) leave(previous.layer, previous.handle);
+      let list = coming.get(layer);
+      if (!list) {
+        list = [];
+        coming.set(layer, list);
+      }
+      list.push({ handle, input });
+      next.set(feature.id, { handle, layer, over: place ? over : undefined });
+      this.drawnOnlyRows.add(handle);
+    }
+    for (const [id, previous] of before) {
+      if (!next.has(id)) leave(previous.layer, previous.handle);
+    }
+    if (next.size > 0) this.overlays.set(owner, next);
+    else this.overlays.delete(owner);
+    const number = ++this.writeCount;
+    for (const layer of new Set([...leaving.keys(), ...coming.keys()])) {
+      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), coming.get(layer) ?? [], number);
+    }
+    for (const [layer, set] of leaving) {
+      for (const handle of set) {
+        if (this.ids.deltaLayer(handle) < 0) this.drawnOnlyRows.delete(handle);
+      }
+      layer.touchPending();
+    }
+    // The rows drawn over are not drawn
+    const overlaid = new Set<RowHandle>();
+    for (const entries of this.overlays.values()) {
+      for (const entry of entries.values()) if (entry.over !== undefined) overlaid.add(entry.over);
+    }
+    const on = [...overlaid].filter((handle) => !this.overlaidRows.has(handle));
+    const off = [...this.overlaidRows].filter((handle) => !overlaid.has(handle));
+    this.overlaidRows = overlaid;
+    if (on.length > 0) this.states.setOverlaid(Int32Array.from(on), true);
+    if (off.length > 0) this.states.setOverlaid(Int32Array.from(off), false);
+    this.revisionCount++;
+  }
+
+  /** A key of the order after every item of a layer (a feature drawn at its end) */
+  private keyAfterLast(layer: LayerTable): string {
+    const order = layer.rowOrder();
+    const n = order.handles.length;
+    if (n === 0) return 'V';
+    const data = order.groups[n - 1].data;
+    const row = order.rows[n - 1];
+    const group = data.groups[row];
+    const key = group >= 0 ? (this.groups.orderOf(group) ?? '') : utf8String(data.itemKeys, row);
+    // Any key the last one is a beginning of comes after it
+    return `${key}~`;
   }
 
   /** Makes a row a feature held (null for a row that cannot be read) */
@@ -2192,10 +2304,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (group) {
       for (let r = 0; r < group.data.length; r++) {
         const handle = group.data.handles[r];
-        // A row held as a feature stays in the delta until it is no longer held
-        written[r] = this.heldRows.has(handle)
-          ? Number.POSITIVE_INFINITY
-          : (writtenOf.get(handle) ?? number);
+        // A row held as a feature stays in the delta until it is no longer held, and a feature
+        // drawn over a row as long as it is drawn
+        written[r] =
+          this.heldRows.has(handle) || this.drawnOnlyRows.has(handle)
+            ? Number.POSITIVE_INFINITY
+            : (writtenOf.get(handle) ?? number);
         this.styles.retain(group.data.styles[r]);
       }
     }

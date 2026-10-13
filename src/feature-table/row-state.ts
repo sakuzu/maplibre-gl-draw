@@ -34,8 +34,15 @@ export const STATE_HIDDEN_DELTA = 1 << 4;
  * read and drawn where it is now (the delta) until then
  */
 export const STATE_HIDDEN_WAIT = 1 << 5;
-/** The bits of every reason a row is hidden (bits 6 and 7 are kept for more) */
+/**
+ * A feature is drawn over the row in its place for this client only (`FeatureTables.overlay`):
+ * the row is not drawn, and is still hit where it is
+ */
+export const STATE_HIDDEN_OVERLAY = 1 << 6;
+/** The bits of every reason a row is hidden (bit 7 is kept for more) */
 export const STATE_HIDDEN_MASK = 0xff;
+/** The bits of the reasons a row is not hit (a row drawn over is hit where it is) */
+export const STATE_UNHIT_MASK = STATE_HIDDEN_MASK & ~STATE_HIDDEN_OVERLAY;
 /** Marked as selected in bulk */
 export const STATE_BULK = 1 << 8;
 /** The first of the two bits of the moving set of the row (0 = not moving, 1 to 3) */
@@ -78,6 +85,7 @@ const SET_HIDDEN = 1;
 const SET_BULK = 2;
 const SET_MOVE_SHIFT = 2;
 const SET_MOVE_MASK = 3 << SET_MOVE_SHIFT;
+const SET_OVERLAY = 16;
 
 /**
  * The state of the rows kept as sets of handles
@@ -105,6 +113,7 @@ export class RowStateSets {
     const bits = handle >= 0 && handle < this.bits.length ? this.bits[handle] : 0;
     return (
       ((bits & SET_HIDDEN) !== 0 ? STATE_HIDDEN_LOCAL : 0) |
+      ((bits & SET_OVERLAY) !== 0 ? STATE_HIDDEN_OVERLAY : 0) |
       ((bits & SET_BULK) !== 0 ? STATE_BULK : 0) |
       (((bits & SET_MOVE_MASK) >> SET_MOVE_SHIFT) << STATE_MOVE_SHIFT)
     );
@@ -113,6 +122,11 @@ export class RowStateSets {
   /** Hides or shows rows in this client only */
   setHidden(handles: Int32Array, hidden: boolean): void {
     this.update(handles, (bits) => (hidden ? bits | SET_HIDDEN : bits & ~SET_HIDDEN));
+  }
+
+  /** Marks or unmarks rows as drawn over by a feature in their place, for this client only */
+  setOverlaid(handles: Int32Array, overlaid: boolean): void {
+    this.update(handles, (bits) => (overlaid ? bits | SET_OVERLAY : bits & ~SET_OVERLAY));
   }
 
   /** Marks or unmarks rows as selected in bulk */

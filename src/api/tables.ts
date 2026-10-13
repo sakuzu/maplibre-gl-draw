@@ -199,6 +199,18 @@ export interface FeatureTables {
   hold(owner: string, ids: readonly string[]): void;
   /** The feature of a row held (undefined for an id not held) */
   heldFeature(id: string): Feature | undefined;
+  /**
+   * Draws features in the places of rows, for this client only: the features `owner` draws over
+   * rows are now these (the ones it drew before and does not give are no longer drawn). A
+   * feature is drawn in the place of the row of its id, which is not drawn while it is (and is
+   * still hit where it is); a feature of no row is drawn at the end of its layer. Nothing is
+   * written: the rows, what is read of them and the notifications of the document stay as they
+   * are. The edits of others in their middle are shown so.
+   *
+   * @param owner Who draws the features
+   * @param features The features it draws (none: it draws none any more)
+   */
+  overlay(owner: string, features: readonly Feature[]): void;
 }
 
 /**

@@ -16,6 +16,8 @@
  *   places
  * - Writes of every kind at random over the frames: what is drawn is the rows of the layer in
  *   their order, every frame
+ * - A feature drawn over a row for this client is drawn in the place of the row, which is not
+ *   drawn, from the frame it is given
  * - The next versions of the groups: their chunks are built without being drawn, and they are
  *   swapped in the pass before the main one of the frame they are up in; every frame draws the
  *   rows of the layer in their order, once each (14.1 of the design, 6.3)
@@ -464,6 +466,29 @@ describe('the drawing of the rows of the delta', () => {
         expect(drawnIds(full.record, live.table)).toEqual(shown);
       }
     }
+  });
+
+  it('draws a feature drawn over a row in its place, from the frame it is given, and not the row', () => {
+    const list = features(60, 5);
+    const live = setup(list);
+    live.frame();
+    const over = list[20];
+    live.tables.overlay('peer', [{ ...over, geometry: { type: 'Point', coordinates: [50, 50] } }]);
+    const { record } = live.frame();
+    const all = live.table.rowOrder();
+    const expected: string[] = [];
+    for (let i = 0; i < all.handles.length; i++) {
+      const id = live.tables.idOf(all.handles[i]) as string;
+      if (id === over.id) expected.push(`\u0000overlay\u0000peer\u0000${id}`);
+      else expected.push(id);
+    }
+    expect(drawnIds(record, live.table)).toEqual(expected);
+    // Taken away: the row is drawn again in its place
+    live.tables.overlay('peer', []);
+    expect(drawnIds(live.frame().record, live.table)).toEqual(
+      shownIds(live.table, live.tables.idOf),
+    );
+    expect(shownIds(live.table, live.tables.idOf)).toContain(over.id);
   });
 
   it('draws every row once in every frame while the next versions are built and swapped', () => {

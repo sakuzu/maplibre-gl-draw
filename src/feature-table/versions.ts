@@ -170,6 +170,8 @@ export interface VersionHost {
   nextGroupHandle(): RowGroupHandle;
   /** Whether the row of a handle has a copy in a delta */
   inDelta(handle: RowHandle): boolean;
+  /** Whether a row of a delta is drawn only (a feature drawn over a row): no version takes it */
+  drawnOnly(handle: RowHandle): boolean;
   /** The group of the copy of the row of a handle read in a group (-1 for none) */
   mainGroup(handle: RowHandle): RowGroupHandle;
   /** The values of a row with what was written in place, as the builder takes them */
@@ -508,6 +510,7 @@ export class GroupVersions {
       sources.push(delta.data);
       for (let k = 0; k < delta.data.length; k++) {
         if (!indices.has(places.groups[k])) continue;
+        if (host.drawnOnly(delta.data.handles[k])) continue;
         if (writtenInPlace(delta, k)) inputs.push(host.rowInput(delta, k));
         else pairs.push(source, k);
       }

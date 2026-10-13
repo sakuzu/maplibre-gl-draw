@@ -282,6 +282,11 @@ export class LayerTable {
   readonly delta: DeltaRows;
   /** The new rows read before their own groups are taken in (`setPendingSource`) */
   private pendingSource: (() => readonly RowGroup[]) | null = null;
+  /**
+   * Whether a row of the delta is a feature drawn over a row for this client only (drawn, not
+   * read: `setDrawnOnly`)
+   */
+  private drawnOnly: ((handle: number) => boolean) | null = null;
   private pendingRevision = 0;
   /** The rows read outside the groups, and what they were found with */
   private extras: ReadExtras | null = null;
@@ -475,6 +480,15 @@ export class LayerTable {
     this.touchPending();
   }
 
+  /**
+   * Sets which rows of the delta are drawn and not read (the features drawn over rows for this
+   * client only): the order and the searches leave them out
+   */
+  setDrawnOnly(test: (handle: number) => boolean): void {
+    this.drawnOnly = test;
+    this.touchPending();
+  }
+
   /** Makes the order and the searches read the new rows read before their groups again */
   touchPending(): void {
     this.pendingRevision++;
@@ -497,10 +511,16 @@ export class LayerTable {
     const groups: RowGroup[] = [];
     const rows: number[] = [];
     const deltaLength = delta?.data.length ?? 0;
+    const drawnOnly = this.drawnOnly;
     let d = 0;
     let p = 0;
     let pr = 0;
     while (d < deltaLength || p < pending.length) {
+      // A row of the delta drawn only is not read
+      if (d < deltaLength && drawnOnly?.((delta as RowGroup).data.handles[d])) {
+        d++;
+        continue;
+      }
       const fromDelta =
         p >= pending.length ||
         (d < deltaLength &&

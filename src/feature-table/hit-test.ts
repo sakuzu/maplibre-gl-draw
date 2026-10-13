@@ -10,7 +10,8 @@
  * tested on its column, read in place as a shape, by the same test as a feature of its type: no
  * feature is made. A type whose test reads a feature (an image, the type of an extension, a
  * shape cut on the globe) is tested on a feature made of the row for the test and dropped. A
- * hidden row (not shown, deleted, hidden by this client) is not a candidate.
+ * hidden row (not shown, deleted, hidden by this client) is not a candidate; a row a feature is
+ * drawn over for this client (`overlay`) is hit where it is.
  */
 
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';
@@ -19,7 +20,7 @@ import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/t
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { geometryAt, type LayerTable, type RowGroup } from './layer-table.js';
 import { rowFeature, rowNumber, rowType } from './row-read.js';
-import { STATE_HIDDEN_MASK } from './row-state.js';
+import { STATE_UNHIT_MASK } from './row-state.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
@@ -82,7 +83,7 @@ export function hitTestLayerTable(
   const reach = input.reach;
   const candidates: Array<{ group: RowGroup; row: number }> = [];
   table.searchInOrder(x - reach, y - reach, x + reach, y + reach, (group, row) => {
-    if ((group.state[row] & STATE_HIDDEN_MASK) !== 0) return;
+    if ((group.state[row] & STATE_UNHIT_MASK) !== 0) return;
     if (input.skip?.(group, row)) return;
     candidates.push({ group, row });
   });
