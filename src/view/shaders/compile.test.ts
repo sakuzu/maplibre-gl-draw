@@ -36,6 +36,7 @@ import { PointShapeRenderer } from '../renderers/point/point-shape.js';
 import { PolygonBatchRenderer } from '../renderers/polygon/batch.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
+import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
 import { DemAtlas } from '../terrain/dem-atlas.js';
 import { QuadDrapeRenderer } from '../terrain/drape/quad.js';
@@ -198,6 +199,11 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
     const renderer = new SDFLineRenderer(mapStub, gl);
     renderer.ensureShader(shaderData);
     expect(renderer.ensureRowProgram()).toBe(true);
+  });
+  withLabel('RowsRenderer', () => {
+    const renderer = new RowsRenderer(mapStub, gl);
+    renderer.ensureShader(shaderData);
+    expect(renderer.ready).toBe(true);
   });
   withLabel('QuadShader', () => new QuadShader(gl).ensureShader(shaderData));
   withLabel('DrapeRenderer', () => {
@@ -363,17 +369,19 @@ describe('shader programs on a real WebGL2', () => {
     // 11 renderers with one program each and the drape of a quad with two (image and paper);
     // the image and the paper share one call site. The point, the line and the polygon
     // renderers also build the variant that draws rows held as columns at the same call site;
-    // each variant is recorded with the program it is a variant of
+    // each variant is recorded with the program it is a variant of. The renderer of the rows
+    // drawn in one draw links its program without waiting for it (`gl.createProgram`), which
+    // the count of the call sites does not see; it is recorded among the programs
     expect(sites).toHaveLength(12);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(19);
+    expect(programs).toHaveLength(20);
   });
 
   it(
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(38);
+      expect(programs.length).toBe(40);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },
