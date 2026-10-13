@@ -479,7 +479,7 @@ export class TableLayerRenderer {
         terrain: this.options.terrain,
       };
     }
-    if (rows) this.ensureRowsStyles(cache, rows);
+    if (rows) this.ensureRowsStyles(cache, rows, tables);
     this.translations[0] = 0;
     this.translations[1] = 0;
     for (let k = 1; k <= MOVE_SETS; k++) {
@@ -633,13 +633,16 @@ export class TableLayerRenderer {
       // A chunk not built yet is built from the columns as they are
       if (!gpu) continue;
       if (chunk.stale || gpu.data.palette !== cache.rowsStyles.palette) return false;
-      const draft = new RowsDraft(to - from, from);
+      const draft = new RowsDraft(to - from, from, undefined, gpu.data.palette);
       const context = this.packContext(groupCache, cache);
       for (let row = from; row < to; row++) {
         collectRow(groupCache.group, row, row - from, draft, gpu.data.origin, context);
       }
       const patch = draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites);
-      if (!rows.patchRows(gpu, from - chunk.range.from, patch)) return false;
+      if (!rows.patchRows(gpu, from - chunk.range.from, patch)) {
+        draft.releaseStyles();
+        return false;
+      }
     }
     return true;
   }
@@ -737,7 +740,11 @@ export class TableLayerRenderer {
    * The styles of the drawing in one draw of a layer, made again with new slots or a new pixel
    * ratio (the chunks built with the old ones keep them until they are built again)
    */
-  private ensureRowsStyles(cache: LayerCache, rows: RowsRenderer): void {
+  private ensureRowsStyles(
+    cache: LayerCache,
+    rows: RowsRenderer,
+    tables: FeatureTablesInternals,
+  ): void {
     const slots = cache.slots as RowStyleSlots;
     const current = cache.rowsStyles;
     const pixelRatio = this.options.pixelRatio;
@@ -750,7 +757,7 @@ export class TableLayerRenderer {
       return;
     }
     if (current) rows.retirePalette(current.palette);
-    cache.rowsStyles = new RowsStyles(slots, new RowsPalette(), pixelRatio);
+    cache.rowsStyles = new RowsStyles(slots, new RowsPalette(), pixelRatio, tables.styles);
   }
 
   /**
@@ -1276,13 +1283,13 @@ function oneDrawJob(
   rows: RowsRenderer,
 ): RetainedChunkJob<RowsGpuChunk> {
   const count = range.to - range.from;
-  const draft = new RowsDraft(count, range.from, range.vertices);
+  const palette = context.rowsStyles.palette;
+  const draft = new RowsDraft(count, range.from, range.vertices, palette);
   // The pictures of the chunk come from one source (`partitionRowGroup`)
   let sprites: RowSpriteSource | null = null;
   for (let row = range.from; row < range.to && !sprites; row++) {
     sprites = context.spriteSourceOf(row) ?? null;
   }
-  const palette = context.rowsStyles.palette;
   let next = 0;
   let chunk: RowsGpuChunk | null = null;
   let done = false;
@@ -1305,7 +1312,9 @@ function oneDrawJob(
     },
     take: () => (done ? chunk : null),
     dispose: () => {
+      // The chunk counts the styles of its rows once it is made; the draft until then
       if (chunk) rows.disposeChunk(chunk);
+      else draft.releaseStyles();
       chunk = null;
       done = false;
     },

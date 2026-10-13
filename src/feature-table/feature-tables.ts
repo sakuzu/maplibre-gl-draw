@@ -277,6 +277,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
       for (let r = 0; r < data.length; r++) data.styles[r] = numbers[data.styles[r]];
       data.styleDictionary = null;
     }
+    for (let r = 0; r < data.length; r++) {
+      if (!this.styles.has(data.styles[r])) {
+        throw new Error(`FeatureTables: a row names the style ${data.styles[r]}, which is unknown`);
+      }
+    }
+    // The rows that use each style are counted (a style no row uses is given again)
+    for (let r = 0; r < data.length; r++) this.styles.retain(data.styles[r]);
 
     const group = createRowGroup(this.nextGroup++, data);
     for (let r = 0; r < data.length; r++) this.writeState(group, r);

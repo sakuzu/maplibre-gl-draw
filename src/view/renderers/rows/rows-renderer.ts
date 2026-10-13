@@ -203,6 +203,8 @@ export class RowsRenderer {
     sprites: null,
   };
   private readonly originShift: [number, number] = [0, 0];
+  /** The bytes written to the GPU by the uploads so far (buffers and textures) */
+  uploadedBytes = 0;
   private bearingFrame = -1;
   private bearing = 0;
 
@@ -291,7 +293,7 @@ export class RowsRenderer {
   get hasPendingUploads(): boolean {
     if (this.queued.size > 0 || this.patched.size > 0) return true;
     for (const palette of this.palettes) {
-      if (palette.uploaded < palette.count) return true;
+      if (palette.dirty.size > 0) return true;
     }
     return false;
   }
@@ -303,7 +305,7 @@ export class RowsRenderer {
   flushUploads(): void {
     if (this.queued.size > 0) this.ensureEmptySprites();
     for (const palette of this.palettes) {
-      if (palette.uploaded < palette.count) this.uploadPalette(palette);
+      if (palette.dirty.size > 0) this.uploadPalette(palette);
     }
     for (const chunk of this.queued) this.uploadChunk(chunk);
     this.queued.clear();
@@ -354,6 +356,12 @@ export class RowsRenderer {
         if (held !== packed) return false;
       }
     }
+    // The rows take the styles the patch counted, and stop counting the ones they had
+    for (let r = 0; r < patch.rows; r++) {
+      const old = data.rowStyle[fromRow + r];
+      if (old >= 0) data.palette.release(old);
+      data.rowStyle[fromRow + r] = patch.rowStyle[r];
+    }
     data.coords.set(patch.coords.subarray(0, coords * 2), firstCoord * 2);
     data.rowStyles.set(
       patch.rowStyles.subarray(0, patch.rows * ROWS_ROW_STYLE_FLOATS),
@@ -390,6 +398,8 @@ export class RowsRenderer {
     chunk.rowStyles = null;
     chunk.uploaded = false;
     const palette = chunk.data.palette;
+    // The rows of the chunk no longer use their styles
+    palette.releaseAll(chunk.data.rowStyle);
     palette.refs--;
     this.releasePalette(palette);
   }
@@ -700,14 +710,16 @@ export class RowsRenderer {
 
   // === Uploads ===
 
-  /** Writes the styles of a palette its texture does not hold, growing the texture as needed */
+  /**
+   * Writes the lines of the texture of a palette written since the last upload, growing the
+   * texture as needed (a new texture is written whole)
+   */
   private uploadPalette(palette: RowsPalette): void {
     const gl = this.gl;
     const texels = palette.count * ROWS_STYLE_TEXELS;
     const height = Math.max(1, Math.ceil(texels / ROWS_STYLE_WIDTH));
-    let from = palette.uploaded;
     if (!palette.gpu || palette.gpu.height < height) {
-      // A new texture with room for twice the lines, written from the first style
+      // A new texture with room for twice the lines, written whole
       const lines = Math.max(height, (palette.gpu?.height ?? 0) * 2, 1);
       this.deletePaletteTexture(palette);
       const texture = createFloatTexture(gl, gl.RGBA32F, ROWS_STYLE_WIDTH, lines);
@@ -719,25 +731,33 @@ export class RowsRenderer {
         textureBytes(ROWS_STYLE_WIDTH, lines, 16),
       );
       palette.gpu = { texture, width: ROWS_STYLE_WIDTH, height: lines };
-      from = 0;
+      for (let line = 0; line < height; line++) palette.dirty.add(line);
     }
-    const firstLine = Math.floor((from * ROWS_STYLE_TEXELS) / ROWS_STYLE_WIDTH);
     const lineFloats = ROWS_STYLE_WIDTH * 4;
-    const data = paddedRange(palette.values, firstLine * lineFloats, height * lineFloats);
     gl.bindTexture(gl.TEXTURE_2D, palette.gpu.texture);
-    gl.texSubImage2D(
-      gl.TEXTURE_2D,
-      0,
-      0,
-      firstLine,
-      ROWS_STYLE_WIDTH,
-      height - firstLine,
-      gl.RGBA,
-      gl.FLOAT,
-      data,
-    );
+    // The lines written, the runs of them next to each other in one upload each
+    const lines = [...palette.dirty].filter((line) => line < height).sort((a, b) => a - b);
+    for (let i = 0; i < lines.length; ) {
+      let j = i + 1;
+      while (j < lines.length && lines[j] === lines[j - 1] + 1) j++;
+      const first = lines[i];
+      const count = lines[j - 1] - first + 1;
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        first,
+        ROWS_STYLE_WIDTH,
+        count,
+        gl.RGBA,
+        gl.FLOAT,
+        paddedRange(palette.values, first * lineFloats, (first + count) * lineFloats),
+      );
+      this.uploadedBytes += count * lineFloats * 4;
+      i = j;
+    }
     gl.bindTexture(gl.TEXTURE_2D, null);
-    palette.uploaded = palette.count;
+    palette.dirty.clear();
   }
 
   private releasePalette(palette: RowsPalette): void {
@@ -751,7 +771,6 @@ export class RowsRenderer {
     this.ledger?.release(palette.gpu.texture);
     this.gl.deleteTexture(palette.gpu.texture);
     palette.gpu = null;
-    palette.uploaded = 0;
   }
 
   /** Writes a chunk: its buffers, its textures and its vertex array */

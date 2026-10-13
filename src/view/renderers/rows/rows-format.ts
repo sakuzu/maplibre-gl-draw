@@ -140,46 +140,111 @@ export function readRowsInstance(source: Float32Array, at: number): RowsInstance
 /**
  * The values of the resolved styles of a layer, as the texture of the values holds them
  *
- * Each resolved style takes {@link ROWS_STYLE_FLOATS} floats, numbered in the order they are
- * added. The texture is written from `values` (`RowsRenderer`), from the first style it does
- * not hold yet; a style is never changed once added. A palette belongs to the chunks built with
- * it, and is released when it is retired and the last of them is.
+ * Each resolved style takes {@link ROWS_STYLE_FLOATS} floats under its number. The rows that use
+ * each number are counted (`retain`, `release`): every row of every chunk built or being built
+ * with the palette, so a number is never given to another style while a chunk drawn (an old one
+ * kept drawing until its new one is built included) names it. A number no row uses any more is
+ * taken back and given to the next style added (`onFree` tells the side that numbered it).
+ *
+ * The contract of the values: the values of a number a row uses are written again only with the
+ * values of the same resolved style (the pixel ratio changed); a number no row uses is written
+ * with the values of a new style. The texture is written from `values` by the renderer
+ * (`RowsRenderer`), the lines of the texture written since the last upload (`dirty`) only. A
+ * palette belongs to the chunks built with it, and is released when it is retired and the last
+ * of them is.
  *
  * @internal
  */
 export class RowsPalette {
   /** The values, {@link ROWS_STYLE_FLOATS} per style */
   values = new Float32Array(ROWS_STYLE_FLOATS * 16);
-  /** The number of styles */
+  /** The numbers given so far (held or taken back) */
   count = 0;
-  /** The styles the texture holds (written by the renderer) */
-  uploaded = 0;
+  /** The lines of the texture written since the last upload (by the renderer) */
+  readonly dirty = new Set<number>();
   /** The chunks built with it that are not released */
   refs = 0;
   /** Whether no chunk is built with it any more (it goes once its chunks are released) */
   retired = false;
   /** The texture of the renderer (null before the first upload) */
   gpu: { texture: WebGLTexture; width: number; height: number } | null = null;
+  /** Called with a number no row uses any more, once it is taken back */
+  onFree: ((style: number) => void) | null = null;
+  /** The rows that use each number */
+  private uses = new Int32Array(16);
+  /** The numbers taken back, to be given again */
+  private readonly free: number[] = [];
+
+  /** The number of styles held (the numbers given and not taken back) */
+  get size(): number {
+    return this.count - this.free.length;
+  }
 
   /**
-   * Adds the values of a style
+   * Adds the values of a style: under a number taken back when there is one, a new one otherwise
    *
    * @returns Its number
    */
   add(values: ArrayLike<number>): number {
-    const index = this.count;
-    const end = (index + 1) * ROWS_STYLE_FLOATS;
-    if (end > this.values.length) {
-      let size = this.values.length * 2;
-      while (size < end) size *= 2;
-      const grown = new Float32Array(size);
-      grown.set(this.values);
-      this.values = grown;
+    const reused = this.free.pop();
+    const index = reused ?? this.count;
+    if (reused === undefined) {
+      const end = (index + 1) * ROWS_STYLE_FLOATS;
+      if (end > this.values.length) {
+        let size = this.values.length * 2;
+        while (size < end) size *= 2;
+        const grown = new Float32Array(size);
+        grown.set(this.values);
+        this.values = grown;
+      }
+      if (index >= this.uses.length) {
+        const uses = new Int32Array(this.uses.length * 2);
+        uses.set(this.uses);
+        this.uses = uses;
+      }
+      this.count++;
     }
+    this.uses[index] = 0;
+    this.write(index, values);
+    return index;
+  }
+
+  /**
+   * Writes the values of a number again (the same resolved style with other values: a new pixel
+   * ratio)
+   */
+  write(index: number, values: ArrayLike<number>): void {
     const at = index * ROWS_STYLE_FLOATS;
     for (let i = 0; i < ROWS_STYLE_FLOATS; i++) this.values[at + i] = values[i] ?? 0;
-    this.count++;
-    return index;
+    this.dirty.add(Math.floor((index * ROWS_STYLE_TEXELS) / ROWS_STYLE_WIDTH));
+  }
+
+  /** The rows that use a number */
+  usesOf(index: number): number {
+    return this.uses[index] ?? 0;
+  }
+
+  /** Counts one more row that uses a number */
+  retain(index: number): void {
+    this.uses[index]++;
+  }
+
+  /** Counts one row less that uses a number, and takes it back when no row uses it any more */
+  release(index: number): void {
+    if (index < 0 || index >= this.count || this.uses[index] <= 0) return;
+    this.uses[index]--;
+    if (this.uses[index] > 0) return;
+    this.free.push(index);
+    this.onFree?.(index);
+  }
+
+  /**
+   * Counts the rows of a list of numbers less (`-1` names no style), as `release` one by one
+   *
+   * @internal
+   */
+  releaseAll(numbers: Int32Array): void {
+    for (const index of numbers) if (index >= 0) this.release(index);
   }
 }
 
@@ -206,6 +271,11 @@ export interface RowsChunkData {
   readonly coordCount: number;
   /** The style of each row, {@link ROWS_ROW_STYLE_FLOATS} floats per row */
   readonly rowStyles: Float32Array;
+  /**
+   * The number of the resolved style of each row (-1 for a row without one): the rows the chunk
+   * counts in its palette
+   */
+  readonly rowStyle: Int32Array;
   /** Where the instances of each row start (rows + 1 entries) */
   readonly rowFirst: Int32Array;
   /** Where the point instances of each row start (rows + 1 entries) */

@@ -109,6 +109,7 @@ function chunkData(rows: number, palette = new RowsPalette()): RowsChunkData {
     coords,
     coordCount: count,
     rowStyles: new Float32Array(rows * 4),
+    rowStyle: new Int32Array(rows).fill(-1),
     rowFirst,
     pointFirst: rowFirst.slice(),
     coordFirst: rowFirst.slice(),

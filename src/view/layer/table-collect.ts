@@ -130,16 +130,10 @@ export interface PolygonSlot {
  * @internal
  */
 export class RowStyleSlots {
-  private readonly points = new Map<string, PointSlot>();
-  private readonly lines = new Map<string, LineSlot>();
-  private readonly polygons = new Map<string, PolygonSlot>();
+  /** What is resolved of each number of style, for the epoch of the number it was resolved for */
+  private readonly byStyle = new Map<number, StyleSlots>();
   /** The rule color of each value of the attribute the rule reads */
   private readonly ruleColors = new Map<unknown, string>();
-  /** The pictures of each source of pictures, for its revision */
-  private readonly sprites = new Map<
-    RowSpriteSource,
-    { revision: number; sprites: Map<number, RowSprite | null> }
-  >();
 
   /**
    * @param resolver The resolution of the styles of the features
@@ -171,32 +165,35 @@ export class RowStyleSlots {
   }
 
   point(style: number, type: FeatureType, ruleColor: string | null): PointSlot {
-    const key = slotKey(style, type, ruleColor);
-    let slot = this.points.get(key);
+    const slots = this.slotsOf(style).points;
+    const key = slotKey(type, ruleColor);
+    let slot = slots.get(key);
     if (!slot) {
       const resolved = this.resolver.getPointStyle(this.probe(style, type, ruleColor, 'point'));
       slot = { shape: toInstancedPointShape(resolved.shape), packed: toPackedPointStyle(resolved) };
-      this.points.set(key, slot);
+      slots.set(key, slot);
     }
     return slot;
   }
 
   line(style: number, type: FeatureType, ruleColor: string | null): LineSlot {
-    const key = slotKey(style, type, ruleColor);
-    let slot = this.lines.get(key);
+    const slots = this.slotsOf(style).lines;
+    const key = slotKey(type, ruleColor);
+    let slot = slots.get(key);
     if (!slot) {
       const stroke = this.resolver.getLineStringStrokeStyle(
         this.probe(style, type, ruleColor, 'stroke'),
       );
       slot = { stroke, color: toLineInstanceColor(stroke.color, stroke.opacity) };
-      this.lines.set(key, slot);
+      slots.set(key, slot);
     }
     return slot;
   }
 
   polygon(style: number, type: FeatureType, ruleColor: string | null): PolygonSlot {
-    const key = slotKey(style, type, ruleColor);
-    let slot = this.polygons.get(key);
+    const slots = this.slotsOf(style).polygons;
+    const key = slotKey(type, ruleColor);
+    let slot = slots.get(key);
     if (!slot) {
       const { fillColor, strokeStyle } = this.resolver.getPolygonStyles(
         this.probe(style, type, ruleColor, 'fill'),
@@ -218,7 +215,7 @@ export class RowStyleSlots {
         lineStyle: strokeStyle.lineStyle,
         dashedColor: toLineInstanceColor(strokeStyle.color, strokeStyle.opacity),
       };
-      this.polygons.set(key, slot);
+      slots.set(key, slot);
     }
     return slot;
   }
@@ -228,17 +225,34 @@ export class RowStyleSlots {
    * once), asked once per source, revision and style
    */
   sprite(source: RowSpriteSource, style: number): RowSprite | null {
-    let bySource = this.sprites.get(source);
-    if (!bySource || bySource.revision !== source.revision) {
-      bySource = { revision: source.revision, sprites: new Map() };
-      this.sprites.set(source, bySource);
+    const sprites = this.slotsOf(style).sprites;
+    let known = sprites.get(source);
+    if (!known || known.revision !== source.revision) {
+      known = { revision: source.revision, sprite: source.sprite(this.styles.get(style)) ?? null };
+      sprites.set(source, known);
     }
-    let sprite = bySource.sprites.get(style);
-    if (sprite === undefined) {
-      sprite = source.sprite(this.styles.get(style)) ?? null;
-      bySource.sprites.set(style, sprite);
+    return known.sprite;
+  }
+
+  /**
+   * What is resolved of a number of style: made again when the table of styles gave the number
+   * to another style since (its epoch changed), so a number given again is never read with the
+   * resolution of the style it had
+   */
+  private slotsOf(style: number): StyleSlots {
+    const epoch = this.styles.epochOf(style);
+    let slots = this.byStyle.get(style);
+    if (!slots || slots.epoch !== epoch) {
+      slots = {
+        epoch,
+        points: new Map(),
+        lines: new Map(),
+        polygons: new Map(),
+        sprites: new Map(),
+      };
+      this.byStyle.set(style, slots);
     }
-    return sprite;
+    return slots;
   }
 
   /**
@@ -266,8 +280,19 @@ export class RowStyleSlots {
   }
 }
 
-function slotKey(style: number, type: FeatureType, ruleColor: string | null): string {
-  return `${style}\u0000${type}\u0000${ruleColor ?? NO_RULE_COLOR}`;
+/** What is resolved of one number of style, by type of feature and rule color */
+interface StyleSlots {
+  /** The epoch of the number it was resolved for (`StyleTable.epochOf`) */
+  readonly epoch: number;
+  readonly points: Map<string, PointSlot>;
+  readonly lines: Map<string, LineSlot>;
+  readonly polygons: Map<string, PolygonSlot>;
+  readonly sprites: Map<RowSpriteSource, { revision: number; sprite: RowSprite | null }>;
+}
+
+/** The key of a type of feature and a rule color */
+function slotKey(type: FeatureType, ruleColor: string | null): string {
+  return `${type}\u0000${ruleColor ?? NO_RULE_COLOR}`;
 }
 
 /**
@@ -788,28 +813,103 @@ export function writePolygonRow(
 // === The rows drawn in one draw ===
 
 /**
+ * The layout of the instances of a row a resolved style gives: what the instances of a row
+ * depend on besides its geometry (a row whose resolved style changes keeps its instances when
+ * the layout of the new one is the same, and only its style is written)
+ *
+ * @internal
+ */
+export const ROWS_LAYOUT = {
+  point: 1,
+  line: 2,
+  polygon: 3,
+  sprite: 4,
+  /** A line or an outline drawn dashed (its segments carry the length before them) */
+  dashed: 8,
+  /** A polygon whose fill is seen */
+  fill: 16,
+  /** A polygon with an outline */
+  stroke: 32,
+} as const;
+
+/** What a resolved style was made from, to make its values again */
+interface ResolvedEntry {
+  /** The number of the style of the rows and its epoch */
+  readonly style: number;
+  readonly epoch: number;
+  /** The key of the entry in the numbers of the style */
+  readonly key: string;
+  /** The layout of the instances it gives ({@link ROWS_LAYOUT}) */
+  readonly layout: number;
+  /** Writes its values into the scratch of the styles */
+  readonly compute: () => void;
+}
+
+/**
  * The resolved styles of the rows of a layer as the values of a palette: each style, type of
  * feature and rule color (and each picture of a source of pictures) is resolved once and gets a
  * number, its values written once (`rows-format.ts`). The widths and sizes are in device pixels
- * of the pixel ratio it was made with.
+ * of the pixel ratio given (`setPixelRatio` writes every value again with the same numbers).
+ *
+ * The rows that use each number are counted in the palette (`RowsDraft`), and a number no row
+ * uses is taken back and given to the next style resolved, so changing the style of rows again
+ * and again does not grow the palette. A number of the table of styles given to another style is
+ * told by its epoch: the numbers resolved for the style it had are never read for the new one.
  *
  * @internal
  */
 export class RowsStyles {
-  private readonly numbers = new Map<string, number>();
+  /** The resolved numbers by number of style (for its epoch) and key */
+  private readonly byStyle = new Map<number, { epoch: number; keys: Map<string, number> }>();
+  /** What each resolved number was made from (null for a number taken back) */
+  private readonly entries: Array<ResolvedEntry | null> = [];
   private readonly values = new Float32Array(ROWS_STYLE_FLOATS);
+  private readonly sources = new Map<RowSpriteSource, number>();
   /** Device pixels per CSS px of the sizes fixed on screen */
-  readonly screenRatio: number;
+  screenRatio: number;
   /** Device pixels per CSS px of the widths that follow the zoom */
-  readonly contentRatio: number;
+  contentRatio: number;
 
   constructor(
-    readonly slots: RowStyleSlots,
+    public slots: RowStyleSlots,
     readonly palette: RowsPalette,
     pixelRatio: PixelRatioInput | undefined,
+    private readonly styles?: StyleTable,
   ) {
     this.screenRatio = resolvePixelRatio(pixelRatio);
     this.contentRatio = resolveContentPixelRatio(pixelRatio);
+    palette.onFree = (number) => this.forget(number);
+  }
+
+  /** The number of resolved styles held */
+  get size(): number {
+    return this.palette.size;
+  }
+
+  /** The layout of the instances a resolved style gives ({@link ROWS_LAYOUT}; 0 for none) */
+  layoutOf(number: number): number {
+    return this.entries[number]?.layout ?? 0;
+  }
+
+  /**
+   * Writes every value again for another pixel ratio, with the same numbers (the chunks keep
+   * their rows; the values reach the GPU with the next upload)
+   *
+   * @returns Whether the ratios changed
+   */
+  setPixelRatio(pixelRatio: PixelRatioInput | undefined): boolean {
+    const screen = resolvePixelRatio(pixelRatio);
+    const content = resolveContentPixelRatio(pixelRatio);
+    if (screen === this.screenRatio && content === this.contentRatio) return false;
+    this.screenRatio = screen;
+    this.contentRatio = content;
+    this.entries.forEach((entry, number) => {
+      if (!entry) return;
+      this.values.fill(0);
+      entry.compute();
+      this.palette.write(number, this.values);
+    });
+    return true;
   }
 
   /**
@@ -817,18 +917,21 @@ export class RowsStyles {
    * and the code of its shape (null for a shape that is not instanced)
    */
   point(style: number, type: FeatureType, ruleColor: string | null): number | null {
-    const key = `p${slotKey(style, type, ruleColor)}`;
-    const known = this.numbers.get(key);
+    const key = `p${slotKey(type, ruleColor)}`;
+    const known = this.known(style, key);
     if (known !== undefined) return known;
-    const slot = this.slots.point(style, type, ruleColor);
+    const slots = this.slots;
+    const slot = slots.point(style, type, ruleColor);
     if (!slot.shape) return null;
-    const v = this.cleared();
-    const packed = slot.packed;
-    for (let i = 0; i < 8; i++) v[i] = packed[i];
-    v[8] = packed[8] * this.screenRatio;
-    v[9] = packed[9] * this.screenRatio;
-    v[10] = pointShapeCode(slot.shape);
-    return this.add(key);
+    const shape = slot.shape;
+    return this.add(style, key, ROWS_LAYOUT.point, () => {
+      const v = this.values;
+      const packed = slot.packed;
+      for (let i = 0; i < 8; i++) v[i] = packed[i];
+      v[8] = packed[8] * this.screenRatio;
+      v[9] = packed[9] * this.screenRatio;
+      v[10] = pointShapeCode(shape);
+    });
   }
 
   /**
@@ -836,14 +939,16 @@ export class RowsStyles {
    * width fixed on screen (negative), its width in CSS px and its pattern
    */
   line(style: number, type: FeatureType, ruleColor: string | null): number {
-    const key = `l${slotKey(style, type, ruleColor)}`;
-    const known = this.numbers.get(key);
+    const key = `l${slotKey(type, ruleColor)}`;
+    const known = this.known(style, key);
     if (known !== undefined) return known;
     const slot = this.slots.line(style, type, ruleColor);
-    const v = this.cleared();
-    for (let i = 0; i < 4; i++) v[i] = slot.color[i];
-    this.widths(v, 4, slot.stroke.width, slot.stroke.lineStyle);
-    return this.add(key);
+    const dashed = slot.stroke.lineStyle !== 'solid';
+    return this.add(style, key, ROWS_LAYOUT.line | (dashed ? ROWS_LAYOUT.dashed : 0), () => {
+      const v = this.values;
+      for (let i = 0; i < 4; i++) v[i] = slot.color[i];
+      this.widths(v, 4, slot.stroke.width, slot.stroke.lineStyle);
+    });
   }
 
   /**
@@ -851,18 +956,24 @@ export class RowsStyles {
    * outline (as a line's) and the color of a dashed outline
    */
   polygon(style: number, type: FeatureType, ruleColor: string | null): number {
-    const key = `g${slotKey(style, type, ruleColor)}`;
-    const known = this.numbers.get(key);
+    const key = `g${slotKey(type, ruleColor)}`;
+    const known = this.known(style, key);
     if (known !== undefined) return known;
     const slot = this.slots.polygon(style, type, ruleColor);
-    const v = this.cleared();
-    for (let i = 0; i < 4; i++) {
-      v[i] = slot.fillColor[i];
-      v[4 + i] = slot.strokeColor[i];
-      v[12 + i] = slot.dashedColor[i];
-    }
-    this.widths(v, 8, slot.strokeWidth, slot.dashedStroke ? slot.lineStyle : 'solid');
-    return this.add(key);
+    const layout =
+      ROWS_LAYOUT.polygon |
+      (slot.fillColor[3] > 0 ? ROWS_LAYOUT.fill : 0) |
+      (slot.hasStroke ? ROWS_LAYOUT.stroke : 0) |
+      (slot.hasStroke && slot.dashedStroke ? ROWS_LAYOUT.dashed : 0);
+    return this.add(style, key, layout, () => {
+      const v = this.values;
+      for (let i = 0; i < 4; i++) {
+        v[i] = slot.fillColor[i];
+        v[4 + i] = slot.strokeColor[i];
+        v[12 + i] = slot.dashedColor[i];
+      }
+      this.widths(v, 8, slot.strokeWidth, slot.dashedStroke ? slot.lineStyle : 'solid');
+    });
   }
 
   /**
@@ -870,18 +981,17 @@ export class RowsStyles {
    * CSS px and its bearing
    */
   sprite(source: RowSpriteSource, sprite: RowSprite, style: number): number {
-    const key = `s${this.sourceNumber(source)}\u0000${style}\u0000${source.revision}`;
-    const known = this.numbers.get(key);
+    const key = `s${this.sourceNumber(source)}\u0000${source.revision}`;
+    const known = this.known(style, key);
     if (known !== undefined) return known;
-    const v = this.cleared();
-    for (let i = 0; i < 4; i++) v[i] = sprite.uv[i];
-    v[4] = sprite.halfWidth;
-    v[5] = sprite.halfHeight;
-    v[6] = sprite.direction >= 0 ? sprite.direction : -1;
-    return this.add(key);
+    return this.add(style, key, ROWS_LAYOUT.sprite, () => {
+      const v = this.values;
+      for (let i = 0; i < 4; i++) v[i] = sprite.uv[i];
+      v[4] = sprite.halfWidth;
+      v[5] = sprite.halfHeight;
+      v[6] = sprite.direction >= 0 ? sprite.direction : -1;
+    });
   }
-
-  private readonly sources = new Map<RowSpriteSource, number>();
 
   private sourceNumber(source: RowSpriteSource): number {
     let number = this.sources.get(source);
@@ -907,15 +1017,44 @@ export class RowsStyles {
     v[at + 3] = ROWS_DASH[lineStyle];
   }
 
-  private cleared(): Float32Array {
-    this.values.fill(0);
-    return this.values;
+  /** The epoch of a number of style (0 without a table of styles) */
+  private epochOf(style: number): number {
+    return this.styles?.epochOf(style) ?? 0;
   }
 
-  private add(key: string): number {
+  /** The resolved number of a style and a key, when it is held for the epoch of the style */
+  private known(style: number, key: string): number | undefined {
+    const held = this.byStyle.get(style);
+    if (!held || held.epoch !== this.epochOf(style)) return undefined;
+    return held.keys.get(key);
+  }
+
+  /** Resolves a new number: its values computed and added to the palette */
+  private add(style: number, key: string, layout: number, compute: () => void): number {
+    this.values.fill(0);
+    compute();
     const number = this.palette.add(this.values);
-    this.numbers.set(key, number);
+    const epoch = this.epochOf(style);
+    let held = this.byStyle.get(style);
+    if (!held || held.epoch !== epoch) {
+      held = { epoch, keys: new Map() };
+      this.byStyle.set(style, held);
+    }
+    held.keys.set(key, number);
+    this.entries[number] = { style, epoch, key, layout, compute };
     return number;
+  }
+
+  /** Forgets a number the palette took back (no row uses it any more) */
+  private forget(number: number): void {
+    const entry = this.entries[number];
+    if (!entry) return;
+    this.entries[number] = null;
+    const held = this.byStyle.get(entry.style);
+    if (held && held.epoch === entry.epoch && held.keys.get(entry.key) === number) {
+      held.keys.delete(entry.key);
+      if (held.keys.size === 0) this.byStyle.delete(entry.style);
+    }
   }
 }
 
@@ -948,6 +1087,8 @@ export class RowsDraft {
   coords: Float32Array;
   coordCount = 0;
   readonly rowStyles: Float32Array;
+  /** The resolved style of each row (-1 for none), counted in the palette while it is held */
+  readonly rowStyle: Int32Array;
   readonly rowFirst: Int32Array;
   readonly pointFirst: Int32Array;
   readonly coordFirst: Int32Array;
@@ -956,19 +1097,37 @@ export class RowsDraft {
    * @param rows The rows of the chunk
    * @param rowBase The first row of the chunk in its group
    * @param coords The coordinates expected (the arrays grow past it)
+   * @param palette The palette the resolved styles of the rows are counted in (none when null)
    */
   constructor(
     readonly rows: number,
     readonly rowBase: number,
     coords = 64,
+    readonly palette: RowsPalette | null = null,
   ) {
     this.coords = new Float32Array(Math.max(coords, 4) * 2);
     this.instances = new Float32Array(Math.max(coords, 4) * 2 * ROWS_INSTANCE_FLOATS);
     this.points = new Float32Array(4 * ROWS_INSTANCE_FLOATS);
     this.rowStyles = new Float32Array(Math.max(rows, 1) * ROWS_ROW_STYLE_FLOATS);
+    this.rowStyle = new Int32Array(rows).fill(-1);
     this.rowFirst = new Int32Array(rows + 1);
     this.pointFirst = new Int32Array(rows + 1);
     this.coordFirst = new Int32Array(rows + 1);
+  }
+
+  /** Sets the resolved style of a row, counted in the palette (the one it had is not counted) */
+  setRowStyle(i: number, style: number): void {
+    const old = this.rowStyle[i];
+    if (old === style) return;
+    if (style >= 0) this.palette?.retain(style);
+    if (old >= 0) this.palette?.release(old);
+    this.rowStyle[i] = style;
+  }
+
+  /** Stops counting the resolved styles of the rows (a draft dropped without its chunk) */
+  releaseStyles(): void {
+    if (this.palette) this.palette.releaseAll(this.rowStyle);
+    this.rowStyle.fill(-1);
   }
 
   /** Adds a coordinate (an offset from the origin) and returns its number */
@@ -1019,6 +1178,7 @@ export class RowsDraft {
       coords: this.coords,
       coordCount: this.coordCount,
       rowStyles: this.rowStyles,
+      rowStyle: this.rowStyle,
       rowFirst: this.rowFirst,
       pointFirst: this.pointFirst,
       coordFirst: this.coordFirst,
@@ -1063,6 +1223,7 @@ export function collectRow(
   const data = group.data;
   const styleAt = i * ROWS_ROW_STYLE_FLOATS;
   draft.rowStyles.fill(0, styleAt, styleAt + ROWS_ROW_STYLE_FLOATS);
+  draft.setRowStyle(i, -1);
   if (rowHasGeometry(group, row)) {
     const type = rowType(data, row);
     switch (type) {
@@ -1100,6 +1261,7 @@ function writeRowStyle(
   style: number,
   createdZoom: number | undefined,
 ): void {
+  draft.setRowStyle(at / ROWS_ROW_STYLE_FLOATS, style);
   draft.rowStyles[at] = style;
   draft.rowStyles[at + 1] = createdZoom ?? 0;
   draft.rowStyles[at + 2] = createdZoom === undefined ? 0 : 1;

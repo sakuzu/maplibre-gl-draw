@@ -43,3 +43,43 @@ describe('StyleTable', () => {
     expect(table.intern({ fillOpacity: 0.5 })).toBe(fromBytes);
   });
 });
+
+describe('StyleTable counting the rows of each style', () => {
+  it('takes back a number no row uses and gives it to the next new style, with a new epoch', () => {
+    const table = new StyleTable();
+    const red = table.intern({ fillColor: '#ff0000' });
+    table.retain(red, 2);
+    const blue = table.intern({ fillColor: '#0000ff' });
+    table.retain(blue);
+    expect(table.size).toBe(2);
+    table.release(red);
+    expect(table.has(red)).toBe(true);
+    table.release(red);
+    // No row uses it: taken back, and the style is no longer held
+    expect(table.has(red)).toBe(false);
+    expect(table.size).toBe(1);
+    expect(() => table.get(red)).toThrow();
+    const epoch = table.epochOf(red);
+    const green = table.intern({ fillColor: '#00ff00' });
+    expect(green).toBe(red);
+    expect(table.epochOf(green)).toBe(epoch + 1);
+    expect(table.get(green)).toEqual({ fillColor: '#00ff00' });
+    // The red style is a new number now, and the blue one kept its own
+    expect(table.intern({ fillColor: '#0000ff' })).toBe(blue);
+    expect(table.intern({ fillColor: '#ff0000' })).not.toBe(green);
+  });
+
+  it('keeps the numbers to the styles used, however many colors a row goes through', () => {
+    const table = new StyleTable();
+    let held = table.intern({ fillColor: '#000000' });
+    table.retain(held);
+    for (let i = 0; i < 1000; i++) {
+      const next = table.intern({ fillColor: `#${i.toString(16).padStart(6, '0')}` });
+      table.retain(next);
+      table.release(held);
+      held = next;
+    }
+    expect(table.size).toBe(1);
+    expect(table.capacity).toBeLessThanOrEqual(2);
+  });
+});
