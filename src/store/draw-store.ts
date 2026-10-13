@@ -435,6 +435,7 @@ export class DrawStore implements Store {
     if (ids.size === before.size && [...ids].every((id) => before.has(id))) return;
     this.#heldIds = ids;
     // What the selection lets go of stays held a moment (unless it is named again meanwhile)
+    const releasedBefore = [...this.#released];
     let released = false;
     for (const id of before) {
       if (ids.has(id) || this.#released.has(id)) continue;
@@ -444,6 +445,8 @@ export class DrawStore implements Store {
     for (const id of ids) {
       if (this.#released.delete(id)) released = true;
     }
+    // A row passing from one owner to the other is named by one of them all the while
+    if (released) tables.hold(RELEASED_OWNER, [...new Set([...releasedBefore, ...this.#released])]);
     tables.hold(SELECTION_OWNER, [...ids]);
     if (!released) return;
     tables.hold(RELEASED_OWNER, [...this.#released]);
