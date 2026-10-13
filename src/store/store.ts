@@ -31,6 +31,7 @@ import type {
   FeatureType,
   FileData,
   Group,
+  ItemPlacement,
   Layer,
   Metadata,
   Mode,
@@ -156,6 +157,15 @@ export interface DocumentStore {
   reorderInLayer(itemId: string, layerId: string, newIndex: number): void;
   /** Changes the order of a feature within a group */
   reorderInGroup(featureId: string, groupId: string, newIndex: number): void;
+  /**
+   * Puts items (features and groups of features) in a place, one after the other in the order
+   * given (see {@link ItemPlacement}): a feature goes into the layer, or into the group, of the
+   * place; a group into its layer, with its members. A group a feature leaves empty is deleted.
+   *
+   * Throws, storing nothing, when the layer or the group of the place does not exist, the group
+   * is not in the layer, an item does not exist, or a group is put into a group.
+   */
+  moveItems(itemIds: readonly string[], to: ItemPlacement): void;
 
   // Groups
   /** Returns the group with this ID, or undefined */
@@ -422,6 +432,10 @@ export interface Store extends StoreView, UiState {
   reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean;
   /** Moves a feature within a group (see {@link DocumentStore.reorderInGroup}) */
   reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean;
+  /** Puts an item in a place (see {@link DocumentStore.moveItems}) */
+  moveItem(itemId: string, to: ItemPlacement): boolean;
+  /** Puts items in a place, one after the other (see {@link DocumentStore.moveItems}) */
+  moveItems(itemIds: readonly string[], to: ItemPlacement): boolean;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

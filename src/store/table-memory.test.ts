@@ -20,7 +20,10 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
+import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { utf8String } from '../table/utf8-column.js';
 import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
+import type { Store } from './store.js';
 import { createTableMemoryStore } from './table-memory.js';
 import type { Feature, StoreChange } from './types.js';
 
@@ -236,5 +239,98 @@ describe('the in-memory Store of rows', () => {
     notified.length = 0;
     store.setSelection('group', ['g']);
     expect(notified[notified.length - 1]?.held?.added.map((f) => f.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('the order of the in-memory Store of rows (stage 3b)', () => {
+  /** The ids of the items of the layer in their order */
+  const items = (tables: NonNullable<ReturnType<typeof setup>['tables']>, store: Store) => {
+    const view = tables.layer('layer');
+    if (!view) return [];
+    const refs = view.itemsInOrder(0, view.itemCount);
+    return Array.from(refs.handles, (h, i) =>
+      refs.kinds[i] === 0
+        ? tables.idOf(h)
+        : store
+            .listGroups()
+            .find((g) => featureTablesInternals(tables)?.groups.handleOfId(g.id) === h)?.id,
+    );
+  };
+
+  it('puts 2,000 items in one place with keys of 64 characters at most', () => {
+    const { store, tables } = setup(2100);
+    const ids = Array.from({ length: 2000 }, (_, i) => `p${i + 50}`);
+    // Between the first two items, again and again
+    for (let round = 0; round < 3; round++) {
+      expect(store.moveItems(ids, { layerId: 'layer', below: 'p0' })).toBe(true);
+    }
+    const order = items(tables, store);
+    expect(order.slice(0, 2002)).toEqual(['p0', ...ids, 'p1']);
+    const internals = featureTablesInternals(tables);
+    for (const id of ids) {
+      const place = internals?.placeOf(tables.handleOf(id) as number);
+      const key = place ? utf8String(place.group.data.itemKeys, place.row) : '';
+      expect(key.length).toBeLessThanOrEqual(64);
+    }
+  });
+
+  it('creates a feature deleted again at the place it had', () => {
+    const { store, tables } = setup();
+    store.deleteFeature('p2');
+    expect(items(tables, store)).toEqual(['p0', 'p1', 'p3', 'p4']);
+    store.createFeature(point('p2', 2));
+    expect(items(tables, store)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
+  });
+
+  it('deletes a group its last member leaves, and creates it again at the place it had', () => {
+    const { store, tables, notified } = setup();
+    store.createGroup({
+      id: 'g',
+      layerId: 'layer',
+      name: 'g',
+      featureIds: ['p1', 'p2'],
+      visible: true,
+      locked: false,
+    });
+    expect(items(tables, store)).toEqual(['p0', 'g', 'p3', 'p4']);
+    notified.length = 0;
+    store.transact(() => {
+      store.deleteFeature('p1');
+      store.deleteFeature('p2');
+    });
+    expect(store.getGroup('g')).toBeUndefined();
+    expect(notified).toHaveLength(1);
+    expect(notified[0].groups?.deleted?.map((g) => g.id)).toEqual(['g']);
+    // Made again with the same ids: at the place they had
+    store.transact(() => {
+      store.createGroup({
+        id: 'g',
+        layerId: 'layer',
+        name: 'g',
+        kind: 'table',
+        visible: true,
+        locked: false,
+      });
+      store.createFeature(point('p1', 1, { groupId: 'g' }));
+      store.createFeature(point('p2', 2, { groupId: 'g' }));
+    });
+    expect(items(tables, store)).toEqual(['p0', 'g', 'p3', 'p4']);
+    expect(store.getFeature('p1')?.groupId).toBe('g');
+  });
+
+  it('puts the members of a group deleted at its place, in their order', () => {
+    const { store, tables } = setup();
+    store.createGroup({
+      id: 'g',
+      layerId: 'layer',
+      name: 'g',
+      featureIds: ['p3', 'p1'],
+      visible: true,
+      locked: false,
+    });
+    expect(items(tables, store)).toEqual(['p0', 'p2', 'g', 'p4']);
+    store.deleteGroup('g');
+    expect(items(tables, store)).toEqual(['p0', 'p2', 'p3', 'p1', 'p4']);
+    expect(store.getFeature('p3')?.groupId).toBeUndefined();
   });
 });

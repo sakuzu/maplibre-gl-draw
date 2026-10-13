@@ -228,3 +228,123 @@ describe('the Store of rows against the Store of objects', () => {
     }
   });
 });
+
+/** The items of a layer of a Store of objects (its features outside a group and its groups) */
+function itemsOf(store: Store, layerId: string): string[] {
+  const layer = store.getLayer(layerId);
+  return layer && layer.kind !== 'table' ? [...layer.items] : [];
+}
+
+describe('the Store of rows against the Store of objects, with the order (stage 3b)', () => {
+  it('reads the same after items put in other places, grouped and ungrouped at random', () => {
+    for (const seed of [11, 12, 13, 14, 15]) {
+      const random = seededRandom(seed);
+      const objects = new MemoryStore();
+      const rows = createTableMemoryStore().store;
+      const errors: unknown[] = [];
+      rows.subscribe((change) => {
+        try {
+          checkNotification(change, rows);
+        } catch (error) {
+          errors.push(error);
+        }
+      });
+      const both = (fn: (store: Store) => void) => {
+        fn(objects);
+        fn(rows);
+      };
+      both((s) => {
+        for (const id of LAYERS) s.createLayer(layer(id));
+      });
+      let next = 0;
+      const feature = (id: string, layerId: string): Feature => ({
+        id,
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [random(), random()] },
+        layerId,
+        groupId: undefined,
+        properties: {},
+        style: {},
+        visible: true,
+        locked: false,
+      });
+      for (let step = 0; step < 150; step++) {
+        const r = random();
+        const features = objects.listFeatures().map((f) => f.id);
+        const groups = objects.listGroups().map((g) => g.id);
+        const layerId = LAYERS[Math.floor(random() * 2)];
+        const any = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)];
+        if (r < 0.25 || features.length < 4) {
+          const f = feature(`f${next++}`, layerId);
+          both((s) => s.createFeature(f));
+        } else if (r < 0.32) {
+          const id = any(features);
+          both((s) => s.deleteFeature(id));
+        } else if (r < 0.6) {
+          // Items put in a layer, just above an item, just below one, or at an end
+          const loose = [...features.filter((id) => !objects.getFeature(id)?.groupId), ...groups];
+          const moved = [...new Set([any(loose), any(loose)])].filter((id) => id !== undefined);
+          const items = itemsOf(objects, layerId);
+          const k = random();
+          const to =
+            k < 0.3
+              ? { layerId, below: items.length > 0 ? any(items) : null }
+              : k < 0.6
+                ? { layerId, above: items.length > 0 ? any(items) : null }
+                : k < 0.8
+                  ? { layerId, below: null }
+                  : { layerId, above: null };
+          both((s) => s.moveItems(moved, to));
+        } else if (r < 0.7 && groups.length > 0) {
+          // Features put in a group, among its members
+          const group = objects.getGroup(any(groups));
+          if (!group || group.kind === 'table') continue;
+          const loose = features.filter((id) => !objects.getFeature(id)?.groupId);
+          if (loose.length === 0) continue;
+          const id = any(loose);
+          const to = { layerId: group.layerId, groupId: group.id, below: any(group.featureIds) };
+          both((s) => s.moveItems([id], to));
+        } else if (r < 0.8) {
+          // Two features grouped
+          // The first member the backmost: the group takes its place in both
+          const loose = itemsOf(objects, 'a').filter((id) => objects.getFeature(id));
+          if (loose.length < 2) continue;
+          const members = [loose[0], loose[loose.length - 1]];
+          const id = `g${next++}`;
+          both((s) =>
+            s.createGroup({
+              id,
+              layerId: 'a',
+              name: id,
+              featureIds: members,
+              visible: true,
+              locked: false,
+            }),
+          );
+        } else if (r < 0.88 && groups.length > 0) {
+          const id = any(groups);
+          both((s) => s.deleteGroup(id));
+        } else {
+          // A member taken out of its group (its group goes when it is the last)
+          const member = features.find((id) => objects.getFeature(id)?.groupId);
+          if (!member) continue;
+          both((s) => s.updateFeature(member, { groupId: undefined }));
+        }
+        expect(contents(rows), `seed ${seed}, step ${step}`).toEqual(contents(objects));
+        expect(
+          rows
+            .listGroups()
+            .map((g) => g.id)
+            .sort(),
+          `seed ${seed}, step ${step}`,
+        ).toEqual(
+          objects
+            .listGroups()
+            .map((g) => g.id)
+            .sort(),
+        );
+        expect(errors, `seed ${seed}, step ${step}`).toEqual([]);
+      }
+    }
+  });
+});

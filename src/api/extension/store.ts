@@ -9,7 +9,15 @@
  */
 
 import type { DocumentChange } from '../events.js';
-import type { Feature, FeatureType, FileData, Group, Layer, Metadata } from '../model.js';
+import type {
+  Feature,
+  FeatureType,
+  FileData,
+  Group,
+  ItemPlacement,
+  Layer,
+  Metadata,
+} from '../model.js';
 import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
 import type { FeatureTables } from '../tables.js';
 
@@ -190,6 +198,19 @@ export interface Store extends StoreView {
   reorderInLayer(itemId: string, layerId: string, newIndex: number): boolean;
   /** Moves a feature to a position within a group. */
   reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean;
+  /**
+   * Puts an item (a feature, or a group of features) in a place: in a layer, or in a group, just
+   * above an item and below another (see {@link ItemPlacement}). Optional for a Store that holds
+   * its features as objects (the instance writes the items of the layers and the groups then);
+   * a Store that holds its features as rows has it.
+   */
+  moveItem?(itemId: string, to: ItemPlacement): boolean;
+  /**
+   * Puts items in a place, one after the other in the order given (see {@link Store.moveItem}).
+   * A Store that holds its features as rows makes the keys of their order at once, so that many
+   * items put in one place keep short keys. A group a feature leaves empty is deleted.
+   */
+  moveItems?(itemIds: readonly string[], to: ItemPlacement): boolean;
   /** Creates a group. */
   createGroup(group: Group): boolean;
   /** Changes the fields given of a group. */

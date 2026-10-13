@@ -36,8 +36,9 @@ function listsOf(tables: FeatureTables, layerIds: readonly string[]): Lists {
       const id = groups?.idOf(handle) as string;
       ids.push(id);
       const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
+      // The members of a group go with it to another layer: a group is named by itself
       out.set(
-        `${layerId}/${id}`,
+        `/${id}`,
         Array.from(members, (h) => tables.idOf(h) as string),
       );
     }
@@ -46,7 +47,7 @@ function listsOf(tables: FeatureTables, layerIds: readonly string[]): Lists {
   return out;
 }
 
-const keyOf = (p: ItemPosition) => `${p.layerId}/${p.groupId ?? ''}`;
+const keyOf = (p: ItemPosition) => (p.groupId ? `/${p.groupId}` : `${p.layerId}/`);
 
 /** Makes the moves back, from the last one */
 function undo(lists: Lists, moves: readonly ItemMove[]): Lists {
@@ -161,10 +162,22 @@ describe('the changes of the order of a Store of rows', () => {
             });
             for (const id of members) store.updateFeature(id, { groupId: `g${next - 1}` });
           });
-        } else if (r < 0.7) {
+        } else if (r < 0.65) {
           const member = ids.find((id) => store.getFeature(id)?.groupId);
           if (!member) continue;
           store.updateFeature(member, { groupId: undefined });
+        } else if (r < 0.72) {
+          const group = store.listGroups()[0];
+          if (!group) continue;
+          store.deleteGroup(group.id);
+        } else if (r < 0.85) {
+          // Items put in a place of a layer at once
+          const moved = [pick(), pick(), ...store.listGroups().map((g) => g.id)].filter(
+            (id, k, all) => all.indexOf(id) === k && !store.getFeature(id)?.groupId,
+          );
+          const target = listsOf(tables, [layerId]).get(`${layerId}/`) ?? [];
+          const below = target[Math.floor(random() * target.length)] ?? null;
+          store.moveItems(moved.slice(0, 3), { layerId, below });
         } else {
           // Keys written from elsewhere, a few rows at a time
           const keys: Array<[string, string]> = [];

@@ -28,11 +28,13 @@ import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy, frozenFeature } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
+import { moveItemsByLists } from './move-items.js';
 import type { DocumentStore, Store, StoreContract } from './store.js';
 import type {
   Feature,
   FileData,
   Group,
+  ItemPlacement,
   Layer,
   Metadata,
   Mode,
@@ -147,6 +149,12 @@ export class MemoryContractStore implements StoreContract {
   }
   reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean {
     return this.#apply(() => this.#document.reorderInGroup(featureId, groupId, newIndex));
+  }
+  moveItem(itemId: string, to: ItemPlacement): boolean {
+    return this.moveItems([itemId], to);
+  }
+  moveItems(itemIds: readonly string[], to: ItemPlacement): boolean {
+    return this.#apply(() => this.#document.moveItems(itemIds, to));
   }
   createGroup(group: Group): boolean {
     return this.#apply(() => this.#document.createGroup(objectGroupOf(group)));
@@ -571,6 +579,23 @@ export class MemoryDocumentStore implements DocumentStore {
     group.featureIds.splice(newIndex, 0, featureId);
     // The move is notified as `order` (not as an update of the group)
     if (this.#bus.hasPendingGroupUpdate(groupId)) this.#bus.mergeGroupUpdate(group, undefined);
+  }
+
+  moveItems(itemIds: readonly string[], to: ItemPlacement): void {
+    this.#withinOperation(() =>
+      moveItemsByLists(
+        {
+          getFeature: (id) => this.getFeature(id),
+          getGroup: (id) => this.getGroup(id),
+          getLayer: (id) => this.getLayer(id),
+          updateFeature: (id, updates) => this.updateFeature(id, updates),
+          updateLayer: (id, updates) => this.updateLayer(id, objectLayerFields(updates)),
+          updateGroup: (id, updates) => this.updateGroup(id, objectGroupFields(updates)),
+        },
+        itemIds,
+        to,
+      ),
+    );
   }
 
   // ============================================================================

@@ -37,6 +37,7 @@ import {
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
+import { moveItemsByLists } from './move-items.js';
 import type { Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
@@ -45,6 +46,7 @@ import type {
   FeatureType,
   FileData,
   Group,
+  ItemPlacement,
   Layer,
   Metadata,
   Mode,
@@ -205,6 +207,18 @@ export class DrawStore implements Store {
   }
   reorderInGroup(featureId: string, groupId: string, newIndex: number): boolean {
     return this.#write(() => this.#contract.reorderInGroup(featureId, groupId, newIndex));
+  }
+  moveItem(itemId: string, to: ItemPlacement): boolean {
+    return this.moveItems([itemId], to);
+  }
+  moveItems(itemIds: readonly string[], to: ItemPlacement): boolean {
+    return this.#write(() => {
+      const contract = this.#contract;
+      if (contract.moveItems) return contract.moveItems(itemIds, to);
+      // A Store of objects that does not put items in a place: its lists are written
+      moveItemsByLists(contract, itemIds, to);
+      return true;
+    });
   }
 
   createGroup(group: Group): boolean {
