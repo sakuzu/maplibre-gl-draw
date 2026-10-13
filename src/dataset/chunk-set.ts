@@ -346,6 +346,9 @@ export class DisplayChunkSet {
     // paying it during a gesture always stutters).
     const settled = !isTerrainCameraMoving(terrain);
 
+    // The size of the render target, read once for every chunk
+    const viewport = renderers.viewport();
+
     const host: ChunkSchedulerHost<DisplayChunkState, DisplayChunkBatches> = {
       // A chunk whose way of handing over the polygons and lines changed is re-baked as well (the
       // analytic drape being switched on or off)
@@ -400,7 +403,7 @@ export class DisplayChunkSet {
           reportTerrainCoarsening(terrain, state.builtGrid / step.grid);
         }
 
-        drawChunkBatches(batches, renderers, zoom, projectionData, factors);
+        drawChunkBatches(batches, renderers, zoom, projectionData, factors, viewport);
 
         // The features that cannot be retained are drawn immediately, right after the retained
         // batches of the chunk, the points last (with the same factors as the retained batches)

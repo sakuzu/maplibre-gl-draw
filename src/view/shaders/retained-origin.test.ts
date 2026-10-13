@@ -11,8 +11,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { BoundingBox } from '../../store/types.js';
+import { seededRandom } from '../../test-utils.js';
 import {
+  boundsCenter,
   RETAINED_ORIGIN_TOLERANCE_PX,
+  rebasedOriginOf,
   rebasedRetainedOrigin,
   retainedOriginErrorPx,
 } from './retained-origin.js';
@@ -112,5 +115,60 @@ describe('the precision of a retained batch', () => {
     const away: BoundingBox = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     expect(rebasedRetainedOrigin(TOKYO, TOKYO_OSAKA, away, 22)).toBeNull();
     expect(rebasedRetainedOrigin(TOKYO, null, OSAKA_VIEW, 22)).toBeNull();
+  });
+});
+
+describe('the origin chosen for the view, from an extent given as numbers', () => {
+  /** The choice as it is described: the extent clipped to the view, as a box */
+  function reference(
+    origin: [number, number],
+    extent: BoundingBox,
+    view: BoundingBox | null,
+    zoom: number,
+  ): [number, number] | null {
+    const region: BoundingBox = view
+      ? {
+          minX: Math.max(extent.minX, view.minX),
+          minY: Math.max(extent.minY, view.minY),
+          maxX: Math.min(extent.maxX, view.maxX),
+          maxY: Math.min(extent.maxY, view.maxY),
+        }
+      : extent;
+    if (!(region.minX <= region.maxX && region.minY <= region.maxY)) return null;
+    const error = retainedOriginErrorPx(origin, region, zoom);
+    if (!(error > RETAINED_ORIGIN_TOLERANCE_PX)) return null;
+    const candidate = boundsCenter(region);
+    return retainedOriginErrorPx(candidate, region, zoom) < error / 2 ? candidate : null;
+  }
+
+  it('is the choice of the boxes, for extents, views and zooms at random', () => {
+    const random = seededRandom(11);
+    const box = (): BoundingBox => {
+      const x = random() * 340 - 170;
+      const y = random() * 160 - 80;
+      const w = random() ** 3 * 20;
+      const h = random() ** 3 * 10;
+      return { minX: x, minY: y, maxX: x + w, maxY: y + h };
+    };
+    let rebased = 0;
+    for (let i = 0; i < 2000; i++) {
+      const extent = box();
+      const pick = random();
+      // No view, a view at random, the extent itself, or a small view inside the extent
+      const x = extent.minX + (extent.maxX - extent.minX) * random();
+      const y = extent.minY + (extent.maxY - extent.minY) * random();
+      const inside = { minX: x, minY: y, maxX: x + 0.001, maxY: y + 0.001 };
+      const view = pick < 0.1 ? null : pick < 0.3 ? box() : pick < 0.4 ? extent : inside;
+      const origin: [number, number] = [extent.minX, extent.minY];
+      const zoom = 10 + random() * 14;
+      const expected = reference(origin, extent, view, zoom);
+      if (expected) rebased++;
+      const args = [extent.minX, extent.minY, extent.maxX, extent.maxY] as const;
+      expect(rebasedOriginOf(origin, ...args, view, zoom)).toEqual(expected);
+      expect(rebasedRetainedOrigin(origin, extent, view, zoom)).toEqual(expected);
+    }
+    // Both outcomes are exercised
+    expect(rebased).toBeGreaterThan(0);
+    expect(rebased).toBeLessThan(2000);
   });
 });

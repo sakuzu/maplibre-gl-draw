@@ -47,7 +47,7 @@ import type { BoundingBox, Feature, Layer, StoreChange } from '../../store/types
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
-import { boundsCenter, rebasedRetainedOrigin } from '../shaders/retained-origin.js';
+import { boundsCenter, rebasedOriginOf } from '../shaders/retained-origin.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
 import {
@@ -511,9 +511,13 @@ export class StoreRetainedCache {
   ): void {
     if (chunk.kind === 'immediate' || chunk.dirty || !chunk.origin || !chunk.bbox) return;
     if (chunk.rebasedFrame === this.frame) return;
-    const next = rebasedRetainedOrigin(
+    const bbox = chunk.bbox;
+    const next = rebasedOriginOf(
       chunk.origin,
-      chunkBBoxToBounds(chunk.bbox),
+      bbox[0],
+      bbox[1],
+      bbox[2],
+      bbox[3],
       viewportBounds ?? null,
       zoom,
     );

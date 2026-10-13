@@ -46,11 +46,36 @@ import { isDepthTestEnabled, setDepthTestEnabled } from '../../layer/depth-state
  * @param draw The drawing to run
  */
 export function drawBillboardsWithoutDepth(gl: WebGL2RenderingContext, draw: () => void): void {
-  const depthWasEnabled = isDepthTestEnabled(gl);
-  if (depthWasEnabled) setDepthTestEnabled(gl, false);
+  const depthWasEnabled = disableDepthForBillboards(gl);
   try {
     draw();
   } finally {
-    if (depthWasEnabled) setDepthTestEnabled(gl, true);
+    restoreDepthAfterBillboards(gl, depthWasEnabled);
   }
+}
+
+/**
+ * The first half of {@link drawBillboardsWithoutDepth}, for a draw that makes no callback: turns
+ * the depth test off and returns whether it was on (give it to `restoreDepthAfterBillboards`,
+ * in a `finally`)
+ *
+ * @internal
+ */
+export function disableDepthForBillboards(gl: WebGL2RenderingContext): boolean {
+  const depthWasEnabled = isDepthTestEnabled(gl);
+  if (depthWasEnabled) setDepthTestEnabled(gl, false);
+  return depthWasEnabled;
+}
+
+/**
+ * The second half of {@link drawBillboardsWithoutDepth}: turns the depth test back on when it
+ * was on
+ *
+ * @internal
+ */
+export function restoreDepthAfterBillboards(
+  gl: WebGL2RenderingContext,
+  depthWasEnabled: boolean,
+): void {
+  if (depthWasEnabled) setDepthTestEnabled(gl, true);
 }

@@ -2000,6 +2000,13 @@ them opens a run around them (`RetainedDrawRun`,
   array and leave none bound, and bind textures only on the unit 0, which
   the run leaves active, so they keep what the run remembers true
 
+The draws of the retained batches make no object per chunk or per draw
+either: the gap of the origin of a batch is written into one array of the
+renderer, the culling of the fills and the depth test of the billboards are
+switched around the draw without a callback, the rows held as columns keep
+one host of the chunk scheduler and the binding of the state of each row
+group, and the size of the render target is read once per layer.
+
 The viewport size given to shaders comes from `gl.drawingBufferWidth` and
 `gl.drawingBufferHeight`, the size of the framebuffer actually drawn into,
 which keeps `gl.getParameter(gl.VIEWPORT)` out of the drawing path.

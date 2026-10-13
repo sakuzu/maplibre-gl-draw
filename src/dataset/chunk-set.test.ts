@@ -216,6 +216,26 @@ describe('DisplayChunkSet', () => {
     expect(events).toEqual(['begin', 'end']);
   });
 
+  it('reads the size of the render target once per draw, however many chunks it draws', () => {
+    const { renderers, counts } = createRenderers();
+    let reads = 0;
+    const counted = {
+      ...renderers,
+      viewport: (): [number, number] => {
+        reads++;
+        return [1920, 1080];
+      },
+    };
+    const set = new DisplayChunkSet(createHost());
+    set.replace(chunksOf(FEATURES));
+    set.draw(frameFor(counted, BOTH));
+    reads = 0;
+    const before = counts.draws;
+    set.draw(frameFor(counted, BOTH));
+    expect(counts.draws - before).toBeGreaterThan(1);
+    expect(reads).toBe(1);
+  });
+
   it('the host collects the rows of the chunks in view', () => {
     const { renderers } = createRenderers();
     const collected: number[] = [];

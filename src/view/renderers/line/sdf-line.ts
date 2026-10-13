@@ -147,6 +147,11 @@ export class SDFLineRenderer {
   private ledger: GpuLedger | undefined;
   /** The run of the retained draws of the context (shared with the other renderers) */
   private readonly run: RetainedDrawRun;
+  /**
+   * The gap between the origin of a retained batch and the camera center, written for each
+   * draw (the projection keeps its values, not the array)
+   */
+  private readonly originShift: [number, number] = [0, 0];
 
   constructor(
     _map: MapLibreMap,
@@ -368,6 +373,16 @@ export class SDFLineRenderer {
       this.textureSizeLimit(),
       { stationBuffer: this.quadVBO, ledger: this.ledger, rowFirst },
     );
+  }
+
+  /** The gap between the origin of a batch and the camera center (in the array reused) */
+  private originShiftOf(
+    origin: readonly [number, number],
+    camera: OffsetUniforms,
+  ): [number, number] {
+    this.originShift[0] = origin[0] - camera.centerLngLat[0];
+    this.originShift[1] = origin[1] - camera.centerLngLat[1];
+    return this.originShift;
   }
 
   /** The largest side of a coordinate texture this GPU allows (MAX_TEXTURE_SIZE, read once) */
@@ -703,10 +718,12 @@ export class SDFLineRenderer {
 
     const cameraUniforms = this.offsetUniforms;
     if (cameraUniforms) {
-      projection.setUniforms(projectionData, zoom, cameraUniforms, [
-        batch.origin[0] - cameraUniforms.centerLngLat[0],
-        batch.origin[1] - cameraUniforms.centerLngLat[1],
-      ]);
+      projection.setUniforms(
+        projectionData,
+        zoom,
+        cameraUniforms,
+        this.originShiftOf(batch.origin, cameraUniforms),
+      );
     } else {
       projection.setUniforms(
         projectionData,
@@ -815,10 +832,12 @@ export class SDFLineRenderer {
     // u_origin_shift
     const cameraUniforms = this.offsetUniforms;
     if (cameraUniforms) {
-      this.projectionUniformManager.setUniforms(projectionData, zoom, cameraUniforms, [
-        batch.origin[0] - cameraUniforms.centerLngLat[0],
-        batch.origin[1] - cameraUniforms.centerLngLat[1],
-      ]);
+      this.projectionUniformManager.setUniforms(
+        projectionData,
+        zoom,
+        cameraUniforms,
+        this.originShiftOf(batch.origin, cameraUniforms),
+      );
     } else {
       // Fallback (normally custom-layer has already called setOffsetUniforms each frame)
       this.projectionUniformManager.setUniforms(

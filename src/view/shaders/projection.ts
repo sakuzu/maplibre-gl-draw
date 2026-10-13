@@ -116,6 +116,12 @@ interface ProjectionUniformMemo {
 }
 
 /**
+ * The gap of the reference coordinates when none is given (read only, never written: the
+ * default is not made anew on every call)
+ */
+const NO_ORIGIN_SHIFT: [number, number] = [0, 0];
+
+/**
  * Creates a record in the not-yet-written state
  */
 function createMemo(): ProjectionUniformMemo {
@@ -260,7 +266,7 @@ export class ProjectionUniformManager {
     projectionData: ProjectionData,
     zoom: number,
     offsetUniforms: OffsetUniforms | null,
-    originShift: [number, number] = [0, 0],
+    originShift: [number, number] = NO_ORIGIN_SHIFT,
   ): void {
     if (!this.locations) return;
 

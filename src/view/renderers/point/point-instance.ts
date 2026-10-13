@@ -49,7 +49,11 @@ import {
   type RowStateBinding,
   RowStateUniforms,
 } from '../row-state.js';
-import { drawBillboardsWithoutDepth } from './billboard-depth.js';
+import {
+  disableDepthForBillboards,
+  drawBillboardsWithoutDepth,
+  restoreDepthAfterBillboards,
+} from './billboard-depth.js';
 import { POINT_SDF_GLSL, POINT_SHAPE_CODE, type SdfPointShape } from './point-sdf.js';
 
 /** Color type */
@@ -581,6 +585,11 @@ export class PointInstanceRenderer {
   private readonly ledger: GpuLedger | undefined;
   /** The run of the retained draws of the context (shared with the other renderers) */
   private readonly run: RetainedDrawRun;
+  /**
+   * The gap between the origin of a retained batch and the camera center, written for each
+   * draw (the projection keeps its values, not the array)
+   */
+  private readonly originShift: [number, number] = [0, 0];
 
   constructor(
     _map: MapLibreMap,
@@ -1161,12 +1170,9 @@ void main() {
     const offsetUniforms =
       cameraUniforms ??
       calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array);
-    const originShift: [number, number] = cameraUniforms
-      ? [
-          batch.origin[0] - cameraUniforms.centerLngLat[0],
-          batch.origin[1] - cameraUniforms.centerLngLat[1],
-        ]
-      : [0, 0];
+    const originShift = this.originShift;
+    originShift[0] = cameraUniforms ? batch.origin[0] - cameraUniforms.centerLngLat[0] : 0;
+    originShift[1] = cameraUniforms ? batch.origin[1] - cameraUniforms.centerLngLat[1] : 0;
 
     const run = this.run;
     run.useProgram(program);
@@ -1180,9 +1186,12 @@ void main() {
       this.pointInstanceAttribs(true, first, false);
       batch.pointedFirst = first;
     }
-    drawBillboardsWithoutDepth(gl, () => {
+    const depthWasEnabled = disableDepthForBillboards(gl);
+    try {
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, QUAD_VERTEX_COUNT, count);
-    });
+    } finally {
+      restoreDepthAfterBillboards(gl, depthWasEnabled);
+    }
     run.release();
   }
 
@@ -1214,12 +1223,9 @@ void main() {
       cameraUniforms ??
       // Fallback (normally custom-layer has already called setOffsetUniforms every frame)
       calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array);
-    const originShift: [number, number] = cameraUniforms
-      ? [
-          batch.origin[0] - cameraUniforms.centerLngLat[0],
-          batch.origin[1] - cameraUniforms.centerLngLat[1],
-        ]
-      : [0, 0];
+    const originShift = this.originShift;
+    originShift[0] = cameraUniforms ? batch.origin[0] - cameraUniforms.centerLngLat[0] : 0;
+    originShift[1] = cameraUniforms ? batch.origin[1] - cameraUniforms.centerLngLat[1] : 0;
 
     const run = this.run;
     run.useProgram(this.program);
@@ -1227,9 +1233,12 @@ void main() {
     this.setDrawFactors(this.program, factors);
 
     run.bindVertexArray(batch.vao);
-    drawBillboardsWithoutDepth(gl, () => {
+    const depthWasEnabled = disableDepthForBillboards(gl);
+    try {
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, QUAD_VERTEX_COUNT, batch.instanceCount);
-    });
+    } finally {
+      restoreDepthAfterBillboards(gl, depthWasEnabled);
+    }
     run.release();
   }
 

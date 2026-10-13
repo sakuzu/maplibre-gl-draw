@@ -42,7 +42,11 @@ import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { GpuLedger } from '../gpu-ledger.js';
-import { layerDrawFactors, type RetainedDrawFactors } from '../renderers/draw-factors.js';
+import {
+  layerDrawFactors,
+  NEUTRAL_DRAW_FACTORS,
+  type RetainedDrawFactors,
+} from '../renderers/draw-factors.js';
 import { ROW_LINE_STRIDE } from '../renderers/line/line-geometry.js';
 import type { RetainedLineBatch } from '../renderers/line/line-types.js';
 import { type RetainedPointBatch, ROW_POINT_STRIDE } from '../renderers/point/point-instance.js';
@@ -56,7 +60,7 @@ import {
   uploadRowState,
 } from '../renderers/row-state.js';
 import {
-  advanceChunkBuilds,
+  advanceChunkBuild,
   type ChunkBuildBudget,
   type ChunkSchedulerHost,
   createChunkBuildBudget,
@@ -191,6 +195,8 @@ interface GroupCache {
   texture: RowStateTexture | null;
   /** The version of the state the texture holds (-1 before the first upload) */
   uploadedVersion: number;
+  /** What a draw of the rows of the group binds (made again with a new texture) */
+  binding: RowStateBinding | null;
 }
 
 /** What is kept for a layer */
@@ -200,6 +206,34 @@ interface LayerCache {
   slots: RowStyleSlots | null;
   rule: Layer['styleRule'];
   companionsGeneration: number;
+  /** What the rows are packed with (made again with new slots) */
+  context: RowPackContext | null;
+}
+
+/**
+ * What the draws of a layer and of a group read: set once per layer and once per group, and
+ * read by the one host of the chunks, so that drawing a chunk makes no object
+ */
+interface DrawPass {
+  layerId: string;
+  frame: TableLayerFrame | null;
+  factors: RetainedDrawFactors;
+  renderers: RetainedRendererSet | null;
+  context: RowPackContext | null;
+  /** The size of the render target, read once per layer */
+  viewport: [number, number];
+  cutsOf: Map<RetainedRowsChunk, number[]> | null;
+  group: RowGroup | null;
+  groupIndex: number;
+  binding: RowStateBinding | null;
+}
+
+/** The frame of the chunk scheduler, set once per layer */
+interface SchedulerFrame {
+  bounds: BoundingBox;
+  zoom: number;
+  settled: boolean;
+  budget: ChunkBuildBudget;
 }
 
 /**
@@ -218,8 +252,49 @@ export class TableLayerRenderer {
   private record: TableDrawRecord[] | null = null;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
   private readonly scratch: { parts: number[] } = { parts: [] };
+  /** What the draws of the layer and the group being drawn read (set per layer and group) */
+  private readonly pass: DrawPass = {
+    layerId: '',
+    frame: null,
+    factors: NEUTRAL_DRAW_FACTORS,
+    renderers: null,
+    context: null,
+    viewport: [0, 0],
+    cutsOf: null,
+    group: null,
+    groupIndex: 0,
+    binding: null,
+  };
+  /** The frame the chunks of the layer being drawn are built and drawn in (set per layer) */
+  private readonly schedule: SchedulerFrame = {
+    bounds: WORLD,
+    zoom: 0,
+    settled: true,
+    budget: createChunkBuildBudget(0),
+  };
+  /** What the building of the chunks asks of the layer and the group being drawn */
+  private readonly host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch>;
 
-  constructor(private readonly options: TableLayerRendererOptions) {}
+  constructor(private readonly options: TableLayerRendererOptions) {
+    const pass = this.pass;
+    this.host = {
+      isStale: () => false,
+      startJob: (state, origin) =>
+        this.startJob(
+          pass.group as RowGroup,
+          state.range,
+          origin,
+          pass.context as RowPackContext,
+          pass.renderers as RetainedRendererSet,
+        ),
+      adoptJob: () => {},
+      disposeBatches: (batches) => disposeBatch(batches, pass.renderers as RetainedRendererSet),
+      draw: (state) => {
+        this.drawRetained(state);
+        return true;
+      },
+    };
+  }
 
   /** Whether the last frame left a build unfinished */
   get hasPendingWork(): boolean {
@@ -275,22 +350,41 @@ export class TableLayerRenderer {
 
     const cache = this.layerCache(tables, table, layer, renderers, deps);
     const slots = cache.slots as RowStyleSlots;
-    const context: RowPackContext = {
-      slots,
-      strings: tables.strings,
-      pixelRatio: this.options.pixelRatio,
-      terrain: this.options.terrain,
-    };
-    for (let k = 0; k <= MOVE_SETS; k++) {
-      const [dLng, dLat] = k === 0 ? [0, 0] : tables.states.translation(k);
+    if (
+      !cache.context ||
+      cache.context.slots !== slots ||
+      cache.context.strings !== tables.strings
+    ) {
+      cache.context = {
+        slots,
+        strings: tables.strings,
+        pixelRatio: this.options.pixelRatio,
+        terrain: this.options.terrain,
+      };
+    }
+    this.translations[0] = 0;
+    this.translations[1] = 0;
+    for (let k = 1; k <= MOVE_SETS; k++) {
+      const [dLng, dLat] = tables.states.translation(k);
       this.translations[k * 2] = dLng;
       this.translations[k * 2 + 1] = dLat;
     }
 
     const bounds = frame.bounds ?? WORLD;
     const settled = !isTerrainCameraMoving(this.options.terrain);
-    const factors = layerDrawFactors(layer);
-    const cutsOf = this.cuts > 0 ? this.placeCuts(table, cache, bounds) : null;
+    const pass = this.pass;
+    pass.layerId = table.layerId;
+    pass.frame = frame;
+    pass.factors = layerDrawFactors(layer);
+    pass.renderers = renderers;
+    pass.context = cache.context;
+    pass.viewport = renderers.viewport();
+    pass.cutsOf = this.cuts > 0 ? this.placeCuts(table, cache, bounds) : null;
+    const schedule = this.schedule;
+    schedule.bounds = bounds;
+    schedule.zoom = frame.zoom;
+    schedule.settled = settled;
+    schedule.budget = budget;
 
     // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), forgotten
     // before the rows drawn at once and ended with the layer
@@ -303,46 +397,29 @@ export class TableLayerRenderer {
         if (!groupCache) continue;
         const binding = this.stateBinding(groupCache);
         if (!binding) continue;
-
-        const host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch> = {
-          isStale: () => false,
-          startJob: (state, origin) =>
-            this.startJob(group, state.range, origin, context, renderers),
-          adoptJob: () => {},
-          disposeBatches: (batches) => disposeBatch(batches, renderers),
-          draw: (state) => {
-            this.drawRetained(
-              table.layerId,
-              group,
-              g,
-              state,
-              binding,
-              frame,
-              factors,
-              renderers,
-              cutsOf?.get(state) ?? null,
-            );
-            return true;
-          },
-        };
+        pass.group = group;
+        pass.groupIndex = g;
+        pass.binding = binding;
 
         for (const chunk of groupCache.chunks) {
           if (chunk.type === 'immediate') {
             // What draws the rows at once may change any of the state of the run
-            renderers.run?.forget();
+            run?.forget();
             this.drawImmediate(tables, table.layerId, layer, group, g, chunk, frame, deps, settled);
             continue;
           }
-          const left = advanceChunkBuilds(
-            [chunk],
-            { bounds, zoom: frame.zoom, settled, budget },
-            host,
-          );
-          if (left) this.pending = true;
+          if (advanceChunkBuild(chunk, schedule, this.host)) this.pending = true;
         }
       }
     } finally {
       run?.end();
+      // Nothing of the layer is held past its drawing
+      pass.frame = null;
+      pass.renderers = null;
+      pass.context = null;
+      pass.group = null;
+      pass.binding = null;
+      pass.cutsOf = null;
     }
   }
 
@@ -409,7 +486,13 @@ export class TableLayerRenderer {
   ): LayerCache {
     let cache = this.layers.get(table.layerId);
     if (!cache) {
-      cache = { groups: new Map(), slots: null, rule: undefined, companionsGeneration: -1 };
+      cache = {
+        groups: new Map(),
+        slots: null,
+        rule: undefined,
+        companionsGeneration: -1,
+        context: null,
+      };
       this.layers.set(table.layerId, cache);
     }
     const companions = deps.companions;
@@ -455,6 +538,7 @@ export class TableLayerRenderer {
           chunks: ranges.flatMap((range) => this.makeChunk(range)),
           texture: null,
           uploadedVersion: -1,
+          binding: null,
         });
       }
     }
@@ -529,6 +613,7 @@ export class TableLayerRenderer {
     if (groupCache.texture) {
       deleteRowStateTexture(this.options.gl, groupCache.texture, this.options.ledger);
       groupCache.texture = null;
+      groupCache.binding = null;
     }
   }
 
@@ -549,7 +634,11 @@ export class TableLayerRenderer {
       uploadRowState(this.options.gl, texture, group.gpuState);
       groupCache.uploadedVersion = group.stateVersion;
     }
-    return { texture, translations: this.translations };
+    // The binding is kept with the group (the translations are the one array of the renderer)
+    if (groupCache.binding?.texture !== texture) {
+      groupCache.binding = { texture, translations: this.translations };
+    }
+    return groupCache.binding;
   }
 
   // === The builds ===
@@ -574,73 +663,73 @@ export class TableLayerRenderer {
 
   // === The draws ===
 
-  /** Draws a retained chunk, in ranges cut at the places given */
-  private drawRetained(
-    layerId: string,
-    group: RowGroup,
-    groupIndex: number,
-    state: RetainedRowsChunk,
-    binding: RowStateBinding,
-    frame: TableLayerFrame,
-    factors: RetainedDrawFactors,
-    renderers: RetainedRendererSet,
-    cuts: readonly number[] | null,
-  ): void {
-    const batches = state.batches;
-    if (!batches?.batch) return;
+  /** Draws a retained chunk of the group being drawn, in ranges cut at the places given */
+  private drawRetained(state: RetainedRowsChunk): void {
+    if (!state.batches?.batch) return;
     const rows = state.range.to - state.range.from;
+    const cuts = this.pass.cutsOf?.get(state);
     let from = 0;
-    const draw = (to: number): void => {
-      if (to <= from) return;
-      const { projectionData, zoom } = frame;
-      switch (batches.kind) {
-        case 'point':
-          renderers.point.drawRetainedRange?.(
-            batches.batch as RetainedPointBatch,
-            from,
-            to,
-            zoom,
-            projectionData,
-            binding,
-            factors,
-          );
-          break;
-        case 'line':
-          renderers.line.drawRetainedRange?.(
-            batches.batch as RetainedLineBatch,
-            from,
-            to,
-            zoom,
-            projectionData,
-            binding,
-            factors,
-          );
-          break;
-        case 'polygon':
-          renderers.polygon.drawRetainedRange?.(
-            batches.batch as RetainedPolygonBatch,
-            from,
-            to,
-            zoom,
-            projectionData,
-            renderers.viewport(),
-            binding,
-            factors,
-          );
-          break;
+    if (cuts) {
+      for (const cut of cuts) {
+        if (cut <= from) continue;
+        this.drawRange(state, from, cut);
+        from = cut;
       }
-      this.record?.push({
-        layerId,
-        group: group.handle,
-        groupIndex,
-        kind: state.range.kind,
-        from: state.range.from + from,
-        to: state.range.from + to,
-      });
-      from = to;
-    };
-    if (cuts) for (const cut of cuts) draw(cut);
-    draw(rows);
+    }
+    if (rows > from) this.drawRange(state, from, rows);
+  }
+
+  /** Draws the rows `[from, to)` of a retained chunk of the group being drawn */
+  private drawRange(state: RetainedRowsChunk, from: number, to: number): void {
+    const pass = this.pass;
+    const batches = state.batches as TableChunkBatch;
+    const renderers = pass.renderers as RetainedRendererSet;
+    const { projectionData, zoom } = pass.frame as TableLayerFrame;
+    const binding = pass.binding as RowStateBinding;
+    switch (batches.kind) {
+      case 'point':
+        renderers.point.drawRetainedRange?.(
+          batches.batch as RetainedPointBatch,
+          from,
+          to,
+          zoom,
+          projectionData,
+          binding,
+          pass.factors,
+        );
+        break;
+      case 'line':
+        renderers.line.drawRetainedRange?.(
+          batches.batch as RetainedLineBatch,
+          from,
+          to,
+          zoom,
+          projectionData,
+          binding,
+          pass.factors,
+        );
+        break;
+      case 'polygon':
+        renderers.polygon.drawRetainedRange?.(
+          batches.batch as RetainedPolygonBatch,
+          from,
+          to,
+          zoom,
+          projectionData,
+          pass.viewport,
+          binding,
+          pass.factors,
+        );
+        break;
+    }
+    this.record?.push({
+      layerId: pass.layerId,
+      group: (pass.group as RowGroup).handle,
+      groupIndex: pass.groupIndex,
+      kind: state.range.kind,
+      from: state.range.from + from,
+      to: state.range.from + to,
+    });
   }
 
   /** Draws a chunk of rows at once, from the features of its rows */

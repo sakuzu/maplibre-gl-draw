@@ -187,61 +187,75 @@ export function advanceChunkBuilds<S extends RetainedChunkState<B>, B>(
   frame: ChunkSchedulerFrame,
   host: ChunkSchedulerHost<S, B>,
 ): boolean {
+  let pending = false;
+  for (const state of states) {
+    if (advanceChunkBuild(state, frame, host)) pending = true;
+  }
+  return pending;
+}
+
+/**
+ * Builds and draws one chunk, when it meets the view (what {@link advanceChunkBuilds} does for
+ * each of its chunks, for a side that walks its chunks itself)
+ *
+ * @returns Whether something of the chunk is left for a later frame
+ * @internal
+ */
+export function advanceChunkBuild<S extends RetainedChunkState<B>, B>(
+  state: S,
+  frame: ChunkSchedulerFrame,
+  host: ChunkSchedulerHost<S, B>,
+): boolean {
   const { bounds, zoom, settled, budget } = frame;
+  if (!intersects(state.bounds, bounds)) return false;
   let pending = false;
 
-  for (const state of states) {
-    if (!intersects(state.bounds, bounds)) continue;
+  // A chunk seen far from its origin at high zoom is built again around the view (the batches
+  // it has keep being drawn until then)
+  const rebased =
+    state.batches !== null && !state.job
+      ? rebasedRetainedOrigin(chunkOrigin(state), state.bounds, bounds, zoom)
+      : null;
+  if (rebased) state.viewOrigin = rebased;
+  const stale = state.batches !== null && (state.stale || host.isStale(state) || rebased !== null);
 
-    // A chunk seen far from its origin at high zoom is built again around the view (the batches
-    // it has keep being drawn until then)
-    const rebased =
-      state.batches !== null && !state.job
-        ? rebasedRetainedOrigin(chunkOrigin(state), state.bounds, bounds, zoom)
-        : null;
-    if (rebased) state.viewOrigin = rebased;
-    const stale =
-      state.batches !== null && (state.stale || host.isStale(state) || rebased !== null);
-
-    const wantsBuild = state.job !== null || !state.batches || stale;
-    if (wantsBuild && !settled) pending = true;
-    if (wantsBuild && settled) {
-      if (budget.canStep()) {
-        // A build is started in the step that first advances it, so the time of starting it
-        // (what the host walks to size the build) is counted as well
-        const done = budget.step((deadline) => {
-          if (!state.job) {
-            const origin = state.viewOrigin ?? boundsCenter(state.bounds);
-            state.jobOrigin = origin;
-            state.job = host.startJob(state, origin);
-          }
-          return state.job.step(deadline, budget.now);
-        });
-        const job = state.job as RetainedChunkJob<B>;
-        if (done) {
-          const built = job.take();
-          state.job = null;
-          if (built) {
-            // The old batches are discarded only once the new ones are complete (no flicker)
-            if (state.batches) host.disposeBatches(state.batches);
-            state.batches = built;
-            state.origin = state.jobOrigin;
-            state.stale = false;
-            host.adoptJob(state);
-          }
-          // When it could not be built (the shaders are not ready) it is built on a later frame
-        } else {
-          pending = true;
+  const wantsBuild = state.job !== null || !state.batches || stale;
+  if (wantsBuild && !settled) pending = true;
+  if (wantsBuild && settled) {
+    if (budget.canStep()) {
+      // A build is started in the step that first advances it, so the time of starting it
+      // (what the host walks to size the build) is counted as well
+      const done = budget.step((deadline) => {
+        if (!state.job) {
+          const origin = state.viewOrigin ?? boundsCenter(state.bounds);
+          state.jobOrigin = origin;
+          state.job = host.startJob(state, origin);
         }
+        return state.job.step(deadline, budget.now);
+      });
+      const job = state.job as RetainedChunkJob<B>;
+      if (done) {
+        const built = job.take();
+        state.job = null;
+        if (built) {
+          // The old batches are discarded only once the new ones are complete (no flicker)
+          if (state.batches) host.disposeBatches(state.batches);
+          state.batches = built;
+          state.origin = state.jobOrigin;
+          state.stale = false;
+          host.adoptJob(state);
+        }
+        // When it could not be built (the shaders are not ready) it is built on a later frame
       } else {
         pending = true;
       }
+    } else {
+      pending = true;
     }
-
-    if (!state.batches) continue;
-    if (!host.draw(state)) pending = true;
   }
 
+  if (!state.batches) return pending;
+  if (!host.draw(state)) pending = true;
   return pending;
 }
 

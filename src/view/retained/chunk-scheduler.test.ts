@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  advanceChunkBuild,
   advanceChunkBuilds,
   type ChunkSchedulerHost,
   createChunkBuildBudget,
@@ -215,5 +216,28 @@ describe('createChunkBuildBudget', () => {
     expect(budget.canStep()).toBe(true);
     budget.step(() => {});
     expect(budget.canStep()).toBe(false);
+  });
+});
+
+describe('advanceChunkBuild', () => {
+  it('does for one chunk what advanceChunkBuilds does for each, with one frame for all', () => {
+    for (const steps of [1, 3]) {
+      for (const ms of [0, Number.POSITIVE_INFINITY]) {
+        const together = [state('a'), state('b'), state('far', 50), state('c')];
+        const alone = [state('a'), state('b'), state('far', 50), state('c')];
+        const a = host(steps);
+        const b = host(steps);
+        for (let f = 0; f < 4; f++) {
+          const pendingTogether = advanceChunkBuilds(together, frame(true, ms), a.h);
+          const shared = frame(true, ms);
+          let pendingAlone = false;
+          for (const chunk of alone) {
+            if (advanceChunkBuild(chunk, shared, b.h)) pendingAlone = true;
+          }
+          expect(pendingAlone).toBe(pendingTogether);
+          expect(b.drawn).toEqual(a.drawn);
+        }
+      }
+    }
   });
 });

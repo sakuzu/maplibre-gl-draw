@@ -862,6 +862,8 @@ export function rebuildChunkPoints(
  * @param factors The factors at draw time (when omitted, a scale of 1 and an opacity of 1, as
  *   before). The same factors apply to the fixed and the scaled batches alike, and to points,
  *   lines and polygons alike (so that no path a data surface takes is missed)
+ * @param viewport The size of the render target (read from the renderers when omitted; a side
+ *   that draws many chunks reads it once)
  *
  * @internal
  */
@@ -871,9 +873,8 @@ export function drawChunkBatches(
   zoom: number,
   projectionData: ProjectionData,
   factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  viewport: [number, number] = renderers.viewport(),
 ): void {
-  const viewport = renderers.viewport();
-
   for (const batch of batches.polygons) {
     renderers.polygon.drawRetained(batch, zoom, projectionData, viewport, factors);
   }

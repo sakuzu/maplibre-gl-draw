@@ -23,12 +23,26 @@ export function drawFillWithTerrainCull(
   terrain: TerrainContext,
   draw: () => void,
 ): void {
+  const active = beginTerrainCull(gl, terrain);
+  draw();
+  endTerrainCull(gl, active);
+}
+
+/**
+ * The first half of {@link drawFillWithTerrainCull}, for a draw that makes no callback: enables
+ * the culling while terrain is active, and returns whether it did (give it to `endTerrainCull`)
+ */
+export function beginTerrainCull(gl: WebGL2RenderingContext, terrain: TerrainContext): boolean {
   const active = terrain.renderState.active;
   if (active) {
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
     gl.frontFace(gl.CCW);
   }
-  draw();
+  return active;
+}
+
+/** The second half of {@link drawFillWithTerrainCull}: disables the culling it enabled */
+export function endTerrainCull(gl: WebGL2RenderingContext, active: boolean): void {
   if (active) gl.disable(gl.CULL_FACE);
 }

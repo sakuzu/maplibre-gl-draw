@@ -423,6 +423,21 @@ describe('the run of the retained draws of a layer', () => {
     }
   });
 
+  it('reads the size of the render target once per layer, however many chunks it draws', () => {
+    const { frame, renderers, draws } = setup(interleaved(300, 12), 50);
+    frame();
+    let reads = 0;
+    const viewport = renderers.viewport;
+    renderers.viewport = () => {
+      reads++;
+      return viewport();
+    };
+    draws.length = 0;
+    frame();
+    expect(draws.length).toBeGreaterThan(10);
+    expect(reads).toBe(1);
+  });
+
   it('is ended when a draw throws', () => {
     const { frame, renderers } = setup(interleaved(50, 10));
     frame();

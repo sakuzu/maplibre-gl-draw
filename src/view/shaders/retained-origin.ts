@@ -56,12 +56,30 @@ export function retainedOriginErrorPx(
   region: BoundingBox,
   zoom: number,
 ): number {
-  const dLng = Math.max(Math.abs(region.minX - origin[0]), Math.abs(region.maxX - origin[0]));
-  const dLat = Math.max(Math.abs(region.minY - origin[1]), Math.abs(region.maxY - origin[1]));
-  const lat = Math.min(
-    Math.max(Math.abs(region.minY), Math.abs(region.maxY)),
-    MAX_MERCATOR_LATITUDE,
+  return originErrorPx(
+    origin[0],
+    origin[1],
+    region.minX,
+    region.minY,
+    region.maxX,
+    region.maxY,
+    zoom,
   );
+}
+
+/** {@link retainedOriginErrorPx} of an origin and a region given as numbers */
+function originErrorPx(
+  originX: number,
+  originY: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  zoom: number,
+): number {
+  const dLng = Math.max(Math.abs(minX - originX), Math.abs(maxX - originX));
+  const dLat = Math.max(Math.abs(minY - originY), Math.abs(maxY - originY));
+  const lat = Math.min(Math.max(Math.abs(minY), Math.abs(maxY)), MAX_MERCATOR_LATITUDE);
   const latScale = 1 / Math.cos((lat * Math.PI) / 180);
   const pxPerDegree = (WORLD_SIZE_PX * 2 ** zoom) / 360;
   return 2 * FLOAT32_ROUNDOFF * Math.max(dLng, dLat * latScale) * pxPerDegree;
@@ -87,19 +105,39 @@ export function rebasedRetainedOrigin(
   zoom: number,
 ): [number, number] | null {
   if (!extent) return null;
-  const region: BoundingBox = view
-    ? {
-        minX: Math.max(extent.minX, view.minX),
-        minY: Math.max(extent.minY, view.minY),
-        maxX: Math.min(extent.maxX, view.maxX),
-        maxY: Math.min(extent.maxY, view.maxY),
-      }
-    : extent;
-  if (!(region.minX <= region.maxX && region.minY <= region.maxY)) return null;
+  return rebasedOriginOf(origin, extent.minX, extent.minY, extent.maxX, extent.maxY, view, zoom);
+}
 
-  const error = retainedOriginErrorPx(origin, region, zoom);
+/**
+ * {@link rebasedRetainedOrigin} of an extent given as numbers (`[minX, minY, maxX, maxY]`)
+ *
+ * The drawing asks it of every chunk in view on every frame, so nothing is made unless a new
+ * origin is proposed.
+ *
+ * @internal
+ */
+export function rebasedOriginOf(
+  origin: readonly [number, number],
+  extentMinX: number,
+  extentMinY: number,
+  extentMaxX: number,
+  extentMaxY: number,
+  view: BoundingBox | null,
+  zoom: number,
+): [number, number] | null {
+  // The region on screen: the extent clipped to the view (the whole extent without a view)
+  const minX = view ? Math.max(extentMinX, view.minX) : extentMinX;
+  const minY = view ? Math.max(extentMinY, view.minY) : extentMinY;
+  const maxX = view ? Math.min(extentMaxX, view.maxX) : extentMaxX;
+  const maxY = view ? Math.min(extentMaxY, view.maxY) : extentMaxY;
+  if (!(minX <= maxX && minY <= maxY)) return null;
+
+  const error = originErrorPx(origin[0], origin[1], minX, minY, maxX, maxY, zoom);
   if (!(error > RETAINED_ORIGIN_TOLERANCE_PX)) return null;
 
-  const candidate = boundsCenter(region);
-  return retainedOriginErrorPx(candidate, region, zoom) < error / 2 ? candidate : null;
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  return originErrorPx(centerX, centerY, minX, minY, maxX, maxY, zoom) < error / 2
+    ? [centerX, centerY]
+    : null;
 }
