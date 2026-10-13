@@ -566,6 +566,40 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     expect(renderer.hasPendingWork).toBe(false);
   });
 
+  it('cuts a group again for a row written into another kind of run, drawing every row meanwhile', () => {
+    const features = interleaved(200, 14);
+    const { table, internals, renderer, frame } = setup(features, 1000);
+    renderer.setDrawingByKind(true);
+    frame();
+    frame();
+    const group = table.groupAt(0);
+    // A solid line made dashed: by kind, it is drawn at once
+    const row = features.findIndex((f) => f.id.startsWith('l'));
+    const dashed = internals.styles.intern({ lineStyle: 'dashed' });
+    internals.styles.retain(dashed);
+    internals.styles.release(group.data.styles[row]);
+    group.data.styles[row] = dashed;
+    renderer.rowsWritten('layer', [
+      {
+        group: group.handle,
+        row,
+        what: ROW_WRITE_STYLE,
+        sameShape: true,
+        from: 0,
+        to: 0,
+        keys: [],
+      },
+    ]);
+    let atOnce = false;
+    for (let i = 0; i < 4; i++) {
+      const { record } = frame();
+      expect(coverage(record)).toEqual(allRows(table));
+      atOnce ||= record.some((entry) => entry.kind === 'immediate' && entry.from === row);
+    }
+    expect(renderer.writeStats.reclassified).toBe(1);
+    expect(atOnce).toBe(true);
+  });
+
   it('records what the chunks hold in the ledger, and releases it with them', () => {
     const { renderer, frame, ledger } = setup(interleaved(200, 11), 100);
     frame();

@@ -45,6 +45,7 @@ import {
 } from '../../feature-table/row-state.js';
 import {
   ROW_WRITE_GEOMETRY,
+  ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
   type RowGroupHandle,
   type RowWrite,
@@ -890,9 +891,24 @@ export class TableLayerRenderer {
   ): void {
     const group = groupCache.group;
     const drawn = this.writeIsDrawn(cache, write);
-    // The drawing by kind and the rows drawn at once read their rows when they are built
-    for (const chunk of allChunks(groupCache)) {
-      if (row < chunk.range.from || row >= chunk.range.to) continue;
+    // What the classification of a row reads (its type, its style, and what an extension reads
+    // of its feature) may have changed with any write but of its state
+    const classified = (write.what & ~ROW_WRITE_STATE) !== 0;
+    const stats = this.writeStats;
+    let oneDrawChunk: OneDrawRowsChunk | null = null;
+    for (const [held, oneDraw] of [
+      [groupCache.byKind, false],
+      [groupCache.oneDraw, true],
+    ] as const) {
+      const chunk = held?.chunks.find((c) => row >= c.range.from && row < c.range.to);
+      if (!held || !chunk) continue;
+      if (classified && !this.classifiedAs(cache, groupCache, row, chunk.range.kind, oneDraw)) {
+        // Another kind of run (drawn at once, by another kind, with other pictures): the group
+        // is cut again, and keeps drawing its chunks until the new ones are built
+        held.generation = -1;
+        stats.reclassified++;
+        continue;
+      }
       if (chunk.type === 'immediate') {
         if (chunk.features && row - chunk.range.from < chunk.filled && cache.tables) {
           // The feature kept for the row is made again from its columns
@@ -900,14 +916,15 @@ export class TableLayerRenderer {
             ? rowFeature(cache.tables.readContext, cache.layer?.id ?? '', group, row)
             : null;
         }
-      } else if (chunk.type === 'retained' && drawn) {
-        this.invalidateChunk(chunk, true);
+      } else if (chunk.type === 'retained') {
+        // The batches by kind hold their rows: built again (drawn until then)
+        if (drawn) this.invalidateChunk(chunk, true);
+      } else {
+        oneDrawChunk = chunk;
       }
     }
-    if (!drawn) return;
-    const chunk = groupCache.oneDraw?.chunks.find((c) => row >= c.range.from && row < c.range.to);
-    if (chunk?.type !== 'rows') return;
-    const stats = this.writeStats;
+    const chunk = oneDrawChunk;
+    if (!drawn || !chunk) return;
     if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
       // The extent of the chunk only widens, so a row moved out of it is not culled with it
       const b = group.data.rowBounds;
@@ -929,12 +946,6 @@ export class TableLayerRenderer {
     if (gpu.data.palette !== rowsStyles.palette) {
       this.invalidateChunk(chunk, true);
       stats.rebuilt++;
-      return;
-    }
-    if (!this.classifiedAlike(cache, groupCache, row)) {
-      // Another kind of run (drawn at once, or with other pictures): the group is cut again
-      if (groupCache.oneDraw) groupCache.oneDraw.generation = -1;
-      stats.reclassified++;
       return;
     }
     const context = this.packContext(groupCache, cache);
@@ -1006,28 +1017,36 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Whether a row is classified as its chunk was cut: drawn in one draw, with the pictures of the
-   * source it had (J13 of the design: a write that changes the kind of the run of a row cannot
-   * be written in place)
+   * Whether a row is classified as its chunk was cut: the kind of its run (and in one draw the
+   * source of its pictures) as it is now. A write that changes it cannot be written in place
+   * (J13 of the design)
    */
-  private classifiedAlike(cache: LayerCache, groupCache: GroupCache, row: number): boolean {
+  private classifiedAs(
+    cache: LayerCache,
+    groupCache: GroupCache,
+    row: number,
+    kind: TableRunKind,
+    oneDraw: boolean,
+  ): boolean {
     const tables = cache.tables;
     const deps = cache.deps;
     const layer = cache.layer;
     if (!tables || !deps || !layer || !cache.slots) return false;
     let source: RowSpriteSource | undefined;
-    const kind = classifyRow(groupCache.group, row, {
+    const now = classifyRow(groupCache.group, row, {
       slots: cache.slots,
       customTypes: deps.customRenderers,
       companions: deps.companions as FeatureCompanionRegistry,
       featureOf: (rows, r) => rowFeature(tables.readContext, layer.id, rows, r),
       layer,
-      oneDraw: true,
+      oneDraw,
       onSprite: (_r, found) => {
         source = found;
       },
     });
-    return kind === 'rows' && source === groupCache.sprites.get(row);
+    // A row without a geometry joins the run it is in
+    if (now !== null && now !== kind) return false;
+    return !oneDraw || kind !== 'rows' || source === groupCache.sprites.get(row);
   }
 
   // === Hooks of tests and measurements ===
