@@ -132,6 +132,30 @@ interface Strip {
   readonly cssPerPx: number;
   /** Half the width of the line (device px) */
   readonly halfWidth: number;
+  /** The position along the strip each corner hands the fragments (device px, `v_geom.y`) */
+  readonly linePositions: readonly number[];
+  /** The length of the segment on the screen (device px) */
+  readonly length: number;
+  /** The direction of the segment on the screen */
+  readonly dir: Point;
+  /** The position of the start of the segment and of its end on the line (CSS px) */
+  readonly startCss: number;
+  readonly endCss: number;
+  /** The dash and the period (CSS px) */
+  readonly dash: number;
+  readonly period: number;
+  /** The segments before and after it on the line, on the screen (null at an end of the line) */
+  readonly prev: Neighbor | null;
+  readonly next: Neighbor | null;
+}
+
+/** A segment next to a segment of a dashed line, as the vertex stage reads it */
+interface Neighbor {
+  /** Its direction on the screen (from the start of the line to its end) */
+  readonly dir: Point;
+  /** Its length in CSS px and on the screen (device px) */
+  readonly lengthCss: number;
+  readonly length: number;
 }
 
 /**
@@ -181,6 +205,7 @@ function stripsOf(data: RowsChunkData, camera: Camera): Strip[] {
     const corners: Point[] = [];
     const positions: number[] = [];
     const stripPositions: number[] = [];
+    const linePositions: number[] = [];
     for (let corner = 0; corner < 4; corner++) {
       const atStart = corner < 2;
       const side = (corner & 1) === 0 ? 1 : -1;
@@ -220,7 +245,21 @@ function stripsOf(data: RowsChunkData, camera: Camera): Strip[] {
       const along = (atStart ? 0 : length) + dot(offset, dir);
       positions.push(startCss + along * cssPerPx);
       stripPositions.push(startCss + linePos * cssPerPx);
+      linePositions.push(linePos);
     }
+    const cssWidth = widths[2] * (hasCreatedZoom ? 2 ** (camera.zoom - createdZoom) : 1);
+    const k = widths[3] === ROWS_DASH.dashed ? DASH_COEFFICIENTS.dashed : DASH_COEFFICIENTS.dotted;
+    const dash = Math.max(k.a, k.b * cssWidth);
+    const gap = Math.max(cssWidth + 1, k.c * cssWidth);
+    const neighbor = (from: number, to: number): Neighbor => {
+      const a = screen(from);
+      const b = screen(to);
+      return {
+        dir: unit(sub(b, a)),
+        length: Math.hypot(b[0] - a[0], b[1] - a[1]),
+        lengthCss: dashSegmentLength(...coord(from), ...coord(to), 0) * 2 ** camera.zoom,
+      };
+    };
     strips.push({
       row,
       corners,
@@ -230,6 +269,15 @@ function stripsOf(data: RowsChunkData, camera: Camera): Strip[] {
       end,
       cssPerPx,
       halfWidth: lineWidth / 2,
+      linePositions,
+      length,
+      dir,
+      startCss,
+      endCss: startCss + lengthCss,
+      dash,
+      period: dash + gap,
+      prev: prevIdx >= 0 ? neighbor(prevIdx, startIdx) : null,
+      next: nextIdx >= 0 ? neighbor(endIdx, nextIdx) : null,
     });
   }
   return strips;
@@ -500,5 +548,453 @@ describe('the dashes cut in the fragments of the drawing in one draw', () => {
         ]);
       }
     }
+  });
+});
+
+// === The coverage at the corners ===
+//
+// The CPU draws every dash as a line of its own: a dash that goes on over a corner has the miter
+// of the corner, and one cut near a corner has a round end that reaches over it, into the strip
+// of the other segment. The coverage of the drawing in one draw is compared with the one of the
+// dashes cut on the CPU, blended as they are drawn, at points all around lines that turn with
+// their corners at every phase of the pattern (a cut in the strip of the miter, a dash going on
+// over the corner, a dash ending just before it or starting just after it). The position along a
+// segment of the CPU is the projection of the point on it; the SDF lines interpolate it over the
+// two triangles of a quad, which shears a round end when the other end of its quad is a miter.
+
+/** The coverage of a line across it, `d` device px from its center line (HHAA) */
+function boxCoverage(d: number, w: number): number {
+  const left = Math.min(Math.max(d - w + 0.5, 0), 1);
+  const right = Math.min(Math.max(d + w + 0.5, 0), 1);
+  return right - left;
+}
+
+/** The coverage of a round end, `along` device px beyond it */
+function capCoverage(d: number, along: number, w: number): number {
+  return 1 - Math.min(Math.max(Math.hypot(d, along) - w + 0.5, 0), 1);
+}
+
+/** The alpha of the color the coverages are blended with (a draw over another adds less) */
+const ALPHA = 0.6;
+
+/** Two coverages of one color drawn over each other, as one coverage */
+const over = (a: number, b: number) => a + b - ALPHA * a * b;
+
+/**
+ * The coverage of the fragment of a dashed segment at a position on the line and a distance
+ * from its center line, as the dashed branch of the fragment stage computes it before the
+ * corners were cut as the CPU cuts them
+ */
+function formerCoverage(strip: Strip, pos: number, d: number, linePos: number): number {
+  const w = strip.halfWidth;
+  const startDist = -linePos;
+  const endDist = linePos - strip.length;
+  const end = strip.next === null ? strip.endCss : -1;
+  const { dash, period, cssPerPx } = strip;
+  if (startDist > 0) return capCoverage(d, startDist, w);
+  if (endDist > 0) {
+    const atEnd = end - Math.floor(end / period) * period;
+    const back = atEnd <= dash ? 0 : (atEnd - dash) / cssPerPx;
+    return capCoverage(d, endDist + back, w);
+  }
+  const m = pos - Math.floor(pos / period) * period;
+  if (m <= dash) return boxCoverage(d, w);
+  let along = m - dash;
+  const toNext = period - m;
+  if (end < 0 || pos + toNext < end) along = Math.min(along, toNext);
+  return capCoverage(d, along / cssPerPx, w);
+}
+
+/** A distance no fragment is near (device px), as the program has it */
+const FAR = 1e6;
+
+/** The dash of a segment next to a dashed one, as `v_dash_prev` and `v_dash_next` hold it */
+type NeighborDash = readonly [number, number, number, number];
+
+/** The modulo of GLSL (`mod`) */
+const mod = (x: number, y: number) => x - y * Math.floor(x / y);
+
+/**
+ * The dash of a segment next to a dashed segment whose round end reaches over the corner they
+ * share, as the vertex stage computes it (`dashNeighbor` of `rows-shader.ts`)
+ */
+function neighborDash(strip: Strip, before: boolean): NeighborDash {
+  const neighbor = before ? strip.prev : strip.next;
+  const none: NeighborDash = before ? [1, 0, -2 * FAR, -FAR] : [1, 0, FAR, 2 * FAR];
+  if (!neighbor || neighbor.length <= 0) return none;
+  const corner = before ? strip.startCss : strip.endCss;
+  const perPx = neighbor.lengthCss / neighbor.length;
+  const { dash, period } = strip;
+  const gap = period - dash;
+  const m = mod(corner, period);
+  if (m > 0 && m < dash) return none;
+  const c = dot(strip.dir, neighbor.dir);
+  const s = dot(strip.dir, [-neighbor.dir[1], neighbor.dir[0]]);
+  if (before) {
+    const end = m >= dash ? corner - m + dash : corner - gap;
+    const first = corner - neighbor.lengthCss;
+    if (end <= first) return none;
+    return [c, s, (Math.max(end - dash, first) - corner) / perPx, (end - corner) / perPx];
+  }
+  const start = m > 0 ? corner - m + period : corner;
+  const last = corner + neighbor.lengthCss;
+  if (start >= last) return none;
+  return [c, s, (start - corner) / perPx, (Math.min(start + dash, last) - corner) / perPx];
+}
+
+/** The coverage of a dash drawn as a line of its own from `a` to `b` along its segment */
+function dashCoverage(d: number, u: number, a: number, b: number, w: number): number {
+  if (u < a) return capCoverage(d, a - u, w);
+  if (u > b) return capCoverage(d, u - b, w);
+  return boxCoverage(d, w);
+}
+
+/** The coverage of the dash of a segment next to this one, `u` along this one from the corner */
+function neighborCoverage(dash: NeighborDash, u: number, d: number, w: number): number {
+  return dashCoverage(u * dash[1] + d * dash[0], u * dash[0] - d * dash[1], dash[2], dash[3], w);
+}
+
+/**
+ * The coverage of the fragment of a dashed segment at a position on the line and a distance from
+ * its center line, as the dashed branch of the fragment stage computes it (`dashedCoverage` of
+ * `rows-shader.ts`)
+ */
+function dashedCoverage(strip: Strip, pos: number, d: number): number {
+  const w = strip.halfWidth;
+  const { dash, period, cssPerPx: perPx } = strip;
+  const first = strip.startCss;
+  const last = strip.endCss;
+  const lineEnd = strip.next === null;
+  const at = Math.min(Math.max(pos, first), last);
+  const m = mod(at, period);
+  let coverage = 0;
+  if (m < dash) {
+    const start = at - m;
+    const end = start + dash;
+    const a = start >= first ? (start - pos) / perPx : -FAR;
+    const b = end <= last || lineEnd ? (Math.min(end, last) - pos) / perPx : FAR;
+    coverage = dashCoverage(d, 0, a, b, w);
+  } else {
+    const end = at - m + dash;
+    if (end > first) {
+      const start = end - dash;
+      const a = start >= first ? (start - pos) / perPx : -FAR;
+      coverage = dashCoverage(d, 0, a, (end - pos) / perPx, w);
+    }
+    const next = at - m + period;
+    if (next < last) {
+      const nextEnd = next + dash;
+      const b = nextEnd <= last || lineEnd ? (Math.min(nextEnd, last) - pos) / perPx : FAR;
+      coverage = over(coverage, dashCoverage(d, 0, (next - pos) / perPx, b, w));
+    }
+  }
+  const fromStart = (pos - first) / perPx;
+  coverage = over(coverage, neighborCoverage(neighborDash(strip, true), fromStart, d, w));
+  const fromEnd = (pos - last) / perPx;
+  coverage = over(coverage, neighborCoverage(neighborDash(strip, false), fromEnd, d, w));
+  return coverage;
+}
+
+/** The coverage of the fragments of a dashed segment at a point on the screen (null outside) */
+type FragmentCoverage = (strip: Strip, pos: number, d: number, linePos: number) => number;
+
+/** The coverage the strips of the drawing in one draw give a point, blended */
+function rowsCoverage(strips: readonly Strip[], point: Point, fragment: FragmentCoverage): number {
+  let coverage = 0;
+  for (const strip of strips) {
+    const pos = positionAt(strip, point, strip.positions);
+    if (pos === null) continue;
+    const eh = strip.halfWidth + 1;
+    const d = positionAt(strip, point, [eh, -eh, eh, -eh]) as number;
+    const linePos = positionAt(strip, point, strip.linePositions) as number;
+    coverage = over(coverage, fragment(strip, pos, d, linePos));
+  }
+  return coverage;
+}
+
+/** A segment of a dash cut on the CPU, drawn as a line of its own (`SDFLineRenderer`) */
+interface CpuSegment {
+  readonly start: Point;
+  readonly end: Point;
+  /** The quad it is drawn in (start left, start right, end left, end right) */
+  readonly corners: readonly Point[];
+  /** Whether its start and its end are round ends (the ends of the dash) */
+  readonly capStart: boolean;
+  readonly capEnd: boolean;
+  readonly halfWidth: number;
+}
+
+/** The quad of a segment of a line, as the vertex stage of the SDF lines puts it */
+function lineQuad(
+  start: Point,
+  end: Point,
+  prev: Point | null,
+  next: Point | null,
+  expanded: number,
+): Point[] {
+  const dir = unit(sub(end, start));
+  const normal: Point = [-dir[1], dir[0]];
+  const corners: Point[] = [];
+  for (let corner = 0; corner < 4; corner++) {
+    const atStart = corner < 2;
+    const side = (corner & 1) === 0 ? 1 : -1;
+    const other = atStart ? prev : next;
+    let miterNormal = normal;
+    let miterScale = 1;
+    if (other) {
+      const otherDir = atStart ? unit(sub(start, other)) : unit(sub(other, end));
+      const sum: Point = [normal[0] - otherDir[1], normal[1] + otherDir[0]];
+      const sumLength = Math.hypot(sum[0], sum[1]);
+      if (sumLength > 0.001) {
+        miterNormal = [sum[0] / sumLength, sum[1] / sumLength];
+        const cosHalf = dot(miterNormal, normal);
+        if (cosHalf > 0.001) {
+          miterScale = 1 / cosHalf;
+          if (miterScale > ROWS_MITER_LIMIT) {
+            miterScale = 1;
+            miterNormal = normal;
+          }
+        }
+      }
+    }
+    const offset: Point = [
+      miterNormal[0] * side * expanded * miterScale,
+      miterNormal[1] * side * expanded * miterScale,
+    ];
+    if (!other) {
+      const cap = atStart ? -expanded : expanded;
+      offset[0] += dir[0] * cap;
+      offset[1] += dir[1] * cap;
+    }
+    const base = atStart ? start : end;
+    corners.push([base[0] + offset[0], base[1] + offset[1]]);
+  }
+  return corners;
+}
+
+/** Whether a point is in a quad (its two triangles, as a strip of 4 vertices draws them) */
+function inQuad(corners: readonly Point[], point: Point): boolean {
+  const zero = [0, 0, 0, 0];
+  return positionAt({ corners } as Strip, point, zero) !== null;
+}
+
+/**
+ * The segments of the dashes the CPU cuts a dashed row into (`splitIntoDashes`, as the drawing at
+ * once cuts the lines and the rings of the polygons), on the screen
+ */
+function cpuSegments(row: DashedRow, camera: Camera): CpuSegment[] {
+  const geometry = row.feature.geometry;
+  const style = row.feature.style ?? {};
+  const lineStyle = style.lineStyle as 'dashed' | 'dotted';
+  const width = (style.strokeWidth as number | undefined) ?? 2;
+  const scale = row.createdZoom === undefined ? 1 : 2 ** (camera.zoom - row.createdZoom);
+  const pattern = getStrokeDashPattern(lineStyle, width * scale);
+  if (!pattern) return [];
+  const halfWidth = Math.max(width * scale * camera.ratio, 1) / 2;
+  // The rings of the polygons of these tests are closed, as the CPU closes them
+  const paths: Coordinate[][] =
+    geometry.type === 'LineString'
+      ? [geometry.coordinates as Coordinate[]]
+      : geometry.type === 'MultiLineString' || geometry.type === 'Polygon'
+        ? (geometry.coordinates as Coordinate[][])
+        : [];
+  const segments: CpuSegment[] = [];
+  for (const path of paths) {
+    for (const piece of splitIntoDashes(path, pattern[0], pattern[1], camera.zoom)) {
+      const points = piece.coords.map((c) => project(camera, c[0], c[1]));
+      for (let k = 0; k < points.length - 1; k++) {
+        const prev = k > 0 ? points[k - 1] : null;
+        const next = k + 2 < points.length ? points[k + 2] : null;
+        segments.push({
+          start: points[k],
+          end: points[k + 1],
+          corners: lineQuad(points[k], points[k + 1], prev, next, halfWidth + 1),
+          capStart: k === 0,
+          capEnd: k === points.length - 2,
+          halfWidth,
+        });
+      }
+    }
+  }
+  return segments;
+}
+
+/**
+ * The coverage the dashes cut on the CPU give a point, blended (the position along a segment
+ * being the projection of the point on it)
+ */
+function cpuCoverage(segments: readonly CpuSegment[], point: Point): number {
+  let coverage = 0;
+  for (const segment of segments) {
+    if (!inQuad(segment.corners, point)) continue;
+    const dir = unit(sub(segment.end, segment.start));
+    const length = Math.hypot(...sub(segment.end, segment.start));
+    const rel = sub(point, segment.start);
+    const along = dot(rel, dir);
+    const d = dot(rel, [-dir[1], dir[0]]);
+    const w = segment.halfWidth;
+    let value: number;
+    if (segment.capStart && along < 0) value = capCoverage(d, -along, w);
+    else if (segment.capEnd && along > length) value = capCoverage(d, along - length, w);
+    else value = boxCoverage(d, w);
+    coverage = over(coverage, value);
+  }
+  return coverage;
+}
+
+/**
+ * The largest difference of the coverage of the drawing in one draw from the one of the dashes
+ * cut on the CPU, over the points around a row (a grid that does not line up with the pixels)
+ */
+function worstCoverage(
+  row: DashedRow,
+  camera: Camera,
+  fragment: FragmentCoverage,
+): { checked: number; worst: number } {
+  const origin: [number, number] = [Math.fround(camera.center[0]), Math.fround(camera.center[1])];
+  const strips = stripsOf(packRows([row], camera.ratio, origin), camera);
+  const segments = cpuSegments(row, camera);
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const strip of strips) {
+    for (const [x, y] of strip.corners) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  const step = 0.43;
+  let checked = 0;
+  let worst = 0;
+  for (let y = minY - 1; y <= maxY + 1; y += step) {
+    for (let x = minX - 1; x <= maxX + 1; x += step) {
+      const point: Point = [x, y];
+      // Only the points near the line (the rest is drawn by neither)
+      const near = strips.some((strip) => {
+        const ab = sub(strip.end, strip.start);
+        const t = Math.min(Math.max(dot(sub(point, strip.start), ab) / dot(ab, ab), 0), 1);
+        const foot: Point = [strip.start[0] + ab[0] * t, strip.start[1] + ab[1] * t];
+        return Math.hypot(...sub(point, foot)) < strip.halfWidth + 2;
+      });
+      if (!near) continue;
+      checked++;
+      const difference = Math.abs(
+        rowsCoverage(strips, point, fragment) - cpuCoverage(segments, point),
+      );
+      worst = Math.max(worst, difference);
+    }
+  }
+  return { checked, worst };
+}
+
+/** A position `x`, `y` CSS px from the center of the camera, in degrees */
+function offsetBy(camera: Camera, x: number, y: number): Coordinate {
+  const perDegree = (512 * 2 ** camera.zoom) / 360;
+  return [
+    camera.center[0] + x / perDegree,
+    camera.center[1] + (y * Math.cos(camera.center[1] * RADIANS)) / perDegree,
+  ];
+}
+
+/**
+ * A dashed row of two segments that turn by `turn` degrees, its corner `phase` of a period into
+ * the pattern
+ */
+function cornerRow(
+  camera: Camera,
+  lineStyle: 'dashed' | 'dotted',
+  turn: number,
+  phase: number,
+): DashedRow {
+  const createdZoom = lineStyle === 'dotted' ? camera.zoom - 1 : undefined;
+  const width = lineStyle === 'dotted' ? 3 : 4;
+  const effective = width * (createdZoom === undefined ? 1 : 2 ** (camera.zoom - createdZoom));
+  const [dash, gap] = getStrokeDashPattern(lineStyle, effective) as [number, number];
+  const period = dash + gap;
+  const first = 2 * period + phase * period;
+  const heading = 10 * RADIANS;
+  const turned = heading + turn * RADIANS;
+  const corner: Point = [Math.cos(heading) * first, Math.sin(heading) * first];
+  const second = 2.3 * period;
+  const end: Point = [corner[0] + Math.cos(turned) * second, corner[1] + Math.sin(turned) * second];
+  return {
+    feature: feature(
+      'corner',
+      'LineString',
+      [offsetBy(camera, 0, 0), offsetBy(camera, ...corner), offsetBy(camera, ...end)],
+      {
+        style: { lineStyle, strokeWidth: width },
+        ...(createdZoom === undefined ? {} : { properties: CREATED(createdZoom) }),
+      },
+    ),
+    createdZoom,
+  };
+}
+
+/** A square with a dashed outline, its corners at the phases its side gives */
+function squareRow(camera: Camera, side: number): DashedRow {
+  const ring = [
+    offsetBy(camera, 0, 0),
+    offsetBy(camera, side, 0),
+    offsetBy(camera, side, side),
+    offsetBy(camera, 0, side),
+    offsetBy(camera, 0, 0),
+  ];
+  return {
+    feature: feature('square', 'Polygon', [ring], {
+      style: { lineStyle: 'dashed', strokeWidth: 3, fillOpacity: 0.2 },
+    }),
+  };
+}
+
+/** The phases of a corner in the pattern the tests go through (they miss every round number) */
+const PHASES = Array.from({ length: 24 }, (_, i) => (i + 0.37) / 24);
+
+describe('the corners of the dashes drawn in one draw', () => {
+  const camera: Camera = { center: [139.7, 35.68], zoom: 14, ratio: 1 };
+
+  for (const lineStyle of ['dashed', 'dotted'] as const) {
+    for (const turn of [90, -90, 51, -51]) {
+      it(`are drawn as the CPU draws them, ${lineStyle}, turning by ${turn} degrees`, () => {
+        for (const phase of PHASES) {
+          const { checked, worst } = worstCoverage(
+            cornerRow(camera, lineStyle, turn, phase),
+            camera,
+            dashedCoverage,
+          );
+          expect(checked).toBeGreaterThan(500);
+          expect(worst, `phase ${phase}`).toBeLessThan(0.005);
+        }
+      });
+    }
+  }
+
+  it('of the dashed outlines of polygons are drawn as the CPU draws them', () => {
+    // A dashed outline 3 px wide: dashes of 12 and gaps of 6
+    for (const phase of PHASES) {
+      const { checked, worst } = worstCoverage(
+        squareRow(camera, 3 * 18 + phase * 18),
+        camera,
+        dashedCoverage,
+      );
+      expect(checked).toBeGreaterThan(500);
+      expect(worst, `phase ${phase}`).toBeLessThan(0.005);
+    }
+  });
+
+  it('would be drawn with round ends past the corners and sheared ends without them', () => {
+    // As the fragments first drew the dashes: the dashes of a segment cut along its line past
+    // its corners, and the round ends of the line at the position along the strip
+    let worst = 0;
+    for (const phase of PHASES) {
+      for (const turn of [90, 51]) {
+        const row = cornerRow(camera, 'dashed', turn, phase);
+        worst = Math.max(worst, worstCoverage(row, camera, formerCoverage).worst);
+      }
+    }
+    expect(worst).toBeGreaterThan(0.5);
   });
 });

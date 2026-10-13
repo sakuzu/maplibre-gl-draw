@@ -37,8 +37,15 @@ const CAMERA: Camera = { center: CENTER, zoom: 14 };
  * differ by more than `level`
  */
 const TOLERANCE = { level: 2, share: 0.001 };
-/** The differences allowed for the dashes cut on the CPU and in the fragments */
-const DASH_TOLERANCE = { level: 2, share: 0.03 };
+/**
+ * The differences allowed for the dashes cut on the CPU and in the fragments. How a line is cut
+ * into quads alone moves the coverage of its edges by 3 to 8 levels on the software renderer (the
+ * same dotted line drawn in one draw as one segment and as seven segments on one straight line:
+ * about 12% of the pixels drawn differ by more than 2 levels), and the CPU draws every dash as
+ * quads of its own. Those levels are not counted, and the share of the pixels that differ by more
+ * is held to 1% rather than 3%
+ */
+const DASH_TOLERANCE = { level: 8, share: 0.01 };
 
 let browser: Browser;
 let bundle: Bundle;
