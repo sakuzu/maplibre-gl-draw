@@ -1,0 +1,525 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The drawing of a layer held as rows in one draw per chunk, with the renderer of the rows on a
+ * GL that records its calls, and the renderers by kind as mocks
+ *
+ * - The ranges drawn, in the order they are drawn, are the rows of the layer in their order,
+ *   each once; a chunk ends only at a row drawn at once, and holds rows of every kind
+ * - Within a chunk the instances are the rows of the chunk in their order
+ * - A chunk is written to the GPU before the main pass of a frame and drawn from that frame on;
+ *   nothing is written to a buffer or a texture of the rows while a layer is drawn
+ * - The cuts, the chunks out of view and the record of the draws work as by kind
+ * - Where the drawing in one draw cannot draw (the terrain, the globe, the program compiling,
+ *   the switch of the tests), the rows are drawn by kind; a group is drawn with the chunks of the
+ *   drawing it had until those of the new one are built, and the old ones are then released
+ * - A write in place of the style of a row reaches its chunk; a row drawn at once is refused
+ * - The draws of a mixed layer are a few, and what they hold is in the ledger
+ */
+
+import type { ProjectionData } from 'maplibre-gl';
+import { beforeEach, describe, expect, it } from 'vitest';
+import type { LayerTable } from '../../feature-table/layer-table.js';
+import type { Feature, Layer } from '../../shared/types/model.js';
+import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
+import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
+import { retainedDrawRun } from '../renderers/draw-run.js';
+import type { RetainedRendererSet } from '../renderers/retained.js';
+import {
+  type RowSpriteSource,
+  type RowsChunkData,
+  readRowsInstance,
+} from '../renderers/rows/rows-format.js';
+import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
+import { beginRenderFrame } from '../shaders/frame.js';
+import { TerrainContext } from '../terrain/context.js';
+import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
+import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
+
+const LAYER: Layer = {
+  id: 'layer',
+  name: 'layer',
+  visible: true,
+  locked: false,
+  opacity: 1,
+  items: [],
+  styleRule: undefined,
+  metadata: undefined,
+};
+
+const PROJECTION = {
+  mainMatrix: new Float32Array(16),
+  projectionTransition: 0,
+} as unknown as ProjectionData;
+
+interface Call {
+  readonly name: string;
+  readonly args: unknown[];
+}
+
+/** A GL that records its calls (`complete` answers whether the program is compiled) */
+function recordingGL(options: { parallel?: boolean; complete?: () => boolean } = {}) {
+  const calls: Call[] = [];
+  let next = 1;
+  const target: Record<string, unknown> = {
+    drawingBufferWidth: 800,
+    drawingBufferHeight: 600,
+  };
+  const gl = new Proxy(target, {
+    get(t, prop: string) {
+      if (prop in t) return t[prop];
+      if (/^[A-Z_0-9]+$/.test(prop)) return prop.length;
+      return (...args: unknown[]) => {
+        calls.push({ name: prop, args });
+        if (prop.startsWith('create')) return { id: next++ };
+        if (prop === 'getExtension') return options.parallel ? {} : null;
+        if (prop === 'getProgramParameter') {
+          return args[1] === 0x91b1 ? (options.complete?.() ?? true) : true;
+        }
+        if (prop === 'getUniformLocation') return { name: args[1] };
+        if (prop === 'getParameter') return 4;
+        return undefined;
+      };
+    },
+  }) as unknown as WebGL2RenderingContext;
+  return { gl, calls };
+}
+
+/** Mocks of the renderers by kind, recording their draws */
+function kindRenderers() {
+  let next = 1;
+  const draws: Array<{ kind: string; from: number; to: number }> = [];
+  const disposed: number[] = [];
+  const batch = (kind: string, rowFirst: Int32Array) => ({ id: next++, kind, rowFirst }) as never;
+  const drawRange = (b: unknown, from: number, to: number) => {
+    draws.push({ kind: (b as { kind: string }).kind, from, to });
+  };
+  const dispose = (b: unknown) => disposed.push((b as { id: number }).id);
+  return {
+    draws,
+    disposed,
+    point: {
+      buildRetained: () => null,
+      drawRetained: () => {},
+      disposeRetained: dispose,
+      buildRetainedRows: (_i: unknown, _c: unknown, _o: unknown, rowFirst: Int32Array) =>
+        batch('point', rowFirst),
+      drawRetainedRange: drawRange,
+    },
+    line: {
+      buildRetainedBatch: () => null,
+      drawRetainedBatch: () => {},
+      disposeRetainedBatch: dispose,
+      buildRetainedRows: (_a: unknown, _o: unknown, rowFirst: Int32Array) =>
+        batch('line', rowFirst),
+      drawRetainedRange: drawRange,
+    },
+    polygon: {
+      buildRetained: () => null,
+      drawRetained: () => {},
+      disposeRetained: dispose,
+      createRetainedRows: (_v: unknown, _i: unknown, _o: unknown, rowFirst: Int32Array) =>
+        batch('polygon', rowFirst),
+      writeRetainedRows: () => {},
+      drawRetainedRange: drawRange,
+    },
+  };
+}
+
+/** Features of every kind interleaved at random, images (drawn at once) among them */
+function interleaved(count: number, seed: number): Feature[] {
+  const random = seededRandom(seed);
+  const out: Feature[] = [];
+  for (let i = 0; i < count; i++) {
+    const x = random() * 10;
+    const y = random() * 10;
+    const pick = random();
+    if (pick < 0.25) out.push(feature(`p${i}`, 'Point', [x, y]));
+    else if (pick < 0.45) {
+      out.push(
+        feature(`l${i}`, 'LineString', [
+          [x, y],
+          [x + 0.1, y + 0.1],
+          [x + 0.2, y],
+        ]),
+      );
+    } else if (pick < 0.7) {
+      out.push(
+        feature(`g${i}`, 'Polygon', [
+          [
+            [x, y],
+            [x + 0.1, y],
+            [x + 0.1, y + 0.1],
+            [x, y + 0.1],
+            [x, y],
+          ],
+        ]),
+      );
+    } else if (pick < 0.85) {
+      out.push(
+        feature(
+          `d${i}`,
+          'LineString',
+          [
+            [x, y],
+            [x + 0.1, y],
+          ],
+          { style: { lineStyle: 'dashed' } },
+        ),
+      );
+    } else if (pick < 0.9) {
+      out.push(feature(`i${i}`, 'Image', [x, y]));
+    } else {
+      out.push(
+        feature(
+          `h${i}`,
+          'Polygon',
+          [
+            [
+              [x, y],
+              [x + 0.1, y],
+              [x, y + 0.1],
+              [x, y],
+            ],
+          ],
+          { style: { lineStyle: 'dotted', fillOpacity: 0.3 } },
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+let terrain: TerrainContext;
+
+beforeEach(() => {
+  terrain = new TerrainContext();
+});
+
+function setup(
+  features: Feature[],
+  targetRows?: number,
+  options: {
+    parallel?: boolean;
+    complete?: () => boolean;
+    customRenderers?: Map<string, unknown>;
+  } = {},
+) {
+  const { internals, table } = tablesOfFeatures('layer', features, targetRows);
+  const mock = recordingGL(options);
+  const ledger = new GpuLedger();
+  const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
+  rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
+  const made: RowsChunkData[] = [];
+  const released: RowsChunkData[] = [];
+  const createChunk = rows.createChunk.bind(rows);
+  rows.createChunk = (data) => {
+    made.push(data);
+    return createChunk(data);
+  };
+  const disposeChunk = rows.disposeChunk.bind(rows);
+  rows.disposeChunk = (chunk) => {
+    released.push(chunk.data);
+    disposeChunk(chunk);
+  };
+  const kinds = kindRenderers();
+  const renderers: RetainedRendererSet = {
+    point: kinds.point,
+    line: kinds.line,
+    polygon: kinds.polygon,
+    styles: createTestDrawer(),
+    viewport: () => [800, 600],
+    run: retainedDrawRun(mock.gl),
+    rows,
+  } as unknown as RetainedRendererSet;
+  const immediate: string[] = [];
+  const deps: StoreRetainedDrawDeps = {
+    renderers,
+    batchManager: {
+      beginFrame: () => {},
+      processFeature: (f: Feature) => {
+        immediate.push(f.id);
+        return true;
+      },
+      endFrame: () => {},
+    },
+    customRenderers: (options.customRenderers ?? new Map()) as never,
+    customRendererContext: {} as never,
+    companions: createFeatureCompanionRegistry(),
+  };
+  const renderer = new TableLayerRenderer({
+    gl: mock.gl,
+    terrain,
+    ledger,
+    requestRepaint: () => {},
+    buildBudgetMs: Number.POSITIVE_INFINITY,
+  });
+  /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
+  const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
+    renderer.prerender();
+    beginRenderFrame();
+    renderer.beginFrame();
+    const record: TableDrawRecord[] = [];
+    renderer.recordDraws(record);
+    const at = mock.calls.length;
+    immediate.length = 0;
+    renderer.drawLayer(
+      internals,
+      table,
+      LAYER,
+      { projectionData: PROJECTION, zoom: 10, bounds },
+      deps,
+    );
+    renderer.endFrame();
+    renderer.recordDraws(null);
+    return { record, calls: mock.calls.slice(at), immediate: [...immediate] };
+  };
+  return { internals, table, renderer, rows, frame, made, released, kinds, ledger, deps };
+}
+
+/** The rows the ranges cover, in order, as `group:row` */
+function coverage(record: TableDrawRecord[]): string[] {
+  const out: string[] = [];
+  for (const entry of record) {
+    for (let row = entry.from; row < entry.to; row++) out.push(`${entry.groupIndex}:${row}`);
+  }
+  return out;
+}
+
+function allRows(table: LayerTable): string[] {
+  const out: string[] = [];
+  for (let g = 0; g < table.groupCount; g++) {
+    for (let row = 0; row < table.groupAt(g).data.length; row++) out.push(`${g}:${row}`);
+  }
+  return out;
+}
+
+function inOrder(record: TableDrawRecord[]): boolean {
+  for (let i = 1; i < record.length; i++) {
+    const a = record[i - 1];
+    const b = record[i];
+    if (b.groupIndex < a.groupIndex) return false;
+    if (b.groupIndex === a.groupIndex && b.from < a.to) return false;
+  }
+  return true;
+}
+
+const draws = (calls: Call[]) => calls.filter((c) => c.name === 'drawArraysInstanced').length;
+
+describe('the drawing of a layer held as rows in one draw per chunk', () => {
+  it('draws every row once, in the order of the layer, a chunk ending only at a row drawn at once', () => {
+    for (const seed of [1, 2, 3]) {
+      const features = interleaved(400, seed);
+      const { table, frame } = setup(features, 64);
+      frame(); // packs
+      const { record, calls, immediate } = frame();
+      expect(inOrder(record)).toBe(true);
+      expect(coverage(record)).toEqual(allRows(table));
+      expect(new Set(record.map((entry) => entry.kind))).toEqual(new Set(['rows', 'immediate']));
+      // Every range in one draw is one draw, and only the images are drawn at once
+      expect(draws(calls)).toBe(record.filter((entry) => entry.kind === 'rows').length);
+      expect(immediate.every((id) => id.startsWith('i'))).toBe(true);
+      expect(immediate.length).toBe(features.filter((f) => f.id.startsWith('i')).length);
+      // Two chunks drawn in one draw are never next to each other but across a group
+      for (let i = 1; i < record.length; i++) {
+        const a = record[i - 1];
+        const b = record[i];
+        if (a.groupIndex === b.groupIndex)
+          expect(a.kind === 'rows' && b.kind === 'rows').toBe(false);
+      }
+    }
+  });
+
+  it('packs the instances of a chunk in the order of its rows, each row once', () => {
+    const { frame, made } = setup(interleaved(300, 4), 100);
+    frame();
+    expect(made.length).toBeGreaterThan(0);
+    for (const data of made) {
+      let last = -1;
+      for (let r = 0; r < data.rows; r++) {
+        for (let i = data.rowFirst[r]; i < data.rowFirst[r + 1]; i++) {
+          const instance = readRowsInstance(data.instances, i);
+          expect(instance.row).toBe(data.rowBase + r);
+          expect(instance.row).toBeGreaterThanOrEqual(last);
+          last = instance.row;
+        }
+      }
+      expect(data.rowFirst[data.rows]).toBe(data.instanceCount);
+    }
+  });
+
+  it('writes a chunk before the main pass and draws it from that frame on, writing nothing while drawing', () => {
+    const { frame } = setup(interleaved(200, 5), 100);
+    // The first frame packs the chunks and draws only the rows drawn at once
+    const first = frame();
+    expect(first.record.filter((entry) => entry.kind === 'rows')).toEqual([]);
+    expect(first.calls.some((c) => c.name === 'bufferData')).toBe(false);
+    // The second frame writes them before its main pass, and draws them
+    const second = frame();
+    expect(second.record.filter((entry) => entry.kind === 'rows').length).toBeGreaterThan(0);
+    for (const name of ['bufferData', 'bufferSubData', 'texStorage2D', 'texSubImage2D']) {
+      expect(second.calls.some((c) => c.name === name)).toBe(false);
+    }
+  });
+
+  it('skips the chunks out of view and keeps the order of the others', () => {
+    const { table, frame } = setup(interleaved(300, 6), 50);
+    frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
+    const { record } = frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
+    const inOneDraw = record.filter((entry) => entry.kind === 'rows');
+    expect(inOneDraw.length).toBeGreaterThan(0);
+    expect(coverage(inOneDraw).length).toBeLessThan(allRows(table).length);
+    expect(inOrder(record)).toBe(true);
+  });
+
+  it('cuts the ranges in view at the places asked for, one more draw per cut, the rows unchanged', () => {
+    const features = interleaved(500, 7);
+    const plain = setup(features, 100);
+    plain.frame();
+    const before = plain.frame().record;
+    const plainDraws = before.filter((entry) => entry.kind === 'rows').length;
+    for (const cuts of [1, 10, 100]) {
+      const { renderer, frame } = setup(features, 100);
+      renderer.setArtificialCuts(cuts);
+      // Packed, then written and drawn: the cuts are placed among the chunks drawn
+      frame();
+      frame();
+      const { record, calls } = frame();
+      expect(inOrder(record)).toBe(true);
+      expect(coverage(record)).toEqual(coverage(before));
+      expect(draws(calls)).toBe(plainDraws + cuts);
+    }
+  });
+
+  it('draws by kind on the globe and on the terrain, and on the switch of the tests', () => {
+    const { renderer, frame } = setup(interleaved(200, 8), 100);
+    terrain.globeGrids = { fill: 0.001, line: 0.001 };
+    frame();
+    let { record } = frame();
+    expect(record.some((entry) => entry.kind === 'rows')).toBe(false);
+    expect(record.some((entry) => entry.kind === 'polygon')).toBe(true);
+    terrain.globeGrids = null;
+    renderer.setDrawingByKind(true);
+    ({ record } = frame());
+    expect(record.some((entry) => entry.kind === 'rows')).toBe(false);
+    renderer.setDrawingByKind(false);
+    // Packed, written, then drawn (the drawing of a group is chosen before its chunks are built)
+    frame();
+    frame();
+    ({ record } = frame());
+    expect(record.some((entry) => entry.kind === 'rows')).toBe(true);
+    expect(record.some((entry) => entry.kind === 'polygon')).toBe(false);
+  });
+
+  it('draws a group by kind while its chunks in one draw are built, then releases the chunks by kind', () => {
+    const { table, renderer, frame, kinds } = setup(interleaved(300, 9), 100);
+    renderer.setDrawingByKind(true);
+    frame();
+    frame();
+    const built = kinds.disposed.length;
+    renderer.setDrawingByKind(false);
+    // The chunks in one draw are being built: the groups keep being drawn by kind, whole
+    const meanwhile = frame().record;
+    expect(coverage(meanwhile)).toEqual(allRows(table));
+    expect(meanwhile.some((entry) => entry.kind === 'rows')).toBe(false);
+    // Once they are built, they are drawn, and the chunks by kind are released
+    frame();
+    const after = frame().record;
+    expect(coverage(after)).toEqual(allRows(table));
+    expect(after.some((entry) => entry.kind === 'polygon')).toBe(false);
+    expect(kinds.disposed.length).toBeGreaterThan(built);
+  });
+
+  it('draws by kind while the program compiles, and in one draw once it is ready', () => {
+    let complete = false;
+    const { table, frame } = setup(interleaved(200, 10), 100, {
+      parallel: true,
+      complete: () => complete,
+    });
+    frame();
+    let { record } = frame();
+    expect(coverage(record)).toEqual(allRows(table));
+    expect(record.some((entry) => entry.kind === 'rows')).toBe(false);
+    complete = true;
+    frame();
+    frame();
+    ({ record } = frame());
+    expect(coverage(record)).toEqual(allRows(table));
+    expect(record.every((entry) => entry.kind === 'rows' || entry.kind === 'immediate')).toBe(true);
+  });
+
+  it('writes the style of a row in place, and refuses a row drawn at once', () => {
+    const features = [
+      feature('a', 'Point', [1, 1]),
+      feature('b', 'Point', [2, 2], { style: { pointColor: '#ff0000' } }),
+      feature('i', 'Image', [3, 3]),
+    ];
+    const { table, renderer, frame, made } = setup(features);
+    frame();
+    frame();
+    const group = table.groupAt(0);
+    const data = made[0];
+    const before = data.rowStyles[0];
+    // Row 0 takes the style of row 1
+    group.data.styles[0] = group.data.styles[1];
+    expect(renderer.patchRows('layer', group.handle, 0, 1)).toBe(true);
+    expect(data.rowStyles[0]).toBe(data.rowStyles[4]);
+    expect(data.rowStyles[0]).not.toBe(before);
+    expect(renderer.patchRows('layer', group.handle, 2, 3)).toBe(false);
+    expect(renderer.patchRows('missing', group.handle, 0, 1)).toBe(false);
+  });
+
+  it('draws the points of an extension with pictures in the chunks, among the other rows', () => {
+    const source: RowSpriteSource = {
+      texture: null,
+      revision: 1,
+      sprite: (style) =>
+        style?.pointColor === '#ff0000'
+          ? { uv: [0, 0, 1, 1], halfWidth: 8, halfHeight: 8, direction: -1 }
+          : null,
+    };
+    const features = [
+      feature('g', 'Polygon', [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ]),
+      feature('a', 'Point', [1, 1], { style: { pointColor: '#ff0000' } }),
+      feature('b', 'Point', [2, 2]),
+      feature('l', 'LineString', [
+        [0, 0],
+        [1, 1],
+      ]),
+    ];
+    const extension = { name: 'pictures', rowSprites: source, draw: () => {} };
+    const { frame, made } = setup(features, undefined, {
+      customRenderers: new Map([['Point', extension]]),
+    });
+    frame();
+    const { record, immediate } = frame();
+    expect(record.map((entry) => [entry.kind, entry.from, entry.to])).toEqual([
+      ['rows', 0, 2],
+      ['immediate', 2, 3],
+      ['rows', 3, 4],
+    ]);
+    // The point without a picture is drawn by the extension, at once
+    expect(immediate).toEqual([]);
+    expect(made[0].sprites).toBe(source);
+    expect(made[1].sprites).toBeNull();
+  });
+
+  it('records what the chunks hold in the ledger, and releases it with them', () => {
+    const { renderer, frame, ledger } = setup(interleaved(200, 11), 100);
+    frame();
+    frame();
+    expect(ledger.snapshot().byOwner.rows).toBeGreaterThan(0);
+    renderer.dispose();
+    // The buffer of the corners of the strip stays with the renderer
+    expect(ledger.snapshot().byOwner.rows).toBe(16);
+  });
+});

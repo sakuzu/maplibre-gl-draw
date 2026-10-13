@@ -21,6 +21,7 @@ import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
+import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { calculateOffsetUniforms, type ShaderData } from '../shaders/helpers.js';
 import { TerrainContext } from '../terrain/context.js';
@@ -241,6 +242,69 @@ describe('the GL calls per draw', () => {
     // A draw of a range: its program (the kinds alternate), its vertex array, the shift of its
     // origin, the draw, and for a line its coordinates (26 calls before the run and the records)
     expect(perDraw).toBeLessThan(5);
+  });
+
+  it('of 10,000 mixed features held as rows, drawn in one draw per chunk', () => {
+    const n = 10_000;
+    const features: Feature[] = [];
+    for (let i = 0; i < n; i++) features.push(mixedFeature(n, i));
+    const { internals, table } = tablesOfFeatures('layer', features);
+    const mock = countingGL();
+    const terrain = new TerrainContext();
+    const { renderers, camera, ledger } = realRenderers(mock.gl, terrain);
+    const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
+    rows.ensureShader(SHADER_DATA);
+    const deps: StoreRetainedDrawDeps = {
+      renderers: { ...renderers, rows },
+      batchManager: { beginFrame: () => {}, processFeature: () => true, endFrame: () => {} },
+      customRenderers: new Map(),
+      customRendererContext: {} as never,
+      companions: createFeatureCompanionRegistry(),
+    };
+    const tableRenderer = new TableLayerRenderer({
+      gl: mock.gl,
+      terrain,
+      ledger,
+      requestRepaint: () => {},
+      buildBudgetMs: Number.POSITIVE_INFINITY,
+    });
+    const frame = (): void => {
+      tableRenderer.prerender();
+      beginRenderFrame();
+      const projectionData = projection();
+      camera(14, projectionData);
+      rows.setOffsetUniforms(
+        calculateOffsetUniforms(CENTER, projectionData.mainMatrix as unknown as Float32Array),
+      );
+      tableRenderer.beginFrame();
+      tableRenderer.drawLayer(
+        internals,
+        table,
+        LAYER,
+        { projectionData, zoom: 14, bounds: undefined },
+        deps,
+      );
+      tableRenderer.endFrame();
+    };
+    frame(); // packs
+    frame(); // writes before the main pass, draws
+    mock.start();
+    frame();
+    const counts = mock.stop();
+    const draws = drawCount(counts);
+    const held = ledger.snapshot().byOwner;
+    console.log(
+      `[one draw] GPU held: rows ${held.rows} B, row-state ${held['row-state'] ?? 0} B, by kind ${(held.points ?? 0) + (held.lines ?? 0) + (held.polygons ?? 0)} B`,
+    );
+    console.log(
+      `[one draw] draws ${draws}, GL calls ${total(counts)}, per draw ${(total(counts) / draws).toFixed(2)}\n  ${breakdown(counts, draws)}`,
+    );
+    // A chunk per 40,000 coordinates or per group: a few draws rather than 7,500
+    expect(draws).toBeGreaterThan(0);
+    expect(draws).toBeLessThan(20);
+    // Nothing is held by the renderers by kind for the rows
+    expect(held.lines ?? 0).toBeLessThan(10_000);
+    expect(held.polygons ?? 0).toBe(0);
   });
 
   it('of the retained batches of the Store and the datasets, interleaved', () => {

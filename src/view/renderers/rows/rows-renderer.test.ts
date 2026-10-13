@@ -116,6 +116,12 @@ function chunkData(rows: number, palette = new RowsPalette()): RowsChunkData {
   };
 }
 
+/** The last draw of the calls */
+function lastDraw(calls: Call[]): Call {
+  const all = calls.filter((c) => c.name === 'drawArraysInstanced');
+  return all[all.length - 1];
+}
+
 function binding(): RowStateBinding {
   return {
     texture: { texture: {} as WebGLTexture, width: ROW_STATE_WIDTH, height: 1, rows: 10 },
@@ -169,7 +175,7 @@ describe('RowsRenderer', () => {
     for (const name of ['bufferData', 'bufferSubData', 'texSubImage2D', 'texStorage2D']) {
       expect(names).not.toContain(name);
     }
-    const drawCall = mock.calls.filter((c) => c.name === 'drawArraysInstanced').at(-1) as Call;
+    const drawCall = lastDraw(mock.calls);
     // A strip of 4 vertices per instance: the 10 points of the 4 rows
     expect(drawCall.args.slice(1)).toEqual([0, 4, 10]);
   });
@@ -189,7 +195,7 @@ describe('RowsRenderer', () => {
       [1, 3 * ROWS_INSTANCE_BYTES],
       [2, 3 * ROWS_INSTANCE_BYTES + 16],
     ]);
-    const drawCall = mock.calls.filter((c) => c.name === 'drawArraysInstanced').at(-1) as Call;
+    const drawCall = lastDraw(mock.calls);
     expect(drawCall.args[3]).toBe(7);
     // The same range again needs no pointing
     const again = mock.calls.length;
