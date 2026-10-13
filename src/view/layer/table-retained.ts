@@ -418,6 +418,8 @@ export class TableLayerRenderer {
   private budget: ChunkBuildBudget | null = null;
   /** The frames begun */
   private frameCount = 0;
+  /** The time the chunks of the next versions may take to build while the camera moves */
+  private versionBudgetWhileMovingMs: number;
   /** The tables the drawing waits the next versions of the row groups of (and the detach) */
   private readonly attached = new Map<FeatureTablesInternals, () => void>();
   /** What is kept for the groups of the next versions built, until they are swapped in */
@@ -498,6 +500,7 @@ export class TableLayerRenderer {
   private readonly oneDrawHost: ChunkSchedulerHost<OneDrawRowsChunk, RowsGpuChunk>;
 
   constructor(private readonly options: TableLayerRendererOptions) {
+    this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
     const pass = this.pass;
     this.host = {
       isStale: () => false,
@@ -913,7 +916,7 @@ export class TableLayerRenderer {
     if (versions.length === 0) return;
     const pass = this.pass;
     const schedule = this.schedule;
-    const moving = this.options.versionBudgetWhileMovingMs ?? 0;
+    const moving = this.versionBudgetWhileMovingMs;
     if (!settled && moving > 0) {
       schedule.settled = true;
       schedule.budget = createChunkBuildBudget(moving);
@@ -1316,6 +1319,14 @@ export class TableLayerRenderer {
    */
   recordDraws(record: TableDrawRecord[] | null): void {
     this.record = record;
+  }
+
+  /**
+   * Sets the time the chunks of the next versions of row groups may take to build in a frame
+   * while the camera moves (0: they are built once it is still)
+   */
+  setVersionBudgetWhileMoving(ms: number): void {
+    this.versionBudgetWhileMovingMs = Math.max(0, ms);
   }
 
   /** The chunks the rows of the delta of a layer are packed in (for the tests) */

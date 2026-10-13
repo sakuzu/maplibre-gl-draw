@@ -151,6 +151,12 @@ export interface TableDrawnRange {
   readonly from: number;
   /** The end of the range (exclusive) */
   readonly to: number;
+  /**
+   * Whether the rows are rows of the delta of the layer (the rows changed since their groups
+   * were built, drawn at their places): `group` is the handle of the delta, `groupIndex` -1, and
+   * `from` and `to` are rows of the delta
+   */
+  readonly delta?: boolean;
 }
 
 /**
@@ -187,6 +193,12 @@ export interface TableDiagnostics {
   setMoveTranslation(set: number, dLng: number, dLat: number): void;
   /** What the writes of rows in place hold and did, for the measurement of the edits */
   editStats(): TableEditStats;
+  /**
+   * Sets the time the chunks of the next versions of row groups may take to build in a frame
+   * while the camera moves (0, the default: they are built once the camera is still), to
+   * compare the two
+   */
+  setVersionBudgetWhileMoving(ms: number): void;
 }
 
 /**
@@ -213,12 +225,24 @@ export interface TableEditStats {
   readonly coordsOnly: number;
   /** Of them, the rows written by their style only */
   readonly styleOnly: number;
-  /** The rows that did not fit their places: their chunks were built again */
+  /** The rows that did not fit their places: they went to the delta of their layer */
   readonly rebuilt: number;
   /** The rows of a chunk being built: its build started again */
   readonly restarted: number;
-  /** The rows classified otherwise: their row groups were cut again */
+  /** The rows classified otherwise: they went to the delta of their layer */
   readonly reclassified: number;
+  /** The rows held by the deltas of every layer (changed since their row groups were built) */
+  readonly deltaRows: number;
+  /** The cuts of the drawn ranges for the rows of the deltas in the last frame */
+  readonly cuts: number;
+  /** The next versions of row groups swapped in so far */
+  readonly versionsSwapped: number;
+  /** The next versions built and waiting for their chunks */
+  readonly versionsPending: number;
+  /** The most next versions held at once so far */
+  readonly versionsMostPending: number;
+  /** The time the last merge of a next version on the main thread took, in ms */
+  readonly lastMergeMs: number;
   /** The time of the last pass before the main one (the writes and the uploads), in ms */
   readonly prerenderMs: number;
   /** The time the layers held as rows took to draw in the last frame, in ms */

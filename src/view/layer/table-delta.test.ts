@@ -42,6 +42,7 @@ import type { RetainedRendererSet } from '../renderers/retained.js';
 import { type RowsChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { TerrainContext } from '../terrain/context.js';
+import { setTerrainCameraMoving } from '../terrain/state.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
 
@@ -587,5 +588,29 @@ describe('the drawing of the rows of the delta', () => {
     expect(live.table.rowCount).toBe(6100);
     expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
     expect(made).toBeGreaterThan(100);
+  });
+
+  it('builds the chunks of the versions while the camera moves only when given a budget for it', () => {
+    for (const budget of [0, 50]) {
+      const list = features(200, 45).map((f) =>
+        f.type === 'Image' ? feature(f.id, 'Point', [1, 1]) : f,
+      );
+      const live = setup(list, 32, true);
+      live.frame();
+      live.frame();
+      live.renderer.setVersionBudgetWhileMoving(budget);
+      setTerrainCameraMoving(terrain, true);
+      const handle = live.tables.handleOf(list[10].id) as number;
+      live.writer.apply(patchOf([handle], { order: [orderKey(150) + 'x'] }));
+      for (let i = 0; i < 12; i++) {
+        const { record } = live.frame();
+        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+      }
+      // Without a budget the versions wait for the camera to stop: the row stays in the delta
+      expect(live.internals.deltaRowCount()).toBe(budget === 0 ? 1 : 0);
+      setTerrainCameraMoving(terrain, false);
+      for (let i = 0; i < 12 && live.internals.hasPendingWork; i++) live.frame();
+      expect(live.internals.deltaRowCount()).toBe(0);
+    }
   });
 });

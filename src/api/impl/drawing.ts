@@ -87,6 +87,7 @@ export function createDrawing(
       const internals = featureTablesInternals(store.tables);
       const renderer = customLayer.getTableRenderer();
       const drawing = renderer?.editStats();
+      const versions = internals?.versionStats();
       return Object.freeze({
         styles: internals?.styles.size ?? 0,
         resolvedStyles: drawing?.resolvedStyles ?? 0,
@@ -100,9 +101,18 @@ export function createDrawing(
         rebuilt: drawing?.writes.rebuilt ?? 0,
         restarted: drawing?.writes.restarted ?? 0,
         reclassified: drawing?.writes.reclassified ?? 0,
+        deltaRows: internals?.deltaRowCount() ?? 0,
+        cuts: drawing?.writes.cuts ?? 0,
+        versionsSwapped: versions?.swapped ?? 0,
+        versionsPending: versions?.pending ?? 0,
+        versionsMostPending: versions?.mostPending ?? 0,
+        lastMergeMs: versions?.lastMergeMs ?? 0,
         prerenderMs: drawing?.prerenderMs ?? 0,
         drawMs: drawing?.drawMs ?? 0,
       });
+    },
+    setVersionBudgetWhileMoving(ms) {
+      customLayer.getTableRenderer()?.setVersionBudgetWhileMoving(ms);
     },
   };
   return {
