@@ -21,7 +21,8 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { LayerTable } from '../../feature-table/layer-table.js';
-import { ROW_WRITE_STYLE } from '../../feature-table/types.js';
+import { writeRowGeometry } from '../../feature-table/row-write.js';
+import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -277,7 +278,7 @@ function setup(
     renderer.recordDraws(null);
     return { record, calls: mock.calls.slice(at), immediate: [...immediate] };
   };
-  return { internals, table, renderer, rows, frame, made, released, kinds, ledger, deps };
+  return { internals, table, renderer, rows, frame, made, released, kinds, ledger, deps, mock };
 }
 
 /** The rows the ranges cover, in order, as `group:row` */
@@ -517,6 +518,51 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     expect(immediate).toEqual([]);
     expect(made[0].sprites).toBe(source);
     expect(made[1].sprites).toBeNull();
+  });
+
+  it('writes the state of the rows before the main pass, and nothing while drawing', () => {
+    const { internals, frame, mock } = setup(interleaved(200, 12), 100);
+    frame();
+    frame();
+    internals.states.setHidden(Int32Array.of(0, 5, 9), true);
+    const before = mock.calls.length;
+    const { calls } = frame();
+    const all = mock.calls.slice(before);
+    const drawing = new Set(calls);
+    const written = all.filter((c) => !drawing.has(c) && c.name === 'texSubImage2D');
+    // The texture of the state of the group of the rows, written in the pass before the main one
+    expect(written.length).toBe(1);
+    for (const name of ['bufferData', 'bufferSubData', 'texStorage2D', 'texSubImage2D']) {
+      expect(calls.some((c) => c.name === name)).toBe(false);
+    }
+  });
+
+  it('draws every row in every frame while a chunk is built again for a row past its place', () => {
+    const features = interleaved(300, 13);
+    const { table, renderer, frame } = setup(features, 1000);
+    frame();
+    frame();
+    const group = table.groupAt(0);
+    // A line row made longer than its place
+    const row = features.findIndex((f) => f.id.startsWith('l'));
+    const longer = writeRowGeometry(table, group, row, {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [0.1, 0.1],
+        [0.2, 0],
+        [0.3, 0.1],
+      ],
+    });
+    renderer.rowsWritten('layer', [
+      { group: group.handle, row, what: ROW_WRITE_GEOMETRY, ...longer, keys: [] },
+    ]);
+    for (let i = 0; i < 4; i++) {
+      const { record } = frame();
+      expect(coverage(record)).toEqual(allRows(table));
+    }
+    expect(renderer.writeStats.rebuilt).toBe(1);
+    expect(renderer.hasPendingWork).toBe(false);
   });
 
   it('records what the chunks hold in the ledger, and releases it with them', () => {

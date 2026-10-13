@@ -449,6 +449,7 @@ export class TableLayerRenderer {
    */
   prerender(): void {
     this.applyWrites();
+    this.uploadStates();
     this.renderers?.rows?.flushUploads();
     this.prepared = true;
   }
@@ -513,6 +514,7 @@ export class TableLayerRenderer {
     // A frame that had no pass before its main one writes what was queued now
     if (!this.prepared) {
       this.applyWrites();
+      this.uploadStates();
       this.renderers?.rows?.flushUploads();
     }
     this.prepared = false;
@@ -652,12 +654,12 @@ export class TableLayerRenderer {
         const group = table.groupAt(g);
         const groupCache = cache.groups.get(group.handle);
         if (!groupCache) continue;
-        const binding = this.stateBinding(groupCache);
-        if (!binding) continue;
+        // The chunks of a group whose state is not written yet are built, not drawn (the rows
+        // drawn at once read their state as it is)
         pass.group = group;
         pass.groupCache = groupCache;
         pass.groupIndex = g;
-        pass.binding = binding;
+        pass.binding = groupCache.binding;
 
         const choice = choices[g];
         if (choice !== drawing) {
@@ -1154,28 +1156,36 @@ export class TableLayerRenderer {
     }
   }
 
-  /** The texture of the state of the rows of a group, written when the state changed */
-  private stateBinding(groupCache: GroupCache): RowStateBinding | null {
-    const group = groupCache.group;
-    if (!groupCache.texture) {
-      groupCache.texture = createRowStateTexture(
-        this.options.gl,
-        group.data.length,
-        this.options.ledger,
-      );
-      groupCache.uploadedVersion = -1;
+  /**
+   * Writes the textures of the state of the rows of every group whose state changed since they
+   * were written (made for a group seen for the first time). Called in the pass before the main
+   * one, with the chunks and the writes in place, so a state takes effect in the frame its texture
+   * is written, as a chunk is drawn from the frame it is written
+   */
+  private uploadStates(): void {
+    for (const cache of this.layers.values()) {
+      for (const groupCache of cache.groups.values()) {
+        const group = groupCache.group;
+        if (!groupCache.texture) {
+          groupCache.texture = createRowStateTexture(
+            this.options.gl,
+            group.data.length,
+            this.options.ledger,
+          );
+          groupCache.uploadedVersion = -1;
+        }
+        const texture = groupCache.texture;
+        if (!texture) continue;
+        if (groupCache.uploadedVersion !== group.stateVersion) {
+          uploadRowState(this.options.gl, texture, group.gpuState);
+          groupCache.uploadedVersion = group.stateVersion;
+        }
+        // The binding is kept with the group (the translations are the one array of the renderer)
+        if (groupCache.binding?.texture !== texture) {
+          groupCache.binding = { texture, translations: this.translations };
+        }
+      }
     }
-    const texture = groupCache.texture;
-    if (!texture) return null;
-    if (groupCache.uploadedVersion !== group.stateVersion) {
-      uploadRowState(this.options.gl, texture, group.gpuState);
-      groupCache.uploadedVersion = group.stateVersion;
-    }
-    // The binding is kept with the group (the translations are the one array of the renderer)
-    if (groupCache.binding?.texture !== texture) {
-      groupCache.binding = { texture, translations: this.translations };
-    }
-    return groupCache.binding;
   }
 
   /** What the rows of a group are packed with for the drawing in one draw */
@@ -1278,13 +1288,13 @@ export class TableLayerRenderer {
 
   /** Draws a retained chunk of the group being drawn, in ranges cut at the places given */
   private drawRetained(state: RetainedRowsChunk): void {
-    if (!state.batches?.batch) return;
+    if (!state.batches?.batch || !this.pass.binding) return;
     this.drawCut(state, (from, to) => this.drawRange(state, from, to));
   }
 
   /** Draws a chunk drawn in one draw of the group being drawn, in ranges cut at the places given */
   private drawOneDraw(state: OneDrawRowsChunk): void {
-    if (!state.batches) return;
+    if (!state.batches || !this.pass.binding) return;
     this.drawCut(state, (from, to) => this.drawOneDrawRange(state, from, to));
   }
 

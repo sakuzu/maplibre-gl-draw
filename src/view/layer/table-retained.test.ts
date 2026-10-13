@@ -243,6 +243,11 @@ describe('the order of the drawing of a layer held as rows', () => {
     for (const seed of [1, 2, 3]) {
       const { table, frame, draws, immediate } = setup(interleaved(400, seed), 64);
       expect(table.groupCount).toBeGreaterThan(3);
+      // The state of the groups is written before the main pass of the frame after the one
+      // they are first seen in, and their chunks are drawn from that frame on
+      frame();
+      draws.length = 0;
+      immediate.length = 0;
       const record = frame();
       expect(inOrder(record)).toBe(true);
       expect(coverage(table, record)).toEqual(allRows(table));
@@ -257,6 +262,7 @@ describe('the order of the drawing of a layer held as rows', () => {
 
   it('skips the chunks out of view and keeps the order of the others', () => {
     const { table, frame } = setup(interleaved(300, 4), 50);
+    frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
     const record = frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
     const retained = record.filter((entry) => entry.kind !== 'immediate');
     expect(retained.length).toBeGreaterThan(0);
@@ -267,11 +273,13 @@ describe('the order of the drawing of a layer held as rows', () => {
   it('cuts the ranges in view at the places asked for, one more draw per cut, the rows unchanged', () => {
     const features = interleaved(500, 5);
     const plain = setup(features, 100);
+    plain.frame();
     const before = plain.frame();
     for (const cuts of [1, 10, 100]) {
       const { renderer, frame, draws } = setup(features, 100);
       renderer.setArtificialCuts(cuts);
       frame(); // builds
+      frame(); // writes the state of the groups
       draws.length = 0;
       const record = frame();
       expect(inOrder(record)).toBe(true);
@@ -489,8 +497,11 @@ describe('the state of the rows', () => {
     return { internals, table, gl, draw, mocks };
   }
 
-  it('uploads the texture of a group only when its state changed', () => {
+  it('uploads the texture of a group before a main pass, only when its state changed', () => {
     const { internals, gl, draw } = stateSetup();
+    // A group seen for the first time gets its texture before the next main pass
+    draw();
+    expect(gl.uploads).toBe(0);
     draw();
     expect(gl.uploads).toBe(1);
     draw();
