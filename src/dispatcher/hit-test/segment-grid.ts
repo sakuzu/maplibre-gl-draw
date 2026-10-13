@@ -8,6 +8,7 @@
  * The distances here are measured in the local frame of hit testing (local-frame.ts).
  */
 
+import { CoordinateRun, type PositionRun } from '../../shared/math/position-runs.js';
 import {
   cellIndex,
   getSegmentGrid,
@@ -16,7 +17,11 @@ import {
   type SegmentGrid,
 } from '../../shared/math/segment-grid.js';
 import type { Coordinate } from '../../store/types.js';
-import { localPointToPolylineDistance, localPointToSegmentDistance } from './local-frame.js';
+import {
+  localPointToPolylineDistance,
+  localPointToRunDistance,
+  localPointToSegmentDistance,
+} from './local-frame.js';
 
 // The grid is defined in shared/ (the snapping providers use it too); re-exported here for
 // the existing imports
@@ -114,4 +119,26 @@ export function polylineDistanceWithin(
   }
 
   return queryDistanceWithin(getSegmentGrid(coords), coords, point, tolerance, latScale);
+}
+
+/**
+ * The shortest distance to a run of positions taken as a polyline (or a ring) within the
+ * tolerance: the same answer as `polylineDistanceWithin` of the positions. A long run of the
+ * positions of a feature goes through the index of its array; any other is scanned
+ *
+ * @param latScale latitudeScale of the click latitude (1 is plain degree space)
+ * @returns The distance if within the tolerance, null if outside
+ */
+export function runDistanceWithin(
+  run: PositionRun,
+  point: Coordinate,
+  tolerance: number,
+  latScale = 1,
+): number | null {
+  if (run instanceof CoordinateRun && run.length >= SEGMENT_INDEX_THRESHOLD) {
+    const coords = run.coords as Coordinate[];
+    return queryDistanceWithin(getSegmentGrid(coords), coords, point, tolerance, latScale);
+  }
+  const distance = localPointToRunDistance(point, run, latScale);
+  return distance <= tolerance ? distance : null;
 }

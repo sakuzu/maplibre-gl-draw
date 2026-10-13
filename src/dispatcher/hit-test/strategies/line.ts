@@ -8,11 +8,9 @@
  * Distances are measured in the local frame of hit testing (local-frame.ts).
  */
 
-import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
-import { latitudeScale, localPointToPolylineDistance } from '../local-frame.js';
-import { polylineDistanceWithin } from '../segment-grid.js';
 import type { HitTestStrategy } from './base.js';
+import { linesShapeTest, shapeOfFeature } from './shape-tests.js';
 
 /**
  * Hit testing strategy for the LineString type
@@ -21,23 +19,14 @@ export class LineHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'LineString';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    return this.testDistance(feature, coordinate, toleranceLngLat) !== null;
+    return linesShapeTest.testShape(shapeOfFeature(feature), coordinate, toleranceLngLat);
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const lineCoords = coordinatesOf(feature) as Coordinate[];
-    // The nearest distance without a tolerance cannot be answered by the index, so this
-    // stays a full scan
-    return localPointToPolylineDistance(coordinate, lineCoords, latitudeScale(coordinate[1]));
+    return linesShapeTest.distanceShape(shapeOfFeature(feature), coordinate);
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const lineCoords = coordinatesOf(feature) as Coordinate[];
-    return polylineDistanceWithin(
-      lineCoords,
-      coordinate,
-      toleranceLngLat,
-      latitudeScale(coordinate[1]),
-    );
+    return linesShapeTest.testDistanceShape(shapeOfFeature(feature), coordinate, toleranceLngLat);
   }
 }

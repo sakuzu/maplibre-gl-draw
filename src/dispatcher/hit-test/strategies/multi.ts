@@ -5,17 +5,19 @@
  * Hit testing strategies for the Multi geometries
  *
  * MultiPoint / MultiLineString / MultiPolygon are tested as "a hit if any part is hit"
- * and "the distance is the minimum over the parts". The test logic itself reuses the
- * strategy of the single geometry for each part. Distances are measured in the local frame
- * of hit testing (local-frame.ts).
+ * and "the distance is the minimum over the parts". The tests are the ones of the single
+ * geometries, run on each part (shape-tests.ts). Distances are measured in the local frame of
+ * hit testing (local-frame.ts).
  */
 
-import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType } from '../../../store/types.js';
-import { latitudeScale, localDistance, localPointToPolylineDistance } from '../local-frame.js';
-import { polylineDistanceWithin } from '../segment-grid.js';
 import type { HitTestStrategy } from './base.js';
-import { PolygonHitTestStrategy } from './polygon.js';
+import {
+  linesShapeTest,
+  pointsShapeTest,
+  polygonsShapeTest,
+  shapeOfFeature,
+} from './shape-tests.js';
 
 /**
  * Hit testing strategy for the MultiPoint type
@@ -26,24 +28,11 @@ export class MultiPointHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'MultiPoint';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const parts = coordinatesOf(feature) as Coordinate[];
-    const latScale = latitudeScale(coordinate[1]);
-    for (const part of parts) {
-      if (localDistance(coordinate, part, latScale) <= toleranceLngLat) {
-        return true;
-      }
-    }
-    return false;
+    return pointsShapeTest.testShape(shapeOfFeature(feature), coordinate, toleranceLngLat);
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const parts = coordinatesOf(feature) as Coordinate[];
-    const latScale = latitudeScale(coordinate[1]);
-    let min = Number.POSITIVE_INFINITY;
-    for (const part of parts) {
-      min = Math.min(min, localDistance(coordinate, part, latScale));
-    }
-    return min;
+    return pointsShapeTest.distanceShape(shapeOfFeature(feature), coordinate);
   }
 }
 
@@ -56,40 +45,15 @@ export class MultiLineStringHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'MultiLineString';
 
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const parts = coordinatesOf(feature) as Coordinate[][];
-    const latScale = latitudeScale(coordinate[1]);
-    for (const part of parts) {
-      if (part.length === 0) continue;
-      if (localPointToPolylineDistance(coordinate, part, latScale) <= toleranceLngLat) {
-        return true;
-      }
-    }
-    return false;
+    return linesShapeTest.testShape(shapeOfFeature(feature), coordinate, toleranceLngLat);
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const parts = coordinatesOf(feature) as Coordinate[][];
-    const latScale = latitudeScale(coordinate[1]);
-    let min = Number.POSITIVE_INFINITY;
-    for (const part of parts) {
-      if (part.length === 0) continue;
-      min = Math.min(min, localPointToPolylineDistance(coordinate, part, latScale));
-    }
-    return min;
+    return linesShapeTest.distanceShape(shapeOfFeature(feature), coordinate);
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const parts = coordinatesOf(feature) as Coordinate[][];
-    const latScale = latitudeScale(coordinate[1]);
-    let min = Number.POSITIVE_INFINITY;
-    for (const part of parts) {
-      if (part.length === 0) continue;
-      const distance = polylineDistanceWithin(part, coordinate, toleranceLngLat, latScale);
-      if (distance !== null && distance < min) {
-        min = distance;
-      }
-    }
-    return min <= toleranceLngLat ? min : null;
+    return linesShapeTest.testDistanceShape(shapeOfFeature(feature), coordinate, toleranceLngLat);
   }
 }
 
@@ -102,36 +66,19 @@ export class MultiLineStringHitTestStrategy implements HitTestStrategy {
 export class MultiPolygonHitTestStrategy implements HitTestStrategy {
   readonly geometryType: FeatureType = 'MultiPolygon';
 
-  private readonly polygonStrategy = new PolygonHitTestStrategy();
-
   test(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean {
-    const parts = coordinatesOf(feature) as Coordinate[][][];
-    for (const rings of parts) {
-      if (this.polygonStrategy.testRings(rings, coordinate, toleranceLngLat)) {
-        return true;
-      }
-    }
-    return false;
+    return polygonsShapeTest.testShape(shapeOfFeature(feature), coordinate, toleranceLngLat);
   }
 
   distance(feature: Feature, coordinate: Coordinate): number {
-    const parts = coordinatesOf(feature) as Coordinate[][][];
-    let min = Number.POSITIVE_INFINITY;
-    for (const rings of parts) {
-      min = Math.min(min, this.polygonStrategy.distanceToRings(rings, coordinate));
-    }
-    return min;
+    return polygonsShapeTest.distanceShape(shapeOfFeature(feature), coordinate);
   }
 
   testDistance(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): number | null {
-    const parts = coordinatesOf(feature) as Coordinate[][][];
-    let min = Number.POSITIVE_INFINITY;
-    for (const rings of parts) {
-      const distance = this.polygonStrategy.testDistanceRings(rings, coordinate, toleranceLngLat);
-      if (distance !== null && distance < min) {
-        min = distance;
-      }
-    }
-    return min <= toleranceLngLat ? min : null;
+    return polygonsShapeTest.testDistanceShape(
+      shapeOfFeature(feature),
+      coordinate,
+      toleranceLngLat,
+    );
   }
 }

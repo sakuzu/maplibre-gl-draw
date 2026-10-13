@@ -22,6 +22,7 @@
 
 import type { ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
+import type { PositionRun } from '../../shared/math/position-runs.js';
 import type { Coordinate } from '../../store/types.js';
 
 /** Converts a screen point into longitude / latitude */
@@ -97,8 +98,24 @@ export function toleranceDegrees(
  * @param latScale latitudeScale of the click latitude
  */
 export function localDistance(a: Coordinate, b: Coordinate, latScale: number): number {
-  const dx = b[0] - a[0];
-  const dy = (b[1] - a[1]) / latScale;
+  return localDistanceXY(a[0], a[1], b[0], b[1], latScale);
+}
+
+/**
+ * The distance between two points in the local frame (degrees of longitude), from their
+ * coordinates
+ *
+ * @param latScale latitudeScale of the click latitude
+ */
+export function localDistanceXY(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  latScale: number,
+): number {
+  const dx = bx - ax;
+  const dy = (by - ay) / latScale;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
@@ -113,12 +130,29 @@ export function localPointToSegmentDistance(
   end: Coordinate,
   latScale: number,
 ): number {
+  return localSegmentDistanceXY(point, start[0], start[1], end[0], end[1], latScale);
+}
+
+/**
+ * The distance from a point to a segment in the local frame (degrees of longitude), from the
+ * coordinates of the ends of the segment
+ *
+ * @param latScale latitudeScale of the click latitude
+ */
+export function localSegmentDistanceXY(
+  point: Coordinate,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  latScale: number,
+): number {
   const px = point[0];
   const py = point[1] / latScale;
-  const ax = start[0];
-  const ay = start[1] / latScale;
-  const dx = end[0] - ax;
-  const dy = end[1] / latScale - ay;
+  const ax = startX;
+  const ay = startY / latScale;
+  const dx = endX - ax;
+  const dy = endY / latScale - ay;
   const lengthSquared = dx * dx + dy * dy;
 
   // The same arithmetic as shared/math pointToSegmentDistance, so that a latScale of 1
@@ -150,6 +184,32 @@ export function localPointToPolylineDistance(
   let min = Number.POSITIVE_INFINITY;
   for (let i = 0; i < coords.length - 1; i++) {
     const distance = localPointToSegmentDistance(point, coords[i], coords[i + 1], latScale);
+    if (distance < min) min = distance;
+  }
+  return min;
+}
+
+/**
+ * The shortest distance from a point to a run of positions taken as a polyline, in the local
+ * frame (degrees of longitude): the same as `localPointToPolylineDistance` of the positions
+ *
+ * @param latScale latitudeScale of the click latitude
+ */
+export function localPointToRunDistance(
+  point: Coordinate,
+  run: PositionRun,
+  latScale: number,
+): number {
+  let min = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < run.length - 1; i++) {
+    const distance = localSegmentDistanceXY(
+      point,
+      run.x(i),
+      run.y(i),
+      run.x(i + 1),
+      run.y(i + 1),
+      latScale,
+    );
     if (distance < min) min = distance;
   }
   return min;

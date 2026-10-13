@@ -9,9 +9,8 @@
  */
 
 import type { Feature, FeatureType } from '../../../api/model.js';
-import { coordinatesOf } from '../../../shared/utils/coordinates.js';
-import type { Coordinate } from '../../../store/types.js';
-import { latitudeScale, localDistance } from '../local-frame.js';
+import type { Feature as StoredFeature } from '../../../store/types.js';
+import { pointsShapeTest, shapeOfFeature } from './shape-tests.js';
 
 /**
  * The built-in hit test of `Point` features: hit within the tolerance of the position.
@@ -26,14 +25,15 @@ export class PointHitTestStrategy {
 
   /** Whether the feature is within `toleranceLngLat` degrees of the coordinate */
   test(feature: Feature, coordinate: [number, number], toleranceLngLat: number): boolean {
-    const pointCoord = coordinatesOf(feature) as Coordinate;
-    const dist = localDistance(coordinate, pointCoord, latitudeScale(coordinate[1]));
-    return dist <= toleranceLngLat;
+    return pointsShapeTest.testShape(
+      shapeOfFeature(feature as StoredFeature),
+      coordinate,
+      toleranceLngLat,
+    );
   }
 
   /** The distance from the coordinate to the feature, in degrees of the local frame */
   distance(feature: Feature, coordinate: [number, number]): number {
-    const pointCoord = coordinatesOf(feature) as Coordinate;
-    return localDistance(coordinate, pointCoord, latitudeScale(coordinate[1]));
+    return pointsShapeTest.distanceShape(shapeOfFeature(feature as StoredFeature), coordinate);
   }
 }
