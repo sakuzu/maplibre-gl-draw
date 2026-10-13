@@ -6,7 +6,7 @@
  *
  * The same features are drawn either from rows of columns (`mode=table`: a Worker builds the
  * row groups, the Store hands out the tables) or as features of the Store, drawn as before
- * (`mode=store`). "Start" runs the measurement: it opens the map, shows the whole of it, stops
+ * (`mode=store`). The rows are drawn in one draw per chunk, or by kind with `drawing=by-kind`. "Start" runs the measurement: it opens the map, shows the whole of it, stops
  * at zoom 14, then pans and zooms, and reports the time each step of the opening took, the
  * intervals of the animation frames (median, 95th percentile, longest) of every phase, the
  * memory and the GPU memory of the drawing. The run stops when the JS heap goes past the limit,
@@ -89,6 +89,7 @@ const setStatus = (text: string): void => {
 const form = document.getElementById('params') as HTMLFormElement;
 for (const [key, value] of Object.entries({
   mode: params.mode,
+  drawing: params.drawing,
   n: String(params.n),
   kind: params.kind,
   styles: String(params.styles),
@@ -148,6 +149,7 @@ const draw: Draw = createDraw(map, {
   initDefaultLayer: false,
   ...(store ? { store } : {}),
 });
+if (params.drawing === 'by-kind') draw.debug.tables().setDrawingByKind(true);
 
 // === Measuring ===
 

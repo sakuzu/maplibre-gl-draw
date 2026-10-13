@@ -25,6 +25,11 @@ export interface TableBenchParams {
 export interface TableBenchPageParams extends TableBenchParams {
   /** How the features are held: as rows of columns, or as features of the Store */
   readonly mode: 'table' | 'store';
+  /**
+   * How the rows are drawn (rows only): in one draw per chunk with rows of every kind, or with
+   * one renderer per kind (the drawing of the terrain and the globe), to compare the two
+   */
+  readonly drawing: 'one-draw' | 'by-kind';
   /** The number of places the ranges drawn are cut at (rows only) */
   readonly cuts: number;
   /** The heap the run stops at (MB) */
@@ -48,6 +53,7 @@ export function parseParams(search: string): TableBenchPageParams {
     styles: Math.max(1, Math.min(n, number('styles', 1))),
     translucent: params.get('alpha') !== '0',
     mode: params.get('mode') === 'store' ? 'store' : 'table',
+    drawing: params.get('drawing') === 'by-kind' ? 'by-kind' : 'one-draw',
     cuts: number('cuts', 0),
     limitMb: Math.max(1, number('limit', 1024)),
   };
