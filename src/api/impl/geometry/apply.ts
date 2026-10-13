@@ -11,9 +11,14 @@
 import type { DrawPropertyName } from '../../../shared/properties.js';
 import { setDrawProperty } from '../../../shared/properties.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
-import { listedItems, listedMembers } from '../../../shared/utils/listed-items.js';
+import { itemNeighbors } from '../../../store/item-lists.js';
 import type { Store } from '../../../store/store.js';
-import type { Feature, FeatureCoordinates, FeatureType } from '../../../store/types.js';
+import type {
+  Feature,
+  FeatureCoordinates,
+  FeatureType,
+  ItemPlacement,
+} from '../../../store/types.js';
 import type { GeometryDeps } from './types.js';
 
 /**
@@ -23,63 +28,27 @@ import type { GeometryDeps } from './types.js';
  */
 const CIRCLE_ONLY_PROPERTIES: readonly DrawPropertyName[] = ['radiusMeters', 'radiusHandleAngle'];
 
-/** Where the result feature is placed (the layer / group, and the z position within it). */
-interface ResultPlacement {
-  layerId: string;
-  groupId?: string;
-  /** The insertion position in the order after the inputs have been removed */
-  index: number;
-}
-
 /**
  * Decides the placement that puts the result at "the place where the input it inherits from
- * was".
+ * was": the items just below and above it among the ones that stay.
  *
- * When the input was a member of a group, the result is put into the same group. The position
- * is the position that the input it inherits from occupied in the order after the inputs have
- * been removed. In an operation where the input it inherits from remains (the buffer), the
- * result is put just in front of that input.
+ * When the input was a member of a group, the result is put into the same group. In an operation
+ * where the input it inherits from remains (the buffer), the result is put just in front of that
+ * input.
  */
 function planPlacement(
   store: Store,
   anchor: Feature,
   removedIds: ReadonlySet<string>,
-): ResultPlacement {
-  const group = anchor.groupId ? store.getGroup(anchor.groupId) : undefined;
-  const layer = store.getLayer(anchor.layerId);
-  const container = group ? listedMembers(group) : layer ? listedItems(layer) : [];
-  const anchorIndex = container.indexOf(anchor.id);
-  const precedingIds = anchorIndex < 0 ? container : container.slice(0, anchorIndex);
-  const precedingCount = precedingIds.filter((id) => !removedIds.has(id)).length;
-
-  return {
-    layerId: anchor.layerId,
-    groupId: group?.id,
-    // One further back when the input it inherits from remains (= just in front of it).
-    // When it is deleted, that place is used as is.
-    index: removedIds.has(anchor.id) ? precedingCount : precedingCount + 1,
-  };
-}
-
-/**
- * Moves the result that createFeature stacked at the tail (the frontmost) to the z position of
- * its placement.
- */
-function moveToPlacement(store: Store, resultId: string, placement: ResultPlacement): void {
-  if (placement.groupId) {
-    const group = store.getGroup(placement.groupId);
-    if (!group) return;
-    const featureIds = listedMembers(group).filter((id) => id !== resultId);
-    featureIds.splice(placement.index, 0, resultId);
-    store.updateGroup(placement.groupId, { featureIds });
-    return;
-  }
-
-  const layer = store.getLayer(placement.layerId);
-  if (!layer) return;
-  const order = listedItems(layer).filter((id) => id !== resultId);
-  order.splice(placement.index, 0, resultId);
-  store.updateLayer(placement.layerId, { items: order });
+): ItemPlacement {
+  const groupId = anchor.groupId && store.getGroup(anchor.groupId) ? anchor.groupId : undefined;
+  const layerId = anchor.layerId;
+  const around = itemNeighbors(store, layerId, groupId, anchor.id, removedIds);
+  if (!around) return { layerId, groupId, above: null };
+  // Just in front of the input when it stays, at its place when it is deleted
+  if (!removedIds.has(anchor.id))
+    return { layerId, groupId, below: anchor.id, above: around.above };
+  return { layerId, groupId, below: around.below, above: around.above };
 }
 
 /**
@@ -147,6 +116,12 @@ export function applyResult(deps: GeometryDeps, params: CommitParams): string {
     store.deleteFeature(id);
   }
 
-  moveToPlacement(store, result.id, placement);
+  // Put where the input was (a group the inputs left empty is gone then, and the result is in
+  // the layer)
+  const to =
+    placement.groupId && !store.getGroup(placement.groupId)
+      ? { layerId: placement.layerId, below: placement.below, above: placement.above }
+      : placement;
+  store.moveItem(result.id, to);
   return result.id;
 }

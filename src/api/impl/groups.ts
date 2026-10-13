@@ -5,8 +5,11 @@
  * `draw.groups`: the groups of the document
  */
 
-import { listedItems } from '../../shared/utils/listed-items.js';
-import { listEveryFeatureInOrder } from '../../store/ordering.js';
+import {
+  featuresInStackingOrder,
+  groupsInStackingOrder,
+  insertGroup,
+} from '../../store/item-lists.js';
 import type { Store } from '../../store/store.js';
 import type {
   ObjectGroup,
@@ -53,21 +56,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
   };
 
   /** Every group in stacking order, from the back; a group no layer lists comes last */
-  const inOrder = (): StoredGroup[] => {
-    const result: StoredGroup[] = [];
-    for (const layerId of store.getLayerOrder()) {
-      const layer = store.getLayer(layerId);
-      for (const itemId of layer ? listedItems(layer) : []) {
-        const group = store.getGroup(itemId);
-        if (group) result.push(group);
-      }
-    }
-    if (result.length < store.listGroups().length) {
-      const listed = new Set(result.map((group) => group.id));
-      result.push(...store.listGroups().filter((group) => !listed.has(group.id)));
-    }
-    return result;
-  };
+  const inOrder = (): StoredGroup[] => groupsInStackingOrder(store);
 
   const list = (filter?: GroupFilter): Group[] => {
     const entries = filterEntries(filter, FILTER_KEYS);
@@ -172,38 +161,9 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     if (target.kind !== 'layer') throw invalidInput('A group can only be moved to a layer');
     if (store.isReadOnly()) return false;
     if (target.locked || groups.some((group) => groupLocked(store, group))) return false;
-    moveGroups(store, groups, target.layer, target.index);
+    moveGroups(store, groups, target.layer, target.place);
     return true;
   }
-}
-
-/**
- * Creates a group where its frontmost member was, in the transaction of the caller
- *
- * @internal
- */
-export function insertGroup(store: Store, prepared: ObjectGroup): void {
-  const members = new Set(prepared.featureIds);
-  const layer = store.getLayer(prepared.layerId);
-  if (layer) {
-    // The group takes the place of its frontmost member standing in the layer
-    let at = -1;
-    const listed = listedItems(layer);
-    for (let i = listed.length - 1; i >= 0; i--) {
-      if (members.has(listed[i])) {
-        at = i;
-        break;
-      }
-    }
-    const items: string[] = [];
-    listed.forEach((itemId, i) => {
-      if (i === at) items.push(prepared.id);
-      if (!members.has(itemId)) items.push(itemId);
-    });
-    if (at === -1) items.push(prepared.id);
-    store.updateLayer(layer.id, { items });
-  }
-  store.createGroup(prepared);
 }
 
 /** The fields of a group that do not depend on its features */
@@ -282,8 +242,7 @@ function prepareGroup(
 
 /** The features in stacking order, from the back */
 function inStackingOrder(store: Store, features: StoredFeature[]): StoredFeature[] {
-  const position = new Map(listEveryFeatureInOrder(store).map((f, index) => [f.id, index]));
-  return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
+  return featuresInStackingOrder(store, features);
 }
 
 /** Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch */

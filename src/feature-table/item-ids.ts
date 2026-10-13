@@ -12,6 +12,7 @@ import type { FeatureTables } from '../api/tables.js';
 import type { HitShape } from '../shared/math/position-runs.js';
 import type { Coordinate } from '../shared/types/model.js';
 import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../table/row-group-types.js';
+import { compareRowKeys } from '../table/row-keys.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
 import { STATE_HIDDEN_MASK } from './row-state.js';
@@ -138,4 +139,150 @@ export function tableLayerHasLockedRow(
     if ((flags & ROW_FLAG_DELETED) === 0 && (flags & ROW_FLAG_LOCKED) !== 0) return true;
   }
   return false;
+}
+
+/**
+ * The items of a layer held as rows, or the members of a group of it, as numbers: twice the
+ * handle of a row, twice the handle of a group plus one (none for a layer that holds no row)
+ */
+function itemCodes(
+  tables: FeatureTables,
+  layerId: string,
+  groupId: string | undefined,
+): Int32Array | null {
+  const internals = featureTablesInternals(tables);
+  const items = internals?.layerTable(layerId)?.itemsOf();
+  if (!internals || !items) return null;
+  if (groupId !== undefined) {
+    const group = internals.groups.handleOfId(groupId);
+    const members = group >= 0 ? items.members.get(group) : undefined;
+    return members ? Int32Array.from(members, (handle) => handle * 2) : null;
+  }
+  return Int32Array.from(items.kinds, (kind, i) =>
+    kind === 0 ? items.handles[i] * 2 : items.handles[i] * 2 + 1,
+  );
+}
+
+/** The id of an item numbered as `itemCodes` numbers it */
+function idOfCode(tables: FeatureTables, code: number): string | undefined {
+  if ((code & 1) === 0) return tables.idOf(code >> 1);
+  return featureTablesInternals(tables)?.groups.idOf(code >> 1);
+}
+
+/** The number of an item by its id (-1 for none) */
+function codeOfId(tables: FeatureTables, id: string): number {
+  const handle = tables.handleOf(id);
+  if (handle !== undefined) return handle * 2;
+  const group = featureTablesInternals(tables)?.groups.handleOfId(id) ?? -1;
+  return group >= 0 ? group * 2 + 1 : -1;
+}
+
+/**
+ * Where an item of a layer held as rows (or of a group of it) stands: the items just below and
+ * above it, the ones `skip` names left out (null when the item is not there)
+ *
+ * @internal
+ */
+export function tableItemNeighbors(
+  tables: FeatureTables | undefined,
+  layerId: string,
+  groupId: string | undefined,
+  itemId: string,
+  skip: ReadonlySet<string> = new Set(),
+): { below: string | null; above: string | null } | null {
+  if (!tables) return null;
+  const codes = itemCodes(tables, layerId, groupId);
+  const code = codeOfId(tables, itemId);
+  const at = codes && code >= 0 ? codes.indexOf(code) : -1;
+  if (!codes || at < 0) return null;
+  const near = (step: 1 | -1): string | null => {
+    for (let i = at + step; i >= 0 && i < codes.length; i += step) {
+      const id = idOfCode(tables, codes[i]);
+      if (id !== undefined && !skip.has(id)) return id;
+    }
+    return null;
+  };
+  return { below: near(-1), above: near(1) };
+}
+
+/**
+ * The frontmost of items of a layer held as rows (undefined when none of them is an item of it)
+ *
+ * @internal
+ */
+export function tableFrontmostItem(
+  tables: FeatureTables | undefined,
+  layerId: string,
+  itemIds: ReadonlySet<string>,
+): string | undefined {
+  if (!tables) return undefined;
+  const codes = itemCodes(tables, layerId, undefined);
+  if (!codes) return undefined;
+  const wanted = new Set<number>();
+  for (const id of itemIds) {
+    const code = codeOfId(tables, id);
+    if (code >= 0) wanted.add(code);
+  }
+  for (let i = codes.length - 1; i >= 0; i--) {
+    if (wanted.has(codes[i])) return idOfCode(tables, codes[i]);
+  }
+  return undefined;
+}
+
+/**
+ * The groups of features of a layer held as rows that are its items (a group with a member), in
+ * their order
+ *
+ * @internal
+ */
+export function tableLayerGroupIds(tables: FeatureTables | undefined, layerId: string): string[] {
+  const internals = featureTablesInternals(tables);
+  const items = internals?.layerTable(layerId)?.itemsOf();
+  if (!internals || !items) return [];
+  const out: string[] = [];
+  for (let i = 0; i < items.kinds.length; i++) {
+    if (items.kinds[i] !== 1) continue;
+    const id = internals.groups.idOf(items.handles[i]);
+    if (id !== undefined) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Ids of rows held as columns in the order they are drawn: by the stacking order of their layers
+ * (a layer not on it after), then by their order in their layer; an id of no row comes last
+ *
+ * @internal
+ */
+export function tableIdsInOrder(
+  tables: FeatureTables | undefined,
+  layerOrder: readonly string[],
+  ids: readonly string[],
+): string[] {
+  const internals = featureTablesInternals(tables);
+  if (!internals || !tables) return [...ids];
+  const layerRank = new Map(layerOrder.map((id, i) => [id, i]));
+  const entries = ids.map((id) => {
+    const handle = tables.handleOf(id);
+    const place = handle === undefined ? undefined : internals.placeOf(handle);
+    return { id, place };
+  });
+  return entries
+    .sort((a, b) => {
+      if (!a.place || !b.place) return (a.place ? 0 : 1) - (b.place ? 0 : 1);
+      const la = layerRank.get(a.place.layer.layerId) ?? Number.MAX_SAFE_INTEGER;
+      const lb = layerRank.get(b.place.layer.layerId) ?? Number.MAX_SAFE_INTEGER;
+      if (la !== lb) return la - lb;
+      if (a.place.layer !== b.place.layer) {
+        return a.place.layer.layerId < b.place.layer.layerId ? -1 : 1;
+      }
+      return compareRowKeys(
+        a.place.group.data,
+        a.place.row,
+        b.place.group.data,
+        b.place.row,
+        internals.groups,
+      );
+    })
+    .map((entry) => entry.id);
 }

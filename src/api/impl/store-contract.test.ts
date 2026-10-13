@@ -51,6 +51,8 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'setLayerOrder',
   'reorderInLayer',
   'reorderInGroup',
+  'moveItem',
+  'moveItems',
   'createGroup',
   'updateGroup',
   'deleteGroup',
@@ -86,7 +88,7 @@ function contractOnly(): { store: Store; calls: string[]; strays: string[] } {
       const value = Reflect.get(target, key, target) as unknown;
       if (typeof value !== 'function') return value;
       return (...args: unknown[]) => {
-        if (/^(set|start|end|create|update|delete|reorder)/.test(key)) calls.push(key);
+        if (/^(set|start|end|create|update|delete|reorder|move)/.test(key)) calls.push(key);
         return (value as (...a: unknown[]) => unknown).apply(target, args);
       };
     },

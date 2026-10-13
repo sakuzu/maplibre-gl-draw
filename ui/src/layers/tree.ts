@@ -33,7 +33,9 @@ import {
   type Group as DrawGroup,
   type Feature,
   type FeatureStyleResolved,
+  type FeatureTables,
   getStyleRuleChannel,
+  ITEM_ROW,
   type Layer,
   type Selection,
   type SelectionType,
@@ -81,6 +83,62 @@ export interface TreeSource {
   };
   /** What this client hides; a node it hides shows as hidden */
   readonly hidden?: { has(id: string): boolean };
+  /**
+   * The Store, whose tables hold the items of the layers held as rows (read with
+   * `itemsInOrder` and `groupMembersInOrder`: such a layer lists no item, nor such a group a
+   * member)
+   */
+  getStore?(): { readonly tables?: FeatureTables };
+}
+
+/** The items of a layer, from the back: listed, or read from the rows of a layer held as rows */
+function layerItems(source: TreeSource, layer: Layer): readonly string[] {
+  if (layer.kind !== 'table') return layer.items;
+  const tables = source.getStore?.().tables;
+  const view = tables?.layer(layer.id);
+  if (!tables || !view) return [];
+  const refs = view.itemsInOrder(0, view.itemCount);
+  const out: string[] = [];
+  for (let i = 0; i < refs.kinds.length; i++) {
+    const id =
+      refs.kinds[i] === ITEM_ROW ? tables.idOf(refs.handles[i]) : tables.groupIdOf(refs.handles[i]);
+    if (id !== undefined) out.push(id);
+  }
+  return out;
+}
+
+/** The members of a group, from the back: listed, or read from the rows of a layer held as rows */
+function groupMembers(source: TreeSource, group: DrawGroup): readonly string[] {
+  if (group.kind !== 'table') return group.featureIds;
+  const tables = source.getStore?.().tables;
+  const view = tables?.layer(group.layerId);
+  const handle = tables?.groupHandleOf(group.id);
+  if (!tables || !view || handle === undefined) return [];
+  const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
+  return Array.from(members, (row) => tables.idOf(row) as string);
+}
+
+/**
+ * The number of the features of a layer, those of its groups included, counted without reading
+ * them
+ */
+function featureTotal(source: TreeSource, layer: Layer): number {
+  if (layer.kind !== 'table') {
+    let total = 0;
+    for (const itemId of layer.items) {
+      const group = source.groups.get(itemId);
+      total += group ? groupMembers(source, group).length : 1;
+    }
+    return total;
+  }
+  const view = source.getStore?.().tables?.layer(layer.id);
+  if (!view) return 0;
+  const refs = view.itemsInOrder(0, view.itemCount);
+  let total = 0;
+  for (let i = 0; i < refs.kinds.length; i++) {
+    total += refs.kinds[i] === ITEM_ROW ? 1 : view.groupMemberCount(refs.handles[i]);
+  }
+  return total;
 }
 
 /** Whether a node shows as visible: visible in the document, and not hidden by this client */
@@ -282,13 +340,10 @@ export function buildNodes(
     const children: LayerTreeNode[] = [];
     // The features of the layer, counted from its items without reading them: those of a group
     // are in the group, not among the items
-    let total = 0;
-    if (options.features) {
-      for (const itemId of layer.items) total += source.groups.get(itemId)?.featureIds.length ?? 1;
-    }
+    const total = options.features ? featureTotal(source, layer) : 0;
     const many = total > limit;
     if (many) children.push(countNode(layer.id, total, m));
-    for (const itemId of many ? [] : [...layer.items].reverse()) {
+    for (const itemId of many ? [] : [...layerItems(source, layer)].reverse()) {
       if (seen.has(itemId)) continue;
       const group = source.groups.get(itemId);
       if (group) {
@@ -304,7 +359,7 @@ export function buildNodes(
         };
         if (options.features) {
           node.children = [];
-          for (const featureId of [...group.featureIds].reverse()) {
+          for (const featureId of [...groupMembers(source, group)].reverse()) {
             const feature = seen.has(featureId) ? undefined : source.features.get(featureId);
             if (!feature) continue;
             seen.add(feature.id);

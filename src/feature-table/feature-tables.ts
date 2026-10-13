@@ -166,6 +166,11 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     layer: (layerId) => store.view(layerId),
     handleOf: (id) => store.handleOf(id),
     idOf: (handle) => store.ids.idOf(handle),
+    groupIdOf: (group) => store.groups.idOf(group),
+    groupHandleOf: (id) => {
+      const group = store.groups.handleOfId(id);
+      return group >= 0 ? group : undefined;
+    },
     scan: (options) => store.scan(options ?? {}),
     hold: (owner, ids) => store.hold(owner, ids),
     heldFeature: (id) => store.heldFeature(id),

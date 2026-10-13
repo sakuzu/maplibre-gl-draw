@@ -8,24 +8,14 @@
  * features from a group, and grouping / ungrouping the selected features.
  */
 
-import { listedItems, listedMembers } from '../shared/utils/listed-items.js';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
+import { insertGroup, itemNeighbors } from '../store/item-lists.js';
 import type { Store } from '../store/store.js';
 import type { Feature, ObjectGroup } from '../store/types.js';
 
 /**
- * Deletes the group if it has become empty (the standard behavior of canvas tools).
- * Called at the end of each path that moves or removes a feature out of a group.
- */
-function deleteGroupIfEmpty(store: Store, groupId: string): void {
-  const group = store.getGroup(groupId);
-  if (group && listedMembers(group).length === 0) {
-    store.deleteGroup(groupId);
-  }
-}
-
-/**
- * Removes a feature from a group
+ * Removes a feature from a group: it goes just in front of the group in the layer (or to the
+ * place of the group, when it was the last member and the group is deleted)
  *
  * @internal
  */
@@ -36,37 +26,11 @@ export function takeOutOfGroup(store: Store, featureId: string): void {
   const group = store.getGroup(feature.groupId);
   if (!group) return;
 
-  // Find the layer the group belongs to
-  let layerId: string | null = null;
-  for (const layer of store.listLayers()) {
-    if (listedItems(layer).includes(group.id)) {
-      layerId = layer.id;
-      break;
-    }
-  }
-
-  store.transact(() => {
-    // Remove the feature from the group
-    const newFeatureIds = listedMembers(group).filter((id) => id !== featureId);
-    store.updateGroup(group.id, { featureIds: newFeatureIds });
-
-    // Remove the groupId from the feature
-    store.updateFeature(featureId, { groupId: undefined });
-
-    // Add the feature to the order of the layer (right after the group)
-    if (layerId) {
-      const layer = store.getLayer(layerId);
-      if (layer) {
-        const groupIndex = listedItems(layer).indexOf(group.id);
-        const newOrder = [...listedItems(layer)];
-        newOrder.splice(groupIndex + 1, 0, featureId);
-        store.updateLayer(layerId, { items: newOrder });
-      }
-    }
-
-    // Delete the group when it has become empty (after the feature has been moved out
-    // directly under the layer)
-    deleteGroupIfEmpty(store, group.id);
+  const around = itemNeighbors(store, group.layerId, undefined, group.id);
+  store.moveItems([featureId], {
+    layerId: group.layerId,
+    below: group.id,
+    above: around?.above ?? null,
   });
 }
 
@@ -122,80 +86,18 @@ export function groupSelection(
     visible: true,
   };
 
-  store.transact(() => {
-    // Remove the feature IDs from the order of the layer and add the group ID
-    const layer = store.getLayer(layerId);
-    if (layer) {
-      // Find the frontmost one (the largest index) among the selected features
-      let frontmostSelectedId: string | null = null;
-      const items = listedItems(layer);
-      for (let i = items.length - 1; i >= 0; i--) {
-        if (selectedIds.includes(items[i])) {
-          frontmostSelectedId = items[i];
-          break;
-        }
-      }
-
-      // Build the new order (insert the group at the position of the frontmost selected feature)
-      const newOrder: string[] = [];
-      for (const id of items) {
-        if (selectedIds.includes(id)) {
-          // Insert the group at the position of the frontmost selected feature
-          if (id === frontmostSelectedId) {
-            newOrder.push(groupId);
-          }
-          // The selected features are excluded from the order
-        } else {
-          newOrder.push(id);
-        }
-      }
-      // Even when not a single selected feature is included in order (for example when they
-      // are missing from order because of stale data), the group is appended at the tail so
-      // that it is not left out of order.
-      if (frontmostSelectedId === null) {
-        newOrder.push(groupId);
-      }
-      store.updateLayer(layerId, { items: newOrder });
-    }
-
-    // Create the group
-    store.createGroup(group);
-  });
+  // The group takes the place of the frontmost selected feature in the layer
+  store.transact(() => insertGroup(store, group));
 
   return groupId;
 }
 
 /**
- * Dissolves a group (outside a transaction, a pure mutation).
- * It removes the group from the order, expands its member features into the same position,
- * and then deletes the group itself. The caller must wrap it in store.transact.
+ * Dissolves a group (outside a transaction): its member features take its place in the order of
+ * its layer, and it is deleted. The caller wraps it in store.transact.
  */
 function dissolveGroup(store: Store, groupId: string): void {
-  const group = store.getGroup(groupId);
-  if (!group) return;
-
-  // Identify the layer the group belongs to
-  let targetLayerId: string | null = null;
-  for (const layer of store.listLayers()) {
-    if (listedItems(layer).includes(groupId)) {
-      targetLayerId = layer.id;
-      break;
-    }
-  }
-
-  if (!targetLayerId) return;
-
-  // Remove the group ID from the order of the layer and expand the feature IDs into the same
-  // position
-  const layer = store.getLayer(targetLayerId);
-  if (layer) {
-    const groupIndex = listedItems(layer).indexOf(groupId);
-    const newOrder = [...listedItems(layer)];
-    newOrder.splice(groupIndex, 1, ...listedMembers(group));
-    store.updateLayer(targetLayerId, { items: newOrder });
-  }
-
-  // Delete the group
+  if (!store.getGroup(groupId)) return;
   store.deleteGroup(groupId);
 }
 

@@ -412,7 +412,8 @@ describe('the layer panel', () => {
     const items = () =>
       page.evaluate(() => {
         const w = window as unknown as E2EWindow;
-        return [...(w.draw.layers.get(w.layerId)?.items ?? [])];
+        const layer = w.draw.layers.get(w.layerId);
+        return [...(layer && layer.kind !== 'table' ? layer.items : [])];
       });
     expect(await items()).toEqual([point, line, polygon]);
     const pointRow = panel.locator(`[role="treeitem"][data-node="${point}"]`);

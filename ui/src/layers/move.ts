@@ -20,6 +20,8 @@
 //   when the reorder is refused), then the same `layers.reorder` with it in its new place
 // - a group: `groups.move` to `{ layerId, index }`
 // - a feature: `features.move` to `{ layerId, index }`, or to `{ groupId, index }` in a group
+// - in a layer held as rows, which lists no item, the place is named by the item behind the node
+//   instead (`{ layerId, groupId?, below }`, null at the back)
 
 import type { TreeMove } from '@sakuzu/kata/svelte';
 import type { DatasetOrder, Group, Layer, MoveTarget } from '@sakuzu/maplibre-gl-draw';
@@ -105,7 +107,11 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
   const behind = shown[shown.indexOf(move.id) + 1];
   if (parent.kind === 'layer') {
     const layer = parent.data as Layer;
-    const to = { layerId: layer.id, index: coreIndex(layer.items, move.id, behind) };
+    // A layer held as rows takes the place by the item that is behind (the one below in core)
+    const to: MoveTarget =
+      layer.kind === 'table'
+        ? { layerId: layer.id, below: behind ?? null }
+        : { layerId: layer.id, index: coreIndex(layer.items, move.id, behind) };
     return at.node.kind === 'group'
       ? { kind: 'group', id: move.id, to }
       : { kind: 'feature', id: move.id, to };
@@ -114,6 +120,9 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
   return {
     kind: 'feature',
     id: move.id,
-    to: { groupId: group.id, index: coreIndex(group.featureIds, move.id, behind) },
+    to:
+      group.kind === 'table'
+        ? { layerId: group.layerId, groupId: group.id, below: behind ?? null }
+        : { groupId: group.id, index: coreIndex(group.featureIds, move.id, behind) },
   };
 }

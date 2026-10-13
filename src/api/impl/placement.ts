@@ -5,12 +5,14 @@
  * Where a move goes, and the writes that move features and groups there
  *
  * A move is one transaction. The features and groups keep their stacking order among
- * themselves, and `index` is their position within the destination once they have left it.
+ * themselves, and go one after the other to the place of the target (`Store.moveItems`): the
+ * items just below and above it, or `index`, their position within the destination once they
+ * have left it (a layer of objects only).
  */
 
-import { listedItems, listedMembers } from '../../shared/utils/listed-items.js';
+import { itemNeighbors, placeAtIndex } from '../../store/item-lists.js';
 import type { Store } from '../../store/store.js';
-import type { Feature, Group, Layer } from '../../store/types.js';
+import type { Feature, Group, ItemPlacement, Layer } from '../../store/types.js';
 import type { MoveTarget } from '../model.js';
 import {
   groupLocked,
@@ -23,6 +25,15 @@ import {
 } from './shared.js';
 
 /**
+ * Where in the destination: a position, or the items just below and above
+ *
+ * @internal
+ */
+export type PlaceRequest =
+  | { index: number | undefined }
+  | { below?: string | null; above?: string | null };
+
+/**
  * A resolved move target
  *
  * - `layer`: the layer, as items of their own
@@ -32,9 +43,15 @@ import {
  * @internal
  */
 export type ResolvedTarget =
-  | { kind: 'layer'; layer: Layer; index: number | undefined; locked: boolean }
-  | { kind: 'group'; group: Group; index: number | undefined; locked: boolean }
+  | { kind: 'layer'; layer: Layer; place: PlaceRequest; locked: boolean }
+  | { kind: 'group'; group: Group; place: PlaceRequest; locked: boolean }
   | { kind: 'ungroup'; index: number | undefined; locked: false };
+
+/** An optional item of a place: an ID, null, or nothing */
+function optionalNeighbor(value: unknown, name: string): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return requireId(value, name);
+}
 
 /**
  * Checks a move target and looks up what it names
@@ -47,28 +64,69 @@ export function resolveMoveTarget(store: Store, to: MoveTarget): ResolvedTarget 
   if (!isRecord(to)) throw invalidInput('The target must be an object');
   const hasLayer = 'layerId' in to;
   const hasGroup = 'groupId' in to;
+  // A place named by the items around it: `{ layerId, groupId?, below?, above? }`
+  if (hasLayer && ('below' in to || 'above' in to || hasGroup)) {
+    const placement = to as ItemPlacement & { index?: unknown };
+    if (placement.index !== undefined) {
+      throw invalidInput('A place is named by an index or by the items around it, not both');
+    }
+    const layerId = requireId(placement.layerId, 'layerId');
+    const layer = store.getLayer(layerId);
+    if (!layer) throw notFound('layer', layerId);
+    const place = {
+      below: optionalNeighbor(placement.below, 'below'),
+      above: optionalNeighbor(placement.above, 'above'),
+    };
+    if (placement.groupId === undefined) {
+      return { kind: 'layer', layer, place, locked: layerLocked(store, layer) };
+    }
+    const groupId = requireId(placement.groupId, 'groupId');
+    const group = store.getGroup(groupId);
+    if (!group) throw notFound('group', groupId);
+    if (group.layerId !== layerId) {
+      throw invalidInput(`The group ${groupId} is not in the layer ${layerId}`);
+    }
+    return { kind: 'group', group, place, locked: groupLocked(store, group) };
+  }
   if (hasLayer === hasGroup) {
     throw invalidInput('The target must have either layerId or groupId');
   }
-  const index = optionalIndex(to.index);
+  const index = optionalIndex((to as { index?: unknown }).index);
   if (hasLayer) {
-    const layerId = requireId(to.layerId, 'layerId');
+    const layerId = requireId((to as { layerId: unknown }).layerId, 'layerId');
     const layer = store.getLayer(layerId);
     if (!layer) throw notFound('layer', layerId);
-    return { kind: 'layer', layer, index, locked: layerLocked(store, layer) };
+    return { kind: 'layer', layer, place: { index }, locked: layerLocked(store, layer) };
   }
-  if (to.groupId === null) return { kind: 'ungroup', index, locked: false };
-  const groupId = requireId(to.groupId, 'groupId');
+  const target = to as { groupId: unknown };
+  if (target.groupId === null) return { kind: 'ungroup', index, locked: false };
+  const groupId = requireId(target.groupId, 'groupId');
   const group = store.getGroup(groupId);
   if (!group) throw notFound('group', groupId);
-  return { kind: 'group', group, index, locked: groupLocked(store, group) };
+  return { kind: 'group', group, place: { index }, locked: groupLocked(store, group) };
 }
 
-/** Inserts the IDs into the list at the index, or at the end when it is undefined */
-function insertAt(list: string[], ids: readonly string[], index: number | undefined): string[] {
-  const at = index === undefined ? list.length : Math.min(index, list.length);
-  list.splice(at, 0, ...ids);
-  return list;
+/**
+ * The place of a target in a layer or a group, by the items around it
+ *
+ * @throws DrawError `invalid-input` for a position by index in a layer held as rows
+ */
+function placementOf(
+  store: Store,
+  layerId: string,
+  groupId: string | undefined,
+  place: PlaceRequest,
+  moving: ReadonlySet<string>,
+): ItemPlacement {
+  if (!('index' in place)) return { layerId, groupId, ...place };
+  // The front, when no position is given
+  if (place.index === undefined) return { layerId, groupId, above: null };
+  if (store.getLayer(layerId)?.kind === 'table') {
+    throw invalidInput(
+      'A layer held as rows takes a place by the items around it ({ below, above }), not an index',
+    );
+  }
+  return { layerId, groupId, ...placeAtIndex(store, layerId, groupId, place.index, moving) };
 }
 
 /**
@@ -79,29 +137,17 @@ function insertAt(list: string[], ids: readonly string[], index: number | undefi
  */
 export function moveFeatures(store: Store, features: Feature[], target: ResolvedTarget): void {
   const ids = features.map((feature) => feature.id);
-  const moved = new Set(ids);
+  const moving = new Set(ids);
   store.transact(() => {
     if (target.kind === 'layer') {
       const layerId = target.layer.id;
-      for (const feature of features) {
-        if (feature.layerId !== layerId || feature.groupId !== undefined) {
-          store.updateFeature(feature.id, { layerId, groupId: undefined });
-        }
-      }
-      const items = itemsOf(store, layerId).filter((id) => !moved.has(id));
-      store.updateLayer(layerId, { items: insertAt(items, ids, target.index) });
+      store.moveItems(ids, placementOf(store, layerId, undefined, target.place, moving));
       return;
     }
 
     if (target.kind === 'group') {
       const { group } = target;
-      for (const feature of features) {
-        if (feature.groupId !== group.id) {
-          store.updateFeature(feature.id, { layerId: group.layerId, groupId: group.id });
-        }
-      }
-      const featureIds = membersOf(store, group.id).filter((id) => !moved.has(id));
-      store.updateGroup(group.id, { featureIds: insertAt(featureIds, ids, target.index) });
+      store.moveItems(ids, placementOf(store, group.layerId, group.id, target.place, moving));
       return;
     }
 
@@ -113,7 +159,13 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
       byLayer.set(feature.layerId, list);
     }
     for (const [layerId, inLayer] of byLayer) {
-      const before = itemsOf(store, layerId);
+      if (target.index !== undefined) {
+        const layerIds = inLayer.map((feature) => feature.id);
+        const place = placementOf(store, layerId, undefined, { index: target.index }, moving);
+        store.moveItems(layerIds, place);
+        continue;
+      }
+      // Just in front of their group, or in its place when it was left empty and deleted
       const blocks = new Map<string, string[]>();
       for (const feature of inLayer) {
         if (feature.groupId === undefined) continue;
@@ -121,24 +173,10 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
         block.push(feature.id);
         blocks.set(feature.groupId, block);
       }
-      for (const feature of inLayer) {
-        if (feature.groupId !== undefined) store.updateFeature(feature.id, { groupId: undefined });
+      for (const [groupId, block] of blocks) {
+        const around = itemNeighbors(store, layerId, undefined, groupId);
+        store.moveItems(block, { layerId, below: groupId, above: around?.above ?? null });
       }
-      let items: string[];
-      if (target.index === undefined) {
-        // Just in front of their group, or in its place when it was left empty and deleted
-        items = [];
-        for (const itemId of before) {
-          if (!blocks.has(itemId) || store.getGroup(itemId)) items.push(itemId);
-          items.push(...(blocks.get(itemId) ?? []));
-        }
-      } else {
-        const layerIds = inLayer.map((feature) => feature.id);
-        const inThisLayer = new Set(layerIds);
-        items = itemsOf(store, layerId).filter((id) => !inThisLayer.has(id));
-        insertAt(items, layerIds, target.index);
-      }
-      store.updateLayer(layerId, { items });
     }
   });
 }
@@ -149,35 +187,14 @@ export function moveFeatures(store: Store, features: Feature[], target: Resolved
  * @param groups The groups, in stacking order
  * @internal
  */
-export function moveGroups(store: Store, groups: Group[], layer: Layer, index?: number): void {
+export function moveGroups(
+  store: Store,
+  groups: Group[],
+  layer: Layer,
+  place: PlaceRequest = { index: undefined },
+): void {
   const ids = groups.map((group) => group.id);
-  const moved = new Set(ids);
   store.transact(() => {
-    for (const group of groups) {
-      if (group.layerId === layer.id) continue;
-      const source = store.getLayer(group.layerId);
-      if (source) {
-        store.updateLayer(source.id, {
-          items: listedItems(source).filter((id) => id !== group.id),
-        });
-      }
-      for (const featureId of listedMembers(group)) {
-        store.updateFeature(featureId, { layerId: layer.id });
-      }
-    }
-    const items = itemsOf(store, layer.id).filter((id) => !moved.has(id));
-    store.updateLayer(layer.id, { items: insertAt(items, ids, index) });
+    store.moveItems(ids, placementOf(store, layer.id, undefined, place, new Set(ids)));
   });
-}
-
-/** A copy of the items a layer lists (none for no layer; refused for a layer held as rows) */
-function itemsOf(store: Store, layerId: string): string[] {
-  const layer = store.getLayer(layerId);
-  return layer ? [...listedItems(layer)] : [];
-}
-
-/** A copy of the members a group lists (none for no group; refused for a group of rows) */
-function membersOf(store: Store, groupId: string): string[] {
-  const group = store.getGroup(groupId);
-  return group ? [...listedMembers(group)] : [];
 }

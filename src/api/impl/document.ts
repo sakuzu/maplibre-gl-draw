@@ -6,13 +6,14 @@
  */
 
 import type { FeatureCollection } from 'geojson';
+import { insertGroup } from '../../store/item-lists.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate } from '../../store/types.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
 import type { GroupShell } from './groups.js';
-import { insertGroup, prepareGroupShell } from './groups.js';
+import { prepareGroupShell } from './groups.js';
 import { isNativeFormat, toFeatureCollection } from './import-export/format-detection.js';
 import { exportGeoJSON } from './import-export/geojson-export.js';
 import { prepareGeoJSON } from './import-export/geojson-import.js';

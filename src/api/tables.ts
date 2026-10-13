@@ -184,6 +184,13 @@ export interface FeatureTables {
   /** The id of the row of a handle (undefined for an unknown handle) */
   idOf(handle: RowHandle): string | undefined;
   /**
+   * The id of the group of features of a handle, as {@link ItemRefs} and
+   * {@link LayerTableView.groupMembersInOrder} name it (undefined for an unknown handle)
+   */
+  groupIdOf(group: number): string | undefined;
+  /** The handle of a group of features by its id (undefined for an unknown group) */
+  groupHandleOf(id: string): number | undefined;
+  /**
    * Reads the handles of the rows of layers, a batch at a time (the deleted rows left out); read
    * their values with {@link LayerTableView}.
    */

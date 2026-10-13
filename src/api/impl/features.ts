@@ -8,6 +8,7 @@
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
+import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Store } from '../../store/store.js';
@@ -94,10 +95,8 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   const requireAll = (ids: unknown): StoredFeature[] => requireIds(ids).map(require);
 
   /** The features in stacking order, from the back */
-  const inStackingOrder = (features: StoredFeature[]): StoredFeature[] => {
-    const position = new Map(listEveryFeatureInOrder(store).map((f, index) => [f.id, index]));
-    return [...features].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
-  };
+  const inStackingOrder = (features: StoredFeature[]): StoredFeature[] =>
+    featuresInStackingOrder(store, features);
 
   /**
    * The checks of a filter: the entries compared as they are, and the IDs within the extent
