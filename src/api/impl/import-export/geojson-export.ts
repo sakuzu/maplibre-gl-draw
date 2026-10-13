@@ -28,6 +28,7 @@ import {
   normalizePolygonOrientation,
 } from '../../../geometry/simplify.js';
 import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../../shared/properties.js';
+import { featuresInOrder } from '../../../store/feature-stream.js';
 import { listShownFeatures } from '../../../store/local-visibility.js';
 import type { Store } from '../../../store/store.js';
 import type { ExportOptions, Feature, FileData } from '../../../store/types.js';
@@ -216,10 +217,26 @@ export function exportGeoJSON(
   // of the export. listShownFeatures returns only the visible features, so on its own it
   // would lose visible:false across the GeoJSON round trip. Including the hidden ones
   // preserves it across the round trip.
-  const visibleOrdered = listShownFeatures(store);
-  const visibleIds = new Set(visibleOrdered.map((f) => f.id));
-  const hiddenFeatures = store.listFeatures().filter((f) => !visibleIds.has(f.id));
-  let features = [...visibleOrdered, ...hiddenFeatures];
+  let features: Feature[];
+  if (store.tables) {
+    // A Store of rows: its features made from its rows one at a time, in the order they are
+    // drawn, the shown ones first
+    const shown: Feature[] = [];
+    const hidden: Feature[] = [];
+    for (const feature of featuresInOrder(store)) {
+      const isShown =
+        feature.visible &&
+        store.getLayer(feature.layerId)?.visible === true &&
+        (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false);
+      (isShown ? shown : hidden).push(feature);
+    }
+    features = [...shown, ...hidden];
+  } else {
+    const visibleOrdered = listShownFeatures(store);
+    const visibleIds = new Set(visibleOrdered.map((f) => f.id));
+    const hiddenFeatures = store.listFeatures().filter((f) => !visibleIds.has(f.id));
+    features = [...visibleOrdered, ...hiddenFeatures];
+  }
 
   if (options?.featureIds && options.featureIds.length > 0) {
     const featureIdSet = new Set(options.featureIds);

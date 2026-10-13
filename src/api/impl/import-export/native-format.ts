@@ -6,6 +6,12 @@
  */
 
 import { getDrawProperty } from '../../../shared/properties.js';
+import {
+  deleteFeaturesAndGroups,
+  featuresInOrder,
+  listedGroups,
+  listedLayers,
+} from '../../../store/feature-stream.js';
 import type { Store } from '../../../store/store.js';
 import type { Data, ExportOptions, FileData, LoadResult } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
@@ -21,9 +27,11 @@ const DEFAULT_LAYER_ID = 'default-layer';
  * Exports the current data in the native format
  */
 export function exportNative(store: Store, options?: ExportOptions): Data {
-  let features = store.listFeatures();
-  const layers = store.listLayers();
-  const groups = store.listGroups();
+  // A Store of rows: its features made from its rows one at a time, in the order they are drawn,
+  // and its layers and groups with the items and the members read from its rows
+  let features = store.tables ? [...featuresInOrder(store)] : store.listFeatures();
+  const layers = store.tables ? listedLayers(store) : store.listLayers();
+  const groups = store.tables ? listedGroups(store) : store.listGroups();
 
   if (options?.featureIds && options.featureIds.length > 0) {
     const featureIdSet = new Set(options.featureIds);
@@ -107,15 +115,7 @@ export async function prepareNative(data: Data, deps: { store: Store }): Promise
   // The writes, in the transaction of the caller, which makes them one change
   const write = (): LoadResult => {
     // 1. Clear the existing data
-    const existingFeatures = store.listFeatures();
-    for (const feature of existingFeatures) {
-      store.deleteFeature(feature.id);
-    }
-
-    const existingGroups = store.listGroups();
-    for (const group of existingGroups) {
-      store.deleteGroup(group.id);
-    }
+    deleteFeaturesAndGroups(store);
 
     const existingLayers = store.listLayers();
     for (const layer of existingLayers) {

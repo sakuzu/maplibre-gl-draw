@@ -6,8 +6,8 @@
  */
 
 import type { FeatureCollection } from 'geojson';
+import { deleteFeaturesAndGroups } from '../../store/feature-stream.js';
 import { insertGroup } from '../../store/item-lists.js';
-import type { Store } from '../../store/store.js';
 import type { Coordinate } from '../../store/types.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
@@ -262,12 +262,6 @@ export function createDocument(
       reservedIds: extra.reservedIds,
     });
   }
-}
-
-/** Deletes every feature and group of the document, keeping the layers */
-function deleteFeaturesAndGroups(store: Store): void {
-  for (const feature of store.listFeatures()) store.deleteFeature(feature.id);
-  for (const group of store.listGroups()) store.deleteGroup(group.id);
 }
 
 /** Reads a file or a string into data, or keeps an image file as it is */

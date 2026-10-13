@@ -15,6 +15,7 @@ import {
   setDrawProperty,
 } from '../../../shared/properties.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
+import { deleteFeaturesAndGroups } from '../../../store/feature-stream.js';
 import type { Store } from '../../../store/store.js';
 import type {
   Coordinate,
@@ -780,10 +781,7 @@ export async function prepareGeoJSON(
   //    whole import is one notification, one step for a subscriber that records changes
   const write = (): LoadResult => {
     const currentLayerId = getCurrentLayerId();
-    if (replace) {
-      for (const feature of store.listFeatures()) store.deleteFeature(feature.id);
-      for (const group of store.listGroups()) store.deleteGroup(group.id);
-    }
+    if (replace) deleteFeaturesAndGroups(store);
     // Feature and group IDs share the entries of layer.order, so an id taken by either (or by
     // an earlier feature of this import) is replaced with a new one. This is what makes a
     // GeoJSON exported from a store loadable into the same store again.

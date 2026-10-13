@@ -100,6 +100,11 @@ export class StoreSpatialIndex implements SpatialIndex {
     }
   }
 
+  /** Re-derives the entries of every feature it holds from the Store */
+  invalidateAll(): void {
+    this.#rebuild();
+  }
+
   /**
    * Re-derives the entries of the given features from the Store (an id the Store does not
    * hold is dropped)
