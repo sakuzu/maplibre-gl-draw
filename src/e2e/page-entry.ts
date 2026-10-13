@@ -11,11 +11,12 @@
  * Besides the public entry point, the page carries the table subpath, the test terrain
  * (`dem-fixture.ts`), the few internals the terrain tests read the GPU side of the engine
  * through, the in-memory Store the tests of a replaced Store fill before the instance, and the
- * builder of row groups the tests of the layers held as rows fill their tables with.
+ * builder of row groups the tests of the layers held as rows fill their tables with (and the
+ * in-memory Store of rows).
  */
 
 import * as maplibregl from 'maplibre-gl';
-import { createDraw, createFeatureTables } from '../index.js';
+import { createDraw, createFeatureTables, createTableMemoryStore } from '../index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { MemoryContractStore } from '../store/memory.js';
 import { prepareTable } from '../table/index.js';
@@ -35,7 +36,7 @@ installTestDem(maplibregl);
   maplibregl,
   createDraw,
   prepareTable,
-  tables: { createFeatureTables, createRowGroupBuilder },
+  tables: { createFeatureTables, createRowGroupBuilder, createTableMemoryStore },
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {
     DemAtlas,
