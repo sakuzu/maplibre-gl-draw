@@ -104,6 +104,12 @@ export class SDFLineRenderer {
 
   // Buffers for instancing
   private quadVAO: WebGLVertexArrayObject | null = null;
+  /**
+   * The vertices of the stations of a segment, shared by immediate mode and every retained batch
+   * of this renderer (recorded once in the ledger, deleted by `dispose`). The renderer lives as
+   * long as its context does: a lost context drops the renderer and its batches, and the restore
+   * makes a new renderer with a new buffer
+   */
   private quadVBO: WebGLBuffer | null = null;
 
   // GPU resources reused in immediate mode
@@ -336,6 +342,32 @@ export class SDFLineRenderer {
    */
   private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
     this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  }
+
+  /**
+   * Creates the GPU resources of a retained batch, its vertex array pointing at the shared
+   * buffer of the stations
+   *
+   * @returns null when the coordinates do not fit in a texture of this GPU, or when the buffer of
+   *   the stations could not be made (the context was lost when the renderer was made)
+   */
+  private createBatch(
+    arrays: LineBatchArrays,
+    shape: LineBatchShape,
+    origin: [number, number],
+    widthZoom: number | null,
+    rowFirst?: Int32Array,
+  ): RetainedLineBatch | null {
+    if (!this.quadVBO) return null;
+    return createRetainedLineBatch(
+      this.gl,
+      arrays,
+      shape,
+      origin,
+      widthZoom,
+      this.textureSizeLimit(),
+      { stationBuffer: this.quadVBO, ledger: this.ledger, rowFirst },
+    );
   }
 
   /** The largest side of a coordinate texture this GPU allows (MAX_TEXTURE_SIZE, read once) */
@@ -609,15 +641,7 @@ export class SDFLineRenderer {
     const arrays = buildLineBatchArrays(items, options.distanceZoom ?? 0, origin, this.pixelRatio);
     if (!arrays) return null;
 
-    return createRetainedLineBatch(
-      this.gl,
-      arrays,
-      shape,
-      origin,
-      options.widthZoom ?? null,
-      this.textureSizeLimit(),
-      { ledger: this.ledger },
-    );
+    return this.createBatch(arrays, shape, origin, options.widthZoom ?? null);
   }
 
   /**
@@ -639,14 +663,12 @@ export class SDFLineRenderer {
     rowFirst: Int32Array,
   ): RetainedLineBatch | null {
     if (arrays.instanceCount === 0) return null;
-    return createRetainedLineBatch(
-      this.gl,
+    return this.createBatch(
       arrays,
       { lineStyle: 'solid' },
       normalizeOrigin(origin),
       null,
-      this.textureSizeLimit(),
-      { ledger: this.ledger, rowFirst },
+      rowFirst,
     );
   }
 
@@ -754,15 +776,7 @@ export class SDFLineRenderer {
     );
     if (!arrays) return null;
 
-    return createRetainedLineBatch(
-      this.gl,
-      arrays,
-      shape,
-      origin,
-      options.widthZoom ?? null,
-      this.textureSizeLimit(),
-      { ledger: this.ledger },
-    );
+    return this.createBatch(arrays, shape, origin, options.widthZoom ?? null);
   }
 
   /**

@@ -103,9 +103,11 @@ export interface LineBatchShape {
 /**
  * A retained-mode line batch (GPU resources)
  *
- * It shares no resources with the shared buffers and shared textures of immediate mode. Each
- * batch owns its own coordinate texture, instance buffer, quad vertex buffer, and VAO, all of
- * which are released together by `disposeRetainedBatch`.
+ * It shares no resources with the buffers and textures immediate mode writes. Each batch owns
+ * its own coordinate texture, instance buffer, and VAO, all of which are released together by
+ * `disposeRetainedBatch`. The vertices of the stations of a segment are the same for every line,
+ * so every batch of a renderer points at the one buffer of the renderer, which the renderer
+ * deletes when it is disposed.
  *
  * @internal
  */
@@ -118,8 +120,6 @@ export interface RetainedLineBatch {
   readonly rowFirst?: Int32Array;
   /** The VAO, with the instance attributes already configured */
   readonly vao: WebGLVertexArrayObject;
-  /** The quad vertex buffer (dedicated to this batch) */
-  readonly quadBuffer: WebGLBuffer;
   /** The instance buffer (dedicated to this batch) */
   readonly instanceBuffer: WebGLBuffer;
   /** The coordinate texture (dedicated to this batch) */

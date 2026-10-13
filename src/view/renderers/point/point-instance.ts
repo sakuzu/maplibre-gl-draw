@@ -245,7 +245,8 @@ export function pointInkFactor(outerPx: number): number {
  *
  * It shares no resources with the shared instance buffer and shared VAO of the immediate mode.
  * Since the fill and the stroke are drawn from a single instance array, a batch holds only one
- * set of billboard vertex buffer, instance buffer and VAO.
+ * instance buffer and one VAO. The vertices of the billboard are the same for every point, so
+ * the VAO points at the one buffer of the renderer, which the batch neither owns nor deletes.
  */
 export interface RetainedPointBatch {
   /** The shape of the points that do not name one */
@@ -258,8 +259,6 @@ export interface RetainedPointBatch {
   readonly rowFirst?: Int32Array;
   /** VAO dedicated to this batch */
   readonly vao: WebGLVertexArrayObject;
-  /** Vertex buffer of the billboard */
-  readonly shapeBuffer: WebGLBuffer;
   /** Instance buffer */
   readonly instanceBuffer: WebGLBuffer;
   /** Number of instances */
@@ -541,12 +540,16 @@ export class PointInstanceRenderer {
   /** The shader data the programs were made with (the variant of the rows is made from it) */
   private shaderData: ShaderData | null = null;
 
-  // Vertices of the billboard (the vertex buffer is created per VAO)
-  private quadVertices: Float32Array;
+  /**
+   * The vertices of the billboard, one buffer shared by the VAOs of the immediate mode and every
+   * retained batch of this renderer (recorded once in the ledger, deleted by `dispose`). The
+   * renderer lives as long as its context does: a lost context drops the renderer and its
+   * batches, and the restore makes a new renderer with a new buffer
+   */
+  private quadBuffer: WebGLBuffer | null = null;
 
   // VAO (created per program; points at the shared instance buffer of the immediate mode)
-  private quadVaos: Map<WebGLProgram, { vao: WebGLVertexArrayObject; shapeBuffer: WebGLBuffer }> =
-    new Map();
+  private quadVaos: Map<WebGLProgram, WebGLVertexArrayObject> = new Map();
 
   // Instance buffer
   private instanceBuffer: WebGLBuffer | null = null;
@@ -583,7 +586,12 @@ export class PointInstanceRenderer {
     this.terrain = terrain;
     this.ledger = ledger;
     this.instanceBuffer = gl.createBuffer();
-    this.quadVertices = generateQuadVertices();
+    this.quadBuffer = gl.createBuffer();
+    if (this.quadBuffer) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, generateQuadVertices(), gl.STATIC_DRAW);
+      ledger?.record(this.quadBuffer, 'points', 'buffer', QUAD_BYTES);
+    }
   }
 
   /**
@@ -753,26 +761,17 @@ void main() {
    * Creates a VAO (with the given instance buffer)
    *
    * The immediate mode passes the shared instance buffer, and the retained mode passes the
-   * instance buffer dedicated to the batch. The attribute layout is common to both.
+   * instance buffer dedicated to the batch. The attribute layout is common to both, and both
+   * point at the shared buffer of the billboard.
    */
-  private createVAOWith(
-    instanceBuffer: WebGLBuffer | null,
-    rows = false,
-  ): {
-    vao: WebGLVertexArrayObject;
-    shapeBuffer: WebGLBuffer;
-  } {
+  private createVAOWith(instanceBuffer: WebGLBuffer | null, rows = false): WebGLVertexArrayObject {
     const gl = this.gl;
 
     const vao = gl.createVertexArray()!;
     gl.bindVertexArray(vao);
 
-    // Vertex buffer of the billboard (location = 0)
-    const vertexBuffer = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, this.quadVertices, gl.STATIC_DRAW);
-    this.ledger?.record(vertexBuffer, 'points', 'buffer', QUAD_BYTES);
-
+    // Vertex buffer of the billboard (location = 0; the shared buffer)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
     gl.enableVertexAttribArray(0); // a_quad
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
@@ -782,7 +781,7 @@ void main() {
 
     gl.bindVertexArray(null);
 
-    return { vao, shapeBuffer: vertexBuffer };
+    return vao;
   }
 
   /**
@@ -842,12 +841,12 @@ void main() {
    * Gets or creates the VAO of the immediate mode
    */
   private getVAO(program: WebGLProgram): WebGLVertexArrayObject {
-    let entry = this.quadVaos.get(program);
-    if (!entry) {
-      entry = this.createVAOWith(this.instanceBuffer);
-      this.quadVaos.set(program, entry);
+    let vao = this.quadVaos.get(program);
+    if (!vao) {
+      vao = this.createVAOWith(this.instanceBuffer);
+      this.quadVaos.set(program, vao);
     }
-    return entry.vao;
+    return vao;
   }
 
   /**
@@ -1030,14 +1029,16 @@ void main() {
    * and size of the points do not depend on the camera (the projection is done by the uniforms
    * of each frame).
    *
-   * @returns The built batch, or null when the shader is not initialized or there are no points
+   * @returns The built batch, or null when the shader is not initialized, there are no points, or
+   *   the buffer of the billboard could not be made (the context was lost when the renderer was
+   *   made)
    */
   buildRetained(
     points: PointInstanceDataFull[],
     shape: PointShape,
     options: RetainedPointBuildOptions = {},
   ): RetainedPointBatch | null {
-    if (!this.program) return null;
+    if (!this.program || !this.quadBuffer) return null;
     if (points.length === 0) return null;
 
     const gl = this.gl;
@@ -1052,12 +1053,11 @@ void main() {
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
 
-    const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer);
+    const vao = this.createVAOWith(instanceBuffer);
 
     return {
       shape,
       vao,
-      shapeBuffer,
       instanceBuffer,
       instanceCount: points.length,
       origin,
@@ -1078,7 +1078,7 @@ void main() {
     shape: PointShape,
     options: RetainedPointBuildOptions = {},
   ): RetainedPointBatch | null {
-    if (!this.program) return null;
+    if (!this.program || !this.quadBuffer) return null;
     if (points.count === 0) return null;
 
     const gl = this.gl;
@@ -1090,12 +1090,11 @@ void main() {
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
 
-    const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer);
+    const vao = this.createVAOWith(instanceBuffer);
 
     return {
       shape,
       vao,
-      shapeBuffer,
       instanceBuffer,
       instanceCount: points.count,
       origin,
@@ -1121,19 +1120,18 @@ void main() {
     origin: [number, number],
     rowFirst: Int32Array,
   ): RetainedPointBatch | null {
-    if (count === 0) return null;
+    if (count === 0 || !this.quadBuffer) return null;
     const gl = this.gl;
     const instanceBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     const data = instances.subarray(0, count * ROW_POINT_STRIDE);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
-    const { vao, shapeBuffer } = this.createVAOWith(instanceBuffer, true);
+    const vao = this.createVAOWith(instanceBuffer, true);
     return {
       shape: 'circle',
       rowFirst,
       vao,
-      shapeBuffer,
       instanceBuffer,
       instanceCount: count,
       origin: normalizeOrigin(origin),
@@ -1244,10 +1242,9 @@ void main() {
   disposeRetained(batch: RetainedPointBatch): void {
     const gl = this.gl;
 
+    // The buffer of the billboard is shared and stays (`dispose` deletes it)
     gl.deleteVertexArray(batch.vao);
-    this.ledger?.release(batch.shapeBuffer);
     this.ledger?.release(batch.instanceBuffer);
-    gl.deleteBuffer(batch.shapeBuffer);
     gl.deleteBuffer(batch.instanceBuffer);
   }
 
@@ -1271,12 +1268,8 @@ void main() {
     // initial values)
     this.programStates.clear();
 
-    // Clear the VAOs and the vertex buffers of the billboard
-    for (const entry of this.quadVaos.values()) {
-      gl.deleteVertexArray(entry.vao);
-      this.ledger?.release(entry.shapeBuffer);
-      gl.deleteBuffer(entry.shapeBuffer);
-    }
+    // Clear the VAOs of the immediate mode (the shared buffer of the billboard stays)
+    for (const vao of this.quadVaos.values()) gl.deleteVertexArray(vao);
     this.quadVaos.clear();
   }
 
@@ -1292,6 +1285,11 @@ void main() {
       this.ledger?.release(this.instanceBuffer);
       gl.deleteBuffer(this.instanceBuffer);
       this.instanceBuffer = null;
+    }
+    if (this.quadBuffer) {
+      this.ledger?.release(this.quadBuffer);
+      gl.deleteBuffer(this.quadBuffer);
+      this.quadBuffer = null;
     }
   }
 }

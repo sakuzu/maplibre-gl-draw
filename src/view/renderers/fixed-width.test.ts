@@ -250,8 +250,9 @@ describe('negative line widths in SDFLineRenderer', () => {
     });
 
     expect(batch).not.toBeNull();
-    // The first one is the quad vertices, the second one is the instance attributes
-    const instanceData = arrayUploads(mock)[1];
+    // The vertices of the stations are the buffer the renderer shares, so the only upload is the
+    // instance attributes
+    const instanceData = arrayUploads(mock)[0];
     expect(lineStrokeWidths(instanceData)).toEqual([-5]);
   });
 });

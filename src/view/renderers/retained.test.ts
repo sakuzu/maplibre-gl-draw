@@ -277,8 +277,9 @@ describe('retained mode of SDFLineRenderer', () => {
     const batch = renderer.buildRetainedBatch(LINE_ITEMS, { lineStyle: 'solid' });
 
     expect(batch).not.toBeNull();
-    // The texture + the quad buffer + the instance buffer + the VAO
-    expect(mock.live() - before).toBe(4);
+    // The texture + the instance buffer + the VAO (the vertices of the stations are the buffer
+    // the renderer shares)
+    expect(mock.live() - before).toBe(3);
     expect(batch?.instanceCount).toBe(3);
   });
 
@@ -408,9 +409,9 @@ describe('retained mode of PointInstanceRenderer', () => {
     const batch = renderer.buildRetained(POINTS, 'circle');
     if (!batch) throw new Error('batch');
 
-    // The fill and the outline are drawn in one draw, so there are only three: the
-    // billboard vertex buffer + the instance buffer + the VAO
-    expect(mock.live() - before).toBe(3);
+    // The fill and the outline are drawn in one draw, so there are only two: the instance
+    // buffer + the VAO (the vertices of the billboard are the buffer the renderer shares)
+    expect(mock.live() - before).toBe(2);
     expect(batch.instanceCount).toBe(2);
 
     renderer.disposeRetained(batch);
@@ -426,7 +427,7 @@ describe('retained mode of PointInstanceRenderer', () => {
     const batch = renderer.buildRetained([{ ...POINTS[1] }], 'square');
     if (!batch) throw new Error('batch');
 
-    expect(mock.live() - before).toBe(3);
+    expect(mock.live() - before).toBe(2);
     expect(batch.instanceCount).toBe(1);
 
     renderer.disposeRetained(batch);

@@ -219,7 +219,11 @@ describe('a point batch of rows', () => {
         .some((call) => (call.args[0] as { name: string }).name === 'u_row_state'),
     ).toBe(true);
 
+    // The batch takes its buffers out; the buffer of the billboard the renderer shares stays
+    // until the renderer is disposed
     renderer.disposeRetained(batch);
+    expect(ledger.snapshot().byOwner.points).toBe(8 * 4);
+    renderer.dispose();
     expect(ledger.snapshot().byOwner.points ?? 0).toBe(0);
   });
 

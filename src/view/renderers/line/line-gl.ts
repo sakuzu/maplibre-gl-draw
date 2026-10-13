@@ -12,12 +12,7 @@
 
 import { type GpuLedger, textureBytes } from '../../gpu-ledger.js';
 import { calculateLngLatOffset } from '../../shaders/helpers.js';
-import {
-  INSTANCE_BYTES,
-  type LineBatchArrays,
-  ROW_LINE_BYTES,
-  STATION_VERTICES,
-} from './line-geometry.js';
+import { INSTANCE_BYTES, type LineBatchArrays, ROW_LINE_BYTES } from './line-geometry.js';
 import type { LineBatchShape, RetainedLineBatch } from './line-types.js';
 
 /**
@@ -195,6 +190,12 @@ export class ImmediateCoordTexture {
  * @internal
  */
 export interface RetainedLineBatchOptions {
+  /**
+   * The vertices of the stations of a segment (`STATION_VERTICES`), one buffer shared by every
+   * batch of the renderer. They are the same for every batch, so a batch points its vertex array
+   * at this buffer and neither owns nor deletes it
+   */
+  readonly stationBuffer: WebGLBuffer;
   /** Where the GPU memory is recorded */
   readonly ledger?: GpuLedger;
   /**
@@ -207,8 +208,8 @@ export interface RetainedLineBatchOptions {
 /**
  * Creates the GPU resources of a retained-mode line batch
  *
- * The batch owns its coordinate texture, quad vertex buffer, instance buffer, and VAO; none of
- * them is shared with immediate mode.
+ * The batch owns its coordinate texture, instance buffer, and VAO; none of them is shared with
+ * immediate mode. The vertices of the stations are the shared buffer of the options.
  *
  * @param limit The largest side of a texture this GPU allows (MAX_TEXTURE_SIZE)
  * @returns null when the coordinates do not fit in a texture of this GPU
@@ -222,21 +223,18 @@ export function createRetainedLineBatch(
   origin: [number, number],
   widthZoom: number | null,
   limit: number,
-  options: RetainedLineBatchOptions = {},
+  options: RetainedLineBatchOptions,
 ): RetainedLineBatch | null {
   const texture = createCoordTexture(gl, arrays.texData, arrays.texSize, limit);
   if (!texture) return null;
-  const { ledger, rowFirst } = options;
+  const { ledger, rowFirst, stationBuffer } = options;
   ledger?.record(texture, 'lines', 'texture', textureBytes(arrays.texSize, arrays.texSize, 16));
 
   const vao = gl.createVertexArray()!;
   gl.bindVertexArray(vao);
 
-  // The quad vertices (held separately from the shared immediate-mode buffer)
-  const quadBuffer = gl.createBuffer()!;
-  gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, STATION_VERTICES, gl.STATIC_DRAW);
-  ledger?.record(quadBuffer, 'lines', 'buffer', STATION_VERTICES.byteLength);
+  // The vertices of the stations (the shared buffer: the vertex array only points at it)
+  gl.bindBuffer(gl.ARRAY_BUFFER, stationBuffer);
   setupQuadAttribs(gl);
 
   // The instance attributes (the layout is identical to immediate mode, with the number of the
@@ -252,7 +250,6 @@ export function createRetainedLineBatch(
   return {
     rowFirst,
     vao,
-    quadBuffer,
     instanceBuffer,
     texture,
     texSize: arrays.texSize,
@@ -321,11 +318,10 @@ export function deleteRetainedLineBatch(
   batch: RetainedLineBatch,
   ledger?: GpuLedger,
 ): void {
-  ledger?.release(batch.quadBuffer);
+  // The buffer of the stations is shared and stays (the renderer deletes it)
   ledger?.release(batch.instanceBuffer);
   ledger?.release(batch.texture);
   gl.deleteVertexArray(batch.vao);
-  gl.deleteBuffer(batch.quadBuffer);
   gl.deleteBuffer(batch.instanceBuffer);
   gl.deleteTexture(batch.texture);
 }
