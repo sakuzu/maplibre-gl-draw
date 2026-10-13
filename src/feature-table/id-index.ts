@@ -55,12 +55,23 @@ export class IdIndex {
   private deltaOf: Int32Array = new Int32Array(64).fill(-1);
   /** The layer of the changed rows each handle is among (-1 for none) */
   private deltaLayerOf: Int32Array = new Int32Array(64).fill(-1);
+  /** Whether each handle is found by its id (a handle forgotten is not, until it is freed) */
+  private linkedOf: Uint8Array = new Uint8Array(64);
+  /** The number of the handles whose id is read from each column of `sources` */
+  private readonly sourceRefs: number[] = [];
+  /** The handles freed, given again to new ids */
+  private readonly freeList: number[] = [];
   /** The number of handles given */
   private count = 0;
 
-  /** The number of handles given (the next handle is this number) */
+  /** The number of handles given (no handle is this number or more) */
   get size(): number {
     return this.count;
+  }
+
+  /** The number of handles in use (given and not freed) */
+  get live(): number {
+    return this.count - this.freeList.length;
   }
 
   /**
@@ -80,6 +91,7 @@ export class IdIndex {
         if (source < 0) {
           source = this.sources.length;
           this.sources.push(ids);
+          this.sourceRefs.push(0);
         }
         handle = this.insert(source, i, hash);
       }
@@ -119,15 +131,8 @@ export class IdIndex {
    */
   remove(handle: RowHandle): void {
     if (!this.has(handle)) return;
-    const mask = this.slots.length - 1;
-    let slot = this.hashOf[handle] & mask;
-    while (this.slots[slot] !== EMPTY) {
-      if (this.slots[slot] === handle) {
-        this.slots[slot] = REMOVED;
-        break;
-      }
-      slot = (slot + 1) & mask;
-    }
+    this.unlink(handle);
+    this.unref(this.sourceOf[handle]);
     this.sourceOf[handle] = -1;
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
@@ -145,9 +150,61 @@ export class IdIndex {
     if (source < 0) {
       source = this.sources.length;
       this.sources.push(ids);
+      this.sourceRefs.push(0);
     }
+    if (source === this.sourceOf[handle]) {
+      this.entryOf[handle] = index;
+      return;
+    }
+    this.sourceRefs[source]++;
+    this.unref(this.sourceOf[handle]);
     this.sourceOf[handle] = source;
     this.entryOf[handle] = index;
+  }
+
+  /**
+   * Takes a handle out of the table of the ids: its id gets a new handle the next time it is seen,
+   * while the handle keeps its id and where its row is until it is freed
+   */
+  unlink(handle: RowHandle): void {
+    if (!this.has(handle) || this.linkedOf[handle] === 0) return;
+    const mask = this.slots.length - 1;
+    let slot = this.hashOf[handle] & mask;
+    while (this.slots[slot] !== EMPTY) {
+      if (this.slots[slot] === handle) {
+        this.slots[slot] = REMOVED;
+        break;
+      }
+      slot = (slot + 1) & mask;
+    }
+    this.linkedOf[handle] = 0;
+  }
+
+  /** Whether a handle is found by its id (given, and neither unlinked nor freed) */
+  isLinked(handle: RowHandle): boolean {
+    return this.has(handle) && this.linkedOf[handle] === 1;
+  }
+
+  /**
+   * Frees a handle: it is unlinked, forgets its id and its place, and is given again to a new id
+   */
+  free(handle: RowHandle): void {
+    if (!this.has(handle)) return;
+    this.unlink(handle);
+    this.unref(this.sourceOf[handle]);
+    this.sourceOf[handle] = -1;
+    this.groupOf[handle] = -1;
+    this.rowOf[handle] = -1;
+    this.deltaOf[handle] = -1;
+    this.deltaLayerOf[handle] = -1;
+    this.freeList.push(handle);
+  }
+
+  /** One handle less reads its id from a column: the column is let go of when none does */
+  private unref(source: number): void {
+    if (source < 0) return;
+    this.sourceRefs[source]--;
+    if (this.sourceRefs[source] <= 0) this.sources[source] = EMPTY_COLUMN;
   }
 
   // === Where the rows are ===
@@ -207,18 +264,20 @@ export class IdIndex {
     }
   }
 
-  /** Gives a new handle to an id that has none */
+  /** Gives a new handle to an id that has none (a handle freed, when there is one) */
   private insert(source: number, index: number, hash: number): RowHandle {
-    const handle = this.count++;
+    const handle = this.freeList.length > 0 ? (this.freeList.pop() as number) : this.count++;
     this.reserve(this.count);
     this.sourceOf[handle] = source;
+    this.sourceRefs[source]++;
     this.entryOf[handle] = index;
     this.hashOf[handle] = hash;
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
     this.deltaOf[handle] = -1;
     this.deltaLayerOf[handle] = -1;
-    if ((this.used + 1) * 2 > this.slots.length) this.rehash();
+    this.linkedOf[handle] = 1;
+    if ((this.used + 1) * 2 > this.slots.length) this.rehash(handle);
     const mask = this.slots.length - 1;
     let slot = hash & mask;
     while (this.slots[slot] >= 0) slot = (slot + 1) & mask;
@@ -227,18 +286,23 @@ export class IdIndex {
     return handle;
   }
 
-  /** Builds the table again at a size that keeps it at most half full (removed slots dropped) */
-  private rehash(): void {
+  /**
+   * Builds the table again at a size that keeps it at most half full (removed slots dropped)
+   *
+   * @param inserting The handle being inserted, which has no slot yet
+   */
+  private rehash(inserting: RowHandle): void {
     let live = 0;
-    for (let handle = 0; handle < this.count; handle++) if (this.sourceOf[handle] >= 0) live++;
+    for (let handle = 0; handle < this.count; handle++) {
+      if (this.sourceOf[handle] >= 0 && this.linkedOf[handle] === 1) live++;
+    }
     let size = 64;
     while (size < (live + 1) * 4) size *= 2;
     const slots = new Int32Array(size).fill(EMPTY);
     const mask = size - 1;
     for (let handle = 0; handle < this.count; handle++) {
-      if (this.sourceOf[handle] < 0) continue;
-      // The handle being inserted has no slot yet
-      if (handle === this.count - 1) continue;
+      if (this.sourceOf[handle] < 0 || this.linkedOf[handle] === 0) continue;
+      if (handle === inserting) continue;
       let slot = this.hashOf[handle] & mask;
       while (slots[slot] !== EMPTY) slot = (slot + 1) & mask;
       slots[slot] = handle;
@@ -259,8 +323,14 @@ export class IdIndex {
     this.rowOf = grow(this.rowOf, size, -1);
     this.deltaOf = grow(this.deltaOf, size, -1);
     this.deltaLayerOf = grow(this.deltaLayerOf, size, -1);
+    const linked = new Uint8Array(size);
+    linked.set(this.linkedOf);
+    this.linkedOf = linked;
   }
 }
+
+/** The column of a source no handle reads its id from any more */
+const EMPTY_COLUMN: Utf8Column = utf8ColumnFromStrings([]);
 
 function grow(array: Int32Array, size: number, fill: number): Int32Array {
   const next = new Int32Array(size).fill(fill);

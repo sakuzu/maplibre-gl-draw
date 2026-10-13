@@ -42,6 +42,8 @@ import type {
   FeatureStyle,
   FeatureType,
   ItemOrderChange,
+  RetainToken,
+  RowValuesSnapshot,
   StoreChange,
 } from '../shared/types/model.js';
 import {
@@ -67,6 +69,7 @@ import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './la
 import {
   type RowReadContext,
   rowFeature,
+  rowGeometry,
   rowInputOf,
   rowPoint,
   rowType,
@@ -115,6 +118,22 @@ const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
 
 /** The attributes the cutting of the rows into chunks reads (a write of one moves the row) */
 const CLASSIFY_KEYS: ReadonlySet<string> = new Set([CREATED_ZOOM_KEY]);
+
+/** The tokens of the deletions kept, at most, when the options do not tell (`retainLimit`) */
+const RETAIN_TOKENS = 100;
+
+/** The bytes of the rows the deletions keep, at most, when the options do not tell */
+const RETAIN_BYTES = 64 * 1024 * 1024;
+
+/** The bytes a row kept is counted as (4.10 of the design: a polygon of five corners) */
+const RETAINED_ROW_BYTES = 342;
+
+/**
+ * The share of the rows of a group deleted and kept by nothing past which the group is due for
+ * its next version (which leaves them out), and the number it always keeps before
+ */
+const DROPPED_ROWS_SHARE = 1 / 8;
+const DROPPED_ROWS_MIN = 64;
 
 /** The fields that place a row in the order of its layer or in another layer */
 const PLACE_FIELDS: ReadonlySet<string> = new Set([
@@ -175,6 +194,8 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     hold: (owner, ids) => store.hold(owner, ids),
     heldFeature: (id) => store.heldFeature(id),
     overlay: (owner, features) => store.overlay(owner, features),
+    snapshot: (patch) => store.snapshot(patch),
+    release: (token) => store.release(token),
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
@@ -182,6 +203,9 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     apply: (patch, options) => store.apply(patch, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
     writeHeld: (id, feature, options) => store.writeHeld(id, feature, options),
+    lookup: (id) => store.lookup(id),
+    retainToken: () => store.retainToken(),
+    forget: (handles) => store.forget(handles),
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
@@ -452,6 +476,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly holders = new Map<string, ReadonlySet<RowHandle>>();
   /** The rows held, with their features */
   private readonly heldRows = new Map<RowHandle, HeldRow>();
+  /** The rows each deletion of this client keeps, by token, in the order the tokens were made */
+  private readonly retained = new Map<number, Set<RowHandle>>();
+  /** The token that keeps each deleted row kept */
+  private readonly retainOf = new Map<RowHandle, number>();
+  private nextToken = 1;
+  /** The most tokens and bytes the deletions kept may hold (`FeatureTablesOptions.retainLimit`) */
+  private readonly retainTokens: number;
+  private readonly retainBytes: number;
+  /** The deleted rows whose ids are forgotten, freed once their rows are gone */
+  private readonly forgotten = new Set<RowHandle>();
+  /** The groups of features deleted that rows still name (taken out once none does) */
+  private readonly deletedGroups = new Set<GroupHandle>();
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -460,6 +496,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.worker = options.worker;
     this.hooks = options.hooks;
     this.versions = new GroupVersions(this.versionHost());
+    this.retainTokens = options.retainLimit?.tokens ?? RETAIN_TOKENS;
+    this.retainBytes = options.retainLimit?.bytes ?? RETAIN_BYTES;
   }
 
   /** What the versions read and write of the tables */
@@ -486,6 +524,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
           else this.styles.release(data.styles[r]);
         }
       },
+      drops: (handle, group, row) => this.drops(handle, group, row),
       worker: this.worker,
       requestWork: () => this.notifyWork(),
       report: (error) => console.error(error),
@@ -1122,7 +1161,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * feature written too, notified as a change of the feature rather than of the row; the fields
    * an edit of it writes in its middle are kept for when the edit ends (`HeldWriteOptions`)
    */
-  apply(patch: RowPatch, _options: RowApplyOptions = {}): RowsChange {
+  apply(patch: RowPatch, options: RowApplyOptions = {}): RowsChange {
     const watch = this.watchOrder(patch);
     const drafts = new Map<string, LayerChangeDraft>();
     const heldWritten: Array<{ handle: RowHandle; fields: Map<RowField, unknown> }> = [];
@@ -1156,16 +1195,216 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     const features = this.heldChanges(heldWritten, drafts);
+    const kept = this.keepDeleted(patch, options.retain);
     const change: RowsChange = { layers: finishChanges(drafts) };
     if (this.hooks) {
-      // The changes of the order go with the last of the additions to the notification
+      // The values before, the token that keeps the rows deleted and the changes of the order go
+      // with the last of the additions to the notification
       const order = watch?.finish() ?? [];
-      const moves = order.length > 0 ? { order } : {};
-      if (change.layers.size > 0) this.hooks.emit({ rows: change, ...(!features && moves) });
-      if (features) this.hooks.emit({ features, ...moves });
-      if (change.layers.size === 0 && !features && order.length > 0) this.hooks.emit(moves);
+      const extra: StoreChange = {
+        ...(order.length > 0 && { order }),
+        ...(kept && options.retain !== undefined && { retain: options.retain }),
+      };
+      const rows = options.before ? { ...change, before: options.before } : change;
+      const hasRows = change.layers.size > 0 || options.before !== undefined;
+      if (hasRows) this.hooks.emit({ rows, ...(!features && extra) });
+      if (features) this.hooks.emit({ features, ...extra });
+      if (!hasRows && !features && Object.keys(extra).length > 0) this.hooks.emit(extra);
     }
     return change;
+  }
+
+  // === The rows deleted kept, forgotten ===
+
+  retainToken(): RetainToken {
+    return this.nextToken++ as RetainToken;
+  }
+
+  /**
+   * Keeps the rows a write deleted with its token, and takes the rows created again out of the
+   * tokens that kept them; the row groups with many deleted rows nothing keeps are due for their
+   * next versions
+   *
+   * @returns Whether the token keeps a row
+   */
+  private keepDeleted(patch: RowPatch, token: RetainToken | undefined): boolean {
+    const deleted = patch.deleted;
+    if (!deleted) return false;
+    let kept = false;
+    const groups = new Set<RowGroup>();
+    for (let i = 0; i < patch.handles.length; i++) {
+      const handle = patch.handles[i];
+      const place = this.placeOf(handle);
+      const isDeleted = !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0;
+      if (deleted[i] && isDeleted && token !== undefined) {
+        this.unkeep(handle);
+        let set = this.retained.get(token);
+        if (!set) {
+          set = new Set();
+          this.retained.set(token, set);
+        }
+        set.add(handle);
+        this.retainOf.set(handle, token);
+        kept = true;
+        continue;
+      }
+      if (!isDeleted) this.unkeep(handle);
+      else if (place) groups.add(place.group);
+    }
+    for (const group of groups) this.checkDeleted(group);
+    if (kept) this.limitRetained(token as number);
+    return kept;
+  }
+
+  /** Takes a row out of the token that keeps it */
+  private unkeep(handle: RowHandle): void {
+    const token = this.retainOf.get(handle);
+    if (token === undefined) return;
+    this.retainOf.delete(handle);
+    this.retained.get(token)?.delete(handle);
+  }
+
+  /** Lets go of the oldest tokens past the limit of the deletions kept */
+  private limitRetained(current: number): void {
+    for (const token of [...this.retained.keys()]) {
+      const over =
+        this.retained.size > this.retainTokens ||
+        this.retainOf.size * RETAINED_ROW_BYTES > this.retainBytes;
+      if (!over) break;
+      if (token === current && this.retained.size > 1) continue;
+      this.release(token as RetainToken);
+    }
+  }
+
+  release(token: RetainToken): void {
+    const set = this.retained.get(token);
+    if (!set) return;
+    this.retained.delete(token);
+    const out: RowHandle[] = [];
+    const groups = new Set<RowGroup>();
+    for (const handle of set) {
+      if (this.retainOf.get(handle) !== token) continue;
+      this.retainOf.delete(handle);
+      out.push(handle);
+      const place = this.placeOf(handle);
+      if (place) groups.add(place.group);
+    }
+    for (const group of groups) this.checkDeleted(group);
+    if (out.length > 0) this.hooks?.released?.(Int32Array.from(out));
+  }
+
+  /**
+   * Marks a row group due for its next version when many of its rows are deleted and nothing
+   * keeps them (they go with it)
+   */
+  private checkDeleted(group: RowGroup): void {
+    if (group.delta || group.pending) return;
+    const data = group.data;
+    let count = 0;
+    for (let r = 0; r < data.length; r++) {
+      if ((data.flags[r] & ROW_FLAG_DELETED) === 0) continue;
+      if (this.drops(data.handles[r], group, r)) count++;
+    }
+    if (count > Math.max(DROPPED_ROWS_MIN, data.length * DROPPED_ROWS_SHARE)) {
+      this.versions.markDue(group.handle);
+      this.notifyWork();
+    }
+  }
+
+  /** Whether the next version of its group leaves a row out: deleted, and nothing keeps it */
+  private drops(handle: RowHandle, group: RowGroup, row: number): boolean {
+    return (
+      (group.data.flags[row] & ROW_FLAG_DELETED) !== 0 &&
+      !this.retainOf.has(handle) &&
+      !this.heldRows.has(handle) &&
+      !this.drawnOnlyRows.has(handle)
+    );
+  }
+
+  lookup(id: string): { handle: RowHandle; deleted: boolean } | undefined {
+    const handle = this.ids.handleOf(id);
+    if (handle < 0) return undefined;
+    const place = this.placeOf(handle);
+    return {
+      handle,
+      deleted: !place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0,
+    };
+  }
+
+  forget(handles: Int32Array): void {
+    const groups = new Set<RowGroup>();
+    for (const handle of handles) {
+      if (!this.ids.isLinked(handle) || this.retainOf.has(handle)) continue;
+      const place = this.placeOf(handle);
+      if (place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0) continue;
+      this.ids.unlink(handle);
+      this.forgotten.add(handle);
+      if (place) groups.add(place.group);
+      this.freeIfGone(handle);
+    }
+    for (const group of groups) {
+      if (group.delta || group.pending) continue;
+      this.versions.markDue(group.handle);
+    }
+    if (groups.size > 0) this.notifyWork();
+  }
+
+  /** Frees the handle of a row forgotten once it is in no row group and no delta */
+  private freeIfGone(handle: RowHandle): void {
+    if (!this.forgotten.has(handle)) return;
+    if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) return;
+    if (this.creationOf.has(handle)) return;
+    this.forgotten.delete(handle);
+    this.states.clear(handle);
+    this.ids.free(handle);
+  }
+
+  snapshot(patch: RowPatch): RowValuesSnapshot {
+    const n = patch.handles.length;
+    const fields = new Map<RowField, unknown[]>();
+    for (const field of patch.fields.keys()) fields.set(field, new Array(n).fill(undefined));
+    const deleted = patch.deleted ? new Uint8Array(n) : undefined;
+    for (let i = 0; i < n; i++) {
+      const place = this.placeOf(patch.handles[i]);
+      if (!place) {
+        if (deleted) deleted[i] = 1;
+        continue;
+      }
+      const { group, row } = place;
+      const data = group.data;
+      if (deleted) deleted[i] = (data.flags[row] & ROW_FLAG_DELETED) !== 0 ? 1 : 0;
+      for (const [field, values] of fields) values[i] = this.fieldOf(place, field);
+    }
+    return { handles: Int32Array.from(patch.handles), fields, ...(deleted && { deleted }) };
+  }
+
+  /** The value of a field of a row, as a feature holds it */
+  private fieldOf(place: RowPlace, field: RowField): unknown {
+    const { group, row } = place;
+    const data = group.data;
+    const featureGroup = data.groups[row];
+    switch (field) {
+      case 'type':
+        return rowType(data, row);
+      case 'layerId':
+        return place.layer.layerId;
+      case 'groupId':
+        return featureGroup >= 0 ? this.groups.idOf(featureGroup) : undefined;
+      case 'order':
+        return utf8String(data.itemKeys, row);
+      case 'member':
+        return featureGroup >= 0 ? utf8String(data.memberKeys, row) : undefined;
+      case 'geometry':
+        return rowGeometry(group, row) ?? undefined;
+      case 'visible':
+        return (data.flags[row] & ROW_FLAG_VISIBLE) !== 0;
+      case 'locked':
+        return (data.flags[row] & ROW_FLAG_LOCKED) !== 0;
+      case 'style':
+        return this.styles.get(data.styles[row]);
+      default:
+        return rowValue(group, row, field.slice('property:'.length), this.strings);
+    }
   }
 
   /**
@@ -1655,10 +1894,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
           change.styleKeys.add(key);
         }
       }
-      if (!place || revived) change.created.push(handle);
-      else if (deleted?.[i] && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0) {
-        change.deleted.push(handle);
-      } else change.updated.push(handle);
+      const wasDeleted = !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0;
+      if (!place || revived || (wasDeleted && deleted && !deleted[i])) change.created.push(handle);
+      else if (deleted?.[i] && !wasDeleted) change.deleted.push(handle);
+      else change.updated.push(handle);
 
       if (!placed && place) {
         // Written in place (and written again into the next version of its group when one is
@@ -1807,6 +2046,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         removed.push(group);
         continue;
       }
+      this.deletedGroups.delete(group);
       if (!this.groups.has(group)) {
         this.groups.set(group, {
           id: value('id', i) as string,
@@ -1868,7 +2108,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // The new rows read from their creations are built again with the groups as they are now
     for (const creation of this.creations) this.dropReading(creation);
     for (const group of removed) {
-      if (!this.groupNamed(group)) this.groups.delete(group);
+      if (this.groupNamed(group)) this.deletedGroups.add(group);
+      else this.groups.delete(group);
     }
     this.revisionCount++;
     this.notifyWork();
@@ -2159,6 +2400,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       flags = locked === true ? flags | ROW_FLAG_LOCKED : flags & ~ROW_FLAG_LOCKED;
     }
     if (deleted && deleted[i] !== 0) flags |= ROW_FLAG_DELETED;
+    // A row deleted written not deleted is created again at its place
+    else if (deleted) flags &= ~ROW_FLAG_DELETED;
     if (flags !== data.flags[row]) {
       if ((flags & ROW_FLAG_DELETED) !== (data.flags[row] & ROW_FLAG_DELETED)) layer.touchItems();
       data.flags[row] = flags;
@@ -2279,6 +2522,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
         }
       }
     }
+    // The rows deleted the version left out: their copies in the deltas go too
+    for (const handle of version.dropped) {
+      if (takes(handle, version.deltaNumber)) leave(handle);
+    }
     // A copy waiting in a group replaced waits in the version, or not any more
     const newGroups = new Set<RowGroup>(groups);
     for (const [handle, copy] of waiting) {
@@ -2337,6 +2584,16 @@ class FeatureTablesStore implements FeatureTablesInternals {
       for (const listener of this.writeListeners) listener(layerId, list);
     }
     this.touch(layer.layerId, GroupVersions.boundsOf(version));
+    // The rows left out are gone: the handles of the ones forgotten are freed, and the groups of
+    // features deleted no row names any more are taken out
+    for (const handle of version.dropped) this.freeIfGone(handle);
+    if (version.dropped.length > 0) {
+      for (const group of [...this.deletedGroups]) {
+        if (this.groupNamed(group)) continue;
+        this.deletedGroups.delete(group);
+        this.groups.delete(group);
+      }
+    }
     return null;
   }
 

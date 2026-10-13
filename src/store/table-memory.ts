@@ -28,6 +28,7 @@ import type {
   FeatureTables,
   FeatureTablesOptions,
   FeatureTablesWriter,
+  LocalRowWrite,
   RowField,
   RowHandle,
 } from '../api/tables.js';
@@ -56,6 +57,7 @@ import type {
   LayerRowsChange,
   Metadata,
   Mode,
+  RetainToken,
   RowsChange,
   Selection,
   SelectionType,
@@ -84,6 +86,14 @@ export function createTableMemoryStore(options: Omit<FeatureTablesOptions, 'hook
   return { store: new DrawStore(contract), writer: contract.writer };
 }
 
+/**
+ * The rows deleted from elsewhere whose ids are kept (their handles are forgotten past it, the
+ * oldest first)
+ *
+ * @internal
+ */
+export const REMOTE_DELETED_KEPT = 10_000;
+
 /** The writes of a feature not held, by row, with the feature before them (one transaction) */
 type Before = Map<RowHandle, Feature>;
 
@@ -109,13 +119,21 @@ export class TableContractStore implements StoreContract {
   #before: Before = new Map();
   /** The depth of the writes of the document being made */
   #depth = 0;
+  /** What keeps the rows deleted in this transaction (made at the first deletion) */
+  #retain: RetainToken | null = null;
+  /** The rows deleted from elsewhere, the oldest first, whose ids are kept a while */
+  #remoteDeleted: RowHandle[] = [];
   /** The groups features left in the write being made (deleted at its end when empty) */
   readonly #leftGroups = new Set<string>();
 
   constructor(options: Omit<FeatureTablesOptions, 'hooks'> = {}) {
     const { tables, writer } = createFeatureTablesStore({
       ...options,
-      hooks: { emit: (change) => this.#bus.merge(change as StoreChange) },
+      hooks: {
+        emit: (change) => this.#bus.merge(change as StoreChange),
+        // Nothing else needs the ids of the rows deleted that nothing keeps any more
+        released: (handles) => this.writer.forget(handles),
+      },
     });
     this.tables = tables;
     this.writer = writer;
@@ -280,11 +298,10 @@ export class TableContractStore implements StoreContract {
       if (handle === undefined) throw new Error(`Feature with id "${id}" not found`);
       const group = this.#groupIdOfRow(handle);
       if (group !== undefined) this.#leftGroups.add(group);
-      this.writer.apply({
-        handles: Int32Array.of(handle),
-        fields: new Map(),
-        deleted: Uint8Array.of(1),
-      });
+      this.writer.apply(
+        { handles: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1) },
+        { retain: this.#token() },
+      );
     });
   }
 
@@ -324,14 +341,14 @@ export class TableContractStore implements StoreContract {
     return this.#apply(() => {
       const layer = this.#layers.get(id);
       if (!layer) throw new Error(`Layer with id "${id}" not found`);
-      // Its rows are deleted, then its groups
+      // Its rows are deleted, then its groups; they are kept as they are (created again, the
+      // layer gets them back where they were)
       const cursor = this.tables.scan({ layerIds: [id] });
       for (let batch = cursor.next(); batch; batch = cursor.next()) {
-        this.writer.apply({
-          handles: batch,
-          fields: new Map(),
-          deleted: new Uint8Array(batch.length).fill(1),
-        });
+        this.writer.apply(
+          { handles: batch, fields: new Map(), deleted: new Uint8Array(batch.length).fill(1) },
+          { retain: this.#token() },
+        );
       }
       const groups = [...this.#groups.values()].filter((group) => group.layerId === id);
       this.#deleteGroups(groups);
@@ -367,6 +384,94 @@ export class TableContractStore implements StoreContract {
 
   moveItem(itemId: string, to: ItemPlacement): boolean {
     return this.moveItems([itemId], to);
+  }
+
+  /**
+   * Writes rows for this client (see the public `Store.applyLocal`): the new rows get handles,
+   * the rows put in a place get keys made at once between the items around it, the rows deleted
+   * are kept by the token of the transaction, and the values before go with the notification
+   */
+  applyLocal(write: LocalRowWrite): boolean {
+    return this.#apply(() => {
+      const { patch, created, place } = write;
+      const handles: number[] = Array.from(patch.handles);
+      const indexOf = new Map(handles.map((handle, i) => [handle, i]));
+      const fields = new Map<RowField, unknown[]>();
+      for (const [field, values] of patch.fields) fields.set(field, [...values]);
+      const deleted = patch.deleted ? Array.from(patch.deleted) : null;
+      const row = (handle: number): number => {
+        let at = indexOf.get(handle);
+        if (at !== undefined) return at;
+        at = handles.length;
+        handles.push(handle);
+        indexOf.set(handle, at);
+        deleted?.push(0);
+        return at;
+      };
+      const set = (field: RowField, at: number, value: unknown): void => {
+        let values = fields.get(field);
+        if (!values) {
+          values = [];
+          fields.set(field, values);
+        }
+        values[at] = value;
+      };
+      // The new rows
+      const createdHandles = created ? this.writer.allocateHandles(created.ids) : new Int32Array(0);
+      createdHandles.forEach((handle, k) => {
+        const at = row(handle);
+        for (const [field, values] of created?.fields ?? []) set(field, at, values[k]);
+      });
+      // A row whose group changes leaves it
+      const groupIds = fields.get('groupId');
+      if (groupIds) {
+        handles.forEach((handle, i) => {
+          const left = this.#groupIdOfRow(handle);
+          if (left !== undefined && (groupIds[i] || undefined) !== left) this.#leftGroups.add(left);
+        });
+      }
+      // The rows put in a place, the new ones after them
+      if (place) {
+        const to = place.to;
+        if (!this.#layers.has(to.layerId)) {
+          throw new Error(`Layer with id "${to.layerId}" not found`);
+        }
+        const group = to.groupId === undefined ? undefined : this.#groups.get(to.groupId);
+        if (to.groupId !== undefined && !group) {
+          throw new Error(`Group with id "${to.groupId}" not found`);
+        }
+        const placed = [...place.rows, ...createdHandles];
+        const keys = this.#keysAt(
+          to,
+          group,
+          new Set(placed.map((handle) => handle * 2)),
+          placed.length,
+        );
+        placed.forEach((handle, k) => {
+          const at = row(handle);
+          const left = this.#groupIdOfRow(handle);
+          if (left !== undefined && left !== group?.id) this.#leftGroups.add(left);
+          set('layerId', at, to.layerId);
+          set('groupId', at, group?.id ?? '');
+          if (group) {
+            set('member', at, keys[k]);
+          } else {
+            set('order', at, keys[k]);
+            set('member', at, undefined);
+          }
+        });
+      }
+      for (const values of fields.values()) values.length = handles.length;
+      const deletes = deleted?.some((value) => value !== 0) ?? false;
+      this.writer.apply(
+        {
+          handles: Int32Array.from(handles),
+          fields,
+          ...(deleted && { deleted: Uint8Array.from(deleted) }),
+        },
+        { before: write.before, ...(deletes && { retain: this.#token() }) },
+      );
+    });
   }
 
   /**
@@ -682,6 +787,30 @@ export class TableContractStore implements StoreContract {
     return true;
   }
 
+  /** The token that keeps the rows deleted in this transaction */
+  #token(): RetainToken {
+    this.#retain ??= this.writer.retainToken();
+    return this.#retain;
+  }
+
+  /**
+   * Forgets the ids of the rows deleted from elsewhere past the most kept (the oldest first): a
+   * change of such a row that comes later is a new row
+   */
+  #forgetRemote(changes: StoreChange): void {
+    for (const change of changes.rows?.layers.values() ?? []) {
+      for (const handle of change.deleted) this.#remoteDeleted.push(handle);
+    }
+    for (const feature of changes.features?.deleted ?? []) {
+      const found = this.writer.lookup(feature.id);
+      if (found?.deleted) this.#remoteDeleted.push(found.handle);
+    }
+    const excess = this.#remoteDeleted.length - REMOTE_DELETED_KEPT;
+    if (excess <= 0) return;
+    this.writer.forget(Int32Array.from(this.#remoteDeleted.slice(0, excess)));
+    this.#remoteDeleted = this.#remoteDeleted.slice(excess);
+  }
+
   /** Deletes the groups features left that have no member left */
   #deleteEmptyGroups(): void {
     if (this.#leftGroups.size === 0) return;
@@ -872,6 +1001,8 @@ export class TableContractStore implements StoreContract {
   #deliver(changes: StoreChange): void {
     const before = this.#before;
     this.#before = new Map();
+    this.#retain = null;
+    if (changes.source === 'remote') this.#forgetRemote(changes);
     const out = reconcile(changes, this.tables, this.#internals, before);
     for (const listener of [...this.#listeners]) {
       try {
@@ -964,8 +1095,12 @@ function reconcile(
   else delete features.updated;
   if (Object.keys(features).length > 0) out.features = features;
   else delete out.features;
-  if (layers.size > 0) out.rows = { layers } as RowsChange;
-  else delete out.rows;
+  // The values before go with the rows (whether each row is a feature or a row at the end)
+  if (layers.size > 0 || rows?.before) {
+    out.rows = { layers, ...(rows?.before && { before: rows.before }) } as RowsChange;
+  } else {
+    delete out.rows;
+  }
   // A row created and held is a feature created, not a row made a feature
   if (out.held && createdIds.size > 0) {
     out.held = {

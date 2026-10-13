@@ -130,6 +130,8 @@ export interface GroupVersion {
   partial: boolean;
   /** The values written in place of the rows of its groups since it started, in their order */
   readonly log: InPlaceEntry[];
+  /** The rows deleted it leaves out (nothing keeps them), of its groups and of the delta */
+  readonly dropped: RowHandle[];
 }
 
 /** A write in place of a row of a group whose next version is being made */
@@ -172,6 +174,8 @@ export interface VersionHost {
   inDelta(handle: RowHandle): boolean;
   /** Whether a row of a delta is drawn only (a feature drawn over a row): no version takes it */
   drawnOnly(handle: RowHandle): boolean;
+  /** Whether a next version leaves a row out: deleted, and nothing keeps it */
+  drops(handle: RowHandle, group: RowGroup, row: number): boolean;
   /** The group of the copy of the row of a handle read in a group (-1 for none) */
   mainGroup(handle: RowHandle): RowGroupHandle;
   /** The values of a row with what was written in place, as the builder takes them */
@@ -443,13 +447,14 @@ export class GroupVersions {
       status: 'building',
       partial: false,
       log: [],
+      dropped: [],
     };
     for (const group of groups) {
       this.locked.set(group.handle, version);
       this.due.delete(group.handle);
       this.urged.delete(group.handle);
     }
-    const merge = this.mergeOf(layer, groups);
+    const merge = this.mergeOf(layer, groups, version.dropped);
     (version as { keys: ReadonlyMap<GroupHandle, number> }).keys = this.keysOf(merge);
     this.pending.set(version.id, version);
     this.mostPending = Math.max(this.mostPending, this.pending.size);
@@ -482,8 +487,15 @@ export class GroupVersions {
       (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
   }
 
-  /** What a next version merges: the rows that stay, and the rows of the delta in its range */
-  private mergeOf(layer: LayerTable, groups: readonly RowGroup[]): RowGroupMerge {
+  /**
+   * What a next version merges: the rows that stay, and the rows of the delta in its range (the
+   * rows deleted that nothing keeps are left out, into `dropped`)
+   */
+  private mergeOf(
+    layer: LayerTable,
+    groups: readonly RowGroup[],
+    dropped: RowHandle[],
+  ): RowGroupMerge {
     const host = this.host;
     const sources: RowGroupData[] = [];
     const pairs: number[] = [];
@@ -496,6 +508,10 @@ export class GroupVersions {
         // A row with a copy in a delta is read there, and a copy waiting for another group is
         // not the row
         if (host.inDelta(handle) || host.mainGroup(handle) !== group.handle) continue;
+        if (host.drops(handle, group, r)) {
+          dropped.push(handle);
+          continue;
+        }
         if (writtenInPlace(group, r)) inputs.push(host.rowInput(group, r));
         else pairs.push(source, r);
       }
@@ -511,6 +527,15 @@ export class GroupVersions {
       for (let k = 0; k < delta.data.length; k++) {
         if (!indices.has(places.groups[k])) continue;
         if (host.drawnOnly(delta.data.handles[k])) continue;
+        // A row deleted read here is left out when its copy in a group goes with the version too
+        const main = host.mainGroup(delta.data.handles[k]);
+        if (
+          host.drops(delta.data.handles[k], delta, k) &&
+          (main < 0 || groups.some((group) => group.handle === main))
+        ) {
+          dropped.push(delta.data.handles[k]);
+          continue;
+        }
         if (writtenInPlace(delta, k)) inputs.push(host.rowInput(delta, k));
         else pairs.push(source, k);
       }
@@ -622,6 +647,7 @@ export class GroupVersions {
       status: 'building',
       partial: false,
       log: [],
+      dropped: [],
     };
     for (const group of groups) {
       this.locked.set(group.handle, version);

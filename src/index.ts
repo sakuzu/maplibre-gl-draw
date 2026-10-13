@@ -177,6 +177,7 @@ export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
 
 // Features held as rows of columns
 export type {
+  CreatedRows,
   FeatureTables,
   FeatureTablesHooks,
   FeatureTablesOptions,
@@ -186,12 +187,14 @@ export type {
   ItemRefs,
   LayerRowsChange,
   LayerTableView,
+  LocalRowWrite,
   RowApplyOptions,
   RowCursor,
   RowField,
   RowFieldValues,
   RowHandle,
   RowPatch,
+  RowPlacement,
   RowsChange,
   TableGroupField,
   TableGroupPatch,

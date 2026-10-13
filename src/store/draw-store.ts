@@ -27,7 +27,7 @@
  *     modes and the public API rely on it.
  */
 
-import type { FeatureTables } from '../api/tables.js';
+import type { FeatureTables, LocalRowWrite, RowPatch } from '../api/tables.js';
 import {
   tableGroupMemberCount,
   tableGroupMemberIds,
@@ -50,6 +50,7 @@ import type {
   Layer,
   Metadata,
   Mode,
+  RowValuesSnapshot,
   Selection,
   SelectionType,
   StoreChange,
@@ -219,6 +220,22 @@ export class DrawStore implements Store {
       moveItemsByLists(contract, itemIds, to);
       return true;
     });
+  }
+  applyLocal(write: LocalRowWrite): boolean {
+    const contract = this.#contract;
+    if (!contract.tables || !contract.applyLocal) {
+      throw new Error('The Store does not hold its features as rows: it writes no rows');
+    }
+    return this.#write(() => (contract.applyLocal as (w: LocalRowWrite) => boolean)(write));
+  }
+  applyRows(patch: RowPatch): RowValuesSnapshot | null {
+    const tables = this.#contract.tables;
+    if (!tables || !this.#contract.applyLocal) {
+      throw new Error('The Store does not hold its features as rows: it writes no rows');
+    }
+    if (this.#contract.isReadOnly()) return null;
+    const before = tables.snapshot(patch);
+    return this.applyLocal({ patch, before }) ? before : null;
   }
 
   createGroup(group: Group): boolean {

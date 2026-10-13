@@ -19,7 +19,7 @@ import type {
   Metadata,
 } from '../model.js';
 import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
-import type { FeatureTables } from '../tables.js';
+import type { FeatureTables, LocalRowWrite } from '../tables.js';
 
 /**
  * Where a write came from, as it arrives in {@link DocumentChange.source} and in the `source` of
@@ -211,6 +211,13 @@ export interface Store extends StoreView {
    * items put in one place keep short keys. A group a feature leaves empty is deleted.
    */
   moveItems?(itemIds: readonly string[], to: ItemPlacement): boolean;
+  /**
+   * Writes rows held as columns for this client (the operations of the instance on many rows at
+   * once, and what undoes them): makes the keys of the order of the rows put in a place and the
+   * handles of the new rows, writes the rows (`FeatureTablesWriter.apply`), and notifies them with
+   * the values they had before. A Store that holds its features as rows has it.
+   */
+  applyLocal?(write: LocalRowWrite): boolean;
   /** Creates a group. */
   createGroup(group: Group): boolean;
   /** Changes the fields given of a group. */

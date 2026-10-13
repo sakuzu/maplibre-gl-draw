@@ -763,9 +763,16 @@ export function expectTablesMatch(
       expect(rows).toEqual([]);
       continue;
     }
-    // Every row, the deleted ones included
-    expect(idsOf(view.rowsInOrder(0, 1_000_000))).toEqual(rows.map((row) => row.id));
-    expect(view.rowCount).toBe(rows.length);
+    // Every row, the deleted ones included until the next version of their group leaves them out
+    // (nothing keeps them: 4.8 of the design)
+    const internals = featureTablesInternals(tables);
+    const present = rows.filter((row) => {
+      if (!row.deleted) return true;
+      const handle = internals?.ids.handleOf(row.id) ?? -1;
+      return handle >= 0 && internals?.placeOf(handle) !== undefined;
+    });
+    expect(idsOf(view.rowsInOrder(0, 1_000_000))).toEqual(present.map((row) => row.id));
+    expect(view.rowCount).toBe(present.length);
     // The rows that are not deleted, a batch at a time
     const scanned: number[] = [];
     const cursor = tables.scan({ layerIds: [layerId], batch: 7 });

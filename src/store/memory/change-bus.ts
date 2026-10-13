@@ -30,6 +30,7 @@ import type {
   LayerRowsChange,
   RowField,
   RowsChange,
+  RowValuesSnapshot,
   StoreChange,
   UpdateSource,
 } from '../types.js';
@@ -106,6 +107,7 @@ function appendGroupUpdates(
  * deleted within the transaction dropped
  */
 export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
+  const before = a.before && b.before ? mergeSnapshots(a.before, b.before) : (a.before ?? b.before);
   const layers = new Map<string, LayerRowsChange>(a.layers);
   for (const [layerId, next] of b.layers) {
     const before = layers.get(layerId);
@@ -133,7 +135,41 @@ export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
       styleKeys: new Set([...before.styleKeys, ...next.styleKeys]),
     });
   }
-  return { layers };
+  return before ? { layers, before } : { layers };
+}
+
+/**
+ * The values before of two writes of a transaction: the rows of both, a row with the values it had
+ * before the first write of it (a field the first did not read is read in the second)
+ */
+function mergeSnapshots(a: RowValuesSnapshot, b: RowValuesSnapshot): RowValuesSnapshot {
+  const rowsOf = (snapshot: RowValuesSnapshot) =>
+    new Map(Array.from(snapshot.handles, (handle, i) => [handle, i]));
+  const ra = rowsOf(a);
+  const rb = rowsOf(b);
+  const handles = [...a.handles, ...Array.from(b.handles).filter((handle) => !ra.has(handle))];
+  const fields = new Map<RowField, unknown[]>();
+  for (const field of new Set([...a.fields.keys(), ...b.fields.keys()])) {
+    fields.set(
+      field,
+      handles.map((handle) => {
+        const i = ra.get(handle);
+        if (i !== undefined && a.fields.has(field)) return a.fields.get(field)?.[i];
+        const j = rb.get(handle);
+        return j !== undefined ? b.fields.get(field)?.[j] : undefined;
+      }),
+    );
+  }
+  const deleted =
+    a.deleted || b.deleted
+      ? Uint8Array.from(handles, (handle) => {
+          const i = ra.get(handle);
+          if (i !== undefined && a.deleted) return a.deleted[i];
+          const j = rb.get(handle);
+          return j !== undefined && b.deleted ? b.deleted[j] : 0;
+        })
+      : undefined;
+  return { handles: Int32Array.from(handles), fields, ...(deleted && { deleted }) };
 }
 
 /**

@@ -146,6 +146,11 @@ export class RowStateSets {
     this.update(handles, (bits) => (bits & ~SET_MOVE_MASK) | (set << SET_MOVE_SHIFT));
   }
 
+  /** Forgets the state of a handle (given again to another row) */
+  clear(handle: RowHandle): void {
+    if (handle >= 0 && handle < this.bits.length) this.bits[handle] = 0;
+  }
+
   /** The translation of a moving set, `[dLng, dLat]` in degrees */
   translation(set: number): [number, number] {
     return [this.translations[set * 2], this.translations[set * 2 + 1]];

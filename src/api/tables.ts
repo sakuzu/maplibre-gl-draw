@@ -19,6 +19,7 @@ import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
 import type {
+  ItemPlacement,
   ItemRefs,
   LayerRowsChange,
   RetainToken,
@@ -143,8 +144,52 @@ export interface RowPatch {
   readonly handles: Int32Array;
   /** The values of each field written, one per row */
   readonly fields: ReadonlyMap<RowField, RowFieldValues>;
-  /** Non-zero for a row deleted */
+  /**
+   * Non-zero for a row deleted; zero for a row deleted and kept (`RetainToken`) created again at
+   * its place, as it was
+   */
   readonly deleted?: Uint8Array;
+}
+
+/**
+ * New rows of a write of this client ({@link LocalRowWrite}): their ids, and the values of their
+ * fields (a `type` and a `geometry` at least; the layer and the key of their order come from the
+ * place they are put at).
+ */
+export interface CreatedRows {
+  /** The ids of the new rows */
+  readonly ids: Utf8Column;
+  /** The values of each field, one per new row */
+  readonly fields: ReadonlyMap<RowField, RowFieldValues>;
+}
+
+/**
+ * Rows put in a place, one after the other ({@link LocalRowWrite}): the implementation of the
+ * Store makes the keys of their order, and writes their layer and group.
+ */
+export interface RowPlacement {
+  /** The rows there are, in the order they go there (the new rows of the write follow them) */
+  readonly rows: Int32Array;
+  /** The place */
+  readonly to: ItemPlacement;
+}
+
+/**
+ * A write of rows of this client, given to the implementation of the Store (`Store.applyLocal`):
+ * the values of rows there are, new rows, the place rows go to, and the values the rows had
+ * before. The implementation makes the keys of the order and the handles of the new rows, and
+ * writes the rows with the writer of its tables; the values before go with the notification
+ * (`RowsChange.before`).
+ */
+export interface LocalRowWrite {
+  /** The values of rows there are (by their handles) */
+  readonly patch: RowPatch;
+  /** New rows */
+  readonly created?: CreatedRows;
+  /** Where rows go */
+  readonly place?: RowPlacement;
+  /** The values the rows had before */
+  readonly before: RowValuesSnapshot;
 }
 
 /**
@@ -171,6 +216,15 @@ export interface TableGroupPatch {
 export interface RowApplyOptions {
   /** Where the change comes from */
   readonly source?: UpdateSource;
+  /**
+   * What keeps the rows the write deletes (`FeatureTablesWriter.retainToken`): they stay as they
+   * were until it is let go of, so that writing them not deleted puts them back where they were.
+   * Given, it is added to the notification (`StoreChange.retain`). Rows deleted without one go
+   * with the next versions of their row groups
+   */
+  readonly retain?: RetainToken;
+  /** The values the rows had before the write, added to the notification (`RowsChange.before`) */
+  readonly before?: RowValuesSnapshot;
 }
 
 /**
@@ -212,6 +266,17 @@ export interface FeatureTables {
   /** The feature of a row held (undefined for an id not held) */
   heldFeature(id: string): Feature | undefined;
   /**
+   * The values the fields of a patch have now, for its rows (as a feature holds them; `deleted`
+   * read when the patch has it, a row that is not there counting as deleted): written back, they
+   * put the rows back as they are
+   */
+  snapshot(patch: RowPatch): RowValuesSnapshot;
+  /**
+   * Lets go of the rows and the groups a deletion kept (`StoreChange.retain`): they go with the
+   * next versions of their row groups, and the Store may forget their ids
+   */
+  release(token: RetainToken): void;
+  /**
    * Draws features in the places of rows, for this client only: the features `owner` draws over
    * rows are now these (the ones it drew before and does not give are no longer drawn). A
    * feature is drawn in the place of the row of its id, which is not drawn while it is (and is
@@ -242,6 +307,19 @@ export interface HeldWriteOptions {
  * The writing side of the features held as rows: kept by the implementation of the Store only.
  */
 export interface FeatureTablesWriter {
+  /**
+   * The handle of the row of an id, deleted rows included (with `deleted`), until the id is
+   * forgotten (undefined for an id never seen, or forgotten)
+   */
+  lookup(id: string): { readonly handle: RowHandle; readonly deleted: boolean } | undefined;
+  /** A new token to keep the rows a write deletes (`RowApplyOptions.retain`) */
+  retainToken(): RetainToken;
+  /**
+   * Forgets the ids of deleted rows that nothing keeps any more: they leave the table of the ids
+   * (an id seen again is a new row), and their handles are given again once their rows are gone.
+   * A row that is not deleted, or is kept, is left as it is
+   */
+  forget(handles: Int32Array): void;
   /**
    * The handle of the row of each id, given to the ids not seen yet.
    *
@@ -324,6 +402,12 @@ export interface FeatureTablesHooks {
    * (`held`), and the changes of the features of the rows held (`features`)
    */
   emit(change: DocumentChange): void;
+  /**
+   * Tells the Store the deleted rows nothing keeps any more (a token let go of, or the oldest
+   * ones past `retainLimit`): it forgets them (`FeatureTablesWriter.forget`) once it no longer
+   * needs their ids
+   */
+  released?(handles: Int32Array): void;
 }
 
 /**
@@ -342,6 +426,12 @@ export interface FeatureTablesOptions {
    * the rows written, and the rows held and their features are not notified)
    */
   readonly hooks?: FeatureTablesHooks;
+  /**
+   * The most the deletions kept and not let go of may hold: tokens (100 when omitted), and bytes
+   * of the rows they keep (64 MiB when omitted, counted at the size of a row of five corners).
+   * Past it, the oldest are let go of
+   */
+  readonly retainLimit?: { readonly tokens?: number; readonly bytes?: number };
 }
 
 /**
