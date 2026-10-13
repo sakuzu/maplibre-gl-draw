@@ -238,6 +238,8 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
     hub.emit('feature.deleted', { feature: feature as Feature, source });
   }
 
+  if (changes.rows) hub.emit('rows.changed', { rows: changes.rows, source });
+
   for (const layer of layers?.created ?? []) hub.emit('layer.created', { layer, source });
   const updatedLayers = new Set<string>();
   for (const { id, layer, previous } of layers?.updated ?? []) {
@@ -388,6 +390,7 @@ function sameVertexSelection(
 /** The categories of a notification that belong to the document */
 const DOCUMENT_KEYS = [
   'features',
+  'rows',
   'layers',
   'groups',
   'layerReorder',

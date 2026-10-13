@@ -19,10 +19,11 @@ import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
 import type { LayerRowsChange, RowField, RowsChange } from '../shared/types/model.js';
+import { createTableMemoryStore as createTableMemoryStoreOf } from '../store/table-memory.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
 import type { DocumentChange } from './events.js';
-import type { UpdateSource } from './extension/store.js';
+import type { Store, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureType } from './model.js';
 
 export type { FeatureTablesWorker, LayerRowsChange, RowField, RowsChange };
@@ -334,4 +335,33 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
   writer: FeatureTablesWriter;
 } {
   return createFeatureTablesStore(options);
+}
+
+/**
+ * Creates an empty Store in memory that holds its features as rows of columns: every layer of
+ * it is held as rows, read from its tables (`store.tables`).
+ *
+ * A row is a {@link Feature} while it is selected or edited (it is then notified as a feature),
+ * and when one is asked for (`getFeature`); its writes are notified as rows written otherwise.
+ * `listFeatures` and `listFeaturesInOrder` throw: read the rows from the tables.
+ *
+ * @param options The options of its tables (the Worker that builds the rows)
+ * @returns The Store, for the `store` option of `createDraw`, and the writer of its tables: what
+ *   takes row groups in (`adopt`) and writes rows from elsewhere, in a transaction of the Store
+ *   with their source
+ *
+ * @example
+ * ```ts
+ * const { store, writer } = createTableMemoryStore();
+ * store.createLayer({ id: 'buildings', name: 'Buildings', visible: true, locked: false, opacity: 1, kind: 'table', metadata: undefined, styleRule: undefined });
+ * writer.adopt('buildings', groups); // the row groups a Worker built
+ * const draw = createDraw(map, { store });
+ * store.transact(() => writer.apply(patch), 'remote'); // a change from elsewhere
+ * ```
+ */
+export function createTableMemoryStore(options: Omit<FeatureTablesOptions, 'hooks'> = {}): {
+  store: Store;
+  writer: FeatureTablesWriter;
+} {
+  return createTableMemoryStoreOf(options);
 }

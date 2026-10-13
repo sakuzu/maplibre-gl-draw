@@ -79,6 +79,7 @@ export class DisplayListCache {
   applyChanges(changes: StoreChange): void {
     if (
       changes.features !== undefined ||
+      changes.held !== undefined ||
       changes.layers !== undefined ||
       changes.groups !== undefined ||
       changes.layerReorder !== undefined ||

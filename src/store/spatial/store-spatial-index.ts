@@ -19,11 +19,15 @@
  * - the intermediate updates of a drag are Store updates too (isIntermediate), so the shape
  *   being dragged is the shape that is indexed
  *
+ * A Store that holds its features as rows has the features of the rows held (selected, edited)
+ * only: they come and go with `held`, and the rows themselves are found in the tables.
+ *
  * The extent of a type registered with a custom bounding box calculator can change for
  * reasons outside the Store (a font that arrives later, for example). Its owner announces
  * that with invalidateType(), which re-derives the features of that type from the Store.
  */
 
+import { heldFeaturesInOrder } from '../../feature-table/held-order.js';
 import type { Store } from '../store.js';
 import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
 import {
@@ -44,7 +48,7 @@ export class StoreSpatialIndex implements SpatialIndex {
     this.#store = store;
     this.#unsubscribe = store.subscribe((changes) => this.#apply(changes));
     // A Store handed in from outside can already hold features
-    this.#index.load(store.listFeatures());
+    this.#index.load(this.#features());
   }
 
   findNear(coordinate: Coordinate, tolerance: number): string[] {
@@ -89,7 +93,7 @@ export class StoreSpatialIndex implements SpatialIndex {
    * For a type whose extent changed for a reason the Store does not see.
    */
   invalidateType(type: string): void {
-    for (const feature of this.#store.listFeatures()) {
+    for (const feature of this.#features()) {
       if (feature.type === type) {
         this.#index.update(feature.id, feature);
       }
@@ -122,6 +126,9 @@ export class StoreSpatialIndex implements SpatialIndex {
       this.#rebuild();
       return;
     }
+    // The rows held come and go (a Store that holds its features as rows)
+    for (const feature of changes.held?.added ?? []) this.#refresh(feature.id);
+    for (const id of changes.held?.removed ?? []) this.#refresh(id);
     const features = changes.features;
     if (!features) return;
 
@@ -130,7 +137,7 @@ export class StoreSpatialIndex implements SpatialIndex {
     if (created && created.length > 0) {
       const present: Feature[] = [];
       for (const { id } of created) {
-        const feature = this.#store.getFeature(id);
+        const feature = this.#indexed(id);
         if (feature) present.push(feature);
       }
       this.#index.load(present);
@@ -147,7 +154,7 @@ export class StoreSpatialIndex implements SpatialIndex {
   }
 
   #refresh(id: string): void {
-    const feature = this.#store.getFeature(id);
+    const feature = this.#indexed(id);
     if (feature) {
       this.#index.update(id, feature);
     } else {
@@ -157,6 +164,20 @@ export class StoreSpatialIndex implements SpatialIndex {
 
   #rebuild(): void {
     this.#index.clear();
-    this.#index.load(this.#store.listFeatures());
+    this.#index.load(this.#features());
+  }
+
+  /** The features the index holds: every feature, or the ones of the rows held */
+  #features(): Feature[] {
+    const store = this.#store;
+    return store.tables
+      ? heldFeaturesInOrder(store.tables, store.getLayerOrder())
+      : store.listFeatures();
+  }
+
+  /** The feature of an id as the index holds it (only a row held, of a Store of rows) */
+  #indexed(id: string): Feature | undefined {
+    const tables = this.#store.tables;
+    return tables ? tables.heldFeature(id) : this.#store.getFeature(id);
   }
 }

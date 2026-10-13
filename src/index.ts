@@ -186,7 +186,12 @@ export type {
   TableGroupPatch,
   TableScanOptions,
 } from './api/tables.js';
-export { createFeatureTables, ITEM_GROUP, ITEM_ROW } from './api/tables.js';
+export {
+  createFeatureTables,
+  createTableMemoryStore,
+  ITEM_GROUP,
+  ITEM_ROW,
+} from './api/tables.js';
 
 // Extensions
 export type {

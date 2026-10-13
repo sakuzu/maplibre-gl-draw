@@ -143,7 +143,12 @@ export interface DrawEvents {
   /** The title or the description changed */
   'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
   /**
-   * Every change of one transaction that changed the document (features, layers, groups,
+   * Rows of the layers held as rows of columns were written ({@link StoreView.tables}): by layer,
+   * the rows created, updated and deleted, by their handles, and the fields written
+   */
+  'rows.changed': { rows: RowsChange; source: string };
+  /**
+   * Every change of one transaction that changed the document (features, rows, layers, groups,
    * metadata or files); it arrives once per such transaction, after the events of the
    * resources. A change of the selection, the mode or another state of this client alone does
    * not fire it.

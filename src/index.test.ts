@@ -26,6 +26,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'createTableMemoryStore',
   'ITEM_GROUP',
   'ITEM_ROW',
   'ItemRefs',

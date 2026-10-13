@@ -52,6 +52,7 @@ function shouldRepaint(changes: StoreChange): boolean {
   return !!(
     changes.features || // creation, update or deletion of features
     changes.rows || // rows held as columns written
+    changes.held || // rows held as columns made features or no longer
     changes.layers || // layer changes
     changes.groups || // group changes (reordering, show/hide)
     changes.layerReorder || // reordering of items within a layer

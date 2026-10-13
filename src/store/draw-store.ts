@@ -28,6 +28,12 @@
  */
 
 import type { FeatureTables } from '../api/tables.js';
+import {
+  tableGroupMemberCount,
+  tableGroupMemberIds,
+  tableLayerFeatureCount,
+  tableLayerFeatureIds,
+} from '../feature-table/item-ids.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
@@ -52,6 +58,22 @@ import type {
 } from './types.js';
 
 /**
+ * The most features of rows held at once for the selection, the editing and the drag (a
+ * selection of more is refused for now)
+ *
+ * @internal
+ */
+export const HOLD_LIMIT = 2000;
+
+/**
+ * The owner of the rows held for the selection, the editing, the vertices selected and the
+ * vertices that follow a drag
+ *
+ * @internal
+ */
+export const SELECTION_OWNER = 'core:selection';
+
+/**
  * Returns the Store for a store option: a Store of core is used as it is, a Store of the host
  * gets the drawing state and the read-only gate of core around it
  *
@@ -72,6 +94,8 @@ export class DrawStore implements Store {
   readonly #drawing = new MemoryDrawingState(this.#bus);
   /** The normalized copy of each object of the contract that gave `null` for an optional field */
   readonly #normalized = new WeakMap<object, object>();
+  /** The ids of the rows held for the selection, as last held */
+  #heldKey = '';
 
   constructor(contract: StoreContract) {
     this.#contract = contract;
@@ -205,6 +229,14 @@ export class DrawStore implements Store {
     return this.#contract.getSelection();
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
+    // The features of rows held for a selection are counted: more than the limit is refused
+    const count = this.#heldCount(type, ids);
+    if (count > HOLD_LIMIT) {
+      console.warn(
+        `A selection of ${count} features held as rows is refused: at most ${HOLD_LIMIT} are selected at once`,
+      );
+      return;
+    }
     this.#local(() => this.#contract.setSelection(type, ids));
   }
 
@@ -291,7 +323,10 @@ export class DrawStore implements Store {
     return this.#drawing.getFollowedVertices();
   }
   setFollowedVertices(selections: VertexSelection[] | null): void {
-    this.#drawing.setFollowedVertices(selections);
+    this.#bus.transact(() => {
+      this.#drawing.setFollowedVertices(selections);
+      this.#syncHeld();
+    }, 'local');
   }
 
   // ============================================================================
@@ -326,7 +361,62 @@ export class DrawStore implements Store {
     this.#bus.transact(() => {
       fn();
       if (redraw) this.#bus.merge({ uiStateChanged: true });
+      this.#syncHeld();
     }, 'local');
+  }
+
+  /**
+   * The number of features of rows a selection holds (0 for a Store without rows)
+   */
+  #heldCount(type: SelectionType | null, ids: readonly string[]): number {
+    const tables = this.#contract.tables;
+    if (!tables) return 0;
+    if (type === 'group') {
+      let count = 0;
+      for (const id of ids) {
+        const group = this.#contract.getGroup(id);
+        if (group) count += tableGroupMemberCount(tables, group);
+      }
+      return count;
+    }
+    if (type === 'layer') {
+      let count = 0;
+      for (const id of ids) count += tableLayerFeatureCount(tables, id);
+      return count;
+    }
+    return ids.length;
+  }
+
+  /**
+   * Holds as features the rows selected (the members of the groups and the layers selected), being
+   * edited, whose vertices are selected, and whose vertices follow a drag, before the notification
+   * of the change goes out (a Store without rows has nothing to hold)
+   */
+  #syncHeld(): void {
+    const tables = this.#contract.tables;
+    if (!tables) return;
+    const ids = new Set<string>();
+    const selection = this.#contract.getSelection();
+    if (selection.type === 'feature') {
+      for (const id of selection.ids) ids.add(id);
+    } else if (selection.type === 'group') {
+      for (const id of selection.ids) {
+        const group = this.#contract.getGroup(id);
+        if (group) for (const member of tableGroupMemberIds(tables, group)) ids.add(member);
+      }
+    } else if (selection.type === 'layer') {
+      for (const id of selection.ids) {
+        for (const member of tableLayerFeatureIds(tables, id)) ids.add(member);
+      }
+    }
+    for (const id of this.#contract.getEditingIds()) ids.add(id);
+    const vertices = this.#contract.getVertexSelection();
+    if (vertices) ids.add(vertices.featureId);
+    for (const followed of this.#drawing.getFollowedVertices() ?? []) ids.add(followed.featureId);
+    const key = [...ids].join('\u0000');
+    if (key === this.#heldKey) return;
+    this.#heldKey = key;
+    tables.hold(SELECTION_OWNER, [...ids]);
   }
 
   /**
@@ -342,6 +432,7 @@ export class DrawStore implements Store {
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
       if (mayHide(changes)) this.#pruneInvisible();
       this.#pruneVertices(changes);
+      this.#syncHeld();
     }, changes.source ?? 'local');
   }
 

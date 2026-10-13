@@ -19,6 +19,7 @@ import { createEngine } from './engine.js';
 
 /** Every member of the public Store */
 const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
+  'tables',
   'getFeature',
   'listFeatures',
   'listFeaturesInOrder',

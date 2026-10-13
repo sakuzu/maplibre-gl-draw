@@ -40,6 +40,7 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'group.updated',
   'group.deleted',
   'metadata.updated',
+  'rows.changed',
   'document.changed',
   'document.loaded',
   'selection.changed',
