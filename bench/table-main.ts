@@ -24,7 +24,7 @@
  *
  * For automation the results are also on `window.benchResult`, `window.runTableBench()` runs the
  * measurement, and `window.runTableEdit(op)` and `window.runTableStream(kind, rate)` an edit and
- * a stream (on the map opened by the measurement).
+ * a stream (on the map opened by the measurement). The draw instance is `window.benchDraw`.
  */
 
 import { createDraw, createFeatureTables, type Draw } from '@sakuzu/maplibre-gl-draw';
@@ -84,6 +84,8 @@ declare global {
     runTableEdit: (op?: EditOp) => Promise<EditResult | null>;
     runTableStream: (kind?: RemoteKind, rate?: number) => Promise<EditResult | null>;
     benchMap: maplibregl.Map;
+    /** The draw instance (`benchDraw.debug.tables().editStats()` reads the edits) */
+    benchDraw: Draw;
   }
 }
 
@@ -171,6 +173,7 @@ const draw: Draw = createDraw(map, {
   initDefaultLayer: false,
   ...(store ? { store } : {}),
 });
+window.benchDraw = draw;
 if (params.drawing === 'by-kind') draw.debug.tables().setDrawingByKind(true);
 
 // === Measuring ===
