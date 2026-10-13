@@ -13,7 +13,8 @@
  * - a color changed: by the style only
  * - a vertex taken off, one put back within the place, a dashed line moved, a line made dashed,
  *   an outline taken off: the row packed again into its place
- * - a vertex past the place, an outline put on: the chunk built again
+ * - a vertex past the place, an outline put on: the row drawn from the delta of its layer, packed
+ *   as a chunk built from it alone
  */
 
 import type { Geometry } from 'geojson';
@@ -148,13 +149,22 @@ function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
     frame();
   };
   if (!options.unsettled) settle();
-  /** The rows the chunks hold on the GPU, in their order */
-  const read = (): ReadRow[] =>
-    made
-      .filter((chunk) => chunk.uploaded && !chunk.disposed)
+  /** The rows the chunks of the groups hold on the GPU, in their order */
+  const read = (): ReadRow[] => {
+    const delta = new Set(renderer.deltaChunks('layer'));
+    return made
+      .filter((chunk) => chunk.uploaded && !chunk.disposed && !delta.has(chunk))
       .sort((a, b) => a.data.rowBase - b.data.rowBase)
       .flatMap((chunk) => readChunk(mock, chunk));
-  return { ...tables, renderer, frame, settle, read, made, view, deps, mock, rows };
+  };
+  /** The rows the chunks of the delta hold on the GPU, in their order */
+  const readDelta = (): ReadRow[] =>
+    renderer
+      .deltaChunks('layer')
+      .filter((chunk) => chunk.uploaded)
+      .sort((a, b) => a.data.rowBase - b.data.rowBase)
+      .flatMap((chunk) => readChunk(mock, chunk));
+  return { ...tables, renderer, frame, settle, read, readDelta, made, view, deps, mock, rows };
 }
 
 /** A row as a chunk holds it on the GPU */
@@ -367,10 +377,11 @@ describe('the writes in place of the rows drawn in one draw', () => {
     expect(live.renderer.writeStats.inPlace).toBe(5);
   });
 
-  it('builds the chunk again for a row past its place', () => {
+  it('draws a row past its place from the delta of its layer, packed as a chunk of its own', () => {
     const features = scene();
     const live = drawn(features);
     const edit = editor(live, features);
+    const before = live.read();
     // A vertex added to the line, and an outline put on the fill
     edit.geometry(3, {
       type: 'LineString',
@@ -382,14 +393,24 @@ describe('the writes in place of the rows drawn in one draw', () => {
       ],
     });
     edit.style(5, { strokeWidth: 3 });
-    expectAsBuilt(live, features);
+    live.settle();
     expect(live.renderer.writeStats.rebuilt).toBe(2);
-    // The chunk built again packs the rows as they are, and takes the next writes in place
+    expect(live.internals.deltaRowCount()).toBe(2);
+    // The chunk of the group keeps them as they were, hidden; the delta holds them as written
+    const group = live.table.groupAt(0);
+    expect([3, 5].map((row) => group.gpuState[row] & 1)).toEqual([1, 1]);
+    expect(live.read()).toEqual(before);
+    expect(live.readDelta()).toEqual(drawn([features[3], features[5]]).read());
+    // The chunk of the group takes the next writes of its other rows in place
     const corners = ring(0, 0, 0.01, 6);
     corners[0] = [0.0105, 0.0005];
     corners[6] = corners[0];
     edit.geometry(0, { type: 'Polygon', coordinates: [corners] });
-    expectAsBuilt(live, features);
+    live.settle();
+    const built = drawn(features).read();
+    expect(live.read().filter((row) => row.row !== 3 && row.row !== 5)).toEqual(
+      built.filter((row) => row.row !== 3 && row.row !== 5),
+    );
     expect(live.renderer.writeStats.rebuilt).toBe(2);
   });
 

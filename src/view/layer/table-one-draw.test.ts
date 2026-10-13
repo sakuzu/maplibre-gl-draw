@@ -299,6 +299,32 @@ function allRows(table: LayerTable): string[] {
   return out;
 }
 
+/**
+ * The handles of the rows drawn, in the order they are drawn: the rows of the ranges recorded
+ * that the state of their group does not hide, the rows of the delta included
+ */
+function drawnHandles(record: TableDrawRecord[], table: LayerTable): number[] {
+  const out: number[] = [];
+  for (const entry of record) {
+    const group = entry.delta ? table.delta.group : table.groupAt(entry.groupIndex);
+    if (!group) continue;
+    for (let row = entry.from; row < entry.to; row++) {
+      if ((group.gpuState[row] & 1) === 0) out.push(group.data.handles[row]);
+    }
+  }
+  return out;
+}
+
+/** Every row of a layer that is not hidden, in its order */
+function visibleHandles(table: LayerTable): number[] {
+  const order = table.rowOrder();
+  const out: number[] = [];
+  for (let i = 0; i < order.handles.length; i++) {
+    if ((order.groups[i].gpuState[order.rows[i]] & 1) === 0) out.push(order.handles[i]);
+  }
+  return out;
+}
+
 function inOrder(record: TableDrawRecord[]): boolean {
   for (let i = 1; i < record.length; i++) {
     const a = record[i - 1];
@@ -538,9 +564,9 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     }
   });
 
-  it('draws every row in every frame while a chunk is built again for a row past its place', () => {
+  it('draws every row once in every frame, a row past its place from the delta', () => {
     const features = interleaved(300, 13);
-    const { table, renderer, frame } = setup(features, 1000);
+    const { table, renderer, frame, internals } = setup(features, 1000);
     frame();
     frame();
     const group = table.groupAt(0);
@@ -560,13 +586,15 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     ]);
     for (let i = 0; i < 4; i++) {
       const { record } = frame();
-      expect(coverage(record)).toEqual(allRows(table));
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      expect(record.some((entry) => entry.delta && entry.kind === 'rows')).toBe(true);
     }
     expect(renderer.writeStats.rebuilt).toBe(1);
+    expect(internals.deltaRowCount()).toBe(1);
     expect(renderer.hasPendingWork).toBe(false);
   });
 
-  it('cuts a group again for a row written into another kind of run, drawing every row meanwhile', () => {
+  it('draws a row written into another kind of run from the delta, every row drawn meanwhile', () => {
     const features = interleaved(200, 14);
     const { table, internals, renderer, frame } = setup(features, 1000);
     renderer.setDrawingByKind(true);
@@ -593,10 +621,11 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     let atOnce = false;
     for (let i = 0; i < 4; i++) {
       const { record } = frame();
-      expect(coverage(record)).toEqual(allRows(table));
-      atOnce ||= record.some((entry) => entry.kind === 'immediate' && entry.from === row);
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      atOnce ||= record.some((entry) => entry.delta && entry.kind === 'immediate');
     }
     expect(renderer.writeStats.reclassified).toBe(1);
+    expect(internals.deltaRowCount()).toBe(1);
     expect(atOnce).toBe(true);
   });
 

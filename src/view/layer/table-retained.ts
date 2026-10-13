@@ -79,6 +79,7 @@ import {
   type ChunkBuildBudget,
   type ChunkSchedulerHost,
   chunkClock,
+  chunkOrigin,
   createChunkBuildBudget,
   invalidateChunk,
   type RetainedChunkJob,
@@ -157,7 +158,31 @@ export interface TableDrawRecord {
   readonly from: number;
   /** The end of the rows drawn (exclusive) */
   readonly to: number;
+  /**
+   * Whether the rows are rows of the delta of the layer (`group` is the handle of the delta and
+   * `groupIndex` -1; `from` and `to` are rows of the delta)
+   */
+  readonly delta?: boolean;
 }
+
+/**
+ * The rows of the delta drawn at a place of a group: before row `at` of the group, the rows
+ * `[from, to)` of the delta
+ */
+interface DeltaInsert {
+  readonly at: number;
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * The time the frames may take cutting the drawn ranges for the rows of the delta: past this
+ * number of cuts in a layer, the next versions of the groups with the most cuts are built first
+ * (a first estimate, to be set from measured data)
+ *
+ * @internal
+ */
+export const SPLIT_BUDGET = 64;
 
 /**
  * The frame a layer is drawn in
@@ -287,6 +312,12 @@ interface LayerCache {
   layer: Layer | null;
   deps: StoreRetainedDrawDeps | null;
   tables: FeatureTablesInternals | null;
+  /** The rows of the delta of the layer as they are packed (null when there is none) */
+  delta: GroupCache | null;
+  /** Whether the rows of the delta are to be packed again (a write did not fit its place) */
+  deltaStale: boolean;
+  /** The view the layer was drawn in last (what a pending version waits for) */
+  bounds: BoundingBox;
 }
 
 /** A row written in place, waiting for the pass before the main one of the next frame */
@@ -312,12 +343,14 @@ export interface TableWriteStats {
   coordsOnly: number;
   /** Of them, the rows written by their style only */
   styleOnly: number;
-  /** The rows that did not fit their places (their chunk is built again) */
+  /** The rows that did not fit their places (they went to the delta of their layer) */
   rebuilt: number;
   /** The rows whose chunk was being built (the build starts again) */
   restarted: number;
-  /** The rows classified otherwise (the chunks of their group are cut again) */
+  /** The rows classified otherwise (they went to the delta of their layer) */
   reclassified: number;
+  /** The cuts of the drawn ranges for the rows of the deltas in the last frame */
+  cuts: number;
 }
 
 /**
@@ -340,6 +373,21 @@ interface DrawPass {
   binding: RowStateBinding | null;
   /** Whether the chunks advanced are drawn (false while the other drawing draws the group) */
   drawing: boolean;
+  /** The rows of the delta to draw at places of the group being drawn, in order */
+  inserts: readonly DeltaInsert[] | null;
+  /** The next of them to draw */
+  insertAt: number;
+  /** The rows of the delta of the layer being drawn, as they are packed (null: not packed) */
+  delta: GroupCache | null;
+  /** The rows of the delta of the layer being drawn */
+  deltaGroup: RowGroup | null;
+  /** What the rows drawn at once of the layer being drawn are drawn with */
+  layer: Layer | null;
+  deps: StoreRetainedDrawDeps | null;
+  tables: FeatureTablesInternals | null;
+  settled: boolean;
+  /** Whether the layer is drawn in one draw (the rows of the delta in one draw too) */
+  oneDraw: boolean;
 }
 
 /** The frame of the chunk scheduler, set once per layer */
@@ -383,6 +431,7 @@ export class TableLayerRenderer {
     rebuilt: 0,
     restarted: 0,
     reclassified: 0,
+    cuts: 0,
   };
   private readonly scratch: { parts: number[]; coords: Float32Array } = {
     parts: [],
@@ -405,6 +454,15 @@ export class TableLayerRenderer {
     groupIndex: 0,
     binding: null,
     drawing: true,
+    inserts: null,
+    insertAt: 0,
+    delta: null,
+    deltaGroup: null,
+    layer: null,
+    deps: null,
+    tables: null,
+    settled: true,
+    oneDraw: false,
   };
   /** The frame the chunks of the layer being drawn are built and drawn in (set per layer) */
   private readonly schedule: SchedulerFrame = {
@@ -468,6 +526,7 @@ export class TableLayerRenderer {
   prerender(): void {
     const start = chunkClock();
     this.applyWrites();
+    this.packDeltas();
     this.uploadStates();
     this.renderers?.rows?.flushUploads();
     this.prepared = true;
@@ -553,6 +612,7 @@ export class TableLayerRenderer {
     // A frame that had no pass before its main one writes what was queued now
     if (!this.prepared) {
       this.applyWrites();
+      this.packDeltas();
       this.uploadStates();
       this.renderers?.rows?.flushUploads();
     }
@@ -673,7 +733,19 @@ export class TableLayerRenderer {
       }
     }
 
+    // The rows of the delta, at their places among the groups (drawn as they are packed, or at
+    // once while they are not)
+    cache.bounds = bounds;
+    const inserts = this.deltaInserts(table);
     const pass = this.pass;
+    pass.delta = cache.delta?.group === table.delta.group && !cache.deltaStale ? cache.delta : null;
+    pass.deltaGroup = table.delta.group;
+    pass.oneDraw = drawing === 'one-draw';
+    pass.layer = layer;
+    pass.deps = deps;
+    pass.tables = tables;
+    pass.settled = settled;
+    this.writeStats.cuts = 0;
     pass.layerId = table.layerId;
     pass.frame = frame;
     pass.factors = layerDrawFactors(layer);
@@ -698,7 +770,12 @@ export class TableLayerRenderer {
       for (let g = 0; g < table.groupCount; g++) {
         const group = table.groupAt(g);
         const groupCache = cache.groups.get(group.handle);
-        if (!groupCache) continue;
+        pass.inserts = inserts.get(g) ?? null;
+        pass.insertAt = 0;
+        if (!groupCache) {
+          this.drawInserts(Number.MAX_SAFE_INTEGER);
+          continue;
+        }
         // The chunks of a group whose state is not written yet are built, not drawn (the rows
         // drawn at once read their state as it is)
         pass.group = group;
@@ -719,33 +796,31 @@ export class TableLayerRenderer {
           // The chunks of the drawing are built without being drawn, and the group is drawn
           // with the chunks of the other drawing, as they are
           pass.drawing = false;
-          this.advance(tables, layer, frame, deps, settled, drawing);
+          this.advance(tables, settled, drawing);
           pass.drawing = true;
           const theirs = choice === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
           if (theirs) {
-            this.drawBuilt(
-              tables,
-              layer,
-              frame,
-              deps,
-              settled,
-              theirs.retiring ?? theirs.chunks,
-              bounds,
-            );
+            this.drawBuilt(tables, settled, theirs.retiring ?? theirs.chunks, bounds);
           }
         } else if (own?.retiring && !builtInView(own.chunks, bounds)) {
           // Cut again: the chunks of the new cut are built without being drawn, and the group is
           // drawn with the chunks of the cut before until they are built in view
           pass.drawing = false;
-          this.advance(tables, layer, frame, deps, settled, drawing);
+          this.advance(tables, settled, drawing);
           pass.drawing = true;
-          this.drawBuilt(tables, layer, frame, deps, settled, own.retiring, bounds);
+          this.drawBuilt(tables, settled, own.retiring, bounds);
           this.pending = true;
         } else {
           if (own?.retiring) this.retire(own);
-          this.advance(tables, layer, frame, deps, settled, drawing);
+          this.advance(tables, settled, drawing);
         }
+        // The rows of the delta after the last chunk of the group
+        this.drawInserts(Number.MAX_SAFE_INTEGER);
       }
+      // The rows of the delta of a layer without groups, or after its last one
+      pass.inserts = inserts.get(-1) ?? null;
+      pass.insertAt = 0;
+      this.drawInserts(Number.MAX_SAFE_INTEGER);
     } finally {
       run?.end();
       this.drawMs += chunkClock() - started;
@@ -759,6 +834,12 @@ export class TableLayerRenderer {
       pass.binding = null;
       pass.cutsOf = null;
       pass.drawing = true;
+      pass.inserts = null;
+      pass.delta = null;
+      pass.deltaGroup = null;
+      pass.layer = null;
+      pass.deps = null;
+      pass.tables = null;
     }
   }
 
@@ -771,6 +852,8 @@ export class TableLayerRenderer {
       for (const groupCache of cache.groups.values()) {
         for (const chunk of allChunks(groupCache)) this.invalidateChunk(chunk, keepDrawing);
       }
+      // The rows of the delta are packed again before the next frame
+      cache.deltaStale = true;
       if (!keepDrawing) cache.slots = null;
     }
   }
@@ -851,6 +934,8 @@ export class TableLayerRenderer {
     if (renderers) this.renderers = renderers;
     for (const cache of this.layers.values()) {
       for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache);
+      if (cache.delta) this.disposeGroup(cache.delta);
+      cache.delta = null;
       if (cache.rowsStyles) this.renderers?.rows?.retirePalette(cache.rowsStyles.palette);
     }
     this.layers.clear();
@@ -864,31 +949,48 @@ export class TableLayerRenderer {
    * Writes the rows written in place since the last pass into the chunks that draw them: a row
    * that keeps its shape by its coordinates only, a row whose style changed within the layout of
    * its instances by its style only, another row packed again into its place in its chunk when it
-   * fits. A row that does not fit makes its chunk build again (the chunk keeps drawing until the
-   * new one is built), a row classified otherwise makes the chunks of its group cut again, and a
-   * row of a chunk being built makes the build start again from its columns
+   * fits. A row that does not fit its place, or is classified otherwise, goes to the delta of its
+   * layer (a row of the delta makes the delta be packed again), and a row of a chunk being built
+   * makes the build start again from its columns
    */
   private applyWrites(): void {
     if (this.written.size === 0) return;
     for (const [layerId, groups] of this.written) {
       const cache = this.layers.get(layerId);
       if (!cache) continue;
+      const delta = cache.tables?.layerTable(layerId)?.delta;
+      const away: number[] = [];
       for (const [handle, rows] of groups) {
-        const groupCache = cache.groups.get(handle);
+        const ofDelta = delta?.handle === handle;
+        const groupCache = ofDelta
+          ? cache.delta?.group === delta.group
+            ? cache.delta
+            : null
+          : cache.groups.get(handle);
         if (!groupCache) continue;
-        for (const [row, write] of rows) this.applyWrite(cache, groupCache, row, write);
+        for (const [row, write] of rows) {
+          if (this.applyWrite(cache, groupCache, row, write)) continue;
+          if (ofDelta) cache.deltaStale = true;
+          else away.push(groupCache.group.data.handles[row]);
+        }
       }
+      if (away.length > 0) cache.tables?.toDelta(away);
     }
     this.written.clear();
   }
 
-  /** Writes one row written in place into the chunks that draw it */
+  /**
+   * Writes one row written in place into the chunks that draw it
+   *
+   * @returns false when the row cannot be written there (it does not fit its place, or it is
+   *   classified otherwise)
+   */
   private applyWrite(
     cache: LayerCache,
     groupCache: GroupCache,
     row: number,
     write: PendingWrite,
-  ): void {
+  ): boolean {
     const group = groupCache.group;
     const drawn = this.writeIsDrawn(cache, write);
     // What the classification of a row reads (its type, its style, and what an extension reads
@@ -903,11 +1005,10 @@ export class TableLayerRenderer {
       const chunk = held?.chunks.find((c) => row >= c.range.from && row < c.range.to);
       if (!held || !chunk) continue;
       if (classified && !this.classifiedAs(cache, groupCache, row, chunk.range.kind, oneDraw)) {
-        // Another kind of run (drawn at once, by another kind, with other pictures): the group
-        // is cut again, and keeps drawing its chunks until the new ones are built
-        held.generation = -1;
+        // Another kind of run (drawn at once, by another kind, with other pictures): the row is
+        // drawn from the delta (J13 of the design)
         stats.reclassified++;
-        continue;
+        return false;
       }
       if (chunk.type === 'immediate') {
         if (chunk.features && row - chunk.range.from < chunk.filled && cache.tables) {
@@ -924,7 +1025,7 @@ export class TableLayerRenderer {
       }
     }
     const chunk = oneDrawChunk;
-    if (!drawn || !chunk) return;
+    if (!drawn || !chunk) return true;
     if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
       // The extent of the chunk only widens, so a row moved out of it is not culled with it
       const b = group.data.rowBounds;
@@ -937,16 +1038,16 @@ export class TableLayerRenderer {
       // Being built: the build starts again from the columns as written
       this.invalidateChunk(chunk, true);
       stats.restarted++;
-      return;
+      return true;
     }
     const gpu = chunk.batches;
     const rows = this.renderers?.rows;
     const rowsStyles = cache.rowsStyles;
-    if (!gpu || !rows || !rowsStyles || !cache.context) return;
+    if (!gpu || !rows || !rowsStyles || !cache.context) return true;
     if (gpu.data.palette !== rowsStyles.palette) {
+      // Built with the styles before: built again with the new ones (drawn until then)
       this.invalidateChunk(chunk, true);
-      stats.rebuilt++;
-      return;
+      return true;
     }
     const context = this.packContext(groupCache, cache);
     const local = row - chunk.range.from;
@@ -973,19 +1074,19 @@ export class TableLayerRenderer {
       }
       stats.inPlace++;
       stats.coordsOnly++;
-      return;
+      return true;
     }
 
     // The style only: a style of the same layout of instances
     if ((write.what & ROW_WRITE_GEOMETRY) === 0) {
       const style = resolveRowStyle(group, row, context);
-      if (style === held) return;
+      if (style === held) return true;
       if (style >= 0 && held >= 0 && rowsStyles.layoutOf(style) === rowsStyles.layoutOf(held)) {
         rowsStyles.palette.retain(style);
         rows.patchRowStyle(gpu, local, style, styleCreatedZoom(group, row, rowsStyles, style));
         stats.inPlace++;
         stats.styleOnly++;
-        return;
+        return true;
       }
     }
 
@@ -996,11 +1097,12 @@ export class TableLayerRenderer {
       rows.patchRows(gpu, local, draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites))
     ) {
       stats.inPlace++;
-      return;
+      return true;
     }
+    // It does not fit its place: drawn from the delta
     draft.releaseStyles();
-    this.invalidateChunk(chunk, true);
     stats.rebuilt++;
+    return false;
   }
 
   /** Whether a write changes what is drawn of a row (its geometry, its style, its rule color) */
@@ -1066,6 +1168,14 @@ export class TableLayerRenderer {
     this.record = record;
   }
 
+  /** The chunks the rows of the delta of a layer are packed in (for the tests) */
+  deltaChunks(layerId: string): RowsGpuChunk[] {
+    const chunks = this.layers.get(layerId)?.delta?.oneDraw?.chunks ?? [];
+    return chunks.flatMap((chunk) =>
+      chunk.type === 'rows' && chunk.batches ? [chunk.batches] : [],
+    );
+  }
+
   /**
    * Draws the layers by kind even where they can be drawn in one draw (true), or in one draw
    * where they can (false, the default), to compare the two
@@ -1099,6 +1209,9 @@ export class TableLayerRenderer {
         layer: null,
         deps: null,
         tables: null,
+        delta: null,
+        deltaStale: false,
+        bounds: WORLD,
       };
       this.layers.set(table.layerId, cache);
     }
@@ -1142,17 +1255,8 @@ export class TableLayerRenderer {
     for (let g = 0; g < table.groupCount; g++) {
       const group = table.groupAt(g);
       if (cache.groups.has(group.handle)) continue;
-      cache.groups.set(group.handle, {
-        group,
-        byKind: null,
-        oneDraw: null,
-        sprites: new Map(),
-        texture: null,
-        uploadedVersion: -1,
-        binding: null,
-        // Its chunks are built with the styles as they are resolved now
-        styleGeneration: cache.styleGeneration,
-      });
+      // Its chunks are built with the styles as they are resolved now
+      cache.groups.set(group.handle, newGroupCache(group, cache.styleGeneration));
     }
     return cache;
   }
@@ -1379,7 +1483,8 @@ export class TableLayerRenderer {
    */
   private uploadStates(): void {
     for (const cache of this.layers.values()) {
-      for (const groupCache of cache.groups.values()) {
+      const caches = cache.delta ? [...cache.groups.values(), cache.delta] : cache.groups.values();
+      for (const groupCache of caches) {
         const group = groupCache.group;
         if (!groupCache.texture) {
           groupCache.texture = createRowStateTexture(
@@ -1442,27 +1547,17 @@ export class TableLayerRenderer {
    * Builds and draws the chunks of the group being drawn for a drawing, in their order (the
    * rows drawn at once among them; nothing is drawn while the pass does not draw)
    */
-  private advance(
-    tables: FeatureTablesInternals,
-    layer: Layer,
-    frame: TableLayerFrame,
-    deps: StoreRetainedDrawDeps,
-    settled: boolean,
-    drawing: Drawing,
-  ): void {
+  private advance(tables: FeatureTablesInternals, settled: boolean, drawing: Drawing): void {
     const pass = this.pass;
     const groupCache = pass.groupCache as GroupCache;
     const held = drawing === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
     if (!held) return;
-    const run = (pass.renderers as RetainedRendererSet).run;
     for (const chunk of held.chunks) {
+      // The rows of the delta before the chunk
+      this.drawInserts(chunk.range.from);
       if (chunk.type === 'immediate') {
         if (!pass.drawing) continue;
-        // The rows are drawn at once outside the run: what draws them may change any of the
-        // state of the run, and some of it draws without the run
-        run?.end();
-        this.drawImmediate(tables, layer, chunk, frame, deps, settled);
-        run?.begin();
+        this.drawImmediate(tables, chunk, settled);
         continue;
       }
       const pending =
@@ -1470,31 +1565,27 @@ export class TableLayerRenderer {
           ? advanceChunkBuild(chunk, this.schedule, this.oneDrawHost)
           : advanceChunkBuild(chunk, this.schedule, this.host);
       if (pending) this.pending = true;
+      // The rows of the delta within the chunk, when it was not drawn
+      this.drawInserts(chunk.range.to - 1);
     }
   }
 
   /** Draws the chunks of the group being drawn for a drawing as they are built, in view */
   private drawBuilt(
     tables: FeatureTablesInternals,
-    layer: Layer,
-    frame: TableLayerFrame,
-    deps: StoreRetainedDrawDeps,
     settled: boolean,
     chunks: readonly TableChunk[],
     bounds: BoundingBox,
   ): void {
-    const pass = this.pass;
-    const run = (pass.renderers as RetainedRendererSet).run;
     for (const chunk of chunks) {
+      this.drawInserts(chunk.range.from);
       if (chunk.type === 'immediate') {
-        // Outside the run, as in `advance`
-        run?.end();
-        this.drawImmediate(tables, layer, chunk, frame, deps, settled);
-        run?.begin();
+        this.drawImmediate(tables, chunk, settled);
       } else if (chunk.batches && meets(chunk.bounds, bounds)) {
         if (chunk.type === 'rows') this.drawOneDraw(chunk);
         else this.drawRetained(chunk);
       }
+      this.drawInserts(chunk.range.to - 1);
     }
   }
 
@@ -1510,19 +1601,48 @@ export class TableLayerRenderer {
     this.drawCut(state, (from, to) => this.drawOneDrawRange(state, from, to));
   }
 
-  /** Draws the rows of a chunk in ranges cut at the places the pass gives for it */
+  /**
+   * Draws the rows of a chunk in ranges cut at the places the pass gives for it, and at the
+   * places of the rows of the delta within it (drawn in between)
+   */
   private drawCut(state: TableChunk, draw: (from: number, to: number) => void): void {
-    const rows = state.range.to - state.range.from;
+    const base = state.range.from;
+    const rows = state.range.to - base;
     const cuts = this.pass.cutsOf?.get(state);
     let from = 0;
-    if (cuts) {
-      for (const cut of cuts) {
-        if (cut <= from) continue;
-        draw(from, cut);
-        from = cut;
+    let c = 0;
+    for (;;) {
+      const cut = cuts && c < cuts.length ? cuts[c] : rows;
+      const insert = this.nextInsert();
+      const at = insert !== null && insert < base + rows ? insert - base : rows;
+      const next = Math.min(cut, at);
+      if (next >= rows) break;
+      if (next > from) {
+        draw(from, next);
+        from = next;
       }
+      if (next === at) this.drawInserts(base + at);
+      else c++;
     }
     if (rows > from) draw(from, rows);
+  }
+
+  /** The row of the group before which the next rows of the delta are drawn (null for none) */
+  private nextInsert(): number | null {
+    const pass = this.pass;
+    const inserts = pass.inserts;
+    return inserts && pass.insertAt < inserts.length ? inserts[pass.insertAt].at : null;
+  }
+
+  /** Draws the rows of the delta placed before rows of the group up to `row` (included) */
+  private drawInserts(row: number): void {
+    const pass = this.pass;
+    const inserts = pass.inserts;
+    if (!inserts || !pass.drawing) return;
+    while (pass.insertAt < inserts.length && inserts[pass.insertAt].at <= row) {
+      const insert = inserts[pass.insertAt++];
+      this.drawDeltaRange(insert.from, insert.to);
+    }
   }
 
   /** Draws the rows `[from, to)` of a chunk drawn in one draw of the group being drawn */
@@ -1603,10 +1723,7 @@ export class TableLayerRenderer {
   /** Draws a chunk of rows at once, from the features of its rows */
   private drawImmediate(
     tables: FeatureTablesInternals,
-    layer: Layer,
     chunk: ImmediateRowsChunk,
-    frame: TableLayerFrame,
-    deps: StoreRetainedDrawDeps,
     settled: boolean,
   ): void {
     const pass = this.pass;
@@ -1638,26 +1755,207 @@ export class TableLayerRenderer {
       this.pending = true;
     }
 
+    // Drawn in parts at the places of the rows of the delta within the chunk
+    let part = from;
+    for (let at = this.nextInsert(); ; at = this.nextInsert()) {
+      const end = at !== null && at > part && at < to ? at : to;
+      this.drawAtOnce(group, part, end, (i) =>
+        chunk.features && i - from < chunk.filled ? chunk.features[i - from] : null,
+      );
+      this.recordRange('immediate', part, end);
+      if (end >= to) break;
+      this.drawInserts(end);
+      part = end;
+    }
+  }
+
+  /**
+   * Draws rows of a group at once, from their features (the ones kept, or made for the rows in
+   * view), outside the run of the retained draws: what draws them may change any of the state of
+   * the run, and some of it draws without the run
+   *
+   * @param kept The feature kept for a row (null when none is)
+   */
+  private drawAtOnce(
+    group: RowGroup,
+    from: number,
+    to: number,
+    kept: (row: number) => Feature | null,
+  ): void {
+    const pass = this.pass;
+    const frame = pass.frame as TableLayerFrame;
+    const tables = pass.tables as FeatureTablesInternals;
     const bounds = frame.bounds ?? WORLD;
     const rowBounds = group.data.rowBounds;
     const features: Feature[] = [];
-    for (let i = 0; i < count; i++) {
-      const row = from + i;
+    for (let row = from; row < to; row++) {
       const state = group.state[row];
       if ((state & STATE_HIDDEN_MASK) !== 0) continue;
-      let feature = chunk.features && i < chunk.filled ? chunk.features[i] : null;
+      let feature = kept(row);
       if (!feature) {
         // A row not kept is made when it is in view
         if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
-        feature = rowFeature(tables.readContext, layerId, group, row);
+        feature = rowFeature(tables.readContext, pass.layerId, group, row);
       }
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
       features.push(set > 0 ? translated(feature, this.translations, set) : feature);
     }
-    if (features.length > 0) {
-      drawImmediateFeatures(features, layer, frame.projectionData, frame.zoom, deps);
+    if (features.length === 0) return;
+    const run = (pass.renderers as RetainedRendererSet).run;
+    run?.end();
+    drawImmediateFeatures(
+      features,
+      pass.layer as Layer,
+      frame.projectionData,
+      frame.zoom,
+      pass.deps as StoreRetainedDrawDeps,
+    );
+    run?.begin();
+  }
+
+  // === The rows of the delta ===
+
+  /**
+   * The places of the rows of the delta of a layer among its groups: by the place of a group in
+   * the order (-1 for the rows after every group), the rows of the delta to draw before each row
+   * of the group, consecutive rows at the same place in one range
+   */
+  private deltaInserts(table: LayerTable): Map<number, DeltaInsert[]> {
+    const out = new Map<number, DeltaInsert[]>();
+    const delta = table.delta.group;
+    if (!delta) return out;
+    const places = table.deltaPlaces();
+    let k = 0;
+    while (k < delta.data.length) {
+      const g = places.groups[k];
+      const at = places.cuts[k];
+      let end = k + 1;
+      while (end < delta.data.length && places.groups[end] === g && places.cuts[end] === at) end++;
+      let list = out.get(g);
+      if (!list) {
+        list = [];
+        out.set(g, list);
+      }
+      list.push({ at, from: k, to: end });
+      k = end;
     }
-    this.recordRange('immediate', from, to);
+    return out;
+  }
+
+  /**
+   * Draws the rows `[from, to)` of the delta of the layer being drawn: in one draw from the
+   * chunks they are packed in, when the layer is drawn in one draw and they are on the GPU; at
+   * once from their features otherwise
+   */
+  private drawDeltaRange(from: number, to: number): void {
+    const pass = this.pass;
+    const group = pass.deltaGroup;
+    if (!group || to <= from) return;
+    const cache = pass.delta;
+    const record = (kind: TableRunKind, a: number, b: number): void => {
+      this.record?.push({
+        layerId: pass.layerId,
+        group: cache?.group.handle ?? -1,
+        groupIndex: -1,
+        kind,
+        from: a,
+        to: b,
+        delta: true,
+      });
+    };
+    this.writeStats.cuts++;
+    const chunks = pass.oneDraw && cache?.binding ? cache.oneDraw?.chunks : undefined;
+    if (!chunks) {
+      this.drawAtOnce(group, from, to, () => null);
+      record('immediate', from, to);
+      return;
+    }
+    const rows = (pass.renderers as RetainedRendererSet).rows;
+    const { projectionData, zoom } = pass.frame as TableLayerFrame;
+    let next = from;
+    for (const chunk of chunks) {
+      const a = Math.max(next, chunk.range.from);
+      const b = Math.min(to, chunk.range.to);
+      if (b <= a) continue;
+      const gpu = chunk.type === 'rows' ? chunk.batches : null;
+      if (gpu?.uploaded && rows) {
+        rows.drawRange(
+          gpu,
+          a - chunk.range.from,
+          b - chunk.range.from,
+          zoom,
+          projectionData,
+          (cache as GroupCache).binding as RowStateBinding,
+          pass.factors,
+        );
+        record('rows', a, b);
+      } else {
+        this.drawAtOnce(group, a, b, () => null);
+        record('immediate', a, b);
+      }
+      next = b;
+    }
+  }
+
+  /**
+   * Packs the rows of the delta of every layer whose rows came in, left or were made again, or
+   * whose packing is stale (a write that did not fit, new styles): before the main pass, so they
+   * are on the GPU in the frame the copies in their groups are hidden. The rows the drawing in
+   * one draw cannot draw are drawn at once
+   */
+  private packDeltas(): void {
+    const rows = this.renderers?.rows ?? null;
+    for (const [layerId, cache] of this.layers) {
+      const table = cache.tables?.layerTable(layerId);
+      if (!table) continue;
+      const group = table.delta.group;
+      const held = cache.delta;
+      const palette = cache.rowsStyles?.palette;
+      const current =
+        held !== null &&
+        held.group === group &&
+        !cache.deltaStale &&
+        held.styleGeneration === cache.styleGeneration &&
+        held.oneDraw?.generation === cache.generation &&
+        held.oneDraw.chunks.every((c) => c.type !== 'rows' || c.batches?.data.palette === palette);
+      if (current) continue;
+      if (held) this.disposeGroup(held);
+      cache.delta = null;
+      cache.deltaStale = false;
+      if (!group) continue;
+      const deltaCache = newGroupCache(group, cache.styleGeneration);
+      cache.delta = deltaCache;
+      const { tables, slots, layer, deps } = cache;
+      if (!rows || !tables || !slots || !layer || !deps || !cache.context || !cache.rowsStyles) {
+        continue;
+      }
+      const sprites = new Map<number, RowSpriteSource>();
+      const ranges = partitionRowGroup(
+        group,
+        (row) =>
+          classifyRow(group, row, {
+            slots,
+            customTypes: deps.customRenderers,
+            companions: deps.companions as FeatureCompanionRegistry,
+            featureOf: (r, k) => rowFeature(tables.readContext, layerId, r, k),
+            layer,
+            oneDraw: true,
+            onSprite: (r, source) => sprites.set(r, source),
+          }),
+        Number.POSITIVE_INFINITY,
+        (row) => sprites.get(row),
+      );
+      deltaCache.sprites = sprites;
+      const chunks = ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[];
+      deltaCache.oneDraw = { chunks, generation: cache.generation, retiring: null };
+      const context = this.packContext(deltaCache, cache);
+      for (const chunk of chunks) {
+        if (chunk.type !== 'rows') continue;
+        const origin = normalizeOrigin(chunkOrigin(chunk));
+        chunk.batches = packRowsChunk(group, chunk.range, origin, context, rows);
+        chunk.origin = origin;
+      }
+    }
   }
 
   /**
@@ -1819,6 +2117,43 @@ function oneDrawJob(
       done = false;
     },
   };
+}
+
+/** What is kept for a row group, before its chunks are cut */
+function newGroupCache(group: RowGroup, styleGeneration: number): GroupCache {
+  return {
+    group,
+    byKind: null,
+    oneDraw: null,
+    sprites: new Map(),
+    texture: null,
+    uploadedVersion: -1,
+    binding: null,
+    styleGeneration,
+  };
+}
+
+/**
+ * Packs a chunk drawn in one draw at once (the rows of a delta, small and written to the GPU in
+ * the pass before the main one of the frame they are packed in)
+ */
+function packRowsChunk(
+  group: RowGroup,
+  range: OrderedChunkRange,
+  origin: [number, number],
+  context: RowsPackContext,
+  rows: RowsRenderer,
+): RowsGpuChunk {
+  const count = range.to - range.from;
+  const palette = context.rowsStyles.palette;
+  const draft = new RowsDraft(count, range.from, range.vertices, palette);
+  // The pictures of the chunk come from one source (`partitionRowGroup`)
+  let sprites: RowSpriteSource | null = null;
+  for (let row = range.from; row < range.to && !sprites; row++) {
+    sprites = context.spriteSourceOf(row) ?? null;
+  }
+  for (let i = 0; i < count; i++) collectRow(group, range.from + i, i, draft, origin, context);
+  return rows.createChunk(draft.finish(origin, palette, sprites));
 }
 
 /** Whether the renderers can build and draw batches of rows */
