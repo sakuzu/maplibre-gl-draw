@@ -123,6 +123,9 @@ const PLACE_FIELDS: ReadonlySet<string> = new Set([
   'member',
 ]);
 
+/** The fields a new row is written with: a deleted row written all of them is created again */
+const CREATE_FIELDS: readonly RowField[] = ['type', 'layerId', 'geometry', 'order'];
+
 /** The number of handles a scan reads at a time when not told */
 const SCAN_BATCH = 1024;
 
@@ -1442,7 +1445,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (let i = 0; i < n; i++) {
       const handle = handles[i];
       const place = places[i];
-      const placed = place ? this.placeChanged(place, i, fields, groupHandles) : true;
+      // A deleted row written whole (its type, layer, geometry and key) is created again: it
+      // goes to the delta as a new row would
+      const revived =
+        !!place &&
+        !deleted?.[i] &&
+        (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 &&
+        CREATE_FIELDS.every((field) => fields.get(field)?.[i] !== undefined);
+      const placed = place ? revived || this.placeChanged(place, i, fields, groupHandles) : true;
       const targetLayer = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
       const change = draftOf(changes, targetLayer as string);
       for (const field of fields.keys()) change.fields.add(field);
@@ -1452,7 +1462,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
           change.styleKeys.add(key);
         }
       }
-      if (!place) change.created.push(handle);
+      if (!place || revived) change.created.push(handle);
       else if (deleted?.[i] && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0) {
         change.deleted.push(handle);
       } else change.updated.push(handle);
@@ -1490,7 +1500,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       // Placed elsewhere, or new: a copy in the delta of its layer (many new rows next to each
       // other are built into groups of their own instead)
-      const input = this.patchedInput(handle, place, i, fields, deleted, groupHandles);
+      const input = this.patchedInput(handle, place, i, fields, deleted, groupHandles, revived);
       const layer = this.layerOf(targetLayer as string);
       if (!place) {
         let list = fresh.get(layer);
@@ -1852,10 +1862,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
     fields: ReadonlyMap<RowField, readonly unknown[]>,
     deleted: Uint8Array | undefined,
     groupHandles: number[] | undefined,
+    revived = false,
   ): RowInput {
-    const base: RowInput = place
-      ? rowInputOf(this.readContext, place.group, place.row)
-      : { id: this.ids.idOf(handle) ?? '', type: 'Point', geometry: null, order: '' };
+    // A row created again starts from nothing, as a new one does
+    const base: RowInput =
+      place && !revived
+        ? rowInputOf(this.readContext, place.group, place.row)
+        : { id: this.ids.idOf(handle) ?? '', type: 'Point', geometry: null, order: '' };
     const out: {
       -readonly [K in keyof RowInput]: RowInput[K];
     } = { ...base, properties: { ...(base.properties ?? {}) } };
@@ -1897,6 +1910,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     if (deleted?.[i]) out.deleted = true;
+    else if (revived) out.deleted = false;
     if (out.group === undefined || out.group < 0) out.member = undefined;
     return out;
   }

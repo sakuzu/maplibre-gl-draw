@@ -348,16 +348,25 @@ export class TableContractStore implements StoreContract {
       if (!this.#layers.has(group.layerId)) {
         throw new Error(`Layer with id "${group.layerId}" not found`);
       }
-      if (group.kind !== 'table' && group.featureIds.length > 0) {
-        throw new Error(`The features of the group "${group.id}" join it by their rows`);
-      }
-      const created = tableGroupOf(group);
+      // The features listed join the group, which takes the place of the first of them
+      const members = group.kind === 'table' ? [] : group.featureIds;
+      const first = members.length > 0 ? this.tables.handleOf(members[0]) : undefined;
+      // Its layer is the one of its first member, when it has one
+      const firstLayer = first === undefined ? undefined : this.getFeature(members[0])?.layerId;
+      const created = tableGroupOf(firstLayer ? { ...group, layerId: firstLayer } : group);
       const handle = this.#nextGroup++;
       this.writer.applyGroups({
         handles: Int32Array.of(handle),
         fields: new Map<'id' | 'order' | 'layerId' | 'visible' | 'locked', unknown[]>([
           ['id', [created.id]],
-          ['order', [keyAfter(this.#lastItemKey(created.layerId))]],
+          [
+            'order',
+            [
+              first === undefined
+                ? keyAfter(this.#lastItemKey(created.layerId))
+                : this.#itemKeyOf(first),
+            ],
+          ],
           ['layerId', [created.layerId]],
           ['visible', [created.visible]],
           ['locked', [created.locked]],
@@ -365,6 +374,7 @@ export class TableContractStore implements StoreContract {
       });
       this.#groups.set(created.id, created);
       this.#bus.merge({ groups: { created: [created] } });
+      for (const id of members) this.updateFeature(id, { groupId: created.id });
     });
   }
 
@@ -553,6 +563,12 @@ export class TableContractStore implements StoreContract {
       if (key !== undefined && (last === null || key > last)) last = key;
     }
     return last;
+  }
+
+  /** The key of the order of a row */
+  #itemKeyOf(handle: RowHandle): string {
+    const place = this.#internals.placeOf(handle);
+    return place ? utf8String(place.group.data.itemKeys, place.row) : keyAfter(null);
   }
 
   /** The key of the last member of a group (null for none) */

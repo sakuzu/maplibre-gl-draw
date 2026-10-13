@@ -22,8 +22,10 @@ import type {
   KeyNormalizedEvent,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { DEFAULT_SELECTION_CONFIG, type SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
+import { HOLD_LIMIT } from '../../store/draw-store.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
 import { computeCombinedGeoBoundingBox, isPointInGeoBoundingBox } from '../../view/ui/bounds.js';
@@ -70,6 +72,8 @@ export class SelectMode implements EngineModeHandler {
 
   #context!: EngineModeContext;
   #dragHandler = new SelectModeDragHandler();
+  /** The rows of a Store of rows marked as in the box being drawn */
+  #boxMarked: Int32Array = new Int32Array(0);
   #config: SelectionUIConfig = DEFAULT_SELECTION_CONFIG;
 
   // ============================================================================
@@ -99,6 +103,7 @@ export class SelectMode implements EngineModeHandler {
     plugins?.finishPluginInteraction();
     this.#dragHandler.reset(store);
 
+    this.#markBox([]);
     if (store.getBoxSelection()) store.setBoxSelection(null);
     if (store.getVertexSelection()) store.setSelectedVertices(null);
     if (!map.dragPan.isEnabled()) map.dragPan.enable();
@@ -129,6 +134,7 @@ export class SelectMode implements EngineModeHandler {
     // The selection and the vertex selection follow the change by themselves (the Store
     // drops what was deleted or hidden and the vertices whose coordinates changed)
     if (store.getDragState()) store.setDragState(null);
+    this.#markBox([]);
     if (store.getBoxSelection()) store.setBoxSelection(null);
   }
 
@@ -392,6 +398,16 @@ export class SelectMode implements EngineModeHandler {
       const updatedBoxSelection: BoxSelection = { ...boxSelection, endPoint };
       store.setBoxSelection(updatedBoxSelection);
 
+      // A Store of rows marks the rows in the box instead of selecting them while the box is
+      // drawn: they are held as features only when it is let go
+      if (store.tables) {
+        const hitIds = queryFeaturesInBox(updatedBoxSelection, this.#context, HOLD_LIMIT);
+        this.#markBox(
+          hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds,
+        );
+        return;
+      }
+
       // Live selection preview (a frame that selects the same features changes nothing)
       const hitIds = queryFeaturesInBox(updatedBoxSelection, this.#context);
       const filtered =
@@ -411,13 +427,38 @@ export class SelectMode implements EngineModeHandler {
     }
   }
 
+  /**
+   * Marks the rows of a Store of rows in the box being drawn (and unmarks the ones no longer in
+   * it): they show as selected without being held as features
+   */
+  #markBox(ids: readonly string[]): void {
+    const { store } = this.#context;
+    const states = featureTablesInternals(store.tables)?.states;
+    if (!states || !store.tables) return;
+    const tables = store.tables;
+    const next = Int32Array.from(
+      ids.map((id) => tables.handleOf(id) ?? -1).filter((handle) => handle >= 0),
+    );
+    const kept = new Set(next);
+    const dropped = this.#boxMarked.filter((handle) => !kept.has(handle));
+    if (dropped.length > 0) states.setBulk(dropped, false);
+    if (next.length > 0) states.setBulk(next, true);
+    this.#boxMarked = next;
+    if (dropped.length > 0 || next.length > 0) this.#context.map.triggerRepaint();
+  }
+
   onDragEnd(event: DragNormalizedEvent): void {
     const { store, map, plugins } = this.#context;
     const boxSelection = store.getBoxSelection();
 
     // Commit the box selection
     if (boxSelection) {
-      const hitIds = queryFeaturesInBox(boxSelection, this.#context);
+      this.#markBox([]);
+      const hitIds = queryFeaturesInBox(
+        boxSelection,
+        this.#context,
+        store.tables ? HOLD_LIMIT : undefined,
+      );
       const filtered =
         hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
       if (filtered.length === 0) {
@@ -447,6 +488,7 @@ export class SelectMode implements EngineModeHandler {
 
     const boxSelection = store.getBoxSelection();
     if (boxSelection) {
+      this.#markBox([]);
       if (boxSelection.previousSelection.length === 0) {
         store.setSelection(null, []);
       } else {

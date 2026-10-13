@@ -45,7 +45,9 @@ import type { Feature } from './shared/types/model.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import type { SnapResult } from './snapping/types.js';
+import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
+import { createTableMemoryStore } from './store/table-memory.js';
 import { createRowGroupBuilder, type RowInput } from './table/row-group-builder.js';
 import { utf8ColumnFromStrings } from './table/utf8-column.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
@@ -1037,3 +1039,12 @@ export function randomRowWrites(
   };
   return { step };
 }
+
+/**
+ * The kinds of Store the tests of the modes run on: the Store of objects, and the Store of rows
+ * (`createTableMemoryStore`), which behave the same to a mode
+ */
+export const STORE_KINDS: ReadonlyArray<readonly [string, () => Store]> = [
+  ['a Store of objects', () => new MemoryStore()],
+  ['a Store of rows', () => createTableMemoryStore().store],
+];

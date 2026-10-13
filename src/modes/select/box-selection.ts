@@ -17,19 +17,32 @@ import type { EngineModeContext } from '../handler.js';
  *
  * First the candidates are obtained quickly through the SpatialIndex (rbush),
  * and then a precise inside-the-box test is performed.
+ *
+ * @param limit The most features looked for: past it, one more is returned and the rest is
+ *   not tested (all of them when omitted)
  */
 export function queryFeaturesInBox(
   boxSelection: BoxSelection,
   context: EngineModeContext,
+  limit = Number.POSITIVE_INFINITY,
 ): string[] {
   const { store, spatialIndex, boxSelectionRegistry } = context;
   const rects = boxRects(boxSelection.startPoint, boxSelection.endPoint);
 
   // First obtain the candidates quickly with rbush (from each part of a box that crosses the
-  // antimeridian)
+  // antimeridian), and the rows of a Store of rows from its tables (its spatial index has the
+  // rows held only)
   const candidateIds = new Set<string>();
   for (const rect of rects) {
     for (const id of spatialIndex.findInBounds(rect)) candidateIds.add(id);
+    const tables = store.tables;
+    const cursor = tables?.scan({
+      bbox: [rect.minX, rect.minY, rect.maxX, rect.maxY],
+      order: 'any',
+    });
+    for (let batch = cursor?.next(); batch; batch = cursor?.next()) {
+      for (const handle of batch) candidateIds.add(tables?.idOf(handle) as string);
+    }
   }
 
   // Perform the precise inside-the-box test on the candidates.
@@ -55,6 +68,8 @@ export function queryFeaturesInBox(
 
     if (rects.some((rect) => isFeatureInBox(feature, rect, boxSelectionRegistry))) {
       hitIds.push(feature.id);
+      // Past the limit the answer is only that there are more
+      if (hitIds.length > limit) break;
     }
   }
 

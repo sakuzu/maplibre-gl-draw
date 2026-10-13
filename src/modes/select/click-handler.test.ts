@@ -17,8 +17,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { MemoryStore } from '../../store/memory.js';
+import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
+import { STORE_KINDS } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
   createFeatureCompanionRegistry,
@@ -28,239 +29,241 @@ import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
 import { handleSelectClick } from './click-handler.js';
 
-function polygon(id: string, layerId: string): Feature {
-  return {
-    groupId: undefined,
-    id,
-    type: 'Polygon',
-    geometry: {
+describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
+  function polygon(id: string, layerId: string): Feature {
+    return {
+      groupId: undefined,
+      id,
       type: 'Polygon',
-      coordinates: [
-        [
-          [0, 0],
-          [10, 0],
-          [10, 10],
-          [0, 10],
-          [0, 0],
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+            [0, 0],
+          ],
         ],
-      ],
-    },
-    layerId,
-    properties: {},
-    locked: false,
-    visible: true,
-    style: {},
-  };
-}
-
-const NO_MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };
-
-function clickEvent(): MouseNormalizedEvent {
-  return {
-    type: 'click',
-    point: { x: 50, y: -50 },
-    lngLat: { lng: 5, lat: 5 },
-    originalEvent: {} as MouseEvent,
-    modifiers: { ...NO_MODIFIERS },
-  };
-}
-
-function makeMap() {
-  return {
-    getCanvas: () => ({ style: { cursor: '' } }),
-    getZoom: () => 10,
-    triggerRepaint: vi.fn(),
-    project: (lngLat: { lng: number; lat: number }) => ({
-      x: lngLat.lng * 10,
-      y: -lngLat.lat * 10,
-    }),
-    unproject: (p: { x: number; y: number }) => ({ lng: p.x / 10, lat: -p.y / 10 }),
-  };
-}
-
-let store: MemoryStore;
-let top: TopHit | null;
-let context: EngineModeContext;
-/** There is one companion rendering provider per draw instance */
-let companions: FeatureCompanionRegistry = createFeatureCompanionRegistry();
-let onCompanionClick: ReturnType<typeof vi.fn<FeatureCompanionProvider['onCompanionClick']>>;
-
-/** Register a provider that has a companion which is "always hit" */
-function registerCompanion(id = 'p1'): void {
-  onCompanionClick = vi.fn<FeatureCompanionProvider['onCompanionClick']>();
-  companions.register({
-    id,
-    has: () => true,
-    draw: () => {},
-    hitTest: () => ({ id: 'c1' }),
-    onCompanionClick,
-  });
-}
-
-function click(): void {
-  handleSelectClick(clickEvent(), context, DEFAULT_SELECTION_CONFIG);
-}
-
-beforeEach(() => {
-  companions = createFeatureCompanionRegistry();
-  store = new MemoryStore();
-  store.createLayer({
-    id: 'l1',
-    name: 'l1',
-    visible: true,
-    locked: false,
-    opacity: 1,
-    items: [],
-    styleRule: undefined,
-    metadata: undefined,
-  });
-  store.createFeature(polygon('f1', 'l1'));
-  store.createFeature(polygon('f2', 'l1'));
-  top = null;
-  context = {
-    store,
-    map: makeMap(),
-    hitTestTopmost: () => top,
-    featureCompanions: companions,
-    plugins: undefined,
-    selectionScope: createSelectionScope(),
-  } as unknown as EngineModeContext;
-});
-
-describe('consumption of a companion click', () => {
-  it('the feature ID and the hit are passed to the provider', () => {
-    registerCompanion();
-    top = {
-      kind: 'companion',
-      companion: { providerId: 'p1', featureId: 'f1', hit: { id: 'c1' } },
+      },
+      layerId,
+      properties: {},
+      locked: false,
+      visible: true,
+      style: {},
     };
+  }
 
-    click();
+  const NO_MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };
 
-    expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'c1' }, expect.anything());
-  });
-
-  it('it does not change the selection (the selected feature stays as it is)', () => {
-    registerCompanion();
-    store.setSelection('feature', ['f2']);
-    top = {
-      kind: 'companion',
-      companion: { providerId: 'p1', featureId: 'f1', hit: { id: 'c1' } },
+  function clickEvent(): MouseNormalizedEvent {
+    return {
+      type: 'click',
+      point: { x: 50, y: -50 },
+      lngLat: { lng: 5, lat: 5 },
+      originalEvent: {} as MouseEvent,
+      modifiers: { ...NO_MODIFIERS },
     };
+  }
 
-    click();
-
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
-  });
-
-  it('it does not clear the selection either (it is not treated as an empty click)', () => {
-    registerCompanion();
-    store.setSelection('feature', ['f1']);
-    const setSelection = vi.spyOn(store, 'setSelection');
-    top = {
-      kind: 'companion',
-      companion: { providerId: 'p1', featureId: 'f1', hit: { id: 'c1' } },
+  function makeMap() {
+    return {
+      getCanvas: () => ({ style: { cursor: '' } }),
+      getZoom: () => 10,
+      triggerRepaint: vi.fn(),
+      project: (lngLat: { lng: number; lat: number }) => ({
+        x: lngLat.lng * 10,
+        y: -lngLat.lat * 10,
+      }),
+      unproject: (p: { x: number; y: number }) => ({ lng: p.x / 10, lat: -p.y / 10 }),
     };
+  }
 
-    click();
+  let store: Store;
+  let top: TopHit | null;
+  let context: EngineModeContext;
+  /** There is one companion rendering provider per draw instance */
+  let companions: FeatureCompanionRegistry = createFeatureCompanionRegistry();
+  let onCompanionClick: ReturnType<typeof vi.fn<FeatureCompanionProvider['onCompanionClick']>>;
 
-    expect(setSelection).not.toHaveBeenCalled();
-    setSelection.mockRestore();
-  });
-});
+  /** Register a provider that has a companion which is "always hit" */
+  function registerCompanion(id = 'p1'): void {
+    onCompanionClick = vi.fn<FeatureCompanionProvider['onCompanionClick']>();
+    companions.register({
+      id,
+      has: () => true,
+      draw: () => {},
+      hitTest: () => ({ id: 'c1' }),
+      onCompanionClick,
+    });
+  }
 
-describe('controls (the conventional path)', () => {
-  it('when a Store feature is in the foreground the selection is updated', () => {
-    top = { kind: 'store', feature: store.getFeature('f1') as Feature };
-
-    click();
-
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
-  });
-
-  it('when nothing is hit the selection is cleared', () => {
-    store.setSelection('feature', ['f1']);
-    top = null;
-
-    click();
-
-    expect(store.getSelection().type).toBeNull();
-  });
-});
-
-describe('a click while a plugin is busy', () => {
-  /** The element of the interaction, and a target inside it */
-  const inside = {} as HTMLElement;
-  const container = { contains: (target: unknown) => target === inside } as HTMLElement;
-
-  let finish: ReturnType<typeof vi.fn>;
-  let onFeatureClick: ReturnType<typeof vi.fn>;
-  let busy: boolean;
+  function click(): void {
+    handleSelectClick(clickEvent(), context, DEFAULT_SELECTION_CONFIG);
+  }
 
   beforeEach(() => {
-    busy = true;
-    finish = vi.fn(() => {
-      busy = false;
+    companions = createFeatureCompanionRegistry();
+    store = createStore();
+    store.createLayer({
+      id: 'l1',
+      name: 'l1',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      styleRule: undefined,
+      metadata: undefined,
     });
-    onFeatureClick = vi.fn(() => true);
+    store.createFeature(polygon('f1', 'l1'));
+    store.createFeature(polygon('f2', 'l1'));
+    top = null;
     context = {
-      ...context,
-      plugins: {
-        isPluginInteracting: () => busy,
-        getPluginInteractionContainer: () => container,
-        finishPluginInteraction: finish,
-        filterSelectionCandidates: (ids: string[]) => ids,
-        handleFeatureClick: onFeatureClick,
-      },
+      store,
+      map: makeMap(),
+      hitTestTopmost: () => top,
+      featureCompanions: companions,
+      plugins: undefined,
+      selectionScope: createSelectionScope(),
     } as unknown as EngineModeContext;
   });
 
-  function clickOn(target: unknown): void {
-    const event = clickEvent();
-    event.originalEvent = { target } as unknown as MouseEvent;
-    handleSelectClick(event, context, DEFAULT_SELECTION_CONFIG);
-  }
+  describe('consumption of a companion click', () => {
+    it('the feature ID and the hit are passed to the provider', () => {
+      registerCompanion();
+      top = {
+        kind: 'companion',
+        companion: { providerId: 'p1', featureId: 'f1', hit: { id: 'c1' } },
+      };
 
-  it('finishes the interaction and selects another feature clicked outside', () => {
-    store.setSelection('feature', ['f1']);
-    top = { kind: 'store', feature: store.getFeature('f2') as Feature };
+      click();
 
-    clickOn({});
+      expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'c1' }, expect.anything());
+    });
 
-    expect(finish).toHaveBeenCalledTimes(1);
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    it('it does not change the selection (the selected feature stays as it is)', () => {
+      registerCompanion();
+      store.setSelection('feature', ['f2']);
+      top = {
+        kind: 'companion',
+        companion: { providerId: 'p1', featureId: 'f1', hit: { id: 'c1' } },
+      };
+
+      click();
+
+      expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    });
+
+    it('it does not clear the selection either (it is not treated as an empty click)', () => {
+      registerCompanion();
+      store.setSelection('feature', ['f1']);
+      const setSelection = vi.spyOn(store, 'setSelection');
+      top = {
+        kind: 'companion',
+        companion: { providerId: 'p1', featureId: 'f1', hit: { id: 'c1' } },
+      };
+
+      click();
+
+      expect(setSelection).not.toHaveBeenCalled();
+      setSelection.mockRestore();
+    });
   });
 
-  it('finishes the interaction and clears the selection on the empty map outside', () => {
-    store.setSelection('feature', ['f1']);
-    top = null;
+  describe('controls (the conventional path)', () => {
+    it('when a Store feature is in the foreground the selection is updated', () => {
+      top = { kind: 'store', feature: store.getFeature('f1') as Feature };
 
-    clickOn({});
+      click();
 
-    expect(finish).toHaveBeenCalledTimes(1);
-    expect(store.getSelection().type).toBeNull();
+      expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    });
+
+    it('when nothing is hit the selection is cleared', () => {
+      store.setSelection('feature', ['f1']);
+      top = null;
+
+      click();
+
+      expect(store.getSelection().type).toBeNull();
+    });
   });
 
-  it('consumes a click inside the container', () => {
-    store.setSelection('feature', ['f1']);
-    const setSelection = vi.spyOn(store, 'setSelection');
-    top = { kind: 'store', feature: store.getFeature('f2') as Feature };
+  describe('a click while a plugin is busy', () => {
+    /** The element of the interaction, and a target inside it */
+    const inside = {} as HTMLElement;
+    const container = { contains: (target: unknown) => target === inside } as HTMLElement;
 
-    clickOn(inside);
+    let finish: ReturnType<typeof vi.fn>;
+    let onFeatureClick: ReturnType<typeof vi.fn>;
+    let busy: boolean;
 
-    expect(finish).not.toHaveBeenCalled();
-    expect(setSelection).not.toHaveBeenCalled();
-    setSelection.mockRestore();
-  });
+    beforeEach(() => {
+      busy = true;
+      finish = vi.fn(() => {
+        busy = false;
+      });
+      onFeatureClick = vi.fn(() => true);
+      context = {
+        ...context,
+        plugins: {
+          isPluginInteracting: () => busy,
+          getPluginInteractionContainer: () => container,
+          finishPluginInteraction: finish,
+          filterSelectionCandidates: (ids: string[]) => ids,
+          handleFeatureClick: onFeatureClick,
+        },
+      } as unknown as EngineModeContext;
+    });
 
-  it('does not offer the click that finished it to the plugins as a re-click', () => {
-    store.setSelection('feature', ['f1']);
-    top = { kind: 'store', feature: store.getFeature('f1') as Feature };
+    function clickOn(target: unknown): void {
+      const event = clickEvent();
+      event.originalEvent = { target } as unknown as MouseEvent;
+      handleSelectClick(event, context, DEFAULT_SELECTION_CONFIG);
+    }
 
-    clickOn({});
+    it('finishes the interaction and selects another feature clicked outside', () => {
+      store.setSelection('feature', ['f1']);
+      top = { kind: 'store', feature: store.getFeature('f2') as Feature };
 
-    expect(finish).toHaveBeenCalledTimes(1);
-    expect(onFeatureClick).not.toHaveBeenCalled();
-    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+      clickOn({});
+
+      expect(finish).toHaveBeenCalledTimes(1);
+      expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    });
+
+    it('finishes the interaction and clears the selection on the empty map outside', () => {
+      store.setSelection('feature', ['f1']);
+      top = null;
+
+      clickOn({});
+
+      expect(finish).toHaveBeenCalledTimes(1);
+      expect(store.getSelection().type).toBeNull();
+    });
+
+    it('consumes a click inside the container', () => {
+      store.setSelection('feature', ['f1']);
+      const setSelection = vi.spyOn(store, 'setSelection');
+      top = { kind: 'store', feature: store.getFeature('f2') as Feature };
+
+      clickOn(inside);
+
+      expect(finish).not.toHaveBeenCalled();
+      expect(setSelection).not.toHaveBeenCalled();
+      setSelection.mockRestore();
+    });
+
+    it('does not offer the click that finished it to the plugins as a re-click', () => {
+      store.setSelection('feature', ['f1']);
+      top = { kind: 'store', feature: store.getFeature('f1') as Feature };
+
+      clickOn({});
+
+      expect(finish).toHaveBeenCalledTimes(1);
+      expect(onFeatureClick).not.toHaveBeenCalled();
+      expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    });
   });
 });

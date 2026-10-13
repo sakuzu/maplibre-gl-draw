@@ -8,11 +8,12 @@
  * `draw.selection.delete()` (api/) both call this, so the two paths delete the same things.
  */
 
+import { tableGroupMemberIds, tableLayerHasLockedRow } from '../feature-table/item-ids.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
-import { listedItems, listedMembers } from '../shared/utils/listed-items.js';
+import { listedItems } from '../shared/utils/listed-items.js';
 import { isFeatureLocked, isGroupLocked } from '../store/lock.js';
 import type { Store } from '../store/store.js';
-import type { FeatureCoordinates, VertexSelection } from '../store/types.js';
+import type { FeatureCoordinates, Group, VertexSelection } from '../store/types.js';
 import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from './vertex.js';
 
 /**
@@ -95,7 +96,7 @@ export function deleteSelectedItems(store: Store): boolean {
         if (!group) continue;
         // Delete the unlocked contents of the group. The group itself is deleted automatically
         // the moment the last feature is removed.
-        for (const featureId of [...listedMembers(group)]) {
+        for (const featureId of membersOf(store, group)) {
           const feature = store.getFeature(featureId);
           if (feature && isFeatureLocked(feature, store)) continue;
           store.deleteFeature(featureId);
@@ -103,7 +104,7 @@ export function deleteSelectedItems(store: Store): boolean {
         // When an empty group (a group with no contents) was selected, delete the group itself
         // (a group that keeps locked members stays)
         const left = store.getGroup(groupId);
-        if (left && listedMembers(left).length === 0) {
+        if (left && membersOf(store, left).length === 0) {
           store.deleteGroup(groupId);
         }
       }
@@ -138,6 +139,11 @@ export function deleteSelectedItems(store: Store): boolean {
 function holdsLockedItem(store: Store, layerId: string): boolean {
   const layer = store.getLayer(layerId);
   if (!layer) return false;
+  if (layer.kind === 'table') {
+    // A layer held as rows: its groups name it, and its rows are read in place
+    if (store.listGroups().some((group) => group.layerId === layerId && group.locked)) return true;
+    return tableLayerHasLockedRow(store.tables, layerId);
+  }
   for (const itemId of listedItems(layer)) {
     const group = store.getGroup(itemId);
     if (group?.locked) return true;
@@ -189,4 +195,9 @@ export function deleteSelectedVertices(store: Store, selection: VertexSelection)
   }
 
   return deletedCount;
+}
+
+/** The members of a group (read from the rows for a group of a layer held as rows) */
+function membersOf(store: Store, group: Group): string[] {
+  return group.kind === 'table' ? tableGroupMemberIds(store.tables, group) : [...group.featureIds];
 }

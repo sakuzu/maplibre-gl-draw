@@ -20,6 +20,8 @@
  * candidates.
  */
 
+import type { FeatureTables } from '../api/tables.js';
+import { tableRowIdsWithVertexAt } from '../feature-table/item-ids.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { hasVertexRef } from '../shared/utils/vertex-ref.js';
 import { isLocallyHidden, type LocalHiddenStore } from '../store/local-visibility.js';
@@ -38,6 +40,8 @@ import { startVertexMove, type VertexState } from './vertex.js';
  */
 export interface SharedVertexStore extends FeatureLockStore, LocalHiddenStore {
   getFeature(id: string): Feature | undefined;
+  /** The rows of a Store that holds its features as rows */
+  readonly tables?: FeatureTables;
 }
 
 /**
@@ -239,13 +243,16 @@ export function collectSharedVertexMoves(params: {
     return { mainRefs, followers: [] };
   }
 
-  // Narrow down the candidate features with the spatial index (tolerance 0 = a point query)
+  // Narrow down the candidate features with the spatial index (tolerance 0 = a point query),
+  // and the rows of a Store of rows with a vertex at a target, read on their columns (the
+  // spatial index holds the features of the rows held only)
   const candidateIds = new Set<string>();
   for (const target of targets) {
     for (const id of spatialIndex.findNear(target, 0)) {
       candidateIds.add(id);
     }
   }
+  for (const id of tableRowIdsWithVertexAt(store.tables, targets)) candidateIds.add(id);
 
   // Also move the vertices at the same coordinate within the main feature (the closing
   // point of a closed ring, for instance)
