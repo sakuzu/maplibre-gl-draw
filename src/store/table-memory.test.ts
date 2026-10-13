@@ -10,8 +10,8 @@
  *   feature held is notified as a change of the feature. A row is in a notification once, as it
  *   is when the transaction ends: a row created and selected in one transaction is a feature
  *   created
- * - The selection, the editing and the vertices selected hold their rows; more than the limit
- *   is refused
+ * - The selection, the editing and the vertices selected hold their rows, and let go of them a
+ *   moment later; more than the limit is refused
  * - A row held deleted from elsewhere leaves the selection, in `features.deleted`, never in
  *   `held.removed`
  * - The values in the middle of a drag are shown; the values written from elsewhere meanwhile
@@ -20,7 +20,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
-import { HOLD_LIMIT } from './draw-store.js';
+import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
 import { createTableMemoryStore } from './table-memory.js';
 import type { Feature, StoreChange } from './types.js';
 
@@ -104,9 +104,29 @@ describe('the in-memory Store of rows', () => {
     expect(notified[0].rows).toBeUndefined();
     expect(notified[0].features?.updated?.map((e) => e.id)).toEqual(['p1']);
     expect(notified[0].features?.updated?.[0].previous).toBe(p1);
+    vi.useFakeTimers();
     store.setSelection(null, []);
+    // Let go a moment later (a quick click elsewhere and back makes no feature again)
+    expect(store.getFeature('p1')).toBe(store.getFeature('p1'));
+    vi.advanceTimersByTime(RELEASE_DELAY_MS);
+    vi.useRealTimers();
     expect(notified[notified.length - 1]?.held).toEqual({ added: [], removed: ['p1', 'p3'] });
     expect(store.getFeature('p1')?.geometry).toEqual({ type: 'Point', coordinates: [9, 9] });
+  });
+
+  it('keeps a row let go of held when it is selected again within a moment', () => {
+    const { store, notified } = setup();
+    vi.useFakeTimers();
+    store.setSelection('feature', ['p1']);
+    const p1 = store.getFeature('p1');
+    store.setSelection('feature', ['p2']);
+    store.setSelection('feature', ['p1']);
+    expect(store.getFeature('p1')).toBe(p1);
+    vi.advanceTimersByTime(RELEASE_DELAY_MS);
+    vi.useRealTimers();
+    expect(store.getFeature('p1')).toBe(p1);
+    const removed = notified.flatMap((change) => change.held?.removed ?? []);
+    expect(removed).toEqual(['p2']);
   });
 
   it('notifies a feature created and selected in one transaction as a feature created', () => {

@@ -18,7 +18,7 @@ import {
   createFeatureTablesStore,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
-import { DrawStore } from '../../store/draw-store.js';
+import { DrawStore, RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
@@ -186,6 +186,8 @@ describe('the hit testing that holds the row hit', () => {
     vi.advanceTimersByTime(POINTER_HOLD_MS);
     expect(tables.tables.heldFeature('p')).toBe(held);
     store.setSelection(null, []);
+    // Let go a moment after the selection lets go of it
+    vi.advanceTimersByTime(RELEASE_DELAY_MS);
     expect(tables.tables.heldFeature('p')).toBeUndefined();
     // Without the selection it is let go after the moment
     tester()(at(5, 5), { hold: true });

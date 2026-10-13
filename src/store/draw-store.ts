@@ -74,6 +74,21 @@ export const HOLD_LIMIT = 2000;
 export const SELECTION_OWNER = 'core:selection';
 
 /**
+ * The owner of the rows the selection let go of, held a moment longer (a quick click elsewhere
+ * and back does not make them features again)
+ *
+ * @internal
+ */
+export const RELEASED_OWNER = 'core:released';
+
+/**
+ * How long the rows the selection let go of stay held (ms)
+ *
+ * @internal
+ */
+export const RELEASE_DELAY_MS = 100;
+
+/**
  * Returns the Store for a store option: a Store of core is used as it is, a Store of the host
  * gets the drawing state and the read-only gate of core around it
  *
@@ -95,7 +110,10 @@ export class DrawStore implements Store {
   /** The normalized copy of each object of the contract that gave `null` for an optional field */
   readonly #normalized = new WeakMap<object, object>();
   /** The ids of the rows held for the selection, as last held */
-  #heldKey = '';
+  #heldIds = new Set<string>();
+  /** The rows the selection let go of, held a moment longer */
+  readonly #released = new Set<string>();
+  #releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(contract: StoreContract) {
     this.#contract = contract;
@@ -413,10 +431,28 @@ export class DrawStore implements Store {
     const vertices = this.#contract.getVertexSelection();
     if (vertices) ids.add(vertices.featureId);
     for (const followed of this.#drawing.getFollowedVertices() ?? []) ids.add(followed.featureId);
-    const key = [...ids].join('\u0000');
-    if (key === this.#heldKey) return;
-    this.#heldKey = key;
+    const before = this.#heldIds;
+    if (ids.size === before.size && [...ids].every((id) => before.has(id))) return;
+    this.#heldIds = ids;
+    // What the selection lets go of stays held a moment (unless it is named again meanwhile)
+    let released = false;
+    for (const id of before) {
+      if (ids.has(id) || this.#released.has(id)) continue;
+      this.#released.add(id);
+      released = true;
+    }
+    for (const id of ids) {
+      if (this.#released.delete(id)) released = true;
+    }
     tables.hold(SELECTION_OWNER, [...ids]);
+    if (!released) return;
+    tables.hold(RELEASED_OWNER, [...this.#released]);
+    if (this.#releaseTimer !== null) clearTimeout(this.#releaseTimer);
+    this.#releaseTimer = setTimeout(() => {
+      this.#releaseTimer = null;
+      this.#released.clear();
+      tables.hold(RELEASED_OWNER, []);
+    }, RELEASE_DELAY_MS);
   }
 
   /**
