@@ -71,6 +71,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   let canvas: { style: { cursor: string } };
   let context: EngineModeContext;
   let hit: Feature | null;
+  /** Whether each hit asked to hold the row it hits */
+  let holds: boolean[] = [];
 
   // The screen coordinate of the polygon center (5,5). Being inside the bbox, it normally becomes
   // the move cursor.
@@ -92,12 +94,16 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     store.setSelection('feature', ['f1']);
     canvas = { style: { cursor: '' } };
     hit = null;
+    holds = [];
     context = {
       store,
       map: makeMap(canvas),
       hitTestService: { hitTest: () => hit },
       // A stub for the unified z traversal (it returns only Store features)
-      hitTestTopmost: () => (hit ? { kind: 'store', feature: hit } : null),
+      hitTestTopmost: (_point: unknown, options?: { hold?: boolean }) => {
+        holds.push(options?.hold === true);
+        return hit ? { kind: 'store', feature: hit } : null;
+      },
       selectionScope: createSelectionScope(),
     } as unknown as EngineModeContext;
   });
@@ -120,6 +126,13 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       hit = null;
       updateCursorForSelection(centerEvent, context, DEFAULT_SELECTION_CONFIG);
       expect(canvas.style.cursor).toBe('default');
+    });
+
+    it('makes no feature of a row the pointer is over (the hit holds nothing)', () => {
+      store.setSelection(null, []);
+      updateCursorForSelection(centerEvent, context, DEFAULT_SELECTION_CONFIG);
+      expect(holds.length).toBeGreaterThan(0);
+      expect(holds.every((hold) => !hold)).toBe(true);
     });
 
     it('no operation cursor is shown for a selection of a locked feature either', () => {

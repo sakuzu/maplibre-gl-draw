@@ -64,6 +64,7 @@ function setup(): {
   manager: DatasetManager;
   interactions: DisplayInteractions;
   setStoreHit: (value: boolean) => void;
+  setRowHit: (value: boolean) => void;
   topmostCalls: () => number;
 } {
   const manager = createDatasetManager({
@@ -74,6 +75,7 @@ function setup(): {
   });
 
   let storeHit = false;
+  let rowHit = false;
   let topmostCalls = 0;
 
   // A reduced version of the unified z scan. It returns store when a feature of the Store is in
@@ -83,6 +85,16 @@ function setup(): {
     hitTestTopmost: (event): TopHit | null => {
       topmostCalls++;
       if (storeHit) return { kind: 'store', feature: STORE_FEATURE };
+      if (rowHit) {
+        return {
+          kind: 'row',
+          layerId: 'rows',
+          id: 'r1',
+          handle: 0,
+          locked: false,
+          distancePx: () => 0,
+        };
+      }
 
       const coordinate: Coordinate = [event.lngLat.lng, event.lngLat.lat];
       const hit =
@@ -99,6 +111,9 @@ function setup(): {
     interactions,
     setStoreHit: (value: boolean) => {
       storeHit = value;
+    },
+    setRowHit: (value: boolean) => {
+      rowHit = value;
     },
     topmostCalls: () => topmostCalls,
   };
@@ -161,6 +176,21 @@ describe('the click of a dataset', () => {
     setStoreHit(false);
     interactions.handleClick(mouseEvent(1, 1));
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('nothing fires when a row held as columns is in front (a feature of the Store too)', () => {
+    const { manager, interactions, setRowHit } = setup();
+    const dataset = manager.add({
+      id: 'c1',
+      rows: [point('a', [1, 1])],
+      interactive: true,
+    });
+    const handler = vi.fn();
+    dataset.on('click', handler);
+
+    setRowHit(true);
+    interactions.handleClick(mouseEvent(1, 1));
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('nothing fires when nothing at all is hit', () => {

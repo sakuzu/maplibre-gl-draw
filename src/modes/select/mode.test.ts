@@ -14,6 +14,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HitTestResult } from '../../dispatcher/hit-test/strategies/base.js';
+import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type {
   DragNormalizedEvent,
   KeyNormalizedEvent,
@@ -118,6 +119,10 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   let store: Store;
   let map: ReturnType<typeof makeMap>;
   let hit: HitTestResult | null;
+  /** A row held as columns the hit returns, before the features of the Store */
+  let rowTop: TopHit | null;
+  /** Whether each hit asked to hold the row it hits */
+  let holds: boolean[];
   let context: EngineModeContext;
   let mode: SelectMode;
 
@@ -136,13 +141,19 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     store.createFeature(polygon('f1', 'l1'));
     map = makeMap();
     hit = null;
+    rowTop = null;
+    holds = [];
     context = {
       store,
       map,
       hitTestService: { hitTest: () => hit },
       // A stub for the unified z traversal (it returns only Store features). Select mode looks at
       // this rather than at hitTestService.hitTest.
-      hitTestTopmost: () => (hit ? { kind: 'store', feature: hit.feature } : null),
+      hitTestTopmost: (_point: unknown, options?: { hold?: boolean }) => {
+        holds.push(options?.hold === true);
+        if (rowTop) return rowTop;
+        return hit ? { kind: 'store', feature: hit.feature } : null;
+      },
       plugins: undefined,
       selectionScope: createSelectionScope(),
     } as unknown as EngineModeContext;
@@ -182,6 +193,33 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       const consumed = mode.onMouseDown(mouseEvent(true));
       expect(consumed).toBe(false);
       expect(map.dragPan.disable).toHaveBeenCalled();
+    });
+  });
+
+  describe('SelectMode: a press on a row held as columns', () => {
+    const row = (locked: boolean): TopHit => ({
+      kind: 'row',
+      layerId: 'l1',
+      id: 'r1',
+      handle: 0,
+      locked,
+      distancePx: () => 0,
+    });
+
+    it('stops the pan of the map, locked or not, without making a feature of the row', () => {
+      for (const locked of [false, true]) {
+        map.dragPan.enable();
+        rowTop = row(locked);
+        expect(mode.onMouseDown(mouseEvent())).toBe(true);
+        expect(map.dragPan.isEnabled()).toBe(false);
+      }
+      expect(holds.every((hold) => !hold)).toBe(true);
+    });
+
+    it('asks the hit of a press that drags to hold the row it hits', () => {
+      hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
+      mode.onDragStart(dragEvent());
+      expect(holds).toContain(true);
     });
   });
 

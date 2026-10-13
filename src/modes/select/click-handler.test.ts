@@ -27,7 +27,7 @@ import {
 } from '../../view/feature-companion.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
-import { handleSelectClick } from './click-handler.js';
+import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 
 describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   function polygon(id: string, layerId: string): Feature {
@@ -82,6 +82,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
   let store: Store;
   let top: TopHit | null;
+  /** Whether each hit asked to hold the row it hits */
+  let holds: boolean[] = [];
   let context: EngineModeContext;
   /** There is one companion rendering provider per draw instance */
   let companions: FeatureCompanionRegistry = createFeatureCompanionRegistry();
@@ -119,10 +121,14 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     store.createFeature(polygon('f1', 'l1'));
     store.createFeature(polygon('f2', 'l1'));
     top = null;
+    holds = [];
     context = {
       store,
       map: makeMap(),
-      hitTestTopmost: () => top,
+      hitTestTopmost: (_point: unknown, options?: { hold?: boolean }) => {
+        holds.push(options?.hold === true);
+        return top;
+      },
       featureCompanions: companions,
       plugins: undefined,
       selectionScope: createSelectionScope(),
@@ -178,6 +184,20 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       click();
 
       expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
+    });
+
+    it('asks the hit of a click and of a double click to hold the row it hits', () => {
+      top = { kind: 'store', feature: store.getFeature('f1') as Feature };
+      click();
+      handleSelectDoubleClick(
+        {
+          ...clickEvent(),
+          type: 'dblclick',
+          originalEvent: { preventDefault: () => {} } as MouseEvent,
+        },
+        context,
+      );
+      expect(holds).toEqual([true, true]);
     });
 
     it('when nothing is hit the selection is cleared', () => {
