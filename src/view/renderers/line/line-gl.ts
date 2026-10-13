@@ -64,6 +64,22 @@ export function setupInstanceAttribs(gl: WebGL2RenderingContext, rows = false, f
 }
 
 /**
+ * Points the instance attributes of the bound vertex array at instance `first` of the bound
+ * instance buffer of a batch of rows (only the pointers: the vertex array keeps the attributes
+ * enabled and per instance from `setupInstanceAttribs`)
+ *
+ * @internal
+ */
+export function pointRowInstanceAttribs(gl: WebGL2RenderingContext, first: number): void {
+  const stride = ROW_LINE_BYTES;
+  const base = first * stride;
+  gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, base); // a_indices
+  gl.vertexAttribPointer(3, 4, gl.FLOAT, false, stride, base + 16); // a_extra
+  gl.vertexAttribPointer(4, 4, gl.FLOAT, false, stride, base + 32); // a_color
+  gl.vertexAttribPointer(5, 1, gl.FLOAT, false, stride, base + 48); // a_row
+}
+
+/**
  * Resets the instance divisors and unbinds the vertex array (the end of an immediate draw)
  *
  * @internal
@@ -249,6 +265,7 @@ export function createRetainedLineBatch(
 
   return {
     rowFirst,
+    pointedFirst: rowFirst ? 0 : undefined,
     vao,
     instanceBuffer,
     texture,

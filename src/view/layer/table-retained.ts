@@ -292,46 +292,57 @@ export class TableLayerRenderer {
     const factors = layerDrawFactors(layer);
     const cutsOf = this.cuts > 0 ? this.placeCuts(table, cache, bounds) : null;
 
-    for (let g = 0; g < table.groupCount; g++) {
-      const group = table.groupAt(g);
-      const groupCache = cache.groups.get(group.handle);
-      if (!groupCache) continue;
-      const binding = this.stateBinding(groupCache);
-      if (!binding) continue;
+    // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), forgotten
+    // before the rows drawn at once and ended with the layer
+    const run = renderers.run;
+    run?.begin();
+    try {
+      for (let g = 0; g < table.groupCount; g++) {
+        const group = table.groupAt(g);
+        const groupCache = cache.groups.get(group.handle);
+        if (!groupCache) continue;
+        const binding = this.stateBinding(groupCache);
+        if (!binding) continue;
 
-      const host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch> = {
-        isStale: () => false,
-        startJob: (state, origin) => this.startJob(group, state.range, origin, context, renderers),
-        adoptJob: () => {},
-        disposeBatches: (batches) => disposeBatch(batches, renderers),
-        draw: (state) => {
-          this.drawRetained(
-            table.layerId,
-            group,
-            g,
-            state,
-            binding,
-            frame,
-            factors,
-            renderers,
-            cutsOf?.get(state) ?? null,
+        const host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch> = {
+          isStale: () => false,
+          startJob: (state, origin) =>
+            this.startJob(group, state.range, origin, context, renderers),
+          adoptJob: () => {},
+          disposeBatches: (batches) => disposeBatch(batches, renderers),
+          draw: (state) => {
+            this.drawRetained(
+              table.layerId,
+              group,
+              g,
+              state,
+              binding,
+              frame,
+              factors,
+              renderers,
+              cutsOf?.get(state) ?? null,
+            );
+            return true;
+          },
+        };
+
+        for (const chunk of groupCache.chunks) {
+          if (chunk.type === 'immediate') {
+            // What draws the rows at once may change any of the state of the run
+            renderers.run?.forget();
+            this.drawImmediate(tables, table.layerId, layer, group, g, chunk, frame, deps, settled);
+            continue;
+          }
+          const left = advanceChunkBuilds(
+            [chunk],
+            { bounds, zoom: frame.zoom, settled, budget },
+            host,
           );
-          return true;
-        },
-      };
-
-      for (const chunk of groupCache.chunks) {
-        if (chunk.type === 'immediate') {
-          this.drawImmediate(tables, table.layerId, layer, group, g, chunk, frame, deps, settled);
-          continue;
+          if (left) this.pending = true;
         }
-        const left = advanceChunkBuilds(
-          [chunk],
-          { bounds, zoom: frame.zoom, settled, budget },
-          host,
-        );
-        if (left) this.pending = true;
       }
+    } finally {
+      run?.end();
     }
   }
 

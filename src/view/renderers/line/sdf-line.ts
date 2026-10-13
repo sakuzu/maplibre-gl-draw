@@ -28,12 +28,8 @@ import { calculateOffsetUniforms, createProgram } from '../../shaders/helpers.js
 import { ProjectionUniformManager } from '../../shaders/projection.js';
 import { TerrainContext } from '../../terrain/context.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
-import {
-  bindRowState,
-  type RowStateBinding,
-  type RowStateLocations,
-  rowStateLocations,
-} from '../row-state.js';
+import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
+import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
 import type { LineBatchArrays, PackedLineItems } from './line-geometry.js';
 import {
   buildLineBatchArrays,
@@ -55,6 +51,7 @@ import {
   deleteRetainedLineBatch,
   ImmediateCoordTexture,
   patchRetainedCoordTexels,
+  pointRowInstanceAttribs,
   releaseInstanceAttribs,
   setupInstanceAttribs,
   setupQuadAttribs,
@@ -90,7 +87,7 @@ interface RowLineProgram {
   readonly program: WebGLProgram;
   readonly uniforms: LineUniforms;
   readonly projection: ProjectionUniformManager;
-  readonly state: RowStateLocations;
+  readonly state: RowStateUniforms;
 }
 
 export class SDFLineRenderer {
@@ -148,6 +145,8 @@ export class SDFLineRenderer {
   private readonly terrain: TerrainContext;
   /** Where the GPU memory this renderer allocates is recorded */
   private ledger: GpuLedger | undefined;
+  /** The run of the retained draws of the context (shared with the other renderers) */
+  private readonly run: RetainedDrawRun;
 
   constructor(
     _map: MapLibreMap,
@@ -158,6 +157,7 @@ export class SDFLineRenderer {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.run = retainedDrawRun(gl);
     this.uniforms = new LineUniforms(gl);
     this.immCoordTexture = new ImmediateCoordTexture(gl);
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
@@ -223,7 +223,7 @@ export class SDFLineRenderer {
 
     const gl = this.gl;
 
-    gl.useProgram(this.program);
+    this.run.useProgram(this.program);
     gl.bindVertexArray(this.quadVAO);
 
     this.setProjectionUniforms(projectionData, zoom);
@@ -309,7 +309,7 @@ export class SDFLineRenderer {
       this.terrain,
     );
     projection.getLocations(program);
-    this.rowProgram = { program, uniforms, projection, state: rowStateLocations(gl, program) };
+    this.rowProgram = { program, uniforms, projection, state: new RowStateUniforms(gl, program) };
     return true;
   }
 
@@ -399,7 +399,7 @@ export class SDFLineRenderer {
     const gl = this.gl;
 
     // The program and the VAO may have been changed by other renderers, so always bind them
-    gl.useProgram(this.program);
+    this.run.useProgram(this.program);
     gl.bindVertexArray(this.quadVAO);
     // The projection uniforms and the viewport are skipped when beginDraw() already set them
     // (a performance optimization)
@@ -696,9 +696,10 @@ export class SDFLineRenderer {
     if (count <= 0) return;
 
     const gl = this.gl;
+    const run = this.run;
     const { program, uniforms, projection, state } = this.rowProgram;
-    gl.useProgram(program);
-    gl.bindVertexArray(batch.vao);
+    run.useProgram(program);
+    run.bindVertexArray(batch.vao);
 
     const cameraUniforms = this.offsetUniforms;
     if (cameraUniforms) {
@@ -729,19 +730,22 @@ export class SDFLineRenderer {
     );
     uniforms.setDrawFactors(factors);
     uniforms.setDash(batch.shape, resolvePixelRatio(this.pixelRatio));
-    bindRowState(gl, state, rowState);
+    bindRowState(run, state, rowState);
 
-    gl.activeTexture(gl.TEXTURE0);
+    run.activateUnitZero();
     gl.bindTexture(gl.TEXTURE_2D, batch.texture);
-    gl.bindBuffer(gl.ARRAY_BUFFER, batch.instanceBuffer);
-    setupInstanceAttribs(gl, true, first);
+    if (batch.pointedFirst !== first) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, batch.instanceBuffer);
+      pointRowInstanceAttribs(gl, first);
+      batch.pointedFirst = first;
+    }
 
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 2 * (stations + 1), count);
-    gl.bindVertexArray(null);
+    run.release();
 
     // When this interrupted an immediate-mode frame, restore the shared VAO and the program
     if (this.isDrawing && this.program) {
-      gl.useProgram(this.program);
+      run.useProgram(this.program);
       gl.bindVertexArray(this.quadVAO);
     }
   }
@@ -799,9 +803,10 @@ export class SDFLineRenderer {
     if (!this.program || batch.instanceCount === 0) return;
 
     const gl = this.gl;
+    const run = this.run;
 
-    gl.useProgram(this.program);
-    gl.bindVertexArray(batch.vao);
+    run.useProgram(this.program);
+    run.bindVertexArray(batch.vao);
 
     // The center of linearization is aligned with the camera center (linearizing around the
     // origin coordinate of the batch turns the residual of the Mercator approximation into a
@@ -840,14 +845,14 @@ export class SDFLineRenderer {
     this.uniforms.setDrawFactors(factors);
 
     // The coordinate texture (the sampler unit is written by LineUniforms.setLineDraw)
-    gl.activeTexture(gl.TEXTURE0);
+    run.activateUnitZero();
     gl.bindTexture(gl.TEXTURE_2D, batch.texture);
 
     this.uniforms.setDash(batch.shape, resolvePixelRatio(this.pixelRatio));
 
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 2 * (stations + 1), batch.instanceCount);
 
-    gl.bindVertexArray(null);
+    run.release();
 
     // When this interrupted an immediate-mode frame, restore the shared VAO and the projection
     // uniforms (because the subsequent drawAll assumes the state set up by beginDraw)

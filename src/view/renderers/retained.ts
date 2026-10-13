@@ -20,6 +20,7 @@
  * shared textures of immediate mode.
  */
 
+import type { RetainedDrawRun } from './draw-run.js';
 import type { FeatureDrawer } from './drawer.js';
 import type { SDFLineRenderer } from './line/sdf-line.js';
 import type { PointInstanceRenderer } from './point/point-instance.js';
@@ -72,4 +73,10 @@ export interface RetainedRendererSet {
   styles: RetainedStyleResolver;
   /** Pixel size of the render target [width, height] */
   viewport(): [number, number];
+  /**
+   * The run of the retained draws of the context of the renderers. The side that draws a layer's
+   * batches one after another opens a run around them, forgets it before anything else draws in
+   * between, and ends it (`draw-run.ts`). Without it every draw sets its whole state, as alone
+   */
+  readonly run?: RetainedDrawRun;
 }

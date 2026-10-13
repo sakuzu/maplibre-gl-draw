@@ -16,6 +16,8 @@
  */
 
 import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
+import { getRenderFrame } from '../shaders/frame.js';
+import type { RetainedDrawRun } from './draw-run.js';
 
 /** The width of the texture of the state of a row group (rows per texture line) */
 export const ROW_STATE_WIDTH = 128;
@@ -80,48 +82,77 @@ export interface RowStateBinding {
 }
 
 /**
- * The uniform locations of the state of the rows in one program
+ * The uniforms of the state of the rows in one program, with the values written to them last
+ *
+ * The draws of a run of rows go through here once per range drawn, but the unit of the texture
+ * never changes, the width of the texture is the same for every group, and the translations of
+ * the moving sets change once per layer at most. Writes of the same values are skipped, and
+ * everything is written again once the frame changes (`shaders/frame.ts`). A program made again
+ * gets a new instance (its uniforms start from their initial values).
  *
  * @internal
  */
-export interface RowStateLocations {
-  readonly state: WebGLUniformLocation | null;
-  readonly width: WebGLUniformLocation | null;
-  readonly translate: WebGLUniformLocation | null;
+export class RowStateUniforms {
+  private readonly state: WebGLUniformLocation | null;
+  private readonly width: WebGLUniformLocation | null;
+  private readonly translate: WebGLUniformLocation | null;
+  /** The frame the values were written in (-1 before the first write) */
+  private frame = -1;
+  private writtenWidth = Number.NaN;
+  private readonly writtenTranslations = new Float32Array(8).fill(Number.NaN);
+
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    program: WebGLProgram,
+  ) {
+    this.state = gl.getUniformLocation(program, 'u_row_state');
+    this.width = gl.getUniformLocation(program, 'u_row_state_width');
+    this.translate = gl.getUniformLocation(program, 'u_state_translate');
+  }
+
+  /** Writes the uniforms for a draw (the program in use must be the one of these uniforms) */
+  write(binding: RowStateBinding): void {
+    const gl = this.gl;
+    const frame = getRenderFrame();
+    const stale = this.frame !== frame;
+    this.frame = frame;
+    if (stale && this.state) gl.uniform1i(this.state, ROW_STATE_TEXTURE_UNIT);
+    const width = binding.texture.width;
+    if (this.width && (stale || this.writtenWidth !== width)) {
+      gl.uniform1i(this.width, width);
+      this.writtenWidth = width;
+    }
+    const translations = binding.translations;
+    if (this.translate && (stale || !sameValues(this.writtenTranslations, translations))) {
+      gl.uniform2fv(this.translate, translations);
+      this.writtenTranslations.set(translations.subarray(0, this.writtenTranslations.length));
+    }
+  }
 }
 
-/**
- * Reads the uniform locations of the state of the rows of a program
- *
- * @internal
- */
-export function rowStateLocations(
-  gl: WebGL2RenderingContext,
-  program: WebGLProgram,
-): RowStateLocations {
-  return {
-    state: gl.getUniformLocation(program, 'u_row_state'),
-    width: gl.getUniformLocation(program, 'u_row_state_width'),
-    translate: gl.getUniformLocation(program, 'u_state_translate'),
-  };
+/** Whether the first values of `values` are those written */
+function sameValues(written: Float32Array, values: Float32Array): boolean {
+  for (let i = 0; i < written.length; i++) {
+    if (written[i] !== values[i]) return false;
+  }
+  return true;
 }
 
 /**
  * Binds the state of the rows for a draw (the program in use must be the variant of the rows)
  *
+ * The texture is bound through the run of the draws (once per group within a run), and the
+ * uniforms are written when their values change.
+ *
  * @internal
  */
 export function bindRowState(
-  gl: WebGL2RenderingContext,
-  locations: RowStateLocations,
+  run: RetainedDrawRun,
+  uniforms: RowStateUniforms,
   binding: RowStateBinding,
 ): void {
-  gl.activeTexture(gl.TEXTURE0 + ROW_STATE_TEXTURE_UNIT);
-  gl.bindTexture(gl.TEXTURE_2D, binding.texture.texture);
-  gl.activeTexture(gl.TEXTURE0);
-  if (locations.state) gl.uniform1i(locations.state, ROW_STATE_TEXTURE_UNIT);
-  if (locations.width) gl.uniform1i(locations.width, binding.texture.width);
-  if (locations.translate) gl.uniform2fv(locations.translate, binding.translations);
+  run.bindRowState(binding.texture.texture);
+  uniforms.write(binding);
 }
 
 /**

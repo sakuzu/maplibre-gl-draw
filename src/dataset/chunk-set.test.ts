@@ -183,6 +183,39 @@ describe('DisplayChunkSet', () => {
     expect(counts.builds).toBeGreaterThan(firstBuilds);
   });
 
+  it('draws the chunks as one run of retained draws, ended even when a draw throws', () => {
+    const { renderers } = createRenderers();
+    const events: string[] = [];
+    const withRun = {
+      ...renderers,
+      run: {
+        begin: () => events.push('begin'),
+        forget: () => events.push('forget'),
+        end: () => events.push('end'),
+      },
+      point: {
+        ...renderers.point,
+        drawRetained: () => {
+          events.push('draw');
+        },
+      },
+    } as unknown as RetainedRendererSet;
+    const set = new DisplayChunkSet(createHost());
+    set.replace(chunksOf(FEATURES));
+
+    set.draw(frameFor(withRun, BOTH));
+    expect(events[0]).toBe('begin');
+    expect(events[events.length - 1]).toBe('end');
+    expect(events.filter((event) => event === 'draw').length).toBeGreaterThan(1);
+
+    events.length = 0;
+    withRun.point.drawRetained = () => {
+      throw new Error('draw');
+    };
+    expect(() => set.draw(frameFor(withRun, BOTH))).toThrow('draw');
+    expect(events).toEqual(['begin', 'end']);
+  });
+
   it('the host collects the rows of the chunks in view', () => {
     const { renderers } = createRenderers();
     const collected: number[] = [];

@@ -44,13 +44,13 @@ import {
 import { reportTerrainCoarsening } from '../../terrain/state.js';
 import type { TessellationStep } from '../../terrain/tessellation.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
+import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import {
   bindRowState,
   ROW_HIDDEN_POSITION_GLSL,
   ROW_STATE_GLSL,
   type RowStateBinding,
-  type RowStateLocations,
-  rowStateLocations,
+  RowStateUniforms,
 } from '../row-state.js';
 import type { PolygonRendererScope } from './batch.js';
 import { buildEarcutInput } from './earcut-input.js';
@@ -260,17 +260,107 @@ export function writePolygonStrokeVertex(
 }
 
 /**
- * The variant of the program that draws rows held as columns, with its own uniform locations
+ * The renderer specific uniforms of one polygon program, with a record of the values written
+ * last (for memoization within a frame)
+ *
+ * Retained mode passes through here once per chunk, but neither the viewport nor the miter limit
+ * changes within a frame, nor, mostly, the zoom and the factors. Writes of the same value are
+ * skipped, and they are rewritten once the frame changes (see shaders/frame.ts). A program made
+ * again gets a new instance (its uniforms start from their initial values).
+ */
+class PolygonUniforms {
+  private readonly viewport: WebGLUniformLocation | null;
+  private readonly zoom: WebGLUniformLocation | null;
+  private readonly miterLimit: WebGLUniformLocation | null;
+  private readonly sizeScale: WebGLUniformLocation | null;
+  private readonly opacity: WebGLUniformLocation | null;
+
+  private shapeFrame = -1;
+  private viewportWidth = Number.NaN;
+  private viewportHeight = Number.NaN;
+  private zoomValue = Number.NaN;
+  private miterLimitValue = Number.NaN;
+  private factorsFrame = -1;
+  private sizeScaleValue = Number.NaN;
+  private opacityValue = Number.NaN;
+
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    program: WebGLProgram,
+  ) {
+    this.viewport = gl.getUniformLocation(program, 'u_viewport');
+    this.zoom = gl.getUniformLocation(program, 'u_zoom');
+    this.miterLimit = gl.getUniformLocation(program, 'u_miterLimit');
+    this.sizeScale = gl.getUniformLocation(program, 'u_size_scale');
+    this.opacity = gl.getUniformLocation(program, 'u_opacity');
+  }
+
+  /**
+   * Writes the viewport, zoom and miter limit (shared by immediate mode and retained mode)
+   *
+   * If the value is the same it is not rewritten. Once the frame changes the whole set is
+   * rewritten.
+   */
+  setShape(viewport: readonly [number, number], zoomValue: number): void {
+    const gl = this.gl;
+    const frame = getRenderFrame();
+    const staleFrame = this.shapeFrame !== frame;
+
+    if (
+      this.viewport &&
+      (staleFrame || this.viewportWidth !== viewport[0] || this.viewportHeight !== viewport[1])
+    ) {
+      gl.uniform2f(this.viewport, viewport[0], viewport[1]);
+      this.viewportWidth = viewport[0];
+      this.viewportHeight = viewport[1];
+    }
+    if (this.zoom && (staleFrame || this.zoomValue !== zoomValue)) {
+      gl.uniform1f(this.zoom, zoomValue);
+      this.zoomValue = zoomValue;
+    }
+    if (
+      this.miterLimit &&
+      (staleFrame || this.miterLimitValue !== RENDERING_DEFAULTS.MITER_LIMIT)
+    ) {
+      gl.uniform1f(this.miterLimit, RENDERING_DEFAULTS.MITER_LIMIT);
+      this.miterLimitValue = RENDERING_DEFAULTS.MITER_LIMIT;
+    }
+
+    this.shapeFrame = frame;
+  }
+
+  /**
+   * Writes the draw-time factors
+   *
+   * Uniforms are residual state per program, so they are always reset to 1 even on paths
+   * that do not use the factors (immediate mode, the retained drawing of the Store). If
+   * the value already written is the same, it is not rewritten.
+   */
+  setFactors(factors: RetainedDrawFactors): void {
+    const gl = this.gl;
+    const frame = getRenderFrame();
+    const staleFrame = this.factorsFrame !== frame;
+
+    if (this.sizeScale && (staleFrame || this.sizeScaleValue !== factors.scale)) {
+      gl.uniform1f(this.sizeScale, factors.scale);
+      this.sizeScaleValue = factors.scale;
+    }
+    if (this.opacity && (staleFrame || this.opacityValue !== factors.opacity)) {
+      gl.uniform1f(this.opacity, factors.opacity);
+      this.opacityValue = factors.opacity;
+    }
+    this.factorsFrame = frame;
+  }
+}
+
+/**
+ * The variant of the program that draws rows held as columns, with its own uniforms
  */
 interface RowPolygonProgram {
   readonly program: WebGLProgram;
   readonly projection: ProjectionUniformManager;
-  readonly viewport: WebGLUniformLocation | null;
-  readonly zoom: WebGLUniformLocation | null;
-  readonly miterLimit: WebGLUniformLocation | null;
-  readonly sizeScale: WebGLUniformLocation | null;
-  readonly opacity: WebGLUniformLocation | null;
-  readonly state: RowStateLocations;
+  readonly uniforms: PolygonUniforms;
+  readonly state: RowStateUniforms;
 }
 
 /**
@@ -288,30 +378,14 @@ export class SDFPolygonRenderer {
   private rowProgram: RowPolygonProgram | null = null;
   /** Where the GPU memory this renderer allocates is recorded */
   private readonly ledger: GpuLedger | undefined;
+  /** The run of the retained draws of the context (shared with the other renderers) */
+  private readonly run: RetainedDrawRun;
 
   // Projection uniform management
   private projectionUniformManager: ProjectionUniformManager;
 
-  // Uniform locations (renderer specific)
-  private viewportLoc: WebGLUniformLocation | null = null;
-  private zoomLoc: WebGLUniformLocation | null = null;
-  private miterLimitLoc: WebGLUniformLocation | null = null;
-  private sizeScaleLoc: WebGLUniformLocation | null = null;
-  private opacityLoc: WebGLUniformLocation | null = null;
-
-  // A record of the renderer specific uniforms written last (for memoization within a frame)
-  //
-  // Retained mode passes through here once per chunk, but neither the viewport nor the
-  // miter limit changes within a frame. Writes of the same value are skipped, and they
-  // are rewritten once the frame changes (see shaders/frame.ts).
-  private memoFrame = -1;
-  private memoViewportWidth = Number.NaN;
-  private memoViewportHeight = Number.NaN;
-  private memoZoom = Number.NaN;
-  private memoMiterLimit = Number.NaN;
-  private memoFactorsFrame = -1;
-  private memoSizeScale = Number.NaN;
-  private memoOpacity = Number.NaN;
+  /** The renderer specific uniforms of the program (null before the first `ensureShader`) */
+  private uniforms: PolygonUniforms | null = null;
 
   // Stores the offset uniforms
   private offsetUniforms: OffsetUniforms | null = null;
@@ -338,6 +412,7 @@ export class SDFPolygonRenderer {
     this.terrain = scope.terrain ?? new TerrainContext();
     this.earcutCache = scope.earcut ?? new EarcutCache();
     this.ledger = scope.gpu;
+    this.run = retainedDrawRun(gl);
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(this.terrain);
@@ -361,16 +436,9 @@ export class SDFPolygonRenderer {
       // Get the projection uniform locations
       this.projectionUniformManager.getLocations(this.program);
 
-      // Get the renderer specific uniform locations
-      this.viewportLoc = this.gl.getUniformLocation(this.program, 'u_viewport');
-      this.zoomLoc = this.gl.getUniformLocation(this.program, 'u_zoom');
-      this.miterLimitLoc = this.gl.getUniformLocation(this.program, 'u_miterLimit');
-      this.sizeScaleLoc = this.gl.getUniformLocation(this.program, 'u_size_scale');
-      this.opacityLoc = this.gl.getUniformLocation(this.program, 'u_opacity');
-
-      // A recreated program also resets its uniforms to their initial values, so the
-      // record is discarded
-      this.resetUniformMemo();
+      // Get the renderer specific uniform locations (a recreated program also resets its
+      // uniforms to their initial values, so the record starts anew with it)
+      this.uniforms = new PolygonUniforms(this.gl, this.program);
 
       // Set up the VAO
       this.setupVAO();
@@ -405,12 +473,8 @@ export class SDFPolygonRenderer {
     this.rowProgram = {
       program,
       projection,
-      viewport: gl.getUniformLocation(program, 'u_viewport'),
-      zoom: gl.getUniformLocation(program, 'u_zoom'),
-      miterLimit: gl.getUniformLocation(program, 'u_miterLimit'),
-      sizeScale: gl.getUniformLocation(program, 'u_size_scale'),
-      opacity: gl.getUniformLocation(program, 'u_opacity'),
-      state: rowStateLocations(gl, program),
+      uniforms: new PolygonUniforms(gl, program),
+      state: new RowStateUniforms(gl, program),
     };
     return true;
   }
@@ -426,56 +490,6 @@ export class SDFPolygonRenderer {
    */
   setOffsetUniforms(uniforms: OffsetUniforms): void {
     this.offsetUniforms = uniforms;
-  }
-
-  /**
-   * Discards the record of the values written last
-   */
-  private resetUniformMemo(): void {
-    this.memoFrame = -1;
-    this.memoViewportWidth = Number.NaN;
-    this.memoViewportHeight = Number.NaN;
-    this.memoZoom = Number.NaN;
-    this.memoMiterLimit = Number.NaN;
-    this.memoFactorsFrame = -1;
-    this.memoSizeScale = Number.NaN;
-    this.memoOpacity = Number.NaN;
-  }
-
-  /**
-   * Writes the viewport, zoom and miter limit (shared by immediate mode and retained mode)
-   *
-   * If the value is the same it is not rewritten. Once the frame changes the whole set is
-   * rewritten.
-   */
-  private setShapeUniforms(viewport: [number, number], zoomValue: number): void {
-    const gl = this.gl;
-    const frame = getRenderFrame();
-    const staleFrame = this.memoFrame !== frame;
-
-    if (
-      this.viewportLoc &&
-      (staleFrame ||
-        this.memoViewportWidth !== viewport[0] ||
-        this.memoViewportHeight !== viewport[1])
-    ) {
-      gl.uniform2f(this.viewportLoc, viewport[0], viewport[1]);
-      this.memoViewportWidth = viewport[0];
-      this.memoViewportHeight = viewport[1];
-    }
-    if (this.zoomLoc && (staleFrame || this.memoZoom !== zoomValue)) {
-      gl.uniform1f(this.zoomLoc, zoomValue);
-      this.memoZoom = zoomValue;
-    }
-    if (
-      this.miterLimitLoc &&
-      (staleFrame || this.memoMiterLimit !== RENDERING_DEFAULTS.MITER_LIMIT)
-    ) {
-      gl.uniform1f(this.miterLimitLoc, RENDERING_DEFAULTS.MITER_LIMIT);
-      this.memoMiterLimit = RENDERING_DEFAULTS.MITER_LIMIT;
-    }
-
-    this.memoFrame = frame;
   }
 
   /**
@@ -752,11 +766,12 @@ void main() {
     this.ledger?.record(this.vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
 
     // Draw
-    gl.useProgram(this.program);
+    this.run.useProgram(this.program);
     this.setProjectionUniforms(projectionData, zoom);
-    this.setShapeUniforms(viewport, zoom);
+    const uniforms = this.uniforms as PolygonUniforms;
+    uniforms.setShape(viewport, zoom);
     // Always written (1 when the caller has none) so that no factor of an earlier draw is left
-    this.setDrawFactors(factors);
+    uniforms.setFactors(factors);
 
     gl.bindVertexArray(this.vao);
     // The ELEMENT_ARRAY_BUFFER binding is VAO state, so the transfer is done after
@@ -769,29 +784,6 @@ void main() {
     gl.bindVertexArray(null);
 
     return indexData.length;
-  }
-
-  /**
-   * Writes the factors used at draw time
-   *
-   * Uniforms are residual state per program, so they are always reset to 1 even on paths
-   * that do not use the factors (immediate mode, the retained drawing of the Store). If
-   * the value already written is the same, it is not rewritten.
-   */
-  private setDrawFactors(factors: RetainedDrawFactors): void {
-    const gl = this.gl;
-    const frame = getRenderFrame();
-    const staleFrame = this.memoFactorsFrame !== frame;
-
-    if (this.sizeScaleLoc && (staleFrame || this.memoSizeScale !== factors.scale)) {
-      gl.uniform1f(this.sizeScaleLoc, factors.scale);
-      this.memoSizeScale = factors.scale;
-    }
-    if (this.opacityLoc && (staleFrame || this.memoOpacity !== factors.opacity)) {
-      gl.uniform1f(this.opacityLoc, factors.opacity);
-      this.memoOpacity = factors.opacity;
-    }
-    this.memoFactorsFrame = frame;
   }
 
   /**
@@ -878,8 +870,9 @@ void main() {
     if (!this.program || batch.indexCount === 0) return;
 
     const gl = this.gl;
+    const run = this.run;
 
-    gl.useProgram(this.program);
+    run.useProgram(this.program);
 
     // The center of the linearization is aligned to the camera center (if it were
     // linearized around the origin of the batch, the residual of the Mercator
@@ -901,14 +894,15 @@ void main() {
       );
     }
 
-    this.setShapeUniforms(viewport, batch.widthZoom ?? zoom);
-    this.setDrawFactors(factors);
+    const uniforms = this.uniforms as PolygonUniforms;
+    uniforms.setShape(viewport, batch.widthZoom ?? zoom);
+    uniforms.setFactors(factors);
 
-    gl.bindVertexArray(batch.vao);
+    run.bindVertexArray(batch.vao);
     drawFillWithTerrainCull(gl, this.terrain, () => {
       gl.drawElements(gl.TRIANGLES, batch.indexCount, gl.UNSIGNED_INT, 0);
     });
-    gl.bindVertexArray(null);
+    run.release();
   }
 
   /**
@@ -1018,8 +1012,9 @@ void main() {
     if (count <= 0) return;
 
     const gl = this.gl;
+    const run = this.run;
     const row = this.rowProgram;
-    gl.useProgram(row.program);
+    run.useProgram(row.program);
     const cameraUniforms = this.offsetUniforms;
     if (cameraUniforms) {
       row.projection.setUniforms(projectionData, zoom, cameraUniforms, [
@@ -1033,18 +1028,15 @@ void main() {
         calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array),
       );
     }
-    if (row.viewport) gl.uniform2f(row.viewport, viewport[0], viewport[1]);
-    if (row.zoom) gl.uniform1f(row.zoom, batch.widthZoom ?? zoom);
-    if (row.miterLimit) gl.uniform1f(row.miterLimit, RENDERING_DEFAULTS.MITER_LIMIT);
-    if (row.sizeScale) gl.uniform1f(row.sizeScale, factors.scale);
-    if (row.opacity) gl.uniform1f(row.opacity, factors.opacity);
-    bindRowState(gl, row.state, rowState);
+    row.uniforms.setShape(viewport, batch.widthZoom ?? zoom);
+    row.uniforms.setFactors(factors);
+    bindRowState(run, row.state, rowState);
 
-    gl.bindVertexArray(batch.vao);
+    run.bindVertexArray(batch.vao);
     drawFillWithTerrainCull(gl, this.terrain, () => {
       gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_INT, first * 4);
     });
-    gl.bindVertexArray(null);
+    run.release();
   }
 
   /**

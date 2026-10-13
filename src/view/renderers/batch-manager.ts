@@ -22,6 +22,7 @@ import {
   NEUTRAL_DRAW_FACTORS,
   type RetainedDrawFactors,
 } from './draw-factors.js';
+import { retainedDrawRun } from './draw-run.js';
 import type { FeatureDrawer } from './drawer.js';
 import { getStrokeDashPattern, splitIntoDashes } from './line/dash.js';
 import type { LineBatchItem, LineBatchShape } from './line/line-types.js';
@@ -296,6 +297,7 @@ export class BatchManager {
       point,
       styles: this.featureDrawer,
       viewport: (): [number, number] => [this.gl.drawingBufferWidth, this.gl.drawingBufferHeight],
+      run: retainedDrawRun(this.gl),
     };
     return this.retainedRenderers;
   }

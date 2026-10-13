@@ -380,6 +380,69 @@ describe('the order of the drawing of a layer held as rows', () => {
   });
 });
 
+describe('the run of the retained draws of a layer', () => {
+  it('is opened around the layer, forgotten before every chunk drawn at once, and ended', () => {
+    const { frame, renderers, deps, draws, immediate } = setup(interleaved(300, 9), 50);
+    frame(); // builds
+    const events: string[] = [];
+    const run = {
+      begin: () => events.push('begin'),
+      forget: () => events.push('forget'),
+      end: () => events.push('end'),
+    };
+    const drawn = draws.length;
+    const drawnAtOnce = immediate.length;
+    (renderers as { run?: unknown }).run = run;
+    const recordDraw = (kind: 'point' | 'line' | 'polygon') => {
+      const original = renderers[kind].drawRetainedRange as (...args: unknown[]) => void;
+      renderers[kind].drawRetainedRange = ((...args: unknown[]) => {
+        events.push('draw');
+        original(...args);
+      }) as never;
+    };
+    recordDraw('point');
+    recordDraw('line');
+    recordDraw('polygon');
+    const processFeature = deps.batchManager.processFeature;
+    deps.batchManager.processFeature = (f: Feature, selected: boolean) => {
+      events.push('immediate');
+      return processFeature(f, selected);
+    };
+    frame();
+    expect(draws.length - drawn).toBeGreaterThan(0);
+    expect(immediate.length - drawnAtOnce).toBeGreaterThan(0);
+    expect(events[0]).toBe('begin');
+    expect(events[events.length - 1]).toBe('end');
+    expect(events.filter((event) => event === 'begin' || event === 'end')).toEqual([
+      'begin',
+      'end',
+    ]);
+    // Every run of features drawn at once comes right after the run is forgotten
+    for (let i = 1; i < events.length; i++) {
+      if (events[i] === 'immediate') expect(['forget', 'immediate']).toContain(events[i - 1]);
+    }
+  });
+
+  it('is ended when a draw throws', () => {
+    const { frame, renderers } = setup(interleaved(50, 10));
+    frame();
+    const events: string[] = [];
+    (renderers as { run?: unknown }).run = {
+      begin: () => events.push('begin'),
+      forget: () => events.push('forget'),
+      end: () => events.push('end'),
+    };
+    const fail = () => {
+      throw new Error('draw');
+    };
+    renderers.point.drawRetainedRange = fail;
+    renderers.line.drawRetainedRange = fail;
+    renderers.polygon.drawRetainedRange = fail;
+    expect(() => frame()).toThrow('draw');
+    expect(events[events.length - 1]).toBe('end');
+  });
+});
+
 describe('the state of the rows', () => {
   function stateSetup() {
     const features = Array.from({ length: 6 }, (_, i) => feature(`p${i}`, 'Point', [i, i]));

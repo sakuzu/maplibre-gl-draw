@@ -717,8 +717,12 @@ buffer alive instead of creating them per frame:
   this buffer bound
 
 Retained batches share none of this. Their coordinate texture has exactly
-the size the batch needs, and the VAO and quad vertices belong to the
-batch.
+the size the batch needs, and the VAO belongs to the batch. The vertices of
+the stations of a segment are the same for every line, so the VAO of every
+batch points at the one buffer of the renderer, which the ledger counts once
+and the renderer deletes when it is disposed (a lost context drops the
+renderer with its batches, and the restore makes a new one). The points do
+the same with the vertices of their billboard.
 
 ### SDFPolygonRenderer
 
@@ -1966,8 +1970,35 @@ alone. Each renderer remembers the value it wrote last and skips
   values, in case maplibre ever reuses an object with new contents
 - Relinking a program discards them too
 
-Redundant `gl.useProgram` calls are not avoided: the current program is
-context-wide state that maplibre and extension renderers also change.
+The uniforms of the state of the rows (the unit of its texture, its width,
+the translations of the moving sets) and the shape uniforms of the
+variants that draw rows held as columns are remembered the same way.
+
+### A run of retained draws
+
+The program in use, the textures bound to the units and the vertex array
+bound are context-wide state that maplibre and the renderers of the
+extensions also change, so a lone draw sets all of them and unbinds its
+vertex array afterwards. The retained batches of a layer, though, are drawn
+one after another with nothing else in between, and the side that draws
+them opens a run around them (`RetainedDrawRun`,
+`view/renderers/draw-run.ts`; one per context, reached as
+`RetainedRendererSet.run`):
+
+- A draw in a run does not call `useProgram` for the program the run already
+  uses, binds the texture of the state of the rows once per row group, and
+  leaves its vertex array bound; the run unbinds it once, when it ends
+- The run only remembers what it set itself. The Store, the datasets and
+  the rows held as columns call `forget()` before they draw features at
+  once (the immediate mode, custom types, companions) and `end()` after the
+  layer, in a `finally`; both unbind the vertex array left bound and forget
+  everything, and a new frame forgets it as well
+- A batch of rows points its instance attributes at the first instance of a
+  range only when they point elsewhere (the vertex array keeps the place it
+  points at)
+- The builds that run between the draws of a run bind their own vertex
+  array and leave none bound, and bind textures only on the unit 0, which
+  the run leaves active, so they keep what the run remembers true
 
 The viewport size given to shaders comes from `gl.drawingBufferWidth` and
 `gl.drawingBufferHeight`, the size of the framebuffer actually drawn into,

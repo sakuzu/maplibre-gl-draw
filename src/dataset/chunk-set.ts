@@ -406,6 +406,8 @@ export class DisplayChunkSet {
         // batches of the chunk, the points last (with the same factors as the retained batches)
         const { fallback, pointFallback } = batches;
         if (fallback.length > 0 || pointFallback.length > 0) {
+          // What draws the features at once may change any of the state of the run
+          renderers.run?.forget();
           target.beginFrame(projectionData, zoom, undefined, factors);
           for (const feature of fallback) target.processFeature(feature, false);
           for (const feature of pointFallback) target.processFeature(feature, false);
@@ -415,7 +417,15 @@ export class DisplayChunkSet {
       },
     };
 
-    const pending = advanceChunkBuilds(this.chunks, { bounds, zoom, settled, budget }, host);
+    // The chunks are drawn as one run of retained draws (view/renderers/draw-run.ts)
+    const run = renderers.run;
+    run?.begin();
+    let pending: boolean;
+    try {
+      pending = advanceChunkBuilds(this.chunks, { bounds, zoom, settled, budget }, host);
+    } finally {
+      run?.end();
+    }
 
     // If any chunk was left unbuilt, one more frame is asked for
     this.lastPending = pending;

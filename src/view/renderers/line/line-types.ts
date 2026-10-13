@@ -120,6 +120,12 @@ export interface RetainedLineBatch {
   readonly rowFirst?: Int32Array;
   /** The VAO, with the instance attributes already configured */
   readonly vao: WebGLVertexArrayObject;
+  /**
+   * For a batch of rows held as columns, the instance the instance attributes of its VAO point
+   * at now (a state of the VAO: a draw of a range of rows points them at the first instance of
+   * the range, only when they point elsewhere)
+   */
+  pointedFirst?: number;
   /** The instance buffer (dedicated to this batch) */
   readonly instanceBuffer: WebGLBuffer;
   /** The coordinate texture (dedicated to this batch) */

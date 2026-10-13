@@ -175,41 +175,57 @@ export class StoreRetainedCache {
     // The opacity of the layer is multiplied in at draw time (the batches do not bake it)
     const factors = layerDrawFactors(layer);
 
-    for (const chunk of cache.chunks) {
-      // A chunk outside the screen is not drawn (a chunk with no computed bbox is always drawn)
-      if (viewportBounds && chunk.bbox && !bboxIntersects(chunk.bbox, viewportBounds)) continue;
+    // The chunks of the layer are drawn as one run of retained draws (draw-run.ts), forgotten
+    // before the features drawn at once and ended with the layer
+    const run = deps.renderers.run;
+    run?.begin();
+    try {
+      for (const chunk of cache.chunks) {
+        // A chunk outside the screen is not drawn (a chunk with no computed bbox is always drawn)
+        if (viewportBounds && chunk.bbox && !bboxIntersects(chunk.bbox, viewportBounds)) continue;
 
-      // A batch whose origin is too far from the view for the zoom is built again around it
-      this.rebaseForView(chunk, layer, zoom, deps, viewportBounds);
+        // A batch whose origin is too far from the view for the zoom is built again around it
+        this.rebaseForView(chunk, layer, zoom, deps, viewportBounds);
 
-      // An immediate chunk, and a chunk that could not be built, are drawn in immediate mode
-      if (chunk.kind === 'immediate' || chunk.dirty) {
-        // Thin per feature as well, but only when the range to thin against is decided.
-        // The spatial index query becomes necessary for the first time here.
-        const visibleIds = viewportBounds ? deps.getVisibleIds?.() : undefined;
-        drawFeaturesImmediate(
-          this.store,
-          chunk.featureIds,
-          layer,
-          projectionData,
-          zoom,
-          deps,
-          visibleIds,
-        );
-        continue;
-      }
+        // An immediate chunk, and a chunk that could not be built, are drawn in immediate mode
+        if (chunk.kind === 'immediate' || chunk.dirty) {
+          // Thin per feature as well, but only when the range to thin against is decided.
+          // The spatial index query becomes necessary for the first time here.
+          const visibleIds = viewportBounds ? deps.getVisibleIds?.() : undefined;
+          // What draws the features at once may change any of the state of the run
+          deps.renderers.run?.forget();
+          drawFeaturesImmediate(
+            this.store,
+            chunk.featureIds,
+            layer,
+            projectionData,
+            zoom,
+            deps,
+            visibleIds,
+          );
+          continue;
+        }
 
-      if (chunk.polygon) {
-        deps.renderers.polygon.drawRetained(chunk.polygon, zoom, projectionData, viewport, factors);
+        if (chunk.polygon) {
+          deps.renderers.polygon.drawRetained(
+            chunk.polygon,
+            zoom,
+            projectionData,
+            viewport,
+            factors,
+          );
+        }
+        if (chunk.line) {
+          // The vertex diff queued during the drag is written into the coordinate texture here
+          flushCoordPatches(chunk, deps.renderers.line);
+          deps.renderers.line.drawRetainedBatch(chunk.line, zoom, projectionData, factors);
+        }
+        if (chunk.point) {
+          deps.renderers.point.drawRetained(chunk.point, zoom, projectionData, factors);
+        }
       }
-      if (chunk.line) {
-        // The vertex diff queued during the drag is written into the coordinate texture here
-        flushCoordPatches(chunk, deps.renderers.line);
-        deps.renderers.line.drawRetainedBatch(chunk.line, zoom, projectionData, factors);
-      }
-      if (chunk.point) {
-        deps.renderers.point.drawRetained(chunk.point, zoom, projectionData, factors);
-      }
+    } finally {
+      run?.end();
     }
   }
 

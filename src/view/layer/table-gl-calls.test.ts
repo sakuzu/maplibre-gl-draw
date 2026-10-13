@@ -16,6 +16,7 @@ import type { Feature, Layer } from '../../shared/types/model.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
+import { retainedDrawRun } from '../renderers/draw-run.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
@@ -153,6 +154,8 @@ function realRenderers(gl: WebGL2RenderingContext, terrain: TerrainContext) {
     polygon,
     styles: createTestDrawer(),
     viewport: () => [gl.drawingBufferWidth, gl.drawingBufferHeight],
+    // The run of the retained draws, as the engine gives it (BatchManager.getRetainedRenderers)
+    run: retainedDrawRun(gl),
   };
   const camera = (zoom: number, projectionData: ProjectionData): void => {
     const offset = calculateOffsetUniforms(
@@ -165,7 +168,7 @@ function realRenderers(gl: WebGL2RenderingContext, terrain: TerrainContext) {
     polygon.setOffsetUniforms(offset);
     void zoom;
   };
-  return { renderers, ledger, camera, point, line, polygon };
+  return { renderers, ledger, camera, point, line, polygon, run: renderers.run };
 }
 
 function drawCount(counts: Map<string, number>): number {
@@ -234,13 +237,16 @@ describe('the GL calls per draw', () => {
     console.log(
       `[rows] draws ${draws}, GL calls ${total(counts)}, per draw ${perDraw.toFixed(2)}\n  ${breakdown(counts, draws)}`,
     );
-    expect(draws).toBeGreaterThan(0);
+    expect(draws).toBe(7500);
+    // A draw of a range: its program (the kinds alternate), its vertex array, the shift of its
+    // origin, the draw, and for a line its coordinates (26 calls before the run and the records)
+    expect(perDraw).toBeLessThan(5);
   });
 
   it('of the retained batches of the Store and the datasets, interleaved', () => {
     const mock = countingGL();
     const terrain = new TerrainContext();
-    const { point, line, polygon, camera } = realRenderers(mock.gl, terrain);
+    const { point, line, polygon, camera, run } = realRenderers(mock.gl, terrain);
     const n = 3_000;
     const batches: Array<() => void> = [];
     let projectionData = projection();
@@ -306,7 +312,10 @@ describe('the GL calls per draw', () => {
       beginRenderFrame();
       projectionData = projection();
       camera(14, projectionData);
+      // As the Store and the datasets draw the chunks of a layer: as one run
+      run?.begin();
       for (const draw of batches) draw();
+      run?.end();
     };
     frame();
     mock.start();
@@ -316,6 +325,8 @@ describe('the GL calls per draw', () => {
     console.log(
       `[store] draws ${draws}, GL calls ${total(counts)}, per draw ${(total(counts) / draws).toFixed(2)}\n  ${breakdown(counts, draws)}`,
     );
-    expect(draws).toBeGreaterThan(0);
+    expect(draws).toBe(n);
+    // 5.5 calls per draw before the run (the vertex array unbound after every draw)
+    expect(total(counts) / draws).toBeLessThan(4.5);
   });
 });

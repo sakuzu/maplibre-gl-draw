@@ -41,13 +41,13 @@ import { ProjectionUniformManager } from '../../shaders/projection.js';
 import { anchorElevationMeters } from '../../terrain/anchor.js';
 import { TerrainContext } from '../../terrain/context.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
+import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import {
   bindRowState,
   ROW_HIDDEN_POSITION_GLSL,
   ROW_STATE_GLSL,
   type RowStateBinding,
-  type RowStateLocations,
-  rowStateLocations,
+  RowStateUniforms,
 } from '../row-state.js';
 import { drawBillboardsWithoutDepth } from './billboard-depth.js';
 import { POINT_SDF_GLSL, POINT_SHAPE_CODE, type SdfPointShape } from './point-sdf.js';
@@ -259,6 +259,12 @@ export interface RetainedPointBatch {
   readonly rowFirst?: Int32Array;
   /** VAO dedicated to this batch */
   readonly vao: WebGLVertexArrayObject;
+  /**
+   * For a batch of rows held as columns, the instance the instance attributes of its VAO point
+   * at now (a state of the VAO: a draw of a range of rows points them at the first instance of
+   * the range, only when they point elsewhere)
+   */
+  pointedFirst?: number;
   /** Instance buffer */
   readonly instanceBuffer: WebGLBuffer;
   /** Number of instances */
@@ -535,8 +541,8 @@ export class PointInstanceRenderer {
   private variantName = '';
   /** The variant of the program that draws rows held as columns (made on its first use) */
   private rowProgram: WebGLProgram | null = null;
-  /** The uniform locations of the state of the rows in `rowProgram` */
-  private rowStateLocs: RowStateLocations | null = null;
+  /** The uniforms of the state of the rows in `rowProgram` */
+  private rowStateUniforms: RowStateUniforms | null = null;
   /** The shader data the programs were made with (the variant of the rows is made from it) */
   private shaderData: ShaderData | null = null;
 
@@ -573,6 +579,8 @@ export class PointInstanceRenderer {
   private readonly terrain: TerrainContext;
   /** Where the GPU memory this renderer allocates is recorded */
   private readonly ledger: GpuLedger | undefined;
+  /** The run of the retained draws of the context (shared with the other renderers) */
+  private readonly run: RetainedDrawRun;
 
   constructor(
     _map: MapLibreMap,
@@ -585,6 +593,7 @@ export class PointInstanceRenderer {
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
     this.ledger = ledger;
+    this.run = retainedDrawRun(gl);
     this.instanceBuffer = gl.createBuffer();
     this.quadBuffer = gl.createBuffer();
     if (this.quadBuffer) {
@@ -628,7 +637,7 @@ export class PointInstanceRenderer {
       shaderData.define,
       true,
     );
-    this.rowStateLocs = rowStateLocations(this.gl, this.rowProgram);
+    this.rowStateUniforms = new RowStateUniforms(this.gl, this.rowProgram);
     return true;
   }
 
@@ -788,53 +797,36 @@ void main() {
    * Points the instance attributes of the bound vertex array at the bound instance buffer,
    * from instance `first` (a batch of rows draws a range of its rows this way: WebGL2 has no
    * draw that starts at an instance)
+   *
+   * @param setup Whether the attributes are also enabled and made per instance (when the vertex
+   *   array is made; a vertex array keeps both, so pointing it elsewhere needs only the pointers)
    */
-  private pointInstanceAttribs(rows: boolean, first: number): void {
+  private pointInstanceAttribs(rows: boolean, first: number, setup = true): void {
     const gl = this.gl;
     const stride = rows ? ROW_POINT_BYTES : INSTANCE_BYTES_PLAIN;
     const base = first * stride;
+    const attribute = (location: number, size: number, offset: number): void => {
+      if (setup) gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, base + offset);
+      if (setup) gl.vertexAttribDivisor(location, 1);
+    };
 
     // Relative coordinates: location=1, offset 0, 2 floats
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, base);
-    gl.vertexAttribDivisor(1, 1);
-
+    attribute(1, 2, 0);
     // Fill color: location=2, offset 8, 4 floats
-    gl.enableVertexAttribArray(2);
-    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, stride, base + 8);
-    gl.vertexAttribDivisor(2, 1);
-
+    attribute(2, 4, 8);
     // Stroke color: location=3, offset 24, 4 floats
-    gl.enableVertexAttribArray(3);
-    gl.vertexAttribPointer(3, 4, gl.FLOAT, false, stride, base + 24);
-    gl.vertexAttribDivisor(3, 1);
-
+    attribute(3, 4, 24);
     // Radius: location=4, offset 40, 1 float
-    gl.enableVertexAttribArray(4);
-    gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, base + 40);
-    gl.vertexAttribDivisor(4, 1);
-
+    attribute(4, 1, 40);
     // Stroke width: location=5, offset 44, 1 float
-    gl.enableVertexAttribArray(5);
-    gl.vertexAttribPointer(5, 1, gl.FLOAT, false, stride, base + 44);
-    gl.vertexAttribDivisor(5, 1);
-
+    attribute(5, 1, 44);
     // Ground elevation of the anchor (meters): location=6, offset 48, 1 float
-    gl.enableVertexAttribArray(6);
-    gl.vertexAttribPointer(6, 1, gl.FLOAT, false, stride, base + 48);
-    gl.vertexAttribDivisor(6, 1);
-
+    attribute(6, 1, 48);
     // Shape: location=7, offset 52, 1 float
-    gl.enableVertexAttribArray(7);
-    gl.vertexAttribPointer(7, 1, gl.FLOAT, false, stride, base + INSTANCE_SHAPE * 4);
-    gl.vertexAttribDivisor(7, 1);
-
+    attribute(7, 1, INSTANCE_SHAPE * 4);
     // The number of the row (rows held as columns only): location=8, offset 56, 1 float
-    if (rows) {
-      gl.enableVertexAttribArray(8);
-      gl.vertexAttribPointer(8, 1, gl.FLOAT, false, stride, base + INSTANCE_STRIDE * 4);
-      gl.vertexAttribDivisor(8, 1);
-    }
+    if (rows) attribute(8, 1, INSTANCE_STRIDE * 4);
   }
 
   /**
@@ -1008,7 +1000,7 @@ void main() {
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
     this.ledger?.record(this.instanceBuffer, 'points', 'buffer', instanceData.byteLength);
 
-    gl.useProgram(this.program);
+    this.run.useProgram(this.program);
     this.setProjectionUniforms(this.program, zoom);
     // Always written (1 when the caller has none) so that no factor of an earlier draw is left
     this.setDrawFactors(this.program, factors);
@@ -1132,6 +1124,7 @@ void main() {
       shape: 'circle',
       rowFirst,
       vao,
+      pointedFirst: 0,
       instanceBuffer,
       instanceCount: count,
       origin: normalizeOrigin(origin),
@@ -1175,18 +1168,22 @@ void main() {
         ]
       : [0, 0];
 
-    gl.useProgram(program);
+    const run = this.run;
+    run.useProgram(program);
     this.setProjectionUniformsWith(program, zoom, projectionData, offsetUniforms, originShift);
     this.setDrawFactors(program, factors);
-    bindRowState(gl, this.rowStateLocs as RowStateLocations, rowState);
+    bindRowState(run, this.rowStateUniforms as RowStateUniforms, rowState);
 
-    gl.bindVertexArray(batch.vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, batch.instanceBuffer);
-    this.pointInstanceAttribs(true, first);
+    run.bindVertexArray(batch.vao);
+    if (batch.pointedFirst !== first) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, batch.instanceBuffer);
+      this.pointInstanceAttribs(true, first, false);
+      batch.pointedFirst = first;
+    }
     drawBillboardsWithoutDepth(gl, () => {
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, QUAD_VERTEX_COUNT, count);
     });
-    gl.bindVertexArray(null);
+    run.release();
   }
 
   /**
@@ -1224,16 +1221,16 @@ void main() {
         ]
       : [0, 0];
 
-    gl.useProgram(this.program);
+    const run = this.run;
+    run.useProgram(this.program);
     this.setProjectionUniformsWith(this.program, zoom, projectionData, offsetUniforms, originShift);
     this.setDrawFactors(this.program, factors);
 
-    gl.bindVertexArray(batch.vao);
+    run.bindVertexArray(batch.vao);
     drawBillboardsWithoutDepth(gl, () => {
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, QUAD_VERTEX_COUNT, batch.instanceCount);
     });
-
-    gl.bindVertexArray(null);
+    run.release();
   }
 
   /**
@@ -1260,7 +1257,7 @@ void main() {
     if (this.rowProgram) {
       gl.deleteProgram(this.rowProgram);
       this.rowProgram = null;
-      this.rowStateLocs = null;
+      this.rowStateUniforms = null;
     }
 
     // The uniform locations and the record of the values written last are tied to the program,

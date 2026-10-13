@@ -828,6 +828,46 @@ describe('z-order', () => {
     expect(order).toEqual(['retained:g1', 'immediate:img', 'retained:l1']);
   });
 
+  it('the retained draws of a layer are one run, forgotten before the immediate drawing', () => {
+    const order: string[] = [];
+    const h = createHarness(
+      [makeFeature('g1', 'Polygon'), makeFeature('img', 'Image'), makeFeature('l1', 'LineString')],
+      {},
+    );
+    const renderers = h.deps.renderers as {
+      -readonly [K in keyof RetainedRendererSet]: RetainedRendererSet[K];
+    };
+    renderers.run = {
+      begin: () => order.push('begin'),
+      forget: () => order.push('forget'),
+      end: () => order.push('end'),
+    } as unknown as RetainedRendererSet['run'];
+    const note = (batch: unknown): void => {
+      order.push(`retained:${(batch as MockBatch).ids.join(',')}`);
+    };
+    renderers.polygon.drawRetained = note as typeof renderers.polygon.drawRetained;
+    renderers.line.drawRetainedBatch = note as typeof renderers.line.drawRetainedBatch;
+    h.deps.batchManager = {
+      beginFrame: (): void => {},
+      processFeature: (feature: Feature): boolean => {
+        order.push(`immediate:${feature.id}`);
+        return false;
+      },
+      endFrame: (): void => {},
+    };
+
+    h.draw();
+
+    expect(order).toEqual([
+      'begin',
+      'retained:g1',
+      'forget',
+      'immediate:img',
+      'retained:l1',
+      'end',
+    ]);
+  });
+
   it('a custom type is drawn through the immediate path after the batch is flushed', () => {
     const h = createHarness(
       [
