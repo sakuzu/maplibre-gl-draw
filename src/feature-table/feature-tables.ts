@@ -283,8 +283,13 @@ export interface FeatureTablesInternals {
    * @returns The function that stops the calls
    */
   onTouched(listener: (layerId: string, bounds: BoundingBox) => void): () => void;
-  /** What the versions did: swapped so far, pending, the time of the last merge (ms) */
-  versionStats(): { swapped: number; pending: number; lastMergeMs: number };
+  /**
+   * What the versions did: swapped so far, pending, the most held at once, the time of the last
+   * merge (ms)
+   */
+  versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number };
+  /** Sets the bytes the versions held at once may take (the tests, the measurements) */
+  setPendingVersionBytes(bytes: number): void;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -450,12 +455,17 @@ class FeatureTablesStore implements FeatureTablesInternals {
     };
   }
 
-  versionStats(): { swapped: number; pending: number; lastMergeMs: number } {
+  versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number } {
     return {
       swapped: this.versions.swapped,
       pending: this.versions.built().length,
+      mostPending: this.versions.mostPending,
       lastMergeMs: this.versions.lastMergeMs,
     };
+  }
+
+  setPendingVersionBytes(bytes: number): void {
+    this.versions.pendingBytesLimit = bytes;
   }
 
   /** Tells the sides that draw in tiles the extent of rows whose drawing changed */

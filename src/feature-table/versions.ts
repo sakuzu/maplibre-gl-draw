@@ -220,6 +220,10 @@ export class GroupVersions {
   private nextId = 1;
   /** The versions swapped (diagnostics) */
   swapped = 0;
+  /** The bytes the versions held at once may take (`PENDING_VERSION_BYTES`) */
+  pendingBytesLimit = PENDING_VERSION_BYTES;
+  /** The most versions held at once so far (diagnostics) */
+  mostPending = 0;
   /** The time the last merge on the main thread took (ms) */
   lastMergeMs = 0;
 
@@ -298,7 +302,7 @@ export class GroupVersions {
         this.due.delete(handle);
         continue;
       }
-      if (this.pendingBytes() + found.group.data.length * ROW_BYTES > PENDING_VERSION_BYTES) {
+      if (this.pendingBytes() + found.group.data.length * ROW_BYTES > this.pendingBytesLimit) {
         // The ones started are swapped first
         if (this.pending.size > 0) break;
       }
@@ -442,6 +446,7 @@ export class GroupVersions {
     const merge = this.mergeOf(layer, groups);
     (version as { keys: ReadonlyMap<GroupHandle, number> }).keys = this.keysOf(merge);
     this.pending.set(version.id, version);
+    this.mostPending = Math.max(this.mostPending, this.pending.size);
     const rows = merge.rows.length / 2;
     const worker = host.worker;
     if (worker && rows > FOLD_INLINE_ROWS) {

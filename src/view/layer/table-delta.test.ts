@@ -542,4 +542,50 @@ describe('the drawing of the rows of the delta', () => {
     expect(changed).toBe(true);
     expect(live.internals.groups.orderOf(5)).toBe(orderKey(120) + 'g');
   });
+
+  it('draws an import written a thousand rows at a time from the frame its groups are up', () => {
+    const list = features(100, 44).map((f) =>
+      f.type === 'Image' ? feature(f.id, 'Point', [1, 1]) : f,
+    );
+    const live = setup(list, 50, true);
+    live.frame();
+    live.frame();
+    let made = 0;
+    let drawnBefore = new Set<string>();
+    for (let write = 0; write < 6; write++) {
+      const ids = Array.from({ length: 1000 }, (_, i) => `import${write * 1000 + i}`);
+      const handles = live.writer.allocateHandles(utf8ColumnFromStrings(ids));
+      live.writer.apply(
+        patchOf(Array.from(handles), {
+          type: ids.map(() => 'Point'),
+          layerId: ids.map(() => 'layer'),
+          geometry: ids.map((_, i) => ({ type: 'Point', coordinates: [i / 100, write] })),
+          order: ids.map(
+            (_, i) => `${orderKey(999_000)}${String(write * 1000 + i).padStart(6, '0')}`,
+          ),
+        }),
+      );
+      for (let i = 0; i < 3; i++) {
+        const { record } = live.frame();
+        // Never in the delta: a group of new rows is drawn from the frame its chunks are up,
+        // the rows in their order, once each, and a row drawn is drawn in every frame after
+        expect(live.internals.deltaRowCount()).toBe(0);
+        const drawn = drawnIds(record, live.table);
+        const shown = shownIds(live.table, live.tables.idOf);
+        const place = new Map(shown.map((id, k) => [id, k]));
+        for (let k = 1; k < drawn.length; k++) {
+          expect(place.get(drawn[k]) as number).toBeGreaterThan(place.get(drawn[k - 1]) as number);
+        }
+        const now = new Set(drawn);
+        for (const id of drawnBefore) expect(now.has(id)).toBe(true);
+        drawnBefore = now;
+        made = Math.max(made, live.table.rowCount);
+      }
+    }
+    for (let i = 0; i < 20 && live.internals.hasPendingWork; i++) live.frame();
+    const { record } = live.frame();
+    expect(live.table.rowCount).toBe(6100);
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(made).toBeGreaterThan(100);
+  });
 });
