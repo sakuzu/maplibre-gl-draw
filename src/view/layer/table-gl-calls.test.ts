@@ -248,7 +248,7 @@ describe('the GL calls per draw', () => {
       const f = mixedFeature(n, i);
       const at = (i % 4) as 0 | 1 | 2 | 3;
       if (at === 0) {
-        const coord = f.geometry.coordinates as [number, number];
+        const coord = (f.geometry as { coordinates: unknown }).coordinates as [number, number];
         const batch = point.buildRetained(
           [
             {
@@ -263,7 +263,7 @@ describe('the GL calls per draw', () => {
         );
         if (batch) batches.push(() => point.drawRetained(batch, 14, projectionData));
       } else if (at === 1) {
-        const coords = f.geometry.coordinates as [number, number][];
+        const coords = (f.geometry as { coordinates: unknown }).coordinates as [number, number][];
         const batch = line.buildRetainedBatch(
           [
             {
@@ -280,7 +280,9 @@ describe('the GL calls per draw', () => {
         );
         if (batch) batches.push(() => line.drawRetainedBatch(batch, 14, projectionData));
       } else {
-        const ring = (f.geometry.coordinates as [number, number][][])[0];
+        const ring = (
+          (f.geometry as { coordinates: unknown }).coordinates as [number, number][][]
+        )[0];
         const batch = polygon.buildRetained([
           {
             coordinates: [ring],
