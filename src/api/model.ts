@@ -18,6 +18,7 @@ import type {
 import type { BBox } from '../geometry/types.js';
 import type { Messages } from '../messages.js';
 import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
+import type { ItemPlacement } from '../shared/types/model.js';
 import type { LineStyle } from '../shared/types/style.js';
 import {
   deriveLegend as deriveRuleLegend,
@@ -505,11 +506,25 @@ export interface GroupFilter {
  *
  * `{ groupId: null }` takes a feature out of its group: it stays in its layer, just in front
  * of the group. `index` is the position within the destination, 0 at the back; the front
- * when it is left out.
+ * when it is left out. A place can be given by the items it goes between instead
+ * ({@link ItemPlacement}: `{ layerId, groupId?, below?, above? }`), which is how a layer held as
+ * rows is moved into: a position by `index` there is refused.
  */
 export type MoveTarget =
   | { layerId: string; index?: number }
-  | { groupId: string | null; index?: number };
+  | { groupId: string | null; index?: number }
+  | ItemPlacement;
+
+export type {
+  ItemMove,
+  ItemOrderChange,
+  ItemPlacement,
+  ItemPosition,
+  ItemRefs,
+  RetainToken,
+  RowRangeMove,
+  RowValuesSnapshot,
+} from '../shared/types/model.js';
 
 // ============================================================================
 // Loading

@@ -21,8 +21,7 @@ import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitt
 import type { Store } from '../../store/store.js';
 import type {
   FeatureCoordinates,
-  Group,
-  Layer,
+  ItemPosition,
   StoreChange,
   Feature as StoredFeature,
   VertexSelection as StoredVertexSelection,
@@ -31,7 +30,7 @@ import type {
 import { DrawError } from '../errors.js';
 import type { DocumentChange, DrawEventListener, DrawEvents } from '../events.js';
 import type { Hit } from '../extension/provider.js';
-import type { Feature, FeatureInput, MoveTarget } from '../model.js';
+import type { Feature, FeatureInput } from '../model.js';
 import type { SnapResult } from '../state.js';
 import { toDatasetRow } from './rows.js';
 
@@ -130,7 +129,7 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
   let readOnly = store.isReadOnly();
   let locked = store.isInteractionLocked();
   return store.subscribe((changes) => {
-    emitResourceEvents(hub, store, changes);
+    emitResourceEvents(hub, changes);
 
     const nextVertexSelection = store.getVertexSelection();
     if (!sameVertexSelection(vertexSelection, nextVertexSelection)) {
@@ -217,7 +216,7 @@ function sameIds(list: readonly string[], set: ReadonlySet<string>): boolean {
 }
 
 /** The events of each resource of one notification */
-function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): void {
+function emitResourceEvents(hub: EventHub, changes: StoreChange): void {
   const source = changes.source ?? 'local';
 
   const { features, layers, groups } = changes;
@@ -231,7 +230,7 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
       source,
       intermediate: update.isIntermediate === true,
     });
-    const move = describeMove(store, changes, update.previous, update.feature);
+    const move = describeMove(changes, update.previous, update.feature);
     if (move) hub.emit('feature.moved', { feature: update.feature as Feature, ...move, source });
   }
   for (const feature of features?.deleted ?? []) {
@@ -241,21 +240,8 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
   if (changes.rows) hub.emit('rows.changed', { rows: changes.rows, source });
 
   for (const layer of layers?.created ?? []) hub.emit('layer.created', { layer, source });
-  const updatedLayers = new Set<string>();
-  for (const { id, layer, previous } of layers?.updated ?? []) {
-    updatedLayers.add(id);
+  for (const { layer, previous } of layers?.updated ?? []) {
     hub.emit('layer.updated', { layer, previous, source });
-  }
-  // A reorder within a layer changes its items
-  if (changes.layerReorder && !updatedLayers.has(changes.layerReorder.layerId)) {
-    const layer = store.getLayer(changes.layerReorder.layerId);
-    if (layer && layer.kind !== 'table') {
-      hub.emit('layer.updated', {
-        layer,
-        previous: { ...layer, items: [...changes.layerReorder.previous] },
-        source,
-      });
-    }
   }
   for (const layer of layers?.deleted ?? []) hub.emit('layer.deleted', { layer, source });
   if (layers?.orderChanged) {
@@ -267,23 +253,33 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
   }
 
   for (const group of groups?.created ?? []) hub.emit('group.created', { group, source });
-  const updatedGroups = new Set<string>();
-  for (const { id, group, previous } of groups?.updated ?? []) {
-    updatedGroups.add(id);
+  for (const { group, previous } of groups?.updated ?? []) {
     hub.emit('group.updated', { group, previous, source });
   }
-  // A reorder within a group changes its features
-  if (changes.groupReorder && !updatedGroups.has(changes.groupReorder.groupId)) {
-    const group = store.getGroup(changes.groupReorder.groupId);
-    if (group && group.kind !== 'table') {
-      hub.emit('group.updated', {
-        group,
-        previous: { ...group, featureIds: [...changes.groupReorder.previous] },
+  for (const group of groups?.deleted ?? []) hub.emit('group.deleted', { group, source });
+
+  // The items put in another place, in the order they were put there (an item created or
+  // deleted is told by its own event)
+  for (const move of changes.order ?? []) {
+    if (move.kind === 'rows') {
+      hub.emit('item.moved', {
+        kind: 'rows',
+        layerId: move.layerId,
+        count: move.handles.length,
+        ...(move.to && { to: move.to }),
         source,
       });
+      continue;
     }
+    if (!move.from || !move.to) continue;
+    hub.emit('item.moved', {
+      kind: 'item',
+      itemId: move.itemId,
+      from: move.from,
+      to: move.to,
+      source,
+    });
   }
-  for (const group of groups?.deleted ?? []) hub.emit('group.deleted', { group, source });
 
   if (changes.metadata) {
     hub.emit('metadata.updated', {
@@ -306,66 +302,32 @@ function emitResourceEvents(hub: EventHub, store: Store, changes: StoreChange): 
 }
 
 /**
- * Where a feature moved from and to, when an update changed its layer or its group; null
- * otherwise
+ * Where a feature moved from and to, when an update changed its layer or its group (null
+ * otherwise): where the moves of the notification say it was first and is last, or its layer and
+ * its group alone when they do not name it
  */
 function describeMove(
-  store: Store,
   changes: StoreChange,
   previous: StoredFeature,
   feature: StoredFeature,
-): { from: MoveTarget; to: MoveTarget } | null {
+): { from: ItemPosition; to: ItemPosition } | null {
   if (previous.layerId === feature.layerId && previous.groupId === feature.groupId) return null;
-
-  const previousLayer = changes.layers?.updated?.find((u) => u.id === previous.layerId)?.previous;
-  const previousGroup = previous.groupId
-    ? changes.groups?.updated?.find((u) => u.id === previous.groupId)?.previous
-    : undefined;
-  const from: MoveTarget = previous.groupId
-    ? withIndex({ groupId: previous.groupId }, membersOf(previousGroup), previous.id)
-    : withIndex({ layerId: previous.layerId }, itemsOf(previousLayer), previous.id);
-
-  let to: MoveTarget;
-  if (feature.groupId) {
-    to = withIndex(
-      { groupId: feature.groupId },
-      membersOf(store.getGroup(feature.groupId)),
-      feature.id,
-    );
-  } else if (previous.groupId && previous.layerId === feature.layerId) {
-    // Out of its group, in the same layer
-    to = withIndex({ groupId: null }, itemsOf(store.getLayer(feature.layerId)), feature.id);
-  } else {
-    to = withIndex(
-      { layerId: feature.layerId },
-      itemsOf(store.getLayer(feature.layerId)),
-      feature.id,
-    );
+  let from: ItemPosition | null = null;
+  let to: ItemPosition | null = null;
+  for (const move of changes.order ?? []) {
+    if (move.kind !== 'item' || move.itemId !== feature.id) continue;
+    if (!from && move.from) from = move.from;
+    if (move.to) to = move.to;
   }
-  return { from, to };
-}
-
-/**
- * The items a layer lists (undefined for no layer, or a layer held as rows: a place in it is
- * not an index)
- */
-function itemsOf(layer: Layer | undefined): readonly string[] | undefined {
-  return layer && layer.kind !== 'table' ? layer.items : undefined;
-}
-
-/** The members a group lists (undefined for no group, or a group of a layer held as rows) */
-function membersOf(group: Group | undefined): readonly string[] | undefined {
-  return group && group.kind !== 'table' ? group.featureIds : undefined;
-}
-
-/** A target with the position of the ID in the list, when the list holds it */
-function withIndex<T extends MoveTarget>(
-  target: T,
-  list: readonly string[] | undefined,
-  id: string,
-): T {
-  const index = list?.indexOf(id) ?? -1;
-  return index >= 0 ? { ...target, index } : target;
+  return {
+    from: from ?? {
+      layerId: previous.layerId,
+      groupId: previous.groupId,
+      below: null,
+      above: null,
+    },
+    to: to ?? { layerId: feature.layerId, groupId: feature.groupId, below: null, above: null },
+  };
 }
 
 /** Whether two vertex selections hold the same vertices of the same feature */
@@ -393,14 +355,13 @@ const DOCUMENT_KEYS = [
   'rows',
   'layers',
   'groups',
-  'layerReorder',
-  'groupReorder',
+  'order',
   'metadata',
   'files',
 ] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
 
 /** The categories of the state of this client that `document.changed` carries along */
-const CLIENT_KEYS = ['selection', 'editing', 'mode'] as const satisfies ReadonlyArray<
+const CLIENT_KEYS = ['selection', 'editing', 'mode', 'retain'] as const satisfies ReadonlyArray<
   keyof DocumentChange & keyof StoreChange
 >;
 

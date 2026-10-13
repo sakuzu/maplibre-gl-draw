@@ -84,7 +84,16 @@ describe('DisplayListCache', () => {
     expect(s.reads()).toBe(2);
 
     s.features.reverse();
-    cache.applyChanges({ layerReorder: {} } as unknown as StoreChange);
+    cache.applyChanges({
+      order: [
+        {
+          kind: 'item',
+          itemId: 'f9',
+          from: { layerId: 'l', groupId: undefined, below: 'f8', above: null },
+          to: { layerId: 'l', groupId: undefined, below: null, above: 'f0' },
+        },
+      ],
+    });
     expect(cache.inOrder(new Set(['f0', 'f9'])).map((f) => f.id)).toEqual(['f9', 'f0']);
   });
 });

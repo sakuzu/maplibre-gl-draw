@@ -18,7 +18,14 @@
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
-import type { LayerRowsChange, RowField, RowsChange } from '../shared/types/model.js';
+import type {
+  ItemRefs,
+  LayerRowsChange,
+  RetainToken,
+  RowField,
+  RowsChange,
+  RowValuesSnapshot,
+} from '../shared/types/model.js';
 import { createTableMemoryStore as createTableMemoryStoreOf } from '../store/table-memory.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
@@ -26,7 +33,15 @@ import type { DocumentChange } from './events.js';
 import type { Store, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureType } from './model.js';
 
-export type { FeatureTablesWorker, LayerRowsChange, RowField, RowsChange };
+export type {
+  FeatureTablesWorker,
+  ItemRefs,
+  LayerRowsChange,
+  RetainToken,
+  RowField,
+  RowsChange,
+  RowValuesSnapshot,
+};
 
 /**
  * The handle of a row: a number the document gives a row the first time it sees its id, and
@@ -87,16 +102,6 @@ export interface LayerTableView {
 export const ITEM_ROW = 0;
 /** An item of {@link ItemRefs} that is a group of features (its handle is the handle of the group) */
 export const ITEM_GROUP = 1;
-
-/**
- * Items of a layer, in their order: rows and groups of features.
- */
-export interface ItemRefs {
-  /** The kind of each item: {@link ITEM_ROW} or {@link ITEM_GROUP} */
-  readonly kinds: Uint8Array;
-  /** The handle of each item: of its row, or of its group */
-  readonly handles: Int32Array;
-}
 
 /**
  * What {@link FeatureTables.scan} reads.

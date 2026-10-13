@@ -82,8 +82,7 @@ export class DisplayListCache {
       changes.held !== undefined ||
       changes.layers !== undefined ||
       changes.groups !== undefined ||
-      changes.layerReorder !== undefined ||
-      changes.groupReorder !== undefined ||
+      changes.order !== undefined ||
       changes.uiStateChanged === true ||
       changes.reset === true
     ) {

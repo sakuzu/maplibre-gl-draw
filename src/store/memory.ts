@@ -18,6 +18,7 @@
  * the notification goes out.
  */
 
+import { itemMovesBetween, type OrderContainer } from '../shared/utils/item-moves.js';
 import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
@@ -278,7 +279,22 @@ export class MemoryDocumentStore implements DocumentStore {
   readonly #freshLayers = new Set<string>();
   readonly #freshGroups = new Set<string>();
 
-  readonly #bus = new ChangeBus(() => this.#freezeFresh());
+  /**
+   * The items of the layers and the groups whose items changed in the current notification, as
+   * they were before it (none for a layer or a group created in it): what the moves of the
+   * notification (`order`) are made from
+   */
+  readonly #orderBefore = new Map<
+    string,
+    { layerId: string; groupId: string | undefined; items: readonly string[] }
+  >();
+  /** The groups created or deleted in the current notification */
+  readonly #groupsSeen = new Set<string>();
+
+  readonly #bus = new ChangeBus(() => {
+    this.#freezeFresh();
+    return this.#orderChanges();
+  });
   readonly #fileStore = new FileStore();
 
   // ============================================================================
@@ -422,6 +438,7 @@ export class MemoryDocumentStore implements DocumentStore {
     }
     // The order stays open for the members created in the same notification
     const stored: ObjectLayer = { ...frozenFields(layer), items: [...layer.items] };
+    this.#recordItems(`layer:${layer.id}`, layer.id, undefined, []);
     this.#layers.set(layer.id, stored);
     this.#freshLayers.add(layer.id);
     this.#layerOrderIndex.set(layer.id, new Set(layer.items));
@@ -445,6 +462,7 @@ export class MemoryDocumentStore implements DocumentStore {
       id,
       items: [...(updates.items ?? previous.items)],
     };
+    this.#recordItems(`layer:${id}`, id, undefined, previous.items);
     if (this.#freshLayers.has(id)) Object.freeze(Object.freeze(previous).items);
     this.#layers.set(id, updated);
     this.#freshLayers.add(id);
@@ -461,6 +479,7 @@ export class MemoryDocumentStore implements DocumentStore {
       throw new Error(`Layer with id "${id}" not found`);
     }
 
+    this.#recordItems(`layer:${id}`, id, undefined, layer.items);
     // Delete the features and groups in the layer
     for (const itemId of [...layer.items]) {
       const group = this.#groups.get(itemId);
@@ -525,17 +544,12 @@ export class MemoryDocumentStore implements DocumentStore {
       throw new Error(`Item "${itemId}" not found in layer "${layerId}"`);
     }
 
-    const previousOrder = [...current.items];
     const layer = this.#writableLayer(current);
     layer.items.splice(currentIndex, 1);
     layer.items.splice(newIndex, 0, itemId);
-    // An update of this layer already stacked in the notification carries the new object
+    // An update of this layer already stacked in the notification carries the new object; the
+    // move itself is notified as `order` (not as an update of the layer)
     if (this.#bus.hasPendingLayerUpdate(layerId)) this.#bus.mergeLayerUpdate(layer, undefined);
-
-    // Emit the dedicated layerReorder (not layers.updated)
-    this.#bus.merge({
-      layerReorder: { layerId, order: [...layer.items], previous: previousOrder },
-    });
   }
 
   reorderInGroup(featureId: string, groupId: string, newIndex: number): void {
@@ -548,15 +562,11 @@ export class MemoryDocumentStore implements DocumentStore {
       throw new Error(`Feature "${featureId}" not found in group "${groupId}"`);
     }
 
-    const previousFeatureIds = [...current.featureIds];
     const group = this.#writableGroup(current);
     group.featureIds.splice(currentIndex, 1);
     group.featureIds.splice(newIndex, 0, featureId);
+    // The move is notified as `order` (not as an update of the group)
     if (this.#bus.hasPendingGroupUpdate(groupId)) this.#bus.mergeGroupUpdate(group, undefined);
-
-    this.#bus.merge({
-      groupReorder: { groupId, featureIds: [...group.featureIds], previous: previousFeatureIds },
-    });
   }
 
   // ============================================================================
@@ -589,6 +599,8 @@ export class MemoryDocumentStore implements DocumentStore {
       layerId,
       featureIds: [...featureIdsCopy],
     };
+    this.#recordItems(`group:${group.id}`, layerId, group.id, []);
+    this.#groupsSeen.add(group.id);
     this.#groups.set(group.id, stored);
     this.#freshGroups.add(group.id);
     this.#groupFeatureIndex.set(group.id, new Set(featureIdsCopy));
@@ -625,6 +637,7 @@ export class MemoryDocumentStore implements DocumentStore {
       id,
       featureIds: [...(updates.featureIds ?? previous.featureIds)],
     };
+    this.#recordItems(`group:${id}`, previous.layerId, id, previous.featureIds);
     if (this.#freshGroups.has(id)) Object.freeze(Object.freeze(previous).featureIds);
     this.#groups.set(id, updated);
     this.#freshGroups.add(id);
@@ -639,6 +652,8 @@ export class MemoryDocumentStore implements DocumentStore {
       throw new Error(`Group with id "${id}" not found`);
     }
 
+    this.#recordItems(`group:${id}`, group.layerId, id, group.featureIds);
+    this.#groupsSeen.add(id);
     // Delete the group itself first. This prevents #removeFeatureFromGroupOrder from
     // recursively invoking the automatic deletion of an empty group while the groupId of the
     // members is cleared (it returns early because the group is already gone).
@@ -787,6 +802,7 @@ export class MemoryDocumentStore implements DocumentStore {
   #writableLayer(current: ObjectLayer): ObjectLayer & { items: string[] } {
     // A layer copied for this notification has its own array until it is frozen
     if (this.#freshLayers.has(current.id)) return current as ObjectLayer & { items: string[] };
+    this.#recordItems(`layer:${current.id}`, current.id, undefined, current.items);
     const layer = { ...current, items: [...current.items] };
     this.#layers.set(layer.id, layer);
     this.#freshLayers.add(layer.id);
@@ -797,10 +813,84 @@ export class MemoryDocumentStore implements DocumentStore {
   #writableGroup(current: ObjectGroup): ObjectGroup & { featureIds: string[] } {
     // A group copied for this notification has its own array until it is frozen
     if (this.#freshGroups.has(current.id)) return current as ObjectGroup & { featureIds: string[] };
+    this.#recordItems(`group:${current.id}`, current.layerId, current.id, current.featureIds);
     const group = { ...current, featureIds: [...current.featureIds] };
     this.#groups.set(group.id, group);
     this.#freshGroups.add(group.id);
     return group;
+  }
+
+  /**
+   * Keeps the items of a layer or a group as they are before the first change of them in the
+   * current notification (the moves of the notification are made from them)
+   *
+   * @param items Its items now (none for a layer or a group being created); a list that is not
+   *   changed in place afterwards (a frozen one, or a copy)
+   */
+  #recordItems(
+    key: string,
+    layerId: string,
+    groupId: string | undefined,
+    items: readonly string[],
+  ): void {
+    if (this.#orderBefore.has(key)) return;
+    this.#orderBefore.set(key, {
+      layerId,
+      groupId,
+      items: Object.isFrozen(items) ? items : [...items],
+    });
+  }
+
+  /**
+   * The moves of the items of the notification going out (`order`): from the items of the layers
+   * and the groups changed as they were before it to what they are
+   */
+  #orderChanges(): StoreChange | undefined {
+    if (this.#orderBefore.size === 0) return undefined;
+    const containers: OrderContainer<string>[] = [];
+    const before = new Set<string>();
+    const after = new Set<string>();
+    for (const entry of this.#orderBefore.values()) {
+      let items: readonly string[] = [];
+      let layerId = entry.layerId;
+      if (entry.groupId === undefined) {
+        items = this.#layers.get(entry.layerId)?.items ?? [];
+      } else {
+        const group = this.#groups.get(entry.groupId);
+        if (group) {
+          items = group.featureIds;
+          layerId = group.layerId;
+        }
+      }
+      // The items that stand where they were at both ends are left out, but for the one next to
+      // the rest, which the moves name as their neighbor (a feature added at the front of a
+      // large layer costs the items it is added to, not the layer)
+      const [from, to, toAfter] = changedRun(entry.items, items);
+      const runBefore = entry.items.slice(from, to);
+      const runAfter = items.slice(from, toAfter);
+      const index = new Map<string, number>();
+      runBefore.forEach((id, i) => {
+        index.set(id, i);
+        before.add(id);
+      });
+      for (const id of runAfter) after.add(id);
+      containers.push({
+        layerId,
+        groupId: entry.groupId,
+        before: runBefore,
+        after: runAfter,
+        beforeIndex: (item) => index.get(item) ?? -1,
+      });
+    }
+    const groups = this.#groupsSeen;
+    const moves = itemMovesBetween(containers, {
+      deleted: [...before].filter((id) => !after.has(id)),
+      isGroup: (id) => groups.has(id) || this.#groups.has(id),
+      idOf: (id) => id,
+    });
+    this.#orderBefore.clear();
+    this.#groupsSeen.clear();
+    return moves.length > 0 ? { order: moves } : undefined;
   }
 
   /** Freezes the layers and groups copied for the notification that is going out */
@@ -1044,6 +1134,26 @@ export class MemoryDocumentStore implements DocumentStore {
       this.deleteGroup(groupId);
     }
   }
+}
+
+/**
+ * The run of two lists of items that differs, with the item next to it at each end that stands
+ * where it was: `[from, to)` of the first and `[from, toAfter)` of the second
+ */
+function changedRun(before: readonly string[], after: readonly string[]): [number, number, number] {
+  let head = 0;
+  const shortest = Math.min(before.length, after.length);
+  while (head < shortest && before[head] === after[head]) head++;
+  let tail = 0;
+  while (
+    tail < shortest - head &&
+    before[before.length - 1 - tail] === after[after.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  if (head === before.length && head === after.length) return [0, 0, 0];
+  const from = Math.max(0, head - 1);
+  return [from, before.length - Math.max(0, tail - 1), after.length - Math.max(0, tail - 1)];
 }
 
 /**

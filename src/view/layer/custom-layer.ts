@@ -370,8 +370,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         changes.rows !== undefined ||
         (changes.layers !== undefined && !isOpacityOnlyLayersChange(changes.layers)) ||
         changes.groups !== undefined ||
-        changes.layerReorder !== undefined ||
-        changes.groupReorder !== undefined;
+        changes.order !== undefined;
       if (affectsDrape) drape.invalidate();
 
       if (changes.features?.updated) {

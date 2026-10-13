@@ -54,9 +54,8 @@ function shouldRepaint(changes: StoreChange): boolean {
     changes.rows || // rows held as columns written
     changes.held || // rows held as columns made features or no longer
     changes.layers || // layer changes
-    changes.groups || // group changes (reordering, show/hide)
-    changes.layerReorder || // reordering of items within a layer
-    changes.groupReorder || // reordering of features within a group
+    changes.groups || // group changes (show/hide)
+    changes.order || // items put in another place of the order
     changes.selection || // selection state changes
     changes.tentative || // changes to the transient state while drawing
     changes.uiStateChanged || // changes to the UI state (dragState, boxSelection)

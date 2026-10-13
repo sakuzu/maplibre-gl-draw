@@ -1048,7 +1048,16 @@ describe('rebuilding', () => {
     h.draw();
 
     h.probe.reset();
-    h.cache.applyChanges({ layerReorder: { layerId: 'layer-1', order: [], previous: [] } });
+    h.cache.applyChanges({
+      order: [
+        {
+          kind: 'item',
+          itemId: 'l1',
+          from: { layerId: 'layer-1', groupId: undefined, below: null, above: 'l2' },
+          to: { layerId: 'layer-1', groupId: undefined, below: 'l2', above: null },
+        },
+      ],
+    });
 
     expect(h.probe.disposed).toHaveLength(1);
 
@@ -1143,7 +1152,17 @@ describe('rebuilding', () => {
     h.cache.drawLayer('layer-2', undefined, PROJECTION, 14, h.deps);
 
     h.probe.reset();
-    h.cache.applyChanges({ groupReorder: { groupId: 'g', featureIds: [], previous: [] } });
+    const group = {
+      id: 'g',
+      layerId: 'layer-1',
+      name: 'g',
+      featureIds: ['a'],
+      visible: true,
+      locked: false,
+    };
+    h.cache.applyChanges({
+      groups: { updated: [{ id: 'g', group: { ...group, visible: false }, previous: group }] },
+    });
 
     expect(h.probe.disposed).toHaveLength(2);
   });

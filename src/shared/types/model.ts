@@ -664,7 +664,7 @@ export interface UpdateFeatureOptions {
  *
  * `subscribe` of the Store delivers one per outermost transaction (or per write outside
  * one). Each category is present only when the transaction changed it. The document
- * categories (features, layers, groups, layerReorder, groupReorder, metadata, files) are what a
+ * categories (features, layers, groups, order, metadata, files, rows) are what a
  * DocumentStore notifies; the others are local state of this client.
  */
 export interface StoreChange {
@@ -714,29 +714,17 @@ export interface StoreChange {
     deleted?: Group[];
   };
   /**
-   * Reordering of items within a layer
-   *
-   * The reordering of items (features or groups) within the layer.items array.
-   * It is emitted separately from layers.updated, and is recorded as a dedicated command
-   * by history management.
+   * The items (features and groups) put in another place of the stacking order, created and
+   * deleted, in the order they were put there: each with where it was and where it is, by the
+   * items just below and above it at that moment (see {@link ItemOrderChange})
    */
-  layerReorder?: {
-    layerId: string;
-    order: string[];
-    previous: string[];
-  };
+  order?: ItemOrderChange[];
   /**
-   * Reordering of features within a group
-   *
-   * The reordering of features within the group.featureIds array.
-   * It is emitted separately from groups.updated, and is recorded as a dedicated command
-   * by history management.
+   * What keeps the rows and the groups deleted by this client in this transaction (a Store that
+   * holds its features as rows): what undoes the deletion holds it, and lets it go with
+   * `FeatureTables.release` once it no longer needs them
    */
-  groupReorder?: {
-    groupId: string;
-    featureIds: string[];
-    previous: string[];
-  };
+  retain?: RetainToken;
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;
@@ -833,7 +821,122 @@ export interface LayerRowsChange {
 export interface RowsChange {
   /** The rows of each layer */
   readonly layers: ReadonlyMap<string, LayerRowsChange>;
+  /**
+   * The values the rows had before, for the fields written (a write of rows from the drawing
+   * instance, `draw.tables.applyRows`): what writes them back
+   */
+  readonly before?: RowValuesSnapshot;
 }
+
+/**
+ * Values of rows as they were at a moment: the rows by their handles, and the values of the
+ * fields read, one per row (as a feature holds them); `deleted` holds non-zero for a row that
+ * was deleted. Written to the rows, it puts the values back.
+ */
+export interface RowValuesSnapshot {
+  /** The rows */
+  readonly handles: Int32Array;
+  /** The values of each field, one per row */
+  readonly fields: ReadonlyMap<RowField, readonly unknown[]>;
+  /** Non-zero for a row that was deleted (absent when the deletion was not read) */
+  readonly deleted?: Uint8Array;
+}
+
+/**
+ * Items of a layer, in their order: rows and groups of features.
+ */
+export interface ItemRefs {
+  /** The kind of each item: 0 for a row, 1 for a group of features */
+  readonly kinds: Uint8Array;
+  /** The handle of each item: of its row, or of its group (-1 for none) */
+  readonly handles: Int32Array;
+}
+
+/**
+ * Where an item (a feature, or a group of features) is put: in a layer, or in a group of
+ * features, just above an item and below another.
+ *
+ * `below` is the item just below it (drawn before it), `above` the one just above it (drawn
+ * after it); `null` names the end of the layer or the group (the back for `below`, the front for
+ * `above`). When the two do not stand next to each other (another write came in between),
+ * `below` decides and `above` is not read. When `below` is left out, `above` decides; when both
+ * are, the item goes to the front.
+ */
+export interface ItemPlacement {
+  /** The layer */
+  readonly layerId: string;
+  /** The group of features of the layer it goes into (a feature only; none: an item of the layer) */
+  readonly groupId?: string;
+  /** The item just below it, or null for the back */
+  readonly below?: string | null;
+  /** The item just above it, or null for the front */
+  readonly above?: string | null;
+}
+
+/**
+ * Where an item stands: its layer, its group of features, and the items just below and above it
+ * (null at an end).
+ */
+export interface ItemPosition {
+  /** The layer */
+  readonly layerId: string;
+  /** The group of features it is in (undefined for an item of the layer) */
+  readonly groupId: string | undefined;
+  /** The item just below it (null: it is at the back) */
+  readonly below: string | null;
+  /** The item just above it (null: it is at the front) */
+  readonly above: string | null;
+}
+
+/**
+ * An item put in another place: where it was and where it is, at the moment it was moved (an
+ * item created was nowhere, an item deleted is nowhere). Moving the items of a list back to
+ * where they were, from the last one, puts the order back.
+ */
+export interface ItemMove {
+  readonly kind: 'item';
+  /** The item: a feature, or a group of features */
+  readonly itemId: string;
+  /** Where it was (null for an item created) */
+  readonly from: ItemPosition | null;
+  /** Where it is (null for an item deleted) */
+  readonly to: ItemPosition | null;
+}
+
+/**
+ * Many rows of a layer held as rows put in another place at once (their features stay as they
+ * are): the rows in the order they were put, and either the place they were put together at
+ * (`to`) or, for each row, the item just below it (`belows`; -1 for a row at the back, read in
+ * its group of features). `before` holds the keys of their order, their layer and their group as
+ * they were (written back, it puts them back).
+ */
+export interface RowRangeMove {
+  readonly kind: 'rows';
+  /** The layer the rows are in */
+  readonly layerId: string;
+  /** The rows, in the order they were put */
+  readonly handles: Int32Array;
+  /** The place they were put at, one after the other (absent when `belows` is given) */
+  readonly to?: ItemPosition;
+  /** The item just below each row (absent when `to` is given) */
+  readonly belows?: ItemRefs;
+  /** Their layer, group and keys of their order before */
+  readonly before: RowValuesSnapshot;
+}
+
+/**
+ * A change of the stacking order of the items of the layers: one item, or many rows at once.
+ */
+export type ItemOrderChange = ItemMove | RowRangeMove;
+
+declare const retainTokenBrand: unique symbol;
+
+/**
+ * What keeps the rows and the groups a deletion of this client deleted (`StoreChange.retain`):
+ * they stay as they were, so that a deletion undone puts them back where they were, until it is
+ * let go of (`FeatureTables.release`).
+ */
+export type RetainToken = number & { readonly [retainTokenBrand]: true };
 
 /**
  * An axis-aligned bounding box in longitude (X) and latitude (Y), in degrees

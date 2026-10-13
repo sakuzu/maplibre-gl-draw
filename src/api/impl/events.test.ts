@@ -32,6 +32,7 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'feature.updated',
   'feature.deleted',
   'feature.moved',
+  'item.moved',
   'layer.created',
   'layer.updated',
   'layer.deleted',
@@ -146,16 +147,41 @@ describe('the events of the features', () => {
     expect(moved).toHaveLength(3);
     expect(moved[0]).toMatchObject({
       feature: { id: a.id, layerId: second },
-      from: { layerId: first },
-      to: { layerId: second, index: 0 },
+      from: { layerId: first, groupId: undefined, below: null, above: b.id },
+      to: { layerId: second, groupId: undefined, below: null, above: null },
       source: 'local',
     });
     expect(moved[1]).toMatchObject({
       feature: { id: b.id, groupId: group?.id },
-      from: { layerId: first },
-      to: { groupId: group?.id, index: 0 },
+      from: { layerId: first, groupId: undefined },
+      to: { layerId: first, groupId: group?.id, below: null, above: null },
     });
-    expect(moved[2]).toMatchObject({ from: { groupId: group?.id }, to: { groupId: null } });
+    expect(moved[2]).toMatchObject({
+      from: { layerId: first, groupId: group?.id },
+      to: { layerId: first, groupId: undefined },
+    });
+  });
+
+  it('item.moved tells an item put in another place, by the items it stood and stands between', () => {
+    const layerId = draw.layers.getActive()?.id as string;
+    const a = draw.features.create(pointInput()) as Feature;
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const c = draw.features.create(pointInput(2, 2)) as Feature;
+    events.length = 0;
+
+    draw.features.move(c.id, { layerId, index: 0 });
+
+    expect(payloadsOf(events, 'item.moved')).toEqual([
+      {
+        kind: 'item',
+        itemId: c.id,
+        from: { layerId, groupId: undefined, below: b.id, above: null },
+        to: { layerId, groupId: undefined, below: null, above: a.id },
+        source: 'local',
+      },
+    ]);
+    // A move within a layer changes no field of its features
+    expect(payloadsOf(events, 'feature.moved')).toEqual([]);
   });
 });
 

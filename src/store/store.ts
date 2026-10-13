@@ -66,7 +66,7 @@ export interface StoreContract extends PublicStore {}
  * Read-only is not the document's concern: core gates the writes before they get here.
  *
  * Notifications: `subscribe` delivers the document categories of StoreChange (features,
- * layers, groups, layerReorder, groupReorder, metadata, files) with their source, and
+ * layers, groups, order, metadata, files) with their source, and
  * `transact` groups the changes of a function into one notification.
  */
 export interface DocumentStore {

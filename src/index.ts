@@ -119,6 +119,17 @@ export type {
   SkippedFeature,
 } from './api/model.js';
 
+// The stacking order of the items
+export type {
+  ItemMove,
+  ItemOrderChange,
+  ItemPlacement,
+  ItemPosition,
+  RetainToken,
+  RowRangeMove,
+  RowValuesSnapshot,
+} from './api/model.js';
+
 // State
 export type {
   LayerStackEntry,

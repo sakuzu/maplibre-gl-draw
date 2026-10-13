@@ -238,9 +238,9 @@ export class StoreRetainedCache {
    * little leaves a stale picture).
    */
   applyChanges(changes: StoreChange): void {
-    // The visibility and the ordering of a group have no reverse lookup to a layer, so everything
-    // is discarded (both are rare operations)
-    if (changes.groups || changes.groupReorder) {
+    // The visibility of a group has no reverse lookup to a layer, so everything is discarded (a
+    // rare operation)
+    if (changes.groups) {
       this.invalidateAll();
       return;
     }
@@ -289,8 +289,14 @@ export class StoreRetainedCache {
     // layers.orderChanged is the order between layers, so it does not affect the chunks
     // (renderLayers calls drawLayer in layer order)
 
-    if (changes.layerReorder) {
-      this.invalidateLayer(changes.layerReorder.layerId);
+    // An item put in another place rebuilds the layers it left and went to
+    for (const move of changes.order ?? []) {
+      if (move.kind === 'rows') {
+        this.invalidateLayer(move.layerId);
+        continue;
+      }
+      if (move.from) this.invalidateLayer(move.from.layerId);
+      if (move.to) this.invalidateLayer(move.to.layerId);
     }
   }
 

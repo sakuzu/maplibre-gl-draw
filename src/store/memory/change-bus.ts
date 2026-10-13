@@ -190,9 +190,10 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     if (changes.groups.deleted) t.deleted = appendField(t.deleted, changes.groups.deleted);
   }
 
-  // layerReorder / groupReorder (dedicated, overwritten)
-  if (changes.layerReorder) target.layerReorder = changes.layerReorder;
-  if (changes.groupReorder) target.groupReorder = changes.groupReorder;
+  // order: the moves in the order they were made (appended, so that every one is undone)
+  if (changes.order) target.order = appendField(target.order, changes.order);
+  // What keeps the rows deleted: one per transaction, the first given
+  if (changes.retain !== undefined && target.retain === undefined) target.retain = changes.retain;
 
   // selection (overwritten)
   if (changes.selection) target.selection = changes.selection;
@@ -233,7 +234,7 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
 
 export class ChangeBus {
   readonly #listeners = new Set<StoreListener>();
-  readonly #beforeFlush: (() => void) | undefined;
+  readonly #beforeFlush: (() => StoreChange | undefined) | undefined;
   #transactionDepth = 0;
   #pendingChanges: StoreChange = {};
   #currentSource: UpdateSource = 'local';
@@ -241,9 +242,10 @@ export class ChangeBus {
 
   /**
    * @param beforeFlush Called when the outermost operation is about to notify, before the
-   *   listeners (MemoryStore freezes the objects it built during the flush here)
+   *   listeners (MemoryStore freezes the objects it built during the flush here); the changes it
+   *   returns are added to the notification
    */
-  constructor(beforeFlush?: () => void) {
+  constructor(beforeFlush?: () => StoreChange | undefined) {
     this.#beforeFlush = beforeFlush;
   }
 
@@ -319,7 +321,8 @@ export class ChangeBus {
   }
 
   #flushChanges(): void {
-    this.#beforeFlush?.();
+    const added = this.#beforeFlush?.();
+    if (added) appendChanges(this.#pendingChanges, added, this.#updateIndex);
     if (Object.keys(this.#pendingChanges).length === 0) return;
 
     const changes: StoreChange = this.#pendingChanges;

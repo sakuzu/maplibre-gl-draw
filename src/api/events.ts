@@ -18,10 +18,12 @@ import type {
   FeatureInput,
   FileData,
   Group,
+  ItemOrderChange,
+  ItemPosition,
   Layer,
   LoadResult,
   Metadata,
-  MoveTarget,
+  RetainToken,
 } from './model.js';
 import type { RuntimeOptions } from './options.js';
 import type {
@@ -82,10 +84,19 @@ export interface DocumentChange {
     updated?: Array<{ id: string; group: Group; previous: Group }>;
     deleted?: Group[];
   };
-  /** The new order of the items of a layer */
-  layerReorder?: { layerId: string; order: string[]; previous: string[] };
-  /** The new order of the features of a group */
-  groupReorder?: { groupId: string; featureIds: string[]; previous: string[] };
+  /**
+   * The items (features and groups) put in another place of the stacking order, created and
+   * deleted, in the order they were put there, each with where it was and where it is (by the
+   * items just below and above it at that moment), or many rows of a layer held as rows at once.
+   * Moving the items back to where they were, from the last one, puts the order back
+   */
+  order?: ItemOrderChange[];
+  /**
+   * What keeps the rows and the groups this client deleted in the transaction, when the Store
+   * holds its features as rows: what undoes the deletion holds it, and lets go of it with
+   * `FeatureTables.release` once it no longer needs them
+   */
+  retain?: RetainToken;
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;
@@ -124,8 +135,21 @@ export interface DrawEvents {
   'feature.updated': { feature: Feature; previous: Feature; source: string; intermediate: boolean };
   /** A feature was deleted */
   'feature.deleted': { feature: Feature; source: string };
-  /** A feature moved between layers or groups */
-  'feature.moved': { feature: Feature; from: MoveTarget; to: MoveTarget; source: string };
+  /**
+   * A feature moved between layers or groups: where it was and where it is, by the items just
+   * below and above it
+   */
+  'feature.moved': { feature: Feature; from: ItemPosition; to: ItemPosition; source: string };
+  /**
+   * An item (a feature, or a group of features) was put in another place of the stacking order,
+   * in its layer or group or into another one (`kind: 'item'`: where it was and where it is, by
+   * the items just below and above it), or many rows of a layer held as rows were (`kind:
+   * 'rows'`: their number, and the place they were put at together when they were). An item
+   * created or deleted is told by its own event
+   */
+  'item.moved':
+    | { kind: 'item'; itemId: string; from: ItemPosition; to: ItemPosition; source: string }
+    | { kind: 'rows'; layerId: string; count: number; to?: ItemPosition; source: string };
   /** A layer was created */
   'layer.created': { layer: Layer; source: string };
   /** A layer changed */
