@@ -12,8 +12,8 @@
  *   building moved, a point moved, a vertex of a line moved, a vertex of a building taken off, a
  *   dashed line moved, a line made dotted, an outline taken off, a color changed, the radius of a
  *   Circle changed, a row hidden
- * - writes that do not fit, whose chunks are built again: a vertex added to a line, an outline put
- *   on a fill
+ * - writes that do not fit: a vertex added to a line, an outline put on a fill (the rows go to the
+ *   delta of their layer, and the next versions of their groups take them)
  *
  * The rows written in place keep the origin of their chunk, and a chunk built again may take
  * another, so the pictures are compared with the tolerance of the other comparisons of the
@@ -374,7 +374,7 @@ describe('the rows written in place against the rows as written drawn from the s
     expect(live.inPlace).toBeGreaterThan(0);
   });
 
-  it('draws the rows that did not fit their places, their chunks built again, as the rows as written', {
+  it('draws the rows that did not fit their places, through the delta, as the rows as written', {
     timeout: browserTimeout(90_000),
   }, async () => {
     const live = await compare('not-fitting', notFitting());
