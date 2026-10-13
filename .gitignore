@@ -9,3 +9,6 @@ scripts/terms.local.json
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/api/
+
+# Large data for the measurement page, never committed
+bench/data/
