@@ -58,6 +58,20 @@ export interface TableBenchPageParams extends TableBenchParams {
    * (`key:break,break,...`)
    */
   readonly rule: { readonly key: string; readonly breaks: readonly number[] };
+  /** The rows the import of others writes (`remote=import`) */
+  readonly importN: number;
+  /** The rows of one write of the import of others (a transaction) */
+  readonly txn: number;
+  /** The groups of features the reorders of others move (`remote=group`), and their members */
+  readonly groups: number;
+  readonly members: number;
+  /**
+   * The time the chunks of the next versions of row groups may take to build in a frame while
+   * the camera moves (0: they are built once it is still)
+   */
+  readonly moving: number;
+  /** Whether the large merges and builds of rows run in a Worker of the page */
+  readonly worker: boolean;
 }
 
 /** The edits a page repeats */
@@ -69,13 +83,28 @@ export const EDIT_OPS = [
   'point',
   'longLine',
   'corner',
+  'finish',
 ] as const;
 
 /** An edit a page repeats */
 export type EditOp = (typeof EDIT_OPS)[number];
 
-/** The kinds of the changes of others the stream sends */
-export const REMOTE_KINDS = ['color', 'attr', 'position', 'corner'] as const;
+/**
+ * The kinds of the changes of others the stream sends: written in place (colors, attributes,
+ * positions of points, corners of buildings), and placed elsewhere (rows put in another place of
+ * the order, groups of features put in another place, a vertex added to a building past its
+ * place, new rows imported a transaction at a time)
+ */
+export const REMOTE_KINDS = [
+  'color',
+  'attr',
+  'position',
+  'corner',
+  'reorder',
+  'group',
+  'vertex',
+  'import',
+] as const;
 
 /** A kind of the changes of others */
 export type RemoteKind = (typeof REMOTE_KINDS)[number];
@@ -113,6 +142,12 @@ export function parseParams(search: string): TableBenchPageParams {
     rate: Math.max(1, number('rate', 10)),
     seconds: Math.max(1, number('seconds', 10)),
     rule: { key: ruleKey || 'value', breaks: breaks.length > 0 ? breaks : [25, 50, 75] },
+    importN: Math.max(1, number('importN', 100_000)),
+    txn: Math.max(1, number('txn', 1000)),
+    groups: Math.max(1, number('groups', 20)),
+    members: Math.max(1, number('members', 50)),
+    moving: number('moving', 0),
+    worker: params.get('worker') !== '0',
   };
 }
 

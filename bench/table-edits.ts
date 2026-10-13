@@ -8,13 +8,17 @@
  * An edit is repeated a number of times, one change per frame (`EDIT_OPS`): a color changed, a
  * color slid, the colors of the steps of a graduated style rule slid, an attribute written (a
  * string, then a number), a point moved, a vertex of the longest line moved, a corner of a
- * building moved. The changes of others are sent at a rate for a time, of one kind: colors,
- * attributes, positions of points, corners of buildings. Rows held as columns are written
+ * building moved, a building drawn and finished in the middle of the order. The changes of others
+ * are sent at a rate for a time, of one kind: written in place (colors, attributes, positions of
+ * points, corners of buildings) or placed elsewhere (rows put in another place of the order,
+ * groups of features put in another place, a vertex added to a building past its place, new rows
+ * imported a transaction at a time, run until all are sent). Rows held as columns are written
  * through the writer of their tables, as the implementation of a Store writes them; features of
- * the Store through `draw.features.update`, as it is drawn today, to compare.
+ * the Store through `draw.features` and `draw.groups`, as it is drawn today, to compare.
  *
- * Each run measures the frames before, during and after it, the JS heap and the GPU memory, and
- * what the writes in place hold and did (`draw.debug.tables().editStats()`).
+ * Each run measures the frames before, during and after it, the JS heap and the GPU memory (and
+ * the highest heap during it), and what the writes, the deltas and the versions of the row groups
+ * hold and did (`draw.debug.tables().editStats()`).
  */
 
 import type {
@@ -28,7 +32,14 @@ import type {
 import type { Geometry, Position } from 'geojson';
 import type * as maplibregl from 'maplibre-gl';
 import type { BenchCandidates, EditOp, RemoteKind, TableBenchPageParams } from './table-data';
-import { idleFrames, nextFrame, type PhaseResult, phaseOf, recordFrames } from './table-measure';
+import {
+  heapMb,
+  idleFrames,
+  nextFrame,
+  type PhaseResult,
+  phaseOf,
+  recordFrames,
+} from './table-measure';
 
 /** What the edits write to */
 export interface EditTarget {
@@ -56,6 +67,8 @@ export interface EditResult {
   readonly frameCpuMs: { readonly mean: number; readonly max: number };
   /** The changes made */
   readonly changes: number;
+  /** The highest JS heap during the run (MB; null when the browser does not tell) */
+  readonly peakHeapMb: number | null;
   /** Why the run could not be made (absent when it was) */
   readonly error?: string;
 }
@@ -160,6 +173,83 @@ function moved(
   }
 }
 
+/** The ids as a column of UTF-8 (what the writer gives handles to) */
+function idColumn(ids: readonly string[]): { offsets: Int32Array; bytes: Uint8Array } {
+  const encoder = new TextEncoder();
+  const parts = ids.map((id) => encoder.encode(id));
+  const offsets = new Int32Array(ids.length + 1);
+  for (let i = 0; i < parts.length; i++) offsets[i + 1] = offsets[i] + parts[i].length;
+  const bytes = new Uint8Array(offsets[ids.length]);
+  parts.forEach((part, i) => {
+    bytes.set(part, offsets[i]);
+  });
+  return { offsets, bytes };
+}
+
+/** A key of the order just after the key of the row `n` of the page (its rows sort by `k<n>`) */
+function keyAfter(params: TableBenchPageParams, n: number, tag: string): string {
+  return `k${String(Math.floor(n)).padStart(params.data ? 9 : 8, '0')}${tag}`;
+}
+
+/** The rows of the layer */
+function rowCount(target: EditTarget): number {
+  return target.tables?.layer(target.layerId)?.rowCount ?? target.draw.features.count();
+}
+
+/** A building of 5 corners around a position */
+function buildingAt(x: number, y: number, size: number): Geometry {
+  return {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [x, y],
+        [x + size, y],
+        [x + size, y + size],
+        [x, y + size],
+        [x, y],
+      ],
+    ],
+  };
+}
+
+/**
+ * Writes new rows of the layer, each with its key: through the writer (the new rows of a Store
+ * implementation, given handles first), or created in the Store and put at their places
+ */
+function createRows(
+  target: EditTarget,
+  rows: ReadonlyArray<{ id: string; geometry: Geometry; order: string; index: number }>,
+  style: Record<string, unknown>,
+): void {
+  if (rows.length === 0) return;
+  const { tables, writer } = target;
+  if (!tables || !writer) {
+    target.draw.features.createMany(
+      rows.map((row) => ({
+        id: row.id,
+        type: row.geometry.type,
+        geometry: row.geometry,
+        layerId: target.layerId,
+        style,
+      })) as never,
+    );
+    for (const row of rows)
+      target.draw.features.move(row.id, { layerId: target.layerId, index: row.index });
+    return;
+  }
+  const handles = writer.allocateHandles(idColumn(rows.map((row) => row.id)));
+  writer.apply({
+    handles,
+    fields: new Map<RowField, unknown[]>([
+      ['type', rows.map((row) => row.geometry.type)],
+      ['layerId', rows.map(() => target.layerId)],
+      ['geometry', rows.map((row) => row.geometry)],
+      ['order', rows.map((row) => row.order)],
+      ['style', rows.map(() => style)],
+    ]),
+  });
+}
+
 /** The steps of an edit: one change per call */
 function stepsOf(
   target: EditTarget,
@@ -237,7 +327,73 @@ function stepsOf(
         if (geometry) writeRows(target, [[polygon, { geometry: moved(geometry, () => 1, d, 0) }]]);
       };
     }
+    case 'finish': {
+      // A building drawn and finished: a new row in the middle of the order, near the center
+      const middle = Math.floor(rowCount(target) / 2);
+      return async (i) => {
+        const center = target.map.getCenter();
+        const size = 1e-4;
+        createRows(
+          target,
+          [
+            {
+              id: `finished${Date.now().toString(36)}${i}`,
+              geometry: buildingAt(
+                center.lng + ((i % 10) - 5) * size * 2,
+                center.lat + (Math.floor(i / 10) % 10) * size * 2,
+                size,
+              ),
+              order: keyAfter(params, middle, `f${String(i).padStart(6, '0')}`),
+              index: middle,
+            },
+          ],
+          { fillColor: '#76b7b2', fillOpacity: 0.5, strokeWidth: 2 },
+        );
+      };
+    }
   }
+}
+
+/** The groups of features the reorders of others move, made once per page */
+let benchGroups: string[] | null = null;
+
+/**
+ * Makes the groups of features the reorders of others move: `groups` groups of `members` rows
+ * each, every one at the key of one of its members
+ */
+function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[] {
+  if (benchGroups) return benchGroups;
+  const ids = target.candidates.ids;
+  const out: string[] = [];
+  const count = Math.min(params.groups, Math.floor(ids.length / params.members));
+  const { tables, writer } = target;
+  for (let g = 0; g < count; g++) {
+    const id = `benchGroup${g}`;
+    const members = ids.slice(g * params.members, (g + 1) * params.members);
+    if (tables && writer) {
+      writer.applyGroups({
+        handles: Int32Array.of(1000 + g),
+        fields: new Map<'id' | 'order' | 'layerId', unknown[]>([
+          ['id', [id]],
+          ['order', [keyAfter(params, (g * rowCount(target)) / count, 'g')]],
+          ['layerId', [target.layerId]],
+        ]),
+      });
+      const handles = members.map((m) => tables.handleOf(m)).filter((h) => h !== undefined);
+      writer.apply({
+        handles: Int32Array.from(handles as number[]),
+        fields: new Map<RowField, unknown[]>([
+          ['groupId', handles.map(() => id)],
+          ['member', handles.map((_, k) => `m${String(k).padStart(4, '0')}`)],
+        ]),
+      });
+    } else {
+      target.draw.groups.create({ id, featureIds: members });
+    }
+    out.push(id);
+  }
+  benchGroups = out;
+  return out;
 }
 
 /** What the writes in place hold and did now (zero for features of the Store) */
@@ -259,10 +415,13 @@ async function measured(
   const statsBefore = statsOf(target);
   const cpu: number[] = [];
   let changes = 0;
+  let peak: number | null = heapMb();
   const intervals = await recordFrames(map, async () => {
     changes = await run(() => {
       const stats = statsOf(target);
       cpu.push(stats.prerenderMs + stats.drawMs);
+      const heap = heapMb();
+      if (heap !== null) peak = Math.max(peak ?? 0, heap);
     });
   });
   const during = phaseOf(draw, `${name}: during`, intervals);
@@ -279,6 +438,7 @@ async function measured(
       max: cpu.length > 0 ? Math.max(...cpu) : 0,
     },
     changes,
+    peakHeapMb: peak,
   };
 }
 
@@ -306,11 +466,13 @@ export async function runStream(
   kind: RemoteKind,
   params: TableBenchPageParams,
 ): Promise<EditResult> {
+  if (kind === 'import') return runImport(target, params);
+  if (kind === 'reorder' || kind === 'group') return runReorders(target, kind, params);
   const { candidates } = target;
   const pool =
     kind === 'position'
       ? candidates.points
-      : kind === 'corner'
+      : kind === 'corner' || kind === 'vertex'
         ? candidates.polygons
         : candidates.ids;
   const name = `stream ${kind} ${params.rate}/s ${params.seconds}s`;
@@ -331,6 +493,19 @@ export async function runStream(
         const d = (n % 2 === 0 ? 1 : -1) * 2e-5;
         return { geometry: moved(geometry, () => (kind === 'corner' ? 1 : 0), d, d) };
       }
+      case 'vertex': {
+        // A vertex added between the first two corners: past the place of the row
+        const geometry = featureOf(target, id)?.geometry;
+        if (geometry?.type !== 'Polygon') return null;
+        const ring = geometry.coordinates[0].slice();
+        const [a, b] = ring;
+        ring.splice(1, 0, [(a[0] + b[0]) / 2 + 1e-5, (a[1] + b[1]) / 2 + 1e-5]);
+        return {
+          geometry: { type: 'Polygon', coordinates: [ring, ...geometry.coordinates.slice(1)] },
+        };
+      }
+      default:
+        return null;
     }
   };
   return measured(target, name, async (sample) => {
@@ -357,6 +532,136 @@ export async function runStream(
   });
 }
 
+/**
+ * Sends reorders of others at a rate for a time: rows put in another place of the order, or
+ * groups of features put in another place (made first)
+ */
+async function runReorders(
+  target: EditTarget,
+  kind: 'reorder' | 'group',
+  params: TableBenchPageParams,
+): Promise<EditResult> {
+  const name = `stream ${kind} ${params.rate}/s ${params.seconds}s`;
+  const pool = kind === 'group' ? ensureGroups(target, params) : target.candidates.ids;
+  if (pool.length === 0) return failed(target, name, `no row for ${kind}`);
+  // The groups made settle before the run
+  if (kind === 'group') await idleFrames(target.map, 120);
+  const count = rowCount(target);
+  let sent = 0;
+  let seed = 7;
+  const random = (): number => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed / 2_147_483_648;
+  };
+  const send = (n: number): void => {
+    const { tables, writer, draw } = target;
+    const ids: string[] = [];
+    const orders: string[] = [];
+    const indices: number[] = [];
+    for (let k = 0; k < n; k++) {
+      ids.push(pool[Math.floor(random() * pool.length)]);
+      const at = random() * count;
+      orders.push(keyAfter(params, at, `r${sent++}`));
+      indices.push(Math.floor(at));
+    }
+    if (kind === 'group') {
+      if (tables && writer) {
+        writer.applyGroups({
+          handles: Int32Array.from(ids.map((id) => 1000 + pool.indexOf(id))),
+          fields: new Map([['order', orders]]),
+        });
+      } else {
+        ids.forEach((id, k) => {
+          draw.groups.move(id, { layerId: target.layerId, index: indices[k] });
+        });
+      }
+      return;
+    }
+    if (tables && writer) {
+      const handles = ids.map((id) => tables.handleOf(id));
+      writer.apply({
+        handles: Int32Array.from(handles.filter((h) => h !== undefined) as number[]),
+        fields: new Map<RowField, unknown[]>([
+          ['order', orders.filter((_, k) => handles[k] !== undefined)],
+        ]),
+      });
+    } else {
+      ids.forEach((id, k) => {
+        draw.features.move(id, { layerId: target.layerId, index: indices[k] });
+      });
+    }
+  };
+  return measured(target, name, async (sample) => {
+    const end = performance.now() + params.seconds * 1000;
+    let last = performance.now();
+    let carry = 0;
+    while (performance.now() < end) {
+      await nextFrame();
+      const now = performance.now();
+      carry += (params.rate * (now - last)) / 1000;
+      last = now;
+      const n = Math.floor(carry);
+      carry -= n;
+      if (n > 0) send(n);
+      sample();
+    }
+    return sent;
+  });
+}
+
+/**
+ * Sends the import of others: `importN` new rows (buildings), a transaction of `txn` rows at a
+ * time at `rate` rows per second, after the rows of the layer; run until every row is sent
+ */
+async function runImport(target: EditTarget, params: TableBenchPageParams): Promise<EditResult> {
+  const name = `import ${params.importN} by ${params.txn} at ${params.rate}/s`;
+  const center = target.map.getCenter();
+  const columns = Math.ceil(Math.sqrt(params.importN));
+  const size = 2e-4;
+  let sent = 0;
+  const stamp = Date.now().toString(36);
+  const sendTransaction = (): void => {
+    const n = Math.min(params.txn, params.importN - sent);
+    const rows = Array.from({ length: n }, (_, k) => {
+      const i = sent + k;
+      return {
+        id: `import${stamp}-${i}`,
+        geometry: buildingAt(
+          center.lng + ((i % columns) - columns / 2) * size * 1.5,
+          center.lat + (Math.floor(i / columns) - columns / 2) * size * 1.5,
+          size,
+        ),
+        // After every row of the layer: a run no row is within
+        order: `z${String(i).padStart(9, '0')}`,
+        index: rowCount(target) + k,
+      };
+    });
+    createRows(target, rows, { fillColor: '#e15759', fillOpacity: 0.5, strokeWidth: 1 });
+    sent += n;
+  };
+  return measured(target, name, async (sample) => {
+    let last = performance.now();
+    let carry = 0;
+    while (sent < params.importN) {
+      await nextFrame();
+      const now = performance.now();
+      carry += (params.rate * (now - last)) / 1000;
+      last = now;
+      while (carry >= Math.min(params.txn, params.importN - sent) && sent < params.importN) {
+        carry -= Math.min(params.txn, params.importN - sent);
+        sendTransaction();
+      }
+      sample();
+    }
+    // The groups of the import built and drawn
+    for (let i = 0; i < 600 && target.draw.hasPendingWork(); i++) {
+      await nextFrame();
+      sample();
+    }
+    return sent;
+  });
+}
+
 /** A run that could not be made */
 function failed(target: EditTarget, name: string, error: string): EditResult {
   const empty = phaseOf(target.draw, name, []);
@@ -370,6 +675,7 @@ function failed(target: EditTarget, name: string, error: string): EditResult {
     statsAfter: stats,
     frameCpuMs: { mean: 0, max: 0 },
     changes: 0,
+    peakHeapMb: null,
     error,
   };
 }

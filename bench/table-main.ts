@@ -17,8 +17,11 @@
  * measured until then.
  *
  * Once the map is open, "Edit" repeats an edit (`op`, `reps` times, one change per frame) and
- * "Stream" sends changes of others (`remote`, `rate` rows per second for `seconds`), each
- * measured before, during and after (`table-edits.ts`).
+ * "Stream" sends changes of others (`remote`, `rate` rows per second for `seconds`; the import
+ * of others sends `importN` rows in transactions of `txn` until all are sent), each measured
+ * before, during and after (`table-edits.ts`). The large merges and builds of the rows run in a
+ * Worker of the page (`worker=0`: on the main thread), and the chunks of the next versions of the
+ * row groups are built while the camera moves with `moving=<ms>` (once it is still otherwise).
  *
  * The map has no base map (a background layer only), so nothing is fetched from another origin.
  *
@@ -27,7 +30,12 @@
  * a stream (on the map opened by the measurement). The draw instance is `window.benchDraw`.
  */
 
-import { createDraw, createFeatureTables, type Draw } from '@sakuzu/maplibre-gl-draw';
+import {
+  createDraw,
+  createFeatureTables,
+  type Draw,
+  type FeatureTablesWorker,
+} from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import {
   type BenchCandidates,
@@ -56,6 +64,7 @@ import {
   recordFrames,
   wait,
 } from './table-measure';
+import type { RowsWorkerRequest } from './table-rows-worker';
 import { TableStore } from './table-store';
 import type { TableWorkerRequest, TableWorkerResult } from './table-worker';
 
@@ -120,6 +129,12 @@ for (const [key, value] of Object.entries({
   rate: String(params.rate),
   seconds: String(params.seconds),
   rule: `${params.rule.key}:${params.rule.breaks.join(',')}`,
+  importN: String(params.importN),
+  txn: String(params.txn),
+  groups: String(params.groups),
+  members: String(params.members),
+  moving: String(params.moving),
+  worker: params.worker ? '1' : '0',
 })) {
   const field = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
   if (field) field.value = value;
@@ -155,7 +170,31 @@ const map = new maplibregl.Map({
 });
 window.benchMap = map;
 
-const tablesOfPage = params.mode === 'table' ? createFeatureTables() : null;
+/** The Worker the tables hand their large merges and builds to */
+function rowsWorker(): FeatureTablesWorker {
+  const worker = new Worker(new URL('./table-rows-worker.ts', import.meta.url), { type: 'module' });
+  let next = 0;
+  const waiting = new Map<number, (groups: unknown) => void>();
+  worker.onmessage = (event: MessageEvent<{ id: number; groups: unknown }>) => {
+    waiting.get(event.data.id)?.(event.data.groups);
+    waiting.delete(event.data.id);
+  };
+  const ask = (request: Omit<RowsWorkerRequest, 'id'>): Promise<never> =>
+    new Promise((resolve) => {
+      const id = next++;
+      waiting.set(id, resolve as (groups: unknown) => void);
+      worker.postMessage({ id, ...request });
+    });
+  return {
+    merge: (merge) => ask({ merge }),
+    build: (rows, options) => ask({ rows, options }),
+  };
+}
+
+const tablesOfPage =
+  params.mode === 'table'
+    ? createFeatureTables(params.worker ? { worker: rowsWorker() } : {})
+    : null;
 const store = tablesOfPage ? new TableStore(tablesOfPage.tables) : undefined;
 store?.createLayer({
   id: LAYER_ID,
@@ -175,6 +214,7 @@ const draw: Draw = createDraw(map, {
 });
 window.benchDraw = draw;
 if (params.drawing === 'by-kind') draw.debug.tables().setDrawingByKind(true);
+if (params.moving > 0) draw.debug.tables().setVersionBudgetWhileMoving(params.moving);
 
 // === Measuring ===
 
@@ -483,9 +523,13 @@ function renderEdits(edits: readonly EditResult[]): string {
       `in place ${b.inPlace - a.inPlace} (coords ${b.coordsOnly - a.coordsOnly}, style ${
         b.styleOnly - a.styleOnly
       })`,
-      `rebuilt ${b.rebuilt - a.rebuilt}`,
+      `past their places ${b.rebuilt - a.rebuilt}`,
       `restarted ${b.restarted - a.restarted}`,
-      `cut again ${b.reclassified - a.reclassified}`,
+      `classified otherwise ${b.reclassified - a.reclassified}`,
+      `delta rows ${a.deltaRows} → ${b.deltaRows}`,
+      `cuts (last frame) ${b.cuts}`,
+      `versions swapped ${b.versionsSwapped - a.versionsSwapped} (most held ${b.versionsMostPending}, last merge ${fmt(b.lastMergeMs, 2)} ms)`,
+      `peak heap ${fmt(edit.peakHeapMb)} MB`,
       `CPU of the rows per frame ${fmt(edit.frameCpuMs.mean, 2)} ms (max ${fmt(edit.frameCpuMs.max, 2)})`,
       edit.error ? `error: ${edit.error}` : '',
     ].filter((fact) => fact !== '');

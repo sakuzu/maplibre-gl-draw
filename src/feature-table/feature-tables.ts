@@ -397,6 +397,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       rowInput: (group, row) => rowInputOf(this.readContext, group, row),
       buildRows: (inputs) => this.buildRows(inputs),
       groupKeys: this.groups,
+      groupKeyList: () => this.groups.keyList(),
       orderVersionOf: (group) => this.groups.orderVersionOf(group),
       swapIn: (version, waiting) => this.swapIn(version, waiting),
       retainStyles: (data, count) => {

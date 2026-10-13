@@ -110,9 +110,41 @@ the dev and preview servers of `bench/vite.config.ts`), so
 `isolated=true` when it is. The heap of `performance.memory` is shown in
 Chromium-based browsers only.
 
+Once the map is open, Edit repeats an edit and Stream sends changes of
+others, each measured before, during and after it (the frames, the JS
+heap and its peak, the GPU memory, and what the rows written, the deltas
+and the next versions of the row groups did):
+
+| Parameter | Meaning | Default |
+| --- | --- | --- |
+| `op` | The edit (below) | `color1` |
+| `reps` | Times an edit is repeated | `100` |
+| `remote` | The changes of others (below) | `color` |
+| `rate` | Rows changed per second | `10` |
+| `seconds` | How long a stream runs | `10` |
+| `importN` | Rows an import sends | `100000` |
+| `txn` | Rows of one write of an import | `1000` |
+| `groups` | Groups of features of `group` | `20` |
+| `members` | Members of each of them | `50` |
+| `moving` | Version builds while moving, ms | `0` |
+| `worker` | `1`: merges in a Worker | `1` |
+
+The edits are `color1`, `colorSlide`, `ruleSlide`, `attr`, `point`,
+`longLine`, `corner` and `finish` (a building written in the middle of the
+order), one change per frame. The changes of others are written in place
+(`color`, `attr`, `position`, `corner`) or placed elsewhere: `reorder`
+puts rows in another place of the order, `group` puts groups of features
+in another place, `vertex` adds a vertex past the place of a building, and
+`import` writes `importN` new buildings after every row of the layer,
+`txn` at a time, until all are sent (`seconds` does not stop it). With
+`moving=0` the chunks of the next versions of the row groups are built
+once the camera is still; a time in ms lets them build while it moves.
+With `worker=0` the large merges and builds run on the main thread.
+
 For automation, the page exposes `window.runTableBench()`, which runs one
-measurement and returns the results, and `window.benchResult`, the
-results so far.
+measurement and returns the results, `window.runTableEdit(op)` and
+`window.runTableStream(kind, rate)`, and `window.benchResult`, the results
+so far.
 
 ## Test data
 

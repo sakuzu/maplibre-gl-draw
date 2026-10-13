@@ -94,6 +94,7 @@
             <option value="point">a point moved</option>
             <option value="longLine">a vertex of the longest line moved</option>
             <option value="corner">a corner of a building moved</option>
+            <option value="finish">a building finished in the middle of the order</option>
           </select>
         </label>
         <label>reps <input name="reps" type="number" min="1"></label>
@@ -104,6 +105,10 @@
             <option value="attr">attributes</option>
             <option value="position">positions of points</option>
             <option value="corner">corners of buildings</option>
+            <option value="reorder">rows put in another place of the order</option>
+            <option value="group">groups of features put in another place</option>
+            <option value="vertex">a vertex added to a building past its place</option>
+            <option value="import">an import (importN rows by txn, until sent)</option>
           </select>
         </label>
         <label>rate (rows/s)
@@ -115,6 +120,17 @@
           </select>
         </label>
         <label>seconds <input name="seconds" type="number" min="1"></label>
+        <label>importN <input name="importN" type="number" min="1"></label>
+        <label>txn <input name="txn" type="number" min="1"></label>
+        <label>groups <input name="groups" type="number" min="1"></label>
+        <label>members <input name="members" type="number" min="1"></label>
+        <label>versions while moving (ms) <input name="moving" type="number" min="0"></label>
+        <label>worker
+          <select name="worker">
+            <option value="1">merges and builds in a Worker</option>
+            <option value="0">on the main thread</option>
+          </select>
+        </label>
         <button type="submit">Apply (reload)</button>
       </form>
       <button id="confirm" type="button" hidden>Confirm more than 100,000 features</button>

@@ -255,6 +255,7 @@ describe('the next versions of the row groups', () => {
       merge: (merge) =>
         new Promise((resolve) => {
           pending.push({ merge: structuredClone(merge), resolve });
+          expect(Array.isArray(merge.groups)).toBe(true);
         }),
       build: () => Promise.resolve([]),
     };

@@ -27,7 +27,11 @@
  */
 
 import type { BoundingBox, RowsChange } from '../shared/types/model.js';
-import type { RowGroupBuilderOptions, RowInput } from '../table/row-group-builder.js';
+import type {
+  RowGroupBuilderOptions,
+  RowGroupKey,
+  RowInput,
+} from '../table/row-group-builder.js';
 import { ROW_GROUP_TARGET_ROWS, ROW_GROUP_TARGET_VERTICES } from '../table/row-group-builder.js';
 import { mergeRowGroup, type RowGroupMerge } from '../table/row-group-merge.js';
 import type { RowGroupData } from '../table/row-group-types.js';
@@ -178,6 +182,8 @@ export interface VersionHost {
   buildRows(inputs: readonly RowInput[]): RowGroupData | null;
   /** The keys of the order of the groups of features */
   readonly groupKeys: RowGroupMerge['groups'];
+  /** The same as a list (what a Worker is sent) */
+  groupKeyList(): RowGroupKey[];
   /** The version of the key of the order of a group of features */
   orderVersionOf(group: GroupHandle): number;
   /** Puts the groups of a version in place of the ones it replaces (see `GroupVersions.swap`) */
@@ -450,7 +456,7 @@ export class GroupVersions {
     const rows = merge.rows.length / 2;
     const worker = host.worker;
     if (worker && rows > FOLD_INLINE_ROWS) {
-      worker.merge(merge).then(
+      worker.merge({ ...merge, groups: host.groupKeyList() }).then(
         (built) => {
           if (version.status !== 'building') return;
           // The keys of the groups of features of its rows changed meanwhile: dropped (the
