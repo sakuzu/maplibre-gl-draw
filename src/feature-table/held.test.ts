@@ -199,4 +199,14 @@ describe('the rows held as features', () => {
     const order = tables.layer('layer')?.rowsInOrder(0, 40) ?? new Int32Array(0);
     expect(Array.from(order, (h) => tables.idOf(h)).indexOf('p2')).toBe(30);
   });
+
+  it('follow their rows to another layer written by apply, read there', () => {
+    const { tables, writer, internals, at } = setup();
+    tables.hold('core:selection', ['p4']);
+    writer.apply(patchOf(at('p4'), { layerId: 'other', order: 'k000000' }));
+    expect(tables.heldFeature('p4')?.layerId).toBe('other');
+    expect(internals.placeOf(at('p4'))?.layer.layerId).toBe('other');
+    expect(tables.layer('layer')?.rowsInOrder(0, 100).includes(at('p4'))).toBe(false);
+    expect(Array.from(tables.layer('other')?.rowsInOrder(0, 10) ?? [])).toEqual([at('p4')]);
+  });
 });
