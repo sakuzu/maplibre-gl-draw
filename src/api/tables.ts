@@ -141,6 +141,24 @@ export interface RowPatch {
 }
 
 /**
+ * A field of a group of features a {@link TableGroupPatch} writes.
+ */
+export type TableGroupField = 'id' | 'order' | 'layerId' | 'visible' | 'locked';
+
+/**
+ * Values written to groups of features of a document, by the implementation of the Store: the
+ * groups by their handles (the handles rows name in `RowGroupData.groups`).
+ */
+export interface TableGroupPatch {
+  /** The groups written */
+  readonly handles: Int32Array;
+  /** The values of each field written, one per group */
+  readonly fields: ReadonlyMap<TableGroupField, readonly unknown[]>;
+  /** Non-zero for a group deleted */
+  readonly deleted?: Uint8Array;
+}
+
+/**
  * The options of {@link FeatureTablesWriter.apply}.
  */
 export interface RowApplyOptions {
@@ -216,6 +234,20 @@ export interface FeatureTablesWriter {
    *   features is unknown, or when a value cannot be held (nothing is written then)
    */
   apply(patch: RowPatch, options?: RowApplyOptions): RowsChange;
+  /**
+   * Writes values of groups of features, after the implementation of the Store recorded them.
+   *
+   * A new group (a handle no group has) needs its `id`, `order` and `layerId`. A new key of the
+   * order of a group moves its members, which follow each other at the place of the group: the
+   * row groups are cut at the runs of the members and at the place they go to, and put in their
+   * new order over the frames, read and drawn in the order before until then; the rows are not
+   * written. A group shown or hidden shows or hides its members. A group deleted is taken out
+   * once no row names it.
+   *
+   * @throws when a new group misses its id, its key or its layer, or a value is not of its kind
+   *   (nothing is written then)
+   */
+  applyGroups(patch: TableGroupPatch, options?: RowApplyOptions): void;
 }
 
 /**

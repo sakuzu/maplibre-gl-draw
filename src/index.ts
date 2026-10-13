@@ -174,6 +174,8 @@ export type {
   RowHandle,
   RowPatch,
   RowsChange,
+  TableGroupField,
+  TableGroupPatch,
   TableScanOptions,
 } from './api/tables.js';
 export { createFeatureTables, ITEM_GROUP, ITEM_ROW } from './api/tables.js';

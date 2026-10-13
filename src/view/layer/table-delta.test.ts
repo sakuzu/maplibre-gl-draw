@@ -498,4 +498,48 @@ describe('the drawing of the rows of the delta', () => {
       expect(record.some((entry) => entry.delta)).toBe(false);
     }
   });
+
+  it('draws the members of a group in the order before until a reorder is swapped in', () => {
+    const list = features(200, 43).map((f) =>
+      f.type === 'Image' ? feature(f.id, 'Point', [1, 1]) : f,
+    );
+    const live = setup(list, 32, true);
+    live.frame();
+    live.frame();
+    live.writer.applyGroups({
+      handles: Int32Array.of(5),
+      fields: new Map([
+        ['id', ['g']],
+        ['order', [orderKey(20) + 'g']],
+        ['layerId', ['layer']],
+      ]),
+    });
+    const members = [30, 31, 32, 150, 151].map((i) => live.tables.handleOf(list[i].id) as number);
+    live.writer.apply(
+      patchOf(members, {
+        groupId: members.map(() => 'g'),
+        member: members.map((_, i) => `m${i}`),
+      }),
+    );
+    for (let i = 0; i < 30 && live.internals.hasPendingWork; i++) {
+      const { record } = live.frame();
+      expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    }
+    expect(live.internals.deltaRowCount()).toBe(0);
+    const before = shownIds(live.table, live.tables.idOf);
+    live.writer.applyGroups({
+      handles: Int32Array.of(5),
+      fields: new Map([['order', [orderKey(120) + 'g']]]),
+    });
+    let changed = false;
+    for (let i = 0; i < 30; i++) {
+      const { record } = live.frame();
+      const shown = shownIds(live.table, live.tables.idOf);
+      expect(drawnIds(record, live.table)).toEqual(shown);
+      changed ||= shown.join() !== before.join();
+      if (!live.internals.hasPendingWork) break;
+    }
+    expect(changed).toBe(true);
+    expect(live.internals.groups.orderOf(5)).toBe(orderKey(120) + 'g');
+  });
 });

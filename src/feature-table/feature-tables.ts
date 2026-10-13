@@ -29,6 +29,7 @@ import type {
   RowHandle,
   RowPatch,
   RowsChange,
+  TableGroupPatch,
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
@@ -80,6 +81,7 @@ import {
 } from './row-write.js';
 import { StyleTable } from './style-table.js';
 import {
+  type GroupHandle,
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
@@ -156,6 +158,7 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
     adopt: (layerId, groups) => store.adopt(layerId, groups),
     apply: (patch, options) => store.apply(patch, options),
+    applyGroups: (patch, options) => store.applyGroups(patch, options),
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
@@ -1144,6 +1147,249 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
+   * Writes values of groups of features (see `FeatureTablesWriter.applyGroups`): a new key of
+   * the order of a group puts its members in another order (`reorderGroups`), a group shown or
+   * hidden makes the copies of the state of its members again
+   */
+  applyGroups(patch: TableGroupPatch, _options: RowApplyOptions = {}): void {
+    const { handles, fields, deleted } = patch;
+    const n = handles.length;
+    for (const [field, values] of fields) {
+      if (values.length !== n) {
+        throw new Error(`FeatureTables: "${field}" has ${values.length} values for ${n} groups`);
+      }
+    }
+    if (deleted && deleted.length !== n) {
+      throw new Error('FeatureTables: deleted has another length than the groups');
+    }
+    const value = (field: 'id' | 'order' | 'layerId' | 'visible' | 'locked', i: number) =>
+      fields.get(field)?.[i];
+    for (let i = 0; i < n; i++) {
+      if (deleted?.[i]) continue;
+      for (const field of ['id', 'order', 'layerId'] as const) {
+        const v = value(field, i);
+        if (v !== undefined && typeof v !== 'string') {
+          throw new Error(`FeatureTables: the ${field} of the group ${handles[i]} is not a string`);
+        }
+        if (v === undefined && !this.groups.has(handles[i])) {
+          throw new Error(`FeatureTables: the new group ${handles[i]} needs its ${field}`);
+        }
+      }
+      for (const field of ['visible', 'locked'] as const) {
+        const v = value(field, i);
+        if (v !== undefined && typeof v !== 'boolean') {
+          throw new Error(
+            `FeatureTables: the ${field} of the group ${handles[i]} is not a boolean`,
+          );
+        }
+      }
+    }
+    const orders = new Map<string, Map<GroupHandle, string>>();
+    const shown = new Set<GroupHandle>();
+    const removed: GroupHandle[] = [];
+    for (let i = 0; i < n; i++) {
+      const group = handles[i];
+      if (deleted?.[i]) {
+        removed.push(group);
+        continue;
+      }
+      if (!this.groups.has(group)) {
+        this.groups.set(group, {
+          id: value('id', i) as string,
+          order: value('order', i) as string,
+          layerId: value('layerId', i) as string,
+          visible: value('visible', i) !== false,
+          locked: value('locked', i) === true,
+        });
+        continue;
+      }
+      const visible = this.groups.isVisible(group);
+      const next = {
+        id: this.groups.idOf(group) as string,
+        // A new key goes in with the members in their new order
+        order: this.groups.orderOf(group) as string,
+        layerId:
+          (value('layerId', i) as string | undefined) ?? (this.groups.layerOf(group) as string),
+        visible: (value('visible', i) as boolean | undefined) ?? visible,
+        locked: (value('locked', i) as boolean | undefined) ?? this.groups.isLocked(group),
+      };
+      this.groups.set(group, next);
+      if (next.visible !== visible) shown.add(group);
+      const order = value('order', i) as string | undefined;
+      if (order !== undefined && order !== next.order) {
+        let list = orders.get(next.layerId);
+        if (!list) {
+          list = new Map();
+          orders.set(next.layerId, list);
+        }
+        list.set(group, order);
+      }
+    }
+    if (shown.size > 0) {
+      for (const layer of this.layers.values()) {
+        const groups: RowGroup[] = [];
+        for (let g = 0; g < layer.groupCount; g++) groups.push(layer.groupAt(g));
+        if (layer.delta.group) groups.push(layer.delta.group);
+        for (const group of groups) {
+          let changed = false;
+          for (let r = 0; r < group.data.length; r++) {
+            if (!shown.has(group.data.groups[r])) continue;
+            this.writeState(group, r);
+            changed = true;
+          }
+          if (changed) group.stateVersion++;
+        }
+      }
+    }
+    for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
+    for (const group of removed) {
+      if (!this.groupNamed(group)) this.groups.delete(group);
+    }
+    this.revisionCount++;
+    this.notifyWork();
+  }
+
+  /**
+   * Puts the members of groups of features in the order of new keys of the groups: the row
+   * groups of the layer are cut at the runs of the members and at the places they go to, and
+   * the pieces are put in their new order by a version swapped in once its chunks are up (the
+   * keys go in then; until then the order before is read and drawn). The rows are not written.
+   * A reorder still waiting is made again with its keys and the new ones
+   */
+  private reorderGroups(layerId: string, orders: Map<GroupHandle, string>): void {
+    const layer = this.layers.get(layerId);
+    for (const version of this.versions.reorders(layer)) {
+      for (const [group, order] of version.orders ?? []) {
+        if (!orders.has(group)) orders.set(group, order);
+      }
+    }
+    // The cuts of each row group: the runs of the members
+    const cuts = new Map<RowGroup, Set<number>>();
+    const cut = (group: RowGroup, row: number): void => {
+      if (row <= 0 || row >= group.data.length) return;
+      let set = cuts.get(group);
+      if (!set) {
+        set = new Set();
+        cuts.set(group, set);
+      }
+      set.add(row);
+    };
+    const members: Array<{ group: RowGroup; row: number; of: GroupHandle }> = [];
+    for (let g = 0; g < (layer?.groupCount ?? 0); g++) {
+      const group = (layer as LayerTable).groupAt(g);
+      const data = group.data;
+      let run = -1;
+      for (let r = 0; r <= data.length; r++) {
+        const inside = r < data.length && orders.has(data.groups[r]);
+        if (inside && run < 0) {
+          run = r;
+          members.push({ group, row: r, of: data.groups[r] });
+          cuts.set(group, cuts.get(group) ?? new Set());
+          cut(group, r);
+        } else if (!inside && run >= 0) {
+          cut(group, r);
+          run = -1;
+        } else if (inside && data.groups[r] !== data.groups[r - 1]) {
+          cut(group, r);
+          members.push({ group, row: r, of: data.groups[r] });
+        }
+      }
+    }
+    if (!layer || members.length === 0) {
+      // No member in the groups: the keys go in now (the deltas in their new order)
+      for (const [group, order] of orders) this.groups.setOrder(group, order);
+      for (const other of this.layers.values()) {
+        if (other.delta.group) this.rebuildDelta(other, new Set(), [], this.writeCount);
+        other.touchItems();
+      }
+      return;
+    }
+    // The places the members go to: before the first row that is no member of a group put in
+    // another order and comes after them with the new keys
+    const keys = this.groups.withOrders(orders);
+    for (const member of members) {
+      let placed = false;
+      for (let g = 0; g < layer.groupCount && !placed; g++) {
+        const group = layer.groupAt(g);
+        const data = group.data;
+        for (let r = 0; r < data.length; r++) {
+          if (orders.has(data.groups[r])) continue;
+          if (compareRowKeys(member.group.data, member.row, data, r, keys) < 0) {
+            if (r > 0 && !orders.has(data.groups[r - 1])) cut(group, r);
+            placed = true;
+            break;
+          }
+        }
+      }
+    }
+    // The pieces
+    const groups = [...cuts.keys()].sort(
+      (a, b) => layer.orderOf(a.handle) - layer.orderOf(b.handle),
+    );
+    const pieces: RowGroupData[] = [];
+    for (const group of groups) {
+      const points = [
+        0,
+        ...[...(cuts.get(group) as Set<number>)].sort((a, b) => a - b),
+        group.data.length,
+      ];
+      for (let k = 0; k + 1 < points.length; k++) {
+        if (points[k + 1] > points[k]) pieces.push(this.sliceRows(group, points[k], points[k + 1]));
+      }
+    }
+    this.versions.startReorder(layer, groups, pieces, orders);
+  }
+
+  /**
+   * The rows `[from, to)` of a group as a group of their own (the values written in place built
+   * into them)
+   */
+  private sliceRows(group: RowGroup, from: number, to: number): RowGroupData {
+    const sources: RowGroupData[] = [group.data];
+    const pairs: number[] = [];
+    const inputs: RowInput[] = [];
+    for (let r = from; r < to; r++) {
+      if (
+        group.values?.has(r) ||
+        group.geometries?.geometry(r) !== undefined ||
+        group.geometries?.rowTriangles(r) !== undefined
+      ) {
+        inputs.push(rowInputOf(this.readContext, group, r));
+      } else {
+        pairs.push(0, r);
+      }
+    }
+    const built = inputs.length > 0 ? this.buildRows(inputs) : null;
+    if (built) {
+      sources.push(built);
+      for (let r = 0; r < built.length; r++) pairs.push(1, r);
+    }
+    const [data] = mergeRowGroup({
+      sources,
+      rows: Int32Array.from(pairs),
+      groups: this.groups,
+      targetRows: UNBOUNDED,
+      targetVertices: UNBOUNDED,
+    });
+    return data;
+  }
+
+  /** Whether a row (of a group, of a delta, of a creation) names a group of features */
+  private groupNamed(group: GroupHandle): boolean {
+    for (const layer of this.layers.values()) {
+      const groups: RowGroup[] = [];
+      for (let g = 0; g < layer.groupCount; g++) groups.push(layer.groupAt(g));
+      if (layer.delta.group) groups.push(layer.delta.group);
+      for (const rowGroup of groups) {
+        if (rowGroup.data.groups.includes(group)) return true;
+      }
+    }
+    return this.creations.some((creation) =>
+      creation.rows.some((row) => row.input.group === group),
+    );
+  }
+
+  /**
    * Whether a patch places a row elsewhere (another key, group, layer or type, or an attribute
    * the cutting of the rows reads): it then goes to the delta rather than being written in place
    */
@@ -1366,8 +1612,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
           this.ids.setMain(handle, group.handle, r);
           waiting.delete(handle);
         } else {
-          // Read in another group until that one has its next version
-          waiting.set(handle, { group, row: r, number: version.deltaNumber });
+          // Read in another group until that one has its next version (a copy that waited in
+          // a group replaced keeps the number of the version that put it there)
+          const before = waiting.get(handle);
+          const number =
+            before && replacedGroups.has(before.group) ? before.number : version.deltaNumber;
+          waiting.set(handle, { group, row: r, number });
         }
       }
     }
@@ -1389,8 +1639,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
         }
       }
     }
-    // The rows of the deltas the version took
-    for (const group of groups) {
+    // The rows of the deltas the version took (a reorder takes none: its copies stay as they are)
+    for (const group of version.takesDelta ? groups : []) {
       const data = group.data;
       for (let r = 0; r < data.length; r++) {
         const handle = data.handles[r];
@@ -1400,8 +1650,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     // A copy waiting in a group replaced waits in the version, or not any more
+    const newGroups = new Set<RowGroup>(groups);
     for (const [handle, copy] of waiting) {
-      if (replacedGroups.has(copy.group)) waiting.delete(handle);
+      if (replacedGroups.has(copy.group) && !newGroups.has(copy.group)) waiting.delete(handle);
     }
     for (const old of version.replaces) {
       for (let r = 0; r < old.data.length; r++) this.styles.release(old.data.styles[r]);

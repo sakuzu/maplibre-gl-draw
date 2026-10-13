@@ -35,6 +35,8 @@ const MAIN = [
   'RowFieldValues',
   'RowPatch',
   'RowsChange',
+  'TableGroupField',
+  'TableGroupPatch',
   'TableScanOptions',
   'TableEditStats',
   'CompanionProvider',

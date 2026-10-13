@@ -110,8 +110,16 @@ export interface GroupVersion {
   groups: RowGroup[] | null;
   /** The number of the last change it took from the delta */
   readonly deltaNumber: number;
-  /** The keys of the groups of features of its rows it was started with (`keyGeneration`) */
-  readonly keys: string;
+  /**
+   * The groups of features its rows name, and the versions of their keys it was made with (a
+   * version whose rows are in the order of other keys is dropped, G12 of the design)
+   */
+  readonly keys: ReadonlyMap<GroupHandle, number>;
+  /**
+   * Whether it takes the rows of the deltas in its range (a next version), or only puts the rows
+   * of its groups in another order (a reorder of groups of features)
+   */
+  readonly takesDelta: boolean;
   /** The keys of groups of features the swap puts in (a reorder; null for none) */
   readonly orders: ReadonlyMap<GroupHandle, string> | null;
   status: GroupVersionStatus;
@@ -419,7 +427,8 @@ export class GroupVersions {
       replaces: groups,
       groups: null,
       deltaNumber: host.writeNumber,
-      keys: '',
+      keys: new Map(),
+      takesDelta: true,
       orders,
       status: 'building',
       partial: false,
@@ -431,7 +440,7 @@ export class GroupVersions {
       this.urged.delete(group.handle);
     }
     const merge = this.mergeOf(layer, groups);
-    (version as { keys: string }).keys = this.keysOf(merge);
+    (version as { keys: ReadonlyMap<GroupHandle, number> }).keys = this.keysOf(merge);
     this.pending.set(version.id, version);
     const rows = merge.rows.length / 2;
     const worker = host.worker;
@@ -441,7 +450,7 @@ export class GroupVersions {
           if (version.status !== 'building') return;
           // The keys of the groups of features of its rows changed meanwhile: dropped (the
           // rows are in another order), and the groups are due again
-          if (this.keysOf(merge) !== version.keys) {
+          if (!this.sameKeys(version)) {
             this.drop(version);
             for (const group of groups) this.markDue(group.handle);
             return;
@@ -508,16 +517,21 @@ export class GroupVersions {
    * The versions of the keys of the groups of features the rows of a merge name (a version built
    * with other keys has its rows in another order)
    */
-  private keysOf(merge: RowGroupMerge): string {
-    const groups = new Set<GroupHandle>();
+  private keysOf(merge: RowGroupMerge): Map<GroupHandle, number> {
+    const out = new Map<GroupHandle, number>();
     for (let i = 0; i < merge.rows.length; i += 2) {
       const group = merge.sources[merge.rows[i]].groups[merge.rows[i + 1]];
-      if (group >= 0) groups.add(group);
+      if (group >= 0 && !out.has(group)) out.set(group, this.host.orderVersionOf(group));
     }
-    return [...groups]
-      .sort((a, b) => a - b)
-      .map((group) => `${group}:${this.host.orderVersionOf(group)}`)
-      .join(',');
+    return out;
+  }
+
+  /** Whether the keys of the groups of features of the rows of a version are the ones it has */
+  private sameKeys(version: GroupVersion): boolean {
+    for (const [group, generation] of version.keys) {
+      if (this.host.orderVersionOf(group) !== generation) return false;
+    }
+    return true;
   }
 
   /** Makes the groups of a version built (their styles counted while they are held) */
@@ -539,6 +553,11 @@ export class GroupVersions {
         this.drop(version);
         return null;
       }
+    }
+    // Made with other keys of groups of features (a reorder swapped since): made again
+    if (!this.sameKeys(version)) {
+      this.drop(version);
+      return null;
     }
     const change = this.host.swapIn(version, this.waiting);
     this.release(version);
@@ -565,7 +584,12 @@ export class GroupVersions {
     }
   }
 
-  /** Starts a version of groups with the keys of groups of features replaced (a reorder) */
+  /**
+   * Starts a version that puts the rows of groups in another order (the keys of groups of
+   * features changed): its groups are the groups cut at the runs of the members, built already,
+   * and the keys go in when it is swapped. A version of the groups being made is dropped (F7 of
+   * the design)
+   */
   startReorder(
     layer: LayerTable,
     groups: RowGroup[],
@@ -573,13 +597,15 @@ export class GroupVersions {
     orders: ReadonlyMap<GroupHandle, string>,
   ): GroupVersion {
     for (const group of groups) this.dropLock(group.handle);
+    for (const version of this.reorders(layer)) this.drop(version);
     const version: GroupVersion = {
       id: this.nextId++,
       layer,
       replaces: groups,
       groups: null,
       deltaNumber: this.host.writeNumber,
-      keys: '',
+      keys: new Map(),
+      takesDelta: false,
       orders,
       status: 'building',
       partial: false,
@@ -604,6 +630,13 @@ export class GroupVersions {
   /** The versions pending that put keys of a group of features in */
   reordersOf(group: GroupHandle): GroupVersion[] {
     return [...this.pending.values()].filter((version) => version.orders?.has(group));
+  }
+
+  /** The reorders pending of a layer */
+  reorders(layer: LayerTable | undefined): GroupVersion[] {
+    return [...this.pending.values()].filter(
+      (version) => version.orders !== null && version.layer === layer,
+    );
   }
 
   /** The bounds of the groups a version replaces and of its new ones */
