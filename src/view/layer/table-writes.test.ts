@@ -78,6 +78,8 @@ interface DrawnOptions {
   readonly targetRows?: number;
   /** The rendering pixel ratio, read every frame */
   readonly pixelRatio?: () => number;
+  /** Whether the first frames are left to the caller (they are drawn until settled otherwise) */
+  readonly unsettled?: boolean;
 }
 
 /** The tables of features drawn in one draw on a context that keeps what the GPU holds */
@@ -145,7 +147,7 @@ function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
     }
     frame();
   };
-  settle();
+  if (!options.unsettled) settle();
   /** The rows the chunks hold on the GPU, in their order */
   const read = (): ReadRow[] =>
     made
@@ -535,5 +537,50 @@ describe('the styles of rows written again and again', () => {
       }
     }
     setTerrainCameraMoving(terrain, false);
+  });
+});
+
+describe('the writes in place and the building of the chunks', () => {
+  it('builds again a chunk being built when one of its rows is written, with the row as written', () => {
+    const features = valued(1500);
+    const live = drawn(features, { budgetMs: 0, unsettled: true });
+    // The chunk packs a slice of its rows per frame: it is being built
+    live.frame();
+    live.frame();
+    const edit = editor(live, features);
+    edit.geometry(3, { type: 'Point', coordinates: [0.5, 0.5] });
+    edit.style(1200, { pointColor: '#00ff00' });
+    live.settle();
+    expect(live.renderer.writeStats.restarted).toBeGreaterThan(0);
+    expect(live.read()).toEqual(drawn(features).read());
+  });
+
+  it('widens the extent of a chunk to a row moved out of it, so the row is not culled with it', () => {
+    const features = scene();
+    const live = drawn(features);
+    const edit = editor(live, features);
+    edit.geometry(1, { type: 'Point', coordinates: [5, 5] });
+    live.settle();
+    const chunk = live.made.find((c) => c.uploaded && !c.disposed) as RowsChunk;
+    expect(chunk).toBeDefined();
+    // Drawn in a view of the new place of the point only
+    live.renderer.prerender();
+    beginRenderFrame();
+    live.renderer.beginFrame();
+    const record: TableDrawRecord[] = [];
+    live.renderer.recordDraws(record);
+    live.renderer.drawLayer(
+      live.internals,
+      live.table,
+      LAYER,
+      {
+        projectionData: PROJECTION,
+        zoom: 10,
+        bounds: { minX: 4.9, minY: 4.9, maxX: 5.1, maxY: 5.1 },
+      },
+      live.deps,
+    );
+    live.renderer.recordDraws(null);
+    expect(coverage(record)).toContain('0:1');
   });
 });
