@@ -10,6 +10,7 @@
  */
 
 import type { ScreenPoint } from '../../shared/math/index.js';
+import type { HitShape } from '../../shared/math/position-runs.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
@@ -28,6 +29,13 @@ import {
 } from './strategies/multi.js';
 import { PointHitTestStrategy } from './strategies/point.js';
 import { PolygonHitTestStrategy } from './strategies/polygon.js';
+import {
+  circleShapeTest,
+  linesShapeTest,
+  pointsShapeTest,
+  polygonsShapeTest,
+  type ShapeHitTest,
+} from './strategies/shape-tests.js';
 import { createVisibilityLookup, type VisibilityLookup } from './visibility-lookup.js';
 
 /**
@@ -120,6 +128,33 @@ export interface HitTestService {
   hitTestFeature(feature: Feature, coordinate: Coordinate, toleranceLngLat: number): boolean;
 
   /**
+   * Tests a shape read in place (a row held as columns) with the test of the strategy of its
+   * type, as {@link HitTestService.hitTestFeature} tests a feature of the same shape
+   *
+   * @param type The type of the feature the shape is of
+   * @returns Whether it is hit, or null when the strategy of the type tests features only (one
+   *   registered by an extension, a type of an extension, an image) or the shape drawn is not
+   *   the stored one (a shape cut on the globe): the caller tests a feature then
+   */
+  hitTestShape?(
+    type: string,
+    shape: HitShape,
+    coordinate: Coordinate,
+    toleranceLngLat: number,
+  ): boolean | null;
+
+  /**
+   * The distance of a shape read in place when it is hit, measured as `hitTestAll` measures a
+   * feature (null when it is not hit, or when its type is tested on features only)
+   */
+  distanceOfShape?(
+    type: string,
+    shape: HitShape,
+    coordinate: Coordinate,
+    toleranceLngLat: number,
+  ): number | null;
+
+  /**
    * Updates the tile size in px of the map (the Image hit test converts pixel sizes with it)
    */
   setTileSize?(tileSize: number): void;
@@ -197,6 +232,10 @@ export class HitTestServiceImpl implements HitTestService {
   private anchorScreen: AnchorScreenProjector | null;
   /** The shape a feature is drawn with (the stored shape when there is no resolver) */
   private drawnShape: DrawnShapeResolver;
+  /** Whether the drawn shape is the stored one now (a resolver that cannot tell cuts) */
+  private readonly storedShapeDrawn: () => boolean;
+  /** The tests on shapes of the built-in strategies, by the object registered for the type */
+  private readonly shapeTests = new Map<HitTestStrategy, ShapeHitTest>();
 
   setClickTolerance(px: number): void {
     this.options = { ...this.options, clickTolerance: px };
@@ -207,32 +246,41 @@ export class HitTestServiceImpl implements HitTestService {
     this.spatialIndex = spatialIndex;
     this.anchorScreen = options.anchorScreen ?? null;
     this.drawnShape = options.drawnShape ?? ((feature) => feature);
+    const cuts = options.drawnShape?.cuts;
+    this.storedShapeDrawn = options.drawnShape ? () => cuts?.() === false : () => true;
     this.options = { ...DEFAULT_HIT_TEST_OPTIONS, ...options };
     const tileSize = options.tileSize ?? 512;
 
     // Register the default strategies
     this.registry = new HitTestStrategyRegistry();
     const markerReach = options.pointMarkerReachPx;
-    this.registry.register(withReach(new PointHitTestStrategy(), markerReach));
-    this.registry.register(new LineHitTestStrategy());
-    this.registry.register(new PolygonHitTestStrategy());
-    this.registry.register(new CircleHitTestStrategy());
+    const builtIn = (strategy: HitTestStrategy, shapeTest: ShapeHitTest): void => {
+      this.registry.register(strategy);
+      this.shapeTests.set(strategy, shapeTest);
+    };
+    builtIn(withReach(new PointHitTestStrategy(), markerReach), pointsShapeTest);
+    builtIn(new LineHitTestStrategy(), linesShapeTest);
+    builtIn(new PolygonHitTestStrategy(), polygonsShapeTest);
+    builtIn(new CircleHitTestStrategy(), circleShapeTest);
 
     // The Multi geometries (a hit if any part is hit / the distance is the minimum over the
     // parts)
-    this.registry.register(withReach(new MultiPointHitTestStrategy(), markerReach));
-    this.registry.register(new MultiLineStringHitTestStrategy());
-    this.registry.register(new MultiPolygonHitTestStrategy());
+    builtIn(withReach(new MultiPointHitTestStrategy(), markerReach), pointsShapeTest);
+    builtIn(new MultiLineStringHitTestStrategy(), linesShapeTest);
+    builtIn(new MultiPolygonHitTestStrategy(), polygonsShapeTest);
 
     // Freehand uses the same strategy as LineString
     const freehandStrategy = new LineHitTestStrategy();
     // Create a wrapper with geometryType changed to Freehand
-    this.registry.register({
-      geometryType: 'Freehand',
-      test: freehandStrategy.test.bind(freehandStrategy),
-      distance: freehandStrategy.distance.bind(freehandStrategy),
-      testDistance: freehandStrategy.testDistance.bind(freehandStrategy),
-    });
+    builtIn(
+      {
+        geometryType: 'Freehand',
+        test: freehandStrategy.test.bind(freehandStrategy),
+        distance: freehandStrategy.distance.bind(freehandStrategy),
+        testDistance: freehandStrategy.testDistance.bind(freehandStrategy),
+      },
+      linesShapeTest,
+    );
 
     // The Image strategy (it depends on the zoom level and the tile size)
     this.imageStrategy = new ImageHitTestStrategy(tileSize);
@@ -244,6 +292,41 @@ export class HitTestServiceImpl implements HitTestService {
    */
   setTileSize(tileSize: number): void {
     this.imageStrategy.setTileSize(tileSize);
+  }
+
+  hitTestShape(
+    type: string,
+    shape: HitShape,
+    coordinate: Coordinate,
+    toleranceLngLat: number,
+  ): boolean | null {
+    const test = this.shapeTestOf(type);
+    return test ? test.testShape(shape, coordinate, toleranceLngLat) : null;
+  }
+
+  distanceOfShape(
+    type: string,
+    shape: HitShape,
+    coordinate: Coordinate,
+    toleranceLngLat: number,
+  ): number | null {
+    const test = this.shapeTestOf(type);
+    if (!test) return null;
+    // As a feature is measured: in one scan where the test has one
+    if (test.testDistanceShape) return test.testDistanceShape(shape, coordinate, toleranceLngLat);
+    return test.testShape(shape, coordinate, toleranceLngLat)
+      ? test.distanceShape(shape, coordinate)
+      : null;
+  }
+
+  /**
+   * The test on shapes of the strategy registered for a type: only a built-in one, and only
+   * while the shape drawn is the stored one (undefined otherwise: a feature is tested)
+   */
+  private shapeTestOf(type: string): ShapeHitTest | undefined {
+    const strategy = this.registry.get(type);
+    const test = strategy ? this.shapeTests.get(strategy) : undefined;
+    return test && this.storedShapeDrawn() ? test : undefined;
   }
 
   /**

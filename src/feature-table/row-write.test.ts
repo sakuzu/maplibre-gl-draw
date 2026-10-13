@@ -238,6 +238,7 @@ describe('the geometry written in place', () => {
       coordinate: [x, y] as [number, number],
       reach: 0.1,
       toleranceOf: () => 0.1,
+      testShape: () => null,
       test: (f: Feature, c: [number, number] | number[]) => {
         const g = f.geometry as { type: string; coordinates: number[] };
         return (

@@ -96,8 +96,9 @@ export function createDisplayInteractions(deps: DisplayInteractionsDeps): Displa
       // Nothing happens when a feature of the Store is in front (that is the domain of the
       // Store selection; neither the click of a dataset nor a no-hit notification is
       // emitted). A companion of a feature (feature companion) is likewise the domain of the
-      // Store side, and the click is handed to the provider by the select mode.
-      if (top?.kind === 'store' || top?.kind === 'companion') return;
+      // Store side, and the click is handed to the provider by the select mode. A row of a layer
+      // held as rows is a feature of the Store too.
+      if (top?.kind === 'store' || top?.kind === 'companion' || top?.kind === 'row') return;
 
       const coordinate = toCoordinate(event);
       if (top?.kind === 'dataset' && top.feature) {

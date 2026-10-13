@@ -241,9 +241,10 @@ export class SelectMode implements EngineModeHandler {
 
     // Feature hit test (unified z traversal)
     // Nothing is grabbed when a dataset is in the foreground. dragPan is also
-    // left alive so that the map can be panned even from on top of the data.
+    // left alive so that the map can be panned even from on top of the data. A row held as
+    // columns stops the pan as a feature does, locked or not (nothing is made of it here)
     const top = this.#context.hitTestTopmost(event.point, { orderedFeatures });
-    if (top?.kind === 'store') {
+    if (top?.kind === 'store' || top?.kind === 'row') {
       map.dragPan.disable();
       return true;
     }
@@ -358,7 +359,8 @@ export class SelectMode implements EngineModeHandler {
     // When a dataset is in the foreground, nothing is grabbed and no drag is
     // started (dragPan is alive, so it becomes a map pan).
     const orderedFeatures = getDisplayFeatures(store);
-    const top = this.#context.hitTestTopmost(dragStartPoint, { orderedFeatures });
+    // A row held as columns is made a feature to drag it
+    const top = this.#context.hitTestTopmost(dragStartPoint, { orderedFeatures, hold: true });
     if (top?.kind !== 'store') return;
     const hitFeatureId = top.feature.id;
 

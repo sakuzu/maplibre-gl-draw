@@ -28,9 +28,10 @@ const MAX_POINTS = 65_536;
 
 /**
  * Reshapes a feature into the shape it is drawn with, for the precise test (the feature itself
- * when the shape is the same)
+ * when the shape is the same); `cuts` tells whether it reshapes anything now (the stored shape
+ * can be tested as it is when it does not)
  */
-export type DrawnShapeResolver = (feature: Feature) => Feature;
+export type DrawnShapeResolver = ((feature: Feature) => Feature) & { cuts?(): boolean };
 
 /**
  * The line cell of the globe for hit testing, in Mercator world units (0 on a flat map)
@@ -86,7 +87,7 @@ export function shapeOnGlobe(feature: Feature, grid: number): Feature {
  */
 export function createGlobeShapeResolver(map: MapLibreMap): DrawnShapeResolver {
   const cache = new WeakMap<Feature, { grid: number; shape: Feature }>();
-  return (feature) => {
+  const resolve: DrawnShapeResolver = (feature) => {
     const grid = globeHitTestGrid(map);
     if (!(grid > 0)) return feature;
     const hit = cache.get(feature);
@@ -95,4 +96,6 @@ export function createGlobeShapeResolver(map: MapLibreMap): DrawnShapeResolver {
     cache.set(feature, { grid, shape });
     return shape;
   };
+  resolve.cuts = () => globeHitTestGrid(map) > 0;
+  return resolve;
 }

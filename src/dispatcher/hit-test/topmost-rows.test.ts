@@ -7,9 +7,13 @@
  * A row is hit as it is drawn: the frontmost row, in the order of the layer, of the layers in
  * the stacking order. The hit is a row (`kind: 'row'`) and no feature of the Store is made; a
  * hidden row, a hidden layer and a row out of reach are not hit.
+ *
+ * A hit asked to hold the row (a click, a drag) makes the row a feature of the Store for a
+ * moment (`core:pointer`) and returns it as one; a row held (selected) is hit as a feature of
+ * the Store with or without it.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFeatureTablesStore,
   featureTablesInternals,
@@ -21,7 +25,7 @@ import type { Feature } from '../../store/types.js';
 import { createRowGroupBuilder } from '../../table/row-group-builder.js';
 import { feature, orderKey, rowOfFeature } from '../../test-utils.js';
 import { HitTestServiceImpl } from './service.js';
-import { createTopmostHitTester, type TopHit } from './topmost.js';
+import { createTopmostHitTester, POINTER_HOLD_MS, POINTER_OWNER, type TopHit } from './topmost.js';
 
 const square = (x: number, y: number) => [
   [
@@ -143,5 +147,60 @@ describe('the hit testing of the rows held as columns', () => {
     adopt('l', [feature('p', 'Polygon', square(0, 0))]);
     tester()(at(5, 5));
     expect(store.getFeature('p')).toBeUndefined();
+  });
+
+  it('measures the distance of a row hit from the row', () => {
+    layer('l');
+    adopt('l', [
+      feature('line', 'LineString', [
+        [0, 0],
+        [10, 0],
+      ]),
+    ]);
+    const hit = tester()(at(5, 0.2));
+    expect(hit?.kind).toBe('row');
+    if (hit?.kind !== 'row') throw new Error('row');
+    // 0.2 degrees at 10 px per degree (a latitude difference counts a little more by cos φ)
+    expect(hit.distancePx()).toBeCloseTo(2, 3);
+  });
+});
+
+describe('the hit testing that holds the row hit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('makes the row hit a feature of the Store for a moment', () => {
+    layer('l');
+    adopt('l', [feature('p', 'Polygon', square(0, 0))]);
+    const hit = tester()(at(5, 5), { hold: true });
+    expect(hit?.kind).toBe('store');
+    const held = tables.tables.heldFeature('p');
+    expect(held).toBeDefined();
+    expect(hit?.kind === 'store' && hit.feature).toBe(held);
+    // The selection holds it before the moment is over
+    store.setSelection('feature', ['p']);
+    vi.advanceTimersByTime(POINTER_HOLD_MS);
+    expect(tables.tables.heldFeature('p')).toBe(held);
+    store.setSelection(null, []);
+    expect(tables.tables.heldFeature('p')).toBeUndefined();
+    // Without the selection it is let go after the moment
+    tester()(at(5, 5), { hold: true });
+    expect(tables.tables.heldFeature('p')).toBeDefined();
+    vi.advanceTimersByTime(POINTER_HOLD_MS);
+    expect(tables.tables.heldFeature('p')).toBeUndefined();
+  });
+
+  it('returns a row held as a feature of the Store, held or not by the hit', () => {
+    layer('l');
+    adopt('l', [feature('p', 'Polygon', square(0, 0))]);
+    tables.tables.hold(POINTER_OWNER, []);
+    store.setSelection('feature', ['p']);
+    const hit = tester()(at(5, 5));
+    expect(hit?.kind).toBe('store');
+    expect(hit?.kind === 'store' && hit.feature).toBe(tables.tables.heldFeature('p'));
   });
 });

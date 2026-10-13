@@ -239,13 +239,15 @@ describe('many new rows written at once', () => {
         coordinate: [10, 1],
         reach: 0.1,
         toleranceOf: () => 0.1,
+        testShape: () => null,
         test: (feature, [x, y], tolerance) => {
           const [px, py] = (feature.geometry as { coordinates: number[] }).coordinates;
           return Math.hypot(px - x, py - y) <= tolerance;
         },
       });
-      expect(hit?.feature.id).toBe('r10');
-      expect(hit?.feature.properties).toEqual({ n: 10 });
+      const hitHandle = hit ? hit.group.data.handles[hit.row] : -1;
+      expect(tables.idOf(hitHandle)).toBe('r10');
+      expect(tables.layer('a')?.valueAt(hitHandle, 'n')).toBe(10);
     };
     // Gathered
     reads();

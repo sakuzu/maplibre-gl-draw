@@ -432,12 +432,12 @@ export function toHit(
       };
     case 'row':
       // A row of a layer held as rows is a feature of the document; the distance is measured
-      // from the row as the feature it was tested as
+      // from the row, as it was tested
       return {
         kind: 'feature',
         id: top.id,
         featureId: top.id,
-        distancePx: distanceToFeaturePx(top.feature),
+        distancePx: top.distancePx(),
       };
     case 'dataset':
       if (!top.feature) return null;

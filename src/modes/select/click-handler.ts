@@ -75,8 +75,9 @@ export function handleSelectDoubleClick(
   const { store } = context;
   const orderedFeatures = getDisplayFeatures(store);
 
-  // Store features are not grabbed when a dataset is in the foreground
-  const top = context.hitTestTopmost(event.point, { orderedFeatures });
+  // Store features are not grabbed when a dataset is in the foreground (a row held as columns
+  // is made a feature to select it)
+  const top = context.hitTestTopmost(event.point, { orderedFeatures, hold: true });
   if (top?.kind !== 'store') return;
   event.originalEvent.preventDefault();
 
@@ -190,7 +191,8 @@ function handleFeatureClick(
   const { store } = context;
   const orderedFeatures = getDisplayFeatures(store);
 
-  let top = context.hitTestTopmost(event.point, { orderedFeatures });
+  // A row held as columns is made a feature to select it
+  let top = context.hitTestTopmost(event.point, { orderedFeatures, hold: true });
 
   // A feature companion is in the foreground: the provider receives the click. When it consumes
   // it, core changes the selection in no way at all (not even clearing it as an empty click

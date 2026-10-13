@@ -35,7 +35,7 @@ import type { ModeManager } from '../../modes/manager.js';
 import { SelectMode } from '../../modes/select/mode.js';
 import { SnapIndicatorRenderer } from '../../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
-import type { FeatureStyle, Mode } from '../../store/types.js';
+import type { Mode } from '../../store/types.js';
 import { createRenderCoordinator } from '../../view/coordinator.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { attachSlotLayers } from '../../view/layer/attach.js';
@@ -248,8 +248,7 @@ export function createEngine(
     },
     companions: featureCompanions,
     // A point of a layer held as rows is hit on its marker, as the points of the Store are
-    pointMarkerReachPx: (feature) =>
-      pointMarkerReachPx(feature.style as FeatureStyle | undefined, featureStyle.point.point),
+    pointMarkerReachPx: (style) => pointMarkerReachPx(style, featureStyle.point.point),
   };
   const hitTestTopmost = createTopmostHitTester(topmostDeps);
 

@@ -29,8 +29,11 @@
  * and neither click nor hover is fired.
  *
  * A layer the Store holds as rows of columns (`store.tables`) is tested on its rows
- * (`feature-table/hit-test.ts`): a row hit is returned as it is, as a row (`kind: 'row'`), and no
- * feature of the Store is made for it.
+ * (`feature-table/hit-test.ts`), read in place: a row hit is returned as it is, as a row
+ * (`kind: 'row'`), and no feature of the Store is made for it. A row held as a feature (selected,
+ * edited) is a feature of the Store (`kind: 'store'`). A caller that needs the feature of the row
+ * it hits (a click selects it, a drag moves it) asks for it (`hold`): the row is then held as a
+ * feature for a moment (`core:pointer`), until the selection holds it.
  *
  * When the features of a layer are examined, the companions of a feature
  * (view/feature-companion) are asked right after the test of the feature itself fails and
@@ -48,10 +51,12 @@ import {
 } from '../../feature-table/feature-tables.js';
 import { hitTestLayerTable } from '../../feature-table/hit-test.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
+import { rowFeature } from '../../feature-table/row-read.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
-import type { Coordinate, Feature } from '../../store/types.js';
+import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../../store/types.js';
+import { ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
 import type {
   CompanionHitContext,
   FeatureCompanionHitResult,
@@ -89,8 +94,8 @@ export type TopHit =
       handle: number;
       /** Whether the row, its group or its layer is locked */
       locked: boolean;
-      /** The row as a feature, made for the test (for the distance of the hit) */
-      feature: Feature;
+      /** The distance of the hit from the point, in screen px (measured when asked) */
+      distancePx(): number;
     }
   | {
       kind: 'dataset';
@@ -112,7 +117,27 @@ export interface TopmostHitTestOptions {
    * it again. When omitted, this function fetches it itself.
    */
   orderedFeatures?: Feature[];
+  /**
+   * Whether a row held as columns that is hit is made a feature of the Store and returned as
+   * one (`kind: 'store'`): only where the feature is needed (a click, a double click, a press
+   * that drags). Without it a row is returned as a row, and nothing is made of it
+   */
+  hold?: boolean;
 }
+
+/**
+ * The owner of the row a hit holds for a moment, until the selection holds it
+ *
+ * @internal
+ */
+export const POINTER_OWNER = 'core:pointer';
+
+/**
+ * How long a row a hit holds stays held, unless something else holds it (ms)
+ *
+ * @internal
+ */
+export const POINTER_HOLD_MS = 100;
 
 /**
  * Returns the single frontmost hit at a screen position, across the Store, the
@@ -162,10 +187,10 @@ export interface TopmostHitTestDeps {
    */
   companions?: FeatureCompanionRegistry;
   /**
-   * How far the marker of a point reaches from it (screen px), for the rows held as columns: a
-   * point is hit anywhere on its marker. Only the click tolerance when omitted
+   * How far the marker of a point of a style reaches from it (screen px), for the rows held as
+   * columns: a point is hit anywhere on its marker. Only the click tolerance when omitted
    */
-  pointMarkerReachPx?(feature: Feature): number;
+  pointMarkerReachPx?(style: FeatureStyle | undefined): number;
 }
 
 /**
@@ -223,47 +248,93 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     return companion ? { kind: 'companion', companion } : null;
   };
 
+  /** The timer that lets go of the row a hit holds */
+  let pointerTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Holds the row hit as a feature for a moment (until the selection holds it, or the next hit
+   * that holds one)
+   */
+  const holdForPointer = (id: string): void => {
+    const tables = store.tables;
+    if (!tables) return;
+    if (pointerTimer !== null) clearTimeout(pointerTimer);
+    tables.hold(POINTER_OWNER, [id]);
+    pointerTimer = setTimeout(() => {
+      pointerTimer = null;
+      tables.hold(POINTER_OWNER, []);
+    }, POINTER_HOLD_MS);
+  };
+
   /**
    * The frontmost row of a layer held as rows hit at the click (null when none is, or when the
-   * layer is hidden)
+   * layer is hidden): a row, or a feature of the Store for a row held (made one when `hold`)
    */
   const rowOf = (
     tables: FeatureTablesInternals,
     table: LayerTable,
+    point: ScreenPoint,
     copies: readonly Coordinate[],
     tolerance: number,
+    hold: boolean,
   ): TopHit | null => {
     const layer = store.getLayer(table.layerId);
     if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
     // A point is hit anywhere on its marker: the candidates are looked for as far as the
     // largest marker of the styles of the rows reaches
     const degreesPerPixel = 360 / (512 * 2 ** (deps.getZoom?.() ?? 0));
-    const reachOf = (feature: Feature): number =>
-      getStyleRuleChannel(feature.type) === 'point' && deps.pointMarkerReachPx
-        ? Math.max(tolerance, deps.pointMarkerReachPx(feature) * degreesPerPixel)
+    const toleranceOf = (type: FeatureType, style: FeatureStyle): number =>
+      getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
+        ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
         : tolerance;
     const reach = Math.max(tolerance, maxMarkerReach(tables, deps) * degreesPerPixel);
+    const hidden = store.listHidden();
     for (const coordinate of copies) {
       const hit = hitTestLayerTable(tables, table, {
         coordinate,
         reach,
-        toleranceOf: reachOf,
+        toleranceOf,
+        testShape: (type, shape, at, within) =>
+          hitTestService.hitTestShape?.(type, shape, at, within) ?? null,
         test,
+        // A row of a group hidden by this client is not hit
+        skip:
+          hidden.size === 0
+            ? undefined
+            : (group, row) => {
+                const groupHandle = group.data.groups[row];
+                const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
+                return groupId !== undefined && hidden.has(groupId);
+              },
       });
       if (!hit) continue;
-      const groupHandle = hit.group.data.groups[hit.row];
+      const data = hit.group.data;
+      const handle = data.handles[hit.row];
+      const id = tables.ids.idOf(handle) as string;
+      const held = store.tables?.heldFeature(id);
+      if (held) return { kind: 'store', feature: held };
+      if (hold) {
+        holdForPointer(id);
+        const feature = store.tables?.heldFeature(id);
+        if (feature) return { kind: 'store', feature };
+      }
+      const groupHandle = data.groups[hit.row];
       const locked =
-        hit.feature.locked ||
+        (data.flags[hit.row] & ROW_FLAG_LOCKED) !== 0 ||
         (groupHandle >= 0 && tables.groups.isLocked(groupHandle)) ||
         layer.locked === true;
-      return {
-        kind: 'row',
-        layerId: table.layerId,
-        id: hit.feature.id,
-        handle: hit.group.data.handles[hit.row],
-        locked,
-        feature: hit.feature,
+      const distancePx = (): number => {
+        const distance = hit.shape
+          ? (hitTestService.distanceOfShape?.(hit.type, hit.shape, coordinate, hit.tolerance) ?? 0)
+          : (hitTestService.hitTestAll(point, unproject, [
+              rowFeature(tables.readContext, table.layerId, hit.group, hit.row),
+            ])[0]?.distance ?? 0);
+        const onePixel = Math.abs(
+          unproject({ x: point.x + 1, y: point.y }).lng - unproject(point).lng,
+        );
+        return onePixel > 0 ? distance / onePixel : 0;
       };
+      return { kind: 'row', layerId: table.layerId, id, handle, locked, distancePx };
     }
     return null;
   };
@@ -330,7 +401,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       // A layer held as rows is tested on its rows
       const table = tables?.layerTable(entryId);
       if (tables && table) {
-        const row = rowOf(tables, table, copies, tolerance);
+        const row = rowOf(tables, table, point, copies, tolerance, options?.hold === true);
         if (row) return row;
         continue;
       }
@@ -390,8 +461,7 @@ function maxMarkerReach(
   if (known && known.styles === tables.styles.size) return known.reach;
   let reach = 0;
   for (let id = 0; id < tables.styles.size; id++) {
-    const probe = { type: 'Point', style: tables.styles.get(id) } as Feature;
-    reach = Math.max(reach, reachOf(probe));
+    reach = Math.max(reach, reachOf(tables.styles.get(id)));
   }
   MARKER_REACH.set(tables, { styles: tables.styles.size, reach });
   return reach;
