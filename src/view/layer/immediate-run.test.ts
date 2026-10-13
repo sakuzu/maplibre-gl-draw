@@ -11,13 +11,16 @@
  * renderer that makes it, whatever the run remembered before.
  *
  * The real renderers and the real immediate mode draw on a GL that records its calls, through
- * the three places that draw at once in the middle of a run: the chunks of the Store, the chunks
- * of rows drawn by kind, and the chunks of rows drawn by kind while those drawn in one draw are
- * not built yet.
+ * the four places that draw at once in the middle of a run: the chunks of the Store, the chunks
+ * of rows drawn by kind, the chunks of rows drawn by kind while those drawn in one draw are not
+ * built yet, and the chunks of a dataset.
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { chunkTargetSizeFor, partitionIntoChunks } from '../../dataset/chunk.js';
+import { DisplayChunkSet } from '../../dataset/chunk-set.js';
+import { collectFeatures } from '../../dataset/retained.js';
 import type { FrameDrawContext } from '../../extension/index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
@@ -180,7 +183,7 @@ function setup(options: { rows?: boolean } = {}) {
     return made;
   };
 
-  return { mock, terrain, deps, camera, draws };
+  return { mock, terrain, deps, manager, renderers, camera, draws };
 }
 
 /** A dashed line, a dotted line and a polygon with a dashed outline, in this order */
@@ -319,5 +322,39 @@ describe('the features drawn at once among the retained chunks', () => {
     tableRenderer.setDrawingByKind(false);
     const made = draws(frame());
     expect(made).toEqual(SCENE_DRAWS);
+  });
+
+  it('of a dataset are drawn each with the program of its renderer', () => {
+    const { mock, terrain, manager, renderers, camera, draws } = setup();
+    const features = scene();
+    const set = new DisplayChunkSet({
+      collector: (rows, options) => collectFeatures(rows.length, (i) => features[rows[i]], options),
+      drawnRows: () => null,
+      externalPointFilter: () => undefined,
+      drapedFills: () => false,
+      requestRepaint: () => {},
+      onInvalidateAll: () => {},
+      buildBudgetMs: Number.POSITIVE_INFINITY,
+      pixelRatio: 1,
+    });
+    set.replace(partitionIntoChunks(features, chunkTargetSizeFor(features.length)));
+    const frame = (): number => {
+      beginRenderFrame();
+      const projectionData = projection();
+      camera(projectionData);
+      const from = mock.calls.length;
+      set.draw({
+        target: manager,
+        renderers,
+        terrain,
+        projectionData,
+        zoom: 14,
+        bounds: { minX: -180, minY: -85, maxX: 180, maxY: 85 },
+        factors: { scale: 1, opacity: 1 },
+      });
+      return from;
+    };
+    frame();
+    expect(draws(frame())).toEqual(SCENE_DRAWS);
   });
 });

@@ -409,12 +409,14 @@ export class DisplayChunkSet {
         // batches of the chunk, the points last (with the same factors as the retained batches)
         const { fallback, pointFallback } = batches;
         if (fallback.length > 0 || pointFallback.length > 0) {
-          // What draws the features at once may change any of the state of the run
-          renderers.run?.forget();
+          // The features are drawn at once outside the run: what draws them may change any of
+          // the state of the run, and some of it draws without the run
+          renderers.run?.end();
           target.beginFrame(projectionData, zoom, undefined, factors);
           for (const feature of fallback) target.processFeature(feature, false);
           for (const feature of pointFallback) target.processFeature(feature, false);
           target.endFrame();
+          renderers.run?.begin();
         }
         return complete;
       },
