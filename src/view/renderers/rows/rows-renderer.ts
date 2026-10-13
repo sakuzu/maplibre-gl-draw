@@ -158,10 +158,12 @@ function emptyMemo(): RowsUniformMemo {
   };
 }
 
-/** The textures bound last in a run of draws, and the epoch of the run they were bound in */
+/**
+ * The textures bound last in a run of draws on the units only this renderer uses, and the epoch
+ * of the run they were bound in (the unit 0 is used by the other renderers of the run too)
+ */
 interface BoundTextures {
   epoch: number;
-  coords: WebGLTexture | null;
   rowStyles: WebGLTexture | null;
   styles: WebGLTexture | null;
   sprites: WebGLTexture | null;
@@ -196,7 +198,6 @@ export class RowsRenderer {
   private readonly palettes = new Set<RowsPalette>();
   private readonly bound: BoundTextures = {
     epoch: -1,
-    coords: null,
     rowStyles: null,
     styles: null,
     sprites: null,
@@ -630,7 +631,8 @@ export class RowsRenderer {
 
   /**
    * Binds the textures of a chunk: on their units, then the unit 0 active again (what the run of
-   * the draws expects), skipping in a run what the last draw of the run bound
+   * the draws expects), skipping in a run what the last draw of the run bound on the units only
+   * this renderer uses
    */
   private bindTextures(chunk: RowsChunk): void {
     const gl = this.gl;
@@ -639,7 +641,6 @@ export class RowsRenderer {
     const epoch = run.isOpen ? run.epoch : -1;
     if (epoch < 0 || bound.epoch !== epoch) {
       bound.epoch = epoch;
-      bound.coords = null;
       bound.rowStyles = null;
       bound.styles = null;
       bound.sprites = null;
@@ -670,12 +671,10 @@ export class RowsRenderer {
       unitMoved = true;
     }
     if (unitMoved) gl.activeTexture(gl.TEXTURE0);
+    // The coordinates on the unit 0, which the renderers by kind bind their own to in the same
+    // run: bound for every draw
     run.activateUnitZero();
-    const coords = (chunk.coords as SizedTexture).texture;
-    if (bound.coords !== coords) {
-      gl.bindTexture(gl.TEXTURE_2D, coords);
-      bound.coords = coords;
-    }
+    gl.bindTexture(gl.TEXTURE_2D, (chunk.coords as SizedTexture).texture);
     if (epoch < 0) bound.epoch = -1;
   }
 
