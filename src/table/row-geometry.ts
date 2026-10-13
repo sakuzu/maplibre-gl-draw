@@ -275,3 +275,46 @@ export function singleRowColumn(geometry: RowGeometry): TableGeometry {
     }
   }
 }
+
+/**
+ * The geometry of one row of a geometry column, as a row geometry (its coordinates copied, two
+ * values each)
+ *
+ * @param column The column (its coordinates may have 3 values each)
+ * @param at The row in the column
+ * @internal
+ */
+export function rowGeometryOfColumn(
+  column: {
+    readonly type: GeometryType;
+    readonly coords: Float64Array;
+    readonly dimensions?: number;
+    readonly offsets?: readonly Int32Array[];
+  },
+  at: number,
+): RowGeometry {
+  const o = column.offsets ?? [];
+  const stride = column.dimensions ?? 2;
+  let first = at;
+  let end = at + 1;
+  for (const level of o) {
+    first = level[first];
+    end = level[end];
+  }
+  const coords = new Float64Array((end - first) * 2);
+  for (let v = first; v < end; v++) {
+    coords[(v - first) * 2] = column.coords[v * stride];
+    coords[(v - first) * 2 + 1] = column.coords[v * stride + 1];
+  }
+  const parts: number[] = [];
+  const polygons: number[] = [];
+  if (column.type === 'Polygon' || column.type === 'MultiLineString') {
+    for (let r = o[0][at]; r < o[0][at + 1]; r++) parts.push(o[1][r + 1] - o[1][r]);
+  } else if (column.type === 'MultiPolygon') {
+    for (let p = o[0][at]; p < o[0][at + 1]; p++) {
+      polygons.push(o[1][p + 1] - o[1][p]);
+      for (let r = o[1][p]; r < o[1][p + 1]; r++) parts.push(o[2][r + 1] - o[2][r]);
+    }
+  }
+  return { type: column.type, coords, parts, polygons };
+}

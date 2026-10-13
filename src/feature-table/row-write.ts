@@ -22,11 +22,11 @@ import {
   polygonRanges,
   type RowGeometry,
   ringOffsetsOf,
+  rowGeometryOfColumn,
   singleRowColumn,
   toRowGeometry,
   triangulateRow,
 } from '../table/row-geometry.js';
-import type { GeometryColumnReader } from '../table/table.js';
 import { readValue } from '../table/value-column.js';
 import {
   columnGeometryAt,
@@ -276,33 +276,9 @@ function shapeOf(group: RowGroup, row: number, geometry: RowGeometryAt): RowShap
   if (reader.type !== 'Polygon' && reader.type !== 'MultiPolygon') {
     return { coords: reader.coords, stride: reader.dimensions, from, to, fill: null, ring: 0 };
   }
-  const local = rowGeometryOf(reader, at);
+  const local = rowGeometryOfColumn(reader, at);
   const fill = triangulateRow(local.coords, ringOffsetsOf(local), polygonRanges(local)).indices;
   return { coords: reader.coords, stride: reader.dimensions, from, to, fill, ring: 0 };
-}
-
-/** The geometry of a row of a polygon column as a row geometry (its coordinates copied) */
-function rowGeometryOf(reader: GeometryColumnReader, at: number): RowGeometry {
-  const o = reader.offsets;
-  const stride = reader.dimensions;
-  const first = reader.vertexStart(at);
-  const end = reader.vertexStart(at + 1);
-  const coords = new Float64Array((end - first) * 2);
-  for (let v = first; v < end; v++) {
-    coords[(v - first) * 2] = reader.coords[v * stride];
-    coords[(v - first) * 2 + 1] = reader.coords[v * stride + 1];
-  }
-  const parts: number[] = [];
-  const polygons: number[] = [];
-  if (reader.type === 'Polygon') {
-    for (let r = o[0][at]; r < o[0][at + 1]; r++) parts.push(o[1][r + 1] - o[1][r]);
-  } else {
-    for (let p = o[0][at]; p < o[0][at + 1]; p++) {
-      polygons.push(o[1][p + 1] - o[1][p]);
-      for (let r = o[1][p]; r < o[1][p + 1]; r++) parts.push(o[2][r + 1] - o[2][r]);
-    }
-  }
-  return { type: reader.type, coords, parts, polygons };
 }
 
 /**

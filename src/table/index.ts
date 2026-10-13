@@ -66,6 +66,8 @@ export {
   ROW_GROUP_TARGET_VERTICES,
   rowGroupTransferList,
 } from './row-group-builder.js';
+export type { RowGroupMerge } from './row-group-merge.js';
+export { mergeRowGroup } from './row-group-merge.js';
 export type { PackedRTree } from './packed-rtree.js';
 export type { RowGroupData, TriangleCache } from './row-group-types.js';
 export { ROW_FLAG_DELETED, ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE } from './row-group-types.js';

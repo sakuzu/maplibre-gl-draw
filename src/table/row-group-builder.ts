@@ -273,8 +273,12 @@ export function rowGroupTransferList(groups: readonly RowGroupData[]): ArrayBuff
 
 // === Building one group ===
 
-/** The coordinates and offsets of one child column of a group, as it is filled */
-class ChildBuilder {
+/**
+ * The coordinates and offsets of one child column of a group, as it is filled
+ *
+ * @internal
+ */
+export class ChildBuilder {
   coords: number[] = [];
   level0: number[] = [0];
   level1: number[] = [0];
@@ -642,8 +646,12 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 
 // === Groups and geometry ===
 
-/** The keys of the groups of the options, by handle */
-function groupKeySource(groups: readonly RowGroupKey[]): GroupKeySource | null {
+/**
+ * The keys of the groups of features the rows name, by handle (null when there is none)
+ *
+ * @internal
+ */
+export function groupKeySource(groups: readonly RowGroupKey[]): GroupKeySource | null {
   if (groups.length === 0) return null;
   const entries = new Map<number, number>();
   groups.forEach((group, i) => {
