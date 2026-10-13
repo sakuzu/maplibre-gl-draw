@@ -340,6 +340,30 @@ describe('RowsRenderer', () => {
     expect(none?.args.slice(1)).toEqual([1, 0, 1, 1]);
   });
 
+  it('writes the values of the styles before the chunks, and the writes in place after them', () => {
+    const mock = recordingGL();
+    const renderer = new RowsRenderer(null, mock.gl, 1);
+    renderer.ensureShader(SHADER_DATA);
+    const palette = new RowsPalette();
+    const chunk = renderer.createChunk(chunkData(3, palette));
+    const at = mock.calls.length;
+    renderer.flushUploads();
+    const names = mock.calls.slice(at).map((c) => c.name);
+    // The texture of the values (made with texStorage2D) comes before the buffers of the chunk
+    expect(names.indexOf('texStorage2D')).toBeLessThan(names.indexOf('bufferData'));
+    // A style added later is written to the texture of the palette, after it grew if needed
+    palette.add(new Array(16).fill(0.5));
+    expect(renderer.hasPendingUploads).toBe(true);
+    const later = mock.calls.length;
+    renderer.flushUploads();
+    expect(mock.calls.slice(later).map((c) => c.name)).toEqual([
+      'bindTexture',
+      'texSubImage2D',
+      'bindTexture',
+    ]);
+    expect(chunk.uploaded).toBe(true);
+  });
+
   it('makes a chunk released before its upload without writing it', () => {
     const mock = recordingGL();
     const renderer = new RowsRenderer(null, mock.gl, 1);

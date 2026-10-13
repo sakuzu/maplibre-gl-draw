@@ -48,9 +48,10 @@ export type RowsKind = (typeof ROWS_KIND)[keyof typeof ROWS_KIND];
 
 /**
  * The factor of the kind in the first float of an instance (`kind * ROWS_KIND_FACTOR + row`):
- * a row group holds fewer rows than this, and the sum stays an exact integer in a float
+ * 2^21, so the sum stays an exact integer in a float (below 2^24) for the six kinds and a row
+ * group of up to 2^21 rows, whatever number of rows a host builds its groups with
  */
-export const ROWS_KIND_FACTOR = 16_384;
+export const ROWS_KIND_FACTOR = 2_097_152;
 
 /** The texels of the values of one resolved style */
 export const ROWS_STYLE_TEXELS = 4;
