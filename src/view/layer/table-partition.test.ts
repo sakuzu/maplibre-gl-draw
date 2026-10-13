@@ -21,6 +21,7 @@ import {
   type FeatureCompanionProvider,
 } from '../feature-companion.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
+import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
 import { classifyFeature } from './store-retained-classify.js';
 import { RowStyleSlots } from './table-collect.js';
 import { classifyRow, partitionRowGroup } from './table-partition.js';
@@ -301,5 +302,152 @@ describe('partitionRowGroup', () => {
     const ranges = partitionRowGroup(group, (row) => (row === 1 ? null : 'point'));
     expect(ranges.map((r) => [r.kind, r.from, r.to])).toEqual([['point', 0, 3]]);
     expect(partitionRowGroup(group, () => null)).toEqual([]);
+  });
+});
+
+describe('the classification and the chunks of the drawing in one draw', () => {
+  /** A source of pictures that gives one for the points of a red style */
+  const source: RowSpriteSource = {
+    texture: null,
+    revision: 1,
+    sprite: (style) =>
+      style?.pointColor === '#ff0000'
+        ? { uv: [0, 0, 1, 1], halfWidth: 8, halfHeight: 8, direction: -1 }
+        : null,
+  };
+
+  function oneDrawKinds(
+    features: Feature[],
+    options: {
+      customTypes?: Map<string, unknown>;
+      companions?: ReturnType<typeof createFeatureCompanionRegistry>;
+    } = {},
+  ) {
+    const resolver = createTestDrawer();
+    const customTypes = options.customTypes ?? new Map();
+    const companions = options.companions ?? createFeatureCompanionRegistry();
+    const { internals, table } = tablesOfFeatures('layer', features);
+    const group = table.groupAt(0);
+    const slots = new RowStyleSlots(resolver, internals.styles, undefined);
+    const sprites = new Map<number, RowSpriteSource>();
+    const context = {
+      slots,
+      customTypes,
+      companions,
+      featureOf: (g: typeof group, row: number) =>
+        rowFeature(internals.readContext, 'layer', g, row),
+      oneDraw: true,
+      onSprite: (row: number, s: RowSpriteSource) => sprites.set(row, s),
+    };
+    return {
+      group,
+      sprites,
+      classify: (row: number) => classifyRow(group, row, context),
+      rows: features.map((_, row) => classifyRow(group, row, context)),
+      features: features.map((f) => classifyFeature(f, resolver, customTypes, companions)),
+    };
+  }
+
+  /**
+   * Whether a feature is one of the rows the drawing in one draw draws although the runs draw it
+   * at once: a dashed or dotted line, a polygon with a dashed outline (a transparent one too:
+   * its opacity is in its color), a point of an extension with pictures
+   */
+  const drawnInOneDrawOnly = (f: Feature): boolean =>
+    ['l-dash', 'g-dash', 'g-dash-hidden', 'c-dash'].includes(f.id);
+
+  it('draws every row the runs retain, and only the listed ones besides', () => {
+    const features = variety();
+    const result = oneDrawKinds(features);
+    features.forEach((f, row) => {
+      const byKind = result.features[row];
+      const expected = byKind !== 'immediate' || drawnInOneDrawOnly(f) ? 'rows' : 'immediate';
+      expect([f.id, result.rows[row]]).toEqual([f.id, expected]);
+    });
+  });
+
+  it('draws the points of an extension with pictures, and draws at once those without one', () => {
+    const features = [
+      feature('red', 'Point', [0, 0], { style: { pointColor: '#ff0000' } }),
+      feature('plain', 'Point', [1, 1]),
+      feature('red-line', 'LineString', [
+        [0, 0],
+        [1, 1],
+      ]),
+    ];
+    const withPictures = oneDrawKinds(features, {
+      customTypes: new Map([['Point', { rowSprites: source }]]),
+    });
+    expect(withPictures.rows).toEqual(['rows', 'immediate', 'rows']);
+    expect([...withPictures.sprites.keys()]).toEqual([0]);
+    // Without pictures the extension draws its points at once, as the runs do
+    const without = oneDrawKinds(features, { customTypes: new Map([['Point', {}]]) });
+    expect(without.rows).toEqual(['immediate', 'immediate', 'rows']);
+    // A refused feature is drawn as its built-in type
+    const refusing = oneDrawKinds(features, {
+      customTypes: new Map([['Point', { rowSprites: source, appliesTo: () => false }]]),
+    });
+    expect(refusing.rows).toEqual(['rows', 'rows', 'rows']);
+    expect(refusing.sprites.size).toBe(0);
+  });
+
+  it('draws at once a point of an extension with pictures that has a companion', () => {
+    const companions = createFeatureCompanionRegistry();
+    companions.register({
+      id: 'c',
+      has: (f: Feature) => f.id === 'red',
+    } as unknown as FeatureCompanionProvider);
+    const features = [feature('red', 'Point', [0, 0], { style: { pointColor: '#ff0000' } })];
+    const result = oneDrawKinds(features, {
+      customTypes: new Map([['Point', { rowSprites: source }]]),
+      companions,
+    });
+    expect(result.rows).toEqual(['immediate']);
+  });
+
+  it('ends a chunk only at a row drawn at once, at the limit of coordinates and at another source of pictures', () => {
+    const other: RowSpriteSource = { ...source };
+    const features = [
+      feature('a', 'Polygon', square),
+      feature('b', 'MultiPoint', [[5, 5]]),
+      feature('c', 'LineString', [
+        [0, 0],
+        [1, 1],
+        [2, 2],
+      ]),
+      feature(
+        'd',
+        'LineString',
+        [
+          [0, 0],
+          [1, 1],
+        ],
+        { style: { lineStyle: 'dashed' } },
+      ),
+      feature('e', 'Image', [0, 0]),
+      feature('f', 'Point', [6, 6], { style: { pointColor: '#ff0000' } }),
+      feature('g', 'Marker', [6, 6], { style: { pointColor: '#ff0000' } }),
+      feature('h', 'Point', [7, 7]),
+    ];
+    const result = oneDrawKinds(features, {
+      customTypes: new Map([
+        ['Point', { rowSprites: source }],
+        ['Marker', { rowSprites: other }],
+      ]),
+    });
+    const ranges = partitionRowGroup(result.group, result.classify, undefined, (row) =>
+      result.sprites.get(row),
+    );
+    // The plain point h is drawn at once (its extension has no picture for it)
+    expect(ranges.map((r) => [r.kind, r.from, r.to])).toEqual([
+      ['rows', 0, 4],
+      ['immediate', 4, 5],
+      ['rows', 5, 6],
+      ['rows', 6, 7],
+      ['immediate', 7, 8],
+    ]);
+    // The limit of coordinates still holds
+    const small = partitionRowGroup(result.group, () => 'rows', 4);
+    expect(small.length).toBeGreaterThan(1);
   });
 });
