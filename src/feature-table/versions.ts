@@ -27,11 +27,7 @@
  */
 
 import type { BoundingBox, RowsChange } from '../shared/types/model.js';
-import type {
-  RowGroupBuilderOptions,
-  RowGroupKey,
-  RowInput,
-} from '../table/row-group-builder.js';
+import type { RowGroupBuilderOptions, RowGroupKey, RowInput } from '../table/row-group-builder.js';
 import { ROW_GROUP_TARGET_ROWS, ROW_GROUP_TARGET_VERTICES } from '../table/row-group-builder.js';
 import { mergeRowGroup, type RowGroupMerge } from '../table/row-group-merge.js';
 import type { RowGroupData } from '../table/row-group-types.js';

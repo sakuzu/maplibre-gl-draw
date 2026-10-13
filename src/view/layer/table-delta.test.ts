@@ -232,7 +232,7 @@ describe('the drawing of the rows of the delta', () => {
     const table = live.table;
     // Moved to the middle of another group, to the front, and to the back
     const ids = [list[0].id, list[50].id, list[100].id];
-    const keys = [orderKey(70) + 'x', orderKey(0).slice(0, -1), orderKey(999)];
+    const keys = [`${orderKey(70)}x`, orderKey(0).slice(0, -1), orderKey(999)];
     for (let i = 0; i < ids.length; i++) {
       const handle = live.tables.handleOf(ids[i]) as number;
       if (handle === undefined) continue;
@@ -256,7 +256,7 @@ describe('the drawing of the rows of the delta', () => {
         type: ['Point'],
         layerId: ['layer'],
         geometry: [geometry],
-        order: [orderKey(20) + 'a'],
+        order: [`${orderKey(20)}a`],
       }),
     );
     const { record } = live.frame();
@@ -309,7 +309,7 @@ describe('the drawing of the rows of the delta', () => {
     live.frame();
     const handles = [3, 9, 9].map((i, k) => live.tables.handleOf(list[i + k * 20].id) as number);
     live.writer.apply(
-      patchOf(handles, { order: [orderKey(10) + 'a', orderKey(30) + 'a', orderKey(30) + 'b'] }),
+      patchOf(handles, { order: [`${orderKey(10)}a`, `${orderKey(30)}a`, `${orderKey(30)}b`] }),
     );
     const { record } = live.frame();
     expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
@@ -337,7 +337,7 @@ describe('the drawing of the rows of the delta', () => {
     const live = setup(list);
     live.frame();
     const handle = live.tables.handleOf(list[5].id) as number;
-    live.writer.apply(patchOf([handle], { order: [orderKey(30) + 'a'] }));
+    live.writer.apply(patchOf([handle], { order: [`${orderKey(30)}a`] }));
     live.frame();
     const chunk = live.renderer.deltaChunks('layer')[0];
     const made = live.made.length;
@@ -390,7 +390,7 @@ describe('the drawing of the rows of the delta', () => {
     live.frame();
     live.frame();
     const handle = live.tables.handleOf(list[7].id) as number;
-    live.writer.apply(patchOf([handle], { order: [orderKey(40) + 'a'] }));
+    live.writer.apply(patchOf([handle], { order: [`${orderKey(40)}a`] }));
     const { record, atOnce } = live.frame();
     expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
     expect(record.filter((entry) => entry.delta).every((entry) => entry.kind === 'immediate')).toBe(
@@ -413,7 +413,7 @@ describe('the drawing of the rows of the delta', () => {
         const pick = random();
         if (pick < 0.35) {
           live.writer.apply(
-            patchOf([handle], { order: [orderKey(Math.floor(random() * 150)) + 'm'] }),
+            patchOf([handle], { order: [`${orderKey(Math.floor(random() * 150))}m`] }),
           );
         } else if (pick < 0.5) {
           const id = `n${created++}`;
@@ -435,7 +435,7 @@ describe('the drawing of the rows of the delta', () => {
                   ],
                 },
               ],
-              order: [orderKey(Math.floor(random() * 150)) + 'n'],
+              order: [`${orderKey(Math.floor(random() * 150))}n`],
             }),
           );
         } else if (pick < 0.65) {
@@ -479,7 +479,7 @@ describe('the drawing of the rows of the delta', () => {
           const pick = random();
           if (pick < 0.6) {
             live.writer.apply(
-              patchOf([handle], { order: [orderKey(Math.floor(random() * 300)) + 'm'] }),
+              patchOf([handle], { order: [`${orderKey(Math.floor(random() * 300))}m`] }),
             );
           } else if (pick < 0.8) {
             live.writer.apply(patchOf([handle], { style: [{ strokeColor: '#00ff00' }] }));
@@ -511,7 +511,7 @@ describe('the drawing of the rows of the delta', () => {
       handles: Int32Array.of(5),
       fields: new Map([
         ['id', ['g']],
-        ['order', [orderKey(20) + 'g']],
+        ['order', [`${orderKey(20)}g`]],
         ['layerId', ['layer']],
       ]),
     });
@@ -530,7 +530,7 @@ describe('the drawing of the rows of the delta', () => {
     const before = shownIds(live.table, live.tables.idOf);
     live.writer.applyGroups({
       handles: Int32Array.of(5),
-      fields: new Map([['order', [orderKey(120) + 'g']]]),
+      fields: new Map([['order', [`${orderKey(120)}g`]]]),
     });
     let changed = false;
     for (let i = 0; i < 30; i++) {
@@ -541,7 +541,7 @@ describe('the drawing of the rows of the delta', () => {
       if (!live.internals.hasPendingWork) break;
     }
     expect(changed).toBe(true);
-    expect(live.internals.groups.orderOf(5)).toBe(orderKey(120) + 'g');
+    expect(live.internals.groups.orderOf(5)).toBe(`${orderKey(120)}g`);
   });
 
   it('draws an import written a thousand rows at a time from the frame its groups are up', () => {
@@ -601,7 +601,7 @@ describe('the drawing of the rows of the delta', () => {
       live.renderer.setVersionBudgetWhileMoving(budget);
       setTerrainCameraMoving(terrain, true);
       const handle = live.tables.handleOf(list[10].id) as number;
-      live.writer.apply(patchOf([handle], { order: [orderKey(150) + 'x'] }));
+      live.writer.apply(patchOf([handle], { order: [`${orderKey(150)}x`] }));
       for (let i = 0; i < 12; i++) {
         const { record } = live.frame();
         expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));

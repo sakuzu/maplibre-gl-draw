@@ -1070,7 +1070,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
           this.versions.logWrite(place.group.handle, {
             handle,
             fields: values,
-            deleted: deleted?.[i] ? true : false,
+            deleted: !!deleted?.[i],
           });
         }
         const write = this.writeInPlace(place, i, fields, deleted, styleNumbers);
