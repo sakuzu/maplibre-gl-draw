@@ -18,7 +18,11 @@
  * the notification goes out.
  */
 
-import { itemMovesBetween, type OrderContainer } from '../shared/utils/item-moves.js';
+import {
+  itemMovesBetween,
+  type OrderContainer,
+  trimmedContainer,
+} from '../shared/utils/item-moves.js';
 import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
@@ -862,25 +866,11 @@ export class MemoryDocumentStore implements DocumentStore {
           layerId = group.layerId;
         }
       }
-      // The items that stand where they were at both ends are left out, but for the one next to
-      // the rest, which the moves name as their neighbor (a feature added at the front of a
-      // large layer costs the items it is added to, not the layer)
-      const [from, to, toAfter] = changedRun(entry.items, items);
-      const runBefore = entry.items.slice(from, to);
-      const runAfter = items.slice(from, toAfter);
-      const index = new Map<string, number>();
-      runBefore.forEach((id, i) => {
-        index.set(id, i);
-        before.add(id);
-      });
-      for (const id of runAfter) after.add(id);
-      containers.push({
-        layerId,
-        groupId: entry.groupId,
-        before: runBefore,
-        after: runAfter,
-        beforeIndex: (item) => index.get(item) ?? -1,
-      });
+      // The items that stand where they were at both ends are left out (see trimmedContainer)
+      const container = trimmedContainer(layerId, entry.groupId, entry.items, items);
+      for (const id of container.before as readonly string[]) before.add(id);
+      for (const id of container.after as readonly string[]) after.add(id);
+      containers.push(container);
     }
     const groups = this.#groupsSeen;
     const moves = itemMovesBetween(containers, {
@@ -1134,26 +1124,6 @@ export class MemoryDocumentStore implements DocumentStore {
       this.deleteGroup(groupId);
     }
   }
-}
-
-/**
- * The run of two lists of items that differs, with the item next to it at each end that stands
- * where it was: `[from, to)` of the first and `[from, toAfter)` of the second
- */
-function changedRun(before: readonly string[], after: readonly string[]): [number, number, number] {
-  let head = 0;
-  const shortest = Math.min(before.length, after.length);
-  while (head < shortest && before[head] === after[head]) head++;
-  let tail = 0;
-  while (
-    tail < shortest - head &&
-    before[before.length - 1 - tail] === after[after.length - 1 - tail]
-  ) {
-    tail++;
-  }
-  if (head === before.length && head === after.length) return [0, 0, 0];
-  const from = Math.max(0, head - 1);
-  return [from, before.length - Math.max(0, tail - 1), after.length - Math.max(0, tail - 1)];
 }
 
 /**

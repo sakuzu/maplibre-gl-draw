@@ -41,6 +41,7 @@ import type {
   Feature,
   FeatureStyle,
   FeatureType,
+  ItemOrderChange,
   StoreChange,
 } from '../shared/types/model.js';
 import {
@@ -61,6 +62,7 @@ import { ValueStringCache } from '../table/value-column.js';
 import { featureFields, featureWithFields } from './feature-fields.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
+import { groupKeyMoves, type ItemOrderSource, ItemOrderWatch } from './item-order.js';
 import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
 import {
   type RowReadContext,
@@ -1116,6 +1118,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * an edit of it writes in its middle are kept for when the edit ends (`HeldWriteOptions`)
    */
   apply(patch: RowPatch, _options: RowApplyOptions = {}): RowsChange {
+    const watch = this.watchOrder(patch);
     const drafts = new Map<string, LayerChangeDraft>();
     const heldWritten: Array<{ handle: RowHandle; fields: Map<RowField, unknown> }> = [];
     if (this.heldRows.size === 0) {
@@ -1150,10 +1153,83 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const features = this.heldChanges(heldWritten, drafts);
     const change: RowsChange = { layers: finishChanges(drafts) };
     if (this.hooks) {
-      if (change.layers.size > 0) this.hooks.emit({ rows: change });
-      if (features) this.hooks.emit({ features });
+      // The changes of the order go with the last of the additions to the notification
+      const order = watch?.finish() ?? [];
+      const moves = order.length > 0 ? { order } : {};
+      if (change.layers.size > 0) this.hooks.emit({ rows: change, ...(!features && moves) });
+      if (features) this.hooks.emit({ features, ...moves });
+      if (change.layers.size === 0 && !features && order.length > 0) this.hooks.emit(moves);
     }
     return change;
+  }
+
+  /**
+   * The items of the layers and the groups a write puts rows in, takes rows from, creates or
+   * deletes rows in, kept before it to tell the changes of the order it makes (null when it makes
+   * none, or when nothing is told)
+   */
+  private watchOrder(patch: RowPatch): ItemOrderWatch | null {
+    if (!this.hooks) return null;
+    const watch = new ItemOrderWatch(this.orderSource);
+    const { handles, fields, deleted } = patch;
+    const layerIds = fields.get('layerId');
+    const groupIds = fields.get('groupId');
+    const orders = fields.get('order');
+    const members = fields.get('member');
+    const groupOf = (value: unknown): GroupHandle =>
+      typeof value === 'string' && value !== '' ? this.groups.handleOfId(value) : -1;
+    for (let i = 0; i < handles.length; i++) {
+      const handle = handles[i];
+      const place = this.placeOf(handle);
+      const deleting = !!deleted?.[i];
+      if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
+        // A new row, or a deleted one created again
+        const layerId = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
+        if (deleting || layerId === undefined) continue;
+        watch.watchLayer(layerId);
+        watch.watchGroup(groupOf(groupIds?.[i]));
+        watch.row(handle, false);
+        continue;
+      }
+      const data = place.group.data;
+      const row = place.row;
+      const group = data.groups[row];
+      if (deleting) {
+        watch.watchLayer(place.layer.layerId);
+        watch.watchGroup(group);
+        watch.row(handle, true);
+        continue;
+      }
+      const layerId = layerIds?.[i] as string | undefined;
+      const nextGroup = groupIds ? groupOf(groupIds[i]) : group;
+      const order = orders?.[i];
+      const moved =
+        (layerId !== undefined && layerId !== place.layer.layerId) ||
+        nextGroup !== group ||
+        (order !== undefined && order !== utf8String(data.itemKeys, row)) ||
+        (members !== undefined &&
+          nextGroup >= 0 &&
+          (members[i] ?? '') !== utf8String(data.memberKeys, row));
+      if (!moved) continue;
+      watch.watchLayer(place.layer.layerId);
+      if (layerId !== undefined) watch.watchLayer(layerId);
+      watch.watchGroup(group);
+      watch.watchGroup(nextGroup);
+      watch.row(handle, false);
+    }
+    if (!watch.changes) return null;
+    watch.keep();
+    return watch;
+  }
+
+  /** What the changes of the order read of the tables */
+  private get orderSource(): ItemOrderSource {
+    return {
+      layer: (layerId) => this.layers.get(layerId),
+      groups: this.groups,
+      idOf: (handle) => this.ids.idOf(handle),
+      placeOf: (handle) => this.placeOf(handle),
+    };
   }
 
   /**
@@ -1773,6 +1849,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
           if (changed) group.stateVersion++;
         }
       }
+    }
+    // The moves of the groups that are items, with the keys before (told when they are written,
+    // whenever the order of their members goes in)
+    if (this.hooks) {
+      const moves: ItemOrderChange[] = [];
+      for (const [layerId, list] of orders) {
+        moves.push(...groupKeyMoves(this.orderSource, layerId, list));
+      }
+      if (moves.length > 0) this.hooks.emit({ order: moves });
     }
     for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
     // The new rows read from their creations are built again with the groups as they are now

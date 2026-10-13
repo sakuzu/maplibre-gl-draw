@@ -38,6 +38,56 @@ export interface OrderContainer<T> {
   readonly after: ArrayLike<T>;
   /** The place of an item in `before` (-1 when it is not there) */
   beforeIndex(item: T): number;
+  /**
+   * Whether the first and the last item of `before` and of `after` are the same item standing
+   * where it stands, given only as the neighbor of the others (the lists are a run of longer
+   * ones that differ, see {@link trimmedContainer}): it is never moved
+   */
+  readonly fixedEnds?: readonly [boolean, boolean];
+}
+
+/**
+ * A container whose lists are cut to the run where they differ, with the item next to it at each
+ * end that stands where it was (which the moves name as a neighbor), and the places of the items
+ * of `before` in that run: what an item added at the front of a long list costs is the items it is
+ * added to, not the list
+ *
+ * @internal
+ */
+export function trimmedContainer<T>(
+  layerId: string,
+  groupId: string | undefined,
+  before: ArrayLike<T>,
+  after: ArrayLike<T>,
+): OrderContainer<T> {
+  let head = 0;
+  const shortest = Math.min(before.length, after.length);
+  while (head < shortest && before[head] === after[head]) head++;
+  let tail = 0;
+  while (
+    tail < shortest - head &&
+    before[before.length - 1 - tail] === after[after.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  if (head === before.length && head === after.length) {
+    return { layerId, groupId, before: [], after: [], beforeIndex: () => -1 };
+  }
+  const from = Math.max(0, head - 1);
+  const runBefore = Array.prototype.slice.call(before, from, before.length - Math.max(0, tail - 1));
+  const runAfter = Array.prototype.slice.call(after, from, after.length - Math.max(0, tail - 1));
+  const index = new Map<T, number>();
+  runBefore.forEach((item: T, i: number) => {
+    index.set(item, i);
+  });
+  return {
+    layerId,
+    groupId,
+    before: runBefore as T[],
+    after: runAfter as T[],
+    beforeIndex: (item) => index.get(item) ?? -1,
+    fixedEnds: [head > 0, tail > 0],
+  };
 }
 
 /**
@@ -110,6 +160,8 @@ function stayingItems<T>(
 ): Set<number> {
   const after = container.after;
   const stays = new Set<number>();
+  if (container.fixedEnds?.[0] && after.length > 0) stays.add(0);
+  if (container.fixedEnds?.[1] && after.length > 0) stays.add(after.length - 1);
   if (moved) {
     for (let i = 0; i < after.length; i++) {
       if (!moved.has(after[i]) && container.beforeIndex(after[i]) >= 0) stays.add(i);
@@ -120,6 +172,7 @@ function stayingItems<T>(
   const places: number[] = [];
   const indices: number[] = [];
   for (let i = 0; i < after.length; i++) {
+    if (stays.has(i)) continue;
     const at = container.beforeIndex(after[i]);
     if (at < 0) continue;
     places.push(at);
