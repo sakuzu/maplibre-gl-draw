@@ -21,6 +21,7 @@ import type {
 import { DrawError } from '../errors.js';
 import type { GroupsCollection } from '../groups.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
+import { groupMemberIds, rangeOf } from './item-reads.js';
 import { moveGroups, resolveMoveTarget } from './placement.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -77,6 +78,10 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     list,
     count: (filter) => list(filter).length,
     has: (id) => store.getGroup(id) !== undefined,
+    listMembers(id, options) {
+      const group = require(id);
+      return groupMemberIds(store, group, rangeOf(options));
+    },
 
     create(input) {
       const prepared = prepareGroup(deps, input, new Set(), new Set());

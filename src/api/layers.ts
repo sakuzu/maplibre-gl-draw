@@ -5,7 +5,7 @@
  * `draw.layers`: the layers of the document
  */
 
-import type { Layer, LayerFilter, LayerInput, LayerPatch } from './model.js';
+import type { ItemListOptions, Layer, LayerFilter, LayerInput, LayerPatch } from './model.js';
 
 /**
  * The layers of the document, with the standard methods of a collection, the stacking order
@@ -43,6 +43,24 @@ export interface LayersCollection {
   count(filter?: LayerFilter): number;
   /** Whether a layer with this ID exists. */
   has(id: string): boolean;
+  /**
+   * Lists the IDs of the items of a layer, its features outside a group and its groups, in
+   * stacking order from the back: the ones in a range of positions (see {@link ItemListOptions}).
+   * A group stands at its place once; its features are read with `groups.listMembers`. It reads
+   * a layer of objects (`Layer.items`) and a layer held as rows alike, without making features.
+   *
+   * @returns The IDs, as a new array (empty past the last item)
+   * @throws `DrawError` with the code `not-found` when there is no layer with this ID, or
+   *   `invalid-input` when the range is not of non-negative integers
+   */
+  listItems(id: string, options?: ItemListOptions): string[];
+  /**
+   * Counts the items of a layer: its features outside a group and its groups (the features of a
+   * group are counted with `features.count({ groupId })`).
+   *
+   * @throws `DrawError` with the code `not-found` when there is no layer with this ID
+   */
+  countItems(id: string): number;
   /**
    * Creates a layer and returns it as it was stored.
    *

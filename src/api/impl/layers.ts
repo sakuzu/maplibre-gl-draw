@@ -11,6 +11,7 @@ import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { LayersCollection } from '../layers.js';
 import type { Layer, LayerFilter, LayerInput, LayerPatch } from '../model.js';
+import { layerItemCount, layerItemIds, rangeOf } from './item-reads.js';
 import type { ResourceDeps } from './shared.js';
 import {
   filterEntries,
@@ -99,6 +100,11 @@ export function createLayers(
     list,
     count: (filter) => list(filter).length,
     has: (id) => store.getLayer(id) !== undefined,
+    listItems(id, options) {
+      const layer = require(id);
+      return layerItemIds(store, layer, rangeOf(options));
+    },
+    countItems: (id) => layerItemCount(store, require(id)),
 
     create(input) {
       const prepared = prepareLayer(deps, input, new Set());

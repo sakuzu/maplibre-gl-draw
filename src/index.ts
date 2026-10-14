@@ -108,6 +108,7 @@ export type {
   GroupFilter,
   GroupInput,
   GroupPatch,
+  ItemListOptions,
   LayerFilter,
   LayerInput,
   LayerPatch,

@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The tree of a layer held as rows: its items and the members of its groups read from the rows,
-// and a drop in it named by the item behind the node
+// The tree of a layer held as rows: its items and the members of its groups read with
+// layers.listItems and groups.listMembers (it lists none), its features counted with
+// features.count, and a drop in it named by the item behind the node
 
 import type { Group, Layer } from '@sakuzu/maplibre-gl-draw';
-import type { FeatureTables } from '@sakuzu/maplibre-gl-draw/kasane';
 import { describe, expect, it } from 'vitest';
 import { planMove } from '../src/layers/move.js';
 import { buildNodes, type LayerTreeNode, type TreeSource } from '../src/layers/tree.js';
@@ -40,35 +40,26 @@ function tableSource(): TreeSource {
     const f = features.get(id);
     if (f) features.set(id, { ...f, groupId: 'g' });
   }
-  // Rows 0 to 3 are a, b, c, d; the group is the handle 7
-  const tables = {
-    getRowId: (handle: number) => ids[handle],
-    getGroupId: (handle: number) => (handle === 7 ? 'g' : undefined),
-    findGroup: (id: string) => (id === 'g' ? 7 : undefined),
-    get: (layerId: string) =>
-      layerId === 'rows'
-        ? {
-            itemCount: 3,
-            listItems: () => ({
-              kinds: Uint8Array.of(0, 1, 0),
-              handles: Int32Array.of(0, 7, 1),
-            }),
-            countGroupMembers: (handle: number) => (handle === 7 ? 2 : 0),
-            listGroupMembers: (handle: number) =>
-              handle === 7 ? Int32Array.of(2, 3) : new Int32Array(0),
-          }
-        : undefined,
-  } as unknown as FeatureTables;
   return {
-    layers: { get: (id) => (id === 'rows' ? layer : undefined), getOrder: () => ['rows'] },
-    groups: { get: (id) => (id === 'g' ? group : undefined) },
-    features: { get: (id) => features.get(id), getAppliedStyle: () => undefined },
-    getStore: () => ({ tables }),
+    layers: {
+      get: (id) => (id === 'rows' ? layer : undefined),
+      getOrder: () => ['rows'],
+      listItems: (id) => (id === 'rows' ? ['a', 'g', 'b'] : []),
+    },
+    groups: {
+      get: (id) => (id === 'g' ? group : undefined),
+      listMembers: (id) => (id === 'g' ? ['c', 'd'] : []),
+    },
+    features: {
+      get: (id) => features.get(id),
+      getAppliedStyle: () => undefined,
+      count: (filter) => (filter?.layerId === 'rows' ? 4 : 0),
+    },
   };
 }
 
 describe('a layer held as rows in the tree', () => {
-  it('lists its items and the members of its groups from the front, read from the rows', () => {
+  it('lists its items and the members of its groups from the front', () => {
     const nodes = buildNodes(tableSource(), en, { features: true, datasets: false });
     const rows = nodes[0];
     expect(rows.children?.map((n) => n.id)).toEqual(['b', 'g', 'a']);

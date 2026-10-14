@@ -340,6 +340,9 @@ export function fakeDraw(
     layers: {
       get: (id: string) => layers.get(id),
       list: () => order.flatMap((id) => layers.get(id) ?? []),
+      listItems: (id: string, range?: { offset?: number; limit?: number }) =>
+        inRange((layers.get(id) as ObjectLayer).items, range),
+      countItems: (id: string) => (layers.get(id) as ObjectLayer).items.length,
       getOrder: () => [...order],
       reorder: vi.fn((next: readonly string[]) => {
         order = [...next];
@@ -366,6 +369,8 @@ export function fakeDraw(
     },
     groups: {
       get: (id: string) => groups.get(id),
+      listMembers: (id: string, range?: { offset?: number; limit?: number }) =>
+        inRange((groups.get(id) as ObjectGroup).featureIds, range),
       update: vi.fn((id: string, patch: Partial<ObjectGroup>) => {
         putGroup(id, patch);
         changed();
@@ -387,8 +392,13 @@ export function fakeDraw(
     },
     features: {
       get: (id: string) => features.get(id),
-      list: (filter: { layerId?: string } = {}) =>
-        [...features.values()].filter((f) => !filter.layerId || f.layerId === filter.layerId),
+      list: (filter: { layerId?: string } = {}, page?: { limit: number }) =>
+        [...features.values()]
+          .filter((f) => !filter.layerId || f.layerId === filter.layerId)
+          .slice(0, page?.limit),
+      count: (filter: { layerId?: string } = {}) =>
+        [...features.values()].filter((f) => !filter.layerId || f.layerId === filter.layerId)
+          .length,
       update: vi.fn((id: string, patch: Partial<Feature>) => {
         const now = features.get(id) as Feature;
         const properties = { ...now.properties, ...(patch.properties ?? {}) };
@@ -571,6 +581,12 @@ function merge<T extends object>(base: T, patch: object | undefined): T {
     else out[key] = value;
   }
   return out as unknown as T;
+}
+
+/** The part of a list of core in a range of positions, as `layers.listItems` reads it */
+function inRange(list: readonly string[], range: { offset?: number; limit?: number } = {}) {
+  const offset = range.offset ?? 0;
+  return list.slice(offset, range.limit === undefined ? undefined : offset + range.limit);
 }
 
 /**

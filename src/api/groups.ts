@@ -5,7 +5,14 @@
  * `draw.groups`: the groups of the document
  */
 
-import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from './model.js';
+import type {
+  Group,
+  GroupFilter,
+  GroupInput,
+  GroupPatch,
+  ItemListOptions,
+  MoveTarget,
+} from './model.js';
 
 /**
  * The groups of the document, with the standard methods of a collection and the verbs that
@@ -43,6 +50,17 @@ export interface GroupsCollection {
   count(filter?: GroupFilter): number;
   /** Whether a group with this ID exists. */
   has(id: string): boolean;
+  /**
+   * Lists the IDs of the features of a group in stacking order from the back: the ones in a
+   * range of positions (see {@link ItemListOptions}). It reads a group of objects
+   * (`Group.featureIds`) and a group of a layer held as rows alike, without making features; they
+   * are counted with `features.count({ groupId })`.
+   *
+   * @returns The IDs, as a new array (empty past the last feature)
+   * @throws `DrawError` with the code `not-found` when there is no group with this ID, or
+   *   `invalid-input` when the range is not of non-negative integers
+   */
+  listMembers(id: string, options?: ItemListOptions): string[];
   /**
    * Creates a group of features and returns it as it was stored.
    *

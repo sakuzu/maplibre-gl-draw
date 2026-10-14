@@ -16,12 +16,12 @@ import {
   type Dataset,
   deriveLegend,
   type Feature,
+  type FeatureListOptions,
   type FeatureType,
   getStyleRuleChannel,
   type Layer,
   type LegendEntry,
 } from '@sakuzu/maplibre-gl-draw';
-import type { FeatureTables } from '@sakuzu/maplibre-gl-draw/kasane';
 import type { Messages } from '../messages.js';
 
 /** The shape of the swatches of a layer, after the kind of what its features draw */
@@ -53,13 +53,10 @@ export interface LegendSource {
     get(id: string): Layer | undefined;
     getOrder(): readonly string[];
   };
-  /** The features of a layer of objects (a layer held as rows is read from the tables) */
-  readonly features: { list(filter?: { layerId?: string }): Feature[] };
-  /**
-   * The Store, whose tables hold the features of the layers held as rows (the types of their
-   * rows are read from there: such a layer is not listed as features)
-   */
-  getStore?(): { readonly tables?: FeatureTables };
+  /** The first features of a layer, whose types the shape of its swatches is read from */
+  readonly features: {
+    list(filter: { layerId: string }, options: FeatureListOptions): Feature[];
+  };
   /** The datasets; the legend has only the layers when left out */
   readonly datasets?: {
     get(id: string): LegendDataset | undefined;
@@ -67,7 +64,10 @@ export interface LegendSource {
   };
 }
 
-/** The most rows of a dataset whose types the shape of its swatches is read from */
+/**
+ * The most features of a layer, or rows of a dataset, whose types the shape of its swatches is
+ * read from
+ */
 const SAMPLED_ROWS = 1000;
 
 /** Fills the placeholders `{name}` of a sentence */
@@ -110,25 +110,12 @@ function shapeOfTypes(types: Iterable<FeatureType>): LegendShape {
 }
 
 /**
- * The shape of the swatches of a layer: from its features, or for a layer held as rows from the
- * types of its rows, read without making features (none when the tables do not hold it)
+ * The shape of the swatches of a layer, read from the types of its first features (at most a
+ * thousand), as for a dataset: a large layer costs no more than a small one, and a layer held as
+ * rows makes no more features than that
  */
 function layerShape(source: LegendSource, layer: Layer): LegendShape {
-  if (layer.kind !== 'table') return legendShape(source.features.list({ layerId: layer.id }));
-  const tables = source.getStore?.().tables;
-  const view = tables?.get(layer.id);
-  if (!tables || !view) return shapeOfTypes([]);
-  function* types(): Generator<FeatureType> {
-    if (!tables || !view) return;
-    const cursor = tables.scan({ layerIds: [layer.id] });
-    for (let batch = cursor.next(); batch; batch = cursor.next()) {
-      for (const handle of batch) {
-        const type = view.getRowType(handle);
-        if (type !== null) yield type;
-      }
-    }
-  }
-  return shapeOfTypes(types());
+  return legendShape(source.features.list({ layerId: layer.id }, { limit: SAMPLED_ROWS }));
 }
 
 /**

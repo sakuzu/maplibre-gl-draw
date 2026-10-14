@@ -451,6 +451,21 @@ export interface FeatureListOptions {
   after?: string;
 }
 
+/**
+ * Which items `layers.listItems` and `groups.listMembers` read: a range of them by position, from
+ * the back.
+ *
+ * A panel shows the part of a long list it is scrolled to, so it reads the items by position. A
+ * reading of every feature a page at a time reads on after the feature read last instead
+ * (`FeatureListOptions.after`), which stays right while features are added or deleted before it.
+ */
+export interface ItemListOptions {
+  /** The position of the first item read, 0 at the back (a non-negative integer); 0 when omitted */
+  offset?: number;
+  /** The number of items read at most (a non-negative integer); every one after `offset` when omitted */
+  limit?: number;
+}
+
 /** What `layers.create` takes. */
 export interface LayerInput {
   /** The ID; one is generated when it is left out */
