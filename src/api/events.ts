@@ -151,20 +151,14 @@ export interface DrawEvents {
   /** A feature was deleted */
   'feature.deleted': { feature: Feature; source: string };
   /**
-   * A feature moved between layers or groups: where it was and where it is, by the items just
-   * below and above it
+   * A feature was put in another place of the stacking order: in its layer or group, into
+   * another layer or group, or out of its group. `from` and `to` are where it was and where it
+   * is, by the items just below and above it, as the Store tells them in `DocumentChange.order`.
+   * A move of a feature does not fire `feature.updated` unless its layer or its group changed.
+   * Many features held as rows put in another place at once are told by `document.changed`
+   * only (`order`)
    */
   'feature.moved': { feature: Feature; from: ItemPosition; to: ItemPosition; source: string };
-  /**
-   * An item (a feature, or a group of features) was put in another place of the stacking order,
-   * in its layer or group or into another one (`kind: 'item'`: where it was and where it is, by
-   * the items just below and above it), or many rows of a layer held as rows were (`kind:
-   * 'rows'`: their number, and the place they were put at together when they were). An item
-   * created or deleted is told by its own event
-   */
-  'item.moved':
-    | { kind: 'item'; itemId: string; from: ItemPosition; to: ItemPosition; source: string }
-    | { kind: 'rows'; layerId: string; count: number; to?: ItemPosition; source: string };
   /** A layer was created */
   'layer.created': { layer: Layer; source: string };
   /** A layer changed */
@@ -179,18 +173,20 @@ export interface DrawEvents {
   'group.updated': { group: Group; previous: Group; source: string };
   /** A group was ungrouped */
   'group.deleted': { group: Group; source: string };
+  /**
+   * A group was put in another place of the stacking order, in its layer or into another one:
+   * where it was and where it is, by the items just below and above it, as the Store tells them in
+   * `DocumentChange.order`. A move of a group in its layer does not fire `group.updated`
+   */
+  'group.moved': { group: Group; from: ItemPosition; to: ItemPosition; source: string };
   /** The title or the description changed */
   'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
-  /**
-   * Rows of the layers held as rows of columns were written ({@link StoreView.tables}): by layer,
-   * the rows created, updated and deleted, by their handles, and the fields written
-   */
-  'rows.changed': { rows: RowsChange; source: string };
   /**
    * Every change of one transaction that changed the document (features, rows, layers, groups,
    * metadata or files); it arrives once per such transaction, after the events of the
    * resources. A change of the selection, the mode or another state of this client alone does
-   * not fire it.
+   * not fire it. The rows of a Store that holds its features as rows written (`rows`) and many of
+   * them put in another place at once (`order`) are told by it only.
    */
   'document.changed': DocumentChange;
   /** A document was loaded */

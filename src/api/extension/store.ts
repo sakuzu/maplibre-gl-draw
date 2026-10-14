@@ -166,6 +166,11 @@ export interface StoreView {
  *   `groupId` moves the feature, and a group whose last member leaves is deleted.
  * - `Group.layerId` is maintained by the Store: it is always the layer whose `items` list the
  *   group.
+ * - The moves are notified: every item (a feature or a group) a write puts in another place of
+ *   the stacking order, within its layer or group or into another one, created or deleted, is in
+ *   the `order` of the notification, with where it was and where it is
+ *   ({@link DocumentChange.order}). The instance tells `feature.moved` and `group.moved` from it,
+ *   and tells no move the Store leaves out.
  * - The stacking order: `createLayer` adds the new layer at the front unless the order
  *   already holds it, `deleteLayer` takes it out, and no other write adds or removes entries.
  * - Writes return whether they were applied: a write of the document returns true when it

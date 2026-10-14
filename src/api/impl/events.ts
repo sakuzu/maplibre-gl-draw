@@ -21,9 +21,9 @@ import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitt
 import type { Store } from '../../store/store.js';
 import type {
   FeatureCoordinates,
+  ItemOrderChange,
   ItemPosition,
   StoreChange,
-  Feature as StoredFeature,
   VertexSelection as StoredVertexSelection,
   TentativeState,
 } from '../../store/types.js';
@@ -129,7 +129,7 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
   let readOnly = store.isReadOnly();
   let locked = store.isInteractionLocked();
   return store.subscribe((changes) => {
-    emitResourceEvents(hub, changes);
+    emitResourceEvents(hub, changes, store);
 
     const nextVertexSelection = store.getVertexSelection();
     if (!sameVertexSelection(vertexSelection, nextVertexSelection)) {
@@ -216,7 +216,7 @@ function sameIds(list: readonly string[], set: ReadonlySet<string>): boolean {
 }
 
 /** The events of each resource of one notification */
-function emitResourceEvents(hub: EventHub, changes: StoreChange): void {
+function emitResourceEvents(hub: EventHub, changes: StoreChange, store: Store): void {
   const source = changes.source ?? 'local';
 
   const { features, layers, groups } = changes;
@@ -230,14 +230,10 @@ function emitResourceEvents(hub: EventHub, changes: StoreChange): void {
       source,
       intermediate: update.isIntermediate === true,
     });
-    const move = describeMove(changes, update.previous, update.feature);
-    if (move) hub.emit('feature.moved', { feature: update.feature as Feature, ...move, source });
   }
   for (const feature of features?.deleted ?? []) {
     hub.emit('feature.deleted', { feature: feature as Feature, source });
   }
-
-  if (changes.rows) hub.emit('rows.changed', { rows: changes.rows, source });
 
   for (const layer of layers?.created ?? []) hub.emit('layer.created', { layer, source });
   for (const { layer, previous } of layers?.updated ?? []) {
@@ -258,27 +254,17 @@ function emitResourceEvents(hub: EventHub, changes: StoreChange): void {
   }
   for (const group of groups?.deleted ?? []) hub.emit('group.deleted', { group, source });
 
-  // The items put in another place, in the order they were put there (an item created or
-  // deleted is told by its own event)
-  for (const move of changes.order ?? []) {
-    if (move.kind === 'rows') {
-      hub.emit('item.moved', {
-        kind: 'rows',
-        layerId: move.layerId,
-        count: move.handles.length,
-        ...(move.to && { to: move.to }),
-        source,
-      });
+  // The features and the groups put in another place, each once, where it was first and is
+  // last, in the order they were first put there (an item created or deleted is told by its own
+  // event; many rows put in another place at once by document.changed only)
+  for (const [itemId, { from, to }] of movesOf(changes.order)) {
+    const group = store.getGroup(itemId);
+    if (group) {
+      hub.emit('group.moved', { group, from, to, source });
       continue;
     }
-    if (!move.from || !move.to) continue;
-    hub.emit('item.moved', {
-      kind: 'item',
-      itemId: move.itemId,
-      from: move.from,
-      to: move.to,
-      source,
-    });
+    const feature = store.getFeature(itemId);
+    if (feature) hub.emit('feature.moved', { feature: feature as Feature, from, to, source });
   }
 
   if (changes.metadata) {
@@ -302,32 +288,25 @@ function emitResourceEvents(hub: EventHub, changes: StoreChange): void {
 }
 
 /**
- * Where a feature moved from and to, when an update changed its layer or its group (null
- * otherwise): where the moves of the notification say it was first and is last, or its layer and
- * its group alone when they do not name it
+ * The items a list of moves of the order put in another place: where each was before its first
+ * move and is after its last one, in the order of their first moves (an item created or deleted
+ * in the list is left out, as are the moves of many rows at once)
  */
-function describeMove(
-  changes: StoreChange,
-  previous: StoredFeature,
-  feature: StoredFeature,
-): { from: ItemPosition; to: ItemPosition } | null {
-  if (previous.layerId === feature.layerId && previous.groupId === feature.groupId) return null;
-  let from: ItemPosition | null = null;
-  let to: ItemPosition | null = null;
-  for (const move of changes.order ?? []) {
-    if (move.kind !== 'item' || move.itemId !== feature.id) continue;
-    if (!from && move.from) from = move.from;
-    if (move.to) to = move.to;
+function movesOf(
+  order: readonly ItemOrderChange[] | undefined,
+): Map<string, { from: ItemPosition; to: ItemPosition }> {
+  const moves = new Map<string, { from: ItemPosition | null; to: ItemPosition | null }>();
+  for (const move of order ?? []) {
+    if (move.kind !== 'item') continue;
+    const known = moves.get(move.itemId);
+    if (known) known.to = move.to;
+    else moves.set(move.itemId, { from: move.from, to: move.to });
   }
-  return {
-    from: from ?? {
-      layerId: previous.layerId,
-      groupId: previous.groupId,
-      below: null,
-      above: null,
-    },
-    to: to ?? { layerId: feature.layerId, groupId: feature.groupId, below: null, above: null },
-  };
+  const out = new Map<string, { from: ItemPosition; to: ItemPosition }>();
+  for (const [itemId, { from, to }] of moves) {
+    if (from && to) out.set(itemId, { from, to });
+  }
+  return out;
 }
 
 /** Whether two vertex selections hold the same vertices of the same feature */

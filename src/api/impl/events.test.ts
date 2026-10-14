@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { EngineModeContext } from '../../modes/handler.js';
 import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
-import { MemoryStore } from '../../store/memory.js';
+import { MemoryContractStore, MemoryStore } from '../../store/memory.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
@@ -32,7 +32,6 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'feature.updated',
   'feature.deleted',
   'feature.moved',
-  'item.moved',
   'layer.created',
   'layer.updated',
   'layer.deleted',
@@ -40,8 +39,8 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'group.created',
   'group.updated',
   'group.deleted',
+  'group.moved',
   'metadata.updated',
-  'rows.changed',
   'document.changed',
   'document.loaded',
   'selection.changed',
@@ -162,7 +161,7 @@ describe('the events of the features', () => {
     });
   });
 
-  it('item.moved tells an item put in another place, by the items it stood and stands between', () => {
+  it('feature.moved tells a feature put in another place of its layer, by the items around it', () => {
     const layerId = draw.layers.getActive()?.id as string;
     const a = draw.features.create(pointInput()) as Feature;
     const b = draw.features.create(pointInput(1, 1)) as Feature;
@@ -171,17 +170,37 @@ describe('the events of the features', () => {
 
     draw.features.move(c.id, { layerId, index: 0 });
 
-    expect(payloadsOf(events, 'item.moved')).toEqual([
+    expect(payloadsOf(events, 'feature.moved')).toEqual([
       {
-        kind: 'item',
-        itemId: c.id,
+        feature: draw.features.get(c.id),
         from: { layerId, groupId: undefined, below: b.id, above: null },
         to: { layerId, groupId: undefined, below: null, above: a.id },
         source: 'local',
       },
     ]);
     // A move within a layer changes no field of its features
-    expect(payloadsOf(events, 'feature.moved')).toEqual([]);
+    expect(payloadsOf(events, 'feature.updated')).toEqual([]);
+  });
+
+  it('feature.moved is not told for a move the Store leaves out of its order', () => {
+    // A Store that breaks its contract: it notifies no move of the order
+    const contract = new MemoryContractStore();
+    const subscribe = contract.subscribe.bind(contract);
+    contract.subscribe = (listener) =>
+      subscribe((changes) => {
+        const { order: _order, ...rest } = changes;
+        listener(rest);
+      });
+    const other = createDraw(createMapStub().map, { store: contract });
+    const seen = record(other);
+    const first = other.layers.getActive()?.id as string;
+    const second = other.layers.create({ name: 'Second' })?.id as string;
+    const a = other.features.create({ ...pointInput(), layerId: first }) as Feature;
+    seen.length = 0;
+    other.features.move(a.id, { layerId: second });
+    expect(payloadsOf(seen, 'feature.updated')).toHaveLength(1);
+    expect(payloadsOf(seen, 'feature.moved')).toEqual([]);
+    other.destroy();
   });
 });
 
@@ -224,6 +243,28 @@ describe('the events of the layers, the groups and the metadata', () => {
     expect(payloadsOf(events, 'group.deleted')).toEqual([
       { group: expect.objectContaining({ id: group?.id }), source: 'local' },
     ]);
+  });
+
+  it('group.moved tells a group put in another place, by the items around it', () => {
+    const layerId = draw.layers.getActive()?.id as string;
+    const a = draw.features.create(pointInput()) as Feature;
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const group = draw.groups.create({ featureIds: [b.id], name: 'G' });
+    events.length = 0;
+
+    draw.groups.move(group?.id as string, { layerId, index: 0 });
+
+    expect(payloadsOf(events, 'group.moved')).toEqual([
+      {
+        group: draw.groups.get(group?.id as string),
+        from: { layerId, groupId: undefined, below: a.id, above: null },
+        to: { layerId, groupId: undefined, below: null, above: a.id },
+        source: 'local',
+      },
+    ]);
+    // A move of a group in its layer changes no field of it, nor of its members
+    expect(payloadsOf(events, 'group.updated')).toEqual([]);
+    expect(payloadsOf(events, 'feature.moved')).toEqual([]);
   });
 
   it('metadata.updated', () => {
