@@ -183,7 +183,7 @@ function rowHit(id: string): TopHit {
 function corners(): number[][] {
   return ids.map((id) => {
     const feature = store.tables?.get('l')?.getRow(store.tables.findRow(id) as number);
-    return (feature?.geometry as { coordinates: number[][][] }).coordinates[0][0];
+    return ((feature as Feature).geometry as { coordinates: number[][][] }).coordinates[0][0];
   });
 }
 
@@ -253,7 +253,7 @@ describe('the select mode over features selected in bulk', () => {
     store.setSelection('feature', ids);
     const before = corners();
     const ne = computeResizeHandles(marginedFrame()).find((handle) => handle.type === 'resize-ne');
-    const [x, y] = ne?.position as [number, number];
+    const [x, y] = (ne as { position: [number, number] }).position;
     mode.onDragStart(drag('dragstart', x, y, [x, y]));
     expect(store.getDragState()?.operation).toBe('resize');
     mode.onDragMove(drag('dragmove', x + 1, y, [x, y]));
