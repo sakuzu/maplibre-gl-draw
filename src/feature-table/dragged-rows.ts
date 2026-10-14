@@ -13,13 +13,9 @@
 import type { Position } from 'geojson';
 import type { FeatureTables, RowHandle } from '../api/tables.js';
 import { transformPosition } from '../shared/math/plane-transform.js';
-import { drawPropertyKey } from '../shared/properties.js';
 import { featureTablesInternals } from './feature-tables.js';
-import { rowType, rowValue } from './row-read.js';
-import { MOVE_SETS, STATE_MOVE_MASK, STATE_MOVE_SHIFT } from './row-state.js';
-
-/** The key of the scale of a row (a row that has one keeps its shape when it is resized) */
-const SCALE_KEY = drawPropertyKey('scale');
+import { rowType } from './row-read.js';
+import { MOVE_SETS, STATE_BY_VALUES, STATE_MOVE_MASK, STATE_MOVE_SHIFT } from './row-state.js';
 
 /**
  * The rows being dragged and how they are moved, while they are drawn moved and not written yet
@@ -34,9 +30,15 @@ export interface DraggedRows {
    * values after `x` and `y` kept), as it is otherwise
    */
   position(handle: RowHandle, position: Position): Position;
-  /** The angle added to the rotation of a row dragged that has one, in degrees (0 otherwise) */
+  /**
+   * The angle added to the rotation of a row dragged that turns by its rotation (an image, a
+   * type resized by its scale, a row that has a rotation), in degrees (0 otherwise)
+   */
   rotation(handle: RowHandle): number;
-  /** The factor of the scale and the radius of a row dragged that has one (1 otherwise) */
+  /**
+   * The factor of the scale of a row dragged that is resized by its scale, and of the radius of
+   * a Circle (1 otherwise)
+   */
   scale(handle: RowHandle): number;
 }
 
@@ -59,6 +61,12 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
   if (!moving) return null;
   const setOf = (handle: RowHandle): number =>
     (states.stateOf(handle) & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
+  const byValues = (handle: RowHandle): boolean => (states.stateOf(handle) & STATE_BY_VALUES) !== 0;
+  const keepsShape = (handle: RowHandle): boolean => {
+    if (byValues(handle)) return true;
+    const place = internals.placeOf(handle);
+    return place ? rowType(place.group.data, place.row) === 'Circle' : false;
+  };
   return {
     has: (handle) => setOf(handle) > 0,
     position(handle, position) {
@@ -67,18 +75,14 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
       const transform = states.transform(set);
       let moved: number[] = [...position];
       if (transform) {
-        // A Circle and a row with a scale keep their shape, as the rows drawn at once are drawn
-        const place = internals.placeOf(handle);
-        const keepsShape = place
-          ? rowType(place.group.data, place.row) === 'Circle' ||
-            rowValue(place.group, place.row, SCALE_KEY) !== undefined
-          : false;
-        moved = transformPosition(transform, moved, keepsShape);
+        // A Circle and a row turned or scaled by its values keep their shape
+        moved = transformPosition(transform, moved, keepsShape(handle));
       }
       const [dx, dy] = states.translation(set);
       return [moved[0] + dx, moved[1] + dy, ...moved.slice(2)];
     },
-    rotation: (handle) => states.transform(setOf(handle))?.rotationDeg ?? 0,
-    scale: (handle) => states.transform(setOf(handle))?.scale ?? 1,
+    rotation: (handle) =>
+      byValues(handle) ? (states.transform(setOf(handle))?.rotationDeg ?? 0) : 0,
+    scale: (handle) => (keepsShape(handle) ? (states.transform(setOf(handle))?.scale ?? 1) : 1),
   };
 }

@@ -566,7 +566,7 @@ describe('the state of the rows', () => {
 });
 
 describe('the rows drawn at once while they are dragged in bulk', () => {
-  it('are given to the renderer of their type moved, turned and resized as the drag draws them, with their rotation and scale', () => {
+  it('are given to the renderer of their type moved, turned and resized as the drag draws them, with their rotation and scale when they turn and scale by them', () => {
     // A type of an extension at a point, with a rotation and a scale (a note, a text), and a
     // point drawn at once (a picture with an arrow of direction)
     const features = [
@@ -592,6 +592,8 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
       mocks.deps.customRenderers.set('Marker', extension as never);
       const handles = ['n', 'p'].map((id) => internals.ids.handleOf(id));
       internals.states.setMoving(Int32Array.from(handles), 2);
+      // The note turns and scales by its values, as the write of the drag decides
+      internals.states.setByValues(Int32Array.of(handles[0]), true);
       internals.states.setTransform(2, transform);
       internals.states.setTranslation(2, 0.5, -0.25);
       const renderer = new TableLayerRenderer({

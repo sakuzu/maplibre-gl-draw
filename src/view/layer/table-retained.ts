@@ -41,6 +41,7 @@ import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/r
 import {
   GPU_STATE_BULK,
   MOVE_SETS,
+  STATE_BY_VALUES,
   STATE_HIDDEN_MASK,
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
@@ -55,7 +56,7 @@ import {
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { type PlaneTransform, transformPosition } from '../../shared/math/plane-transform.js';
-import { drawProperties, getDrawProperty, hasDrawProperty } from '../../shared/properties.js';
+import { drawProperties, getDrawProperty } from '../../shared/properties.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -2072,7 +2073,9 @@ export class TableLayerRenderer {
       drawer = null;
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
       features.push(
-        set > 0 ? movedFeature(feature, this.translations, this.transforms[set], set) : feature,
+        set > 0
+          ? movedFeature(feature, this.translations, this.transforms[set], set, state)
+          : feature,
       );
     }
     drawFeatures();
@@ -2530,11 +2533,15 @@ function movedFeature(
   translations: Float32Array,
   transform: PlaneTransform | null,
   set: number,
+  state: number,
 ): Feature {
   const dLng = translations[set * 2];
   const dLat = translations[set * 2 + 1];
   if (dLng === 0 && dLat === 0 && !transform) return feature;
-  const keepsShape = feature.type === 'Circle' || hasDrawProperty(feature.properties, 'scale');
+  // A row turned or scaled by its values (as the write of the drag let go decides) keeps its
+  // shape and changes its values, as a Circle keeps its shape and changes its radius
+  const byValues = (state & STATE_BY_VALUES) !== 0;
+  const keepsShape = feature.type === 'Circle' || byValues;
   const shift = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;
     if (typeof value[0] === 'number') {
@@ -2552,14 +2559,11 @@ function movedFeature(
   };
   if (!transform) return moved;
   const values: Partial<Record<'rotation' | 'scale' | 'radiusMeters', number>> = {};
-  const rotation = getDrawProperty(feature, 'rotation');
-  if (transform.rotationDeg !== 0 && (feature.type === 'Image' || rotation !== undefined)) {
-    values.rotation = (rotation ?? 0) + transform.rotationDeg;
+  if (transform.rotationDeg !== 0 && byValues) {
+    values.rotation = (getDrawProperty(feature, 'rotation') ?? 0) + transform.rotationDeg;
   }
   if (transform.scale !== 1) {
-    const scale = getDrawProperty(feature, 'scale');
-    if (feature.type === 'Image' || scale !== undefined)
-      values.scale = (scale ?? 1) * transform.scale;
+    if (byValues) values.scale = (getDrawProperty(feature, 'scale') ?? 1) * transform.scale;
     const radius = getDrawProperty(feature, 'radiusMeters');
     if (feature.type === 'Circle' && radius !== undefined)
       values.radiusMeters = radius * transform.scale;

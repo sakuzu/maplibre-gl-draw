@@ -17,6 +17,7 @@
  * them in steps (`bulk-sliced.ts`).
  */
 
+import type { LayerTableView } from '../api/tables.js';
 import type { BulkOperation, BulkRowReader } from '../feature-table/bulk-plan.js';
 import { livePlaceOf } from '../feature-table/bulk-rows.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
@@ -41,6 +42,80 @@ import { type RotateExtensions, rotateCoordinate } from './rotate.js';
 const ROTATION_KEY = drawPropertyKey('rotation');
 const SCALE_KEY = drawPropertyKey('scale');
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
+
+/** What the rules of the values of a row read of it */
+type RowValueReads = Pick<LayerTableView, 'getRowType' | 'getRowValue'>;
+
+/**
+ * Whether a row turns by its rotation (an image, a type of an extension resized by its scale, a
+ * row that has a rotation), as a rotation of features one by one decides (`rotate.ts`)
+ *
+ * @internal
+ */
+export function turnedByValue(
+  view: RowValueReads,
+  handle: number,
+  extensions: RotateExtensions | undefined,
+): boolean {
+  const type = view.getRowType(handle);
+  return (
+    type === 'Image' ||
+    (type !== null && extensions?.getResizeStrategy(type) === 'scale') ||
+    view.getRowValue(handle, ROTATION_KEY) !== undefined
+  );
+}
+
+/**
+ * Whether a row is resized by its scale (a type of an extension resized by its scale, an image
+ * or a row that has a scale, unless its type is resized by its coordinates), as a resize of
+ * features one by one decides (`resize.ts`)
+ *
+ * @internal
+ */
+export function scaledByValue(
+  view: RowValueReads,
+  handle: number,
+  extensions: ResizeExtensions | undefined,
+): boolean {
+  const type = view.getRowType(handle);
+  const strategy = type === null ? undefined : extensions?.getResizeStrategy(type);
+  return (
+    strategy === 'scale' ||
+    (strategy !== 'coordinates' &&
+      (type === 'Image' || view.getRowValue(handle, SCALE_KEY) !== undefined))
+  );
+}
+
+/**
+ * The rows of a selection of many rows that a drag turns (`rotate`) or resizes (`resize`) by
+ * their values, which are drawn so while they are dragged (`setByValues` of the state of the
+ * rows). A type of an extension that computes its own resize is not among them
+ *
+ * @internal
+ */
+export function rowsByValues(
+  store: Store,
+  rows: TableSelection,
+  motion: 'rotate' | 'resize',
+  extensions: ResizeExtensions | undefined,
+): Int32Array {
+  const internals = featureTablesInternals(store.tables);
+  if (!internals) return new Int32Array(0);
+  const out: number[] = [];
+  for (const handle of rows.handles) {
+    const place = livePlaceOf(internals, handle);
+    const view = place ? store.tables?.get(place.layer.layerId) : undefined;
+    if (!view) continue;
+    if (motion === 'rotate') {
+      if (turnedByValue(view, handle, extensions)) out.push(handle);
+      continue;
+    }
+    const type = view.getRowType(handle);
+    if (type !== null && extensions?.getCustomResizeCalculator(type)) continue;
+    if (scaledByValue(view, handle, extensions)) out.push(handle);
+  }
+  return Int32Array.from(out);
+}
 
 /**
  * The positions of a geometry mapped by their `x` and `y`, the values after them kept
@@ -179,12 +254,8 @@ export function rotationKinds(
     const place = livePlaceOf(internals, handle);
     if (!place) continue;
     const view = store.tables?.get(place.layer.layerId);
-    const type = view?.getRowType(handle);
-    const byProperty =
-      type === 'Image' ||
-      (type !== null && type !== undefined && extensions?.getResizeStrategy(type) === 'scale') ||
-      view?.getRowValue(handle, ROTATION_KEY) !== undefined;
-    (byProperty ? turned : plain).push(handle);
+    if (!view) continue;
+    (turnedByValue(view, handle, extensions) ? turned : plain).push(handle);
   }
   return [
     {
@@ -291,12 +362,7 @@ export function resizeKinds(
       kinds.custom.push(handle);
       continue;
     }
-    const strategy = type === null ? undefined : extensions?.getResizeStrategy(type);
-    const scaled =
-      strategy === 'scale' ||
-      (strategy !== 'coordinates' &&
-        (type === 'Image' || view?.getRowValue(handle, SCALE_KEY) !== undefined));
-    if (scaled) kinds.scale.push(handle);
+    if (view && scaledByValue(view, handle, extensions)) kinds.scale.push(handle);
     else if (type === 'Circle') kinds.circle.push(handle);
     else kinds.axes.push(handle);
   }

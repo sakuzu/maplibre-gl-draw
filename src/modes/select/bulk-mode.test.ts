@@ -18,6 +18,7 @@ import type {
   KeyNormalizedEvent,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
+import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/row-state.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
@@ -332,6 +333,70 @@ describe('the select mode over features selected in bulk', () => {
       ),
     );
     expect(corners()).not.toEqual(after);
+  });
+
+  it('writes the features turned and scaled by their values where the drag drew them', () => {
+    // An image without a scale nor a rotation yet, and a type of an extension resized by its scale
+    context.selectionScope.extensions.registerResizeStrategy('Card', 'scale');
+    const point = (id: string, type: string, x: number, properties = {}): Feature => ({
+      ...square(id, 0, 0),
+      type,
+      geometry: { type: 'Point', coordinates: [x, 0.5] },
+      properties,
+    });
+    store.transact(() => {
+      store.createFeature(point('img', 'Image', 13, { 'maplibre-gl-draw:imageFileId': 'i' }));
+      store.createFeature(point('card', 'Card', 15));
+    });
+    const tables = store.tables as NonNullable<typeof store.tables>;
+    const handleOf = (id: string) => tables.findRow(id) as number;
+    const read = (id: string) => tables.get('l')?.getRow(handleOf(id)) as Feature;
+    const at = (feature: Feature) => (feature.geometry as { coordinates: number[] }).coordinates;
+    store.setSelection('feature', [...ids, 'img', 'card']);
+
+    // A resize from a corner: the image and the card keep their shape and scale by their values
+    const ne = computeResizeHandles(marginedFrame()).find((handle) => handle.type === 'resize-ne');
+    const [x, y] = (ne as { position: [number, number] }).position;
+    const before = new Map(['img', 'card'].map((id) => [id, read(id)]));
+    mode.onDragStart(drag('dragstart', x, y, [x, y]));
+    mode.onDragMove(drag('dragmove', x + 3, y + 2, [x, y]));
+    let dragged = draggedRowsOf(tables);
+    const drawnAt = new Map(
+      ['img', 'card'].map((id) => [
+        id,
+        {
+          position: dragged?.position(handleOf(id), at(before.get(id) as Feature)),
+          scale: dragged?.scale(handleOf(id)),
+        },
+      ]),
+    );
+    mode.onDragEnd(drag('dragend', x + 3, y + 2, [x, y]));
+    for (const id of ['img', 'card']) {
+      const after = read(id);
+      const drawn = drawnAt.get(id);
+      expect(at(after)[0]).toBeCloseTo(drawn?.position?.[0] as number, 9);
+      expect(at(after)[1]).toBeCloseTo(drawn?.position?.[1] as number, 9);
+      expect(after.properties['maplibre-gl-draw:scale']).toBeCloseTo(drawn?.scale as number, 9);
+      expect(drawn?.scale).not.toBe(1);
+    }
+
+    // A rotation: the card turns by its rotation, which it had not
+    const rotate = computeRotateHandle(
+      marginedFrame(),
+      DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
+      6,
+    ).position;
+    const center = store.getSelection().bulk?.bounds as number[];
+    const to: [number, number] = [(center[0] + center[2]) / 2 + 3, (center[1] + center[3]) / 2];
+    mode.onDragStart(drag('dragstart', rotate[0], rotate[1], rotate as [number, number]));
+    mode.onDragMove(drag('dragmove', to[0], to[1], rotate as [number, number]));
+    dragged = draggedRowsOf(tables);
+    const turned = dragged?.rotation(handleOf('card'));
+    expect(turned).not.toBe(0);
+    mode.onDragEnd(drag('dragend', to[0], to[1], rotate as [number, number]));
+    expect(read('card').properties['maplibre-gl-draw:rotation']).toBeCloseTo(turned as number, 9);
+    // A square has no rotation of its own: it turns by its coordinates
+    expect(draggedRowsOf(tables)).toBeNull();
   });
 
   it('starts no drag while a feature selected is locked, and keeps the selection', () => {

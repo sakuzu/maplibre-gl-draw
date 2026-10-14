@@ -26,6 +26,7 @@ import {
   type BulkKinds,
   resizeKinds,
   rotationKinds,
+  rowsByValues,
   translateBulkSelection,
   translationKinds,
 } from '../../operations/bulk-transform.js';
@@ -215,6 +216,7 @@ abstract class BulkDrag implements DragOperation {
     const states = featureTablesInternals(store.tables)?.states;
     const release = (): void => {
       states?.setMoving(this.rows.handles, 0);
+      states?.setByValues(this.rows.handles, false);
       states?.setTranslation(BULK_MOVE_SET, 0, 0);
       states?.setTransform(BULK_MOVE_SET, null);
       this.context.map.triggerRepaint();
@@ -289,6 +291,11 @@ export class BulkRotateDrag extends BulkDrag {
     bbox: BoundingBoxCoords,
   ) {
     super(context, rows);
+    // The rows turned by their rotation are drawn so, as they are written once let go
+    featureTablesInternals(context.store.tables)?.states.setByValues(
+      rowsByValues(context.store, rows, 'rotate', context.selectionScope.extensions),
+      true,
+    );
     this.#state = startRotation(
       dragStartLngLat(event),
       bbox,
@@ -360,6 +367,11 @@ export class BulkResizeDrag extends BulkDrag {
     bbox: BoundingBoxCoords,
   ) {
     super(context, rows);
+    // The rows resized by their scale are drawn so, as they are written once let go
+    featureTablesInternals(context.store.tables)?.states.setByValues(
+      rowsByValues(context.store, rows, 'resize', context.selectionScope.extensions),
+      true,
+    );
     this.#handle = handle;
     this.#bbox = bbox;
     this.#state = startResize(

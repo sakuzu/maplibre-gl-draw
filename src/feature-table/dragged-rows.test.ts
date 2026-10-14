@@ -72,6 +72,8 @@ describe('the rows dragged', () => {
     const { tables, handleOf } = setup();
     const states = internalsOf(tables).states;
     states.setMoving(Int32Array.of(handleOf('a'), handleOf('b')), BULK_MOVE_SET);
+    // a turns by its rotation, as the write of the drag would turn it
+    states.setByValues(Int32Array.of(handleOf('a')), true);
     const transform = rotationTransform([139.1, 35], 0.25);
     states.setTransform(BULK_MOVE_SET, transform);
     states.setTranslation(BULK_MOVE_SET, 0.5, -0.25);
@@ -86,11 +88,12 @@ describe('the rows dragged', () => {
     ]);
     expect(dragged?.position(handleOf('c'), [139.2, 35])).toEqual([139.2, 35]);
     expect(dragged?.rotation(handleOf('a'))).toBeCloseTo((0.25 * 180) / Math.PI, 12);
+    expect(dragged?.rotation(handleOf('b'))).toBe(0);
     expect(dragged?.rotation(handleOf('c'))).toBe(0);
     expect(dragged?.scale(handleOf('b'))).toBe(1);
   });
 
-  it('keep the shape of a Circle and of a row with a scale when they are resized, as they are drawn', () => {
+  it('keep the shape of a Circle and of a row scaled by its values when they are resized, and give their factor', () => {
     const { store, tables, handleOf } = setup();
     store.transact(() => {
       store.createFeature({
@@ -101,6 +104,8 @@ describe('the rows dragged', () => {
     const states = internalsOf(tables).states;
     const rows = ['a', 'b', 'e'].map(handleOf);
     states.setMoving(Int32Array.from(rows), BULK_MOVE_SET);
+    // e is resized by its scale, as the write of the drag would resize it
+    states.setByValues(Int32Array.of(handleOf('e')), true);
     const transform = resizeTransform(toPlane([139, 34.9]), 2, 0.5, 2);
     states.setTransform(BULK_MOVE_SET, transform);
     const dragged = draggedRowsOf(tables);
@@ -111,7 +116,9 @@ describe('the rows dragged', () => {
       expect(dragged?.position(handleOf(id), [139, 35])).toEqual(
         transformPosition(transform, [139, 35], true),
       );
+      expect(dragged?.scale(handleOf(id))).toBe(2);
     }
+    expect(dragged?.scale(handleOf('a'))).toBe(1);
   });
 
   it('of a selection of many features are read by its summary', () => {

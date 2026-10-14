@@ -51,8 +51,14 @@ export const STATE_BULK = 1 << 8;
 export const STATE_MOVE_SHIFT = 9;
 /** The two bits of the moving set */
 export const STATE_MOVE_MASK = 3 << STATE_MOVE_SHIFT;
-/** Scaled by the same factor in x and y (a Circle) */
+/** Scaled by the same factor in x and y (a Circle, a row turned or scaled by its values) */
 export const STATE_UNIFORM = 1 << 11;
+/**
+ * Turned and scaled by its values while it is dragged (its rotation, its scale), as the write of
+ * the drag let go turns and scales it: an image, a type an extension resizes by its scale, a row
+ * that has such a value
+ */
+export const STATE_BY_VALUES = 1 << 12;
 
 // === The byte per row the GPU reads ===
 
@@ -94,6 +100,7 @@ const SET_BULK = 2;
 const SET_MOVE_SHIFT = 2;
 const SET_MOVE_MASK = 3 << SET_MOVE_SHIFT;
 const SET_OVERLAY = 16;
+const SET_BY_VALUES = 32;
 
 /**
  * The state of the rows kept as sets of handles
@@ -127,6 +134,7 @@ export class RowStateSets {
       ((bits & SET_HIDDEN) !== 0 ? STATE_HIDDEN_LOCAL : 0) |
       ((bits & SET_OVERLAY) !== 0 ? STATE_HIDDEN_OVERLAY : 0) |
       ((bits & SET_BULK) !== 0 ? STATE_BULK : 0) |
+      ((bits & SET_BY_VALUES) !== 0 ? STATE_BY_VALUES | STATE_UNIFORM : 0) |
       (((bits & SET_MOVE_MASK) >> SET_MOVE_SHIFT) << STATE_MOVE_SHIFT)
     );
   }
@@ -166,6 +174,14 @@ export class RowStateSets {
       throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
     }
     this.update(handles, (bits) => (bits & ~SET_MOVE_MASK) | (set << SET_MOVE_SHIFT));
+  }
+
+  /**
+   * Marks or unmarks rows as turned and scaled by their values while they are dragged (the write
+   * of the drag decides which)
+   */
+  setByValues(handles: Int32Array, marked: boolean): void {
+    this.update(handles, (bits) => (marked ? bits | SET_BY_VALUES : bits & ~SET_BY_VALUES));
   }
 
   /** Forgets the state of a handle (given again to another row) */
