@@ -25,8 +25,9 @@
  *   notification carries them (`previousValues`): the rows that were there when the transaction
  *   began, with the values they had then. A write through `applyRows` carries the values it is
  *   given
- * - A group this client deletes (with its features, left by its last feature, or dissolved) is
- *   kept by the token of the transaction, as its rows deleted are (`groups.restore`)
+ * - The rows and the groups this client deletes (a group with its features, left by its last
+ *   feature, or dissolved) are kept by the token of the transaction (`features.restore`,
+ *   `groups.restore`); what is deleted from elsewhere is not
  * - The writes of rows from elsewhere go through the writer it returns, in a transaction with
  *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
@@ -338,7 +339,7 @@ export class TableContractStore implements StoreContract {
       if (group !== undefined) this.#leftGroups.add(group);
       this.writer.apply(
         { handles: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1) },
-        { restoreToken: this.#token() },
+        this.#keeping(),
       );
     });
   }
@@ -385,7 +386,7 @@ export class TableContractStore implements StoreContract {
       for (let batch = cursor.next(); batch; batch = cursor.next()) {
         this.writer.apply(
           { handles: batch, fields: new Map(), deleted: new Uint8Array(batch.length).fill(1) },
-          { restoreToken: this.#token() },
+          this.#keeping(),
         );
       }
       const groups = [...this.#groups.values()].filter((group) => group.layerId === id);
@@ -507,7 +508,7 @@ export class TableContractStore implements StoreContract {
           fields,
           ...(deleted && { deleted: Uint8Array.from(deleted) }),
         },
-        { before: write.before, ...(deletes && { restoreToken: this.#token() }) },
+        { before: write.before, ...(deletes && this.#keeping()) },
       );
     });
   }
@@ -821,10 +822,14 @@ export class TableContractStore implements StoreContract {
     return true;
   }
 
-  /** The token that keeps the rows deleted in this transaction */
-  #token(): RestoreToken {
+  /**
+   * What keeps the rows and the groups a deletion of this client deletes: the token of the
+   * transaction (none for a deletion from elsewhere, which nothing undoes here)
+   */
+  #keeping(): { restoreToken?: RestoreToken } {
+    if (this.#bus.source === 'remote') return {};
     this.#retain ??= this.writer.createRestoreToken();
-    return this.#retain;
+    return { restoreToken: this.#retain };
   }
 
   /**
@@ -1116,7 +1121,7 @@ export class TableContractStore implements StoreContract {
           fields: new Map(),
           deleted: new Uint8Array(handles.length).fill(1),
         },
-        this.#bus.source === 'remote' ? {} : { restoreToken: this.#token() },
+        this.#keeping(),
       );
     }
     for (const group of groups) this.#groups.delete(group.id);

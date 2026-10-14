@@ -222,6 +222,35 @@ describe('the rows written for this client through the Store', () => {
 });
 
 describe('the rows deleted from elsewhere', () => {
+  it('are not kept by a token, whether a feature or a layer is deleted through the Store', () => {
+    const { store, writer, notified } = setup();
+    store.transact(() => store.deleteFeature('p1'), 'remote');
+    expect(notified[notified.length - 1].restoreToken).toBeUndefined();
+    store.createLayer({
+      id: 'other',
+      name: 'Other',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: 'table',
+      metadata: undefined,
+      styleRule: undefined,
+    });
+    store.createFeature(point('q', 0, 'other'));
+    store.transact(() => store.deleteLayer('other'), 'remote');
+    expect(notified[notified.length - 1].restoreToken).toBeUndefined();
+    // Nothing keeps them: their ids can be forgotten
+    const handles = ['p1', 'q'].map((id) => writer.lookup(id)?.handle as number);
+    writer.forget(Int32Array.from(handles));
+    expect(writer.lookup('p1')).toBeUndefined();
+    expect(writer.lookup('q')).toBeUndefined();
+    // A deletion of this client is kept
+    store.deleteFeature('p2');
+    expect(notified[notified.length - 1].restoreToken).toBeDefined();
+    writer.forget(Int32Array.of(writer.lookup('p2')?.handle as number));
+    expect(writer.lookup('p2')).toMatchObject({ deleted: true });
+  });
+
   it('have their ids forgotten past the most kept, the handles given again', () => {
     const { store, writer, tables, internals } = setup(0);
     const write = (fn: (w: FeatureTablesWriter) => void) =>
