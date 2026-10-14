@@ -1862,11 +1862,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /** A key of the order after every item of a layer (a feature drawn at its end) */
   private keyAfterLast(layer: LayerTable): string {
-    const order = layer.rowOrder();
-    const n = order.handles.length;
-    if (n === 0) return 'V';
-    const data = order.groups[n - 1].data;
-    const row = order.rows[n - 1];
+    // The last row of the order, read from the rows at its end
+    const last = layer.lastRow();
+    if (!last) return 'V';
+    const data = last.group.data;
+    const row = last.row;
     const group = data.groups[row];
     const key = group >= 0 ? (this.groups.orderOf(group) ?? '') : utf8String(data.itemKeys, row);
     // Any key the last one is a beginning of comes after it
