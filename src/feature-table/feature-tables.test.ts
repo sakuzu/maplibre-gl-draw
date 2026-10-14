@@ -192,6 +192,30 @@ describe('createFeatureTables', () => {
     expect(ids()).toEqual(order);
   });
 
+  it('puts the rows of a group not in the order of their keys in the delta, at their places', () => {
+    const { tables, writer } = createFeatureTables();
+    writer.adopt('layer', groups(3));
+    // u100 and u101 with their keys swapped: u101 comes first
+    const [built] = groups(2, { keyOffset: 100, prefix: 'u' });
+    const swapped = { ...built, itemKeys: utf8ColumnFromStrings(['k101', 'k100']) };
+    expect(() => writer.adopt('layer', [swapped])).not.toThrow();
+    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    const u100 = tables.handleOf('u100') as number;
+    expect(internals.ids.deltaLayer(u100)).toBeGreaterThanOrEqual(0);
+    const view = tables.layer('layer');
+    const ids = () => Array.from(view?.rowsInOrder(0, 10) ?? []).map((h) => tables.idOf(h));
+    const order = ['r0', 'r1', 'r2', 'u101', 'u100'];
+    expect(ids()).toEqual(order);
+    const drawn = Array.from(view?.listDrawnRows([-1, -1, 200, 200]) ?? []).map((h) =>
+      tables.idOf(h),
+    );
+    expect(drawn).toEqual(order);
+    expect(view?.getRowPoint(u100)).toEqual([100, 100]);
+    internals.flushVersions();
+    expect(internals.ids.mainGroup(u100)).toBeGreaterThanOrEqual(0);
+    expect(ids()).toEqual(order);
+  });
+
   it('refuses an id that is already a row, and an unknown group', () => {
     const { writer } = createFeatureTables();
     writer.adopt('layer', groups(5));

@@ -1105,11 +1105,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     const group = createRowGroup(-1, data);
     const rows: DeltaInput[] = [];
+    const seen = new Set<RowHandle>();
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
       // A row read from a row group or a delta is not put there again (one read from its
-      // creation, which it is about to leave, is)
+      // creation, which it is about to leave, is), nor an id the group holds twice (its first)
       if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) continue;
+      if (seen.has(handle)) continue;
+      seen.add(handle);
       rows.push({ handle, input: rowInputOf(this.readContext, group, r) });
     }
     this.rebuildDelta(layer, new Set(), rows, ++this.writeCount);
@@ -2964,10 +2967,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
         throw new Error(`FeatureTables: a row names the style ${data.styles[r]}, which is unknown`);
       }
     }
-    // A group whose keys overlap the rows of another group (one taken in, or built of rows
-    // written, since it was made) is not left out: its rows go to the delta, read and drawn at
-    // their places at once, and into the row groups with their next versions
-    if (data.length > 0 && layer.inKeyOrder(data) && layer.overlaps(data)) {
+    // A group whose rows are not in the order of their keys, or whose keys overlap the rows of
+    // another group (one taken in, or built of rows written, since it was made), is not left
+    // out: its rows go to the delta, read and drawn at their places at once, and into the row
+    // groups with their next versions
+    if (data.length > 0 && (!layer.inKeyOrder(data) || layer.overlaps(data))) {
       this.rowsToDelta(layer, data);
       return;
     }
