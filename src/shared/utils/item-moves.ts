@@ -178,23 +178,35 @@ function stayingItems<T>(
     places.push(at);
     indices.push(i);
   }
+  for (const k of longestRisingRun(places)) stays.add(indices[k]);
+  return stays;
+}
+
+/**
+ * The longest run of numbers that go up, as their places in the list (the first one the patience
+ * method finds, from the last number of the run back)
+ *
+ * @internal
+ */
+export function longestRisingRun(numbers: ArrayLike<number>): number[] {
   const tails: number[] = [];
-  const previous = new Int32Array(places.length).fill(-1);
-  for (let k = 0; k < places.length; k++) {
+  const previous = new Int32Array(numbers.length).fill(-1);
+  for (let k = 0; k < numbers.length; k++) {
     let lo = 0;
     let hi = tails.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (places[tails[mid]] < places[k]) lo = mid + 1;
+      if (numbers[tails[mid]] < numbers[k]) lo = mid + 1;
       else hi = mid;
     }
     if (lo > 0) previous[k] = tails[lo - 1];
     tails[lo] = k;
   }
+  const run: number[] = [];
   for (let k = tails.length > 0 ? tails[tails.length - 1] : -1; k >= 0; k = previous[k]) {
-    stays.add(indices[k]);
+    run.push(k);
   }
-  return stays;
+  return run;
 }
 
 /**

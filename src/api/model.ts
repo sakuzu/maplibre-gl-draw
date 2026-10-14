@@ -18,8 +18,9 @@ import type {
 import type { BBox } from '../geometry/types.js';
 import type { Messages } from '../messages.js';
 import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
-import type { ItemPlacement } from '../shared/types/model.js';
+import type { ItemMove, ItemPlacement } from '../shared/types/model.js';
 import type { LineStyle } from '../shared/types/style.js';
+import { longestRisingRun, itemMovesBetween as movesBetween } from '../shared/utils/item-moves.js';
 import {
   deriveLegend as deriveRuleLegend,
   evaluateStyleRule as evaluateRule,
@@ -555,6 +556,112 @@ export type {
   RowRangeMove,
   RowValuesSnapshot,
 } from '../shared/types/model.js';
+
+/**
+ * The items of a layer (its features outside a group, and its groups) or the members of a group,
+ * from the back, before and after a change: what {@link itemMovesBetween} reads.
+ */
+export interface ItemListChange {
+  /** The layer (the layer of the group, for a group) */
+  readonly layerId: string;
+  /** The group (undefined for a layer) */
+  readonly groupId: string | undefined;
+  /** The items before, from the back (none when the list did not exist) */
+  readonly before: readonly string[];
+  /** The items after, from the back (none when the list does not exist any more) */
+  readonly after: readonly string[];
+}
+
+/**
+ * The moves of the items that take lists of items from their state before to their state after,
+ * one item at a time: what a Store that keeps its lists of items notifies as `order`
+ * (`StoreChange.order`) when it changes them otherwise than by putting items in a place.
+ *
+ * Each move has where the item stood and where it stands at that moment, by the items just below
+ * and above it ({@link ItemMove}). Made back from the last one, each item put back where it was,
+ * the moves take the lists back to their state before.
+ *
+ * The moves come in this order: the items placed in the layers (moved, or created), then the
+ * features placed in the groups, then the features deleted, then the groups deleted, so that a
+ * group is in its place before its members go into it, and its members leave it before it is
+ * deleted. The items of a list that keep their order among the others (the longest run of them)
+ * do not move. An item in a list after and in none before is created (`from` is null); an item
+ * in a list before and in none after is deleted (`to` is null). An item listed twice keeps its
+ * first place: in the lists before in their order, in the lists after the layers first.
+ *
+ * @param lists - The lists that changed (the lists of a layer and of its groups that did not
+ *   change can be left out, as long as an item does not leave them or come into them)
+ * @param isGroup - Whether an item is a group (a group is deleted after the features)
+ * @returns The moves, in the order they are made
+ *
+ * @example The moves of a layer whose items were reordered
+ * ```ts
+ * const moves = itemMovesBetween(
+ *   [{ layerId: 'l1', groupId: undefined, before: ['a', 'b', 'c'], after: ['c', 'a', 'b'] }],
+ *   (id) => draw.groups.has(id),
+ * );
+ * // [{ kind: 'item', itemId: 'c', from: { layerId: 'l1', groupId: undefined, below: 'b',
+ * //   above: null }, to: { layerId: 'l1', groupId: undefined, below: null, above: 'a' } }]
+ * ```
+ */
+export function itemMovesBetween(
+  lists: readonly ItemListChange[],
+  isGroup: (id: string) => boolean,
+): ItemMove[] {
+  // An item listed twice keeps its first place: in the lists before in their order, in the lists
+  // after the layers first
+  const seenBefore = new Set<string>();
+  const before = lists.map((list) =>
+    list.before.filter((id) => {
+      if (seenBefore.has(id)) return false;
+      seenBefore.add(id);
+      return true;
+    }),
+  );
+  const layersFirst = [
+    ...lists.flatMap((list, k) => (list.groupId === undefined ? [k] : [])),
+    ...lists.flatMap((list, k) => (list.groupId !== undefined ? [k] : [])),
+  ];
+  // The items that stay in each list: the longest run of the ones listed after whose first
+  // places in the list before go up; every other item placed moves
+  const placed = new Set<string>();
+  const moved = new Set<string>();
+  const after: string[][] = lists.map(() => []);
+  for (const k of layersFirst) {
+    const list = lists[k];
+    const placeBefore = new Map<string, number>();
+    list.before.forEach((id, i) => {
+      if (!placeBefore.has(id)) placeBefore.set(id, i);
+    });
+    const places: number[] = [];
+    const indices: number[] = [];
+    list.after.forEach((id, i) => {
+      const at = placeBefore.get(id);
+      if (at === undefined) return;
+      places.push(at);
+      indices.push(i);
+    });
+    const stays = new Set(longestRisingRun(places).map((at) => indices[at]));
+    list.after.forEach((id, i) => {
+      if (placed.has(id)) return;
+      placed.add(id);
+      after[k].push(id);
+      if (!stays.has(i)) moved.add(id);
+    });
+  }
+  const deleted = before.flatMap((ids) => ids.filter((id) => !placed.has(id)));
+  const containers = lists.map((list, k) => {
+    const index = new Map(before[k].map((id, i) => [id, i]));
+    return {
+      layerId: list.layerId,
+      groupId: list.groupId,
+      before: before[k],
+      after: after[k],
+      beforeIndex: (id: string) => index.get(id) ?? -1,
+    };
+  });
+  return movesBetween(containers, { moved, deleted, isGroup, idOf: (id) => id });
+}
 
 // ============================================================================
 // Loading

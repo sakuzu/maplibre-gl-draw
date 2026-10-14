@@ -124,6 +124,7 @@ export type {
 
 // The stacking order of the items
 export type {
+  ItemListChange,
   ItemMove,
   ItemOrderChange,
   ItemPlacement,
@@ -132,6 +133,7 @@ export type {
   RowRangeMove,
   RowValuesSnapshot,
 } from './api/model.js';
+export { itemMovesBetween } from './api/model.js';
 
 // State
 export type {
