@@ -46,10 +46,17 @@ export interface GroupsCollection {
   /**
    * Creates a group of features and returns it as it was stored.
    *
+   * The group takes the place of its frontmost feature in their layer. In a layer held as rows (a
+   * Store that holds its features as rows), a group can be created without features, at the front
+   * of the layer (`featureIds: []` with its `layerId`); and a group created with the ID of a group
+   * deleted whose rows are kept (`StoreChange.retain`) comes back at the place it had, as an undo
+   * of its deletion puts it back.
+   *
    * @returns The new group, or `null` when the document is read-only
-   * @throws `DrawError` with the code `not-found` when one of the features does not exist,
-   *   `invalid-input` when the features are not in the same layer, or `already-exists` when
-   *   its ID is taken
+   * @throws `DrawError` with the code `not-found` when one of the features or the layer does not
+   *   exist, `invalid-input` when the features are not in the same layer (or not in `layerId`),
+   *   or when there is no feature in a layer not held as rows, or `already-exists` when its ID is
+   *   taken
    */
   create(input: GroupInput): Group | null;
   /**

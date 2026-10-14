@@ -171,17 +171,22 @@ export interface GroupInsertStore extends ItemListStore {
 /**
  * Creates a group where its frontmost member was (between the items just below and above it that
  * are not members; at the front when no member stands in the layer), in the transaction of the
- * caller
+ * caller. A group of a layer held as rows deleted whose rows are kept is created again at the
+ * place it had, which the Store gives it
  *
  * @internal
  */
 export function insertGroup(store: GroupInsertStore, group: Group): void {
   const members = new Set(group.kind === 'table' ? [] : group.featureIds);
   const layerId = group.layerId;
+  const kept =
+    heldAsRows(store, layerId) &&
+    store.getGroup(group.id) === undefined &&
+    store.tables?.groupHandleOf(group.id) !== undefined;
   const frontmost = frontmostItem(store, layerId, members);
   const around = frontmost ? itemNeighbors(store, layerId, undefined, frontmost, members) : null;
   store.createGroup(group);
-  if (store.getLayer(layerId)) {
+  if (!kept && store.getLayer(layerId)) {
     store.moveItems(
       [group.id],
       around ? { layerId, below: around.below, above: around.above } : { layerId, above: null },

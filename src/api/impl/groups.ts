@@ -37,7 +37,7 @@ import {
   requireRecord,
 } from './shared.js';
 
-const INPUT_KEYS = ['featureIds', 'id', 'name', 'visible', 'locked'] as const;
+const INPUT_KEYS = ['featureIds', 'layerId', 'id', 'name', 'visible', 'locked'] as const;
 const PATCH_KEYS = ['name', 'visible', 'locked'] as const;
 const FILTER_KEYS = ['layerId', 'visible', 'locked'] as const;
 
@@ -219,7 +219,18 @@ function prepareGroup(
   const { store } = deps;
   requireRecord(input, 'The input');
   const ids = requireIds(input.featureIds, 'featureIds');
-  if (ids.length === 0) throw invalidInput('A group needs at least one feature');
+  optionalString(input as unknown as Record<string, unknown>, 'layerId');
+  if (ids.length === 0) {
+    // A group without features: in a layer held as rows only
+    if (input.layerId === undefined) throw invalidInput('A group needs at least one feature');
+    const layer = store.getLayer(input.layerId);
+    if (!layer) throw notFound('layer', input.layerId);
+    if (layer.kind !== 'table') {
+      throw invalidInput('A group needs at least one feature, but in a layer held as rows');
+    }
+    const shell = prepareGroupShell(deps, input, INPUT_KEYS, pending);
+    return { ...shell, layerId: layer.id, featureIds: [] };
+  }
   const members = ids.map((featureId) => {
     const feature = store.getFeature(featureId);
     if (!feature) throw notFound('feature', featureId);
@@ -231,6 +242,9 @@ function prepareGroup(
   const layerId = members[0].layerId;
   if (members.some((feature) => feature.layerId !== layerId)) {
     throw invalidInput('The features of a group must be in the same layer');
+  }
+  if (input.layerId !== undefined && input.layerId !== layerId) {
+    throw invalidInput(`The features of the group are not in the layer ${input.layerId}`);
   }
   const shell = prepareGroupShell(deps, input, INPUT_KEYS, pending);
   return {
