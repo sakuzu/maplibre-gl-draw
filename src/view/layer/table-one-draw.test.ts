@@ -20,6 +20,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { RowField } from '../../api/tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
@@ -210,7 +211,7 @@ function setup(
     customRenderers?: Map<string, unknown>;
   } = {},
 ) {
-  const { internals, table } = tablesOfFeatures('layer', features, targetRows);
+  const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
   const mock = recordingGL(options);
   const ledger = new GpuLedger();
   const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
@@ -279,7 +280,21 @@ function setup(
     renderer.recordDraws(null);
     return { record, calls: mock.calls.slice(at), immediate: [...immediate] };
   };
-  return { internals, table, renderer, rows, frame, made, released, kinds, ledger, deps, mock };
+  return {
+    internals,
+    table,
+    tables,
+    writer,
+    renderer,
+    rows,
+    frame,
+    made,
+    released,
+    kinds,
+    ledger,
+    deps,
+    mock,
+  };
 }
 
 /** The rows the ranges cover, in order, as `group:row` */
@@ -637,5 +652,108 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     renderer.dispose();
     // The buffer of the corners of the strip and the empty picture stay with the renderer
     expect(ledger.snapshot().byOwner.rows).toBe(16 + 4);
+  });
+});
+
+describe('the check of the classification of a row written in place (7.2 of the design, J13)', () => {
+  /** A layer drawn in one draw whose writes in place reach the renderer, as the instance does */
+  function written(features: Feature[]) {
+    const setUp = setup(features, 1000);
+    setUp.internals.onRowsWritten((layerId, writes) => setUp.renderer.rowsWritten(layerId, writes));
+    return setUp;
+  }
+
+  it('draws a row from the delta when an attribute a provider of companions reads gives it one', () => {
+    const features = interleaved(200, 21);
+    const { internals, tables, writer, renderer, frame, deps, table } = written(features);
+    const companions: string[] = [];
+    deps.companions.register({
+      id: 'leader',
+      has: (f) => f.properties?.leader === true,
+      draw: (f) => {
+        companions.push(f.id);
+      },
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    frame();
+    const line = features.find((f) => f.id.startsWith('l')) as Feature;
+    const handle = tables.handleOf(line.id) as number;
+    writer.apply({
+      handles: Int32Array.of(handle),
+      fields: new Map([['property:leader', [true]]]),
+    });
+    let atOnce = false;
+    for (let i = 0; i < 4; i++) {
+      const { record, immediate } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      atOnce ||= immediate.includes(line.id);
+    }
+    // Not written into its place in the chunk: drawn at once from the delta, with its companion
+    expect(renderer.writeStats.reclassified).toBe(1);
+    expect(renderer.writeStats.inPlace).toBe(0);
+    expect(internals.deltaRowCount()).toBe(1);
+    expect(atOnce).toBe(true);
+    expect(companions).toContain(line.id);
+  });
+
+  it('writes in place an attribute nothing classifies by, and a row only hidden or shown', () => {
+    const features = interleaved(200, 22);
+    const { internals, tables, writer, renderer, frame, table } = written(features);
+    frame();
+    frame();
+    const polygon = features.find((f) => f.id.startsWith('g')) as Feature;
+    const handle = tables.handleOf(polygon.id) as number;
+    writer.apply({
+      handles: Int32Array.of(handle),
+      fields: new Map<RowField, unknown[]>([
+        ['property:name', ['a name']],
+        ['visible', [false]],
+      ]),
+    });
+    for (let i = 0; i < 2; i++) {
+      const { record } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    }
+    expect(renderer.writeStats.reclassified).toBe(0);
+    expect(internals.deltaRowCount()).toBe(0);
+    expect(visibleHandles(table)).not.toContain(handle);
+  });
+
+  it('draws a row from the delta when a renderer of its type takes it after a write', () => {
+    const features = [
+      ...interleaved(100, 23),
+      feature('c0', 'Point', [1, 1]),
+      feature('c1', 'Point', [2, 2]),
+    ];
+    const drawn: string[] = [];
+    const customRenderers = new Map<string, unknown>([
+      [
+        'Point',
+        {
+          type: 'Point',
+          appliesTo: (f: Feature) => f.properties?.custom === true,
+          draw: (f: Feature) => {
+            drawn.push(f.id);
+          },
+        },
+      ],
+    ]);
+    const setUp = setup(features, 1000, { customRenderers });
+    setUp.internals.onRowsWritten((layerId, writes) => setUp.renderer.rowsWritten(layerId, writes));
+    const { tables, writer, renderer, frame, table } = setUp;
+    frame();
+    frame();
+    writer.apply({
+      handles: Int32Array.of(tables.handleOf('c1') as number),
+      fields: new Map([['property:custom', [true]]]),
+    });
+    for (let i = 0; i < 3; i++) {
+      const { record } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    }
+    expect(renderer.writeStats.reclassified).toBe(1);
+    expect(setUp.internals.deltaRowCount()).toBe(1);
   });
 });
