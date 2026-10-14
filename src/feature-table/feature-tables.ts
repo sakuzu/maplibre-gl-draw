@@ -74,6 +74,7 @@ import { GroupTable } from './group-table.js';
 import { translationBetween } from './held-move.js';
 import { IdIndex } from './id-index.js';
 import { groupKeyMoves, type ItemOrderSource, ItemOrderWatch } from './item-order.js';
+import { ItemWalk } from './item-walk.js';
 import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
 import {
   type RowReadContext,
@@ -3205,12 +3206,24 @@ class LayerTableViewImpl implements LayerTableView {
     return { kinds: items.kinds.slice(from, to), handles: items.handles.slice(from, to) };
   }
 
+  // The members of a group are read from the list of the items when it is made, and from the
+  // rows of the group otherwise (the list is made from every row of the layer)
+
   groupMemberCount(group: number): number {
-    return this.table.itemsOf().members.get(group)?.length ?? 0;
+    const items = this.table.itemsMade;
+    if (items) return items.members.get(group)?.length ?? 0;
+    return new ItemWalk(this.table, this.store).memberCount(group);
   }
 
   groupMembersInOrder(group: number, start: number, count: number): Int32Array {
-    const members = this.table.itemsOf().members.get(group);
+    const items = this.table.itemsMade;
+    if (!items) {
+      const from = Math.max(0, start);
+      return Int32Array.from(
+        new ItemWalk(this.table, this.store).members(group, from, Math.max(0, count)),
+      );
+    }
+    const members = items.members.get(group);
     if (!members) return new Int32Array(0);
     const from = Math.max(0, Math.min(start, members.length));
     return members.slice(from, Math.max(from, Math.min(members.length, from + Math.max(0, count))));

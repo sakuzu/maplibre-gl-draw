@@ -15,6 +15,7 @@ import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
+import { ItemWalk } from './item-walk.js';
 import { STATE_HIDDEN_MASK } from './row-state.js';
 
 /**
@@ -141,29 +142,14 @@ export function tableLayerHasLockedRow(
   return false;
 }
 
-/**
- * The items of a layer held as rows, or the members of a group of it, as numbers: twice the
- * handle of a row, twice the handle of a group plus one (none for a layer that holds no row)
- */
-function itemCodes(
-  tables: FeatureTables,
-  layerId: string,
-  groupId: string | undefined,
-): Int32Array | null {
+/** The walk of the items of a layer held as rows (null for a layer that holds no row) */
+function walkOf(tables: FeatureTables, layerId: string): ItemWalk | null {
   const internals = featureTablesInternals(tables);
-  const items = internals?.layerTable(layerId)?.itemsOf();
-  if (!internals || !items) return null;
-  if (groupId !== undefined) {
-    const group = internals.groups.handleOfId(groupId);
-    const members = group >= 0 ? items.members.get(group) : undefined;
-    return members ? Int32Array.from(members, (handle) => handle * 2) : null;
-  }
-  return Int32Array.from(items.kinds, (kind, i) =>
-    kind === 0 ? items.handles[i] * 2 : items.handles[i] * 2 + 1,
-  );
+  const table = internals?.layerTable(layerId);
+  return internals && table ? new ItemWalk(table, internals) : null;
 }
 
-/** The id of an item numbered as `itemCodes` numbers it */
+/** The id of an item numbered as the walk numbers it */
 function idOfCode(tables: FeatureTables, code: number): string | undefined {
   if ((code & 1) === 0) return tables.idOf(code >> 1);
   return featureTablesInternals(tables)?.groups.idOf(code >> 1);
@@ -179,7 +165,8 @@ function codeOfId(tables: FeatureTables, id: string): number {
 
 /**
  * Where an item of a layer held as rows (or of a group of it) stands: the items just below and
- * above it, the ones `skip` names left out (null when the item is not there)
+ * above it, the ones `skip` names left out (null when the item is not there). Read from the rows
+ * next to it, not from the list of the items of the layer
  *
  * @internal
  */
@@ -191,22 +178,28 @@ export function tableItemNeighbors(
   skip: ReadonlySet<string> = new Set(),
 ): { below: string | null; above: string | null } | null {
   if (!tables) return null;
-  const codes = itemCodes(tables, layerId, groupId);
+  const walk = walkOf(tables, layerId);
   const code = codeOfId(tables, itemId);
-  const at = codes && code >= 0 ? codes.indexOf(code) : -1;
-  if (!codes || at < 0) return null;
-  const near = (step: 1 | -1): string | null => {
-    for (let i = at + step; i >= 0 && i < codes.length; i += step) {
-      const id = idOfCode(tables, codes[i]);
-      if (id !== undefined && !skip.has(id)) return id;
-    }
-    return null;
+  const container =
+    groupId === undefined ? -1 : (featureTablesInternals(tables)?.groups.handleOfId(groupId) ?? -1);
+  if (!walk || code < 0 || (groupId !== undefined && container < 0)) return null;
+  if (!walk.span(code, container)) return null;
+  const skipped = new Set<number>();
+  for (const id of skip) {
+    const other = codeOfId(tables, id);
+    if (other >= 0) skipped.add(other);
+  }
+  const below = walk.below(code, container, skipped);
+  const above = walk.above(code, container, skipped);
+  return {
+    below: below === null ? null : (idOfCode(tables, below) ?? null),
+    above: above === null ? null : (idOfCode(tables, above) ?? null),
   };
-  return { below: near(-1), above: near(1) };
 }
 
 /**
- * The frontmost of items of a layer held as rows (undefined when none of them is an item of it)
+ * The frontmost of items of a layer held as rows (undefined when none of them is an item of it),
+ * read where each of them stands
  *
  * @internal
  */
@@ -216,17 +209,15 @@ export function tableFrontmostItem(
   itemIds: ReadonlySet<string>,
 ): string | undefined {
   if (!tables) return undefined;
-  const codes = itemCodes(tables, layerId, undefined);
-  if (!codes) return undefined;
-  const wanted = new Set<number>();
+  const walk = walkOf(tables, layerId);
+  if (!walk) return undefined;
+  let front = -1;
   for (const id of itemIds) {
     const code = codeOfId(tables, id);
-    if (code >= 0) wanted.add(code);
+    if (code < 0 || !walk.span(code, -1)) continue;
+    if (front < 0 || walk.compare(code, front) > 0) front = code;
   }
-  for (let i = codes.length - 1; i >= 0; i--) {
-    if (wanted.has(codes[i])) return idOfCode(tables, codes[i]);
-  }
-  return undefined;
+  return front < 0 ? undefined : idOfCode(tables, front);
 }
 
 /**

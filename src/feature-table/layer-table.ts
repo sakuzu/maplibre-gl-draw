@@ -221,6 +221,17 @@ export interface LayerOrder {
 }
 
 /**
+ * A row of the order of a layer: the group it is read from (a group of the layer, the group of
+ * its delta, or a group of its new rows read before their groups are taken in) and its row there
+ *
+ * @internal
+ */
+export interface OrderRow {
+  readonly group: RowGroup;
+  readonly row: number;
+}
+
+/**
  * Where the rows of the delta of a layer are drawn and read: before row `cuts[k]` of the group
  * at `groups[k]` of the order (the rows of the delta are in their order, so the places are too)
  *
@@ -651,6 +662,11 @@ export class LayerTable {
     return this.items;
   }
 
+  /** The items of the layer when they are made, null when they would have to be made again */
+  get itemsMade(): LayerItems | null {
+    return this.items;
+  }
+
   /**
    * Makes the items and the order be made again when next read (a row deleted, a row of another
    * group, a row of the delta)
@@ -658,6 +674,162 @@ export class LayerTable {
   touchItems(): void {
     this.items = null;
     this.ordered = null;
+  }
+
+  // === Walking the order a row at a time ===
+  //
+  // The rows of the order (`rowOrder`) are the rows of the groups read there and the rows read
+  // outside them (the delta, the new rows) at their places. A row is found from its place and
+  // the rows next to it are read from the groups and the places of the rows outside them, so a
+  // step costs the rows not read it passes, not the rows of the layer.
+
+  /** The first row of the order (null for a layer without rows) */
+  firstRow(): OrderRow | null {
+    return this.earlier(this.mainFrom(0, 0), this.readExtras().rows.length > 0 ? 0 : -1);
+  }
+
+  /** The last row of the order (null for a layer without rows) */
+  lastRow(): OrderRow | null {
+    const extras = this.readExtras();
+    const last = this.order.length - 1;
+    const main = last >= 0 ? this.mainBefore(last, this.groupAt(last).data.length) : null;
+    return this.later(main, extras.rows.length - 1);
+  }
+
+  /**
+   * The row just before a row of the order (null for the first one)
+   *
+   * @throws when the row is not read in the layer
+   */
+  previousRow(at: OrderRow): OrderRow | null {
+    const extras = this.readExtras();
+    const k = this.extraOf(at);
+    if (k >= 0) {
+      const g = extras.places.groups[k];
+      const main = g >= 0 ? this.mainBefore(g, extras.places.cuts[k]) : null;
+      return this.later(main, k - 1);
+    }
+    const [g, r] = this.mainOf(at);
+    return this.later(this.mainBefore(g, r), this.lastExtraBefore(g, r));
+  }
+
+  /**
+   * The row just after a row of the order (null for the last one)
+   *
+   * @throws when the row is not read in the layer
+   */
+  nextRow(at: OrderRow): OrderRow | null {
+    const extras = this.readExtras();
+    const k = this.extraOf(at);
+    if (k >= 0) {
+      const g = extras.places.groups[k];
+      const main = g >= 0 ? this.mainFrom(g, extras.places.cuts[k]) : this.mainFrom(0, 0);
+      return this.earlier(main, k + 1 < extras.rows.length ? k + 1 : -1);
+    }
+    const [g, r] = this.mainOf(at);
+    const next = this.lastExtraBefore(g, r) + 1;
+    return this.earlier(this.mainFrom(g, r + 1), next < extras.rows.length ? next : -1);
+  }
+
+  /**
+   * The first row of the order that does not come before a key (null when every row does)
+   *
+   * @param keys The columns the key is read from
+   * @param row The entry of the key in them
+   */
+  rowNotBefore(keys: RowKeySource, row: number): OrderRow | null {
+    const extras = this.readExtras();
+    let main: [number, number] | null = null;
+    const place = this.positionOfKey(keys, row);
+    if (place) {
+      const g = this.orderOf(place.group);
+      main = this.mainFrom(g, place.slot >> 1);
+    }
+    // The first row outside the groups that does not come before the key
+    let lo = 0;
+    let hi = extras.rows.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const group = extras.groups[mid];
+      if (compareRowKeys(group.data, extras.rows[mid], keys, row, this.groupKeys) < 0) {
+        lo = mid + 1;
+      } else hi = mid;
+    }
+    return this.earlier(main, lo < extras.rows.length ? lo : -1);
+  }
+
+  /** The entry of a row among the rows read outside the groups (-1 for a row of a group) */
+  private extraOf(at: OrderRow): number {
+    if (!at.group.delta && !at.group.pending) return -1;
+    const k = this.readExtras().entries.get(at.group)?.[at.row] ?? -1;
+    if (k < 0) throw new Error('LayerTable: the row is not read in the layer');
+    return k;
+  }
+
+  /** The place in the order of the groups of a row of a group */
+  private mainOf(at: OrderRow): [number, number] {
+    const g = this.orderOf(at.group.handle);
+    if (g < 0 || this.groupAt(g) !== at.group || (at.group.state[at.row] & STATE_ELSEWHERE) !== 0) {
+      throw new Error('LayerTable: the row is not read in the layer');
+    }
+    return [g, at.row];
+  }
+
+  /** The first row of the groups read there at or after row `r` of the group at `g` */
+  private mainFrom(g: number, r: number): [number, number] | null {
+    for (let i = g; i < this.order.length; i++) {
+      const group = this.groupAt(i);
+      for (let row = i === g ? r : 0; row < group.data.length; row++) {
+        if ((group.state[row] & STATE_ELSEWHERE) === 0) return [i, row];
+      }
+    }
+    return null;
+  }
+
+  /** The last row of the groups read there before row `r` of the group at `g` */
+  private mainBefore(g: number, r: number): [number, number] | null {
+    for (let i = g; i >= 0; i--) {
+      const group = this.groupAt(i);
+      for (let row = (i === g ? r : group.data.length) - 1; row >= 0; row--) {
+        if ((group.state[row] & STATE_ELSEWHERE) === 0) return [i, row];
+      }
+    }
+    return null;
+  }
+
+  /** Whether the row `k` read outside the groups comes before row `r` of the group at `g` */
+  private extraBefore(k: number, g: number, r: number): boolean {
+    const places = this.readExtras().places;
+    return places.groups[k] < g || (places.groups[k] === g && places.cuts[k] <= r);
+  }
+
+  /** The last row read outside the groups that comes before row `r` of the group at `g` (-1) */
+  private lastExtraBefore(g: number, r: number): number {
+    let lo = 0;
+    let hi = this.readExtras().rows.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.extraBefore(mid, g, r)) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo - 1;
+  }
+
+  /** The earlier of a row of the groups and a row read outside them (-1 for none) */
+  private earlier(main: [number, number] | null, k: number): OrderRow | null {
+    if (k >= 0 && (!main || this.extraBefore(k, main[0], main[1]))) return this.extraRow(k);
+    return main ? { group: this.groupAt(main[0]), row: main[1] } : null;
+  }
+
+  /** The later of a row of the groups and a row read outside them (-1 for none) */
+  private later(main: [number, number] | null, k: number): OrderRow | null {
+    if (k >= 0 && (!main || !this.extraBefore(k, main[0], main[1]))) return this.extraRow(k);
+    return main ? { group: this.groupAt(main[0]), row: main[1] } : null;
+  }
+
+  private extraRow(k: number): OrderRow {
+    const extras = this.readExtras();
+    return { group: extras.groups[k], row: extras.rows[k] };
   }
 
   /**

@@ -46,6 +46,7 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../feature-table/feature-tables.js';
+import { ItemWalk } from '../feature-table/item-walk.js';
 import { rowFeature } from '../feature-table/row-read.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
@@ -871,17 +872,10 @@ export class TableContractStore implements StoreContract {
     return group >= 0 ? group * 2 + 1 : -1;
   }
 
-  /** The items of a layer, or the members of a group of it, as numbers */
-  #codesOf(layerId: string, group: number): Int32Array {
-    const items = this.#internals.layerTable(layerId)?.itemsOf();
-    if (!items) return new Int32Array(0);
-    if (group >= 0) {
-      const members = items.members.get(group) ?? new Int32Array(0);
-      return Int32Array.from(members, (handle) => handle * 2);
-    }
-    return Int32Array.from(items.kinds, (kind, i) =>
-      kind === 0 ? items.handles[i] * 2 : items.handles[i] * 2 + 1,
-    );
+  /** The walk of the items of a layer (null for a layer that holds no row) */
+  #walk(layerId: string): ItemWalk | null {
+    const table = this.#internals.layerTable(layerId);
+    return table ? new ItemWalk(table, this.#internals) : null;
   }
 
   /** The key of an item in a layer (its own key, the key of a group), or in a group */
@@ -895,17 +889,19 @@ export class TableContractStore implements StoreContract {
 
   /** The keys of the items just below and above an item of a layer */
   #neighborsOf(layerId: string, code: number): { below: string | null; above: string | null } {
-    const list = this.#codesOf(layerId, -1);
-    const at = list.indexOf(code);
+    const walk = this.#walk(layerId);
+    const below = walk?.below(code, -1) ?? null;
+    const above = walk?.above(code, -1) ?? null;
     return {
-      below: at > 0 ? this.#keyOfCode(list[at - 1], false) : null,
-      above: at >= 0 && at + 1 < list.length ? this.#keyOfCode(list[at + 1], false) : null,
+      below: below === null ? null : this.#keyOfCode(below, false),
+      above: above === null ? null : this.#keyOfCode(above, false),
     };
   }
 
   /**
    * `n` keys for items put in a place, between the keys of the items just below and above it
-   * among the items that stay (the items put there left out)
+   * among the items that stay (the items put there left out), read from the items next to the
+   * place
    */
   #keysAt(
     to: ItemPlacement,
@@ -913,27 +909,28 @@ export class TableContractStore implements StoreContract {
     moving: ReadonlySet<number>,
     n: number,
   ): string[] {
-    const groupHandle = group ? this.#internals.groups.handleOfId(group.id) : -1;
-    const list = this.#codesOf(to.layerId, groupHandle);
+    const container = group ? this.#internals.groups.handleOfId(group.id) : -1;
+    const walk = this.#walk(to.layerId);
     const inGroup = group !== undefined;
-    const stay = (from: number, step: 1 | -1): number => {
-      for (let i = from + step; i >= 0 && i < list.length; i += step) {
-        if (!moving.has(list[i])) return i;
-      }
-      return -1;
-    };
-    const keyAt = (i: number): string | null => (i >= 0 ? this.#keyOfCode(list[i], inGroup) : null);
-    const indexOf = (id: string | null | undefined): number => {
-      if (id === null || id === undefined) return -1;
+    const keyOf = (code: number | null | undefined): string | null =>
+      code === null || code === undefined ? null : this.#keyOfCode(code, inGroup);
+    /** The item of an id that stays in the container (-1 for none) */
+    const itemOf = (id: string | null | undefined): number => {
+      if (id === null || id === undefined || !walk) return -1;
       const code = this.#codeOfId(id);
-      return code >= 0 && !moving.has(code) ? list.indexOf(code) : -1;
+      return code >= 0 && !moving.has(code) && walk.span(code, container) ? code : -1;
     };
-    if (to.below === null) return keysBetween(null, keyAt(stay(-1, 1)), n);
-    const below = indexOf(to.below);
-    if (below >= 0) return keysBetween(keyAt(below), keyAt(stay(below, 1)), n);
-    const above = to.above === null ? -1 : indexOf(to.above);
-    if (above >= 0) return keysBetween(keyAt(stay(above, -1)), keyAt(above), n);
-    return keysBetween(keyAt(stay(list.length, -1)), null, n);
+    if (group && container < 0) return keysBetween(null, null, n);
+    if (to.below === null) return keysBetween(null, keyOf(walk?.bottom(container, moving)), n);
+    const below = itemOf(to.below);
+    if (below >= 0) {
+      return keysBetween(keyOf(below), keyOf(walk?.above(below, container, moving)), n);
+    }
+    const above = to.above === null ? -1 : itemOf(to.above);
+    if (above >= 0) {
+      return keysBetween(keyOf(walk?.below(above, container, moving)), keyOf(above), n);
+    }
+    return keysBetween(keyOf(walk?.top(container, moving)), null, n);
   }
 
   /** Writes fields of one row */
@@ -994,17 +991,10 @@ export class TableContractStore implements StoreContract {
 
   /** The key of the order of the last item of a layer (null for none) */
   #lastItemKey(layerId: string): string | null {
-    const view = this.tables.layer(layerId);
-    if (!view || view.itemCount === 0) return null;
-    let last: string | null = null;
     // The keys of the items are in their order; the last one may be a group
-    const items = view.itemsInOrder(view.itemCount - 1, 1);
-    if (items.kinds[0] === 0) {
-      const place = this.#internals.placeOf(items.handles[0]);
-      if (place) last = utf8String(place.group.data.itemKeys, place.row);
-    } else {
-      last = this.#internals.groups.orderOf(items.handles[0]) ?? null;
-    }
+    const top = this.#walk(layerId)?.top(-1) ?? null;
+    if (top === null) return null;
+    let last: string | null = this.#keyOfCode(top, false);
     // A group without members is not an item of the rows; its key may come after
     for (const group of this.#groups.values()) {
       if (group.layerId !== layerId) continue;
@@ -1022,14 +1012,10 @@ export class TableContractStore implements StoreContract {
 
   /** The key of the last member of a group (null for none) */
   #lastMemberKey(group: TableGroup): string | null {
-    const view = this.tables.layer(group.layerId);
     const handle = this.#internals.groups.handleOfId(group.id);
-    if (!view || handle < 0) return null;
-    const count = view.groupMemberCount(handle);
-    if (count === 0) return null;
-    const [last] = view.groupMembersInOrder(handle, count - 1, 1);
-    const place = this.#internals.placeOf(last);
-    return place ? utf8String(place.group.data.memberKeys, place.row) : null;
+    if (handle < 0) return null;
+    const last = this.#walk(group.layerId)?.top(handle) ?? null;
+    return last === null ? null : this.#keyOfCode(last, true);
   }
 
   /** Deletes groups of features with the rows that name them */
