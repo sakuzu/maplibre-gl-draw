@@ -206,9 +206,9 @@ export interface LegendEntry {
 }
 
 /**
- * What every layer has.
+ * A unit of the stacking order that holds features and groups as objects.
  */
-export interface LayerFields {
+export interface ObjectLayer {
   /** The ID */
   id: string;
   /** The name */
@@ -223,12 +223,6 @@ export interface LayerFields {
   styleRule: StyleRule | undefined;
   /** Values of the user */
   metadata: Record<string, unknown> | undefined;
-}
-
-/**
- * A unit of the stacking order that holds features and groups as objects.
- */
-export interface ObjectLayer extends LayerFields {
   /** Not set: a layer of objects */
   kind?: undefined;
   /**
@@ -242,7 +236,21 @@ export interface ObjectLayer extends LayerFields {
  * A layer a Store holds as rows of columns (the tables of the Store): its items are read from
  * its rows (`LayerTableView.itemsInOrder`), not listed in it.
  */
-export interface TableLayer extends LayerFields {
+export interface TableLayer {
+  /** The ID */
+  id: string;
+  /** The name */
+  name: string;
+  /** Whether it is visible */
+  visible: boolean;
+  /** Whether it is locked */
+  locked: boolean;
+  /** The opacity of the whole layer, from 0 to 1 */
+  opacity: number;
+  /** The rule that colors its features from their attributes */
+  styleRule: StyleRule | undefined;
+  /** Values of the user */
+  metadata: Record<string, unknown> | undefined;
   /** A layer held as rows */
   kind: 'table';
 }
@@ -254,9 +262,9 @@ export interface TableLayer extends LayerFields {
 export type Layer = ObjectLayer | TableLayer;
 
 /**
- * What every group has.
+ * A set of features in one layer of objects.
  */
-export interface GroupFields {
+export interface ObjectGroup {
   /** The ID */
   id: string;
   /** The ID of the layer it is in */
@@ -267,12 +275,6 @@ export interface GroupFields {
   visible: boolean;
   /** Whether it is locked */
   locked: boolean;
-}
-
-/**
- * A set of features in one layer of objects.
- */
-export interface ObjectGroup extends GroupFields {
   /** Not set: a group of a layer of objects */
   kind?: undefined;
   /** The IDs of its features, from the back */
@@ -283,7 +285,17 @@ export interface ObjectGroup extends GroupFields {
  * A set of features in one layer held as rows: its features are read from the rows
  * (`LayerTableView.groupMembersInOrder`), not listed in it.
  */
-export interface TableGroup extends GroupFields {
+export interface TableGroup {
+  /** The ID */
+  id: string;
+  /** The ID of the layer it is in */
+  layerId: string;
+  /** The name */
+  name: string;
+  /** Whether it is visible */
+  visible: boolean;
+  /** Whether it is locked */
+  locked: boolean;
   /** A group of a layer held as rows */
   kind: 'table';
 }
