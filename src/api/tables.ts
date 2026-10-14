@@ -389,9 +389,12 @@ export interface FeatureTablesWriter {
    * in the table of styles, and it is put at its place in the order of the layer. The groups are
    * kept as they are: do not change their arrays afterwards.
    *
-   * A group that cannot be taken in (an id that is already a row of the document, rows not in
-   * the order of their keys, keys that overlap those of another group of the layer) is left out
-   * and reported on the console.
+   * A group whose keys overlap those of another group of the layer (one taken in, or built of
+   * rows written, since it was made) is not left out: its rows go to the rows of the layer
+   * changed since their groups were built (the delta), read and drawn at their places at once,
+   * and into the row groups with their next versions. A group that cannot be taken in (an id
+   * that is already a row of the document, rows not in the order of their keys) is left out and
+   * reported on the console.
    *
    * @throws when an array of a group does not have one entry per row, when a group is empty, when
    *   its coordinates do not have the dimensions of the layer (`FeatureTablesOptions.dimsOf`), or

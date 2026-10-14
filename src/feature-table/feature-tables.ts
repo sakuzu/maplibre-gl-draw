@@ -880,7 +880,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     try {
       this.adoptGroup(adoption.layer, adoption.data);
     } catch {
-      this.createdToDelta(adoption.layer, adoption.data);
+      this.rowsToDelta(adoption.layer, adoption.data);
     }
     this.settleCreated(creation, adoption.data);
   }
@@ -1096,8 +1096,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.revisionCount++;
   }
 
-  /** Puts the rows of a group of new rows that could not be taken in into the delta */
-  private createdToDelta(layer: LayerTable, data: RowGroupData): void {
+  /**
+   * Puts the rows of a row group that cannot be taken in as a group into the delta of its layer
+   * (given to `adopt`, or built of new rows)
+   */
+  private rowsToDelta(layer: LayerTable, data: RowGroupData): void {
     this.numberStyles(data);
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     const group = createRowGroup(-1, data);
@@ -2960,6 +2963,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (!this.styles.has(data.styles[r])) {
         throw new Error(`FeatureTables: a row names the style ${data.styles[r]}, which is unknown`);
       }
+    }
+    // A group whose keys overlap the rows of another group (one taken in, or built of rows
+    // written, since it was made) is not left out: its rows go to the delta, read and drawn at
+    // their places at once, and into the row groups with their next versions
+    if (data.length > 0 && layer.inKeyOrder(data) && layer.overlaps(data)) {
+      this.rowsToDelta(layer, data);
+      return;
     }
     const group = createRowGroup(this.nextGroup++, data);
     layer.insert(group);

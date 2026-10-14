@@ -453,17 +453,32 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     expect(items('a')).toEqual(BETWEEN);
   });
 
-  it('leave out a group whose keys hold the new key of the group, once the reorder is in', () => {
-    const { writer, tables, frame, items, low, high } = heldReorder();
+  it('put a group whose keys hold the new key of the group in the delta once it is in', () => {
+    const { writer, tables, internals, frame, draw, items, low, high } = heldReorder();
     writer.adopt('a', around(low, high));
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    for (let f = 1; f <= 6; f++) frame(f >= 4);
-    // Refused when it is taken in (it would overlap the members of the group), not when the
-    // reorder goes in
-    expect(error).toHaveBeenCalledTimes(1);
+    let placed = 0;
+    for (let f = 1; f <= 6; f++) {
+      frame(f >= 4);
+      if (placed === 0 && tables.handleOf('n0') !== undefined) placed = f;
+    }
+    // Not left out: taken in by its rows (it would overlap the members of the group), in the
+    // frame after the reorder is in, read and drawn at their places
+    expect(error).not.toHaveBeenCalled();
     error.mockRestore();
-    expect(tables.handleOf('n0')).toBeUndefined();
-    expect(items('a')).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'g']);
+    expect(placed).toBe(5);
+    const n0 = tables.handleOf('n0') as number;
+    expect(internals.ids.deltaLayer(n0)).toBeGreaterThanOrEqual(0);
+    const after = ['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'n0', 'g', 'n1'];
+    expect(items('a')).toEqual(after);
+    const view = tables.layer('a');
+    const drawn = Array.from(view?.listDrawnRows([-1, -1, 30, 1]) ?? [], (h) => tables.idOf(h));
+    expect(drawn).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'n0', 'r2', 'r3', 'n1']);
+    expect(view?.getRowPoint(n0)).toEqual([20, 0]);
+    // And into the row groups with their next versions
+    draw();
+    expect(internals.ids.mainGroup(n0)).toBeGreaterThanOrEqual(0);
+    expect(items('a')).toEqual(after);
   });
 
   /** Writes `n` new rows `c00`.. of these keys (a run no row of the order drawn is within) */

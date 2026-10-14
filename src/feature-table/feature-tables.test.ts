@@ -11,7 +11,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRowGroupBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
-import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
+import {
+  createFeatureTablesStore,
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from './feature-tables.js';
 import type { LayerTable } from './layer-table.js';
 import {
   GPU_STATE_BULK,
@@ -163,12 +167,34 @@ describe('createFeatureTables', () => {
     ]);
   });
 
-  it('refuses a group whose keys overlap another group, an id that is already a row, and an unknown group', () => {
+  it('puts the rows of a group whose keys overlap another group in the delta, at their places', () => {
+    const { tables, writer } = createFeatureTables();
+    writer.adopt('layer', groups(5));
+    // Not left out: read and drawn at their places at once
+    expect(() => writer.adopt('layer', groups(2, { keyOffset: 3, prefix: 'x' }))).not.toThrow();
+    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    const x3 = tables.handleOf('x3') as number;
+    expect(internals.ids.deltaLayer(x3)).toBeGreaterThanOrEqual(0);
+    const view = tables.layer('layer');
+    const ids = () => Array.from(view?.rowsInOrder(0, 10) ?? []).map((h) => tables.idOf(h));
+    const order = ['r0', 'r1', 'r2', 'r3', 'x3', 'r4', 'x4'];
+    expect(ids()).toEqual(order);
+    expect(view?.getRow(x3)?.properties).toEqual({ n: 3, name: 'name 3' });
+    expect(view?.getRowPoint(x3)).toEqual([3, 3]);
+    const drawn = Array.from(view?.listDrawnRows([-1, -1, 10, 10]) ?? []).map((h) =>
+      tables.idOf(h),
+    );
+    expect(drawn).toEqual(order);
+    // And into the row groups with their next versions
+    internals.flushVersions();
+    expect(internals.ids.deltaLayer(x3)).toBeLessThan(0);
+    expect(internals.ids.mainGroup(x3)).toBeGreaterThanOrEqual(0);
+    expect(ids()).toEqual(order);
+  });
+
+  it('refuses an id that is already a row, and an unknown group', () => {
     const { writer } = createFeatureTables();
     writer.adopt('layer', groups(5));
-    expect(() => writer.adopt('layer', groups(2, { keyOffset: 3, prefix: 'x' }))).toThrow(
-      /overlap/,
-    );
     expect(() => writer.adopt('layer', groups(1, { keyOffset: 50 }))).not.toThrow();
     expect(() => writer.adopt('other', groups(1, { keyOffset: 50 }))).toThrow(/already a row/);
     expect(() =>
@@ -346,15 +372,19 @@ describe('adopt over the frames', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       writer.adopt('layer', groups(5));
-      // Keys that overlap the first group, then a group that is fine
+      // Ids that are rows already, keys that overlap the first group (taken in by their rows,
+      // in the delta), then a group that is fine
+      writer.adopt('layer', groups(1, { keyOffset: 30 }));
+      writer.adopt('layer', groups(1, { keyOffset: 0 }));
       writer.adopt('layer', groups(2, { keyOffset: 3, prefix: 'x' }));
       writer.adopt('layer', groups(2, { keyOffset: 10, prefix: 'y' }));
       expect(internals.advanceAdoption(stepBudget(10))).toBe(false);
       expect(error).toHaveBeenCalledTimes(1);
-      expect(String(error.mock.calls[0][0])).toMatch(/overlap/);
-      expect(tables.layer('layer')?.rowCount).toBe(7);
-      expect(tables.handleOf('x3')).toBeUndefined();
+      expect(String(error.mock.calls[0][0])).toMatch(/already a row/);
+      expect(tables.handleOf('x3')).toBeDefined();
       expect(tables.handleOf('y10')).toBeDefined();
+      expect(tables.handleOf('r30')).toBeDefined();
+      expect(internals.deltaRowCount()).toBe(2);
     } finally {
       error.mockRestore();
     }

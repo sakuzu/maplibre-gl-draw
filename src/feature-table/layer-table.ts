@@ -368,21 +368,28 @@ export class LayerTable {
     return this.indexOf.get(handle) ?? -1;
   }
 
-  /**
-   * Puts a row group at its place in the order (the order of its first row)
-   *
-   * @throws when the keys of its rows overlap the keys of the rows of another group, or when
-   *   its rows are not in the order of their keys
-   */
-  insert(group: RowGroup): void {
-    const data = group.data;
-    if (data.length === 0) throw new Error('LayerTable: an empty row group');
+  /** Whether the rows of a row group are in the order of their keys */
+  inKeyOrder(data: RowGroupData): boolean {
     for (let r = 1; r < data.length; r++) {
-      if (compareRowKeys(data, r - 1, data, r, this.groupKeys) >= 0) {
-        throw new Error('LayerTable: the rows of a group are not in the order of their keys');
-      }
+      if (compareRowKeys(data, r - 1, data, r, this.groupKeys) >= 0) return false;
     }
-    // The number of groups whose first row comes before the first row of the new group
+    return true;
+  }
+
+  /**
+   * Whether the keys of the rows of a row group overlap the keys of the rows of a group of the
+   * layer: it then cannot be put among them (its rows are not in the order of their keys
+   * otherwise: see `insert`)
+   */
+  overlaps(data: RowGroupData): boolean {
+    return this.placeOfGroup(data) < 0;
+  }
+
+  /**
+   * The place in the order of a row group (the number of groups whose first row comes before
+   * its first row), or -1 when its rows overlap the rows of the group before or after it there
+   */
+  private placeOfGroup(data: RowGroupData): number {
     let lo = 0;
     let hi = this.order.length;
     while (lo < hi) {
@@ -394,10 +401,27 @@ export class LayerTable {
     const before = lo > 0 ? this.groupAt(lo - 1).data : null;
     const after = lo < this.order.length ? this.groupAt(lo).data : null;
     if (before && compareRowKeys(before, before.length - 1, data, 0, this.groupKeys) >= 0) {
-      throw new Error('LayerTable: the rows of a group overlap the rows of the group before it');
+      return -1;
     }
-    if (after && compareRowKeys(data, data.length - 1, after, 0, this.groupKeys) >= 0) {
-      throw new Error('LayerTable: the rows of a group overlap the rows of the group after it');
+    if (after && compareRowKeys(data, data.length - 1, after, 0, this.groupKeys) >= 0) return -1;
+    return lo;
+  }
+
+  /**
+   * Puts a row group at its place in the order (the order of its first row)
+   *
+   * @throws when the keys of its rows overlap the keys of the rows of another group, or when
+   *   its rows are not in the order of their keys
+   */
+  insert(group: RowGroup): void {
+    const data = group.data;
+    if (data.length === 0) throw new Error('LayerTable: an empty row group');
+    if (!this.inKeyOrder(data)) {
+      throw new Error('LayerTable: the rows of a group are not in the order of their keys');
+    }
+    const lo = this.placeOfGroup(data);
+    if (lo < 0) {
+      throw new Error('LayerTable: the rows of a group overlap the rows of another group');
     }
     this.order.splice(lo, 0, group.handle);
     this.groups.set(group.handle, group);
