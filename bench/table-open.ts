@@ -219,10 +219,11 @@ async function sendParts(
 ): Promise<void> {
   const response = await fetchFile(url);
   if (!response.ok) throw new Error(`${url}: ${response.status}`);
-  const reader = response.body?.getReader();
   let total = Number(response.headers.get('content-length')) || 0;
+  // Read as it comes when its size is known (the body is not read twice)
+  const reader = total > 0 ? response.body?.getReader() : undefined;
   let chunks: AsyncIterable<Uint8Array> | Iterable<Uint8Array>;
-  if (!reader || total === 0) {
+  if (!reader) {
     // The size is not known before: the whole of it first
     const all = new Uint8Array(await response.arrayBuffer());
     total = all.length;
