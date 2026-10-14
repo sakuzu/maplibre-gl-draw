@@ -46,7 +46,6 @@ export type { PreparedTable } from './types.js';
 
 // Coordinates
 export type { CoordinateDims, CoordinateSystem } from './coordinates.js';
-export { planarCoordinates } from './coordinates.js';
 
 // Column types
 export type {

@@ -254,7 +254,6 @@ const TABLE = [
   'GroupKeySource',
   'mergeRowGroup',
   'PackedRTree',
-  'planarCoordinates',
   'PreparedTable',
   'prepareTable',
   'PropertyColumns',

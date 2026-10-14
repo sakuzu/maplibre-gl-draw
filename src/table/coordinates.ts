@@ -189,6 +189,8 @@ export function planarRowBox(
 /**
  * The plane: the values of `x` and `y` as they are, the leaves of the spatial index along the
  * Hilbert curve of the centers. The system of coordinates when none is given
+ *
+ * @internal
  */
 export const planarCoordinates: CoordinateSystem = { rowBox: planarRowBox };
 
