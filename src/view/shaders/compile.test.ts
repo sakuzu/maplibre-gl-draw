@@ -41,6 +41,7 @@ import { StrokeRenderer } from '../renderers/stroke.js';
 import { DemAtlas } from '../terrain/dem-atlas.js';
 import { QuadDrapeRenderer } from '../terrain/drape/quad.js';
 import { DrapeRenderer } from '../terrain/drape/renderer.js';
+import { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import { SAMPLER_PRECISION_GLSL, type ShaderData } from './helpers.js';
 import { QuadShader } from './quad.js';
 
@@ -217,6 +218,11 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
   withLabel('DemAtlas', () => {
     expect(new DemAtlas(gl).ensureProgram()).toBe(true);
   });
+  withLabel('BulkFramesRenderer', () => {
+    const renderer = new BulkFramesRenderer(gl);
+    renderer.ensureShader(shaderData);
+    expect(renderer.ensureProgram()).toBe(true);
+  });
 
   return programs;
 }
@@ -366,22 +372,43 @@ describe('shader programs on a real WebGL2', () => {
         () => file,
       ),
     );
-    // 11 renderers with one program each and the drape of a quad with two (image and paper);
-    // the image and the paper share one call site. The point, the line and the polygon
+    // 12 renderers with one program each (the frames of the features selected in bulk among
+    // them) and the drape of a quad with two (image and paper); the image and the paper share
+    // one call site. The point, the line and the polygon
     // renderers also build the variant that draws rows held as columns at the same call site;
     // each variant is recorded with the program it is a variant of. The renderer of the rows
     // drawn in one draw links its program without waiting for it (`gl.createProgram`), which
     // the count of the call sites does not see; it is recorded among the programs
-    expect(sites).toHaveLength(12);
+    expect(sites).toHaveLength(13);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(20);
+    expect(programs).toHaveLength(21);
+  });
+
+  it('builds every program that moves rows with their moving set', () => {
+    // The variants that draw rows held as columns and the frames of the rows selected in bulk
+    // turn the GLSL of the state of the rows on and move a dragged row as they draw it: a call of
+    // `rowStateMove` besides its definition (the GLSL of the state is in every program, off)
+    const moving = recordPrograms(preludes[0])
+      .filter(
+        (program) =>
+          /^#define TABLE_ROWS$/m.test(program.vertex) &&
+          program.vertex.split('rowStateMove(').length > 2,
+      )
+      .map((program) => program.name.replace(/^[^/]+\//, ''));
+    expect(moving.sort()).toEqual([
+      'BulkFramesRenderer #1',
+      'PointInstanceRenderer (rows) #2',
+      'RowsRenderer #1',
+      'SDFLineRenderer (rows) #2',
+      'SDFPolygonRenderer (rows) #2',
+    ]);
   });
 
   it(
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(40);
+      expect(programs.length).toBe(42);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

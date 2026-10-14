@@ -102,10 +102,15 @@ export class BulkFramesRenderer {
     this.shaderData = shaderData;
   }
 
-  /** Makes the program of the projection variant taken last, once */
-  private ensureProgram(): void {
+  /**
+   * Makes the program of the projection variant taken last, once
+   *
+   * @returns Whether it can draw frames (false before the first `ensureShader`)
+   */
+  ensureProgram(): boolean {
     const shaderData = this.shaderData;
-    if (!shaderData || (this.variantName === shaderData.variantName && this.program)) return;
+    if (!shaderData) return false;
+    if (this.variantName === shaderData.variantName && this.program) return true;
     const gl = this.gl;
     if (this.program) gl.deleteProgram(this.program);
     this.program = createProgram(
@@ -120,6 +125,7 @@ export class BulkFramesRenderer {
     this.locations = Object.fromEntries(
       names.map((name) => [name, gl.getUniformLocation(this.program as WebGLProgram, name)]),
     );
+    return true;
   }
 
   /** Sets the uniforms of the offset mode (the camera of the copy of the world being drawn) */
@@ -143,7 +149,7 @@ export class BulkFramesRenderer {
     config: SelectionUIConfig,
     pointExtent: PointFrameExtent,
   ): void {
-    this.ensureProgram();
+    if (!this.ensureProgram()) return;
     const program = this.program;
     if (!program || !this.rowState) return;
     const frames = this.framesOf(group, revision, pointExtent);

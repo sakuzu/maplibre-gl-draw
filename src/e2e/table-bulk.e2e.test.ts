@@ -20,8 +20,14 @@
  *
  * The frames of the rows are lines of the width of the stroke of the selection UI without the
  * smoothing of its edges, so the pictures with frames are compared with a tolerance of their own.
+ *
+ * With `E2E_DUMP_DIR` set, each comparison also writes its pictures there as PNG: the rows selected
+ * in bulk (`<scene>-rows.png`), the features selected one by one (`<scene>-store.png`) and the
+ * pixels that differ painted red over a faded picture of the rows (`<scene>-diff.png`).
  */
 
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
@@ -258,6 +264,80 @@ async function differing(page: Page, a: string, b: string, level: number): Promi
   );
 }
 
+/**
+ * Writes the pictures of a comparison as PNG to `E2E_DUMP_DIR`, when it is set: the two pictures
+ * over white, and the pixels that differ by more than `level` painted red over the first faded
+ */
+async function dump(page: Page, scene: string, a: string, b: string, level: number): Promise<void> {
+  const dir = process.env.E2E_DUMP_DIR;
+  if (!dir) return;
+  const urls = await page.evaluate(
+    ({ a, b, level }) => {
+      const w = window as unknown as {
+        map: import('maplibre-gl').Map;
+        captured: Record<string, Uint8Array>;
+      };
+      const gl = w.map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+      const width = gl.drawingBufferWidth;
+      const height = gl.drawingBufferHeight;
+      const pa = w.captured[a];
+      const pb = w.captured[b];
+      /** A PNG of pixels read from the bottom row up, each set by `paint` */
+      const png = (paint: (out: Uint8ClampedArray, o: number, i: number) => void): string => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d') as CanvasRenderingContext2D;
+        const image = context.createImageData(width, height);
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const i = ((height - 1 - y) * width + x) * 4;
+            const o = (y * width + x) * 4;
+            paint(image.data, o, i);
+            image.data[o + 3] = 255;
+          }
+        }
+        context.putImageData(image, 0, 0);
+        return canvas.toDataURL('image/png');
+      };
+      // The drawing buffer holds premultiplied colors: over white, a channel gains 255 - alpha
+      const overWhite =
+        (pixels: Uint8Array) =>
+        (out: Uint8ClampedArray, o: number, i: number): void => {
+          for (let k = 0; k < 3; k++) out[o + k] = pixels[i + k] + 255 - pixels[i + 3];
+        };
+      const differs = (i: number): boolean => {
+        for (let k = 0; k < 4; k++) if (Math.abs(pa[i + k] - pb[i + k]) > level) return true;
+        return false;
+      };
+      return {
+        rows: png(overWhite(pa)),
+        store: png(overWhite(pb)),
+        diff: png((out, o, i) => {
+          if (differs(i)) {
+            out[o] = 255;
+            out[o + 1] = 0;
+            out[o + 2] = 0;
+            return;
+          }
+          for (let k = 0; k < 3; k++) {
+            const white = pa[i + k] + 255 - pa[i + 3];
+            out[o + k] = 255 - (255 - white) * 0.3;
+          }
+        }),
+      };
+    },
+    { a, b, level },
+  );
+  mkdirSync(dir, { recursive: true });
+  for (const [name, url] of Object.entries(urls)) {
+    writeFileSync(
+      join(dir, `${scene}-${name}.png`),
+      Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'),
+    );
+  }
+}
+
 /** The count of the selection and whether it is in bulk */
 async function selection(page: Page): Promise<{ bulk: boolean; count: number }> {
   return page.evaluate(() => {
@@ -297,6 +377,7 @@ describe('features selected in bulk', () => {
     const rows = await capture(page, 'selected-rows');
     expect(await selection(page)).toEqual({ bulk: true, count: features.length });
     const differs = await differing(page, 'selected-rows', 'selected-store', FRAME_TOLERANCE.level);
+    await dump(page, 'selected', 'selected-rows', 'selected-store', FRAME_TOLERANCE.level);
     console.log(`[selected] ${rows} pixels drawn (${objects} one by one), ${differs} differ`);
     expect(rows).toBeGreaterThan(0);
     expect(differs).toBeLessThanOrEqual(Math.floor(objects * FRAME_TOLERANCE.share));
@@ -340,6 +421,13 @@ describe('features selected in bulk', () => {
         FRAME_TOLERANCE.level,
       );
       console.log(`[move] ${phase}: ${differs} pixels differ`);
+      await dump(
+        page,
+        `move-${phase}`,
+        `move-rows-${phase}`,
+        `move-store-${phase}`,
+        FRAME_TOLERANCE.level,
+      );
       const drawn = await capture(page, `move-check-${phase}`);
       expect(differs).toBeLessThanOrEqual(Math.floor(drawn * FRAME_TOLERANCE.share));
     }
@@ -391,6 +479,13 @@ describe('features selected in bulk', () => {
         FRAME_TOLERANCE.level,
       );
       console.log(`[rotate] ${phase}: ${differs} pixels differ`);
+      await dump(
+        page,
+        `rotate-${phase}`,
+        `rotate-rows-${phase}`,
+        `rotate-store-${phase}`,
+        FRAME_TOLERANCE.level,
+      );
       const drawn = await capture(page, `rotate-check-${phase}`);
       expect(differs).toBeLessThanOrEqual(Math.floor(drawn * FRAME_TOLERANCE.share));
     }
