@@ -7,6 +7,7 @@
  * Helper functions for obtaining the selected features and computing the bounding box.
  */
 
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { tableGroupMemberIds, tableLayerFeatureIds } from '../../feature-table/item-ids.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
@@ -41,6 +42,26 @@ export function getSelectedFeatureIds(store: Store): readonly string[] {
     default:
       return [];
   }
+}
+
+/**
+ * The ids of the rows of a Store of rows marked as in the box being drawn (the select mode marks
+ * them in place of selecting them while the box is drawn): what the selection UI shows as
+ * selected until the box is let go. Null when no box is drawn, or the Store holds no rows
+ *
+ * @internal
+ */
+export function getBoxMarkedFeatureIds(store: Store): readonly string[] | null {
+  const tables = store.tables;
+  if (!tables || !store.getBoxSelection()) return null;
+  const marked = featureTablesInternals(tables)?.states.bulkHandles();
+  if (!marked) return null;
+  const ids: string[] = [];
+  for (const handle of marked) {
+    const id = tables.idOf(handle);
+    if (id !== undefined) ids.push(id);
+  }
+  return ids;
 }
 
 // The feature IDs of a group (read from the rows for a group of a layer held as rows)

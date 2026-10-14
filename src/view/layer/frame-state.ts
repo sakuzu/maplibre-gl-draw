@@ -39,7 +39,7 @@ import {
 import type { QuadDrapeFrame } from '../terrain/drape/quad.js';
 import { type DrapeLight, resolveDrapeLight } from '../terrain/drape/renderer.js';
 import { setQuadDrapeFrame, setTerrainSurfacesFlattened } from '../terrain/state.js';
-import { getSelectedFeatureIds } from '../ui/helper.js';
+import { getBoxMarkedFeatureIds, getSelectedFeatureIds } from '../ui/helper.js';
 import { applyDrawBlendState } from './blend.js';
 import type { DisplayListCache } from './display-list.js';
 import {
@@ -362,7 +362,9 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   // The single source of truth of the selection carries a kind. A group / layer selection is
   // resolved to its members and reflected on the map (getSelectedFeatureIds absorbs
   // feature / group / layer).
-  const selectedIds = getSelectedFeatureIds(store);
+  // While a box is drawn over a Store of rows, the rows marked in it are shown as the selection
+  // (as a Store of objects selects the features in the box while it is drawn)
+  const selectedIds = getBoxMarkedFeatureIds(store) ?? getSelectedFeatureIds(store);
   const selectedIdSet = new Set(selectedIds);
 
   // The features for the selection UI are resolved directly from the selected ids. This keeps

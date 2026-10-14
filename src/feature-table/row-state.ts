@@ -97,6 +97,8 @@ const SET_OVERLAY = 16;
  */
 export class RowStateSets {
   private bits: Uint8Array = new Uint8Array(64);
+  /** The handles marked as selected in bulk */
+  private readonly bulk = new Set<RowHandle>();
   /** The translation of each moving set, `[dLng, dLat]` (set 0 is unused) */
   private readonly translations = new Float64Array((MOVE_SETS + 1) * 2);
   private translationRevision = 0;
@@ -131,7 +133,17 @@ export class RowStateSets {
 
   /** Marks or unmarks rows as selected in bulk */
   setBulk(handles: Int32Array, marked: boolean): void {
+    for (const handle of handles) {
+      if (handle < 0) continue;
+      if (marked) this.bulk.add(handle);
+      else this.bulk.delete(handle);
+    }
     this.update(handles, (bits) => (marked ? bits | SET_BULK : bits & ~SET_BULK));
+  }
+
+  /** The handles marked as selected in bulk */
+  bulkHandles(): ReadonlySet<RowHandle> {
+    return this.bulk;
   }
 
   /**
@@ -148,6 +160,7 @@ export class RowStateSets {
 
   /** Forgets the state of a handle (given again to another row) */
   clear(handle: RowHandle): void {
+    this.bulk.delete(handle);
     if (handle >= 0 && handle < this.bits.length) this.bits[handle] = 0;
   }
 
