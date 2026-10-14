@@ -91,7 +91,8 @@ writing it. Its changes are listed after those of 3.0.0.
   of a layer held as rows, without making their features:
   `FeatureTypeDefinition.appliesToRow`, `CompanionProvider.hasRow` and
   `FeatureRenderer.drawRows`. `draggedRowsOf` keeps the shape of a row with
-  a scale being resized, as it is drawn.
+  a scale being resized, as it is drawn. `LayerTableView.getRowStyle` reads
+  the style of a row, shared and frozen, without a copy.
 
 ### Changed in 3.0.0
 

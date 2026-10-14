@@ -35,7 +35,7 @@ import type { Utf8Column } from '../table/utf8-column.js';
 import { DrawError } from './errors.js';
 import type { DocumentChange } from './events.js';
 import type { Store, UpdateSource } from './extension/store.js';
-import type { Feature, FeatureType, FeatureValues } from './model.js';
+import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';
 
 export type {
   FeatureTablesWorker,
@@ -83,6 +83,11 @@ export interface LayerTableView {
   getRowPoint(handle: RowHandle): Position | null;
   /** The value of an attribute of a row (undefined when it does not hold the key) */
   getRowValue(handle: RowHandle, key: string): unknown;
+  /**
+   * The style of a row (undefined for a row not in this layer): the object the table of styles
+   * shares between the rows of the same style, frozen, read without a copy
+   */
+  getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined;
   /**
    * A row as a feature: a new object every call, so read the values above for what is read
    * often (undefined for a deleted row or one not in this layer)

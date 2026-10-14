@@ -3573,6 +3573,11 @@ class LayerTableViewImpl implements LayerTableView {
     return at ? rowValue(at.group, at.row, key, this.store.strings) : undefined;
   }
 
+  getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
+    const at = this.locate(handle);
+    return at ? this.store.styles.get(at.group.data.styles[at.row]) : undefined;
+  }
+
   getRow(handle: RowHandle): Feature | undefined {
     const at = this.locate(handle);
     if (!at || (at.group.data.flags[at.row] & ROW_FLAG_DELETED) !== 0) return undefined;
