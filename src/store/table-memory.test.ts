@@ -21,6 +21,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { circleRowRings } from '../shared/circle-rings.js';
 import { createRowGroupBuilder } from '../table/row-group-builder.js';
 import { utf8String } from '../table/utf8-column.js';
 import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
@@ -443,5 +444,78 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
     // After the first round, every grouping and every ungrouping does and leaves what the one
     // before did
     for (let rep = 3; rep < work.length; rep++) expect(work[rep]).toBe(work[rep - 2]);
+  });
+});
+
+describe('the rows of a layer of z and m in the in-memory Store of rows', () => {
+  it('give the values before and take them back with their z and m, as an undo writes them', () => {
+    const { store, writer } = createTableMemoryStore({ dimsOf: () => 'xyzm' });
+    store.createLayer({
+      id: 'layer',
+      name: 'Layer',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      metadata: undefined,
+      styleRule: undefined,
+    });
+    const line = {
+      type: 'LineString' as const,
+      coordinates: [
+        [0, 0, 10, 1.7e12],
+        [1, 1, Number.NaN, 1.7e12 + 1],
+        [2, 2, 12],
+      ],
+    };
+    const builder = createRowGroupBuilder({ dims: 'xyzm', rings: circleRowRings });
+    builder.addRow({ id: 'l', type: 'LineString', geometry: line, order: 'k1' });
+    writer.adopt('layer', builder.finish());
+    const tables = store.tables;
+    if (!tables) throw new Error('a Store of rows has tables');
+    featureTablesInternals(tables)?.flushAdoption();
+    const handle = tables.handleOf('l') as number;
+    const geometryOf = () =>
+      tables
+        .snapshot({ handles: Int32Array.of(handle), fields: new Map([['geometry', [0]]]) })
+        .fields.get('geometry')?.[0];
+    const notified: StoreChange[] = [];
+    store.subscribe((change) => notified.push(change));
+    // A write of this client with the values before, as an edit writes it
+    const patch = {
+      handles: Int32Array.of(handle),
+      fields: new Map<RowField, unknown[]>([
+        [
+          'geometry',
+          [
+            {
+              type: 'LineString',
+              coordinates: [
+                [5, 5, 1],
+                [6, 6],
+              ],
+            },
+          ],
+        ],
+      ]),
+    };
+    const before = tables.snapshot(patch);
+    expect(store.applyLocal?.({ patch, before })).toBe(true);
+    expect(notified[notified.length - 1]?.rows?.before?.fields.get('geometry')?.[0]).toEqual(line);
+    expect(geometryOf()).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [5, 5, 1],
+        [6, 6],
+      ],
+    });
+    // The values before written back
+    store.applyLocal?.({
+      patch: { handles: before.handles, fields: before.fields },
+      before: tables.snapshot(patch),
+    });
+    expect(geometryOf()).toEqual(line);
+    // A row of it is not a feature
+    expect(() => store.getFeature('l')).toThrow(/is not a feature/);
   });
 });
