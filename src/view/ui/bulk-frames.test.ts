@@ -110,4 +110,16 @@ describe('the frames of the features selected in bulk', () => {
     expect(source).toContain('(state & 8u) == 0u');
     expect(source).toContain('rowStateMove(state,');
   });
+
+  it('widen the extent moved as the row is, and outline it as the line of the selection UI is', () => {
+    const source = buildBulkFramesVertexSource('', '');
+    // The margin after the move (a resize does not scale it)
+    expect(source.indexOf('rowStateMove(state, a_bounds.xw)')).toBeLessThan(
+      source.indexOf('q[0] += (-right - down) * u_margin'),
+    );
+    // The miters of StrokeRenderer, within its limit, and the band of the coverage
+    expect(source).toContain('miterAt(corners[(k + 3) % 4], corners[k], corners[(k + 1) % 4])');
+    expect(source).toContain('scale > 4.0');
+    expect(source).toContain('float reach = u_half_width + 1.0');
+  });
 });

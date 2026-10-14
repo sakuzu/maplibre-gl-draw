@@ -11,16 +11,16 @@
  * row marked as selected in bulk. A row being dragged is moved by its moving set as it is drawn
  * (`rowStateMove`), so its frame follows it.
  *
- * A frame is the extent of the row widened by the margin of the selection UI on the plane of the
- * map, as the frame of a feature is (`marginOnMapPlane`), outlined by lines of the width of the
- * stroke of the selection UI; a row of one position gets the square of the extent of its marker
- * plus the margin, on the screen, as a point does.
+ * A frame is the extent of the row, moved as the row is, widened by the margin of the selection UI
+ * on the plane of the map as the frame of a feature is (`marginOnMapPlane`), and outlined by the
+ * line of the stroke of the selection UI as StrokeRenderer draws it; a row of one position gets
+ * the square of the extent of its marker plus the margin, on the screen, as a point does.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
-import { DEFAULT_TILE_SIZE } from '../../shared/math/constants.js';
+import { DEFAULT_TILE_SIZE, RENDERING_DEFAULTS } from '../../shared/math/constants.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { GpuLedger } from '../gpu-ledger.js';
@@ -121,7 +121,15 @@ export class BulkFramesRenderer {
     this.variantName = shaderData.variantName;
     this.projection.getLocations(this.program);
     this.rowState = new RowStateUniforms(gl, this.program);
-    const names = ['u_viewport', 'u_margin', 'u_half_width', 'u_color', 'u_deg_per_px', 'u_ratio'];
+    const names = [
+      'u_viewport',
+      'u_margin',
+      'u_half_width',
+      'u_color',
+      'u_deg_per_px',
+      'u_ratio',
+      'u_origin_latitude',
+    ];
     this.locations = Object.fromEntries(
       names.map((name) => [name, gl.getUniformLocation(this.program as WebGLProgram, name)]),
     );
@@ -173,6 +181,7 @@ export class BulkFramesRenderer {
       gl.uniform4f(loc.u_color, r, g, b, a * stroke.opacity);
     }
     if (loc.u_deg_per_px) gl.uniform1f(loc.u_deg_per_px, 360 / (DEFAULT_TILE_SIZE * 2 ** zoom));
+    if (loc.u_origin_latitude) gl.uniform1f(loc.u_origin_latitude, frames.origin[1]);
     gl.bindVertexArray(frames.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, VERTICES_PER_FRAME, frames.rows);
     gl.bindVertexArray(null);
@@ -267,6 +276,13 @@ export class BulkFramesRenderer {
 /**
  * The vertex shader of the frames (the variant of the rows: it reads the state of the rows)
  *
+ * A frame is drawn as the selection UI draws the frame of a feature: the extent of the row, moved
+ * as the row is, widened by the margin on the plane of the map (`marginOnMapPlane`, after the
+ * move, so a resize does not scale the margin), and outlined by the line of StrokeRenderer (the
+ * miters at the corners and the band of one pixel the coverage fades in). A row of one position
+ * gets the square of its marker and the margin on the screen, as AnchoredOutlineRenderer draws
+ * the frame of a point.
+ *
  * @internal
  */
 export function buildBulkFramesVertexSource(prelude: string, define: string): string {
@@ -289,17 +305,48 @@ uniform float u_half_width;
 uniform float u_ratio;
 // Degrees of longitude per CSS px at the zoom of the frame
 uniform float u_deg_per_px;
+// The latitude of the origin of the group (the offsets are taken from it)
+uniform float u_origin_latitude;
+
+out float v_dist;
+out float v_width;
+out float v_point;
 
 vec2 toScreen(vec4 clip) {
     return (clip.xy / clip.w * 0.5 + 0.5) * u_viewport;
 }
 
+// The direction of the miter at a corner of the outline, scaled by its length in half widths, as
+// StrokeRenderer joins two sides: the mean of their normals, a bevel past the miter limit
+vec2 miterAt(vec2 previous, vec2 corner, vec2 next) {
+    vec2 in1 = corner - previous;
+    vec2 in2 = next - corner;
+    float l1 = length(in1);
+    float l2 = length(in2);
+    vec2 dir1 = l1 > 0.0 ? in1 / l1 : (l2 > 0.0 ? in2 / l2 : vec2(1.0, 0.0));
+    vec2 dir2 = l2 > 0.0 ? in2 / l2 : dir1;
+    vec2 normal1 = vec2(-dir1.y, dir1.x);
+    vec2 normal2 = vec2(-dir2.y, dir2.x);
+    vec2 sum = normal1 + normal2;
+    float sumLength = length(sum);
+    if (sumLength <= 0.001) return normal1;
+    vec2 normal = sum / sumLength;
+    float cosHalf = dot(normal, normal1);
+    if (cosHalf <= 0.001) return normal;
+    float scale = 1.0 / cosHalf;
+    return scale > ${RENDERING_DEFAULTS.MITER_LIMIT.toFixed(1)} ? normal1 : normal * scale;
+}
+
 void main() {
     uint state = a_meta.x < 0.0 ? 1u : readRowState(a_meta.x);
+    v_width = u_half_width;
+    v_point = a_meta.y > 0.0 ? 1.0 : 0.0;
+    v_dist = 0.0;
     if ((state & 8u) == 0u || rowStateHidden(state)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
+    // The corners on the screen (y up): top left, top right, bottom right, bottom left
     vec2 corners[4];
     if (a_meta.y > 0.0) {
         // A row of one position: the square of its marker and the margin, on the screen
@@ -315,13 +362,34 @@ void main() {
         corners[2] = center + vec2(halfSize.x, -halfSize.y);
         corners[3] = center + vec2(-halfSize.x, -halfSize.y);
     } else {
-        // The extent widened by the margin on the plane of the map, then moved as the row is
-        float latitude = (a_bounds.y + a_bounds.w) * 0.5 + u_origin_shift.y + u_center_lnglat.y;
-        vec2 margin = u_margin * u_deg_per_px * vec2(1.0, cos(radians(latitude)));
-        vec4 b = a_bounds + vec4(-margin, margin);
-        vec2 offsets[4] = vec2[4](b.xw, b.zw, b.zy, b.xy);
+        // The extent moved as the row is
+        vec2 moved[4] = vec2[4](
+            rowStateMove(state, a_bounds.xw),
+            rowStateMove(state, a_bounds.zw),
+            rowStateMove(state, a_bounds.zy),
+            rowStateMove(state, a_bounds.xy)
+        );
+        // Widened by the margin on the plane of the map, as marginOnMapPlane widens it: in CSS px
+        // of the latitude of its center (y down), every side moved out along the sides
+        float latitude = (moved[0].y + moved[1].y + moved[2].y + moved[3].y) * 0.25 + u_origin_latitude;
+        vec2 degPerPx = vec2(u_deg_per_px, -u_deg_per_px * cos(radians(latitude)));
+        vec2 q[4] = vec2[4](moved[0] / degPerPx, moved[1] / degPerPx, moved[2] / degPerPx, moved[3] / degPerPx);
+        vec2 right = q[1] - q[0];
+        if (length(right) == 0.0) right = q[2] - q[3];
+        vec2 down = q[3] - q[0];
+        if (length(down) == 0.0) down = q[2] - q[1];
+        bool hasRight = length(right) > 0.0;
+        bool hasDown = length(down) > 0.0;
+        right = hasRight ? normalize(right) : vec2(1.0, 0.0);
+        down = hasDown ? normalize(down) : vec2(0.0, 1.0);
+        if (!hasRight && hasDown) right = vec2(down.y, -down.x);
+        if (hasRight && !hasDown) down = vec2(-right.y, right.x);
+        q[0] += (-right - down) * u_margin;
+        q[1] += (right - down) * u_margin;
+        q[2] += (right + down) * u_margin;
+        q[3] += (-right + down) * u_margin;
         for (int i = 0; i < 4; i++) {
-            vec4 clip = project_position_to_clipspace_from_offset(rowStateMove(state, offsets[i]), u_projection_matrix);
+            vec4 clip = project_position_to_clipspace_from_offset(q[i] * degPerPx, u_projection_matrix);
             if (clip.w <= 0.0) {
                 gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
                 return;
@@ -329,29 +397,38 @@ void main() {
             corners[i] = toScreen(clip);
         }
     }
-    // A side of the frame: a quad along it, as wide as the stroke, reaching past its ends by
-    // half the width (so the corners are closed)
+    // A side of the frame: the quad of the line between two corners, each moved along its miter by
+    // half the width and one pixel to either side (the band the coverage fades in)
     int side = gl_VertexID / 6;
     int vertex = gl_VertexID % 6;
-    vec2 from = corners[side];
-    vec2 to = corners[(side + 1) % 4];
-    vec2 along = to - from;
-    float len = length(along);
-    vec2 dir = len > 0.0 ? along / len : vec2(1.0, 0.0);
-    vec2 normal = vec2(-dir.y, dir.x);
     bool atEnd = vertex == 1 || vertex == 4 || vertex == 5;
-    bool outer = vertex == 2 || vertex == 3 || vertex == 5;
-    vec2 base = atEnd ? to + dir * u_half_width : from - dir * u_half_width;
-    vec2 position = base + normal * (outer ? u_half_width : -u_half_width);
+    float across = (vertex == 2 || vertex == 3 || vertex == 5) ? -1.0 : 1.0;
+    int k = atEnd ? (side + 1) % 4 : side;
+    float reach = u_half_width + 1.0;
+    vec2 position = corners[k] + miterAt(corners[(k + 3) % 4], corners[k], corners[(k + 1) % 4]) * across * reach;
     gl_Position = vec4(position / u_viewport * 2.0 - 1.0, 0.0, 1.0);
+    v_dist = across * reach;
 }`;
 }
 
-/** The fragment shader of the frames: the color of the stroke of the selection UI */
+/**
+ * The fragment shader of the frames: the coverage of the line as StrokeRenderer computes it
+ * (HHAA), given to the color as the selection UI gives it (StrokeRenderer to the whole color for
+ * a frame with an extent, AnchoredOutlineRenderer to the alpha for the frame of a point)
+ */
 const BULK_FRAMES_FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
 uniform vec4 u_color;
+in float v_dist;
+in float v_width;
+in float v_point;
 out vec4 fragColor;
+
+float pixelLine(float x) {
+    return clamp(x + 0.5, 0.0, 1.0);
+}
+
 void main() {
-    fragColor = u_color;
+    float coverage = pixelLine(v_dist + v_width) - pixelLine(v_dist - v_width);
+    fragColor = v_point > 0.5 ? vec4(u_color.rgb, u_color.a * coverage) : u_color * coverage;
 }`;

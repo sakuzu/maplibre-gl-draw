@@ -114,11 +114,12 @@ function scene(): SceneFeature[] {
 
 /**
  * Makes a new instance over a Store holding the scene, its rows (`rows`, opening at most 3
- * features for the selection) or its features (`store`), with every feature selected
+ * features for the selection) or its features (`store`), with every feature selected, the map
+ * back at the camera of the test (a drag that missed may have moved it)
  */
 async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'): Promise<void> {
   await page.evaluate(
-    async ({ features, form }) => {
+    async ({ features, form, camera }) => {
       type Contract = import('../index.js').Store;
       const w = window as unknown as Record<string, unknown> & {
         map: import('maplibre-gl').Map;
@@ -133,6 +134,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
         };
       };
       const { map } = w;
+      map.jumpTo({ center: camera.center, zoom: camera.zoom });
       const layer = {
         id: 'rows',
         name: 'rows',
@@ -197,7 +199,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
       w.draw.selection.setAll();
       await frame();
     },
-    { features, form },
+    { features, form, camera: CAMERA },
   );
 }
 
@@ -437,7 +439,11 @@ describe('features selected in bulk', () => {
     timeout: browserTimeout(120_000),
   }, async () => {
     const features = scene();
-    /** The rotation handle: above the middle of the top of the frame (its margin and distance) */
+    /**
+     * The rotation handle: above the middle of the top of the frame, the margin of the frame
+     * (10 px) and the distance of the handle (10, in degrees of tiles of 256 px, as
+     * computeRotateHandle places it) above the top of the features
+     */
     const handleOf = async (): Promise<[number, number]> =>
       page.evaluate(() => {
         const w = window as unknown as {
@@ -458,14 +464,18 @@ describe('features selected in bulk', () => {
         };
         for (const feature of all) walk((feature.geometry as { coordinates: unknown }).coordinates);
         const top = w.map.project([(west + east) / 2, north]);
-        const ll = w.map.unproject([top.x, top.y - 20]);
-        return [ll.lng, ll.lat] as [number, number];
+        const frameTop = w.map.unproject([top.x, top.y - 10]);
+        const distance = 10 / ((256 * 2 ** w.map.getZoom()) / 360);
+        return [frameTop.lng, frameTop.lat + distance] as [number, number];
       });
     await open(page, features, 'store');
     const handle = await handleOf();
     const to = at(0.006, 0.006);
+    const original = await cornerOf(page, 'building0');
     await dragged(handle, to, 'rotate-store');
     const turnedByObjects = await cornerOf(page, 'building0');
+    // The drag took the handle (a press beside it moves the map, and nothing turns)
+    expect(turnedByObjects).not.toEqual(original);
     await open(page, features, 'rows');
     await dragged(handle, to, 'rotate-rows');
     const turnedByRows = await cornerOf(page, 'building0');
