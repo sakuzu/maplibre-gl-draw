@@ -70,7 +70,7 @@ import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
 import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
 import { featureFields, featureWithFields } from './feature-fields.js';
-import { groupRunCuts } from './group-runs.js';
+import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { translationBetween } from './held-move.js';
 import { IdIndex } from './id-index.js';
@@ -2250,8 +2250,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     if (shown.size > 0) {
       for (const layer of this.layers.values()) {
-        const groups: RowGroup[] = [];
-        for (let g = 0; g < layer.groupCount; g++) groups.push(layer.groupAt(g));
+        // The row groups around the members of the groups (by their keys), and the delta
+        const groups = rowGroupsHolding(layer, shown, this.groups).map((g) => layer.groupAt(g));
         if (layer.delta.group) groups.push(layer.delta.group);
         for (const group of groups) {
           let changed = false;
@@ -2370,8 +2370,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** Whether a row (of a group, of a delta, of a creation) names a group of features */
   private groupNamed(group: GroupHandle): boolean {
     for (const layer of this.layers.values()) {
-      const groups: RowGroup[] = [];
-      for (let g = 0; g < layer.groupCount; g++) groups.push(layer.groupAt(g));
+      // The row groups around the rows that name it (by its keys), and the delta
+      const groups = rowGroupsHolding(layer, [group], this.groups).map((g) => layer.groupAt(g));
       if (layer.delta.group) groups.push(layer.delta.group);
       for (const rowGroup of groups) {
         if (rowGroup.data.groups.includes(group)) return true;

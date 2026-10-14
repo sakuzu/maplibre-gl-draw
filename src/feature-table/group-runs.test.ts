@@ -5,7 +5,8 @@
  * The cuts of the row groups of a layer for groups of features given new keys (`groupRunCuts`)
  * are the cuts made by reading every row of the layer (kept here as the reference): for members
  * written into groups and taken out, rows deleted, next versions made, and keys of groups still
- * going in; and they read the row groups around the members and their places, not every row.
+ * going in; and they read the row groups around the members and their places, not every row. A
+ * group shown or hidden hides the rows that name it, read from the row groups around them.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,7 @@ import { type FeatureTablesInternals, featureTablesInternals } from './feature-t
 import { groupRunCuts } from './group-runs.js';
 import type { GroupTable } from './group-table.js';
 import type { LayerTable, RowGroup } from './layer-table.js';
+import { STATE_HIDDEN_GROUP } from './row-state.js';
 import type { GroupHandle } from './types.js';
 
 /** The cuts made by reading every row of the layer (the reference) */
@@ -181,6 +183,29 @@ describe('groupRunCuts', () => {
         expect(comparable(groupRunCuts(layer, orders, internals.groups)), `seed ${seed}`).toEqual(
           comparable(referenceCuts(layer, orders, internals.groups)),
         );
+        // A group shown or hidden: the rows that name it, and only they, are hidden with it
+        if (random() < 0.3) {
+          const id = GROUPS[Math.floor(random() * GROUPS.length)];
+          const group = internals.groups.handleOfId(id);
+          store.transact(
+            () =>
+              writer.applyGroups({
+                handles: Int32Array.of(group),
+                fields: new Map([['visible', [!internals.groups.isVisible(group)]]]),
+              }),
+            'remote',
+          );
+          const rowGroups: RowGroup[] = [];
+          for (let g = 0; g < layer.groupCount; g++) rowGroups.push(layer.groupAt(g));
+          if (layer.delta.group) rowGroups.push(layer.delta.group);
+          for (const rowGroup of rowGroups) {
+            for (let r = 0; r < rowGroup.data.length; r++) {
+              const named = rowGroup.data.groups[r];
+              const hidden = named >= 0 && !internals.groups.isVisible(named);
+              expect((rowGroup.state[r] & STATE_HIDDEN_GROUP) !== 0, `seed ${seed}`).toBe(hidden);
+            }
+          }
+        }
         // Sometimes the keys go in, their versions made now or later
         if (orders.size > 0 && random() < 0.4) {
           store.transact(

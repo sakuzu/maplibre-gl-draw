@@ -58,30 +58,9 @@ export function groupRunCuts(
     set.add(row);
   };
   const count = layer.groupCount;
-  // The row groups whose rows meet the keys of a group: its members are among them
-  const holding = new Set<number>();
-  for (const group of orders.keys()) {
-    if (!groups.has(group)) continue;
-    const start = groupStart(group);
-    const end = groupEnd(group, groups);
-    // The first row group whose last row does not come before the group
-    let lo = 0;
-    let hi = count;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      const data = layer.groupAt(mid).data;
-      if (compareRowKeys(data, data.length - 1, start, 0, groups) < 0) lo = mid + 1;
-      else hi = mid;
-    }
-    for (let g = lo; g < count; g++) {
-      const data = layer.groupAt(g).data;
-      if (compareRowKeys(data, 0, end, 0, groups) >= 0) break;
-      holding.add(g);
-    }
-  }
   // The runs of the members
   const members: Array<{ group: RowGroup; row: number; of: GroupHandle }> = [];
-  for (const g of [...holding].sort((a, b) => a - b)) {
+  for (const g of rowGroupsHolding(layer, orders.keys(), groups)) {
     const group = layer.groupAt(g);
     const data = group.data;
     let run = -1;
@@ -149,6 +128,42 @@ export function groupRunCuts(
     }
   }
   return { cuts, members: true };
+}
+
+/**
+ * The places in the order of a layer of the row groups that can hold members of groups of
+ * features: the ones whose rows meet the keys of a group (its members follow each other there),
+ * found by a search of the keys, in their order
+ *
+ * @internal
+ */
+export function rowGroupsHolding(
+  layer: LayerTable,
+  groupsOf: Iterable<GroupHandle>,
+  groups: GroupTable,
+): number[] {
+  const count = layer.groupCount;
+  const holding = new Set<number>();
+  for (const group of groupsOf) {
+    if (!groups.has(group)) continue;
+    const start = groupStart(group);
+    const end = groupEnd(group, groups);
+    // The first row group whose last row does not come before the group
+    let lo = 0;
+    let hi = count;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const data = layer.groupAt(mid).data;
+      if (compareRowKeys(data, data.length - 1, start, 0, groups) < 0) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let g = lo; g < count; g++) {
+      const data = layer.groupAt(g).data;
+      if (compareRowKeys(data, 0, end, 0, groups) >= 0) break;
+      holding.add(g);
+    }
+  }
+  return [...holding].sort((a, b) => a - b);
 }
 
 /** A key before every member of a group of features and after every item before the group */
