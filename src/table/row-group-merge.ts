@@ -9,7 +9,8 @@
  * group itself, and rows built on their own (the rows changed since). The merge copies their
  * columns as they are, so nothing is computed again for a row that did not change: its
  * triangles are copied from the cache of its group (earcut runs only where a row was built), its
- * bbox is copied, and only the spatial index of the new groups is built. A merge too large for
+ * bbox is copied, its attributes are copied as their bytes (no value is decoded and written
+ * again), and only the spatial index of the new groups is built. A merge too large for
  * one group is cut into groups of the target sizes at once.
  *
  * The rows of the sources must hold the numbers of the table of styles of the document (a group
@@ -39,7 +40,12 @@ import type { RowGroupData, TriangleCache } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
 import type { GeometryType, TableMixedGeometry } from './types.js';
 import { Utf8ColumnBuilder } from './utf8-column.js';
-import { readValue, type ValueColumn, ValueColumnBuilder } from './value-column.js';
+import {
+  VALUE_ABSENT,
+  type ValueColumn,
+  ValueColumnBuilder,
+  valueEntryOf,
+} from './value-column.js';
 
 /**
  * What {@link mergeRowGroup} merges
@@ -287,17 +293,18 @@ function copyRows(
     }
     types[r] = type;
 
-    // The attributes, by key
+    // The attributes, by key, copied as their bytes (no value is decoded)
     const { keys, columns } = data.properties;
     for (let k = 0; k < keys.length; k++) {
-      const value = readValue(columns[k] as ValueColumn, row);
-      if (value === undefined) continue;
+      const column = columns[k] as ValueColumn;
+      const entry = valueEntryOf(column, row);
+      if (entry < 0 || column.tags[entry] === VALUE_ABSENT) continue;
       let builder = builders.get(keys[k]);
       if (!builder) {
         builder = new ValueColumnBuilder(length);
         builders.set(keys[k], builder);
       }
-      builder.set(r, value);
+      builder.copy(r, column, entry);
     }
 
     for (let k = 0; k < 4; k++) rowBounds[r * 4 + k] = data.rowBounds[row * 4 + k];

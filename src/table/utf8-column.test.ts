@@ -11,8 +11,27 @@ import {
   Utf8ColumnBuilder,
   utf8ColumnFromStrings,
   utf8ColumnLength,
+  utf8LengthOf,
   utf8String,
+  writeUtf8,
 } from './utf8-column.js';
+
+/** Strings of every width of UTF-8, with surrogate pairs and lone surrogates */
+const AWKWARD = [
+  '',
+  'ascii',
+  'x'.repeat(200),
+  'é',
+  '日本語',
+  '🗾',
+  'a🗾b',
+  '\ud800',
+  'a\udc00b',
+  '\ud83d',
+  '\ud83dx',
+  '\uffff\ue000',
+  `${'a'.repeat(50)}日${'b'.repeat(50)}`,
+];
 
 describe('Utf8Column', () => {
   it('reads back the strings it was built from, empty and non-ASCII ones included', () => {
@@ -67,5 +86,25 @@ describe('Utf8Column', () => {
     const column = builder.finish();
     expect(utf8String(column, 0)).toBe('ü');
     expect(utf8String(column, 1)).toBe('first');
+  });
+
+  it('measures and writes the bytes TextEncoder writes, a lone surrogate as U+FFFD', () => {
+    const encoder = new TextEncoder();
+    for (const value of AWKWARD) {
+      const expected = encoder.encode(value);
+      expect(utf8LengthOf(value)).toBe(expected.length);
+      const target = new Uint8Array(value.length * 3 + 4);
+      const written = writeUtf8(value, target, 2);
+      expect(written).toBe(expected.length);
+      expect([...target.subarray(2, 2 + written)]).toEqual([...expected]);
+    }
+    const builder = new Utf8ColumnBuilder(1);
+    for (const value of AWKWARD) builder.add(value);
+    const column = builder.finish();
+    AWKWARD.forEach((value, i) => {
+      expect([...column.bytes.subarray(column.offsets[i], column.offsets[i + 1])]).toEqual([
+        ...encoder.encode(value),
+      ]);
+    });
   });
 });

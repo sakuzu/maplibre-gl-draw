@@ -8,9 +8,12 @@ import {
   readNumberValue,
   readValue,
   VALUE_ABSENT,
+  VALUE_NESTED,
   VALUE_NULL,
+  VALUE_STRING,
   ValueColumnBuilder,
   ValueStringCache,
+  valueEntryOf,
   valueKindOf,
 } from './value-column.js';
 
@@ -81,6 +84,67 @@ describe('ValueColumn', () => {
 
   it('refuses a number that is not finite', () => {
     expect(() => new ValueColumnBuilder(1).set(0, Number.NaN)).toThrow();
+  });
+
+  it('leaves a row as it was when its nested value is refused', () => {
+    const builder = new ValueColumnBuilder(2);
+    builder.set(0, 'kept');
+    expect(() => builder.set(0, { a: Number.NaN })).toThrow();
+    builder.set(1, [1]);
+    const column = builder.finish();
+    expect(readValue(column, 0)).toBe('kept');
+    expect(readValue(column, 1)).toEqual([1]);
+  });
+
+  it('keeps a repeated nested value once, apart from a string of the same bytes', () => {
+    const source = { dataset: 'OpenStreetMap', license: 'ODbL-1.0' };
+    const values: unknown[] = [];
+    for (let i = 0; i < 10; i++) values.push([{ ...source }]);
+    const column = columnOf(values);
+    expect(utf8ColumnLength(column.values as never)).toBe(1);
+    expect(values.map((_, row) => readValue(column, row))).toEqual(values);
+
+    // The canonical bytes of [] are 0x06 0x00: a string of those bytes is another value
+    const mixed = columnOf([[], '\u0006\u0000', [], '\u0006\u0000']);
+    expect(utf8ColumnLength(mixed.values as never)).toBe(2);
+    expect([0, 1, 2, 3].map((row) => readValue(mixed, row))).toEqual([
+      [],
+      '\u0006\u0000',
+      [],
+      '\u0006\u0000',
+    ]);
+    expect(valueKindOf(mixed, 0)).toBe(VALUE_NESTED);
+    expect(valueKindOf(mixed, 1)).toBe(VALUE_STRING);
+  });
+
+  it('gives the same column whatever the order the rows are set in', () => {
+    const values = ['b', [1], 'a', 'b', null, { a: 1 }, 'c', [1], 'b', 'b'];
+    const backward = new ValueColumnBuilder(values.length);
+    for (let row = values.length - 1; row >= 0; row--) backward.set(row, values[row]);
+    expect(backward.finish()).toEqual(columnOf(values));
+  });
+
+  it('copies entries of other columns as the values set', () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => i);
+    const sources = [
+      columnOf(['a', null, { x: [1, 'é'] }, 4.5, true, undefined, 'a', false]),
+      columnOf(many(40).map((i) => (i % 9 === 0 ? { names: { primary: `n${i}` } } : undefined))),
+      columnOf(many(12).map((i) => `name ${i}`)),
+    ];
+    // Every row of every source, in an order of its own, against the values set as they are
+    const picks: Array<[number, number]> = [];
+    sources.forEach((column, s) => {
+      for (let row = column.length - 1; row >= 0; row--) picks.push([s, row]);
+    });
+    const copied = new ValueColumnBuilder(picks.length);
+    const set = new ValueColumnBuilder(picks.length);
+    picks.forEach(([s, row], r) => {
+      const column = sources[s];
+      const entry = valueEntryOf(column, row);
+      if (entry >= 0) copied.copy(r, column, entry);
+      set.set(r, readValue(column, row));
+    });
+    expect(copied.finish()).toEqual(set.finish());
   });
 });
 

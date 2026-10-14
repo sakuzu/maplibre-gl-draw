@@ -32,8 +32,10 @@
  *   every byte but the last. The signed one puts the sign in 0x40 of the first byte with the 6
  *   lowest bits, then 7 bits per byte. Both are written in the fewest bytes
  *
- * A pure module: it depends on nothing, so it runs in a Worker as well.
+ * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
+
+import { utf8LengthOf, writeUtf8 } from './utf8-column.js';
 
 /** The kinds of the canonical form */
 export const CANONICAL_NULL = 0;
@@ -101,18 +103,70 @@ class ByteWriter {
     this.size += 8;
   }
 
+  /**
+   * The number of bytes and the UTF-8 of a string. An ASCII string (most keys and values) is
+   * written as it is read, with no array of its own; any other is measured, then encoded in
+   * place
+   */
   string(value: string): void {
-    const utf8 = encoder.encode(value);
-    this.varUint(utf8.length);
-    this.reserve(utf8.length);
-    this.bytes.set(utf8, this.size);
-    this.size += utf8.length;
-  }
-
-  take(): Uint8Array {
-    return this.bytes.slice(0, this.size);
+    const n = value.length;
+    const head = n < 0x80 ? 1 : varUintLength(n);
+    this.reserve(head + n * 3);
+    const bytes = this.bytes;
+    const start = this.size + head;
+    let k = 0;
+    for (; k < n; k++) {
+      const unit = value.charCodeAt(k);
+      if (unit >= 0x80) break;
+      bytes[start + k] = unit;
+    }
+    if (k === n) {
+      this.varUint(n);
+      this.size += n;
+      return;
+    }
+    const length = utf8LengthOf(value);
+    this.varUint(length);
+    this.reserve(length);
+    this.size += writeUtf8(value, this.bytes, this.size);
   }
 }
+
+/** The number of bytes of an unsigned variable-length integer */
+function varUintLength(value: number): number {
+  let length = 1;
+  let rest = value;
+  while (rest > 0x7f) {
+    rest = Math.floor(rest / 0x80);
+    length++;
+  }
+  return length;
+}
+
+/** The writer the values are written with, used again from one value to the next */
+let scratch: ByteWriter | null = new ByteWriter();
+
+/**
+ * Writes a value in the canonical form into a writer used again from one value to the next
+ *
+ * A writer in use (a value written while another is, from a getter of an object) gets a new one.
+ */
+function writeCanonical<T>(value: unknown, take: (bytes: Uint8Array, size: number) => T): T {
+  const writer = scratch ?? new ByteWriter();
+  scratch = null;
+  writer.size = 0;
+  try {
+    writeValue(writer, value, 0);
+    return take(writer.bytes, writer.size);
+  } finally {
+    // A writer grown past a large value is not kept
+    if (writer.bytes.length <= SCRATCH_KEPT_BYTES) scratch = writer;
+    else scratch ??= new ByteWriter();
+  }
+}
+
+/** The largest writer kept from one value to the next */
+const SCRATCH_KEPT_BYTES = 1 << 16;
 
 /**
  * Writes a value in the canonical form
@@ -123,9 +177,30 @@ class ByteWriter {
  * @internal
  */
 export function encodeCanonicalValue(value: unknown): Uint8Array {
-  const writer = new ByteWriter();
-  writeValue(writer, value, 0);
-  return writer.take();
+  return writeCanonical(value, (bytes, size) => bytes.slice(0, size));
+}
+
+/**
+ * What {@link appendCanonicalValue} adds the bytes of a value to
+ *
+ * @internal
+ */
+export interface CanonicalByteSink {
+  /** Adds the bytes `[start, end)` of an array as one entry */
+  addBytes(source: Uint8Array, start: number, end: number): void;
+}
+
+/**
+ * Writes a value in the canonical form and adds its bytes to a column as they are being built,
+ * with no array of their own
+ *
+ * The value is written in full before anything is added, so a value refused adds nothing.
+ *
+ * @throws as {@link encodeCanonicalValue}
+ * @internal
+ */
+export function appendCanonicalValue(value: unknown, sink: CanonicalByteSink): void {
+  writeCanonical(value, (bytes, size) => sink.addBytes(bytes, 0, size));
 }
 
 function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
@@ -161,23 +236,76 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
         for (const item of value) writeValue(writer, item, depth + 1);
         return;
       }
-      const entries: Array<[Uint8Array, string, unknown]> = [];
-      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      const record = value as Record<string, unknown>;
+      const keys: string[] = [];
+      const items: unknown[] = [];
+      let plain = true;
+      for (const key of Object.keys(record)) {
+        const item = record[key];
         if (item === undefined) continue;
-        entries.push([encoder.encode(key), key, item]);
+        keys.push(key);
+        items.push(item);
+        if (plain && !belowSurrogates(key)) plain = false;
       }
-      entries.sort((a, b) => compareBytes(a[0], b[0]));
+      const order = keyOrder(keys, plain);
       writer.byte(CANONICAL_OBJECT);
-      writer.varUint(entries.length);
-      for (const [, key, item] of entries) {
-        writer.string(key);
-        writeValue(writer, item, depth + 1);
+      writer.varUint(keys.length);
+      for (let i = 0; i < order.length; i++) {
+        const at = order[i];
+        writer.string(keys[at]);
+        writeValue(writer, items[at], depth + 1);
       }
       return;
     }
     default:
       throw new Error(`Canonical value: a ${typeof value} is not a value`);
   }
+}
+
+/** The most keys of an object put in order by an insertion sort */
+const INSERTION_SORT_KEYS = 24;
+
+/** Whether every UTF-16 unit of a string is below the surrogates (U+D800) */
+function belowSurrogates(value: string): boolean {
+  for (let k = 0; k < value.length; k++) {
+    if (value.charCodeAt(k) >= 0xd800) return false;
+  }
+  return true;
+}
+
+/**
+ * The places of the keys of an object in the order of their UTF-8 bytes
+ *
+ * Below the surrogates the order of the UTF-16 units is the order of the code points, which is
+ * the order of the UTF-8 bytes, so the keys are compared as they are; a key at or above them (a
+ * surrogate orders below U+E000 in UTF-16 and above it in UTF-8, and a lone one is written as
+ * U+FFFD) is compared by its bytes. Keys of the same bytes keep the order they were given.
+ */
+function keyOrder(keys: readonly string[], plain: boolean): number[] {
+  const n = keys.length;
+  const order: number[] = new Array(n);
+  for (let i = 0; i < n; i++) order[i] = i;
+  if (n < 2) return order;
+  if (plain && n <= INSERTION_SORT_KEYS) {
+    // An insertion sort: an object has a few keys, often in the order already
+    for (let i = 1; i < n; i++) {
+      const key = keys[i];
+      let j = i - 1;
+      while (j >= 0 && keys[order[j]] > key) {
+        order[j + 1] = order[j];
+        j--;
+      }
+      order[j + 1] = i;
+    }
+    return order;
+  }
+  if (plain) {
+    order.sort((a, b) => (keys[a] < keys[b] ? -1 : keys[a] > keys[b] ? 1 : a - b));
+    return order;
+  }
+  const bytes = keys.map((key) => encoder.encode(key));
+  order.sort((a, b) => compareBytes(bytes[a], bytes[b]) || a - b);
+  return order;
 }
 
 /** The order of two arrays of bytes */

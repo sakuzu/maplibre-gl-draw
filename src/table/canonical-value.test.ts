@@ -3,12 +3,67 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  appendCanonicalValue,
   CANONICAL_INTEGER,
   CANONICAL_MAX_DEPTH,
   CANONICAL_NUMBER,
   decodeCanonicalValue,
   encodeCanonicalValue,
 } from './canonical-value.js';
+import { Utf8ColumnBuilder } from './utf8-column.js';
+
+/**
+ * The canonical form written the plain way (every string through TextEncoder, the keys sorted by
+ * their bytes), which the encoder must give byte for byte
+ */
+function referenceBytes(value: unknown): number[] {
+  const encoder = new TextEncoder();
+  const out: number[] = [];
+  const varUint = (n: number) => {
+    let rest = n;
+    while (rest > 0x7f) {
+      out.push(0x80 | (rest % 0x80));
+      rest = Math.floor(rest / 0x80);
+    }
+    out.push(rest);
+  };
+  const string = (text: string) => {
+    const bytes = encoder.encode(text);
+    varUint(bytes.length);
+    out.push(...bytes);
+  };
+  const compare = (a: Uint8Array, b: Uint8Array) => {
+    for (let k = 0; k < Math.min(a.length, b.length); k++) if (a[k] !== b[k]) return a[k] - b[k];
+    return a.length - b.length;
+  };
+  const write = (item: unknown): void => {
+    if (item === null) out.push(0);
+    else if (item === false) out.push(1);
+    else if (item === true) out.push(2);
+    else if (typeof item === 'number') out.push(...encodeCanonicalValue(item));
+    else if (typeof item === 'string') {
+      out.push(5);
+      string(item);
+    } else if (Array.isArray(item)) {
+      out.push(6);
+      varUint(item.length);
+      for (const inner of item) write(inner);
+    } else {
+      const entries = Object.entries(item as Record<string, unknown>)
+        .filter(([, inner]) => inner !== undefined)
+        .map(([key, inner]) => [encoder.encode(key), key, inner] as const)
+        .sort((a, b) => compare(a[0], b[0]));
+      out.push(7);
+      varUint(entries.length);
+      for (const [, key, inner] of entries) {
+        string(key);
+        write(inner);
+      }
+    }
+  };
+  write(value);
+  return out;
+}
 
 describe('the canonical form of a value', () => {
   it('reads back every kind of value', () => {
@@ -113,5 +168,52 @@ describe('the canonical form of a value', () => {
     const bytes = new Uint8Array(value.length + 4);
     bytes.set(value, 2);
     expect(decodeCanonicalValue(bytes, 2, 2 + value.length)).toEqual(['a', 2]);
+  });
+
+  it('writes every string and key as TextEncoder does, and orders the keys by those bytes', () => {
+    const long = 'x'.repeat(300);
+    const values: unknown[] = [
+      'a🗾b',
+      '\ud800',
+      'a\udc00b',
+      long,
+      `${long}日本`,
+      { '\ue000': 1, '🗾': 2, '｡': 3, a: 4, '\ud800': 5, '\udc00': 6, [long]: 7 },
+      { zeta: 1, alpha: [{ beta: 'é', alpha: null }], gamma: { b: 2, a: 1 } },
+      // More keys than are put in order one by one
+      Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`k${(i * 7) % 40}`, i])),
+      Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`${'🗾'.repeat(i % 3)}${i}`, i])),
+    ];
+    for (const value of values) {
+      expect([...encodeCanonicalValue(value)]).toEqual(referenceBytes(value));
+    }
+  });
+
+  it('writes a value read from a getter while another is written', () => {
+    const inner = { b: [1, 'x'] };
+    const outer = {
+      get a() {
+        // A value written while the outer one is
+        return [...encodeCanonicalValue(inner)];
+      },
+      c: 'z',
+    };
+    expect([...encodeCanonicalValue(outer)]).toEqual(
+      referenceBytes({ a: referenceBytes(inner), c: 'z' }),
+    );
+    expect([...encodeCanonicalValue(inner)]).toEqual(referenceBytes(inner));
+  });
+
+  it('adds the bytes of a value to a column, and nothing for a value refused', () => {
+    const builder = new Utf8ColumnBuilder(1);
+    appendCanonicalValue({ a: [1, 'b'] }, builder);
+    expect(() => appendCanonicalValue({ a: Number.NaN }, builder)).toThrow();
+    appendCanonicalValue('c', builder);
+    const column = builder.finish();
+    expect(column.offsets.length).toBe(3);
+    expect(decodeCanonicalValue(column.bytes, column.offsets[0], column.offsets[1])).toEqual({
+      a: [1, 'b'],
+    });
+    expect(decodeCanonicalValue(column.bytes, column.offsets[1], column.offsets[2])).toBe('c');
   });
 });

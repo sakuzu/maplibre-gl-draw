@@ -205,6 +205,55 @@ export function encodeUtf8Into(value: string, target: Uint8Array): number {
 }
 
 /**
+ * The number of UTF-8 bytes of a string (what `TextEncoder` writes: a lone surrogate takes the
+ * 3 bytes of U+FFFD)
+ *
+ * @internal
+ */
+export function utf8LengthOf(value: string): number {
+  const n = value.length;
+  let length = 0;
+  for (let k = 0; k < n; k++) {
+    const unit = value.charCodeAt(k);
+    if (unit < 0x80) length += 1;
+    else if (unit < 0x800) length += 2;
+    else if (unit >= 0xd800 && unit <= 0xdbff && k + 1 < n) {
+      const next = value.charCodeAt(k + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        length += 4;
+        k++;
+      } else {
+        length += 3;
+      }
+    } else length += 3;
+  }
+  return length;
+}
+
+/**
+ * Writes the UTF-8 bytes of a string at `at` of an array, which must have room for three bytes
+ * per UTF-16 unit of the string
+ *
+ * An ASCII string is written unit by unit: most strings of the data are short and ASCII (ids,
+ * keys, codes), and `TextEncoder.encodeInto` costs a view of the array and a call into the
+ * engine each time.
+ *
+ * @returns The number of bytes written
+ * @internal
+ */
+export function writeUtf8(value: string, target: Uint8Array, at: number): number {
+  const n = value.length;
+  let k = 0;
+  for (; k < n; k++) {
+    const unit = value.charCodeAt(k);
+    if (unit >= 0x80) break;
+    target[at + k] = unit;
+  }
+  if (k === n) return n;
+  return encoder.encodeInto(value, target.subarray(at)).written;
+}
+
+/**
  * Whether entry `i` of a column holds the bytes `bytes[0, length)`
  *
  * @internal
@@ -261,8 +310,7 @@ export class Utf8ColumnBuilder {
   add(value: string): void {
     // A UTF-8 string takes at most 3 bytes per UTF-16 code unit
     this.reserveBytes(value.length * 3);
-    const { written } = encoder.encodeInto(value, this.bytes.subarray(this.size));
-    this.size += written;
+    this.size += writeUtf8(value, this.bytes, this.size);
     this.push();
   }
 
@@ -272,6 +320,21 @@ export class Utf8ColumnBuilder {
     this.bytes.set(source.subarray(start, end), this.size);
     this.size += end - start;
     this.push();
+  }
+
+  /** Where entry `index` added starts in {@link bytesAdded} */
+  entryStart(index: number): number {
+    return this.offsets[index];
+  }
+
+  /** Where entry `index` added ends in {@link bytesAdded} */
+  entryEnd(index: number): number {
+    return this.offsets[index + 1];
+  }
+
+  /** The array the bytes of the entries are added to (it changes when it grows) */
+  get bytesAdded(): Uint8Array {
+    return this.bytes;
   }
 
   /** Adds entry `index` of another column */
