@@ -20,6 +20,7 @@ import { getDisplayFeatures } from '../../store/local-visibility.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import {
   getCursorForHandle,
+  hitTestBulkHandles,
   hitTestGlobalAuxiliaryHandles,
   hitTestHandles,
 } from '../../view/ui/handle-test.js';
@@ -85,6 +86,23 @@ export function updateCursorForSelection(
         canvas.style.cursor = getCursorForHandle(handleHit);
         return;
       }
+    }
+  }
+
+  // Features selected in bulk: the handles of their frame (not while they cannot be edited)
+  const bulk = store.getSelection().bulk;
+  if (bulk && !store.isReadOnly() && !store.isInteractionLocked() && !store.isSelectedRowLocked()) {
+    const bulkHit = hitTestBulkHandles(
+      event.point,
+      bulk,
+      transform,
+      config,
+      map.getZoom(),
+      context.selectionScope,
+    );
+    if (bulkHit && bulkHit.type !== 'move') {
+      canvas.style.cursor = getCursorForHandle(bulkHit);
+      return;
     }
   }
 
