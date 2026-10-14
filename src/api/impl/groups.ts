@@ -8,6 +8,7 @@
 import {
   featuresInStackingOrder,
   groupsInStackingOrder,
+  groupsInStackingOrderOf,
   insertGroup,
 } from '../../store/item-lists.js';
 import type { Store } from '../../store/store.js';
@@ -155,8 +156,10 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
   };
 
   function moveMany(ids: readonly string[], to: MoveTarget): boolean {
-    const wanted = new Set(requireIds(ids).map((id) => require(id).id));
-    const groups = inOrder().filter((group) => wanted.has(group.id));
+    // In stacking order, read where each of them stands
+    const groups = groupsInStackingOrderOf(store, [
+      ...new Map(requireIds(ids).map((id) => [id, require(id)])).values(),
+    ]);
     const target = resolveMoveTarget(store, to);
     if (target.kind !== 'layer') throw invalidInput('A group can only be moved to a layer');
     if (store.isReadOnly()) return false;

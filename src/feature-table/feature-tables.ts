@@ -70,6 +70,7 @@ import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
 import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
 import { featureFields, featureWithFields } from './feature-fields.js';
+import { groupRunCuts } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { translationBetween } from './held-move.js';
 import { IdIndex } from './id-index.js';
@@ -2297,39 +2298,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
         if (!orders.has(group)) orders.set(group, order);
       }
     }
-    // The cuts of each row group: the runs of the members
-    const cuts = new Map<RowGroup, Set<number>>();
-    const cut = (group: RowGroup, row: number): void => {
-      if (row <= 0 || row >= group.data.length) return;
-      let set = cuts.get(group);
-      if (!set) {
-        set = new Set();
-        cuts.set(group, set);
-      }
-      set.add(row);
-    };
-    const members: Array<{ group: RowGroup; row: number; of: GroupHandle }> = [];
-    for (let g = 0; g < (layer?.groupCount ?? 0); g++) {
-      const group = (layer as LayerTable).groupAt(g);
-      const data = group.data;
-      let run = -1;
-      for (let r = 0; r <= data.length; r++) {
-        const inside = r < data.length && orders.has(data.groups[r]);
-        if (inside && run < 0) {
-          run = r;
-          members.push({ group, row: r, of: data.groups[r] });
-          cuts.set(group, cuts.get(group) ?? new Set());
-          cut(group, r);
-        } else if (!inside && run >= 0) {
-          cut(group, r);
-          run = -1;
-        } else if (inside && data.groups[r] !== data.groups[r - 1]) {
-          cut(group, r);
-          members.push({ group, row: r, of: data.groups[r] });
-        }
-      }
-    }
-    if (!layer || members.length === 0) {
+    // The cuts of each row group: the runs of the members, and where they go
+    const { cuts, members } = layer
+      ? groupRunCuts(layer, orders, this.groups)
+      : { cuts: new Map<RowGroup, Set<number>>(), members: false };
+    if (!layer || !members) {
       // No member in the groups: the keys go in now (the deltas in their new order)
       for (const [group, order] of orders) this.groups.setOrder(group, order);
       for (const other of this.layers.values()) {
@@ -2337,24 +2310,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
         other.touchItems();
       }
       return;
-    }
-    // The places the members go to: before the first row that is no member of a group put in
-    // another order and comes after them with the new keys
-    const keys = this.groups.withOrders(orders);
-    for (const member of members) {
-      let placed = false;
-      for (let g = 0; g < layer.groupCount && !placed; g++) {
-        const group = layer.groupAt(g);
-        const data = group.data;
-        for (let r = 0; r < data.length; r++) {
-          if (orders.has(data.groups[r])) continue;
-          if (compareRowKeys(member.group.data, member.row, data, r, keys) < 0) {
-            if (r > 0 && !orders.has(data.groups[r - 1])) cut(group, r);
-            placed = true;
-            break;
-          }
-        }
-      }
     }
     // The pieces
     const groups = [...cuts.keys()].sort(

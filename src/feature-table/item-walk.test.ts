@@ -14,6 +14,7 @@ import type { Draw } from '../api/draw.js';
 import { createDrawOnEngine } from '../api/impl/create-draw.js';
 import { createEngine } from '../api/impl/engine.js';
 import type { FeatureTables, RowField } from '../api/tables.js';
+import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-lists.js';
 import { createTableMemoryStore } from '../store/table-memory.js';
 import { createRowGroupBuilder } from '../table/row-group-builder.js';
 import { createMapStub, seededRandom } from '../test-utils.js';
@@ -187,6 +188,11 @@ describe('ItemWalk', () => {
         }
         store.transact(() => writer.apply({ handles, fields, deleted }), 'remote');
         expectWalkAsLists(internals);
+        // The groups in stacking order, read where each stands
+        const groups = store.listGroups();
+        expect(groupsInStackingOrderOf(store, groups.slice(1))).toEqual(
+          groupsInStackingOrder(store).filter((group) => group.id !== groups[0].id),
+        );
         if (step % 10 === 9) {
           internals.flushAdoption();
           internals.flushVersions();
@@ -200,8 +206,9 @@ describe('ItemWalk', () => {
 describe('an edit of a few items of a layer held as rows', () => {
   /**
    * Groups and ungroups 50 rows spread over the layer, brings them to the front and back, puts
-   * 300 rows in front, and gives a group a new key from elsewhere: the steps read from the rows
-   * next to the items, and whether the list of every row or item of the layer was made
+   * 300 rows in front, sends a group to the back and gives it a new key from elsewhere: the
+   * steps read from the rows next to the items, and whether the list of every row or item of the
+   * layer was made
    */
   function edit(n: number): { steps: number; listed: number } {
     const { store, writer, tables, internals } = storeOf(n);
@@ -229,6 +236,7 @@ describe('an edit of a few items of a layer held as rows', () => {
     draw.features.moveMany(members, { layerId: 'rows', below: null });
     draw.features.moveMany(many, { layerId: 'rows', above: null });
     const again = draw.groups.create({ featureIds: members.slice(0, 5) });
+    if (again) draw.groups.move(again.id, { layerId: 'rows', below: null });
     const handle = internals.groups.handleOfId(again?.id ?? '');
     store.transact(
       () =>

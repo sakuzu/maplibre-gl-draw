@@ -12,6 +12,7 @@
 import type { FeatureTables } from '../api/tables.js';
 import {
   tableFrontmostItem,
+  tableGroupsInOrder,
   tableIdsInOrder,
   tableItemNeighbors,
   tableLayerGroupIds,
@@ -158,6 +159,37 @@ export function groupsInStackingOrder(store: ItemListStore): Group[] {
   if (result.length < store.listGroups().length) {
     const listed = new Set(result.map((group) => group.id));
     result.push(...store.listGroups().filter((group) => !listed.has(group.id)));
+  }
+  return result;
+}
+
+/**
+ * Groups in the order `groupsInStackingOrder` lists them in, read where each of them stands (not
+ * from the items of every layer held as rows)
+ *
+ * @internal
+ */
+export function groupsInStackingOrderOf(store: ItemListStore, groups: readonly Group[]): Group[] {
+  const wanted = new Map(groups.map((group) => [group.id, group]));
+  const result: Group[] = [];
+  for (const layerId of store.getLayerOrder()) {
+    const layer = store.getLayer(layerId);
+    if (!layer) continue;
+    const ids =
+      layer.kind === 'table'
+        ? tableGroupsInOrder(store.tables, layerId, [...wanted.keys()])
+        : layer.items.filter((id) => wanted.has(id));
+    for (const id of ids) {
+      const group = wanted.get(id);
+      if (group && store.getGroup(id)) result.push(group);
+    }
+  }
+  if (result.length < wanted.size) {
+    // A group no layer lists comes last, in the order of the groups
+    const listed = new Set(result.map((group) => group.id));
+    for (const group of store.listGroups()) {
+      if (wanted.has(group.id) && !listed.has(group.id)) result.push(group);
+    }
   }
   return result;
 }

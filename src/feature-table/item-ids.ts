@@ -221,6 +221,29 @@ export function tableFrontmostItem(
 }
 
 /**
+ * Of groups of features, the ones that are items of a layer held as rows (a group with a member),
+ * in their order: read where each of them stands
+ *
+ * @internal
+ */
+export function tableGroupsInOrder(
+  tables: FeatureTables | undefined,
+  layerId: string,
+  groupIds: readonly string[],
+): string[] {
+  const internals = featureTablesInternals(tables);
+  const walk = tables ? walkOf(tables, layerId) : null;
+  if (!internals || !walk) return [];
+  const codes: number[] = [];
+  for (const id of groupIds) {
+    const group = internals.groups.handleOfId(id);
+    if (group >= 0 && walk.span(group * 2 + 1, -1)) codes.push(group * 2 + 1);
+  }
+  codes.sort((a, b) => walk.compare(a, b));
+  return codes.map((code) => internals.groups.idOf(code >> 1) as string);
+}
+
+/**
  * The groups of features of a layer held as rows that are its items (a group with a member), in
  * their order
  *
