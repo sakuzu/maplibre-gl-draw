@@ -38,6 +38,7 @@ import type { FeatureTablesInternals } from '../../feature-table/feature-tables.
 import { type LayerTable, type RowGroup, widenBounds } from '../../feature-table/layer-table.js';
 import { rowFeature, rowHasGeometry } from '../../feature-table/row-read.js';
 import {
+  GPU_STATE_BULK,
   MOVE_SETS,
   STATE_HIDDEN_MASK,
   STATE_MOVE_MASK,
@@ -51,6 +52,7 @@ import {
   type RowGroupHandle,
 } from '../../feature-table/types.js';
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
+import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { type PlaneTransform, transformPosition } from '../../shared/math/plane-transform.js';
 import { drawProperties, getDrawProperty, hasDrawProperty } from '../../shared/properties.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
@@ -90,6 +92,7 @@ import {
 } from '../retained/chunk-scheduler.js';
 import type { TerrainContext } from '../terrain/context.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
+import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
 import { drawImmediateFeatures, type StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import {
   collectRow,
@@ -303,6 +306,9 @@ interface GroupCache {
   binding: RowStateBinding | null;
   /** The generation of the styles of the layer the styles of its rows were resolved with */
   styleGeneration: number;
+  /** Whether a row is marked as selected in bulk, and the version of the state it was read at */
+  bulkMarked: boolean;
+  bulkMarkVersion: number;
 }
 
 /** What is kept for a layer */
@@ -1653,6 +1659,41 @@ export class TableLayerRenderer {
   }
 
   /**
+   * Draws the frames of the rows marked as selected in bulk, of every layer, one draw per row
+   * group holding one (the groups whose textures of the state are written)
+   *
+   * @param revision Changes with every change of the rows (the extents are read again)
+   */
+  drawBulkFrames(
+    renderer: BulkFramesRenderer,
+    projectionData: ProjectionData,
+    zoom: number,
+    config: SelectionUIConfig,
+    revision: number,
+    pointExtent: PointFrameExtent,
+  ): void {
+    const drawn = new Set<number>();
+    for (const cache of this.layers.values()) {
+      const caches = cache.delta ? [...cache.groups.values(), cache.delta] : cache.groups.values();
+      for (const groupCache of caches) {
+        const binding = groupCache.binding;
+        if (!binding || !holdsBulkMark(groupCache)) continue;
+        drawn.add(groupCache.group.handle);
+        renderer.drawGroup(
+          groupCache.group,
+          binding,
+          revision,
+          projectionData,
+          zoom,
+          config,
+          pointExtent,
+        );
+      }
+    }
+    renderer.retain(drawn);
+  }
+
+  /**
    * Writes the textures of the state of the rows of every group whose state changed since they
    * were written (made for a group seen for the first time). Called in the pass before the main
    * one, with the chunks and the writes in place, so a state takes effect in the frame its texture
@@ -2314,6 +2355,8 @@ function newGroupCache(group: RowGroup, styleGeneration: number): GroupCache {
     uploadedVersion: -1,
     binding: null,
     styleGeneration,
+    bulkMarked: false,
+    bulkMarkVersion: -1,
   };
 }
 
@@ -2383,6 +2426,16 @@ function rowInView(rowBounds: Float64Array, row: number, bounds: BoundingBox): b
     rowBounds[at + 1] <= bounds.maxY &&
     rowBounds[at + 3] >= bounds.minY
   );
+}
+
+/** Whether a row of a group is marked as selected in bulk (read once per version of its state) */
+function holdsBulkMark(groupCache: GroupCache): boolean {
+  const group = groupCache.group;
+  if (groupCache.bulkMarkVersion !== group.stateVersion) {
+    groupCache.bulkMarkVersion = group.stateVersion;
+    groupCache.bulkMarked = group.gpuState.some((state) => (state & GPU_STATE_BULK) !== 0);
+  }
+  return groupCache.bulkMarked;
 }
 
 /**

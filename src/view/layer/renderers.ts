@@ -31,6 +31,7 @@ import { StrokeRenderer } from '../renderers/stroke.js';
 import { ShaderInitializer } from '../shaders/initializer.js';
 import { QuadShader } from '../shaders/quad.js';
 import { BoxSelectionRenderer } from '../ui/box-selection.js';
+import { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import { SelectionHandlesRenderer, SelectionUIRenderer } from '../ui/index.js';
 import { TentativeRenderer } from '../ui/tentative.js';
 import { ViewportFilter } from '../viewport.js';
@@ -53,6 +54,8 @@ export interface Renderers {
   sdfPolygonRenderer: SDFPolygonRenderer;
   /** The rows of the layers held as rows, of every kind in one draw */
   rowsRenderer: RowsRenderer;
+  /** The frames of the features selected in bulk, one per row, on the GPU */
+  bulkFramesRenderer: BulkFramesRenderer;
   fillShaderManager: FillShaderManager;
   selectionUIRenderer: SelectionUIRenderer;
   selectionHandlesRenderer: SelectionHandlesRenderer;
@@ -132,6 +135,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     gpu: scope.gpu,
   });
   const rowsRenderer = new RowsRenderer(mapInstance, gl, pixelRatio, terrain, scope.gpu);
+  const bulkFramesRenderer = new BulkFramesRenderer(gl, pixelRatio, scope.gpu);
   const fillShaderManager = new FillShaderManager(gl, terrain);
 
   const selectionExtensions = scope.selection.extensions;
@@ -206,6 +210,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     sdfPolygonRenderer,
     rowsRenderer,
     fillShaderManager,
+    bulkFramesRenderer,
   });
 
   const batchManager = new BatchManager({
@@ -231,6 +236,7 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     polygonBatchRenderer,
     sdfPolygonRenderer,
     rowsRenderer,
+    bulkFramesRenderer,
     fillShaderManager,
     selectionUIRenderer,
     selectionHandlesRenderer,
@@ -274,6 +280,7 @@ const GPU_OWNERS = [
   'polygonBatchRenderer',
   'sdfPolygonRenderer',
   'rowsRenderer',
+  'bulkFramesRenderer',
   'fillShaderManager',
 ] as const satisfies readonly GpuOwnerKey[];
 

@@ -11,18 +11,22 @@
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { THINNING_VIEWPORT_MARGIN_PX } from '../../shared/config/selection.js';
 import { type CoordinateTransform, createCoordinateTransform } from '../../shared/math/index.js';
+import { type PlaneTransform, transformPosition } from '../../shared/math/plane-transform.js';
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
+import { summaryHasArea } from '../../store/bulk-selection.js';
 import { isLocallyHidden, type LocalHiddenStore } from '../../store/local-visibility.js';
 import type {
   Coordinate,
   DragState,
   Feature,
+  SelectionBulk,
   VertexRef,
   VertexSelection,
 } from '../../store/types.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
 import type { AuxiliaryHandleContext } from './auxiliary-handles.js';
+import { bulkFrame } from './handle-test.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
 import { computeVisibleHandleSet, shouldThinHandles } from './handle-thinning.js';
 import type { HandleInfo } from './handles.js';
@@ -560,4 +564,73 @@ function renderMultiSelectionHandles(
   if (showRotate) {
     selectionHandlesRenderer.drawRotateHandle(bbox, zoom);
   }
+}
+
+/**
+ * What the drag of features selected in bulk does to them now: the translation and the rotation
+ * or resize of their moving set (null when they are not dragged)
+ */
+export interface BulkMovement {
+  readonly translation: readonly [number, number];
+  readonly transform: PlaneTransform | null;
+}
+
+/**
+ * Draws the frame of features selected in bulk (the box of their extent, moved as they are while
+ * dragged) and its handles, as the frame of a selection of several features and its handles are
+ * drawn (the frames of the features themselves are drawn on the GPU, `bulk-frames.ts`)
+ *
+ * @param isLocked Whether the selection cannot be edited: the frame is drawn without handles
+ * @internal
+ */
+export function renderBulkSelectionUI(
+  bulk: SelectionBulk,
+  zoom: number,
+  projectionData: CustomRenderMethodInput['defaultProjectionData'],
+  deps: SelectionUIDrawerDeps,
+  dragState: DragState | null,
+  isLocked: boolean,
+  movement: BulkMovement | null,
+): void {
+  const { selectionUIRenderer, selectionHandlesRenderer, map } = deps;
+  if (!bulk.bounds || !selectionUIRenderer || !selectionHandlesRenderer) return;
+  const transform = createCoordinateTransform(map);
+  selectionUIRenderer.setTransform(transform);
+  selectionUIRenderer.setProjectionData(projectionData);
+  selectionHandlesRenderer.setTransform(transform);
+  selectionHandlesRenderer.setProjectionData(projectionData);
+
+  const operation = dragState?.operation ?? null;
+  let frame = bulkFrame(bulk.bounds);
+  if (operation === 'rotate' && dragState?.rotateInfo) {
+    frame = rotateBoundingBox(dragState.rotateInfo.initialBbox, dragState.rotateInfo.currentAngle);
+  } else if (movement) {
+    frame = movedFrame(frame, movement);
+  }
+  selectionUIRenderer.drawFrame(frame, zoom);
+  if (isLocked || !summaryHasArea(bulk)) return;
+  if (operation !== 'move' && operation !== 'rotate') {
+    selectionHandlesRenderer.drawResizeHandles(frame, zoom);
+  }
+  if (operation !== 'move' && operation !== 'resize') {
+    selectionHandlesRenderer.drawRotateHandle(frame, zoom);
+  }
+}
+
+/** A frame moved by the drag of the features it frames */
+function movedFrame(frame: BoundingBoxCoords, movement: BulkMovement): BoundingBoxCoords {
+  const [dx, dy] = movement.translation;
+  const move = (corner: Coordinate): Coordinate => {
+    const moved = movement.transform
+      ? transformPosition(movement.transform, corner, false)
+      : [corner[0], corner[1]];
+    return [moved[0] + dx, moved[1] + dy];
+  };
+  return {
+    topLeft: move(frame.topLeft),
+    topRight: move(frame.topRight),
+    bottomRight: move(frame.bottomRight),
+    bottomLeft: move(frame.bottomLeft),
+    center: move(frame.center),
+  };
 }

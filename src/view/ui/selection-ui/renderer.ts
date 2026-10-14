@@ -91,6 +91,19 @@ export class SelectionUIRenderer {
     this.#config = config;
   }
 
+  /** The configuration of the selection UI */
+  get config(): SelectionUIConfig {
+    return this.#config;
+  }
+
+  /**
+   * Draws a frame with the margin around a box of the map (the frame of features selected in
+   * bulk: the box of their extent, as it is moved while they are dragged)
+   */
+  drawFrame(bbox: BoundingBoxCoords, zoom: number): void {
+    this.#strokeBoundingBox(this.#applyMargin(bbox, zoom), zoom);
+  }
+
   /**
    * Draw the UI of the selected features
    */

@@ -69,6 +69,12 @@ export const GPU_STATE_UNIFORM = 16;
 export const MOVE_SETS = 3;
 
 /**
+ * The moving set the features selected in bulk are dragged with (set 1 is the one of the rows
+ * opened as features moved as a whole)
+ */
+export const BULK_MOVE_SET = 2;
+
+/**
  * The byte the GPU reads for the copy of the state of a row
  *
  * @internal

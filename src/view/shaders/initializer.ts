@@ -19,6 +19,7 @@ import type { FillShaderManager } from '../renderers/polygon/fill.js';
 import type { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
 import type { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import type { StrokeRenderer } from '../renderers/stroke.js';
+import type { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import type { TentativeRenderer } from '../ui/tentative.js';
 import { calculateOffsetUniforms, type OffsetUniforms, type ShaderData } from './helpers.js';
 import type { QuadShader } from './quad.js';
@@ -42,6 +43,8 @@ export interface ShaderInitializerRenderers {
   rowsRenderer?: RowsRenderer | null;
   /** The fill shared with the render context of custom feature renderers */
   fillShaderManager: FillShaderManager | null;
+  /** The frames of the features selected in bulk (optional) */
+  bulkFramesRenderer?: BulkFramesRenderer | null;
 }
 
 /**
@@ -110,6 +113,7 @@ export class ShaderInitializer {
     }
     rowsRenderer?.ensureShader(shaderData);
     fillShaderManager?.ensureShader(shaderData);
+    this.renderers.bulkFramesRenderer?.ensureShader(shaderData);
   }
 
   /**
@@ -189,6 +193,7 @@ export class ShaderInitializer {
     }
     rowsRenderer?.setOffsetUniforms(uniforms);
     fillShaderManager?.setOffsetUniforms(uniforms);
+    this.renderers.bulkFramesRenderer?.setOffsetUniforms(uniforms);
   }
 
   /**

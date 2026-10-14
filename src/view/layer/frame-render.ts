@@ -13,8 +13,15 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
+import {
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from '../../feature-table/feature-tables.js';
+import { rowType } from '../../feature-table/row-read.js';
+import { BULK_MOVE_SET } from '../../feature-table/row-state.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
+import type { Feature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { TerrainContext } from '../terrain/context.js';
 import {
@@ -24,8 +31,11 @@ import {
   setTerrainShadeLight,
   setTerrainSurfacesFlattened,
 } from '../terrain/state.js';
+import type { PointFrameExtent } from '../ui/bulk-frames.js';
 import type { SelectionScope } from '../ui/selection-scope.js';
 import {
+  type BulkMovement,
+  renderBulkSelectionUI,
   renderFollowedVertices,
   renderGlobalAuxiliaryHandles,
   renderSelectionUI,
@@ -266,6 +276,25 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   const selectionLocked = f.selectedFeatures.some((feature) =>
     isInteractionBlocked(feature, store),
   );
+  // Features selected in bulk (and the rows a box marks past the limit): their frames are drawn
+  // on the GPU, and the frame of all of them with its handles as for several features
+  const bulk = store.getSelection().bulk;
+  const tables = featureTablesInternals(store.tables);
+  const bulkFramesShown =
+    tables !== undefined &&
+    deps.tableRetained !== null &&
+    (bulk !== undefined ||
+      (store.getBoxSelection() !== null && tables.states.bulkHandles().size > store.holdLimit));
+  const bulkLocked =
+    bulk !== undefined &&
+    (store.isReadOnly() || store.isInteractionLocked() || store.isSelectedRowLocked());
+  const bulkMovement: BulkMovement | null = tables
+    ? {
+        translation: tables.states.translation(BULK_MOVE_SET),
+        transform: tables.states.transform(BULK_MOVE_SET),
+      }
+    : null;
+  const pointExtent = tables ? pointFrameExtentOf(deps, tables) : null;
   const selectionUIDeps = {
     selectionUIRenderer: r.selectionUIRenderer,
     selectionHandlesRenderer: r.selectionHandlesRenderer,
@@ -291,6 +320,28 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
       store.getVertexSelection(),
       selectionLocked,
     );
+    if (bulkFramesShown && tables && pointExtent) {
+      deps.tableRetained?.drawBulkFrames(
+        r.bulkFramesRenderer,
+        copy.projectionData,
+        f.zoom,
+        r.selectionUIRenderer.config,
+        tables.revision,
+        pointExtent,
+      );
+      f.restoreBlendState();
+    }
+    if (bulk) {
+      renderBulkSelectionUI(
+        bulk,
+        f.zoom,
+        copy.projectionData,
+        selectionUIDeps,
+        store.getDragState(),
+        bulkLocked,
+        bulkMovement,
+      );
+    }
     // The handles of the extensions that belong to no feature, while they can be grabbed
     if (globalHandlesShown) {
       renderGlobalAuxiliaryHandles(
@@ -360,4 +411,49 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   // The entry point of the quads lasts only for this frame (it is always removed so that it is
   // not read from outside the rendering)
   if (f.quadDrapeFrame) setQuadDrapeFrame(terrainContext, null);
+}
+
+/**
+ * The extent of the marker of a row of one position, for its frame: what the selection UI reads
+ * for a point of its type and style (read once per type and style)
+ */
+function pointFrameExtentOf(
+  deps: FrameRenderDeps,
+  tables: FeatureTablesInternals,
+): PointFrameExtent {
+  const known = new Map<string, readonly [number, number] | null>();
+  return (group, row) => {
+    const data = group.data;
+    const type = rowType(data, row);
+    const styleNumber = data.styles[row];
+    const key = `${type}\u0000${styleNumber}`;
+    let extent = known.get(key);
+    if (extent === undefined) {
+      const feature = {
+        id: '',
+        type,
+        geometry: { type: 'Point', coordinates: [0, 0] },
+        layerId: '',
+        groupId: undefined,
+        properties: {},
+        style: tables.styles.get(styleNumber),
+        visible: true,
+        locked: false,
+      } as Feature;
+      const corners = deps.selectionScope.extensions.resolvePointFrameCorners(
+        feature,
+        { x: 0, y: 0 },
+        0,
+      );
+      extent =
+        corners.length > 0
+          ? [
+              Math.max(...corners.map((corner) => Math.abs(corner.x))),
+              Math.max(...corners.map((corner) => Math.abs(corner.y))),
+            ]
+          : null;
+      known.set(key, extent);
+    }
+    return extent;
+  };
 }

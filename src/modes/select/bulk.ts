@@ -19,7 +19,7 @@ import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
-import { STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
+import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import {
   resizeBulkSelection,
@@ -39,13 +39,7 @@ import type { IntermediateWrites } from './drag/intermediate-writes.js';
 import type { DragOperation, DragStore } from './drag/operation.js';
 import { dragStartLngLat } from './drag/operation.js';
 
-/**
- * The moving set the features selected in bulk are dragged with (set 1 is the one of the rows
- * opened as features)
- *
- * @internal
- */
-export const BULK_MOVE_SET = 2;
+export { BULK_MOVE_SET };
 
 /**
  * The rows in a box drawn over a Store of rows, read on their columns: the rows that can be

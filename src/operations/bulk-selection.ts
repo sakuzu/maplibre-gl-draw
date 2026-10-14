@@ -52,8 +52,7 @@ export function deleteBulkSelection(store: Store): boolean {
  * @internal
  */
 export function bulkSelectionLocked(store: Store): boolean {
-  const rows = store.getSelectedRows();
-  return rows !== null && rowsLocked(store, rows);
+  return store.isSelectedRowLocked();
 }
 
 /**

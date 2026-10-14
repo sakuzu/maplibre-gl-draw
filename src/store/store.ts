@@ -468,6 +468,11 @@ export interface Store extends StoreView, UiState {
    */
   selectRows(rows: TableSelection): void;
   /**
+   * Whether a feature selected in bulk is locked (itself, its group or its layer): read once
+   * after each change of the document
+   */
+  isSelectedRowLocked(): boolean;
+  /**
    * Puts back a selection read before (`getSelection`, a notification): what is no longer there
    * or cannot be seen is left out
    */

@@ -29,7 +29,12 @@
 
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
-import { isRowShown, type RowContainers, rowsByLayerInOrder } from '../feature-table/bulk-rows.js';
+import {
+  isRowLocked,
+  isRowShown,
+  type RowContainers,
+  rowsByLayerInOrder,
+} from '../feature-table/bulk-rows.js';
 import {
   type FeatureTablesInternals,
   featureTablesInternals,
@@ -159,6 +164,8 @@ export class DrawStore implements Store {
   #bulk: BulkState | null = null;
   /** Whether the selection is being written here (its notification does not prune it) */
   #selecting = false;
+  /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
+  #bulkLocked: boolean | null = null;
   readonly holdLimit: number;
 
   constructor(contract: StoreContract, options: DrawStoreOptions = {}) {
@@ -340,6 +347,19 @@ export class DrawStore implements Store {
 
   getSelectedRows(): TableSelection | null {
     return this.#bulk?.rows ?? null;
+  }
+
+  isSelectedRowLocked(): boolean {
+    const bulk = this.#bulk;
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!bulk || !internals) return false;
+    if (this.#bulkLocked === null) {
+      const containers = this.#containers();
+      this.#bulkLocked = bulk.rows.handles.some((handle) =>
+        isRowLocked(internals, containers, handle),
+      );
+    }
+    return this.#bulkLocked;
   }
 
   selectRows(rows: TableSelection): void {
@@ -584,6 +604,7 @@ export class DrawStore implements Store {
       next && internals && next.rows.count > 0
         ? { type: next.type, rows: next.rows, summary: summaryOf(internals, next.rows) }
         : null;
+    this.#bulkLocked = null;
     this.#heldStale = true;
   }
 
@@ -811,6 +832,7 @@ export class DrawStore implements Store {
    * did not come from a transaction of this Store)
    */
   #receive(changes: StoreChange): void {
+    this.#bulkLocked = null;
     this.#bus.transact(() => {
       if (this.#contract.tables && this.#changesHeld(changes)) this.#heldStale = true;
       this.#bus.merge(this.#normalizeChanges(withoutSource(changes)));
