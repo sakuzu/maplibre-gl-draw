@@ -231,7 +231,10 @@ async function drawWritten(
             createFeatureTables: typeof import('../index.js').createFeatureTables;
             createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
           };
-          internals: { MemoryContractStore: new () => Contract };
+          internals: {
+            MemoryContractStore: new () => Contract;
+            tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
+          };
         };
       };
       const { map } = w;
@@ -310,7 +313,7 @@ async function drawWritten(
       (w.captured as Record<string, Uint8Array>)[key] = pixels;
       let drawn = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) drawn++;
-      const stats = w.draw.debug.tables().editStats();
+      const stats = w.e2e.internals.tableDiagnosticsOf(w.draw).editStats();
       return { drawn, inPlace: stats.inPlace, rebuilt: stats.rebuilt };
     },
     { key, features, writes },

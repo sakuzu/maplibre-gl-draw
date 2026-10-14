@@ -174,7 +174,10 @@ async function drawWritten(
             createFeatureTables: typeof import('../index.js').createFeatureTables;
             createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
           };
-          internals: { MemoryContractStore: new () => Contract };
+          internals: {
+            MemoryContractStore: new () => Contract;
+            tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
+          };
         };
       };
       const { map } = w;
@@ -267,10 +270,10 @@ async function drawWritten(
         });
         // The frame the writes are drawn in: the rows of the delta at their places
         captured[`${key}-delta`] = await read();
-        deltaRows = w.draw.debug.tables().editStats().deltaRows;
+        deltaRows = w.e2e.internals.tableDiagnosticsOf(w.draw).editStats().deltaRows;
         captured[`${key}-swapped`] = await settle();
       }
-      const stats = w.draw.debug.tables().editStats();
+      const stats = w.e2e.internals.tableDiagnosticsOf(w.draw).editStats();
       const pixels = captured[`${key}-swapped`];
       let drawn = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) drawn++;

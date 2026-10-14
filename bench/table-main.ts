@@ -58,6 +58,7 @@ import {
   stylesOf,
   type TableBenchPageParams,
 } from './table-data';
+import { type TableDiagnostics, tableDiagnosticsOf } from './table-diagnostics';
 import {
   type EditResult,
   type EditTarget,
@@ -102,8 +103,10 @@ declare global {
     runTableEdit: (op?: EditOp) => Promise<EditResult | null>;
     runTableStream: (kind?: RemoteKind, rate?: number) => Promise<EditResult | null>;
     benchMap: maplibregl.Map;
-    /** The draw instance (`benchDraw.debug.tables().editStats()` reads the edits) */
+    /** The draw instance */
     benchDraw: Draw;
+    /** The hooks of measurement of its rows (`benchTables.editStats()` reads the edits) */
+    benchTables: TableDiagnostics;
   }
 }
 
@@ -235,8 +238,12 @@ const draw: Draw = createDraw(map, {
   ...(store ? { store } : {}),
 });
 window.benchDraw = draw;
-if (params.drawing === 'by-kind') draw.debug.tables().setDrawingByKind(true);
-if (params.moving > 0) draw.debug.tables().setVersionBudgetWhileMoving(params.moving);
+// The hooks of measurement are read from the module of the library that holds them (they are
+// not part of its API)
+const diagnostics = tableDiagnosticsOf(draw);
+window.benchTables = diagnostics;
+if (params.drawing === 'by-kind') diagnostics.setDrawingByKind(true);
+if (params.moving > 0) diagnostics.setVersionBudgetWhileMoving(params.moving);
 
 // === Measuring ===
 
@@ -462,8 +469,7 @@ async function runTableBench(): Promise<TableBenchResult> {
       `the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB while opening`,
     );
   result.memory.afterOpenMb = await measuredMemoryMb();
-  if (params.mode === 'table' && params.cuts > 0)
-    draw.debug.tables().setArtificialCuts(params.cuts);
+  if (params.mode === 'table' && params.cuts > 0) diagnostics.setArtificialCuts(params.cuts);
 
   const [west, south, east, north] = opened?.extent ?? extentOf(params);
   const center: [number, number] = opened ? [(west + east) / 2, (south + north) / 2] : CENTER;

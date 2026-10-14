@@ -24,6 +24,7 @@ import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound, requireRecord, withLocksIgnored } from './shared.js';
+import { attachTableDiagnostics } from './table-diagnostics.js';
 import { createTables } from './tables.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
@@ -132,6 +133,7 @@ export function createDrawOnEngine(
     asyncMembers: ASYNC_MEMBERS,
     skip: new Set(['destroy']),
   });
+  attachTableDiagnostics(draw, engine);
   engine.extensions.attach(draw, options.store);
   return draw;
 }

@@ -12,8 +12,6 @@ import type {
   ModifierKeys,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
-import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { TableDrawRecord } from '../../view/layer/table-retained.js';
 import type { TerrainRenderState } from '../../view/terrain/context.js';
 import { INITIAL_DRAPE_DEBUG } from '../../view/terrain/context.js';
 import {
@@ -23,14 +21,7 @@ import {
 } from '../../view/terrain/state.js';
 import type { Draw } from '../draw.js';
 import type { DrawingResource } from '../drawing.js';
-import type {
-  GpuMemoryDiagnostics,
-  LayerStackEntry,
-  TableDiagnostics,
-  TableDrawnRange,
-  TableEditStats,
-  TerrainDiagnostics,
-} from '../state.js';
+import type { GpuMemoryDiagnostics, LayerStackEntry, TerrainDiagnostics } from '../state.js';
 import type { Engine } from './engine.js';
 import { invalidInput } from './shared.js';
 
@@ -40,81 +31,9 @@ import { invalidInput } from './shared.js';
  * @internal
  */
 export function createDrawing(
-  engine: Pick<Engine, 'customLayer' | 'context' | 'map'>,
+  engine: Pick<Engine, 'customLayer'>,
 ): Pick<Draw, 'getLayerStack' | 'hasPendingWork' | 'debug'> {
   const { customLayer } = engine;
-  const store = engine.context.store;
-  /** The state sets of the rows of the Store, when it holds rows */
-  const states = () => featureTablesInternals(store.tables)?.states;
-  const repaint = (): void => {
-    engine.map.triggerRepaint?.();
-  };
-  const tables: TableDiagnostics = {
-    setArtificialCuts(count) {
-      customLayer.getTableRenderer()?.setArtificialCuts(count);
-      repaint();
-    },
-    recordDraws() {
-      const record: TableDrawRecord[] = [];
-      customLayer.getTableRenderer()?.recordDraws(record);
-      repaint();
-      return record as readonly TableDrawnRange[];
-    },
-    stopRecording() {
-      customLayer.getTableRenderer()?.recordDraws(null);
-    },
-    setDrawingByKind(byKind) {
-      customLayer.getTableRenderer()?.setDrawingByKind(byKind);
-      repaint();
-    },
-    setRowsHidden(handles, hidden) {
-      states()?.setHidden(Int32Array.from(handles), hidden);
-      repaint();
-    },
-    setRowsMarked(handles, marked) {
-      states()?.setBulk(Int32Array.from(handles), marked);
-      repaint();
-    },
-    setRowsMoving(handles, set) {
-      states()?.setMoving(Int32Array.from(handles), set);
-      repaint();
-    },
-    setMoveTranslation(set, dLng, dLat) {
-      states()?.setTranslation(set, dLng, dLat);
-      repaint();
-    },
-    editStats(): TableEditStats {
-      const internals = featureTablesInternals(store.tables);
-      const renderer = customLayer.getTableRenderer();
-      const drawing = renderer?.editStats();
-      const versions = internals?.versionStats();
-      return Object.freeze({
-        styles: internals?.styles.size ?? 0,
-        resolvedStyles: drawing?.resolvedStyles ?? 0,
-        overrideBytes: internals?.overrideBytes() ?? 0,
-        groupsDue: internals?.groupsDue.size ?? 0,
-        movedRows: internals?.movedRowCount() ?? 0,
-        uploadedBytes: drawing?.uploadedBytes ?? 0,
-        inPlace: drawing?.writes.inPlace ?? 0,
-        coordsOnly: drawing?.writes.coordsOnly ?? 0,
-        styleOnly: drawing?.writes.styleOnly ?? 0,
-        rebuilt: drawing?.writes.rebuilt ?? 0,
-        restarted: drawing?.writes.restarted ?? 0,
-        reclassified: drawing?.writes.reclassified ?? 0,
-        deltaRows: internals?.deltaRowCount() ?? 0,
-        cuts: drawing?.writes.cuts ?? 0,
-        versionsSwapped: versions?.swapped ?? 0,
-        versionsPending: versions?.pending ?? 0,
-        versionsMostPending: versions?.mostPending ?? 0,
-        lastMergeMs: versions?.lastMergeMs ?? 0,
-        prerenderMs: drawing?.prerenderMs ?? 0,
-        drawMs: drawing?.drawMs ?? 0,
-      });
-    },
-    setVersionBudgetWhileMoving(ms) {
-      customLayer.getTableRenderer()?.setVersionBudgetWhileMoving(ms);
-    },
-  };
   return {
     getLayerStack(): readonly LayerStackEntry[] {
       return Object.freeze(
@@ -136,7 +55,6 @@ export function createDrawing(
           byRenderer: memory.byOwner,
         });
       },
-      tables: () => tables,
       terrain(): TerrainDiagnostics {
         const terrain = customLayer.getTerrainContext();
         return Object.freeze({

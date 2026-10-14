@@ -143,9 +143,6 @@ export type {
   SnapResult,
   TerrainDiagnostics,
   GpuMemoryDiagnostics,
-  TableDiagnostics,
-  TableDrawnRange,
-  TableEditStats,
   VertexRef,
   VertexSelection,
 } from './api/state.js';

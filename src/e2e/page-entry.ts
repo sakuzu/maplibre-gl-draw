@@ -16,6 +16,7 @@
  */
 
 import * as maplibregl from 'maplibre-gl';
+import { tableDiagnosticsOf } from '../api/impl/table-diagnostics.js';
 import { createDraw, createFeatureTables, createTableMemoryStore } from '../index.js';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { getAnchorProjector } from '../shared/math/index.js';
@@ -54,5 +55,7 @@ installTestDem(maplibregl);
     getRenderableTerrainTiles,
     getTerrainTileData,
     TERRAIN_SAMPLE_GLSL,
+    // The hooks of measurement of the drawing of the rows (not part of the API)
+    tableDiagnosticsOf,
   },
 };

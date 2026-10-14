@@ -36,7 +36,8 @@
  *
  * Each run measures the frames before, during and after it, the JS heap and the GPU memory (and
  * the highest heap during it), and what the writes, the deltas and the versions of the row groups
- * hold and did (`draw.debug.tables().editStats()`).
+ * hold and did (`tableDiagnosticsOf(draw).editStats()`, read from the module of the library that
+ * holds it: it is not part of its API).
  */
 
 import type {
@@ -48,11 +49,11 @@ import type {
   RowPatch,
   RowValuesSnapshot,
   Store,
-  TableEditStats,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Geometry, Position } from 'geojson';
 import type * as maplibregl from 'maplibre-gl';
 import type { BenchCandidates, EditOp, RemoteKind, TableBenchPageParams } from './table-data';
+import { type TableEditStats, tableDiagnosticsOf } from './table-diagnostics';
 import {
   heapMb,
   idleFrames,
@@ -901,7 +902,7 @@ function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[
 
 /** What the writes in place hold and did now (zero for features of the Store) */
 function statsOf(target: EditTarget): TableEditStats {
-  return target.draw.debug.tables().editStats();
+  return tableDiagnosticsOf(target.draw).editStats();
 }
 
 /**

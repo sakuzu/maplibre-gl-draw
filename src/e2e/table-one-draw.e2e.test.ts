@@ -5,8 +5,8 @@
  * End-to-end tests of the drawing of the layers held as rows in one draw per chunk
  *
  * The same rows are drawn on the real maplibre and WebGL of the browser in one draw per chunk
- * (the default on a flat map) and by kind (`debug.tables().setDrawingByKind(true)`, the renderers
- * of points, lines and polygons), and the pictures are compared. Each branch of the program is
+ * (the default on a flat map) and by kind (`tableDiagnosticsOf(draw).setDrawingByKind(true)`,
+ * the renderers of points, lines and polygons), and the pictures are compared. Each branch of the program is
  * compared on its own scene: the points of every shape, the segments of the lines (fixed and
  * following the zoom, sharp corners), the outlines of the polygons (thick and thin, a sharp wedge,
  * a half transparent light outline, a hole) and their fills (a half transparent polygon of parts
@@ -286,7 +286,10 @@ async function drawScene(
             createFeatureTables: typeof import('../index.js').createFeatureTables;
             createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
           };
-          internals: { MemoryContractStore: new () => Contract };
+          internals: {
+            MemoryContractStore: new () => Contract;
+            tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
+          };
         };
       };
       const { map } = w;
@@ -354,7 +357,7 @@ async function drawScene(
       }
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
-      if (byKind) w.draw.debug.tables().setDrawingByKind(true);
+      if (byKind) w.e2e.internals.tableDiagnosticsOf(w.draw).setDrawingByKind(true);
 
       const read = (): Promise<Uint8Array> =>
         new Promise((resolve) => {
@@ -465,8 +468,13 @@ describe('the rows drawn in one draw against the rows drawn by kind', () => {
       const w = window as unknown as {
         draw: import('../index.js').Draw;
         map: import('maplibre-gl').Map;
+        e2e: {
+          internals: {
+            tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
+          };
+        };
       };
-      w.draw.debug.tables().setDrawingByKind(false);
+      w.e2e.internals.tableDiagnosticsOf(w.draw).setDrawingByKind(false);
       const frame = () =>
         new Promise<void>((resolve) => {
           w.map.once('render', () => resolve());
@@ -477,12 +485,12 @@ describe('the rows drawn in one draw against the rows drawn by kind', () => {
       for (let i = 0; i < 200 && w.draw.hasPendingWork(); i++) await frame();
       await frame();
       await frame();
-      const record = w.draw.debug.tables().recordDraws();
+      const record = w.e2e.internals.tableDiagnosticsOf(w.draw).recordDraws();
       await new Promise<void>((resolve) => {
         w.map.once('render', () => resolve());
         w.map.triggerRepaint();
       });
-      w.draw.debug.tables().stopRecording();
+      w.e2e.internals.tableDiagnosticsOf(w.draw).stopRecording();
       return record.map((entry) => entry.kind);
     });
     expect(ranges.length).toBeGreaterThan(0);

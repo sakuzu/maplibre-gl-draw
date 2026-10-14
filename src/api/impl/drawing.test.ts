@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the members about the drawing: getLayerStack, hasPendingWork and debug.terrain
+ * Tests for the members about the drawing: getLayerStack, hasPendingWork and debug.terrain, and
+ * the hooks of measurement of the drawing of the rows (`tableDiagnosticsOf`)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,6 +25,7 @@ import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
+import { tableDiagnosticsOf } from './table-diagnostics.js';
 
 let draw: Draw;
 
@@ -66,7 +68,7 @@ describe('hasPendingWork and debug.terrain', () => {
   });
 });
 
-describe('debug.gpu and debug.tables', () => {
+describe('debug.gpu and the hooks of measurement of the rows', () => {
   it('reports no GPU memory before anything is drawn', () => {
     draw = createDraw(createMapStub().map);
     const gpu = draw.debug.gpu();
@@ -86,14 +88,13 @@ describe('debug.gpu and debug.tables', () => {
     Object.defineProperty(contract, 'tables', { value: tables });
     draw = createDraw(createMapStub().map, { store: contract, initDefaultLayer: false });
 
-    const debug = draw.debug.tables();
+    const debug = tableDiagnosticsOf(draw);
     const handle = tables.handleOf('b') as number;
-    debug.setRowsHidden([handle], true);
     debug.setRowsMoving([handle], 2);
     debug.setMoveTranslation(2, 0.5, -0.5);
     const internals = featureTablesInternals(tables);
     const group = internals?.layerTable('rows')?.groupAt(0);
-    expect(group?.gpuState[1]).toBe(1 | (2 << 1));
+    expect(group?.gpuState[1]).toBe(2 << 1);
     expect(internals?.states.translation(2)).toEqual([0.5, -0.5]);
     // Nothing is drawn yet: the recording starts empty
     expect(debug.recordDraws()).toEqual([]);

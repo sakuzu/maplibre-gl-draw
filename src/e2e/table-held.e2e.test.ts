@@ -175,6 +175,9 @@ async function drawHeld(
             createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
             createTableMemoryStore: typeof import('../index.js').createTableMemoryStore;
           };
+          internals: {
+            tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
+          };
         };
       };
       const { map } = w;
@@ -249,7 +252,7 @@ async function drawHeld(
       (w.captured as Record<string, Uint8Array>)[key] = pixels;
       let drawn = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) drawn++;
-      const delta = w.draw.debug.tables().editStats().deltaRows;
+      const delta = w.e2e.internals.tableDiagnosticsOf(w.draw).editStats().deltaRows;
       return { drawn, delta };
     },
     { key, features, held, edits },
