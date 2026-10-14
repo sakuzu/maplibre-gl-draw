@@ -144,6 +144,7 @@ const MAIN = [
   'ScreenContext',
   'ScreenPoint',
   'Selection',
+  'SelectionBulk',
   'SelectionResource',
   'SelectionStyleOptions',
   'SelectionType',

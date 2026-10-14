@@ -83,8 +83,19 @@ export type SelectionType = 'feature' | 'group' | 'layer';
 export interface Selection {
   /** Selection type (null means nothing is selected) */
   type: SelectionType | null;
-  /** IDs of the selected items */
+  /** IDs of the selected items (empty for features selected in bulk) */
   ids: readonly string[];
+  /** Many features selected at once, held as the set of their rows (see the public `Selection`) */
+  bulk?: SelectionBulk;
+}
+
+/**
+ * Many features selected at once (see the public `SelectionBulk`)
+ */
+export interface SelectionBulk {
+  readonly count: number;
+  readonly layerIds: readonly string[];
+  readonly bounds: [number, number, number, number] | null;
 }
 
 /**
@@ -731,6 +742,9 @@ export interface StoreChange {
     ids: string[];
     previousType: SelectionType | null;
     previousIds: string[];
+    /** Many features selected at once, and before */
+    bulk?: SelectionBulk;
+    previousBulk?: SelectionBulk;
   };
   /** The IDs of the features whose editing started and ended */
   editing?: {
@@ -1093,6 +1107,8 @@ export interface BoxSelection {
   endPoint: Coordinate;
   /** The selection state when the drag started (in order to restore it on cancel) */
   previousSelection: string[];
+  /** The features selected in bulk when the drag started (restored on cancel) */
+  previousBulk?: SelectionBulk;
 }
 
 /**

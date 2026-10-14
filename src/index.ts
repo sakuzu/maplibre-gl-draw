@@ -135,6 +135,7 @@ export type {
   LayerStackEntry,
   Mode,
   Selection,
+  SelectionBulk,
   SelectionType,
   SnapPreference,
   SnapResult,

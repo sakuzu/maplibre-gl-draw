@@ -31,6 +31,7 @@ import type {
   LayerStackEntry,
   Mode,
   Selection,
+  SelectionBulk,
   SelectionType,
   SnapResult,
   VertexSelection,
@@ -112,12 +113,17 @@ export interface DocumentChange {
    * (written deleted, it is taken back). Absent for a change from elsewhere
    */
   previousValues?: FeatureValues;
-  /** The new selection and the one before it */
+  /**
+   * The new selection and the one before it; `bulk` and `previousBulk` for many features selected
+   * at once (`Selection.bulk`)
+   */
   selection?: {
     type: SelectionType | null;
     ids: string[];
     previousType: SelectionType | null;
     previousIds: string[];
+    bulk?: SelectionBulk;
+    previousBulk?: SelectionBulk;
   };
   /** The IDs of the features whose editing started and ended */
   editing?: { started?: string[]; ended?: string[] };

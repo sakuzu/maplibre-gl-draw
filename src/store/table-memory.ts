@@ -461,7 +461,11 @@ export class TableContractStore implements StoreContract {
         const at = row(handle);
         for (const [field, values] of created?.fields ?? []) set(field, at, values[k]);
       });
-      // A row whose group changes leaves it
+      // A row deleted leaves its group, and so does a row whose group changes
+      patch.deleted?.forEach((flag, i) => {
+        const left = flag !== 0 ? this.#groupIdOfRow(patch.handles[i]) : undefined;
+        if (left !== undefined) this.#leftGroups.add(left);
+      });
       const groupIds = fields.get('groupId');
       if (groupIds) {
         handles.forEach((handle, i) => {

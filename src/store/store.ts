@@ -24,6 +24,8 @@
 
 import type { Store as PublicStore } from '../api/extension/store.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
+import type { BulkOperation } from '../feature-table/bulk-plan.js';
+import type { TableSelection } from '../feature-table/selection.js';
 import type {
   BoxSelection,
   DragState,
@@ -452,6 +454,29 @@ export interface Store extends StoreView, UiState {
    * @throws when the Store does not hold its features as rows
    */
   restoreRows(patch: RowValues): RowValues | null;
+
+  /** The most features of rows opened at once for the selection: past it they are selected in bulk */
+  readonly holdLimit: number;
+  /**
+   * The rows of the features selected in bulk (`Selection.bulk`), null while the selection holds
+   * its features
+   */
+  getSelectedRows(): TableSelection | null;
+  /**
+   * Selects features by their rows: opened as features up to `holdLimit`, selected in bulk past
+   * it (the rows that cannot be seen left out)
+   */
+  selectRows(rows: TableSelection): void;
+  /**
+   * Puts back a selection read before (`getSelection`, a notification): what is no longer there
+   * or cannot be seen is left out
+   */
+  restoreSelection(selection: Selection): void;
+  /**
+   * Writes an operation on the rows selected in bulk, through the gates of read-only and the
+   * interaction lock (false when refused, or when nothing is selected in bulk)
+   */
+  applyBulk(op: BulkOperation): boolean;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

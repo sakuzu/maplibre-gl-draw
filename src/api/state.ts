@@ -7,6 +7,7 @@
  */
 
 import type { Position } from 'geojson';
+import type { BBox } from '../geometry/types.js';
 
 /** The names of the built-in modes. */
 export const MODES = [
@@ -32,8 +33,34 @@ export type SelectionType = 'feature' | 'group' | 'layer';
 export interface Selection {
   /** The type of the selected items, or `null` when nothing is selected */
   type: SelectionType | null;
-  /** The IDs of the selected items */
+  /**
+   * The IDs of the selected items. Empty for features selected in bulk (`bulk`): a group or a
+   * layer selected in bulk keeps its ID here
+   */
   ids: readonly string[];
+  /**
+   * Present when more features are selected than are made at once, in a Store that holds its
+   * features as rows (a box drawn over many features, every feature, a group or a layer of many
+   * features): the selection is not a list of IDs then. `selection.count`,
+   * `selection.features` with a limit and the verbs of `draw.selection` act on it.
+   */
+  bulk?: SelectionBulk;
+}
+
+/**
+ * Many features selected at once (`Selection.bulk`): how many, in which layers, and where. Kept
+ * as it is, it puts the same features back in the selection (`selection.restore`).
+ */
+export interface SelectionBulk {
+  /** The number of features selected */
+  readonly count: number;
+  /** The layers they are in */
+  readonly layerIds: readonly string[];
+  /**
+   * The extent of their geometries, as `[west, south, east, north]` in degrees (`null` when none
+   * has a geometry): the frame the handles to rotate and resize them stand on
+   */
+  readonly bounds: BBox | null;
 }
 
 /**

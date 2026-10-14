@@ -208,7 +208,7 @@ describe('the in-memory Store of rows', () => {
     expect(store.getFeature('p3')?.geometry).toEqual(at(31));
   });
 
-  it('refuses a selection of more rows than the limit', () => {
+  it('selects more rows than the limit in bulk, and opens up to the limit', () => {
     const { store } = setup(0);
     const ids: string[] = [];
     store.transact(() => {
@@ -217,13 +217,12 @@ describe('the in-memory Store of rows', () => {
         ids.push(`q${i}`);
       }
     });
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     store.setSelection('feature', ids);
     expect(store.getSelection().ids).toEqual([]);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    expect(store.getSelection().bulk?.count).toBe(HOLD_LIMIT + 1);
     store.setSelection('feature', ids.slice(0, HOLD_LIMIT));
     expect(store.getSelection().ids).toHaveLength(HOLD_LIMIT);
+    expect(store.getSelection().bulk).toBeUndefined();
   });
 
   it('holds the members of a group selected', () => {

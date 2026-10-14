@@ -28,14 +28,21 @@
  */
 
 import type { FeatureTables, RowWrite } from '../api/tables.js';
-import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import type { BulkOperation } from '../feature-table/bulk-plan.js';
+import { isRowShown, type RowContainers, rowsByLayerInOrder } from '../feature-table/bulk-rows.js';
+import {
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from '../feature-table/feature-tables.js';
 import {
   tableGroupMemberCount,
   tableGroupMemberIds,
   tableLayerFeatureCount,
   tableLayerFeatureIds,
 } from '../feature-table/item-ids.js';
+import { TableSelection } from '../feature-table/selection.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
+import { rowsOfSummary, summaryOf } from './bulk-selection.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
@@ -53,6 +60,7 @@ import type {
   Mode,
   RowValues,
   Selection,
+  SelectionBulk,
   SelectionType,
   StoreChange,
   TentativeState,
@@ -103,6 +111,26 @@ export function toStore(store: StoreContract | Store): Store {
 }
 
 /**
+ * The options of the Store of core
+ *
+ * @internal
+ */
+export interface DrawStoreOptions {
+  /** The most features of rows opened at once for the selection (`HOLD_LIMIT` when omitted) */
+  readonly holdLimit?: number;
+}
+
+/**
+ * Features selected in bulk: the type of the selection (features, or the groups or layers whose
+ * features are many), its rows, and the summary given with the selection
+ */
+interface BulkState {
+  readonly type: SelectionType;
+  readonly rows: TableSelection;
+  summary: SelectionBulk;
+}
+
+/**
  * The Store of core over a {@link StoreContract}
  *
  * @internal
@@ -127,9 +155,15 @@ export class DrawStore implements Store {
   /** The rows the selection let go of, held a moment longer */
   readonly #released = new Set<string>();
   #releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The features selected in bulk (null while the selection holds its features) */
+  #bulk: BulkState | null = null;
+  /** Whether the selection is being written here (its notification does not prune it) */
+  #selecting = false;
+  readonly holdLimit: number;
 
-  constructor(contract: StoreContract) {
+  constructor(contract: StoreContract, options: DrawStoreOptions = {}) {
     this.#contract = contract;
+    this.holdLimit = options.holdLimit ?? HOLD_LIMIT;
     contract.subscribe((changes) => this.#receive(changes));
   }
 
@@ -285,18 +319,79 @@ export class DrawStore implements Store {
   // ============================================================================
 
   getSelection(): Selection {
-    return this.#contract.getSelection();
+    const selection = this.#contract.getSelection();
+    const bulk = this.#bulk;
+    if (!bulk) return selection;
+    return {
+      type: bulk.type,
+      ids: bulk.type === 'feature' ? [] : selection.ids,
+      bulk: bulk.summary,
+    };
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
-    // The features of rows held for a selection are counted: more than the limit is refused
-    const count = this.#heldCount(type, ids);
-    if (count > HOLD_LIMIT) {
-      console.warn(
-        `A selection of ${count} features held as rows is refused: at most ${HOLD_LIMIT} are selected at once`,
-      );
+    // A selection of more features of rows than are opened at once is selected in bulk
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (internals && type !== null && this.#heldCount(type, ids) > this.holdLimit) {
+      this.#selectBulk(type, ids, this.#rowsOfSelection(internals, type, ids));
       return;
     }
-    this.#local(() => this.#contract.setSelection(type, ids));
+    this.#select(type, ids);
+  }
+
+  getSelectedRows(): TableSelection | null {
+    return this.#bulk?.rows ?? null;
+  }
+
+  selectRows(rows: TableSelection): void {
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!internals) return;
+    const containers = this.#containers();
+    const shown = rows.filter((handle) => isRowShown(internals, containers, handle));
+    if (shown.count > this.holdLimit) {
+      this.#selectBulk('feature', [], shown);
+      return;
+    }
+    const ids: string[] = [];
+    for (const handles of rowsByLayerInOrder(internals, shown).values()) {
+      for (const handle of handles) ids.push(internals.ids.idOf(handle) as string);
+    }
+    this.#select(ids.length > 0 ? 'feature' : null, ids);
+  }
+
+  restoreSelection(selection: Selection): void {
+    const rows = rowsOfSummary(selection.bulk);
+    if (rows && selection.type === 'feature') {
+      this.selectRows(rows);
+      return;
+    }
+    const type = selection.type;
+    if (type === null) {
+      this.#select(null, []);
+      return;
+    }
+    const contract = this.#contract;
+    const shown = createShownLookup(contract);
+    const ids = selection.ids.filter((id) => {
+      const there =
+        type === 'feature'
+          ? contract.getFeature(id)
+          : type === 'group'
+            ? contract.getGroup(id)
+            : contract.getLayer(id);
+      return there !== undefined && shown(type, id);
+    });
+    this.setSelection(ids.length > 0 ? type : null, ids);
+  }
+
+  applyBulk(op: BulkOperation): boolean {
+    const contract = this.#contract;
+    const bulk = this.#bulk;
+    const internals = featureTablesInternals(contract.tables);
+    if (!bulk || !internals || !contract.applyRows) return false;
+    if (contract.isReadOnly() || contract.isInteractionLocked()) return false;
+    const write = internals.planBulk(op, bulk.rows, this.#containers());
+    if (!write) return false;
+    return this.applyRows(write);
   }
 
   getEditingIds(): readonly string[] {
@@ -349,7 +444,10 @@ export class DrawStore implements Store {
     if (this.#contract.isHidden(id) === hidden) return;
     this.#local(() => {
       this.#contract.setLocallyHidden(id, hidden);
-      if (hidden) this.#pruneInvisible();
+      if (hidden) {
+        this.#pruneInvisible();
+        this.#pruneBulk(null);
+      }
     }, true);
   }
 
@@ -427,6 +525,206 @@ export class DrawStore implements Store {
   }
 
   /**
+   * Selects items that hold their features (none in bulk): the features selected in bulk before,
+   * if any, are no longer
+   */
+  #select(type: SelectionType | null, ids: string[]): void {
+    this.#local(() => {
+      const previous = this.getSelection();
+      this.#selecting = true;
+      try {
+        this.#setBulk(null);
+        this.#contract.setSelection(type, ids);
+      } finally {
+        this.#selecting = false;
+      }
+      if (previous.bulk) this.#notifySelection(previous);
+    });
+  }
+
+  /**
+   * Selects features in bulk: `rows` are the features, and `type` and `ids` the items selected
+   * (the groups or the layers whose features they are; none for features)
+   */
+  #selectBulk(type: SelectionType, ids: string[], rows: TableSelection): void {
+    if (rows.count === 0) {
+      this.#select(null, []);
+      return;
+    }
+    this.#local(() => {
+      const previous = this.getSelection();
+      this.#selecting = true;
+      try {
+        this.#setBulk({ type, rows });
+        this.#contract.setSelection(
+          type === 'feature' ? null : type,
+          type === 'feature' ? [] : [...ids],
+        );
+      } finally {
+        this.#selecting = false;
+      }
+      this.#notifySelection(previous);
+    });
+  }
+
+  /**
+   * Makes rows the features selected in bulk (none: no feature is), marking them for the drawing
+   */
+  #setBulk(next: { type: SelectionType; rows: TableSelection } | null): void {
+    const internals = featureTablesInternals(this.#contract.tables);
+    const before = this.#bulk?.rows ?? TableSelection.empty;
+    const after = next?.rows ?? TableSelection.empty;
+    if (internals && !before.equals(after)) {
+      const dropped = before.handles.filter((handle) => !after.has(handle));
+      const added = after.handles.filter((handle) => !before.has(handle));
+      if (dropped.length > 0) internals.states.setBulk(dropped, false);
+      if (added.length > 0) internals.states.setBulk(added, true);
+    }
+    this.#bulk =
+      next && internals && next.rows.count > 0
+        ? { type: next.type, rows: next.rows, summary: summaryOf(internals, next.rows) }
+        : null;
+    this.#heldStale = true;
+  }
+
+  /** Tells the selection now, and the one before it, in the notification being made */
+  #notifySelection(previous: Selection): void {
+    const now = this.getSelection();
+    this.#bus.merge({
+      selection: {
+        type: now.type,
+        ids: [...now.ids],
+        previousType: previous.type,
+        previousIds: [...previous.ids],
+        ...(now.bulk && { bulk: now.bulk }),
+        ...(previous.bulk && { previousBulk: previous.bulk }),
+      },
+    });
+  }
+
+  /** What the rows read of the layers, the groups and what this client hides */
+  #containers(): RowContainers {
+    const contract = this.#contract;
+    return {
+      layerVisible: (layerId) => contract.getLayer(layerId)?.visible === true,
+      layerLocked: (layerId) => contract.getLayer(layerId)?.locked === true,
+      hidden: (id) => contract.isHidden(id),
+    };
+  }
+
+  /** The rows of the features of a selection (the members of the groups and the layers) */
+  #rowsOfSelection(
+    internals: FeatureTablesInternals,
+    type: SelectionType,
+    ids: readonly string[],
+  ): TableSelection {
+    const tables = this.#contract.tables as FeatureTables;
+    const handles: number[] = [];
+    if (type === 'feature') {
+      for (const id of ids) {
+        const handle = tables.findRow(id);
+        if (handle !== undefined) handles.push(handle);
+      }
+    } else if (type === 'group') {
+      for (const id of ids) {
+        const group = this.#contract.getGroup(id);
+        const handle = group ? internals.groups.handleOfId(group.id) : -1;
+        const view = group ? tables.get(group.layerId) : undefined;
+        if (handle < 0 || !view) continue;
+        handles.push(...view.listGroupMembers(handle, 0, view.countGroupMembers(handle)));
+      }
+    } else {
+      const cursor = tables.scan({ layerIds: [...ids] });
+      for (let batch = cursor.next(); batch; batch = cursor.next()) handles.push(...batch);
+    }
+    const containers = this.#containers();
+    return TableSelection.of(handles).filter((handle) => isRowShown(internals, containers, handle));
+  }
+
+  /**
+   * Keeps the features selected in bulk what the selection holds after a change of the document:
+   * the rows that were deleted or can no longer be seen leave it, and the features of the groups
+   * and the layers selected are read again when what is in them may have changed. Only the rows
+   * the change names are looked at, but after a change of a layer or a group, or of what this
+   * client hides, when every row is
+   *
+   * @param changes The change, or null to look at every row
+   */
+  #pruneBulk(changes: StoreChange | null): void {
+    const bulk = this.#bulk;
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!bulk || !internals || this.#selecting) return;
+    const previous = this.getSelection();
+    if (bulk.type !== 'feature') {
+      const selection = this.#contract.getSelection();
+      if (selection.type !== bulk.type || selection.ids.length === 0) {
+        this.#setBulk(null);
+        this.#notifySelection(previous);
+        return;
+      }
+      if (changes && !membersMayChange(changes)) {
+        this.#refreshSummary(changes);
+        return;
+      }
+      const rows = this.#rowsOfSelection(internals, selection.type, selection.ids);
+      if (rows.equals(bulk.rows)) {
+        this.#refreshSummary(changes);
+        return;
+      }
+      // Few enough: the features of the groups or the layers are opened again
+      this.#setBulk(rows.count > this.holdLimit ? { type: bulk.type, rows } : null);
+      this.#notifySelection(previous);
+      return;
+    }
+    const containers = this.#containers();
+    const checked = changes ? rowsToCheck(internals, changes) : null;
+    const keep = (handle: number): boolean => isRowShown(internals, containers, handle);
+    const rows =
+      checked === null
+        ? bulk.rows.filter(keep)
+        : bulk.rows.without(checked.filter((handle) => bulk.rows.has(handle) && !keep(handle)));
+    if (rows === bulk.rows) {
+      this.#refreshSummary(changes);
+      return;
+    }
+    if (rows.count > this.holdLimit) {
+      this.#setBulk({ type: 'feature', rows });
+      this.#notifySelection(previous);
+      return;
+    }
+    // Few enough: they are opened as features
+    const ids: string[] = [];
+    for (const handles of rowsByLayerInOrder(internals, rows).values()) {
+      for (const handle of handles) ids.push(internals.ids.idOf(handle) as string);
+    }
+    this.#selecting = true;
+    try {
+      this.#setBulk(null);
+      this.#contract.setSelection(ids.length > 0 ? 'feature' : null, ids);
+    } finally {
+      this.#selecting = false;
+    }
+    this.#notifySelection(previous);
+  }
+
+  /**
+   * Makes the summary of the features selected in bulk again when a change wrote the geometry or
+   * the layer of one of them (their extent and their layers)
+   */
+  #refreshSummary(changes: StoreChange | null): void {
+    const bulk = this.#bulk;
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!bulk || !internals) return;
+    let touched = changes === null;
+    for (const change of changes?.rows?.layers.values() ?? []) {
+      if (touched) break;
+      if (!change.fields.has('geometry') && !change.fields.has('layerId')) continue;
+      touched = change.updated.some((handle) => bulk.rows.has(handle));
+    }
+    if (touched) bulk.summary = summaryOf(internals, bulk.rows);
+  }
+
+  /**
    * The number of features of rows a selection holds (0 for a Store without rows)
    */
   #heldCount(type: SelectionType | null, ids: readonly string[]): number {
@@ -461,7 +759,10 @@ export class DrawStore implements Store {
     const ids = new Set<string>();
     const selection = this.#contract.getSelection();
     this.#heldSelectionType = selection.type;
-    if (selection.type === 'feature') {
+    // The features selected in bulk are not opened
+    if (this.#bulk) {
+      // nothing of the selection
+    } else if (selection.type === 'feature') {
       for (const id of selection.ids) ids.add(id);
     } else if (selection.type === 'group') {
       for (const id of selection.ids) {
@@ -517,6 +818,7 @@ export class DrawStore implements Store {
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
       if (mayHide(changes)) this.#pruneInvisible();
+      if (this.#bulk) this.#pruneBulk(changes);
       this.#pruneVertices(changes);
       this.#syncHeld();
     }, changes.source ?? 'local');
@@ -812,4 +1114,53 @@ function hasNullLayerField(layer: Layer): boolean {
 function withoutSource(changes: StoreChange): StoreChange {
   const { source: _source, ...rest } = changes;
   return rest;
+}
+
+/**
+ * Whether a change may change what is in the groups or the layers selected: rows created,
+ * deleted or moved, groups or layers changed, what this client hides
+ */
+function membersMayChange(changes: StoreChange): boolean {
+  if (changes.reset || changes.uiStateChanged) return true;
+  if (changes.features?.created?.length || changes.features?.deleted?.length) return true;
+  if (changes.groups || changes.layers) return true;
+  for (const rows of changes.rows?.layers.values() ?? []) {
+    if (rows.created.length > 0 || rows.deleted.length > 0) return true;
+    if (rows.fields.has('groupId') || rows.fields.has('layerId') || rows.fields.has('visible')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The rows a change may have hidden or deleted, or null when it may have hidden any (a change of
+ * a layer or a group, of what this client hides, or a reset)
+ */
+function rowsToCheck(internals: FeatureTablesInternals, changes: StoreChange): Int32Array | null {
+  if (changes.reset || changes.uiStateChanged) return null;
+  if (changes.layers?.updated?.length || changes.layers?.deleted?.length) return null;
+  if (changes.groups?.updated?.length || changes.groups?.deleted?.length) return null;
+  const out: number[] = [];
+  for (const rows of changes.rows?.layers.values() ?? []) {
+    out.push(...rows.deleted);
+    if (rows.fields.has('visible') || rows.fields.has('groupId') || rows.fields.has('layerId')) {
+      out.push(...rows.updated);
+    }
+  }
+  for (const feature of changes.features?.deleted ?? []) {
+    const handle = internals.ids.handleOf(feature.id);
+    if (handle >= 0) out.push(handle);
+  }
+  for (const { feature, previous } of changes.features?.updated ?? []) {
+    if (
+      feature.visible !== previous.visible ||
+      feature.layerId !== previous.layerId ||
+      feature.groupId !== previous.groupId
+    ) {
+      const handle = internals.ids.handleOf(feature.id);
+      if (handle >= 0) out.push(handle);
+    }
+  }
+  return Int32Array.from(out);
 }

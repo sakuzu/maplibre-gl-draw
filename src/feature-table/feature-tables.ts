@@ -30,6 +30,7 @@ import type {
   RowField,
   RowHandle,
   RowsChange,
+  RowWrite,
   TableGroupPatch,
   TableScanOptions,
 } from '../api/tables.js';
@@ -69,6 +70,8 @@ import {
 import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
 import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/utf8-column.js';
 import { ValueStringCache } from '../table/value-column.js';
+import { type BulkOperation, planBulk } from './bulk-plan.js';
+import type { RowContainers } from './bulk-rows.js';
 import { featureFields, featureWithFields } from './feature-fields.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
@@ -104,6 +107,7 @@ import {
   writeRowGeometry,
   writeRowValue,
 } from './row-write.js';
+import type { TableSelection } from './selection.js';
 import { StyleTable } from './style-table.js';
 import {
   type GroupHandle,
@@ -376,6 +380,13 @@ export interface FeatureTablesInternals {
   versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number };
   /** Sets the bytes the versions held at once may take (the tests, the measurements) */
   setPendingVersionBytes(bytes: number): void;
+  /** The values the rows of `rows` have now, for its fields (see `FeatureTables.readValues`) */
+  readValues(rows: RowValues): RowValues;
+  /**
+   * The write of an operation on the rows of a selection of many rows (null when it writes
+   * nothing or is refused): read only, nothing is written (`bulk-plan.ts`)
+   */
+  planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null;
   /** Whether the row of a handle is held as a feature */
   isHeld(handle: RowHandle): boolean;
   /** The handles of the rows held as features */
@@ -1847,6 +1858,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   // === The rows held as features ===
+
+  planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null {
+    return planBulk(this, op, rows, containers);
+  }
 
   open(owner: string, ids: readonly string[]): void {
     const next = new Set<RowHandle>();
