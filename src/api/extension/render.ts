@@ -8,6 +8,7 @@
 
 import type { Position } from 'geojson';
 import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
+import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { Feature, LineStyle, PointShape } from '../model.js';
 import type { TerrainAnchors } from './context.js';
 
@@ -156,6 +157,16 @@ export interface FeatureRenderer {
   draw(feature: Feature, ctx: RenderContext): void;
   /** Called when the renderer is removed; release what `onAdd` created. */
   onRemove(map: MaplibreMap, gl: WebGL2RenderingContext): void;
+  /**
+   * The pictures it draws its points with, for the layers held as rows: a point it takes whose
+   * style has a picture here is drawn with the other rows of its layer, in their order and in
+   * their draw, from the texture and the picture given, rather than by `draw` one at a time (a
+   * point whose style has none is drawn by `draw`). Without it, every feature it takes is drawn
+   * by `draw`. Its type is in `@sakuzu/maplibre-gl-draw/kasane`.
+   *
+   * @experimental
+   */
+  readonly rowSprites?: RowSpriteSource;
 }
 
 /**

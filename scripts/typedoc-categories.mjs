@@ -38,6 +38,8 @@ const MAIN_CATEGORIES = [
 const KASANE_CATEGORIES = [
   'Stores that hold features as rows',
   'The order of the rows',
+  'Features selected in bulk and dragged',
+  'Pictures of points drawn with the rows',
   'Build blocks of rows in a Worker',
 ];
 

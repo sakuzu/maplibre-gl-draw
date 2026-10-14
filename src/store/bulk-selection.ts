@@ -10,6 +10,7 @@
  * history) puts the same rows back in the selection (`DrawStore.restoreSelection`).
  */
 
+import type { SelectionBulk as PublicSelectionBulk } from '../api/state.js';
 import { summarizeRows } from '../feature-table/bulk-rows.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
 import type { TableSelection } from '../feature-table/selection.js';
@@ -44,6 +45,19 @@ export function summaryOf(internals: FeatureTablesInternals, rows: TableSelectio
  */
 export function summaryHasArea(bulk: SelectionBulk): boolean {
   return WITH_AREA.has(bulk);
+}
+
+/**
+ * The handles of the rows of features selected in bulk, from the summary of the selection
+ * (`Selection.bulk`, the `bulk` of `drag.started`): what a plugin reads them by, without their
+ * IDs. Empty for a summary the instance did not give
+ *
+ * @param bulk - The summary of the features selected in bulk
+ * @returns The handles of their rows, ascending
+ * @experimental
+ */
+export function listSelectedRows(bulk: PublicSelectionBulk): Int32Array {
+  return ROWS.get(bulk)?.handles.slice() ?? new Int32Array(0);
 }
 
 /**

@@ -20,7 +20,7 @@
  * issued), and a range of rows is one range of instances.
  */
 
-import type { FeatureStyle } from '../../../shared/types/model.js';
+import type { FeatureStyle as PublicFeatureStyle } from '../../../api/model.js';
 
 /** The floats of an instance */
 export const ROWS_INSTANCE_FLOATS = 8;
@@ -319,7 +319,7 @@ export interface RowsChunkData extends RowsChunkLayout {
 /**
  * One picture of a point an extension draws in the place of the built-in point
  *
- * @internal
+ * @experimental
  */
 export interface RowSprite {
   /** The rectangle of the picture in the texture, `[u0, v0, u1, v1]` (the top left first) */
@@ -339,7 +339,7 @@ export interface RowSprite {
  * pitched view: `clamp(base + factor * w0 / w, min, max)`, where `w0` is the distance of the
  * center of the screen and `w` the distance of the point (1 on the globe)
  *
- * @internal
+ * @experimental
  */
 export interface RowSpriteDistanceScale {
   readonly base: number;
@@ -356,7 +356,7 @@ export interface RowSpriteDistanceScale {
  * The fragment is the texel of the picture times the opacity of the layer, blended as the
  * other drawing of the layer is.
  *
- * @internal
+ * @experimental
  */
 export interface RowSpriteSource {
   /** The texture the pictures are read from (nothing is drawn while it is null) */
@@ -370,7 +370,7 @@ export interface RowSpriteSource {
    * The picture of a point of a style, or null for a point drawn at once by the renderer of
    * the extension (asked once per style)
    */
-  sprite(style: FeatureStyle | undefined): RowSprite | null;
+  sprite(style: PublicFeatureStyle | undefined): RowSprite | null;
   /** How the size follows the distance from the camera (the same size everywhere when omitted) */
   readonly distanceScale?: RowSpriteDistanceScale;
 }

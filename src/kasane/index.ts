@@ -73,6 +73,18 @@ export {
 export type { ItemHandles, RowsMove } from '../api/model.js';
 export { ITEM_GROUP, ITEM_ROW } from '../api/tables.js';
 
+// Features selected in bulk and dragged
+export { listSelectedRows } from '../store/bulk-selection.js';
+export type { DraggedRows } from '../feature-table/dragged-rows.js';
+export { draggedRowsOf } from '../feature-table/dragged-rows.js';
+
+// Pictures of points drawn with the rows
+export type {
+  RowSprite,
+  RowSpriteDistanceScale,
+  RowSpriteSource,
+} from '../view/renderers/rows/rows-format.js';
+
 // Build blocks of rows in a Worker
 export type {
   GroupEntry,

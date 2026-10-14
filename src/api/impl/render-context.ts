@@ -241,6 +241,8 @@ export function adaptFeatureRenderer(
       attachment = null;
       renderer.onRemove(map, gl);
     },
+    // The pictures of the points drawn with the rows, as the renderer gives them
+    ...(renderer.rowSprites && { rowSprites: renderer.rowSprites }),
   };
 }
 

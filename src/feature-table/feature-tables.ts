@@ -387,6 +387,16 @@ export interface FeatureTablesInternals {
    * nothing or is refused): read only, nothing is written (`bulk-plan.ts`)
    */
   planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null;
+  /**
+   * Calls `listener` with the rows of a selection of many features once it is decided (a box let
+   * go of, every feature selected), and with null once there is none: what moves them on the
+   * terrain (the moving parts of the drape) starts being built then, before they are pressed
+   *
+   * @returns The function that stops the calls
+   */
+  onBulkSelected(listener: (rows: TableSelection | null) => void): () => void;
+  /** Tells the listeners of `onBulkSelected` the rows of a selection of many features decided */
+  bulkSelected(rows: TableSelection | null): void;
   /** Whether the row of a handle is held as a feature */
   isHeld(handle: RowHandle): boolean;
   /** The handles of the rows held as features */
@@ -1861,6 +1871,19 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null {
     return planBulk(this, op, rows, containers);
+  }
+
+  private readonly bulkListeners = new Set<(rows: TableSelection | null) => void>();
+
+  onBulkSelected(listener: (rows: TableSelection | null) => void): () => void {
+    this.bulkListeners.add(listener);
+    return () => {
+      this.bulkListeners.delete(listener);
+    };
+  }
+
+  bulkSelected(rows: TableSelection | null): void {
+    for (const listener of this.bulkListeners) listener(rows);
   }
 
   open(owner: string, ids: readonly string[]): void {

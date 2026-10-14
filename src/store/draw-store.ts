@@ -600,11 +600,16 @@ export class DrawStore implements Store {
       if (dropped.length > 0) internals.states.setBulk(dropped, false);
       if (added.length > 0) internals.states.setBulk(added, true);
     }
+    const had = this.#bulk !== null;
     this.#bulk =
       next && internals && next.rows.count > 0
         ? { type: next.type, rows: next.rows, summary: summaryOf(internals, next.rows) }
         : null;
     this.#bulkLocked = null;
+    // What moves them on the terrain starts being built once they are selected
+    if (internals && (this.#bulk || had) && !before.equals(after)) {
+      internals.bulkSelected(this.#bulk?.rows ?? null);
+    }
     this.#heldStale = true;
   }
 

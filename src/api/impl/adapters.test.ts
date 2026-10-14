@@ -251,6 +251,27 @@ describe('a custom feature type', () => {
   });
 });
 
+describe('the pictures of the points of a custom feature type', () => {
+  it('reach the drawing of the rows as its renderer gives them', () => {
+    const engine = engineWithDraw();
+    let registered: FeatureTypeRenderer | null = null;
+    const register = engine.customLayer.registerFeatureRenderer.bind(engine.customLayer);
+    vi.spyOn(engine.customLayer, 'registerFeatureRenderer').mockImplementation((type, r) => {
+      registered = r;
+      return register(type, r);
+    });
+    const rowSprites = { texture: null, revision: 0, sprite: () => null };
+    engine.extensions.collections.featureTypes.override({
+      type: 'Point',
+      geometry: 'Point',
+      appliesTo: () => true,
+      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rowSprites },
+    });
+    expect((registered as unknown as FeatureTypeRenderer).rowSprites).toBe(rowSprites);
+    engine.destroy();
+  });
+});
+
 describe('the outline of a custom feature type', () => {
   const baseFeature = {
     layerId: 'l',
