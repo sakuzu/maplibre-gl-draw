@@ -272,10 +272,10 @@ async function drawScene(
   key: string,
   features: SceneFeature[],
   form: 'rows' | 'store',
-  options: { byKind?: boolean; layers?: string[] } = {},
+  options: { byKind?: boolean; layers?: string[]; dims?: 'xyz' | 'xyzm' } = {},
 ): Promise<number> {
   return page.evaluate(
-    async ({ key, features, form, byKind, layers }) => {
+    async ({ key, features, form, byKind, layers, dims }) => {
       type Contract = import('../index.js').Store;
       const w = window as unknown as Record<string, unknown> & {
         map: import('maplibre-gl').Map;
@@ -322,13 +322,26 @@ async function drawScene(
         }
       }, 'remote');
       if (form === 'rows') {
-        const { tables, writer } = w.e2e.tables.createFeatureTables();
-        const builder = w.e2e.tables.createRowGroupBuilder({});
+        // The rows of a layer of z (and m): the same x and y, with a z (and an m) after them
+        const lift = (value: unknown): unknown =>
+          Array.isArray(value) && typeof value[0] === 'number'
+            ? dims === 'xyzm'
+              ? [value[0], value[1], 50, 1.7e12]
+              : [value[0], value[1], 50]
+            : Array.isArray(value)
+              ? value.map(lift)
+              : value;
+        const { tables, writer } = w.e2e.tables.createFeatureTables(
+          dims ? { dimsOf: () => dims } : undefined,
+        );
+        const builder = w.e2e.tables.createRowGroupBuilder(dims ? { dims } : {});
         features.forEach((f, i) => {
           builder.addRow({
             id: f.id,
             type: f.type,
-            geometry: f.geometry,
+            geometry: dims
+              ? { ...f.geometry, coordinates: lift(f.geometry.coordinates) }
+              : f.geometry,
             order: `k${String(i).padStart(6, '0')}`,
             style: f.style ?? {},
             properties: f.properties ?? {},
@@ -381,6 +394,7 @@ async function drawScene(
       form,
       byKind: options.byKind ?? false,
       layers: options.layers ?? null,
+      dims: options.dims ?? null,
     },
   );
 }
@@ -412,7 +426,7 @@ async function compare(
   page: Page,
   name: string,
   features: SceneFeature[],
-  other: { form: 'rows' | 'store'; byKind?: boolean; layers?: string[] },
+  other: { form: 'rows' | 'store'; byKind?: boolean; layers?: string[]; dims?: 'xyz' | 'xyzm' },
   tolerance: { level: number; share: number },
 ): Promise<void> {
   const drawn = await drawScene(page, `${name}-one-draw`, features, 'rows');
@@ -481,6 +495,36 @@ describe('the rows drawn in one draw against the rows drawn by kind', () => {
   }, async () => {
     await compare(page, 'dashes', SCENES.dashes, { form: 'rows', byKind: true }, DASH_TOLERANCE);
   });
+});
+
+describe('the rows of a layer of z and m against the rows of xy', () => {
+  let page: Page;
+
+  beforeAll(async () => {
+    page = await openMapPage(browser, bundle, CAMERA);
+  }, browserTimeout(60_000));
+
+  afterAll(async () => {
+    await page?.close();
+  });
+
+  // The z and the m are held, not drawn: the pictures are the same, pixel for pixel
+  for (const dims of ['xyz', 'xyzm'] as const) {
+    it(`draws the rows of a layer of ${dims} as the rows of xy of the same x and y`, {
+      timeout: browserTimeout(90_000),
+    }, async () => {
+      await compare(
+        page,
+        `dims-${dims}`,
+        interleaved(),
+        { form: 'rows', dims },
+        {
+          level: 0,
+          share: 0,
+        },
+      );
+    });
+  }
 });
 
 describe('a row drawn in one draw against its feature drawn by the Store', () => {

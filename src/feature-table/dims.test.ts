@@ -4,9 +4,10 @@
 /**
  * The rows of layers whose coordinates have a `z`, an `m` or both
  *
- * - Writes of every kind at random, with the next versions made in between, on the main thread
- *   and in a Worker: every read gives the reference, every value of the positions included, in
- *   layers of `xy`, `xyz`, `xym` and `xyzm` (14.2 of the design)
+ * - Writes of every kind at random, groups of features put in another place, with the next
+ *   versions made in between, on the main thread and in a Worker: every read gives the
+ *   reference, every value of the positions included, in layers of `xy`, `xyz`, `xym` and `xyzm`
+ *   (14.2 of the design)
  * - A write of a `z` or an `m` only is written in place and draws nothing again
  * - The values read are the values written back: `snapshot` and `apply` keep the `z` and the `m`
  * - The dimensions of a layer raised: no value is lost, before and after the next versions
@@ -137,6 +138,17 @@ describe('the rows of layers of every dimensions', () => {
           if (step % 50 === 49) {
             expectTablesMatch(tables, reference, layerIds, groupHandleOf);
             internals.advanceVersions(steps(3));
+          }
+          if (step % 50 === 24) {
+            // A group of features put in another place: its members are cut out of their row
+            // groups, as they are
+            const order = key(random() * 1e6);
+            setup.writer.applyGroups({
+              handles: Int32Array.of(groupHandleOf('ga')),
+              fields: new Map([['order', [order]]]),
+            });
+            const group = reference.groups.get('ga');
+            if (group) group.order = order;
           }
         }
         expectTablesMatch(tables, reference, layerIds, groupHandleOf);
