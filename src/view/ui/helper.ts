@@ -32,6 +32,8 @@ import {
  */
 export function getSelectedFeatureIds(store: Store): readonly string[] {
   const selection = store.getSelection();
+  // Features selected in bulk are not listed: the operations of the selection read their rows
+  if (selection.bulk) return [];
   switch (selection.type) {
     case 'feature':
       return selection.ids;
@@ -56,6 +58,9 @@ export function getBoxMarkedFeatureIds(store: Store): readonly string[] | null {
   if (!tables || !store.getBoxSelection()) return null;
   const marked = featureTablesInternals(tables)?.states.bulkHandles();
   if (!marked) return null;
+  // More rows than are opened at once are shown by the frames of the rows marked (drawn on the
+  // GPU), as features selected in bulk are
+  if (marked.size > store.holdLimit) return [];
   const ids: string[] = [];
   for (const handle of marked) {
     const id = tables.getRowId(handle);

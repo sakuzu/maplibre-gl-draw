@@ -228,6 +228,19 @@ function handleFeatureClick(
     }
   }
 
+  // Shift over features selected in bulk: the feature joins or leaves their rows (opened once
+  // few enough)
+  const rows = store.getSelectedRows();
+  const handle = store.tables?.findRow(feature.id);
+  if (event.modifiers.shift && rows && selection.type === 'feature' && handle !== undefined) {
+    if (rows.has(handle)) {
+      store.selectRows(rows.without([handle]));
+    } else if ((context.plugins?.filterSelectionCandidates([feature.id]) ?? [feature.id]).length) {
+      store.selectRows(rows.with([handle]));
+    }
+    return;
+  }
+
   // Update the selection
   const candidateIds = event.modifiers.shift
     ? toggleSelection(selection, feature.id)

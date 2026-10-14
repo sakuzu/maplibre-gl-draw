@@ -40,6 +40,11 @@ export interface DragOperation {
    * hand the drag to someone else need it
    */
   finish?(event?: DragNormalizedEvent): void;
+  /**
+   * Called once when the drag ends: committed (let go) or not (cancelled, aborted). Only the
+   * operations that write once at the end need it (the drags of features selected in bulk)
+   */
+  end?(store: DragStore, committed: boolean): void;
 }
 
 /**

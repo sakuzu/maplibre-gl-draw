@@ -25,7 +25,7 @@ import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Store } from '../store/store.js';
 import type { FeatureCoordinates, RowField } from '../store/types.js';
-import { bulkSelectionLocked } from './bulk-selection.js';
+import { rowsLocked } from './bulk-selection.js';
 import {
   computeResize,
   computeResizeFactors,
@@ -74,7 +74,7 @@ function writeKinds(
   kinds: ReadonlyArray<{ rows: number[]; op: BulkOperation }>,
 ): boolean {
   // A locked feature refuses the whole of it, as a drag does not start then
-  if (rows.count === 0 || bulkSelectionLocked(store)) return false;
+  if (rows.count === 0 || rowsLocked(store, rows)) return false;
   let written = false;
   store.transact(() => {
     for (const kind of kinds) {
@@ -91,17 +91,24 @@ function writeKinds(
  * @returns false when nothing is written, or the move is refused
  * @internal
  */
-export function translateBulkSelection(store: Store, dx: number, dy: number): boolean {
-  const rows = store.getSelectedRows();
+export function translateBulkSelection(
+  store: Store,
+  dx: number,
+  dy: number,
+  rows: TableSelection | null = store.getSelectedRows(),
+): boolean {
   if (!rows) return false;
-  return store.applyBulk({
-    kind: 'rows',
-    fields: ['geometry'],
-    write: (_handle, read) => {
-      const geometry = mappedGeometry(read, (x, y) => [x + dx, y + dy]);
-      return geometry === undefined ? null : [geometry];
+  return store.applyBulk(
+    {
+      kind: 'rows',
+      fields: ['geometry'],
+      write: (_handle, read) => {
+        const geometry = mappedGeometry(read, (x, y) => [x + dx, y + dy]);
+        return geometry === undefined ? null : [geometry];
+      },
     },
-  });
+    rows,
+  );
 }
 
 /**
@@ -119,8 +126,8 @@ export function rotateBulkSelection(
   center: [number, number],
   deltaAngle: number,
   extensions?: RotateExtensions,
+  rows: TableSelection | null = store.getSelectedRows(),
 ): boolean {
-  const rows = store.getSelectedRows();
   const internals = featureTablesInternals(store.tables);
   if (!rows || !internals) return false;
   const rotate = (x: number, y: number) => rotateCoordinate([x, y], center, deltaAngle);
@@ -194,8 +201,8 @@ export function resizeBulkSelection(
     readonly minAxisExtent?: number;
   },
   extensions?: ResizeExtensions,
+  rows: TableSelection | null = store.getSelectedRows(),
 ): boolean {
-  const rows = store.getSelectedRows();
   const internals = featureTablesInternals(store.tables);
   const tables = store.tables;
   if (!rows || !internals || !tables) return false;

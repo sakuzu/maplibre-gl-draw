@@ -1,0 +1,338 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The select mode over features selected in bulk (11.3 of the design, F10): a press on one of
+ * them drags them all, without narrowing the selection, by the state of their rows, and writes
+ * them once let go; the handles of their frame rotate and resize them; a box over many rows
+ * selects them in bulk; a cancelled box puts back the features selected in bulk before it; the
+ * arrow keys move them by their moving set and write once a moment after the last press.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCoreBoxSelectionStrategies } from '../../dispatcher/hit-test/box-strategies.js';
+import { BoxSelectionStrategyRegistry } from '../../dispatcher/hit-test/box-strategy.js';
+import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
+import type {
+  DragNormalizedEvent,
+  KeyNormalizedEvent,
+  MouseNormalizedEvent,
+} from '../../dispatcher/types.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/row-state.js';
+import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { applyMarginToBoundingBox } from '../../shared/math/index.js';
+import { DrawStore } from '../../store/draw-store.js';
+import { TableContractStore } from '../../store/table-memory.js';
+import type { Feature, StoreChange } from '../../store/types.js';
+import { bulkFrame } from '../../view/ui/handle-test.js';
+import { computeResizeHandles, computeRotateHandle } from '../../view/ui/handles.js';
+import { createSelectionScope } from '../../view/ui/selection-scope.js';
+import type { EngineModeContext } from '../handler.js';
+import { BULK_MOVE_SET, BULK_NUDGE_COMMIT_MS } from './bulk.js';
+import { SelectMode } from './mode.js';
+
+/** A square of one degree at (x, y) */
+function square(id: string, x: number, y: number, extra: Partial<Feature> = {}): Feature {
+  return {
+    id,
+    type: 'Polygon',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [x, y],
+          [x + 1, y],
+          [x + 1, y + 1],
+          [x, y + 1],
+          [x, y],
+        ],
+      ],
+    },
+    layerId: 'l',
+    groupId: undefined,
+    properties: {},
+    style: {},
+    visible: true,
+    locked: false,
+    ...extra,
+  };
+}
+
+/** A map that maps degrees linearly (1 degree = 10 px, y down) */
+function makeMap() {
+  const dragPan = {
+    enabled: true,
+    disable: vi.fn(() => {
+      dragPan.enabled = false;
+    }),
+    enable: vi.fn(() => {
+      dragPan.enabled = true;
+    }),
+    isEnabled: () => dragPan.enabled,
+  };
+  return {
+    dragPan,
+    getCanvas: () => ({ style: { cursor: '' } }),
+    getZoom: () => 6,
+    triggerRepaint: vi.fn(),
+    project: (lngLat: [number, number] | { lng: number; lat: number }) => {
+      const lng = Array.isArray(lngLat) ? lngLat[0] : lngLat.lng;
+      const lat = Array.isArray(lngLat) ? lngLat[1] : lngLat.lat;
+      return { x: lng * 10, y: -lat * 10 };
+    },
+    unproject: (p: [number, number] | { x: number; y: number }) => {
+      const x = Array.isArray(p) ? p[0] : p.x;
+      const y = Array.isArray(p) ? p[1] : p.y;
+      return { lng: x / 10, lat: -y / 10 };
+    },
+  };
+}
+
+const NO_MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };
+
+function drag(
+  type: 'dragstart' | 'dragmove' | 'dragend',
+  lng: number,
+  lat: number,
+  start: [number, number],
+  shift = false,
+): DragNormalizedEvent {
+  return {
+    type,
+    point: { x: lng * 10, y: -lat * 10 },
+    lngLat: { lng, lat },
+    originalEvent: {} as MouseEvent,
+    modifiers: { ...NO_MODIFIERS, shift },
+    dragStartPoint: { x: start[0] * 10, y: -start[1] * 10 },
+    dragStartLngLat: { lng: start[0], lat: start[1] },
+  };
+}
+
+function key(name: string): KeyNormalizedEvent {
+  return {
+    type: 'keydown',
+    key: name,
+    modifiers: { ...NO_MODIFIERS },
+    originalEvent: { preventDefault: vi.fn() } as unknown as KeyboardEvent,
+  } as KeyNormalizedEvent;
+}
+
+let store: DrawStore;
+let mode: SelectMode;
+let context: EngineModeContext;
+let top: TopHit | null;
+let emitted: Array<[string, unknown]>;
+let changes: StoreChange[];
+const ids = Array.from({ length: 6 }, (_, i) => `f${i}`);
+
+beforeEach(() => {
+  store = new DrawStore(new TableContractStore(), { holdLimit: 3 });
+  store.createLayer({
+    id: 'l',
+    name: 'l',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    kind: 'table',
+    styleRule: undefined,
+    metadata: undefined,
+  });
+  store.transact(() => {
+    ids.forEach((id, i) => {
+      store.createFeature(square(id, i * 2, 0));
+    });
+  });
+  top = null;
+  emitted = [];
+  const registry = new BoxSelectionStrategyRegistry();
+  for (const strategy of createCoreBoxSelectionStrategies()) registry.register(strategy);
+  context = {
+    store,
+    map: makeMap(),
+    hitTestTopmost: () => top,
+    plugins: undefined,
+    selectionScope: createSelectionScope(),
+    boxSelectionRegistry: registry,
+    spatialIndex: { findInBounds: () => [] },
+    eventEmitter: { emit: (name: string, payload: unknown) => emitted.push([name, payload]) },
+  } as unknown as EngineModeContext;
+  mode = new SelectMode();
+  mode.onStart(context);
+  changes = [];
+  store.subscribe((change) => changes.push(change));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/** The row hit at a feature (as the hit test of rows answers) */
+function rowHit(id: string): TopHit {
+  return {
+    kind: 'row',
+    layerId: 'l',
+    id,
+    handle: store.tables?.findRow(id) as number,
+    locked: false,
+    distancePx: () => 0,
+  };
+}
+
+/** The first position of each feature */
+function corners(): number[][] {
+  return ids.map((id) => {
+    const feature = store.tables?.get('l')?.getRow(store.tables.findRow(id) as number);
+    return (feature?.geometry as { coordinates: number[][][] }).coordinates[0][0];
+  });
+}
+
+/** The moving set of the row of a feature */
+function movingSetOf(id: string): number {
+  const internals = featureTablesInternals(store.tables);
+  const place = internals?.placeOf(store.tables?.findRow(id) as number);
+  return place ? (place.group.state[place.row] & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT : -1;
+}
+
+/** The frame of the features selected in bulk with its margin, as its handles stand on it */
+function marginedFrame() {
+  const bulk = store.getSelection().bulk;
+  const frame = bulkFrame(bulk?.bounds as [number, number, number, number]);
+  const transform = {
+    project: (c: [number, number]) => ({ x: c[0] * 10, y: -c[1] * 10 }),
+    unproject: (p: { x: number; y: number }) => ({ lng: p.x / 10, lat: -p.y / 10 }),
+  };
+  return {
+    ...applyMarginToBoundingBox(
+      frame,
+      DEFAULT_SELECTION_CONFIG.boundingBox.margin,
+      transform as never,
+    ),
+    center: frame.center,
+  };
+}
+
+describe('the select mode over features selected in bulk', () => {
+  it('drags them all from a press on one of them, by their moving set, and writes them once', () => {
+    store.setSelection('feature', ids);
+    expect(store.getSelection().bulk?.count).toBe(6);
+    const before = corners();
+    top = rowHit('f3');
+    expect(
+      mode.onMouseDown({
+        ...drag('dragstart', 6.5, 0.5, [6.5, 0.5]),
+        type: 'mousedown',
+      } as unknown as MouseNormalizedEvent),
+    ).toBe(true);
+    mode.onDragStart(drag('dragstart', 6.5, 0.5, [6.5, 0.5]));
+    // The selection is not narrowed to the feature pressed
+    expect(store.getSelection().bulk?.count).toBe(6);
+    expect(emitted[0][0]).toBe('drag.started');
+    expect(emitted[0][1]).toMatchObject({ kind: 'feature', featureIds: [] });
+    expect((emitted[0][1] as { bulk?: unknown }).bulk).toBe(store.getSelection().bulk);
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => BULK_MOVE_SET));
+    const count = changes.length;
+    mode.onDragMove(drag('dragmove', 8.5, 1.5, [6.5, 0.5]));
+    const states = featureTablesInternals(store.tables)?.states;
+    expect(states?.translation(BULK_MOVE_SET)).toEqual([2, 1]);
+    // Nothing is written while it is dragged
+    expect(corners()).toEqual(before);
+    expect(changes.slice(count).some((change) => change.rows)).toBe(false);
+    mode.onDragEnd(drag('dragend', 8.5, 1.5, [6.5, 0.5]));
+    expect(corners()).toEqual(before.map(([x, y]) => [x + 2, y + 1]));
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
+    expect(states?.translation(BULK_MOVE_SET)).toEqual([0, 0]);
+    const written = changes.slice(count).filter((change) => change.rows);
+    expect(written).toHaveLength(1);
+    expect(written[0].previousValues).toBeDefined();
+    expect(emitted.some(([name]) => name === 'drag.ended')).toBe(true);
+    expect(store.getSelection().bulk?.bounds).toEqual([2, 1, 13, 2]);
+  });
+
+  it('resizes and rotates them from the handles of their frame', () => {
+    store.setSelection('feature', ids);
+    const before = corners();
+    const ne = computeResizeHandles(marginedFrame()).find((handle) => handle.type === 'resize-ne');
+    const [x, y] = ne?.position as [number, number];
+    mode.onDragStart(drag('dragstart', x, y, [x, y]));
+    expect(store.getDragState()?.operation).toBe('resize');
+    mode.onDragMove(drag('dragmove', x + 1, y, [x, y]));
+    expect(featureTablesInternals(store.tables)?.states.transform(BULK_MOVE_SET)).not.toBeNull();
+    mode.onDragEnd(drag('dragend', x + 1, y, [x, y]));
+    const after = corners();
+    // The west side is the anchor: it stays, the others move east
+    expect(after[0][0]).toBeCloseTo(before[0][0], 9);
+    expect(after[5][0]).toBeGreaterThan(before[5][0]);
+    expect(featureTablesInternals(store.tables)?.states.transform(BULK_MOVE_SET)).toBeNull();
+
+    const rotate = computeRotateHandle(
+      marginedFrame(),
+      DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
+      6,
+    ).position;
+    mode.onDragStart(drag('dragstart', rotate[0], rotate[1], rotate as [number, number]));
+    expect(store.getDragState()?.operation).toBe('rotate');
+    const center = store.getSelection().bulk?.bounds as number[];
+    mode.onDragMove(
+      drag(
+        'dragmove',
+        (center[0] + center[2]) / 2 + 3,
+        (center[1] + center[3]) / 2,
+        rotate as [number, number],
+      ),
+    );
+    mode.onDragEnd(
+      drag(
+        'dragend',
+        (center[0] + center[2]) / 2 + 3,
+        (center[1] + center[3]) / 2,
+        rotate as [number, number],
+      ),
+    );
+    expect(corners()).not.toEqual(after);
+  });
+
+  it('starts no drag while a feature selected is locked, and keeps the selection', () => {
+    store.updateFeature('f2', { locked: true });
+    store.setSelection('feature', ids);
+    top = rowHit('f3');
+    mode.onDragStart(drag('dragstart', 6.5, 0.5, [6.5, 0.5]));
+    expect(store.getDragState()).toBeNull();
+    expect(store.getSelection().bulk?.count).toBe(6);
+  });
+
+  it('selects the rows of a box in bulk, and puts back the features selected in bulk on a cancel', () => {
+    mode.onDragStart(drag('dragstart', -1, -1, [-1, -1], true));
+    mode.onDragMove(drag('dragmove', 9.5, 1.5, [-1, -1], true));
+    mode.onDragEnd(drag('dragend', 9.5, 1.5, [-1, -1], true));
+    // Rows 0 to 4 are inside, row 4 [8, 9] too; row 5 [10, 11] is out
+    expect(store.getSelection().bulk?.count).toBe(5);
+    const kept = store.getSelection();
+    mode.onDragStart(drag('dragstart', -1, -1, [-1, -1], true));
+    mode.onDragMove(drag('dragmove', 1.5, 1.5, [-1, -1], true));
+    mode.onDragCancel();
+    expect(store.getSelection().bulk?.count).toBe(kept.bulk?.count);
+    // A small box opens what it selects
+    mode.onDragStart(drag('dragstart', -1, -1, [-1, -1], true));
+    mode.onDragMove(drag('dragmove', 3.5, 1.5, [-1, -1], true));
+    mode.onDragEnd(drag('dragend', 3.5, 1.5, [-1, -1], true));
+    expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f0', 'f1'] });
+  });
+
+  it('moves them by the arrow keys, written once a moment after the last press', () => {
+    vi.useFakeTimers();
+    store.setSelection('feature', ids);
+    const before = corners();
+    const count = changes.length;
+    for (let i = 0; i < 5; i++) mode.onKeyDown(key('ArrowRight'));
+    expect(corners()).toEqual(before);
+    expect(featureTablesInternals(store.tables)?.states.translation(BULK_MOVE_SET)[0]).toBeCloseTo(
+      0.5,
+      9,
+    );
+    vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
+    expect(corners()[0][0]).toBeCloseTo(before[0][0] + 0.5, 9);
+    expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
+  });
+});

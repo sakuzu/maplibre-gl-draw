@@ -208,6 +208,7 @@ export class MemoryDrawingState {
           startPoint: [...box.startPoint],
           endPoint: [...box.endPoint],
           previousSelection: [...box.previousSelection],
+          ...(box.previous && { previous: box.previous }),
         }
       : null;
     this.#bus.merge({ uiStateChanged: true });
@@ -227,6 +228,7 @@ export class MemoryDrawingState {
           activeFeatureId: state.activeFeatureId,
           rotateInfo: state.rotateInfo,
           movingFeatureIds: state.movingFeatureIds ? [...state.movingFeatureIds] : undefined,
+          ...(state.movingRows && { movingRows: state.movingRows }),
         }
       : null;
     this.#bus.merge({ uiStateChanged: true });

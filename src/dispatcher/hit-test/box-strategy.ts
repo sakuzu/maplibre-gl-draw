@@ -29,6 +29,14 @@ export interface BoxSelectionStrategy {
    * @returns `true` if it intersects (the feature is then selected)
    */
   intersects(feature: Feature, rect: BoundingBox): boolean;
+  /**
+   * True when every feature whose extent is inside the box meets the test: the rows of a layer
+   * held as rows inside a box are then selected without being made features (the tests of core
+   * for points, lines, areas and circles)
+   *
+   * @internal
+   */
+  readonly insideMeetsTest?: boolean;
 }
 
 /**

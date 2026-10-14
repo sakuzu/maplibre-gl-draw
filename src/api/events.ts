@@ -214,10 +214,22 @@ export interface DrawEvents {
     selection: VertexSelection | null;
     previous: VertexSelection | null;
   };
-  /** A drag started */
-  'drag.started': { kind: 'feature' | 'vertex' | 'handle'; featureIds: string[] };
+  /**
+   * A drag started; `bulk` for features selected in bulk (`Selection.bulk`), whose IDs are not
+   * listed (`listSelectedRows` of `@sakuzu/maplibre-gl-draw/kasane` reads their rows)
+   */
+  'drag.started': {
+    kind: 'feature' | 'vertex' | 'handle';
+    featureIds: string[];
+    bulk?: SelectionBulk;
+  };
   /** A drag ended; `cancelled` is true when it was cancelled */
-  'drag.ended': { kind: 'feature' | 'vertex' | 'handle'; featureIds: string[]; cancelled: boolean };
+  'drag.ended': {
+    kind: 'feature' | 'vertex' | 'handle';
+    featureIds: string[];
+    bulk?: SelectionBulk;
+    cancelled: boolean;
+  };
   /** The mode changed */
   'mode.changed': { mode: Mode; previous: Mode };
   /** The items this client hides changed; `ids` is the whole set after the change */

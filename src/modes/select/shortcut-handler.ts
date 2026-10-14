@@ -7,6 +7,7 @@
  * Responsible for handling keyboard shortcuts in select mode
  */
 
+import { bulkSelectionLocked } from '../../operations/bulk-selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
 import {
@@ -18,6 +19,7 @@ import { isInteractionBlocked } from '../../store/lock.js';
 import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
+import type { BulkNudge } from './bulk.js';
 
 /** The distance an arrow key moves the selection (pixels; with Shift, NUDGE_LARGE) */
 const NUDGE_SMALL = 1;
@@ -77,11 +79,32 @@ export function handleNudgeShortcut(
   context: EngineModeContext,
   key: string,
   modifiers: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean },
+  bulkNudge?: BulkNudge,
 ): boolean {
   const direction = ARROW_DIRECTIONS[key];
   if (!direction || modifiers.ctrl || modifiers.alt || modifiers.meta) return false;
 
   const { store, map } = context;
+  const step = modifiers.shift ? NUDGE_LARGE : NUDGE_SMALL;
+
+  // Features selected in bulk: moved by their moving set while the keys are pressed, and written
+  // once a moment after the last press (the presses of a key held are one change)
+  const bulk = store.getSelection().bulk;
+  if (bulk) {
+    if (!bulkNudge || !bulk.bounds) return false;
+    if (store.isReadOnly() || store.isInteractionLocked() || bulkSelectionLocked(store)) {
+      return false;
+    }
+    // One offset in degrees for every feature, taken at the center of their frame where the moves
+    // waiting put it
+    const [west, south, east, north] = bulk.bounds;
+    const [shownX, shownY] = bulkNudge.active ? bulkNudge.offset : [0, 0];
+    const reference: Coordinate = [(west + east) / 2 + shownX, (south + north) / 2 + shownY];
+    const from = map.project(reference);
+    const to = map.unproject([from.x + direction[0] * step, from.y + direction[1] * step]);
+    return bulkNudge.add(context, to.lng - reference[0], to.lat - reference[1]);
+  }
+
   const features = getSelectedFeatureIds(store)
     .map((id) => store.getFeature(id))
     .filter((f): f is Feature => f !== undefined);
@@ -92,7 +115,6 @@ export function handleNudgeShortcut(
   // features keep their relative placement (the same translation as a move drag)
   const reference = firstCoordinate(coordinatesOf(features[0]));
   if (!reference) return false;
-  const step = modifiers.shift ? NUDGE_LARGE : NUDGE_SMALL;
   const from = map.project(reference);
   const to = map.unproject([from.x + direction[0] * step, from.y + direction[1] * step]);
   const dx = to.lng - reference[0];
@@ -124,8 +146,10 @@ export function handleEscapeShortcut(context: EngineModeContext): void {
 
   if (boxSelection) {
     // Cancel when a box selection is in progress (restore the selection as it was when the drag
-    // started)
-    if (boxSelection.previousSelection.length === 0) {
+    // started, features selected in bulk included)
+    if (boxSelection.previous) {
+      store.restoreSelection(boxSelection.previous);
+    } else if (boxSelection.previousSelection.length === 0) {
       store.setSelection(null, []);
     } else {
       store.setSelection('feature', boxSelection.previousSelection);

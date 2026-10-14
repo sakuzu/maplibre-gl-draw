@@ -391,6 +391,15 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       });
       return filtered;
     },
+    filterSelectionRows(view, handles) {
+      let filtered = handles;
+      eachPlugin('filterSelectionRows', (plugin) => {
+        const filter = plugin.interaction?.filterSelectionRows;
+        if (filter) filtered = filter.call(plugin.interaction, view, filtered);
+        return false;
+      });
+      return filtered;
+    },
     handleFeatureClick: click('onFeatureClick'),
     handleFeatureDoubleClick: click('onFeatureDoubleClick'),
     isPluginInteracting: () =>

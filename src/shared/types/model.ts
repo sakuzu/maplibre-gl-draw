@@ -1107,8 +1107,11 @@ export interface BoxSelection {
   endPoint: Coordinate;
   /** The selection state when the drag started (in order to restore it on cancel) */
   previousSelection: string[];
-  /** The features selected in bulk when the drag started (restored on cancel) */
-  previousBulk?: SelectionBulk;
+  /**
+   * The selection when the drag started when it held features in bulk (restored on cancel in
+   * place of `previousSelection`)
+   */
+  previous?: Selection;
 }
 
 /**
@@ -1188,4 +1191,9 @@ export interface DragState {
    * Used so that snapping can exclude "the very feature being moved" from the candidates.
    */
   movingFeatureIds?: string[];
+  /**
+   * The rows of the features selected in bulk being moved (snapping leaves them out as it leaves
+   * out `movingFeatureIds`)
+   */
+  movingRows?: { has(handle: number): boolean };
 }

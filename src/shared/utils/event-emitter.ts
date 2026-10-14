@@ -17,6 +17,7 @@ import type {
   SnapResult,
   StackSlot,
 } from '../types/events.js';
+import type { SelectionBulk } from '../types/model.js';
 
 /**
  * The signals of the engine by name, with their payloads
@@ -93,7 +94,12 @@ export interface EngineSignals {
    *
    * A drag of an auxiliary handle is not announced (its provider writes the changes itself).
    */
-  'drag.started': { kind: 'feature' | 'vertex' | 'handle'; featureIds: string[] };
+  'drag.started': {
+    kind: 'feature' | 'vertex' | 'handle';
+    featureIds: string[];
+    /** The features selected in bulk the drag moves (their IDs are not listed) */
+    bulk?: SelectionBulk;
+  };
   /**
    * The drag announced by `drag.started` ended, with the same IDs; `cancelled` is true when it
    * was aborted instead of committed
@@ -101,6 +107,7 @@ export interface EngineSignals {
   'drag.ended': {
     kind: 'feature' | 'vertex' | 'handle';
     featureIds: string[];
+    bulk?: SelectionBulk;
     cancelled: boolean;
   };
 }

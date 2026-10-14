@@ -14,13 +14,16 @@
  */
 
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
+import { bulkSelectionLocked } from '../../operations/bulk-selection.js';
+import type { HandleType } from '../../shared/config/constants.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import { isInteractionBlocked } from '../../store/lock.js';
-import type { Feature } from '../../store/types.js';
+import type { Feature, SelectionBulk } from '../../store/types.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
 import type { EngineModeContext } from '../handler.js';
+import { BulkMoveDrag, BulkResizeDrag, BulkRotateDrag } from './bulk.js';
 import { type AuxiliaryDrag, resolveAuxiliaryDrag } from './drag/auxiliary.js';
 import { IntermediateWrites } from './drag/intermediate-writes.js';
 import { startMoveDrag } from './drag/move.js';
@@ -51,6 +54,8 @@ export class SelectModeDragHandler {
    * a listener that opens a scope on drag.started always closes it.
    */
   private announcedFeatureIds: string[] | null = null;
+  /** The features selected in bulk announced by drag.started (their IDs are not listed) */
+  private announcedBulk: SelectionBulk | undefined = undefined;
   /** What the announced drag grabbed, and the emitter its end is announced on */
   private announcedKind: DragKind | null = null;
   private announcer: EventEmitter | null = null;
@@ -194,6 +199,46 @@ export class SelectModeDragHandler {
   }
 
   /**
+   * Start a drag of the features selected in bulk: a move by a press on one of them, a rotation
+   * or a resize by a handle of their frame. Nothing starts while the selection cannot be edited
+   * (read-only, the interaction lock, a feature locked)
+   *
+   * @param bbox The frame of their extent (without its margin)
+   * @returns Whether the drag started
+   */
+  startBulkDrag(
+    hitResult: HandleHitResult,
+    event: DragNormalizedEvent,
+    context: EngineModeContext,
+    bbox: BoundingBoxCoords,
+  ): boolean {
+    const { store } = context;
+    this.scope = context.selectionScope;
+    const rows = store.getSelectedRows();
+    const bulk = store.getSelection().bulk;
+    if (!rows || !bulk) return false;
+    if (store.isReadOnly() || store.isInteractionLocked() || bulkSelectionLocked(store)) {
+      return false;
+    }
+    if (hitResult.type !== 'move' && hitResult.type !== 'rotate' && hitResult.type !== 'resize') {
+      return false;
+    }
+    if (hitResult.type === 'resize' && !hitResult.handle) return false;
+    this.announce(hitResult.type, [], context.eventEmitter, bulk);
+    context.map.dragPan.disable();
+    this.writes.discard(store);
+    if (hitResult.type === 'move') {
+      this.begin(new BulkMoveDrag(context, rows, event));
+      store.setDragState({ operation: 'move', movingFeatureIds: [], movingRows: rows });
+    } else if (hitResult.type === 'rotate') {
+      this.begin(new BulkRotateDrag(context, rows, event, bbox));
+    } else {
+      this.begin(new BulkResizeDrag(context, rows, event, hitResult.handle as HandleType, bbox));
+    }
+    return true;
+  }
+
+  /**
    * Make a started operation the running one. An operation that could not start (its feature
    * or vertex is gone) leaves the handler as it was
    */
@@ -229,6 +274,9 @@ export class SelectModeDragHandler {
       // Tell a delegate that the drag has ended (for an auxiliary handle core has written
       // nothing to the Store)
       this.operation?.finish?.(event);
+      // An operation that writes once at its end writes now (the drags of features selected in
+      // bulk)
+      this.operation?.end?.(store, true);
 
       // Commit the intermediate updates made during the drag in a single transaction before
       // announcing drag.ended (listeners see the state after the commit). If no feature was
@@ -258,6 +306,8 @@ export class SelectModeDragHandler {
     // exactly once. When coming through endDrag it has already been delivered, so nothing
     // happens here.
     this.operation?.finish?.();
+    // An operation that writes at its end and has not ended writes nothing
+    if (store) this.operation?.end?.(store, false);
 
     this.operation = null;
     this.writes.discard(store);
@@ -273,11 +323,18 @@ export class SelectModeDragHandler {
     const featureIds = this.announcedFeatureIds;
     const kind = this.announcedKind;
     const announcer = this.announcer;
+    const bulk = this.announcedBulk;
     this.announcedFeatureIds = null;
     this.announcedKind = null;
     this.announcer = null;
+    this.announcedBulk = undefined;
     if (!featureIds || !kind) return;
-    announcer?.emit('drag.ended', { kind, featureIds: [...featureIds], cancelled });
+    announcer?.emit('drag.ended', {
+      kind,
+      featureIds: [...featureIds],
+      ...(bulk && { bulk }),
+      cancelled,
+    });
   }
 
   /**
@@ -288,13 +345,15 @@ export class SelectModeDragHandler {
     type: HandleHitResult['type'],
     featureIds: string[],
     emitter: EventEmitter | undefined,
+    bulk?: SelectionBulk,
   ): void {
     const kind: DragKind =
       type === 'move' ? 'feature' : type === 'vertex' || type === 'midpoint' ? 'vertex' : 'handle';
     this.announcedFeatureIds = [...featureIds];
     this.announcedKind = kind;
     this.announcer = emitter ?? null;
-    emitter?.emit('drag.started', { kind, featureIds: [...featureIds] });
+    this.announcedBulk = bulk;
+    emitter?.emit('drag.started', { kind, featureIds: [...featureIds], ...(bulk && { bulk }) });
   }
 
   /**

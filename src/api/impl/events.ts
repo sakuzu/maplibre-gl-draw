@@ -276,9 +276,18 @@ function emitResourceEvents(hub: EventHub, changes: StoreChange, store: Store): 
   }
 
   if (changes.selection) {
+    const { bulk, previousBulk } = changes.selection;
     hub.emit('selection.changed', {
-      selection: { type: changes.selection.type, ids: [...changes.selection.ids] },
-      previous: { type: changes.selection.previousType, ids: [...changes.selection.previousIds] },
+      selection: {
+        type: changes.selection.type,
+        ids: [...changes.selection.ids],
+        ...(bulk && { bulk }),
+      },
+      previous: {
+        type: changes.selection.previousType,
+        ids: [...changes.selection.previousIds],
+        ...(previousBulk && { bulk: previousBulk }),
+      },
     });
   }
 
@@ -426,11 +435,11 @@ export function connectEngineEvents(
   listen('load.error', ({ source, featureId, error }) => {
     hub.emit('error', { error: toDrawError(error), source, featureId });
   });
-  listen('drag.started', ({ kind, featureIds }) => {
-    hub.emit('drag.started', { kind, featureIds: [...featureIds] });
+  listen('drag.started', ({ kind, featureIds, bulk }) => {
+    hub.emit('drag.started', { kind, featureIds: [...featureIds], ...(bulk && { bulk }) });
   });
-  listen('drag.ended', ({ kind, featureIds, cancelled }) => {
-    hub.emit('drag.ended', { kind, featureIds: [...featureIds], cancelled });
+  listen('drag.ended', ({ kind, featureIds, bulk, cancelled }) => {
+    hub.emit('drag.ended', { kind, featureIds: [...featureIds], ...(bulk && { bulk }), cancelled });
   });
 
   return () => {

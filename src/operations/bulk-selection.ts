@@ -53,8 +53,17 @@ export function deleteBulkSelection(store: Store): boolean {
  */
 export function bulkSelectionLocked(store: Store): boolean {
   const rows = store.getSelectedRows();
+  return rows !== null && rowsLocked(store, rows);
+}
+
+/**
+ * Whether any of these rows is locked (itself, its group or its layer)
+ *
+ * @internal
+ */
+export function rowsLocked(store: Store, rows: TableSelection): boolean {
   const internals = featureTablesInternals(store.tables);
-  if (!rows || !internals) return false;
+  if (!internals) return false;
   const containers = containersOf(store);
   return rows.handles.some((handle) => isRowLocked(internals, containers, handle));
 }

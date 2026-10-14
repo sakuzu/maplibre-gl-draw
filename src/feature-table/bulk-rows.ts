@@ -39,6 +39,8 @@ export interface RowsSummary {
   readonly layerIds: readonly string[];
   /** The union of the extents of the rows, `[west, south, east, north]` (null when none has one) */
   readonly bounds: BBox | null;
+  /** Whether a row has an extent with an area (not a single position) */
+  readonly hasArea: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export function summarizeRows(
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
   let count = 0;
+  let hasArea = false;
   for (const handle of rows.handles) {
     const place = internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) continue;
@@ -64,6 +67,7 @@ export function summarizeRows(
     const b = place.group.data.rowBounds;
     const at = place.row * 4;
     if (Number.isNaN(b[at])) continue;
+    if (b[at + 2] > b[at] || b[at + 3] > b[at + 1]) hasArea = true;
     if (b[at] < minX) minX = b[at];
     if (b[at + 1] < minY) minY = b[at + 1];
     if (b[at + 2] > maxX) maxX = b[at + 2];
@@ -73,6 +77,7 @@ export function summarizeRows(
     count,
     layerIds: [...layers],
     bounds: minX <= maxX ? [minX, minY, maxX, maxY] : null,
+    hasArea,
   };
 }
 

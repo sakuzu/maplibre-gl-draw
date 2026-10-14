@@ -35,6 +35,8 @@ import type { BoxSelectionStrategy } from './box-strategy.js';
  */
 export class PointBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'Point' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'Point') return false;
@@ -54,6 +56,8 @@ export class PointBoxSelectionStrategy implements BoxSelectionStrategy {
  */
 export class LineStringBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'LineString' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'LineString') return false;
@@ -75,6 +79,8 @@ export class LineStringBoxSelectionStrategy implements BoxSelectionStrategy {
  */
 export class PolygonBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'Polygon' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'Polygon') return false;
@@ -93,6 +99,8 @@ export class PolygonBoxSelectionStrategy implements BoxSelectionStrategy {
  */
 export class MultiPointBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'MultiPoint' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'MultiPoint') return false;
@@ -111,6 +119,8 @@ export class MultiPointBoxSelectionStrategy implements BoxSelectionStrategy {
  */
 export class MultiLineStringBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'MultiLineString' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'MultiLineString') return false;
@@ -129,6 +139,8 @@ export class MultiLineStringBoxSelectionStrategy implements BoxSelectionStrategy
  */
 export class MultiPolygonBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'MultiPolygon' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'MultiPolygon') return false;
@@ -214,6 +226,8 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
  */
 export class CircleBoxSelectionStrategy implements BoxSelectionStrategy {
   readonly featureType = 'Circle' as const;
+  /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
+  readonly insideMeetsTest = true;
 
   intersects(feature: Feature, rect: BoundingBox): boolean {
     if (feature.type !== 'Circle') return false;

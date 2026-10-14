@@ -16,6 +16,8 @@ import type { TableSelection } from '../feature-table/selection.js';
 import type { SelectionBulk } from './types.js';
 
 const ROWS = new WeakMap<SelectionBulk, TableSelection>();
+/** The summaries whose rows have one with an extent of an area */
+const WITH_AREA = new WeakSet<SelectionBulk>();
 
 /**
  * The summary of the rows of a selection (a new frozen object, which keeps the rows)
@@ -30,7 +32,18 @@ export function summaryOf(internals: FeatureTablesInternals, rows: TableSelectio
     bounds: summary.bounds,
   });
   ROWS.set(bulk, rows);
+  if (summary.hasArea) WITH_AREA.add(bulk);
   return bulk;
+}
+
+/**
+ * Whether a row of a summary has an extent of an area: a selection of points alone has no
+ * handle to rotate or resize it, as features selected one by one have none
+ *
+ * @internal
+ */
+export function summaryHasArea(bulk: SelectionBulk): boolean {
+  return WITH_AREA.has(bulk);
 }
 
 /**

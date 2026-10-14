@@ -16,7 +16,8 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
 import { applyMarginToBoundingBox } from '../../shared/math/index.js';
 import { nearestLongitude } from '../../shared/math/longitude.js';
-import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
+import { summaryHasArea } from '../../store/bulk-selection.js';
+import type { Coordinate, Feature, SelectionBulk, VertexRef } from '../../store/types.js';
 import type {
   AuxiliaryHandleCandidate,
   AuxiliaryHandleContext,
@@ -596,6 +597,58 @@ export function hitTestHandles(
   }
 
   return null;
+}
+
+/**
+ * Hit test of the handles of features selected in bulk (`Selection.bulk`), on the frame of their
+ * extent: its rotate and resize handles (when a feature has an extent of an area, as for
+ * features selected one by one), then its inside (move)
+ *
+ * @internal
+ */
+export function hitTestBulkHandles(
+  screenPoint: { x: number; y: number },
+  bulk: SelectionBulk,
+  transform: CoordinateTransform,
+  config: SelectionUIConfig,
+  zoom: number,
+  scope: SelectionScope,
+): HandleHitResult | null {
+  if (!bulk.bounds) return null;
+  transform = alignToPointer(transform, screenPoint);
+  const rawBbox = bulkFrame(bulk.bounds);
+  const marginedBbox: BoundingBoxCoords = {
+    ...applyMarginToBoundingBox(rawBbox, config.boundingBox.margin, transform),
+    center: rawBbox.center,
+  };
+  const params: HitTestParams = { screenPoint, transform, scope };
+  if (summaryHasArea(bulk)) {
+    const rotateHit = hitTestRotateHandle(marginedBbox, config, zoom, params);
+    if (rotateHit) return rotateHit;
+    const resizeHit = hitTestResizeHandles(marginedBbox, config, params);
+    if (resizeHit) return resizeHit;
+  }
+  const geoLngLat = transform.unproject(screenPoint);
+  if (isPointInGeoBoundingBox([geoLngLat.lng, geoLngLat.lat], marginedBbox)) {
+    return { type: 'move' };
+  }
+  return null;
+}
+
+/**
+ * The frame of an extent `[west, south, east, north]` (the frame of features selected in bulk)
+ *
+ * @internal
+ */
+export function bulkFrame(bounds: readonly [number, number, number, number]): BoundingBoxCoords {
+  const [west, south, east, north] = bounds;
+  return {
+    topLeft: [west, north],
+    topRight: [east, north],
+    bottomRight: [east, south],
+    bottomLeft: [west, south],
+    center: [(west + east) / 2, (south + north) / 2],
+  };
 }
 
 /**

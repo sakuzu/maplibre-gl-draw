@@ -22,15 +22,21 @@ import type {
   KeyNormalizedEvent,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
+import { rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { TableSelection } from '../../feature-table/selection.js';
 import { DEFAULT_SELECTION_CONFIG, type SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
-import { HOLD_LIMIT } from '../../store/draw-store.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
 import { computeCombinedGeoBoundingBox, isPointInGeoBoundingBox } from '../../view/ui/bounds.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
-import { hitTestGlobalAuxiliaryHandles, hitTestHandles } from '../../view/ui/handle-test.js';
+import {
+  bulkFrame,
+  hitTestBulkHandles,
+  hitTestGlobalAuxiliaryHandles,
+  hitTestHandles,
+} from '../../view/ui/handle-test.js';
 import {
   computeSelectionBoundingBox,
   getSelectedFeatureIds,
@@ -38,6 +44,7 @@ import {
 } from '../../view/ui/helper.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../handler.js';
 import { queryFeaturesInBox } from './box-selection.js';
+import { BulkNudge, queryRowsInBox } from './bulk.js';
 import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
 import { SelectModeDragHandler } from './drag-handler.js';
@@ -73,7 +80,9 @@ export class SelectMode implements EngineModeHandler {
   #context!: EngineModeContext;
   #dragHandler = new SelectModeDragHandler();
   /** The rows of a Store of rows marked as in the box being drawn */
-  #boxMarked: Int32Array = new Int32Array(0);
+  #boxMarked: TableSelection = TableSelection.empty;
+  /** The moves of the arrow keys over features selected in bulk, waiting to be written */
+  readonly #nudge = new BulkNudge();
   #config: SelectionUIConfig = DEFAULT_SELECTION_CONFIG;
 
   // ============================================================================
@@ -102,8 +111,9 @@ export class SelectMode implements EngineModeHandler {
 
     plugins?.finishPluginInteraction();
     this.#dragHandler.reset(store);
+    this.#nudge.flush();
 
-    this.#markBox([]);
+    this.#markBox(TableSelection.empty);
     if (store.getBoxSelection()) store.setBoxSelection(null);
     if (store.getVertexSelection()) store.setSelectedVertices(null);
     if (!map.dragPan.isEnabled()) map.dragPan.enable();
@@ -134,7 +144,8 @@ export class SelectMode implements EngineModeHandler {
     // The selection and the vertex selection follow the change by themselves (the Store
     // drops what was deleted or hidden and the vertices whose coordinates changed)
     if (store.getDragState()) store.setDragState(null);
-    this.#markBox([]);
+    this.#nudge.cancel();
+    this.#markBox(TableSelection.empty);
     if (store.getBoxSelection()) store.setBoxSelection(null);
   }
 
@@ -174,9 +185,29 @@ export class SelectMode implements EngineModeHandler {
     // onClick, so it is unaffected. Shift box selection is already handled above.
     if (store.isInteractionLocked()) return false;
 
+    // The moves of the arrow keys waiting are written before anything else is grabbed
+    this.#nudge.flush();
+
     const orderedFeatures = getDisplayFeatures(store);
     const selectedFeatures = getSelectedFeatures(store);
     const transform = createCoordinateTransform(map);
+
+    // Features selected in bulk: the handles of their frame and its inside
+    const bulk = store.getSelection().bulk;
+    if (
+      bulk &&
+      hitTestBulkHandles(
+        event.point,
+        bulk,
+        transform,
+        this.#config,
+        map.getZoom(),
+        this.#context.selectionScope,
+      )
+    ) {
+      map.dragPan.disable();
+      return true;
+    }
 
     // Test against the handles of the selected features / inside their bbox
     if (selectedFeatures.length > 0) {
@@ -284,8 +315,10 @@ export class SelectMode implements EngineModeHandler {
     if (this.#context.plugins?.isPluginInteracting()) return;
 
     const { store, map } = this.#context;
+    this.#nudge.flush();
+    const selection = store.getSelection();
     // Group / layer selections are also resolved to their members (so dragging the selection box
-    // moves a group as one).
+    // moves a group as one). Features selected in bulk are not listed (their rows are dragged)
     const selectedIds = getSelectedFeatureIds(store);
     const transform = createCoordinateTransform(map);
     const dragStartPoint = event.dragStartPoint ?? event.point;
@@ -298,7 +331,11 @@ export class SelectMode implements EngineModeHandler {
         startPoint,
         endPoint: startPoint,
         previousSelection: [...selectedIds],
+        // Features selected in bulk are put back from the selection itself on a cancel, and are
+        // let go of while the box marks its rows (the marks are the box's)
+        ...(selection.bulk && { previous: selection }),
       });
+      if (selection.bulk) store.setSelection(null, []);
       map.dragPan.disable();
       map.triggerRepaint();
       return;
@@ -309,6 +346,10 @@ export class SelectMode implements EngineModeHandler {
     // onMouseDown not disabling dragPan; starting a move selection here would select a feature
     // during a pan). Shift box selection is already handled above, so it is preserved.
     if (store.isInteractionLocked()) return;
+
+    // Features selected in bulk: a handle of their frame, or a press on one of them, drags them
+    // all (the selection is not narrowed to the one pressed)
+    if (selection.bulk && this.#dragBulk(event, dragStartPoint, transform)) return;
 
     // A handle hit on the selected features -> start the corresponding drag operation
     if (selectedIds.length > 0) {
@@ -399,12 +440,9 @@ export class SelectMode implements EngineModeHandler {
       store.setBoxSelection(updatedBoxSelection);
 
       // A Store of rows marks the rows in the box instead of selecting them while the box is
-      // drawn: they are held as features only when it is let go
+      // drawn: they are held as features, or selected in bulk, only when it is let go
       if (store.tables) {
-        const hitIds = queryFeaturesInBox(updatedBoxSelection, this.#context, HOLD_LIMIT);
-        this.#markBox(
-          hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds,
-        );
+        this.#markBox(queryRowsInBox(updatedBoxSelection, this.#context));
         return;
       }
 
@@ -431,20 +469,59 @@ export class SelectMode implements EngineModeHandler {
    * Marks the rows of a Store of rows in the box being drawn (and unmarks the ones no longer in
    * it): they show as selected without being held as features
    */
-  #markBox(ids: readonly string[]): void {
+  #markBox(rows: TableSelection): void {
     const { store } = this.#context;
     const states = featureTablesInternals(store.tables)?.states;
     if (!states || !store.tables) return;
-    const tables = store.tables;
-    const next = Int32Array.from(
-      ids.map((id) => tables.findRow(id) ?? -1).filter((handle) => handle >= 0),
-    );
-    const kept = new Set(next);
-    const dropped = this.#boxMarked.filter((handle) => !kept.has(handle));
+    const before = this.#boxMarked;
+    if (before.equals(rows)) return;
+    const dropped = before.handles.filter((handle) => !rows.has(handle));
+    const added = rows.handles.filter((handle) => !before.has(handle));
     if (dropped.length > 0) states.setBulk(dropped, false);
-    if (next.length > 0) states.setBulk(next, true);
-    this.#boxMarked = next;
-    if (dropped.length > 0 || next.length > 0) this.#context.map.triggerRepaint();
+    if (added.length > 0) states.setBulk(added, true);
+    this.#boxMarked = rows;
+    this.#context.map.triggerRepaint();
+  }
+
+  /**
+   * Starts a drag of the features selected in bulk: by a handle of their frame, or by a press on
+   * one of them (taken whether the drag starts or not: the selection is not narrowed to it)
+   *
+   * @returns Whether the press was on their handles or on one of them
+   */
+  #dragBulk(
+    event: DragNormalizedEvent,
+    point: { x: number; y: number },
+    transform: ReturnType<typeof createCoordinateTransform>,
+  ): boolean {
+    const { store, map } = this.#context;
+    const bulk = store.getSelection().bulk;
+    const rows = store.getSelectedRows();
+    if (!bulk?.bounds || !rows) return false;
+    const frame = bulkFrame(bulk.bounds);
+    const hit = hitTestBulkHandles(
+      point,
+      bulk,
+      transform,
+      this.#config,
+      map.getZoom(),
+      this.#context.selectionScope,
+    );
+    if (hit && hit.type !== 'move') {
+      this.#dragHandler.startBulkDrag(hit, event, this.#context, frame);
+      return true;
+    }
+    // A press on one of them (not made a feature)
+    const top = this.#context.hitTestTopmost(point, { orderedFeatures: getDisplayFeatures(store) });
+    const handle =
+      top?.kind === 'row'
+        ? top.handle
+        : top?.kind === 'store'
+          ? store.tables?.findRow(top.feature.id)
+          : undefined;
+    if (handle === undefined || !rows.has(handle)) return false;
+    this.#dragHandler.startBulkDrag({ type: 'move' }, event, this.#context, frame);
+    return true;
   }
 
   onDragEnd(event: DragNormalizedEvent): void {
@@ -453,18 +530,30 @@ export class SelectMode implements EngineModeHandler {
 
     // Commit the box selection
     if (boxSelection) {
-      this.#markBox([]);
-      const hitIds = queryFeaturesInBox(
-        boxSelection,
-        this.#context,
-        store.tables ? HOLD_LIMIT : undefined,
-      );
-      const filtered =
-        hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
-      if (filtered.length === 0) {
-        store.setSelection(null, []);
+      this.#markBox(TableSelection.empty);
+      const internals = featureTablesInternals(store.tables);
+      if (internals) {
+        // A Store of rows: more rows than are opened at once are selected in bulk
+        const rows = queryRowsInBox(boxSelection, this.#context);
+        if (rows.count > store.holdLimit) {
+          store.selectRows(rows);
+        } else {
+          const ids: string[] = [];
+          for (const handles of rowsByLayerInOrder(internals, rows).values()) {
+            for (const handle of handles) ids.push(internals.ids.idOf(handle) as string);
+          }
+          const filtered = ids.length > 0 ? (plugins?.filterSelectionCandidates(ids) ?? ids) : ids;
+          store.setSelection(filtered.length > 0 ? 'feature' : null, filtered);
+        }
       } else {
-        store.setSelection('feature', filtered);
+        const hitIds = queryFeaturesInBox(boxSelection, this.#context);
+        const filtered =
+          hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
+        if (filtered.length === 0) {
+          store.setSelection(null, []);
+        } else {
+          store.setSelection('feature', filtered);
+        }
       }
       store.setBoxSelection(null);
       map.dragPan.enable();
@@ -488,8 +577,10 @@ export class SelectMode implements EngineModeHandler {
 
     const boxSelection = store.getBoxSelection();
     if (boxSelection) {
-      this.#markBox([]);
-      if (boxSelection.previousSelection.length === 0) {
+      this.#markBox(TableSelection.empty);
+      if (boxSelection.previous) {
+        store.restoreSelection(boxSelection.previous);
+      } else if (boxSelection.previousSelection.length === 0) {
         store.setSelection(null, []);
       } else {
         store.setSelection('feature', [...boxSelection.previousSelection]);
@@ -527,10 +618,12 @@ export class SelectMode implements EngineModeHandler {
     }
 
     // Arrow keys: move the selection by a few pixels. A used key is not also a map pan
-    if (handleNudgeShortcut(this.#context, event.key, event.modifiers)) {
+    if (handleNudgeShortcut(this.#context, event.key, event.modifiers, this.#nudge)) {
       event.originalEvent.preventDefault();
       return;
     }
+    // Another key: the moves of the arrow keys waiting are written first
+    this.#nudge.flush();
 
     const isMetaOrCtrl = event.modifiers.meta || event.modifiers.ctrl;
 

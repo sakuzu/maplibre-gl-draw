@@ -280,7 +280,17 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
         : undefined;
 
     const moving = dragState?.operation === 'move' ? dragState.movingFeatureIds : undefined;
-    const excludeFeatureIds = moving && moving.length > 0 ? new Set(moving) : undefined;
+    const movingRows = dragState?.operation === 'move' ? dragState.movingRows : undefined;
+    const tables = context.store.tables;
+    const excludeFeatureIds =
+      movingRows && tables
+        ? new RowsExclusion(moving ?? [], (id) => {
+            const handle = tables.findRow(id);
+            return handle !== undefined && movingRows.has(handle);
+          })
+        : moving && moving.length > 0
+          ? new Set(moving)
+          : undefined;
 
     const preferFeature = modeManager.getHandler()?.getSnapPreference?.() ?? undefined;
 
@@ -575,4 +585,21 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       return pointerHeld;
     },
   };
+}
+
+/**
+ * The features snapping leaves out while features selected in bulk are moved: the ones listed,
+ * and the rows being moved (asked by id; the rows are not listed)
+ */
+class RowsExclusion extends Set<string> {
+  constructor(
+    ids: readonly string[],
+    private readonly moving: (id: string) => boolean,
+  ) {
+    super(ids);
+  }
+
+  override has(id: string): boolean {
+    return super.has(id) || this.moving(id);
+  }
 }

@@ -38,6 +38,14 @@ export type SnapInputKind = 'click' | 'mousemove' | 'dragstart' | 'dragmove' | '
 export interface PluginInteractions {
   /** Narrows the features a click or a box would select */
   filterSelectionCandidates(candidateIds: string[]): string[];
+  /**
+   * Narrows the rows of a layer held as rows a selection of many features would select (the
+   * plugins that do; the rows as they are otherwise)
+   */
+  filterSelectionRows?(
+    view: import('../api/tables.js').LayerTableView,
+    handles: Int32Array,
+  ): Int32Array;
   /** Offers a click on a feature to the plugins; true when one consumed it */
   handleFeatureClick(featureId: string, event?: MouseNormalizedEvent): boolean;
   /** Offers a double click on a feature to the plugins; true when one consumed it */

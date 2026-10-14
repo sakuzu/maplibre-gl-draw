@@ -6,6 +6,7 @@
  */
 
 import type { Feature } from '../model.js';
+import type { LayerTableView } from '../tables.js';
 import type { PluginContext } from './context.js';
 import type { DrawPointerEvent, InputHandlers } from './mode.js';
 
@@ -34,6 +35,14 @@ export interface Plugin<Api = unknown> {
   readonly interaction?: {
     /** Narrows the candidates of a selection to the IDs it returns */
     filterSelection?(candidateIds: readonly string[]): string[];
+    /**
+     * Narrows the rows of a layer held as rows a selection of many features would select (a box
+     * over many features), to the handles it returns, without making features of them. Its type
+     * is in `@sakuzu/maplibre-gl-draw/kasane`. A plugin without it narrows no row.
+     *
+     * @experimental
+     */
+    filterSelectionRows?(view: LayerTableView, handles: Int32Array): Int32Array;
     /** A selected feature was clicked again; returning true means the plugin handled it */
     onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A feature was double-clicked; returning true means the plugin handled it */
