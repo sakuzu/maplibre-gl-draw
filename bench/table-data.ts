@@ -73,6 +73,11 @@ export interface TableBenchPageParams extends TableBenchParams {
   /** Whether the large merges and builds of rows run in a Worker of the page */
   readonly worker: boolean;
   /**
+   * The Workers the rows of the opening are made (or read) and built in, each a run of the
+   * order (0: one per logical core but one, at most {@link MAX_OPEN_WORKERS})
+   */
+  readonly workers: number;
+  /**
    * The vertices of a large area put under every row (an administrative area, a land use: what
    * the pointer moves over between the buildings; 0 for none)
    */
@@ -182,10 +187,25 @@ export function parseParams(search: string): TableBenchPageParams {
     members: Math.max(1, number('members', 50)),
     moving: number('moving', 0),
     worker: params.get('worker') !== '0',
+    workers: number('workers', 0),
     bigArea: number('bigArea', 0),
     held: Math.max(1, number('held', 2000)),
     moveFrom: (params.get('moveFrom') ?? '') === '' ? null : number('moveFrom', 0),
   };
+}
+
+/** The most Workers the rows of the opening are made (or read) and built in */
+export const MAX_OPEN_WORKERS = 8;
+
+/**
+ * The Workers the rows of the opening are made (or read) and built in: the number asked, or one
+ * per logical core of the device but one (the page's own), at most {@link MAX_OPEN_WORKERS}
+ *
+ * @param cores The logical cores of the device (`navigator.hardwareConcurrency`)
+ */
+export function openWorkerCount(params: TableBenchPageParams, cores: number): number {
+  if (params.workers > 0) return params.workers;
+  return Math.max(1, Math.min(MAX_OPEN_WORKERS, (cores || 2) - 1));
 }
 
 /** The center of the features (Tokyo) */
@@ -329,6 +349,68 @@ const ROW_GEOMETRIES = new Set([
   'MultiPolygon',
 ]);
 
+/** A feature as a file holds it */
+export type RawFeature = { id?: unknown; geometry?: Geometry | null; properties?: unknown };
+
+/**
+ * The order of the lines of a file: the place of each line in the order of the rows, the one of
+ * the file or one at random (the same for a seed)
+ */
+export function lineOrder(count: number, shuffle: boolean): Int32Array {
+  const order = new Int32Array(count);
+  for (let i = 0; i < count; i++) order[i] = i;
+  if (shuffle) {
+    let seed = 1;
+    for (let i = count - 1; i > 0; i--) {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      const j = seed % (i + 1);
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+  return order;
+}
+
+/** Whether a feature of a file has a geometry a row holds */
+export function holdsRow(raw: RawFeature): boolean {
+  return !!raw.geometry && ROW_GEOMETRIES.has(raw.geometry.type);
+}
+
+/**
+ * The feature of the `i`-th line of a file at the place `order` of the order of the rows (null for
+ * a line without a geometry a row holds); its id is made unique by its line
+ */
+export function featureOfLine(
+  raw: RawFeature,
+  i: number,
+  order: number,
+  styles: readonly Record<string, unknown>[],
+): BenchFeature | null {
+  const geometry = raw.geometry;
+  if (!geometry || !ROW_GEOMETRIES.has(geometry.type)) return null;
+  const properties =
+    raw.properties && typeof raw.properties === 'object'
+      ? (raw.properties as Record<string, unknown>)
+      : {};
+  return {
+    id: `${i}:${String(raw.id ?? '')}`,
+    type: geometry.type,
+    geometry,
+    style: styles[i % styles.length],
+    properties: withoutNulls(properties),
+    order: `k${String(order).padStart(9, '0')}`,
+  };
+}
+
+/** The features of a file as text, one feature per line (`ndjson`) or a FeatureCollection */
+export function rawFeaturesOf(text: string, lines: boolean): RawFeature[] {
+  return lines
+    ? text
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+    : (JSON.parse(text).features ?? []);
+}
+
 /**
  * The features of a GeoJSON text: a FeatureCollection, or one feature per line (`ndjson`).
  * A feature without a geometry a row holds is left out; the ids are made unique by their place
@@ -339,40 +421,12 @@ export function featuresOfText(
   params: TableBenchParams,
 ): BenchFeature[] {
   const styles = stylesOf(params);
-  const raw: Array<{ id?: unknown; geometry?: Geometry | null; properties?: unknown }> = lines
-    ? text
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line))
-    : (JSON.parse(text).features ?? []);
+  const raw = rawFeaturesOf(text, lines);
+  const order = lineOrder(raw.length, params.shuffle);
   const out: BenchFeature[] = [];
-  const count = raw.length;
-  // The order of the rows: the one of the file, or one at random (the same for a seed)
-  const order = Array.from({ length: count }, (_, i) => i);
-  if (params.shuffle) {
-    let seed = 1;
-    for (let i = count - 1; i > 0; i--) {
-      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
-      const j = seed % (i + 1);
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-  }
-  for (let i = 0; i < count; i++) {
-    const feature = raw[i];
-    const geometry = feature.geometry;
-    if (!geometry || !ROW_GEOMETRIES.has(geometry.type)) continue;
-    const properties =
-      feature.properties && typeof feature.properties === 'object'
-        ? (feature.properties as Record<string, unknown>)
-        : {};
-    out.push({
-      id: `${i}:${String(feature.id ?? '')}`,
-      type: geometry.type,
-      geometry,
-      style: styles[i % styles.length],
-      properties: withoutNulls(properties),
-      order: `k${String(order[i]).padStart(9, '0')}`,
-    });
+  for (let i = 0; i < raw.length; i++) {
+    const feature = featureOfLine(raw[i], i, order[i], styles);
+    if (feature) out.push(feature);
   }
   return out;
 }
@@ -388,31 +442,55 @@ function withoutNulls(properties: Record<string, unknown>): Record<string, unkno
   return out;
 }
 
-/** The extent of features, `[west, south, east, north]` */
-export function extentOfFeatures(
-  features: readonly BenchFeature[],
-): [number, number, number, number] {
-  let west = Number.POSITIVE_INFINITY;
-  let south = Number.POSITIVE_INFINITY;
-  let east = Number.NEGATIVE_INFINITY;
-  let north = Number.NEGATIVE_INFINITY;
+/** An extent that holds nothing yet (`widenExtent` widens it) */
+export function emptyExtent(): [number, number, number, number] {
+  return [
+    Number.POSITIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ];
+}
+
+/** Widens an extent to the coordinates of a geometry */
+export function widenExtent(extent: [number, number, number, number], geometry: Geometry): void {
   const visit = (value: unknown): void => {
     if (!Array.isArray(value)) return;
     if (typeof value[0] === 'number') {
       const [x, y] = value as number[];
-      if (x < west) west = x;
-      if (x > east) east = x;
-      if (y < south) south = y;
-      if (y > north) north = y;
+      if (x < extent[0]) extent[0] = x;
+      if (x > extent[2]) extent[2] = x;
+      if (y < extent[1]) extent[1] = y;
+      if (y > extent[3]) extent[3] = y;
       return;
     }
     for (const item of value) visit(item);
   };
-  for (const feature of features) {
-    visit((feature.geometry as { coordinates?: unknown }).coordinates);
+  visit((geometry as { coordinates?: unknown }).coordinates);
+}
+
+/** The union of extents (the center of the features for an extent that holds nothing) */
+export function unionOfExtents(
+  extents: ReadonlyArray<readonly [number, number, number, number]>,
+): [number, number, number, number] {
+  const out = emptyExtent();
+  for (const [west, south, east, north] of extents) {
+    out[0] = Math.min(out[0], west);
+    out[1] = Math.min(out[1], south);
+    out[2] = Math.max(out[2], east);
+    out[3] = Math.max(out[3], north);
   }
-  if (west > east) return [CENTER[0], CENTER[1], CENTER[0], CENTER[1]];
-  return [west, south, east, north];
+  if (out[0] > out[2]) return [CENTER[0], CENTER[1], CENTER[0], CENTER[1]];
+  return out;
+}
+
+/** The extent of features, `[west, south, east, north]` */
+export function extentOfFeatures(
+  features: readonly BenchFeature[],
+): [number, number, number, number] {
+  const extent = emptyExtent();
+  for (const feature of features) widenExtent(extent, feature.geometry);
+  return unionOfExtents([extent]);
 }
 
 // === The rows the edits change ===
@@ -433,38 +511,111 @@ export interface BenchCandidates {
   readonly polygons: readonly string[];
 }
 
-/** The rows the edits change, from the features */
-export function candidatesOf(features: readonly BenchFeature[]): BenchCandidates {
-  let point: string | null = null;
-  let line: string | null = null;
-  let lineVertices = 0;
-  let polygon: string | null = null;
-  let polygonCorners = Number.POSITIVE_INFINITY;
-  const ids: string[] = [];
-  const points: string[] = [];
-  const polygons: string[] = [];
-  const step = Math.max(1, Math.floor(features.length / 2000));
-  features.forEach((feature, i) => {
+/**
+ * The number of features between two of the rows taken at random (about 2,000 of them, taken
+ * by the place of the feature among every feature)
+ */
+export function candidateStep(features: number): number {
+  return Math.max(1, Math.floor(features / 2000));
+}
+
+/** The kind of a feature as the rows taken at random are taken (0: neither, 1: a point, 2: a polygon) */
+export function candidateKind(feature: BenchFeature): number {
+  return feature.geometry.type === 'Point' ? 1 : feature.geometry.type === 'Polygon' ? 2 : 0;
+}
+
+/**
+ * Picks the rows the edits change among features given in their order, each with its place
+ * among every feature (a part of them at a time: the picks of the parts are put together by
+ * {@link mergeCandidates})
+ */
+export class CandidatePicker implements CandidatePick {
+  point: string | null = null;
+  line: string | null = null;
+  lineVertices = 0;
+  polygon: string | null = null;
+  polygonCorners = Number.POSITIVE_INFINITY;
+  readonly ids: string[] = [];
+  readonly points: string[] = [];
+  readonly polygons: string[] = [];
+
+  /** @param step The number of features between two of the rows taken at random */
+  constructor(private readonly step: number) {}
+
+  /** A feature and its place among every feature */
+  add(feature: BenchFeature, index: number): void {
+    this.note(feature);
+    this.take(feature.id, candidateKind(feature), index);
+  }
+
+  /** A feature, for the first point, the longest line and the polygon of the fewest corners */
+  note(feature: BenchFeature): void {
     const geometry = feature.geometry;
     if (geometry.type === 'Point') {
-      point ??= feature.id;
-      if (i % step === 0) points.push(feature.id);
+      this.point ??= feature.id;
     } else if (geometry.type === 'LineString') {
-      if (geometry.coordinates.length > lineVertices) {
-        lineVertices = geometry.coordinates.length;
-        line = feature.id;
+      if (geometry.coordinates.length > this.lineVertices) {
+        this.lineVertices = geometry.coordinates.length;
+        this.line = feature.id;
       }
     } else if (geometry.type === 'Polygon') {
       const corners = geometry.coordinates[0].length - 1;
-      if (corners >= 4 && corners < polygonCorners) {
-        polygonCorners = corners;
-        polygon = feature.id;
+      if (corners >= 4 && corners < this.polygonCorners) {
+        this.polygonCorners = corners;
+        this.polygon = feature.id;
       }
-      if (i % step === 0) polygons.push(feature.id);
     }
-    if (i % step === 0) ids.push(feature.id);
-  });
+  }
+
+  /** A feature at its place, of its kind (`candidateKind`): taken when its place is on the step */
+  take(id: string, kind: number, index: number): void {
+    if (index % this.step !== 0) return;
+    if (kind === 1) this.points.push(id);
+    else if (kind === 2) this.polygons.push(id);
+    this.ids.push(id);
+  }
+}
+
+/** What a part of the features picked (as a Worker sends it) */
+export interface CandidatePick {
+  readonly point: string | null;
+  readonly line: string | null;
+  readonly lineVertices: number;
+  readonly polygon: string | null;
+  readonly polygonCorners: number;
+  readonly ids: readonly string[];
+  readonly points: readonly string[];
+  readonly polygons: readonly string[];
+}
+
+/** The rows the edits change, from the picks of the parts of the features, in their order */
+export function mergeCandidates(parts: readonly CandidatePick[]): BenchCandidates {
+  const out = new CandidatePicker(1);
+  for (const part of parts) {
+    out.point ??= part.point;
+    if (part.line !== null && part.lineVertices > out.lineVertices) {
+      out.line = part.line;
+      out.lineVertices = part.lineVertices;
+    }
+    if (part.polygon !== null && part.polygonCorners < out.polygonCorners) {
+      out.polygon = part.polygon;
+      out.polygonCorners = part.polygonCorners;
+    }
+    out.ids.push(...part.ids);
+    out.points.push(...part.points);
+    out.polygons.push(...part.polygons);
+  }
+  const { point, line, polygon, ids, points, polygons } = out;
   return { point, line, polygon, ids, points, polygons };
+}
+
+/** The rows the edits change, from the features */
+export function candidatesOf(features: readonly BenchFeature[]): BenchCandidates {
+  const picker = new CandidatePicker(candidateStep(features.length));
+  features.forEach((feature, i) => {
+    picker.add(feature, i);
+  });
+  return mergeCandidates([picker]);
 }
 
 /**

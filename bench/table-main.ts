@@ -4,8 +4,9 @@
 /**
  * Measurement page of the layers held as rows of columns
  *
- * The same features are drawn either from rows of columns (`mode=table`: a Worker builds the
- * row groups, the Store hands out the tables) or as features of the Store, drawn as before
+ * The same features are drawn either from rows of columns (`mode=table`: Workers build the row
+ * groups, each a run of the order, `table-open.ts`; the Store hands out the tables) or as
+ * features of the Store, drawn as before
  * (`mode=store`). The rows are drawn in one draw per chunk, or by kind with `drawing=by-kind`.
  * The features are made in the page, or read from a GeoJSON file of `bench/data/`
  * (`data=<file>`, in the order of the file or at random with `shuffle=1`).
@@ -73,8 +74,8 @@ import {
   recordFrames,
   wait,
 } from './table-measure';
+import { openRows } from './table-open';
 import type { RowsWorkerRequest } from './table-rows-worker';
-import type { TableWorkerRequest, TableWorkerResult } from './table-worker';
 
 // Worker URL setup for v6 (side effect). Required before the Map is created.
 import './maplibre-setup';
@@ -143,6 +144,7 @@ for (const [key, value] of Object.entries({
   members: String(params.members),
   moving: String(params.moving),
   worker: params.worker ? '1' : '0',
+  workers: String(params.workers),
   bigArea: String(params.bigArea),
   held: String(params.held),
   moveFrom: params.moveFrom === null ? '' : String(params.moveFrom),
@@ -294,37 +296,19 @@ async function pageFeatures(): Promise<BenchFeature[]> {
 async function open(result: TableBenchResult): Promise<void> {
   const t0 = performance.now();
   if (tablesOfPage) {
-    const worker = new Worker(new URL('./table-worker.ts', import.meta.url), { type: 'module' });
-    const response = await new Promise<TableWorkerResult>((resolve) => {
-      worker.onmessage = (event: MessageEvent<TableWorkerResult>) => resolve(event.data);
-      const request: TableWorkerRequest = {
-        params: {
-          n: params.n,
-          kind: params.kind,
-          styles: params.styles,
-          translucent: params.translucent,
-          data: params.data,
-          shuffle: params.shuffle,
-        },
-        dataUrl,
-      };
-      worker.postMessage(request);
+    const rows = await openRows({
+      params,
+      dataUrl,
+      layerId: LAYER_ID,
+      writer: tablesOfPage.writer,
+      createWorker: () =>
+        new Worker(new URL('./table-worker.ts', import.meta.url), { type: 'module' }),
+      cores: navigator.hardwareConcurrency,
+      start: t0,
     });
-    worker.terminate();
-    if (response.error) throw new Error(response.error);
-    const received = performance.now();
-    result.open.rows = response.count;
-    result.open.generate = response.generateMs;
-    result.open.addRows = response.addMs;
-    result.open.buildGroups = response.buildMs;
-    result.open.workerTotal = received - t0;
-    opened = { extent: response.extent, candidates: response.candidates };
+    Object.assign(result.open, rows.open);
+    opened = { extent: rows.extent, candidates: rows.candidates };
     if (overLimit()) return;
-    // The groups are queued here and taken in over the frames (within their budget), so the
-    // time of taking them in is part of the first drawing below
-    const a0 = performance.now();
-    tablesOfPage.writer.adopt(LAYER_ID, response.groups);
-    result.open.adoptQueue = performance.now() - a0;
   } else {
     const g0 = performance.now();
     const made = await pageFeatures();

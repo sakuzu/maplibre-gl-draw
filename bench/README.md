@@ -63,9 +63,11 @@ lines.
 The same features drawn two ways: held as rows of columns (`mode=table`)
 or as features of the Store (`mode=store`), on a map with a background
 layer only (no network), in a fixed 1280 x 800 map. The features are made
-in the page; in `mode=table` a Worker builds them into row groups and
-hands them to the page without a copy, and the rows are held by an
-in-memory Store of rows (`createTableMemoryStore`).
+in the page; in `mode=table` several Workers build them into row groups,
+each Worker a run of the order of the rows, and hand them to the page
+without a copy, a batch at a time, and the rows are held by an in-memory
+Store of rows (`createTableMemoryStore`). The page takes the groups in a
+run after the other, in the order of their keys, as they come.
 
 Open it from the root of the repository:
 
@@ -88,11 +90,25 @@ writes them too):
 | `alpha` | `1` translucent, `0` opaque | `1` |
 | `cuts` | Artificial cuts: `0`, `100`, `1000`, `3000` | `0` |
 | `limit` | Heap limit in MB: `1024`, `500`, `400` | `1024` |
+| `workers` | Workers of the opening (`0`: one per logical core but one, at most 8) | `0` |
 
 A `line` has 10 vertices, `polygon5` and `polygon50` have 5 and 50, and
 `mixed` takes the four kinds in turn. The cuts split the ranges drawn of
 `mode=table` only. The heap limits are those of a PC (`1024`), an iPad
 (`500`) and an iPhone (`400`).
+
+A file of one feature per line (`data=<file>.ndjson`, in the order of
+the file) is fetched by the page and sent to the Workers as it comes,
+about as many bytes to each, cut at the ends of lines; each Worker reads
+its lines, and once the parts before it are read it builds them with the
+ids and keys of their places in the file. Rows put in an order at random
+(`shuffle=1`) or a FeatureCollection are read and built whole in one
+Worker. The steps of the opening are `fetch` (the file fetched and sent),
+`generate` (every part read, or the file read whole), `addRows` and
+`buildGroups` (the longest of the Workers; made features are made as they
+are added), `firstGroups` (the first groups taken in), `workerTotal`
+(every group built), `adoptQueue` (the page taking the groups in) and
+`firstDraw` (the rest of the drawing after the last group).
 
 More than 100,000 features need the confirmation button before Start.
 Start opens the map, shows the whole of it, stops at zoom 14, then pans
