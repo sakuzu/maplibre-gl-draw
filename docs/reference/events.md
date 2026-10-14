@@ -102,8 +102,8 @@ change is made.
 
 | Event | Payload |
 | --- | --- |
-| `drag.started` | `{ kind; featureIds }` |
-| `drag.ended` | `{ kind; featureIds; cancelled }` |
+| `drag.started` | `{ kind; featureIds; bulk? }` |
+| `drag.ended` | `{ kind; featureIds; bulk?; cancelled }` |
 | `snap.changed` | `{ result: SnapResult \| null }` |
 | `preview.changed` | `{ feature; confirmedVertices?; highlightVertex? }` |
 | `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
@@ -268,7 +268,9 @@ A listener that does expensive work on changes skips the updates with
 
 `drag.started` fires when a drag of the select mode starts, and
 `drag.ended` when it ends. They come in pairs with the same `kind` and
-`featureIds`.
+`featureIds`. A drag of features selected in bulk (`Selection.bulk`) has
+no IDs in `featureIds`: `bulk` tells how many and where, and
+`listSelectedRows(bulk)` of `/kasane` reads their rows.
 
 - `kind` is `feature` for moving features, `vertex` for moving or adding a
   vertex, and `handle` for the handles of the selection (resizing,

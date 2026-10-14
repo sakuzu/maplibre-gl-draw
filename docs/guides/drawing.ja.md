@@ -287,6 +287,38 @@ const selected = draw.selection.features();
 `selection.delete()` は選んでいるものを削除します。選択が変わるたびに、
 前の選択と合わせて `selection.changed` が届きます。
 
+`selection.setAll(filter)` は絞り込みに合う地物をすべて選びます (Cmd+A は
+すべてを選びます)。`selection.count(filter)` は選んだ地物を数え、
+`selection.update(patch, filter)` は選んだ地物を 1 回の変更で書き換えます。
+差分は関数で作れます。関数は地物ごとではなく、地物の種類 (型、書式、作った
+ときのズーム) ごとに 1 回呼ばれます。
+
+```ts
+draw.selection.setAll({ shown: true });
+draw.selection.update((sample) => ({
+  style: { strokeWidth: sample.type === 'LineString' ? 4 : 2 },
+}));
+```
+
+### たくさんの地物を一度に
+
+地物を行で持つストアでは、一度に地物にする数 (2,000) を超える地物はまとめて
+選ばれます。多くの地物を囲む矩形、`selection.setAll`、多くの地物を持つ
+グループやレイヤーの選択がそうです。このとき選択は ID の一覧を持たず、
+`selection.get().bulk` が数とレイヤーと範囲を伝えます。地物ごとの枠と、全体を
+囲む枠とハンドルは、複数選択と同じに表示されます。そのうちの 1 つを押して
+ドラッグするとすべてが動き、枠のハンドルですべてを回転、拡縮できます。
+書き込みは離したときに 1 回だけ行われます。矢印キーでも動かせます。押し続けた
+分の移動は、最後に押してから少し経ったときに 1 回で書き込まれます (取り消しの
+1 歩になります)。
+
+`draw.selection` の操作 (`delete`、`group`、`ungroup`、`move`、`update`) は、
+まとめて選ばれた地物にも効きます。`selection.features(filter, { limit, after })`
+はそれを 1 ページずつ読み、上限の無い読み出しは断ります。
+`selection.restore(selection)` は、前に読んだ選択 (まとめて選ばれた地物を
+含みます) をもう一度選びます。コピー、複製、面の演算、バッファは 2,000 件
+までの地物に使えます。それ以上の選択では使えないようにしてください。
+
 ## キーボード
 
 ショートカットは地図のキャンバスで受け取ります。地図を押すとキャンバスが

@@ -291,6 +291,40 @@ returns the selected features, or the features inside the selected groups
 or layers. `selection.delete()` deletes whatever is selected, and
 `selection.changed` reports every change with the selection before it.
 
+`selection.setAll(filter)` selects every feature that matches a filter
+(Cmd+A selects them all), `selection.count(filter)` counts the selected
+features, and `selection.update(patch, filter)` changes them in one change.
+The patch can be made by a function, called once per kind of feature (its
+type, its style and the zoom it was created at) rather than once per
+feature:
+
+```ts
+draw.selection.setAll({ shown: true });
+draw.selection.update((sample) => ({
+  style: { strokeWidth: sample.type === 'LineString' ? 4 : 2 },
+}));
+```
+
+### Many features at once
+
+In a store that holds its features as rows, more features than are made at
+once (2,000) are selected in bulk: a box over them, `selection.setAll`, or a
+group or a layer of many features. The selection then has no list of IDs:
+`selection.get().bulk` tells how many, in which layers and where. Each
+feature shows its frame and the selection one frame with its handles, as for
+several features. A press on one of them moves them all, and the handles of
+the frame rotate and resize them all; they are written once, when they are
+let go. The arrow keys move them too, and the moves of a key held are
+written once, a moment after the last press (one step of an undo).
+
+The verbs of `draw.selection` act on them (`delete`, `group`, `ungroup`,
+`move`, `update`). `selection.features(filter, { limit, after })` reads
+them a page at a time, and refuses to read them all without a limit.
+`selection.restore(selection)` selects again what a selection read before
+held, features selected in bulk included. Copy, duplicate, the boolean
+operations of areas and the buffer take at most 2,000 features: offer them
+for a selection of that many only.
+
 ## Keyboard
 
 The shortcuts listen on the map canvas. A press on the map gives the canvas

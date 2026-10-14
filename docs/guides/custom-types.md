@@ -389,6 +389,14 @@ draw.extensions.featureTypes.override({
 });
 ```
 
+On a layer held as rows, the points such a renderer takes are drawn one at a
+time by `draw`, each between the rows around it. A renderer that draws its
+points as pictures can give them as `rowSprites` (experimental, its types in
+`/kasane`): a texture, the rectangle of the picture of a style, and its size
+on screen. Such a point is then drawn with the other rows of its layer, in
+their order and in their draw, so a layer where points with icons and areas
+alternate is drawn in a few draws.
+
 ## Terrain
 
 With terrain on, the shared renderers lay what they draw on the ground

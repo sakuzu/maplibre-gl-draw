@@ -274,6 +274,10 @@ draw.extensions.plugins.add(createShortcuts());
 
 - `filterSelection(candidateIds)` is asked before a click or a box
   selects, and returns the IDs that may be selected
+- `filterSelectionRows(view, handles)` (experimental) is asked before a box
+  selects many features of a layer held as rows, and returns the handles
+  of the rows that may be selected, without making features of them; a
+  plugin without it narrows no row
 - `onFeatureClick(feature, event)` is called when a selected feature
   is clicked again; returning true means the plugin handled the click
 - `onFeatureDoubleClick(feature, event)` is called when a feature is

@@ -64,6 +64,27 @@ writing it. Its changes are listed after those of 3.0.0.
 - `draw.debug.gpu()` (`GpuMemoryDiagnostics`): the bytes of GPU memory the
   drawing holds.
 - `CoordinateDimensions` in `/table`.
+- Many features selected at once, in a store that holds its features as
+  rows: past 2,000 features (a box, every feature, a group or a layer of
+  many features), the selection has no list of IDs and tells their
+  number, layers and extent (`Selection.bulk`, `SelectionBulk`, and
+  `bulk` and `previousBulk` in `DocumentChange.selection` and
+  `selection.changed`). The verbs of `draw.selection` act on them, the
+  select mode moves, rotates and resizes them by the state of their rows
+  and writes them once let go, and the arrow keys write the moves of a key
+  held once.
+- `selection.setAll(filter)`, `selection.count(filter)`,
+  `selection.update(patch | make, filter)` (a patch made once per kind of
+  feature, `FeatureStyleSample`) and `selection.restore(selection)`;
+  `selection.features(filter, { limit, after })` reads the selection a
+  page at a time.
+- `drag.started` and `drag.ended` carry `bulk` for features selected in
+  bulk.
+- Experimental: `FeatureRenderer.rowSprites`, the pictures of the points
+  a renderer draws, drawn with the rows of a layer held as rows;
+  `interaction.filterSelectionRows` of a plugin; and in `/kasane`,
+  `listSelectedRows`, `draggedRowsOf` (`DraggedRows`) and the types of the
+  pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteDistanceScale`).
 
 ### Changed in 3.0.0
 

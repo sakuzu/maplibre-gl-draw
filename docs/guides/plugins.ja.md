@@ -273,6 +273,9 @@ draw.extensions.plugins.add(createShortcuts());
 
 - `filterSelection(candidateIds)` は、クリックや矩形で選ぶ前に
   呼ばれ、選んでよい ID を返します
+- `filterSelectionRows(view, handles)` (実験的) は、行で持つレイヤーの
+  多くの地物を矩形で選ぶ前に呼ばれ、選んでよい行の札を、地物を作らずに
+  返します。持たないプラグインは行を絞りません
 - `onFeatureClick(feature, event)` は、選ばれている地物がもう一度
   クリックされたときに呼ばれます。true を返すと、プラグインがその
   クリックを処理したことになります
