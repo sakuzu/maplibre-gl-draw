@@ -87,6 +87,11 @@ writing it. Its changes are listed after those of 3.0.0.
   `interaction.filterSelectionRows` of a plugin; and in `/kasane`,
   `listSelectedRows`, `draggedRowsOf` (`DraggedRows`) and the types of the
   pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteDistanceScale`).
+- Experimental: the answers and the drawing of an extension from the rows
+  of a layer held as rows, without making their features:
+  `FeatureTypeDefinition.appliesToRow`, `CompanionProvider.hasRow` and
+  `FeatureRenderer.drawRows`. `draggedRowsOf` keeps the shape of a row with
+  a scale being resized, as it is drawn.
 
 ### Changed in 3.0.0
 

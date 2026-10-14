@@ -397,6 +397,19 @@ on screen. Such a point is then drawn with the other rows of its layer, in
 their order and in their draw, so a layer where points with icons and areas
 alternate is drawn in a few draws.
 
+Two more members, experimental with their types in `/kasane`, keep a layer of
+many rows from making a feature of each row:
+
+- `appliesToRow(view, handle)` gives the answer of `appliesTo` from the row,
+  read from the `LayerTableView` of the layer (`getRowValue`, `getRowType`).
+  Without it, a feature is made from each row of the type to ask `appliesTo`
+  whenever the rows are sorted for the drawing
+- `renderer.drawRows(view, handles, ctx)` draws the rows the renderer draws
+  one at a time from the rows: consecutive rows of the type, not hidden and in
+  view, in the order of the layer. Without it, the features of such rows are
+  made, kept up to a limit, and drawn by `draw`. A row being dragged in bulk
+  is given as it is written; `draggedRowsOf` tells where it is drawn
+
 ## Terrain
 
 With terrain on, the shared renderers lay what they draw on the ground
@@ -568,7 +581,10 @@ draw.extensions.companionProviders.add(halo);
 
 - `has(feature)` is asked for every feature on every drawing and every
   hit test, so it must answer at once, from the feature or from an
-  index you keep
+  index you keep. On a layer held as rows, `hasRow(view, handle)`
+  (experimental, its types in `/kasane`) gives the same answer from the
+  row; without it, a feature is made from each row to ask `has` whenever
+  the rows are sorted for the drawing
 - `draw` is called just before the feature itself
 - `hitTest` is asked at the step of its feature: when the pointer missed
   the feature itself, before the feature behind it. At one point on the
