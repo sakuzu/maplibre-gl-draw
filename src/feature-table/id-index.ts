@@ -15,8 +15,10 @@
  */
 
 import {
+  encodeUtf8Into,
   equalUtf8,
-  hashString,
+  equalUtf8Bytes,
+  hashByteRun,
   hashUtf8,
   type Utf8Column,
   utf8ColumnFromStrings,
@@ -63,6 +65,17 @@ export class IdIndex {
   private readonly freeList: number[] = [];
   /** The number of handles given */
   private count = 0;
+  /** The bytes of the id looked up last by `handleOf` (grown to the longest one, never shrunk) */
+  private scratch = new Uint8Array(256);
+  /**
+   * The id `handleOf` looked up last and its answer, while the table has not changed since
+   * (`changes`): one write of a row looks its id up several times
+   */
+  private lastId: string | null = null;
+  private lastHandle: RowHandle = -1;
+  private lastChanges = -1;
+  /** Changes whenever an id gets a handle or loses it */
+  private changes = 0;
 
   /** The number of handles given (no handle is this number or more) */
   get size(): number {
@@ -104,8 +117,32 @@ export class IdIndex {
    * The handle of an id, or -1 when it has none
    */
   handleOf(id: string): RowHandle {
-    const column = utf8ColumnFromStrings([id]);
-    return this.find(column, 0, hashString(id));
+    if (id === this.lastId && this.lastChanges === this.changes) return this.lastHandle;
+    // The bytes of the id written into an array kept for it: nothing is made per look-up
+    if (this.scratch.length < id.length * 3) this.scratch = new Uint8Array(id.length * 3);
+    const bytes = this.scratch;
+    const length = encodeUtf8Into(id, bytes);
+    const hash = hashByteRun(bytes, 0, length);
+    const mask = this.slots.length - 1;
+    let slot = hash & mask;
+    let found: RowHandle = -1;
+    for (;;) {
+      const handle = this.slots[slot];
+      if (handle === EMPTY) break;
+      if (
+        handle >= 0 &&
+        this.hashOf[handle] === hash &&
+        equalUtf8Bytes(this.sources[this.sourceOf[handle]], this.entryOf[handle], bytes, length)
+      ) {
+        found = handle;
+        break;
+      }
+      slot = (slot + 1) & mask;
+    }
+    this.lastId = id;
+    this.lastHandle = found;
+    this.lastChanges = this.changes;
+    return found;
   }
 
   /**
@@ -168,6 +205,7 @@ export class IdIndex {
    */
   unlink(handle: RowHandle): void {
     if (!this.has(handle) || this.linkedOf[handle] === 0) return;
+    this.changes++;
     const mask = this.slots.length - 1;
     let slot = this.hashOf[handle] & mask;
     while (this.slots[slot] !== EMPTY) {
@@ -266,6 +304,7 @@ export class IdIndex {
 
   /** Gives a new handle to an id that has none (a handle freed, when there is one) */
   private insert(source: number, index: number, hash: number): RowHandle {
+    this.changes++;
     const handle = this.freeList.length > 0 ? (this.freeList.pop() as number) : this.count++;
     this.reserve(this.count);
     this.sourceOf[handle] = source;

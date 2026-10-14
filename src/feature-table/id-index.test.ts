@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import { IdIndex } from './id-index.js';
 
@@ -71,5 +71,44 @@ describe('IdIndex', () => {
     index.rehome(handle, column, 1);
     expect(index.idOf(handle)).toBe('a');
     expect(index.handleOfEntry(column, 1)).toBe(handle);
+  });
+});
+
+describe('IdIndex.handleOf', () => {
+  it('finds ids of every length and script without making anything per look-up', () => {
+    const long = 'x'.repeat(500);
+    const ids = ['a', 'b', '東京都庁', 'émoji 🗺️', long, ''];
+    const index = new IdIndex();
+    const handles = index.allocate(utf8ColumnFromStrings(ids));
+    const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+    for (let round = 0; round < 3; round++) {
+      ids.forEach((id, i) => {
+        expect(index.handleOf(id)).toBe(handles[i]);
+      });
+      expect(index.handleOf('missing')).toBe(-1);
+      expect(index.handleOf(`${long}y`)).toBe(-1);
+    }
+    expect(encode).not.toHaveBeenCalled();
+    encode.mockRestore();
+  });
+
+  it('answers again once an id gets a handle or loses it', () => {
+    const index = new IdIndex();
+    expect(index.handleOf('a')).toBe(-1);
+    const [a] = index.allocate(utf8ColumnFromStrings(['a']));
+    expect(index.handleOf('a')).toBe(a);
+    expect(index.handleOf('a')).toBe(a);
+    index.unlink(a);
+    expect(index.handleOf('a')).toBe(-1);
+    const [again] = index.allocate(utf8ColumnFromStrings(['a']));
+    expect(again).not.toBe(a);
+    expect(index.handleOf('a')).toBe(again);
+    index.free(again);
+    expect(index.handleOf('a')).toBe(-1);
+    // Many ids: the table is built again as it grows, and every id is still found
+    const many = Array.from({ length: 5000 }, (_, i) => `id${i}`);
+    const handles = index.allocate(utf8ColumnFromStrings(many));
+    expect(index.handleOf('id4999')).toBe(handles[4999]);
+    expect(index.handleOf('id0')).toBe(handles[0]);
   });
 });

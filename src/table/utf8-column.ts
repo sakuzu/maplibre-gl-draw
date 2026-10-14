@@ -194,6 +194,37 @@ export function hashString(value: string): number {
 }
 
 /**
+ * Writes the UTF-8 bytes of a string into an array, which must hold three bytes per UTF-16 unit
+ * of the string (what one unit encodes to at most)
+ *
+ * @returns The number of bytes written
+ * @internal
+ */
+export function encodeUtf8Into(value: string, target: Uint8Array): number {
+  return encoder.encodeInto(value, target).written;
+}
+
+/**
+ * Whether entry `i` of a column holds the bytes `bytes[0, length)`
+ *
+ * @internal
+ */
+export function equalUtf8Bytes(
+  column: Utf8Column,
+  i: number,
+  bytes: Uint8Array,
+  length: number,
+): boolean {
+  const start = column.offsets[i];
+  if (column.offsets[i + 1] - start !== length) return false;
+  const own = column.bytes;
+  for (let k = 0; k < length; k++) {
+    if (own[start + k] !== bytes[k]) return false;
+  }
+  return true;
+}
+
+/**
  * The UTF-8 bytes of a string
  *
  * @internal
