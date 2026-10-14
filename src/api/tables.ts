@@ -31,9 +31,10 @@ import { createTableStore as createTableStoreOf } from '../store/table-memory.js
 import type { CoordinateDimensions, CoordinateSystem } from '../table/coordinates.js';
 import type { RowBlock } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
+import { DrawError } from './errors.js';
 import type { DocumentChange } from './events.js';
 import type { Store, UpdateSource } from './extension/store.js';
-import type { Feature, FeatureType } from './model.js';
+import type { Feature, FeatureType, FeatureValues } from './model.js';
 
 export type {
   FeatureTablesWorker,
@@ -165,7 +166,7 @@ export interface RowPlacement {
  * the values of rows there are, new rows, the place rows go to, and the values the rows had
  * before. The implementation makes the keys of the order and the handles of the new rows, and
  * writes the rows with the writer of its tables; the values before go with the notification
- * (`RowsChange.before`).
+ * (`DocumentChange.previousValues`).
  */
 export interface RowWrite {
   /** The values of rows there are (by their handles) */
@@ -209,49 +210,91 @@ export interface RowApplyOptions {
    * deleted without one go with the next versions of their blocks
    */
   readonly restoreToken?: RestoreToken;
-  /** The values the rows had before the write, added to the notification (`RowsChange.before`) */
+  /**
+   * The values the rows had before the write, added to the notification
+   * (`DocumentChange.previousValues`)
+   */
   readonly before?: RowValues;
 }
 
+/** The fields of a row other than its attributes (`property:<key>`) */
+const ROW_FIELDS: ReadonlySet<string> = new Set([
+  'type',
+  'layerId',
+  'groupId',
+  'order',
+  'member',
+  'geometry',
+  'visible',
+  'locked',
+  'style',
+]);
+
 /**
- * `draw.tables`: the writes of the rows of a Store that holds its features as rows, made by this
- * client through the gate of the instance (read-only), as its other writes are.
+ * The values checked: rows by their handles, values of fields of a row, one per row
  *
- * What a Store of rows notifies of a write of this client carries the values the rows had
- * (`RowsChange.before`); written back with {@link TablesResource.applyRows}, they put the rows
- * back, as a history undoes a write.
+ * @throws `DrawError` with the code `invalid-input` when they have another shape
+ * @internal
  */
-export interface TablesResource {
-  /**
-   * Writes values of rows through the Store, as a write of this client: the values the rows have
-   * for the fields given are read (`FeatureTables.readValues`), the values are written
-   * (`Store.applyRows`), and the notification carries the values read (`RowsChange.before`).
-   *
-   * A row is written whether it is a feature (selected, edited) or not, and whatever the locks of
-   * the row, its group and its layer: it is what puts values back. A row deleted and kept
-   * (`DocumentChange.restoreToken`) written not deleted comes back where it was. The place of a
-   * row (its layer, group and keys of the order) is written as given, and the changes of the order
-   * it makes are notified (`DocumentChange.order`).
-   *
-   * @param values - The rows by their handles, and the values of each field written
-   * @returns The values the rows had for the fields written (written back, they put the rows
-   *   back), or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-state` when the Store does not hold its features
-   *   as rows, `invalid-input` when the values have the wrong shape, or `not-found` when a handle
-   *   names no row; the error of the Store when it cannot write a value (see
-   *   `FeatureTablesWriter.apply`)
-   *
-   * @example Writing back the values before of a write
-   * ```ts
-   * draw.getStore().subscribe((change) => {
-   *   if (change.source === 'local' && change.rows?.before) steps.push(change.rows.before);
-   * });
-   * // Later: the rows as they were
-   * const before = steps.pop();
-   * if (before) draw.transact(() => draw.tables.applyRows(before), { source: 'history' });
-   * ```
-   */
-  applyRows(values: RowValues): RowValues | null;
+export function checkRowValues(values: unknown): RowValues {
+  if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+    throw new DrawError('invalid-input', 'The values must be an object');
+  }
+  const { handles, fields, deleted } = values as Partial<RowValues>;
+  if (!(handles instanceof Int32Array)) {
+    throw new DrawError('invalid-input', 'The handles must be an Int32Array');
+  }
+  if (!(fields instanceof Map)) throw new DrawError('invalid-input', 'The fields must be a Map');
+  const n = handles.length;
+  for (const [field, list] of fields) {
+    if (typeof field !== 'string' || !(ROW_FIELDS.has(field) || field.startsWith('property:'))) {
+      throw new DrawError('invalid-input', `${JSON.stringify(field)} is not a field of a row`);
+    }
+    if (!Array.isArray(list) || list.length !== n) {
+      throw new DrawError(
+        'invalid-input',
+        `The values of ${field} must be an array of one value per row`,
+      );
+    }
+  }
+  if (deleted !== undefined && (!(deleted instanceof Uint8Array) || deleted.length !== n)) {
+    throw new DrawError('invalid-input', 'The deletions must be a Uint8Array of one value per row');
+  }
+  return values as RowValues;
+}
+
+/**
+ * Makes values of rows, which `draw.features.restore` writes back (a {@link FeatureValues} of the
+ * main entry)
+ *
+ * @param values - The rows by their handles, the values of each field, one per row, and the
+ *   deletion of each row (non-zero for a row deleted)
+ * @returns The values
+ * @throws `DrawError` with the code `invalid-input` when they have another shape: a field that is
+ *   not one of a row, or not one value per row
+ */
+export function createRowValues(values: {
+  readonly handles: Int32Array;
+  readonly fields: ReadonlyMap<RowField, RowFieldValues>;
+  readonly deleted?: Uint8Array;
+}): RowValues {
+  const checked = checkRowValues(values);
+  return {
+    handles: checked.handles,
+    fields: checked.fields,
+    ...(checked.deleted && { deleted: checked.deleted }),
+  };
+}
+
+/**
+ * Reads values of features as values of rows: what a Store that holds its features as rows
+ * notifies (`DocumentChange.previousValues`) and `draw.features.restore` returns
+ *
+ * @returns The same values, as rows by their handles and values of fields
+ * @throws `DrawError` with the code `invalid-input` when they are not values of rows
+ */
+export function rowValuesOf(values: FeatureValues): RowValues {
+  return checkRowValues(values);
 }
 
 /**
@@ -499,7 +542,8 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  *
  * A row is a {@link Feature} while it is selected or edited (it is then notified as a feature),
  * and when one is asked for (`getFeature`); its writes are notified as rows written otherwise,
- * with the values the rows had before (`RowsChange.before`; none for a change from elsewhere).
+ * with the values the rows had before (`DocumentChange.previousValues`; none for a change from
+ * elsewhere).
  * `listFeatures` and `listFeaturesInOrder` throw: read the rows from the tables.
  *
  * @param options The options of its tables (the Worker that builds the rows)

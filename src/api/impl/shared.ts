@@ -55,6 +55,11 @@ export function invalidInput(message: string, details?: unknown): DrawError {
   return new DrawError('invalid-input', message, details);
 }
 
+/** The error for a call the state of the instance or of its Store does not allow */
+export function invalidState(message: string, details?: unknown): DrawError {
+  return new DrawError('invalid-state', message, details);
+}
+
 // ============================================================================
 // Checks of the arguments
 // ============================================================================

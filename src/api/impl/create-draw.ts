@@ -25,7 +25,6 @@ import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound, requireRecord, withLocksIgnored } from './shared.js';
 import { attachTableDiagnostics } from './table-diagnostics.js';
-import { createTables } from './tables.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
 const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load', 'document.loadMany']);
@@ -85,7 +84,6 @@ export function createDrawOnEngine(
       events.emit('document.loaded', { result, source }),
     ),
     extensions: engine.extensions.collections,
-    tables: createTables(deps),
 
     getMap: () => map,
     getStore: () => view,

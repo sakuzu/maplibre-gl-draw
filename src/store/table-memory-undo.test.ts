@@ -178,7 +178,7 @@ describe('the rows written for this client through the Store', () => {
     expect(before?.fields.get('property:n')).toEqual([1, 3]);
     expect(before?.fields.get('style')).toEqual([{}, {}]);
     expect(notified).toHaveLength(1);
-    expect(notified[0].rows?.before).toBe(before);
+    expect(notified[0].previousValues).toBe(before);
     expect(store.getFeature('p1')?.properties).toEqual({ n: 10 });
     expect(store.getFeature('p1')?.geometry).toEqual({ type: 'Point', coordinates: [9, 9] });
     // Written back

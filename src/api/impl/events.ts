@@ -353,6 +353,7 @@ function sameVertexSelection(
 const DOCUMENT_KEYS = [
   'features',
   'rows',
+  'previousValues',
   'layers',
   'groups',
   'order',

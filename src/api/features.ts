@@ -13,7 +13,9 @@ import type {
   FeatureListPage,
   FeaturePatch,
   FeatureStyleResolved,
+  FeatureValues,
   MoveTarget,
+  RestoreToken,
 } from './model.js';
 
 /**
@@ -144,6 +146,46 @@ export interface FeaturesCollection {
    *   not exist; nothing moves then
    */
   moveMany(ids: readonly string[], to: MoveTarget): boolean;
+  /**
+   * Writes values of features back: what a write of this client left them
+   * (`DocumentChange.previousValues`), or what this method returned, so that an undo puts the
+   * features back as they were. It is for a Store that holds its features as rows: a feature is
+   * written whether it is selected or not, a feature deleted whose rows are kept
+   * (`DocumentChange.restoreToken`) comes back where it was, and the place of a feature in the
+   * stacking order is written as the values give it.
+   *
+   * A lock of a feature, its group or its layer refuses the write, as it refuses an update: an
+   * undo writes in a transaction that ignores the locks
+   * (`draw.transact(fn, { ignoreLocks: true })`).
+   *
+   * @param values - The values to write back
+   * @returns The values the features had before (written back, they redo the write), or `null`
+   *   when the write is refused (read-only, a lock)
+   * @throws `DrawError` with the code `invalid-state` when the Store does not hold its features
+   *   as rows, `invalid-input` when the values are not values of features held as rows, or
+   *   `not-found` when they name a feature that is no longer there (a deletion let go of)
+   *
+   * @example Undoing the last write of this client
+   * ```ts
+   * const steps: FeatureValues[] = [];
+   * draw.on('document.changed', (change) => {
+   *   if (change.source === 'local' && change.previousValues) steps.push(change.previousValues);
+   * });
+   * // Later
+   * const last = steps.pop();
+   * if (last) draw.transact(() => draw.features.restore(last), { ignoreLocks: true });
+   * ```
+   */
+  restore(values: FeatureValues): FeatureValues | null;
+  /**
+   * Lets go of the features and the groups a deletion of this client kept
+   * (`DocumentChange.restoreToken`), once nothing will write them back: the Store no longer keeps
+   * them, and `restore` can no longer bring them back.
+   *
+   * @throws `DrawError` with the code `invalid-state` when the Store does not hold its features
+   *   as rows, or `invalid-input` when the token is not one
+   */
+  releaseRestore(token: RestoreToken): void;
   /**
    * The look a feature is drawn with: the default, the layer rule and the style of the
    * feature put on top of each other.

@@ -29,7 +29,7 @@
  *
  * Where to find things: every resource of {@link Draw} is a field with its own methods.
  *
- * - `draw.features` (create, update, delete, move, union, split): {@link FeaturesCollection}
+ * - `draw.features` (create, update, delete, move, union, split, restore): {@link FeaturesCollection}
  * - `draw.layers` (create, update, reorder, setActive): {@link LayersCollection}
  * - `draw.groups` (create, update, move): {@link GroupsCollection}
  * - `draw.datasets` (add, remove, move): {@link DatasetsCollection}
@@ -39,7 +39,6 @@
  * - `draw.document` (load, toJSON, toGeoJSON): {@link DocumentResource}
  * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
  * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
- * - `draw.tables` (applyRows, for a store that holds its features as rows): {@link TablesResource}
  * - events with `draw.on`: {@link DrawEvents}; errors: {@link DrawError}
  *
  * Read next: [getting started](https://sakuzu.github.io/maplibre-gl-draw/getting-started),
@@ -122,6 +121,7 @@ export type {
 
 // The stacking order of the items
 export type {
+  FeatureValues,
   ItemListChange,
   ItemMove,
   ItemOrderChange,
@@ -172,9 +172,6 @@ export type {
 // Store
 export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
 export { diffItemOrder } from './api/model.js';
-
-// Features held as rows of columns
-export type { TablesResource } from './api/tables.js';
 
 // Extensions
 export type {

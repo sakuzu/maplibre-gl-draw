@@ -22,7 +22,7 @@
  * - Every write of rows of this client (not `remote`), through the Store or its writer, reads the
  *   values the rows that are not held had for the fields it writes, other than their place (the
  *   layer, the group and the keys of the order, which the changes of the order tell), and the
- *   notification carries them (`rows.before`): the rows that were there when the transaction
+ *   notification carries them (`previousValues`): the rows that were there when the transaction
  *   began, with the values they had then. A write through `applyRows` carries the values it is
  *   given
  * - The writes of rows from elsewhere go through the writer it returns, in a transaction with
@@ -1210,7 +1210,7 @@ function valuesBefore(
  * A notification with each row in it once (see `TableContractStore`): the rows written that are
  * held at its end are changes of their features (a row created and held a feature created, not
  * held), and the features of rows no longer held are changes of their rows; the values the rows
- * had before go with them (`rows.before`), and make the features before of the rows held
+ * had before go with them (`previousValues`), and make the features before of the rows held
  */
 function reconcile(
   changes: StoreChange,
@@ -1299,11 +1299,10 @@ function reconcile(
   if (Object.keys(features).length > 0) out.features = features;
   else delete out.features;
   // The values before go with the rows (whether each row is a feature or a row at the end)
-  if (layers.size > 0 || before) {
-    out.rows = { layers, ...(before && { before }) } as RowsChange;
-  } else {
-    delete out.rows;
-  }
+  if (layers.size > 0) out.rows = { layers } as RowsChange;
+  else delete out.rows;
+  if (before) out.previousValues = before;
+  else delete out.previousValues;
   // A row created and held is a feature created, not a row made a feature
   if (out.opened && createdIds.size > 0) {
     out.opened = {

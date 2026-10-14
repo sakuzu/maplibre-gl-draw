@@ -5,7 +5,7 @@
  * The values before of the writes of rows that are not features (13.4 of the design): every way
  * the in-memory Store of rows writes rows of this client (its writes of features, its writer, the
  * writes for this client, the moves of the items, the groups created and deleted) notifies the
- * rows that are not held with the values they had (`rows.before`), and those values written back
+ * rows that are not held with the values they had (`previousValues`), and those values written back
  * put the rows back. The place of a row (its layer, group and keys) is told by the changes of the
  * order instead, and a row created has no value before.
  */
@@ -16,7 +16,7 @@ import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { internalsOf } from '../test-utils.js';
 import type { Store } from './store.js';
 import { createTableStore } from './table-memory.js';
-import type { Feature, ItemMove, StoreChange } from './types.js';
+import type { Feature, ItemMove, RowValues, StoreChange } from './types.js';
 
 function point(id: string, x: number, layerId = 'layer'): Feature {
   return {
@@ -71,7 +71,7 @@ function stateOf(store: Store, tables: FeatureTables) {
 
 /** The values before of the last notification */
 function lastBefore(notified: StoreChange[]) {
-  return notified[notified.length - 1]?.rows?.before;
+  return notified[notified.length - 1]?.previousValues as RowValues | undefined;
 }
 
 describe('the writes of the features of rows not held', () => {
@@ -99,12 +99,14 @@ describe('the writes of the features of rows not held', () => {
     const start = stateOf(store, tables);
     store.updateFeature('p1', { layerId: 'other', properties: { n: 5 } });
     const change = notified[notified.length - 1];
-    expect([...(change.rows?.before?.fields.keys() ?? [])]).toEqual(['property:n']);
+    expect([...((change.previousValues as RowValues | undefined)?.fields.keys() ?? [])]).toEqual([
+      'property:n',
+    ]);
     const moves = (change.order ?? []) as ItemMove[];
     expect(moves.map((move) => move.itemId)).toEqual(['p1']);
     // Put back: the values, then the item where it was
     store.transact(() => {
-      const before = change.rows?.before;
+      const before = change.previousValues as RowValues | undefined;
       if (before) store.restoreRows(before);
       const from = moves[0].from;
       if (from) store.moveItem('p1', from);
@@ -141,7 +143,7 @@ describe('the writes of the features of rows not held', () => {
     const start = stateOf(store, tables);
     store.createFeature(point('q', 7));
     const change = notified[notified.length - 1];
-    expect(change.rows?.before).toBeUndefined();
+    expect(change.previousValues as RowValues | undefined).toBeUndefined();
     const created = change.rows?.layers.get('layer')?.created ?? new Int32Array(0);
     expect(Array.from(created, (handle) => tables.getRowId(handle))).toEqual(['q']);
     store.restoreRows({ handles: created, fields: new Map(), deleted: new Uint8Array(1).fill(1) });
@@ -189,7 +191,7 @@ describe('the writes of the features of rows not held', () => {
     });
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);
-    const before = change.rows?.before;
+    const before = change.previousValues as RowValues | undefined;
     expect(before?.fields.get('property:n')).toEqual([1]);
     store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
@@ -200,7 +202,7 @@ describe('the writes of the features of rows not held', () => {
     store.setSelection('feature', ['p1']);
     store.updateFeature('p1', { properties: { n: 10 } });
     const change = notified[notified.length - 1];
-    expect(change.rows?.before).toBeUndefined();
+    expect(change.previousValues as RowValues | undefined).toBeUndefined();
     expect(change.features?.updated?.[0].previous.properties).toEqual({ n: 1 });
   });
 });
@@ -232,7 +234,7 @@ describe('the writes of rows through the writer of the Store', () => {
   it('notify no values before of a write from elsewhere', () => {
     const { store, writer, tables, notified } = setup();
     store.transact(() => writer.apply(patchOf(tables)), 'remote');
-    expect(notified[notified.length - 1].rows?.before).toBeUndefined();
+    expect(notified[notified.length - 1].previousValues as RowValues | undefined).toBeUndefined();
   });
 
   it('fold the writes of a transaction that write other fields of other rows', () => {
@@ -275,7 +277,7 @@ describe('the moves of the items and the groups', () => {
     const start = stateOf(store, tables);
     store.moveItems(['p0', 'p1'], { layerId: 'other', below: null });
     const change = notified[notified.length - 1];
-    expect(change.rows?.before).toBeUndefined();
+    expect(change.previousValues as RowValues | undefined).toBeUndefined();
     const moves = (change.order ?? []).filter((move): move is ItemMove => move.kind === 'item');
     expect(moves.map((move) => move.itemId).sort()).toEqual(['p0', 'p1']);
     store.transact(() => {
@@ -295,10 +297,10 @@ describe('the moves of the items and the groups', () => {
       visible: true,
       locked: false,
     });
-    expect(notified[notified.length - 1].rows?.before).toBeUndefined();
+    expect(notified[notified.length - 1].previousValues as RowValues | undefined).toBeUndefined();
     expect(notified[notified.length - 1].order?.length).toBeGreaterThan(0);
     store.deleteGroup('g');
-    expect(notified[notified.length - 1].rows?.before).toBeUndefined();
+    expect(notified[notified.length - 1].previousValues as RowValues | undefined).toBeUndefined();
     expect(store.getFeature('p1')?.groupId).toBeUndefined();
     expect(tables.get('layer')?.itemCount).toBe(5);
   });

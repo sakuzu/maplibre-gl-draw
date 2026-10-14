@@ -47,6 +47,7 @@ import { setOwnProperty } from './import-export/own-property.js';
 import { describeStyleProblem } from './import-export/style-validation.js';
 import { toAppliedDefaults } from './options.js';
 import { moveFeatures, resolveMoveTarget } from './placement.js';
+import { createRestore } from './restore.js';
 import type { ResourceDeps } from './shared.js';
 import {
   featureLocked,
@@ -199,6 +200,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   }
 
   return {
+    ...createRestore(deps),
     get: (id) => store.getFeature(id),
     getMany(ids) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');

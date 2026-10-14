@@ -559,6 +559,7 @@ export type MoveTarget =
   | ItemPlacement;
 
 export type {
+  FeatureValues,
   ItemHandles,
   ItemMove,
   ItemOrderChange,

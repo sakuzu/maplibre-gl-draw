@@ -21,7 +21,6 @@ import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
-import type { TablesResource } from './tables.js';
 
 /** The options of {@link Draw.transact} */
 export interface TransactOptions {
@@ -65,8 +64,6 @@ export interface Draw {
   readonly document: DocumentResource;
   /** The plugins, modes, feature types, overlays and providers */
   readonly extensions: ExtensionsCollections;
-  /** The writes of the rows of a Store that holds its features as rows */
-  readonly tables: TablesResource;
 
   // The map and the Store
 

@@ -107,7 +107,6 @@ function appendGroupUpdates(
  * deleted within the transaction dropped
  */
 export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
-  const before = a.before && b.before ? mergeSnapshots(a.before, b.before) : (a.before ?? b.before);
   const layers = new Map<string, LayerRowsChange>(a.layers);
   for (const [layerId, next] of b.layers) {
     const before = layers.get(layerId);
@@ -135,7 +134,7 @@ export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
       styleKeys: new Set([...before.styleKeys, ...next.styleKeys]),
     });
   }
-  return before ? { layers, before } : { layers };
+  return { layers };
 }
 
 /**
@@ -253,6 +252,13 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   // rows held as columns (one entry per row)
   if (changes.rows) {
     target.rows = target.rows ? mergeRowsChanges(target.rows, changes.rows) : changes.rows;
+  }
+  // the values the rows had before (a row with the values before the first write of it)
+  if (changes.previousValues) {
+    // A Store of rows gives values of rows
+    target.previousValues = target.previousValues
+      ? mergeSnapshots(target.previousValues as RowValues, changes.previousValues as RowValues)
+      : changes.previousValues;
   }
 
   // rows made features and no longer (the difference over the transaction)

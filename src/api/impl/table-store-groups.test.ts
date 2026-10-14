@@ -108,7 +108,7 @@ describe('draw.groups.create in a layer held as rows', () => {
     // Undone: the group created again, then its rows written not deleted
     draw.transact(() => {
       draw?.groups.create({ id: 'g', featureIds: [], layerId: 'rows', name: 'G' });
-      draw?.tables.applyRows(deletion.rows?.before as RowValues);
+      draw?.features.restore(deletion.previousValues as RowValues);
     });
     expect(itemsOf(tables)).toEqual(['g[p1,p2]', 'p3', 'p4', 'p0']);
     expect(draw.groups.get('g')?.name).toBe('G');

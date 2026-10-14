@@ -62,7 +62,12 @@ export type {
   TableGroupPatch,
   TableScanOptions,
 } from '../api/tables.js';
-export { createFeatureTables, createTableStore } from '../api/tables.js';
+export {
+  createFeatureTables,
+  createRowValues,
+  createTableStore,
+  rowValuesOf,
+} from '../api/tables.js';
 
 // The order of the rows
 export type { ItemHandles, RowsMove } from '../api/model.js';

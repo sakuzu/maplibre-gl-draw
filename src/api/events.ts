@@ -16,6 +16,7 @@ import type { StoreView, UpdateSource } from './extension/store.js';
 import type {
   Feature,
   FeatureInput,
+  FeatureValues,
   FileData,
   Group,
   ItemOrderChange,
@@ -93,10 +94,20 @@ export interface DocumentChange {
   order?: ItemOrderChange[];
   /**
    * What keeps the rows and the groups this client deleted in the transaction, when the Store
-   * holds its features as rows: what undoes the deletion holds it, and lets go of it with
-   * `FeatureTables.release` once it no longer needs them
+   * holds its features as rows: what undoes the deletion holds it (written back with
+   * `features.restore` and `groups.restore`, they come back where they were), and lets go of it
+   * with `features.releaseRestore` once it no longer needs them
    */
   restoreToken?: RestoreToken;
+  /**
+   * The values the features held as rows had before a write of this client, for the fields it
+   * wrote, when the Store holds its features as rows: written back with `features.restore`, they
+   * put the features back. The Store gives them for the rows that were there when the
+   * transaction began, through any of its writes, other than their place in the stacking order
+   * (their layer, group and keys of the order, which `order` tells). A row created has none
+   * (written deleted, it is taken back). Absent for a change from elsewhere
+   */
+  previousValues?: FeatureValues;
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;

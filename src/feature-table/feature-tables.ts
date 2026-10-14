@@ -1430,9 +1430,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
         ...(order.length > 0 && { order }),
         ...(kept && options.restoreToken !== undefined && { restoreToken: options.restoreToken }),
       };
-      const rows = options.before ? { ...change, before: options.before } : change;
       const hasRows = change.layers.size > 0 || options.before !== undefined;
-      if (hasRows) this.onChange({ rows, ...(!features && extra) });
+      if (hasRows) {
+        this.onChange({
+          rows: change,
+          ...(options.before && { previousValues: options.before }),
+          ...(!features && extra),
+        });
+      }
       if (features) this.onChange({ features, ...extra });
       if (!hasRows && !features && Object.keys(extra).length > 0) this.onChange(extra);
     }

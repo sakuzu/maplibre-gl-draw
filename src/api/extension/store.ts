@@ -78,7 +78,7 @@ export type UpdateSource =
  *   read-only, the interaction lock and the hidden items) is not part of the document: it is
  *   not saved, and a change from outside the instance does not carry it.
  * - A Store that holds its features as rows (`tables`) notifies the rows written as `rows`
- *   (with the values they had before, for the writes of this client: `RowsChange.before`),
+ *   (with the values they had before, for the writes of this client: `previousValues`),
  *   and the rows opened as features (the rows selected and edited) as features, with their
  *   changes: a row is in one of the two in a notification, as it is when the outermost
  *   transaction ends (a row created and selected in one transaction is a feature created). The

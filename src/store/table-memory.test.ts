@@ -28,7 +28,7 @@ import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
 import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';
 import { createTableStore } from './table-memory.js';
-import type { Feature, StoreChange } from './types.js';
+import type { Feature, RowValues, StoreChange } from './types.js';
 
 /** A point of the tests */
 function point(id: string, x: number, extra: Partial<Feature> = {}): Feature {
@@ -501,7 +501,11 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
     };
     const before = tables.readValues(patch);
     expect(store.applyRows?.({ patch, before })).toBe(true);
-    expect(notified[notified.length - 1]?.rows?.before?.fields.get('geometry')?.[0]).toEqual(line);
+    expect(
+      (notified[notified.length - 1]?.previousValues as RowValues | undefined)?.fields.get(
+        'geometry',
+      )?.[0],
+    ).toEqual(line);
     expect(geometryOf()).toEqual({
       type: 'LineString',
       coordinates: [

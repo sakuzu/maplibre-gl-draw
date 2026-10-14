@@ -774,6 +774,11 @@ export interface StoreChange {
    */
   rows?: RowsChange;
   /**
+   * The values the rows had before a write of this client, for the fields written (see
+   * `DocumentChange.previousValues`): a {@link RowValues}
+   */
+  previousValues?: FeatureValues;
+  /**
    * The rows held as columns opened as features for this client (`added`, their features) and
    * no longer (`removed`, their ids): not a change of the document, so what records or sends the
    * changes of the document does not read it. A row is opened while it is selected or edited; a
@@ -821,17 +826,19 @@ export interface LayerRowsChange {
 export interface RowsChange {
   /** The rows of each layer */
   readonly layers: ReadonlyMap<string, LayerRowsChange>;
-  /**
-   * The values the rows had before a write of this client, for the fields written: what writes
-   * them back (`draw.tables.applyRows`). A Store that holds its features as rows gives them for
-   * the rows that were there when the transaction began, through any of its writes: a write of
-   * rows (`draw.tables.applyRows`, `Store.applyRows`) with the values it read or was given, and
-   * a write of a row that is not a feature (`updateFeature`, `deleteFeature`, a deletion of its
-   * layer) with the values of the fields written other than its place (its layer, group and keys
-   * of the order, which `StoreChange.order` tells). A row created has none (written deleted, it is
-   * taken back). Absent for a change from elsewhere
-   */
-  readonly before?: RowValues;
+}
+
+declare const featureValuesBrand: unique symbol;
+
+/**
+ * Values of features as they were, which written back with `features.restore` put them back: what
+ * a Store that holds its features as rows notifies of a write of this client
+ * (`DocumentChange.previousValues`) and what `features.restore` returns. Its content is read and
+ * made with `@sakuzu/maplibre-gl-draw/kasane` (`RowValues`).
+ */
+export interface FeatureValues {
+  /** Tells it from other objects: its content is a `RowValues` */
+  readonly [featureValuesBrand]?: true;
 }
 
 /**
@@ -840,7 +847,7 @@ export interface RowsChange {
  * value, `undefined` taking the key off the row). Read from the rows, they are the values the rows
  * have (`FeatureTables.readValues`); written to them, they put the values there.
  */
-export interface RowValues {
+export interface RowValues extends FeatureValues {
   /** The rows */
   readonly handles: Int32Array;
   /** The values of each field, one per row */
