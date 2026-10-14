@@ -22,6 +22,16 @@
  * feature selected go through the Store as the select mode writes them (the middle of a drag,
  * then its end).
  *
+ * The edits of many rows: `held` rows selected (the time to hold them is an input) and dragged as
+ * the select mode drags them (every row written in the middle of the drag in every frame, then
+ * the end in one transaction), or kept selected while the map pans; `members` rows grouped and
+ * ungrouped, put in another layer and back, brought to the front and sent to the back (one row,
+ * or `members`), each an input timed to the frame nothing is left to build (the longest key of
+ * the order of the rows moved is noted); an edit of `members` rows undone and redone by a history
+ * of the page (the Store of the page has none): the values before and after the edit written back
+ * through the Store (`applyRows`, which returns the values before; the features of the Store are
+ * updated with their values for the Store of objects), with the bytes the history holds noted.
+ *
  * Each run measures the frames before, during and after it, the JS heap and the GPU memory (and
  * the highest heap during it), and what the writes, the deltas and the versions of the row groups
  * hold and did (`draw.debug.tables().editStats()`).
@@ -33,6 +43,8 @@ import type {
   FeatureTables,
   FeatureTablesWriter,
   RowField,
+  RowPatch,
+  RowValuesSnapshot,
   Store,
   TableEditStats,
 } from '@sakuzu/maplibre-gl-draw';
@@ -48,6 +60,14 @@ import {
   recordFrames,
 } from './table-measure';
 
+/**
+ * The Store of rows of the page as the instance writes it: the values of rows written for this
+ * client, returning the values they had (what an undo writes back)
+ */
+export interface RowsStore {
+  applyRows(patch: RowPatch): RowValuesSnapshot | null;
+}
+
 /** What the edits write to */
 export interface EditTarget {
   readonly mode: 'table' | 'store';
@@ -59,6 +79,8 @@ export interface EditTarget {
   readonly writer: FeatureTablesWriter | null;
   /** The Store, with its writes (the edits of a feature at a time write it as the modes do) */
   readonly store: Store;
+  /** The Store of rows of the page (null for features of the Store) */
+  readonly rowsStore: RowsStore | null;
   readonly candidates: BenchCandidates;
 }
 
@@ -83,6 +105,8 @@ export interface EditResult {
    * pointer, or a click to the frame its handles are drawn in (absent for the other edits)
    */
   readonly inputMs?: { readonly mean: number; readonly max: number; readonly count: number };
+  /** What else an edit noted (the longest key of the order, the bytes of a history) */
+  readonly notes?: readonly string[];
   /** Why the run could not be made (absent when it was) */
   readonly error?: string;
 }
@@ -371,7 +395,267 @@ function stepsOf(
     case 'vertexRemove':
     case 'delete':
       return featureSteps(target, op, inputs);
+    case 'moveHeld':
+    case 'panHeld':
+    case 'group':
+    case 'toLayer':
+    case 'order1':
+    case 'orderMany':
+    case 'undoRedo':
+      return manySteps(target, op, params);
   }
+}
+
+/** What an edit noted, as it is made */
+const notes: string[] = [];
+
+/** A geometry moved as a whole by a translation */
+function translated(geometry: Geometry, dx: number, dy: number): Geometry {
+  const walk = (value: unknown): unknown =>
+    Array.isArray(value) && typeof value[0] === 'number'
+      ? [(value[0] as number) + dx, (value[1] as number) + dy, ...value.slice(2)]
+      : Array.isArray(value)
+        ? value.map(walk)
+        : value;
+  return {
+    ...geometry,
+    coordinates: walk((geometry as { coordinates: unknown }).coordinates),
+  } as Geometry;
+}
+
+/** Draws frames until the drawing has nothing left to build (at most `frames`) */
+async function settled(draw: Draw, frames = 600): Promise<void> {
+  await nextFrame();
+  for (let i = 0; i < frames && draw.hasPendingWork(); i++) await nextFrame();
+}
+
+/** The layer the rows are put in and taken back from, made once per page */
+const OTHER_LAYER = 'bench-other';
+
+/** Makes the other layer the rows are put in, the same kind as the layer of the page */
+function ensureOtherLayer(target: EditTarget): void {
+  if (target.store.getLayer(OTHER_LAYER)) return;
+  if (target.tables) {
+    target.store.createLayer({
+      id: OTHER_LAYER,
+      name: OTHER_LAYER,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: 'table',
+      styleRule: undefined,
+      metadata: undefined,
+    } as never);
+  } else {
+    target.draw.layers.create({ id: OTHER_LAYER, name: OTHER_LAYER });
+  }
+}
+
+/** The longest key of the order of rows (table mode; 0 for features of the Store) */
+function longestKey(target: EditTarget, ids: readonly string[]): number {
+  const { tables } = target;
+  if (!tables) return 0;
+  const handles = ids.map((id) => tables.handleOf(id)).filter((h) => h !== undefined) as number[];
+  if (handles.length === 0) return 0;
+  const read = tables.snapshot({
+    handles: Int32Array.from(handles),
+    fields: new Map<RowField, unknown[]>([['order', handles.map(() => undefined)]]),
+  });
+  let longest = 0;
+  for (const key of read.fields.get('order') ?? []) {
+    if (typeof key === 'string') longest = Math.max(longest, key.length);
+  }
+  return longest;
+}
+
+/** The bytes of values of rows as a history holds them (the values as JSON, and the handles) */
+function snapshotBytes(snapshot: RowValuesSnapshot): number {
+  let bytes = snapshot.handles.length * 4 + (snapshot.deleted?.length ?? 0);
+  for (const values of snapshot.fields.values()) {
+    for (const value of values) bytes += JSON.stringify(value ?? null).length;
+  }
+  return bytes;
+}
+
+/**
+ * The steps of the edits of many rows: `held` rows selected and dragged or kept while the map
+ * pans, `members` rows grouped, put in another layer, brought to the front and sent to the back,
+ * an edit undone and redone (the times of their inputs go to `inputs`, what they note to `notes`)
+ */
+function manySteps(
+  target: EditTarget,
+  op: 'moveHeld' | 'panHeld' | 'group' | 'toLayer' | 'order1' | 'orderMany' | 'undoRedo',
+  params: TableBenchPageParams,
+): ((i: number) => Promise<void>) | string {
+  const { draw, map, store, candidates, layerId } = target;
+  const ids = candidates.ids;
+  if (ids.length === 0) return 'no row';
+  const held = ids.slice(0, params.held);
+  const members = ids.slice(0, Math.min(params.members, ids.length));
+  /** Selects the rows held, timing it (the rows are held as features) */
+  const select = (): void => {
+    const t0 = performance.now();
+    store.setSelection('feature', held);
+    inputs.push(performance.now() - t0);
+    notes.push(`selected ${store.getSelection().ids.length} of ${held.length}`);
+  };
+  /** Runs a change of the order and times it to the frame nothing is left to build */
+  const timed = async (change: () => void): Promise<void> => {
+    const t0 = performance.now();
+    change();
+    await settled(draw);
+    inputs.push(performance.now() - t0);
+  };
+  switch (op) {
+    case 'moveHeld': {
+      // A drag of 10 frames, ended, then another: every row written in every frame of it, as the
+      // select mode writes them, the end in one transaction
+      const DRAG_FRAMES = 10;
+      let starts = new Map<string, Geometry>();
+      return async (i) => {
+        if (i === 0) select();
+        const frame = i % DRAG_FRAMES;
+        if (frame === 0) {
+          starts = new Map();
+          for (const id of held) {
+            const geometry = store.getFeature(id)?.geometry;
+            if (geometry) starts.set(id, geometry);
+          }
+        }
+        const sign = Math.floor(i / DRAG_FRAMES) % 2 === 0 ? 1 : -1;
+        const d = sign * (frame + 1) * 1e-5;
+        const t0 = performance.now();
+        if (frame < DRAG_FRAMES - 1) {
+          for (const [id, geometry] of starts) {
+            store.updateFeature(
+              id,
+              { geometry: translated(geometry, d, d / 2) },
+              {
+                isIntermediate: true,
+              },
+            );
+          }
+        } else {
+          store.transact(() => {
+            for (const [id, geometry] of starts) {
+              store.updateFeature(id, { geometry: translated(geometry, d, d / 2) });
+            }
+          });
+        }
+        inputs.push(performance.now() - t0);
+      };
+    }
+    case 'panHeld':
+      // A pan of a few pixels per frame, back and forth, the rows selected
+      return async (i) => {
+        if (i === 0) select();
+        const sign = Math.floor(i / 50) % 2 === 0 ? 1 : -1;
+        map.panBy([sign * 6, sign * 2], { animate: false });
+      };
+    case 'group': {
+      // Grouped at the place of the frontmost, then ungrouped at the place of the group
+      let group: string | null = null;
+      return async () => {
+        await timed(() => {
+          if (group) {
+            draw.groups.delete(group);
+            group = null;
+          } else {
+            group = draw.groups.create({ featureIds: members })?.id ?? null;
+          }
+        });
+      };
+    }
+    case 'toLayer': {
+      ensureOtherLayer(target);
+      return async (i) => {
+        await timed(() => {
+          draw.features.moveMany(members, { layerId: i % 2 === 0 ? OTHER_LAYER : layerId });
+        });
+        if (i % 2 === 1) notes.push(`longest key ${longestKey(target, members)}`);
+      };
+    }
+    case 'order1':
+    case 'orderMany': {
+      const moved = op === 'order1' ? ids.slice(0, 1) : members;
+      return async (i) => {
+        await timed(() => {
+          draw.features.moveMany(
+            moved,
+            i % 2 === 0 ? { layerId, above: null } : { layerId, below: null },
+          );
+        });
+        if (i === params.reps - 1) notes.push(`longest key ${longestKey(target, moved)}`);
+      };
+    }
+    case 'undoRedo':
+      return undoRedoSteps(target, members);
+  }
+}
+
+/**
+ * The steps of an edit of rows undone and redone by a history of the page: the edit (the rows
+ * moved and colored) is made once, then undone and redone in turn, each a write of the values
+ * the history holds (through `applyRows` for rows, `updateMany` for features of the Store)
+ */
+function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) => Promise<void> {
+  const { draw, tables, rowsStore } = target;
+  // The edit: every row moved and colored
+  const after = new Map<string, { geometry: Geometry; style: Record<string, unknown> }>();
+  for (const id of ids) {
+    const feature = featureOf(target, id);
+    if (!feature) continue;
+    after.set(id, {
+      geometry: translated(feature.geometry, 3e-5, 3e-5),
+      style: { ...feature.style, ...colored('#e15759') },
+    });
+  }
+  let undo: (() => void) | null = null;
+  let redo: (() => void) | null = null;
+  if (tables && rowsStore) {
+    const handles = [...after.keys()].map((id) => tables.handleOf(id) as number);
+    const patch: RowPatch = {
+      handles: Int32Array.from(handles),
+      fields: new Map<RowField, unknown[]>([
+        ['geometry', [...after.values()].map((v) => v.geometry)],
+        ['style', [...after.values()].map((v) => v.style)],
+      ]),
+    };
+    let before: RowValuesSnapshot | null = null;
+    let done: RowValuesSnapshot | null = null;
+    undo = () => {
+      done = before ? rowsStore.applyRows(before as RowPatch) : null;
+    };
+    redo = () => {
+      before = rowsStore.applyRows(done ?? patch);
+    };
+    redo();
+    const bytes = (before ? snapshotBytes(before) : 0) * 2;
+    notes.push(
+      `history ${(bytes / 1024).toFixed(1)} KB (the values before and after, ${handles.length} rows)`,
+    );
+  } else {
+    const previous = [...after.keys()].map((id) => {
+      const feature = draw.features.get(id) as Feature;
+      return { id, patch: { geometry: feature.geometry, style: feature.style } };
+    });
+    const next = [...after].map(([id, values]) => ({ id, patch: values }));
+    undo = () => {
+      draw.features.updateMany(previous as never);
+    };
+    redo = () => {
+      draw.features.updateMany(next as never);
+    };
+    redo();
+    const bytes = JSON.stringify(previous).length + JSON.stringify(next).length;
+    notes.push(`history ${(bytes / 1024).toFixed(1)} KB (the features before and after)`);
+  }
+  return async (i) => {
+    const t0 = performance.now();
+    if (i % 2 === 0) undo?.();
+    else redo?.();
+    inputs.push(performance.now() - t0);
+  };
 }
 
 /** The times of the inputs of the edits of a feature at a time, as they are made (ms) */
@@ -628,6 +912,7 @@ export async function runEdit(
   params: TableBenchPageParams,
 ): Promise<EditResult> {
   inputs.length = 0;
+  notes.length = 0;
   const steps = stepsOf(target, op, params);
   if (typeof steps === 'string') return failed(target, `${op} x${params.reps}`, steps);
   const result = await measured(target, `${op} x${params.reps}`, async (sample) => {
@@ -638,9 +923,11 @@ export async function runEdit(
     }
     return params.reps;
   });
-  if (inputs.length === 0) return result;
+  const noted = notes.length > 0 ? { notes: [...new Set(notes)] } : {};
+  if (inputs.length === 0) return { ...result, ...noted };
   return {
     ...result,
+    ...noted,
     inputMs: {
       mean: inputs.reduce((a, b) => a + b, 0) / inputs.length,
       max: Math.max(...inputs),

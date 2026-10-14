@@ -130,6 +130,8 @@ and the next versions of the row groups did):
 | `moving` | Version builds while moving, ms | `0` |
 | `worker` | `1`: merges in a Worker | `1` |
 | `bigArea` | Vertices of a large area under the rows | `0` |
+| `held` | Rows the edits of many rows select | `2000` |
+| `moveFrom` | Rows held from which a move is drawn by state | library's |
 
 The edits are `color1`, `colorSlide`, `ruleSlide`, `attr`, `point`,
 `longLine`, `corner` and `finish` (a building written in the middle of the
@@ -143,6 +145,22 @@ the middle of the drag, then ended), `vertexRemove` puts a vertex and
 takes it off, and `delete` selects a feature and deletes it. `bigArea`
 puts a large area of that many vertices under every row once the map is
 open (an administrative area under the buildings), for `hover`.
+
+The edits of many rows select `held` rows (the time to hold them is an
+input) or work on `members` rows: `moveHeld` drags the rows selected as
+the select mode drags them (every row written in every frame of a drag of
+10 frames, then the end; the bytes uploaded show what a move costs, and
+`moveFrom` sets the number of rows held from which the rows moved are
+drawn by their state instead of written), `panHeld` pans the map with the
+rows selected, `group` groups and ungroups the rows, `toLayer` puts them
+in another layer and back, `order1` and `orderMany` bring one row or the
+rows to the front and send them to the back (each timed to the frame
+nothing is left to build, with the longest key of the order of the rows
+moved), and `undoRedo` undoes and redoes an edit of the rows (moved and
+colored) with a history of the page: the Store has no history of its own,
+so the values before and after are written back through the Store
+(`applyRows` for rows, `updateMany` for features), and the bytes that
+history holds are shown.
 
 The changes of others are written in place
 (`color`, `attr`, `position`, `corner`) or placed elsewhere: `reorder`

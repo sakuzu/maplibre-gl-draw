@@ -57,7 +57,13 @@ import {
   stylesOf,
   type TableBenchPageParams,
 } from './table-data';
-import { type EditResult, type EditTarget, runEdit, runStream } from './table-edits';
+import {
+  type EditResult,
+  type EditTarget,
+  type RowsStore,
+  runEdit,
+  runStream,
+} from './table-edits';
 import {
   heapMb,
   MB,
@@ -138,6 +144,8 @@ for (const [key, value] of Object.entries({
   moving: String(params.moving),
   worker: params.worker ? '1' : '0',
   bigArea: String(params.bigArea),
+  held: String(params.held),
+  moveFrom: params.moveFrom === null ? '' : String(params.moveFrom),
 })) {
   const field = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
   if (field) field.value = value;
@@ -198,7 +206,10 @@ function rowsWorker(): FeatureTablesWorker {
 // groups in and writes the changes of others
 const ofRows =
   params.mode === 'table'
-    ? createTableMemoryStore(params.worker ? { worker: rowsWorker() } : {})
+    ? createTableMemoryStore({
+        ...(params.worker && { worker: rowsWorker() }),
+        ...(params.moveFrom !== null && { moveHeldByStateFrom: params.moveFrom }),
+      })
     : null;
 const tablesOfPage =
   ofRows?.store.tables !== undefined
@@ -582,6 +593,7 @@ function renderEdits(edits: readonly EditResult[]): string {
       edit.inputMs
         ? `input ${fmt(edit.inputMs.mean, 2)} ms (max ${fmt(edit.inputMs.max, 2)}, ${edit.inputMs.count} inputs)`
         : '',
+      ...(edit.notes ?? []),
       `CPU of the rows per frame ${fmt(edit.frameCpuMs.mean, 2)} ms (max ${fmt(edit.frameCpuMs.max, 2)})`,
       edit.error ? `error: ${edit.error}` : '',
     ].filter((fact) => fact !== '');
@@ -607,6 +619,7 @@ function editTarget(): EditTarget | null {
     writer: tablesOfPage?.writer ?? null,
     // The Store the instance writes (`getStore` gives the Store itself, typed as its view)
     store: draw.getStore() as unknown as Store,
+    rowsStore: (store as unknown as RowsStore | undefined) ?? null,
     candidates: opened.candidates,
   };
 }

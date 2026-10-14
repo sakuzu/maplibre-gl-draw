@@ -77,13 +77,23 @@ export interface TableBenchPageParams extends TableBenchParams {
    * the pointer moves over between the buildings; 0 for none)
    */
   readonly bigArea: number;
+  /** The rows the edits of many rows held select and move or keep while panning */
+  readonly held: number;
+  /**
+   * The number of rows held from which a row held moved as a whole is drawn moved by its state
+   * (`moveHeldByStateFrom` of the tables; null for the default of the library)
+   */
+  readonly moveFrom: number | null;
 }
 
 /**
- * The edits a page repeats: written to the rows (`color1` to `finish`), and made as the select
- * mode makes them, a feature at a time (`hover` to `delete`): the pointer moved over the map, a
- * click that selects and shows the handles, a vertex added by a drag of a midpoint, a vertex taken
- * off and put back, a feature selected and deleted
+ * The edits a page repeats: written to the rows (`color1` to `finish`), made as the select mode
+ * makes them, a feature at a time (`hover` to `delete`): the pointer moved over the map, a click
+ * that selects and shows the handles, a vertex added by a drag of a midpoint, a vertex taken off
+ * and put back, a feature selected and deleted; and the edits of many rows (`moveHeld` to
+ * `undoRedo`): `held` rows selected and dragged, `held` rows selected while the map pans,
+ * `members` rows grouped and ungrouped, put in another layer and back, one row and `members`
+ * rows brought to the front and sent to the back, an edit of `members` rows undone and redone
  */
 export const EDIT_OPS = [
   'color1',
@@ -99,6 +109,13 @@ export const EDIT_OPS = [
   'vertexAdd',
   'vertexRemove',
   'delete',
+  'moveHeld',
+  'panHeld',
+  'group',
+  'toLayer',
+  'order1',
+  'orderMany',
+  'undoRedo',
 ] as const;
 
 /** An edit a page repeats */
@@ -164,6 +181,8 @@ export function parseParams(search: string): TableBenchPageParams {
     moving: number('moving', 0),
     worker: params.get('worker') !== '0',
     bigArea: number('bigArea', 0),
+    held: Math.max(1, number('held', 2000)),
+    moveFrom: (params.get('moveFrom') ?? '') === '' ? null : number('moveFrom', 0),
   };
 }
 

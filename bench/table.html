@@ -100,8 +100,17 @@
             <option value="vertexAdd">a vertex added by a drag of a midpoint</option>
             <option value="vertexRemove">a vertex taken off and put back</option>
             <option value="delete">a feature selected and deleted</option>
+            <option value="moveHeld">held rows selected and dragged (one frame per rep)</option>
+            <option value="panHeld">held rows selected while the map pans</option>
+            <option value="group">members rows grouped, then ungrouped</option>
+            <option value="toLayer">members rows put in another layer, then back</option>
+            <option value="order1">a row brought to the front, then sent to the back</option>
+            <option value="orderMany">members rows brought to the front, then sent to the back</option>
+            <option value="undoRedo">an edit of members rows undone and redone</option>
           </select>
         </label>
+        <label>held <input name="held" type="number" min="1"></label>
+        <label>moved by state from (rows held) <input name="moveFrom" type="number" min="0" placeholder="library default"></label>
         <label>large area under the rows (vertices) <input name="bigArea" type="number" min="0"></label>
         <label>reps <input name="reps" type="number" min="1"></label>
         <label>rule (key:breaks) <input name="rule" type="text"></label>
