@@ -171,8 +171,8 @@ function randomCase(next: () => number): ItemListChange[] {
 
 /** The lists after the moves made from the lists before, or back from the lists after */
 function replay(lists: readonly ItemListChange[], moves: readonly ItemMove[], back: boolean) {
-  const state = new Map(
-    lists.map((list) => [list.groupId, [...(back ? list.after : list.before)]] as const),
+  const state = new Map<string | undefined, string[]>(
+    lists.map((list) => [list.groupId, [...(back ? list.after : list.before)]]),
   );
   const put = (id: string, position: ItemPosition | null) => {
     for (const list of state.values()) {
