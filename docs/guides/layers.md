@@ -191,6 +191,8 @@ group needs features as well. The store keeps a group this client deletes
 the token of the deletion is let go of (`DocumentChange.restoreToken`):
 `groups.restore(id)` brings it back without features at the place it had,
 and `features.restore` or `features.move` puts its features back in it.
+A group created with the ID of such a group takes the place it had, as a
+feature created with the ID of a row deleted and kept does.
 
 Changes emit `group.created`, `group.updated` and `group.deleted`.
 

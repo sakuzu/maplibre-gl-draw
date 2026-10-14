@@ -65,7 +65,10 @@ export interface GroupsCollection {
    * Creates a group of features and returns it as it was stored.
    *
    * The group takes the place of its frontmost feature in their layer. A group needs at least
-   * one feature, in every kind of layer; a group deleted is brought back with `restore`.
+   * one feature, in every kind of layer; a group deleted is brought back with `restore`. In a
+   * layer held as rows, a group created with the ID of a group deleted that the Store still keeps
+   * takes the place that group had, as a feature created with the ID of a row deleted and kept
+   * does.
    *
    * @returns The new group, or `null` when the document is read-only
    * @throws `DrawError` with the code `not-found` when one of the features does not exist,

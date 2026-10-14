@@ -190,6 +190,8 @@ const created = draw.selection.group(); // まとめられないときは null
 (`DocumentChange.restoreToken`) が離されるまでストアに残ります。
 `groups.restore(id)` は、そのグループを地物のないまま元の場所に
 戻します。地物は `features.restore` か `features.move` で戻します。
+残っているグループの ID でグループを作ると、そのグループがいた場所に
+作られます。残っている行の ID で地物を作ったときと同じです。
 
 変更すると `group.created`、`group.updated`、`group.deleted` が
 届きます。
