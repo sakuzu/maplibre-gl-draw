@@ -256,7 +256,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
    * that holds one)
    */
   const holdForPointer = (id: string): void => {
-    const tables = store.tables;
+    const tables = featureTablesInternals(store.tables);
     if (!tables) return;
     if (pointerTimer !== null) clearTimeout(pointerTimer);
     tables.hold(POINTER_OWNER, [id]);
@@ -311,11 +311,11 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       const data = hit.group.data;
       const handle = data.handles[hit.row];
       const id = tables.ids.idOf(handle) as string;
-      const held = store.tables?.heldFeature(id);
+      const held = tables.heldFeature(id);
       if (held) return { kind: 'store', feature: held };
       if (hold) {
         holdForPointer(id);
-        const feature = store.tables?.heldFeature(id);
+        const feature = tables.heldFeature(id);
         if (feature) return { kind: 'store', feature };
       }
       const groupHandle = data.groups[hit.row];

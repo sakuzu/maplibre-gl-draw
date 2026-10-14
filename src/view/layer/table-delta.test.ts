@@ -33,6 +33,7 @@ import { utf8ColumnFromStrings } from '../../table/utf8-column.js';
 import {
   createTestDrawer,
   feature,
+  internalsOf,
   memoryGL,
   orderKey,
   seededRandom,
@@ -473,7 +474,9 @@ describe('the drawing of the rows of the delta', () => {
     const live = setup(list);
     live.frame();
     const over = list[20];
-    live.tables.overlay('peer', [{ ...over, geometry: { type: 'Point', coordinates: [50, 50] } }]);
+    internalsOf(live.tables).overlay('peer', [
+      { ...over, geometry: { type: 'Point', coordinates: [50, 50] } },
+    ]);
     const { record } = live.frame();
     const all = live.table.rowOrder();
     const expected: string[] = [];
@@ -484,7 +487,7 @@ describe('the drawing of the rows of the delta', () => {
     }
     expect(drawnIds(record, live.table)).toEqual(expected);
     // Taken away: the row is drawn again in its place
-    live.tables.overlay('peer', []);
+    internalsOf(live.tables).overlay('peer', []);
     expect(drawnIds(live.frame().record, live.table)).toEqual(
       shownIds(live.table, live.tables.idOf),
     );

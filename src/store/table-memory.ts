@@ -178,7 +178,7 @@ export class TableContractStore implements StoreContract {
   // ==========================================================================
 
   getFeature(id: string): Feature | undefined {
-    const held = this.tables.heldFeature(id);
+    const held = this.#internals.heldFeature(id);
     if (held) return held;
     const handle = this.tables.handleOf(id);
     return handle === undefined ? undefined : this.#rowFeature(handle);
@@ -270,7 +270,7 @@ export class TableContractStore implements StoreContract {
     return this.#apply(() => {
       const handle = this.tables.handleOf(id);
       if (handle === undefined) throw new Error(`Feature with id "${id}" not found`);
-      const held = this.tables.heldFeature(id);
+      const held = this.#internals.heldFeature(id);
       const current = held ?? (this.#rowFeature(handle) as Feature);
       // The place: another layer or group goes at its end, with the key of the order
       const place = new Map<RowField, unknown>();
@@ -294,7 +294,7 @@ export class TableContractStore implements StoreContract {
         return;
       }
       if (place.size > 0) this.#write(handle, place);
-      const moved = this.tables.heldFeature(id) as Feature;
+      const moved = this.#internals.heldFeature(id) as Feature;
       if (options?.isIntermediate) {
         this.writer.writeHeld(id, { ...moved, ...updates, id, layerId, groupId } as Feature, {
           intermediate: true,
@@ -317,7 +317,7 @@ export class TableContractStore implements StoreContract {
     this.transact(() => {
       for (const id of ids) {
         const committed = this.#internals.heldCommitted(id);
-        const held = this.tables.heldFeature(id);
+        const held = this.#internals.heldFeature(id);
         if (committed && held && committed !== held) this.writer.writeHeld(id, committed);
       }
     });
@@ -1244,7 +1244,7 @@ function reconcile(
     const keep = { created: [] as number[], updated: [] as number[], deleted: [] as number[] };
     for (const handle of change.created) {
       const id = tables.idOf(handle) as string;
-      const feature = internals.isHeld(handle) ? tables.heldFeature(id) : undefined;
+      const feature = internals.isHeld(handle) ? internals.heldFeature(id) : undefined;
       if (!feature) keep.created.push(handle);
       else {
         created.push(feature);
@@ -1253,7 +1253,7 @@ function reconcile(
     }
     for (const handle of change.updated) {
       const id = tables.idOf(handle) as string;
-      const feature = internals.isHeld(handle) ? tables.heldFeature(id) : undefined;
+      const feature = internals.isHeld(handle) ? internals.heldFeature(id) : undefined;
       if (!feature) keep.updated.push(handle);
       else if (!updated.some((entry) => entry.id === id)) {
         updated.push({ id, feature, previous: previousOf(handle, feature) });

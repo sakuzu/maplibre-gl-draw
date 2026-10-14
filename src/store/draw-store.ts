@@ -28,6 +28,7 @@
  */
 
 import type { FeatureTables, LocalRowWrite, RowPatch } from '../api/tables.js';
+import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import {
   tableGroupMemberCount,
   tableGroupMemberIds,
@@ -454,7 +455,8 @@ export class DrawStore implements Store {
    */
   #syncHeld(): void {
     const tables = this.#contract.tables;
-    if (!tables || !this.#heldStale) return;
+    const holder = featureTablesInternals(tables);
+    if (!tables || !holder || !this.#heldStale) return;
     this.#heldStale = false;
     const ids = new Set<string>();
     const selection = this.#contract.getSelection();
@@ -490,15 +492,15 @@ export class DrawStore implements Store {
       if (this.#released.delete(id)) released = true;
     }
     // A row passing from one owner to the other is named by one of them all the while
-    if (released) tables.hold(RELEASED_OWNER, [...new Set([...releasedBefore, ...this.#released])]);
-    tables.hold(SELECTION_OWNER, [...ids]);
+    if (released) holder.hold(RELEASED_OWNER, [...new Set([...releasedBefore, ...this.#released])]);
+    holder.hold(SELECTION_OWNER, [...ids]);
     if (!released) return;
-    tables.hold(RELEASED_OWNER, [...this.#released]);
+    holder.hold(RELEASED_OWNER, [...this.#released]);
     if (this.#releaseTimer !== null) clearTimeout(this.#releaseTimer);
     this.#releaseTimer = setTimeout(() => {
       this.#releaseTimer = null;
       this.#released.clear();
-      tables.hold(RELEASED_OWNER, []);
+      holder.hold(RELEASED_OWNER, []);
     }, RELEASE_DELAY_MS);
   }
 

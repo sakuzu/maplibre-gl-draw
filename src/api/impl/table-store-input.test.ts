@@ -16,7 +16,7 @@ import { RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { createTableMemoryStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
-import { createMapStub, createSyntheticInput } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput, internalsOf } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -115,14 +115,14 @@ describe('the input of the user over a Store of rows', () => {
     if (!tables) throw new Error('rows');
     createSyntheticInput(engine).click([0.25, 0.25]);
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['a'] });
-    const held = tables.heldFeature('a');
+    const held = internalsOf(tables).heldFeature('a');
     expect(held).toBeDefined();
     expect(draw.features.get('a')).toEqual(held);
     // A click on nothing lets go of it a moment later
     createSyntheticInput(engine).click([5, 5]);
     expect(store.getSelection().ids).toEqual([]);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(tables.heldFeature('a')).toBeUndefined();
+    expect(internalsOf(tables).heldFeature('a')).toBeUndefined();
   });
 
   it('writes the row of a vertex dragged, in the middle of the drag and at its end', () => {
@@ -155,7 +155,7 @@ describe('the input of the user over a Store of rows', () => {
     // Read so once it is no longer held
     store.setSelection(null, []);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(tables.heldFeature('a')).toBeUndefined();
+    expect(internalsOf(tables).heldFeature('a')).toBeUndefined();
     expect(corner()).toEqual([0.7, -0.2]);
   });
 

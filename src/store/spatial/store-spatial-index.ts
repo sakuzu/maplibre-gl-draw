@@ -27,6 +27,7 @@
  * that with invalidateType(), which re-derives the features of that type from the Store.
  */
 
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { heldFeaturesInOrder } from '../../feature-table/held-order.js';
 import type { Store } from '../store.js';
 import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
@@ -183,6 +184,6 @@ export class StoreSpatialIndex implements SpatialIndex {
   /** The feature of an id as the index holds it (only a row held, of a Store of rows) */
   #indexed(id: string): Feature | undefined {
     const tables = this.#store.tables;
-    return tables ? tables.heldFeature(id) : this.#store.getFeature(id);
+    return tables ? featureTablesInternals(tables)?.heldFeature(id) : this.#store.getFeature(id);
   }
 }

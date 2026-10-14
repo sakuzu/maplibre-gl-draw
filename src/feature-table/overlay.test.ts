@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { StoreChange } from '../shared/types/model.js';
-import { feature, tablesOfFeatures } from '../test-utils.js';
+import { feature, internalsOf, tablesOfFeatures } from '../test-utils.js';
 import { hitTestLayerTable } from './hit-test.js';
 import { STATE_HIDDEN_OVERLAY } from './row-state.js';
 
@@ -59,7 +59,9 @@ describe('the features drawn over rows for this client', () => {
     const { tables, internals, table, emitted, ids } = setup();
     const before = ids();
     const p3 = tables.layer('layer')?.getRow(tables.handleOf('p3') ?? -1);
-    tables.overlay('peer', [{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]);
+    internalsOf(tables).overlay('peer', [
+      { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
+    ]);
     // Drawn as a row of the delta, at the place of p3
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p3']);
     const place = table.deltaPlaces();
@@ -95,7 +97,7 @@ describe('the features drawn over rows for this client', () => {
 
   it('are replaced by the next call of their owner, and taken away by none', () => {
     const { tables, internals, table } = setup();
-    tables.overlay('peer', [
+    internalsOf(tables).overlay('peer', [
       { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
       { ...feature('new', 'Polygon', square(40)), layerId: 'layer' },
     ]);
@@ -105,11 +107,13 @@ describe('the features drawn over rows for this client', () => {
     expect(newAt).toBeGreaterThanOrEqual(0);
     expect(places.groups[newAt]).toBe(table.groupCount - 1);
     expect(places.cuts[newAt]).toBe(table.groupAt(table.groupCount - 1).data.length);
-    tables.overlay('peer', [{ ...feature('p5', 'Polygon', square(50)), layerId: 'layer' }]);
+    internalsOf(tables).overlay('peer', [
+      { ...feature('p5', 'Polygon', square(50)), layerId: 'layer' },
+    ]);
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p5']);
     const p3 = internals.placeOf(tables.handleOf('p3') ?? -1);
     expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
-    tables.overlay('peer', []);
+    internalsOf(tables).overlay('peer', []);
     expect(table.delta.group).toBeNull();
     const p5 = internals.placeOf(tables.handleOf('p5') ?? -1);
     expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
@@ -117,7 +121,9 @@ describe('the features drawn over rows for this client', () => {
 
   it('are not taken by the next versions', () => {
     const { tables, internals, table, writer, ids } = setup();
-    tables.overlay('peer', [{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]);
+    internalsOf(tables).overlay('peer', [
+      { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
+    ]);
     // A row moved in the same layer goes to the delta and to the next version
     writer.apply({
       handles: Int32Array.of(tables.handleOf('p1') ?? -1),

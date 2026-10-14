@@ -505,6 +505,17 @@ export function rowOfFeature(feature: Feature, order: string): RowInput {
 }
 
 /**
+ * The internals of tables made by core (the rows held as features, the features drawn over rows)
+ *
+ * @throws when the tables were not made by core
+ */
+export function internalsOf(tables: FeatureTables | undefined): FeatureTablesInternals {
+  const internals = featureTablesInternals(tables);
+  if (!internals) throw new Error('the tables were not made by core');
+  return internals;
+}
+
+/**
  * Tables holding the features in one layer, in the order given
  *
  * @param targetRows The largest number of rows of a row group

@@ -303,22 +303,6 @@ export interface FeatureTables {
    */
   scan(options?: TableScanOptions): RowCursor;
   /**
-   * Makes rows features for this client: the rows `owner` names are now these (the ones it named
-   * before and no other owner names are no longer). A row held is a {@link Feature} the Store
-   * gives as it is (`heldFeature`) until it is no longer held; it stays a row of the table, drawn
-   * from the table while it is not changed. The change is notified as `held`, not as a change of
-   * the document. An id of no row, or of a deleted one, is not held.
-   *
-   * The instance holds the rows selected and edited (`core:selection`) and, for a moment, the row
-   * a click is on (`core:pointer`).
-   *
-   * @param owner Who holds the rows
-   * @param ids The ids of the rows it holds (none: it holds no row any more)
-   */
-  hold(owner: string, ids: readonly string[]): void;
-  /** The feature of a row held (undefined for an id not held) */
-  heldFeature(id: string): Feature | undefined;
-  /**
    * The values the fields of a patch have now, for its rows (as a feature holds them; `deleted`
    * read when the patch has it, a row that is not there counting as deleted): written back, they
    * put the rows back as they are
@@ -329,18 +313,6 @@ export interface FeatureTables {
    * next versions of their row groups, and the Store may forget their ids
    */
   release(token: RetainToken): void;
-  /**
-   * Draws features in the places of rows, for this client only: the features `owner` draws over
-   * rows are now these (the ones it drew before and does not give are no longer drawn). A
-   * feature is drawn in the place of the row of its id, which is not drawn while it is (and is
-   * still hit where it is); a feature of no row is drawn at the end of its layer. Nothing is
-   * written: the rows, what is read of them and the notifications of the document stay as they
-   * are. The edits of others in their middle are shown so.
-   *
-   * @param owner Who draws the features
-   * @param features The features it draws (none: it draws none any more)
-   */
-  overlay(owner: string, features: readonly Feature[]): void;
 }
 
 /**
@@ -427,7 +399,7 @@ export interface FeatureTablesWriter {
    * they are until then. The row groups given to `adopt` from then on have the new dimensions.
    *
    * @throws when the dimensions do not hold the ones of the layer (they are never lowered), or
-   *   when a row of the layer is held as a feature (`FeatureTables.hold`)
+   *   when a row of the layer is made a feature for this client (`DocumentChange.held`)
    */
   raiseDims(layerId: string, dims: CoordinateDims): void;
   /**
@@ -480,7 +452,7 @@ export interface FeatureTablesWriter {
   applyGroups(patch: TableGroupPatch, options?: RowApplyOptions): void;
   /**
    * Writes the feature of a row held, after the implementation of the Store recorded it: the
-   * feature is what `heldFeature` gives from now on, and its values are written to the row as
+   * feature is what the Store gives for the row from now on (`getFeature`), and its values are written to the row as
    * `apply` writes them (the layer and the group of features are written with `apply`, with the
    * key of the order, not here). The change is notified as an update of the feature.
    *
@@ -540,7 +512,7 @@ export interface FeatureTablesOptions {
    * The dimensions of the coordinates of the rows of a layer, read once, when the layer first
    * holds rows (`xy` for every layer when omitted): `xy`, `xyz`, `xym` or `xyzm`. The rows of a
    * layer of `z` or `m` are drawn and hit by their `x` and `y`, and are read with every value
-   * (`snapshot`); they are not made features (`hold`, `getRow`)
+   * (`snapshot`); they are not made features (for the selection, or by `getRow`)
    */
   readonly dimsOf?: (layerId: string) => CoordinateDims;
   /**

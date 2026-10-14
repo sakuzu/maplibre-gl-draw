@@ -15,6 +15,7 @@ import { RELEASE_DELAY_MS } from '../store/draw-store.js';
 import type { Store } from '../store/store.js';
 import { createTableMemoryStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
+import { internalsOf } from '../test-utils.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { translationBetween } from './held-move.js';
 import {
@@ -208,7 +209,7 @@ describe('many rows held moved as a whole', () => {
     drag(store, ids, 1, 0.5);
     for (const id of ids) {
       expect(rowGeometry(tables, id)).toEqual(squareAt(Number(id.slice(1)) * 2, 0));
-      expect(tables.heldFeature(id)?.geometry).toEqual(
+      expect(internalsOf(tables).heldFeature(id)?.geometry).toEqual(
         moved(rowGeometry(tables, id) as Geometry, 1, 0.5),
       );
       expect(movingSet(tables, id)).toEqual([1, 1]);
@@ -243,14 +244,14 @@ describe('many rows held moved as a whole', () => {
     for (const id of ids) {
       const start = squareAt(Number(id.slice(1)) * 2, 0);
       expect(rowGeometry(tables, id)).toEqual(start);
-      expect(tables.heldFeature(id)?.geometry).toEqual(start);
+      expect(internalsOf(tables).heldFeature(id)?.geometry).toEqual(start);
       expect(movingSet(tables, id)).toEqual([0, 0]);
     }
     // Let go of in the middle of a move: the rows hold the values before it
     drag(store, ids, 2, 2);
     store.setSelection(null, []);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(tables.heldFeature('s0')).toBeUndefined();
+    expect(internalsOf(tables).heldFeature('s0')).toBeUndefined();
     for (const id of ids) {
       expect(rowGeometry(tables, id)).toEqual(squareAt(Number(id.slice(1)) * 2, 0));
       expect(movingSet(tables, id)).toEqual([0, 0]);
@@ -300,8 +301,8 @@ describe('many rows held moved as a whole', () => {
       });
     }, 'remote');
     // The name is written; the geometry the move writes is kept apart until it ends
-    expect(tables.heldFeature('s2')?.properties.name).toBe('other');
-    expect(tables.heldFeature('s2')?.geometry).toEqual(moved(squareAt(4, 0), 1, 0.5));
+    expect(internalsOf(tables).heldFeature('s2')?.properties.name).toBe('other');
+    expect(internalsOf(tables).heldFeature('s2')?.geometry).toEqual(moved(squareAt(4, 0), 1, 0.5));
     expect(rowGeometry(tables, 's2')).toEqual(squareAt(4, 0));
     expect(movingSet(tables, 's2')).toEqual([1, 1]);
     // Let go of without an end, the row takes the geometry the other wrote

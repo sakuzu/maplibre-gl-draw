@@ -203,9 +203,6 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
     },
     groupOrderOf: (group) => store.groupOrderOf(group),
     scan: (options) => store.scan(options ?? {}),
-    hold: (owner, ids) => store.hold(owner, ids),
-    heldFeature: (id) => store.heldFeature(id),
-    overlay: (owner, features) => store.overlay(owner, features),
     snapshot: (patch) => store.snapshot(patch),
     release: (token) => store.release(token),
   };
@@ -368,6 +365,34 @@ export interface FeatureTablesInternals {
    * (undefined for an id not held): what an undone edit writes back
    */
   heldCommitted(id: string): Feature | undefined;
+  /**
+   * Makes rows features for this client: the rows `owner` names are now these (the ones it named
+   * before and no other owner names are no longer). A row held is a {@link Feature} the Store
+   * gives as it is (`heldFeature`) until it is no longer held; it stays a row of the table, drawn
+   * from the table while it is not changed. The change is notified as `held`, not as a change of
+   * the document. An id of no row, or of a deleted one, is not held.
+   *
+   * The instance holds the rows selected and edited (`core:selection`) and, for a moment, the row
+   * a click is on (`core:pointer`).
+   *
+   * @param owner Who holds the rows
+   * @param ids The ids of the rows it holds (none: it holds no row any more)
+   */
+  hold(owner: string, ids: readonly string[]): void;
+  /** The feature of a row held (undefined for an id not held) */
+  heldFeature(id: string): Feature | undefined;
+  /**
+   * Draws features in the places of rows, for this client only: the features `owner` draws over
+   * rows are now these (the ones it drew before and does not give are no longer drawn). A
+   * feature is drawn in the place of the row of its id, which is not drawn while it is (and is
+   * still hit where it is); a feature of no row is drawn at the end of its layer. Nothing is
+   * written: the rows, what is read of them and the notifications of the document stay as they
+   * are. The edits of others in their middle are shown so.
+   *
+   * @param owner Who draws the features
+   * @param features The features it draws (none: it draws none any more)
+   */
+  overlay(owner: string, features: readonly Feature[]): void;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();

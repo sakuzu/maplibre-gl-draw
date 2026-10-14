@@ -315,9 +315,19 @@ async function moveHeld(
   const before = features.filter((f) => ids.includes(f.id));
   return page.evaluate(
     ({ geometries, before, intermediate }) => {
-      const store = (window as unknown as { store: import('../index.js').Store }).store;
+      const w = window as unknown as {
+        store: import('../index.js').Store;
+        e2e: {
+          internals: {
+            featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
+          };
+        };
+      };
+      const store = w.store;
       const tables = store.tables as import('../index.js').FeatureTables;
-      tables.hold(
+      const internals = w.e2e.internals.featureTablesInternals(tables);
+      if (!internals) throw new Error('the Store of the page holds no rows');
+      internals.hold(
         'e2e',
         geometries.map((f) => f.id),
       );

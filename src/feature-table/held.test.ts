@@ -50,32 +50,32 @@ function patchOf(handle: number, fields: Record<string, unknown>, deleted = fals
 
 describe('the rows held as features', () => {
   it('are features given as they are until they change, and notified as held', () => {
-    const { tables, emitted } = setup();
-    tables.hold('core:selection', ['p1', 'p2', 'unknown']);
+    const { tables, internals, emitted } = setup();
+    internals.hold('core:selection', ['p1', 'p2', 'unknown']);
     expect(emitted).toHaveLength(1);
     expect(emitted[0].held?.added.map((f) => f.id)).toEqual(['p1', 'p2']);
     expect(emitted[0].held?.removed).toEqual([]);
-    const held = tables.heldFeature('p1');
+    const held = internals.heldFeature('p1');
     expect(held).toBe(emitted[0].held?.added[0]);
     expect(held?.geometry).toEqual({ type: 'Point', coordinates: [1, 0] });
     expect(held?.properties).toEqual({ n: 1 });
-    expect(tables.heldFeature('p1')).toBe(held);
-    expect(tables.heldFeature('p3')).toBeUndefined();
+    expect(internals.heldFeature('p1')).toBe(held);
+    expect(internals.heldFeature('p3')).toBeUndefined();
     // Held by two owners: not given back until neither names it
-    tables.hold('core:pointer', ['p2']);
-    tables.hold('core:selection', ['p1']);
+    internals.hold('core:pointer', ['p2']);
+    internals.hold('core:selection', ['p1']);
     expect(emitted).toHaveLength(1);
-    tables.hold('core:pointer', []);
+    internals.hold('core:pointer', []);
     expect(emitted[1].held).toEqual({ added: [], removed: ['p2'] });
-    expect(tables.heldFeature('p2')).toBeUndefined();
+    expect(internals.heldFeature('p2')).toBeUndefined();
     // A row stays a row of the table while it is held
     expect(tables.scan().next()?.length).toBe(20);
   });
 
   it('write their rows when their features are written, notified as updates of the features', () => {
-    const { tables, writer, emitted, row } = setup();
-    tables.hold('core:selection', ['p3']);
-    const before = tables.heldFeature('p3') as Feature;
+    const { internals, writer, emitted, row } = setup();
+    internals.hold('core:selection', ['p3']);
+    const before = internals.heldFeature('p3') as Feature;
     const next: Feature = {
       ...before,
       geometry: { type: 'Point', coordinates: [30, 3] },
@@ -84,7 +84,7 @@ describe('the rows held as features', () => {
     };
     emitted.length = 0;
     writer.writeHeld('p3', next);
-    expect(tables.heldFeature('p3')).toBe(next);
+    expect(internals.heldFeature('p3')).toBe(next);
     expect(emitted).toEqual([
       { features: { updated: [{ id: 'p3', feature: next, previous: before }] } },
     ]);
@@ -97,9 +97,9 @@ describe('the rows held as features', () => {
   });
 
   it('are written by apply as features: an update of the feature, a deletion of the feature', () => {
-    const { tables, writer, emitted, at } = setup();
-    tables.hold('core:selection', ['p5', 'p6']);
-    const p5 = tables.heldFeature('p5') as Feature;
+    const { internals, writer, emitted, at } = setup();
+    internals.hold('core:selection', ['p5', 'p6']);
+    const p5 = internals.heldFeature('p5') as Feature;
     emitted.length = 0;
     const change = writer.apply({
       handles: Int32Array.of(at('p5'), at('p7')),
@@ -111,23 +111,23 @@ describe('the rows held as features', () => {
     const updated = emitted[1].features?.updated?.[0];
     expect(updated?.previous).toBe(p5);
     expect(updated?.feature.properties).toEqual({ n: -5 });
-    expect(tables.heldFeature('p5')).toBe(updated?.feature);
+    expect(internals.heldFeature('p5')).toBe(updated?.feature);
     // A row held deleted: its feature is deleted, and it is not held any more (not in held)
     emitted.length = 0;
     writer.apply(patchOf(at('p6'), {}, true));
     expect(emitted).toHaveLength(1);
     expect(emitted[0].features?.deleted?.map((f) => f.id)).toEqual(['p6']);
     expect(emitted[0].rows).toBeUndefined();
-    expect(tables.heldFeature('p6')).toBeUndefined();
+    expect(internals.heldFeature('p6')).toBeUndefined();
     emitted.length = 0;
-    tables.hold('core:selection', ['p5']);
+    internals.hold('core:selection', ['p5']);
     expect(emitted).toHaveLength(0);
   });
 
   it('show an edit in its middle, and keep the values of others for when it ends', () => {
-    const { tables, writer, internals, at, row } = setup();
-    tables.hold('core:selection', ['p8']);
-    const start = tables.heldFeature('p8') as Feature;
+    const { writer, internals, at, row } = setup();
+    internals.hold('core:selection', ['p8']);
+    const start = internals.heldFeature('p8') as Feature;
     const moved = (x: number): Feature => ({
       ...start,
       geometry: { type: 'Point', coordinates: [x, 8] },
@@ -143,7 +143,7 @@ describe('the rows held as features', () => {
     );
     expect(row('p8')?.geometry).toEqual({ type: 'Point', coordinates: [80, 8] });
     expect(row('p8')?.style).toEqual({ pointColor: '#00ff00' });
-    expect(tables.heldFeature('p8')?.geometry).toEqual({ type: 'Point', coordinates: [80, 8] });
+    expect(internals.heldFeature('p8')?.geometry).toEqual({ type: 'Point', coordinates: [80, 8] });
     writer.writeHeld(
       'p8',
       { ...moved(81), style: { pointColor: '#00ff00' } },
@@ -159,23 +159,23 @@ describe('the rows held as features', () => {
   });
 
   it('show the values before an edit when they are no longer held in its middle', () => {
-    const { tables, writer, at, row } = setup();
-    tables.hold('core:selection', ['p9']);
-    const start = tables.heldFeature('p9') as Feature;
+    const { internals, writer, at, row } = setup();
+    internals.hold('core:selection', ['p9']);
+    const start = internals.heldFeature('p9') as Feature;
     writer.writeHeld(
       'p9',
       { ...start, geometry: { type: 'Point', coordinates: [90, 9] }, properties: { n: 99 } },
       { intermediate: true },
     );
     writer.apply(patchOf(at('p9'), { geometry: { type: 'Point', coordinates: [-9, -9] } }));
-    tables.hold('core:selection', []);
+    internals.hold('core:selection', []);
     expect(row('p9')?.geometry).toEqual({ type: 'Point', coordinates: [-9, -9] });
     expect(row('p9')?.properties).toEqual({ n: 9 });
   });
 
   it('keep their copies in the delta until they are no longer held', () => {
     const { tables, writer, internals, at } = setup(40);
-    tables.hold('core:selection', ['p2']);
+    internals.hold('core:selection', ['p2']);
     writer.apply(patchOf(at('p2'), { order: 'k000030m' }));
     expect(internals.placeOf(at('p2'))?.group.delta).toBe(true);
     internals.flushVersions();
@@ -183,12 +183,12 @@ describe('the rows held as features', () => {
     expect(internals.hasPendingWork).toBe(false);
     // Written while held: still kept
     writer.writeHeld('p2', {
-      ...(tables.heldFeature('p2') as Feature),
+      ...(internals.heldFeature('p2') as Feature),
       geometry: { type: 'Point', coordinates: [2, 2] },
     });
     internals.flushVersions();
     expect(internals.placeOf(at('p2'))?.group.delta).toBe(true);
-    tables.hold('core:selection', []);
+    internals.hold('core:selection', []);
     expect(internals.hasPendingWork).toBe(true);
     internals.flushVersions();
     expect(internals.placeOf(at('p2'))?.group.delta).toBe(false);
@@ -202,9 +202,9 @@ describe('the rows held as features', () => {
 
   it('follow their rows to another layer written by apply, read there', () => {
     const { tables, writer, internals, at } = setup();
-    tables.hold('core:selection', ['p4']);
+    internals.hold('core:selection', ['p4']);
     writer.apply(patchOf(at('p4'), { layerId: 'other', order: 'k000000' }));
-    expect(tables.heldFeature('p4')?.layerId).toBe('other');
+    expect(internals.heldFeature('p4')?.layerId).toBe('other');
     expect(internals.placeOf(at('p4'))?.layer.layerId).toBe('other');
     expect(tables.layer('layer')?.rowsInOrder(0, 100).includes(at('p4'))).toBe(false);
     expect(Array.from(tables.layer('other')?.rowsInOrder(0, 10) ?? [])).toEqual([at('p4')]);

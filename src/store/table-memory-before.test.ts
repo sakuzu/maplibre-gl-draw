@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { internalsOf } from '../test-utils.js';
 import type { Store } from './store.js';
 import { createTableMemoryStore } from './table-memory.js';
 import type { Feature, ItemMove, StoreChange } from './types.js';
@@ -181,10 +182,10 @@ describe('the writes of the features of rows not held', () => {
   it('give the values before of a row written while held and no longer held at the end', () => {
     const { store, tables, notified } = setup();
     const start = stateOf(store, tables);
-    tables.hold('test', ['p1']);
+    internalsOf(tables).hold('test', ['p1']);
     store.transact(() => {
       store.updateFeature('p1', { properties: { n: 10 }, style: { pointColor: '#0000ff' } });
-      tables.hold('test', []);
+      internalsOf(tables).hold('test', []);
     });
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);

@@ -24,6 +24,7 @@ import { createRowGroupBuilder } from '../table/row-group-builder.js';
 import { mergeRowGroup } from '../table/row-group-merge.js';
 import {
   expectTablesMatch,
+  internalsOf,
   referenceKey as key,
   type RandomGeometry,
   type ReferenceRow,
@@ -507,9 +508,9 @@ describe('the dimensions of a layer raised', () => {
     expect(() => writer.raiseDims('a', 'xym')).toThrow(/cannot be lowered/);
     expect(() => writer.raiseDims('a', 'xy')).toThrow(/cannot be lowered/);
     const xy = smallTables('xy', [['p', { type: 'Point', coordinates: [1, 2] }]]);
-    xy.tables.hold('owner', ['p']);
+    internalsOf(xy.tables).hold('owner', ['p']);
     expect(() => xy.writer.raiseDims('a', 'xyz')).toThrow(/held as a feature/);
-    xy.tables.hold('owner', []);
+    internalsOf(xy.tables).hold('owner', []);
     xy.writer.raiseDims('a', 'xyz');
     expect(tables.layer('a')).toBeDefined();
   });
@@ -518,7 +519,7 @@ describe('the dimensions of a layer raised', () => {
 describe('the rows of a layer of z or m', () => {
   it('are not made features: held, read as one, hit as one', () => {
     const { tables } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2, 3] }]]);
-    expect(() => tables.hold('owner', ['p'])).toThrow(/is not a feature/);
+    expect(() => internalsOf(tables).hold('owner', ['p'])).toThrow(/is not a feature/);
     const handle = tables.handleOf('p') as number;
     expect(() => tables.layer('a')?.getRow(handle)).toThrow(/is not a feature/);
     // What is read without a feature: x and y

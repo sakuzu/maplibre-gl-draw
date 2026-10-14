@@ -25,7 +25,7 @@ import { STATE_BULK } from '../../feature-table/row-state.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
-import { STORE_KINDS } from '../../test-utils.js';
+import { internalsOf, STORE_KINDS } from '../../test-utils.js';
 import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
@@ -560,7 +560,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       mode.onDragMove(shiftDrag('dragmove', 12, 12));
       expect(marked('f1')).toBe(true);
       expect(store.getSelection()).toEqual({ type: null, ids: [] });
-      expect(store.tables?.heldFeature('f1')).toBeUndefined();
+      expect(internalsOf(store.tables).heldFeature('f1')).toBeUndefined();
       mode.onDragEnd(shiftDrag('dragend', 12, 12));
       expect(marked('f1')).toBe(false);
       expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });

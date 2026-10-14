@@ -177,6 +177,7 @@ async function drawHeld(
           };
           internals: {
             tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
+            featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
           };
         };
       };
@@ -240,7 +241,7 @@ async function drawHeld(
       };
       await settle();
       // Held without a selection: no handle is drawn over them
-      store.tables?.hold('e2e', held);
+      w.e2e.internals.featureTablesInternals(store.tables)?.hold('e2e', held);
       for (const edit of edits) {
         const updates: Record<string, unknown> = {};
         if (edit.geometry) updates.geometry = edit.geometry;

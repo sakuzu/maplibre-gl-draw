@@ -23,7 +23,7 @@ import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
 import { createRowGroupBuilder } from '../../table/row-group-builder.js';
-import { feature, orderKey, rowOfFeature } from '../../test-utils.js';
+import { feature, internalsOf, orderKey, rowOfFeature } from '../../test-utils.js';
 import { HitTestServiceImpl } from './service.js';
 import { createTopmostHitTester, POINTER_HOLD_MS, POINTER_OWNER, type TopHit } from './topmost.js';
 
@@ -178,31 +178,31 @@ describe('the hit testing that holds the row hit', () => {
     adopt('l', [feature('p', 'Polygon', square(0, 0))]);
     const hit = tester()(at(5, 5), { hold: true });
     expect(hit?.kind).toBe('store');
-    const held = tables.tables.heldFeature('p');
+    const held = internalsOf(tables.tables).heldFeature('p');
     expect(held).toBeDefined();
     expect(hit?.kind === 'store' && hit.feature).toBe(held);
     // The selection holds it before the moment is over
     store.setSelection('feature', ['p']);
     vi.advanceTimersByTime(POINTER_HOLD_MS);
-    expect(tables.tables.heldFeature('p')).toBe(held);
+    expect(internalsOf(tables.tables).heldFeature('p')).toBe(held);
     store.setSelection(null, []);
     // Let go a moment after the selection lets go of it
     vi.advanceTimersByTime(RELEASE_DELAY_MS);
-    expect(tables.tables.heldFeature('p')).toBeUndefined();
+    expect(internalsOf(tables.tables).heldFeature('p')).toBeUndefined();
     // Without the selection it is let go after the moment
     tester()(at(5, 5), { hold: true });
-    expect(tables.tables.heldFeature('p')).toBeDefined();
+    expect(internalsOf(tables.tables).heldFeature('p')).toBeDefined();
     vi.advanceTimersByTime(POINTER_HOLD_MS);
-    expect(tables.tables.heldFeature('p')).toBeUndefined();
+    expect(internalsOf(tables.tables).heldFeature('p')).toBeUndefined();
   });
 
   it('returns a row held as a feature of the Store, held or not by the hit', () => {
     layer('l');
     adopt('l', [feature('p', 'Polygon', square(0, 0))]);
-    tables.tables.hold(POINTER_OWNER, []);
+    internalsOf(tables.tables).hold(POINTER_OWNER, []);
     store.setSelection('feature', ['p']);
     const hit = tester()(at(5, 5));
     expect(hit?.kind).toBe('store');
-    expect(hit?.kind === 'store' && hit.feature).toBe(tables.tables.heldFeature('p'));
+    expect(hit?.kind === 'store' && hit.feature).toBe(internalsOf(tables.tables).heldFeature('p'));
   });
 });
