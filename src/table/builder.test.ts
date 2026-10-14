@@ -168,10 +168,105 @@ describe('createTableBuilder: the geometry', () => {
     expect(Number.isNaN(prepareTable(table).rowBounds[0])).toBe(true);
   });
 
-  it('keeps only the first two values of a position', () => {
+  it('keeps every value of a position: the column takes the dimensions of the longest', () => {
     const builder = createTableBuilder();
     builder.add({ type: 'Point', coordinates: [1, 2, 30] });
-    expect(Array.from((builder.finish().geometry as TableGeometry).coords)).toEqual([1, 2]);
+    const geometry = builder.finish().geometry as TableGeometry;
+    expect(geometry.dims).toBe('xyz');
+    expect(Array.from(geometry.coords)).toEqual([1, 2, 30]);
+  });
+
+  it('grows the dimensions of a column as longer positions come, the values before NaN', () => {
+    const builder = createTableBuilder({ capacity: 1 });
+    builder.add(
+      line([
+        [0, 0],
+        [1, 1],
+      ]),
+    );
+    builder.add(
+      line([
+        [2, 2, 5],
+        [3, 3],
+      ]),
+    );
+    builder.add({
+      type: 'LineString',
+      coordinates: [
+        [4, 4, 6, 1.7e12],
+        [5, 5],
+      ],
+    });
+    builder.add({ type: 'Point', coordinates: [9, 9] });
+    const table = builder.finish();
+    const lines = (table.geometry as TableMixedGeometry).children[0];
+    expect(lines.dims).toBe('xyzm');
+    const n = Number.NaN;
+    expect(Array.from(lines.coords)).toEqual([
+      0,
+      0,
+      n,
+      n,
+      1,
+      1,
+      n,
+      n,
+      2,
+      2,
+      5,
+      n,
+      3,
+      3,
+      n,
+      n,
+      4,
+      4,
+      6,
+      1.7e12,
+      5,
+      5,
+      n,
+      n,
+    ]);
+    // The point stays a column of xy
+    expect((table.geometry as TableMixedGeometry).children[1].dims).toBeUndefined();
+    const reader = new TableReader(table);
+    expect(reader.coordinatesOf(1)).toEqual([
+      [2, 2],
+      [3, 3],
+    ]);
+    expect(reader.columnOf(2)?.fullCoordinatesOf(2)).toEqual([
+      [4, 4, 6, 1.7e12],
+      [5, 5],
+    ]);
+    expect(() => prepareTable(table)).not.toThrow();
+    expect(Array.from(prepareTable(table).rowBounds.subarray(4, 8))).toEqual([2, 2, 3, 3]);
+  });
+
+  it('holds the dimensions it is given, and refuses a longer position', () => {
+    const table = tableFromFeatures(
+      [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [1, 2, 1.7e12] },
+          properties: {},
+        },
+        { type: 'Feature', geometry: { type: 'Point', coordinates: [3, 4] }, properties: {} },
+        { type: 'Feature', geometry: null, properties: {} },
+      ],
+      { dims: 'xym' },
+    );
+    const geometry = table.geometry as TableGeometry;
+    expect(geometry.dims).toBe('xym');
+    const n = Number.NaN;
+    expect(Array.from(geometry.coords)).toEqual([1, 2, 1.7e12, 3, 4, n, n, n, n]);
+    const builder = createTableBuilder({ dims: 'xyz' });
+    expect(() => builder.add({ type: 'Point', coordinates: [1, 2, 3, 4] })).toThrow(
+      /4 values does not fit coordinates of xyz/,
+    );
+    expect(() => createTableBuilder().add({ type: 'Point', coordinates: [1, 2, 3, 4, 5] })).toThrow(
+      /5 values/,
+    );
   });
 
   it('grows past its capacity', () => {

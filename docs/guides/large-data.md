@@ -190,6 +190,10 @@ of a table has no style of its own.
   floating point column, NaN means no value
 - A row without a geometry (an empty run, NaN coordinates for a point,
   or a 0 bit in `validity`) is neither drawn nor hit
+- The coordinates have the dimensions in `dims`: `xy` (the default),
+  `xyz`, `xym` or `xyzm`, the names of GeoArrow, the values of a
+  coordinate next to each other. The rows are drawn and hit by `x` and
+  `y`
 - Pass only the columns that the rule and your own code read
 
 The dataset keeps the arrays and reads them; it does not copy them. Do
