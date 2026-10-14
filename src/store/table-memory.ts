@@ -803,9 +803,12 @@ export class TableContractStore implements StoreContract {
   }
   setLocallyHidden(id: string, hidden: boolean): void {
     this.#client.setLocallyHidden(id, hidden);
-    // A row hidden on this client is hidden in its state
+    // A row hidden on this client is hidden in its state, and the rows of a group by the group
     const handle = this.tables.findRow(id);
     if (handle !== undefined) this.#internals.states.setHidden(Int32Array.of(handle), hidden);
+    else if (this.tables.findGroup(id) !== undefined || !hidden) {
+      this.#internals.setGroupHidden(id, hidden);
+    }
   }
 
   // ==========================================================================

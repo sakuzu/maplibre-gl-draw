@@ -95,6 +95,7 @@ import {
   STATE_HIDDEN_DELTA,
   STATE_HIDDEN_GROUP,
   STATE_HIDDEN_INVISIBLE,
+  STATE_HIDDEN_LOCAL,
   STATE_HIDDEN_MASK,
   STATE_HIDDEN_WAIT,
   STATE_UNIFORM,
@@ -397,6 +398,12 @@ export interface FeatureTablesInternals {
    * @returns The function that stops the calls
    */
   onBulkSelected(listener: (rows: TableSelection | null) => void): () => void;
+  /**
+   * Hides or shows the rows of a group of features on this client only, as the features of a
+   * group hidden on this client are: the rows that are in the group by the id, now and while it
+   * is hidden, are not drawn and not hit
+   */
+  setGroupHidden(groupId: string, hidden: boolean): void;
   /** Tells the listeners of `onBulkSelected` the rows of a selection of many features decided */
   bulkSelected(rows: TableSelection | null): void;
   /** Whether the row of a handle is held as a feature */
@@ -550,6 +557,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The layers by their serial number */
   private readonly layerList: LayerTable[] = [];
   private readonly views = new Map<string, LayerTableView>();
+  /** The ids of the groups of features hidden on this client */
+  private readonly hiddenGroupIds = new Set<string>();
   private readonly rowGroups = new Map<RowGroupHandle, { layer: LayerTable; group: RowGroup }>();
   private nextGroup = 0;
   private revisionCount = 0;
@@ -1882,6 +1891,34 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   private readonly bulkListeners = new Set<(rows: TableSelection | null) => void>();
 
+  setGroupHidden(groupId: string, hidden: boolean): void {
+    if (this.hiddenGroupIds.has(groupId) === hidden) return;
+    if (hidden) this.hiddenGroupIds.add(groupId);
+    else this.hiddenGroupIds.delete(groupId);
+    const group = this.groups.handleOfId(groupId);
+    if (group >= 0) this.refreshGroupStates(new Set([group]));
+    this.revisionCount++;
+    this.notifyWork();
+  }
+
+  /** Makes the copies of the state of the rows of groups of features again */
+  private refreshGroupStates(shown: ReadonlySet<GroupHandle>): void {
+    for (const layer of this.layers.values()) {
+      // The row groups around the members of the groups (by their keys), and the delta
+      const groups = rowGroupsHolding(layer, shown, this.groups).map((g) => layer.groupAt(g));
+      if (layer.delta.group) groups.push(layer.delta.group);
+      for (const group of groups) {
+        let changed = false;
+        for (let r = 0; r < group.data.length; r++) {
+          if (!shown.has(group.data.groups[r])) continue;
+          this.writeState(group, r);
+          changed = true;
+        }
+        if (changed) group.stateVersion++;
+      }
+    }
+  }
+
   onBulkSelected(listener: (rows: TableSelection | null) => void): () => void {
     this.bulkListeners.add(listener);
     return () => {
@@ -2604,22 +2641,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         list.set(group, order);
       }
     }
-    if (shown.size > 0) {
-      for (const layer of this.layers.values()) {
-        // The row groups around the members of the groups (by their keys), and the delta
-        const groups = rowGroupsHolding(layer, shown, this.groups).map((g) => layer.groupAt(g));
-        if (layer.delta.group) groups.push(layer.delta.group);
-        for (const group of groups) {
-          let changed = false;
-          for (let r = 0; r < group.data.length; r++) {
-            if (!shown.has(group.data.groups[r])) continue;
-            this.writeState(group, r);
-            changed = true;
-          }
-          if (changed) group.stateVersion++;
-        }
-      }
-    }
+    if (shown.size > 0) this.refreshGroupStates(shown);
     // The moves of the groups that are items, with the keys before (told when they are written,
     // whenever the order of their members goes in)
     if (this.onChange) {
@@ -3301,6 +3323,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if ((flags & ROW_FLAG_DELETED) !== 0) state |= STATE_HIDDEN_DELETED;
     const featureGroup = data.groups[row];
     if (featureGroup >= 0 && !this.groups.isVisible(featureGroup)) state |= STATE_HIDDEN_GROUP;
+    if (featureGroup >= 0 && this.hiddenGroupIds.size > 0) {
+      const id = this.groups.idOf(featureGroup);
+      if (id !== undefined && this.hiddenGroupIds.has(id)) state |= STATE_HIDDEN_LOCAL;
+    }
     if (rowType(data, row) === 'Circle') state |= STATE_UNIFORM;
     if (!group.delta && !group.pending) {
       // The copy of a row read elsewhere: in the delta, or in another group until it is in this
