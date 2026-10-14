@@ -190,7 +190,7 @@ class GeometryColumnBuilder {
    *
    * @throws when the position has more values than the dimensions can hold
    */
-  private fit(position: Position): void {
+  private holdDimsOf(position: Position): void {
     const length = position.length;
     if (length <= this.stride) return;
     if (this.fixedDims !== undefined || length > 4) {
@@ -209,7 +209,7 @@ class GeometryColumnBuilder {
       this.coords.push2(position[0], position[1]);
       return;
     }
-    this.fit(position);
+    this.holdDimsOf(position);
     this.coords.pushPosition(position, this.stride);
   }
 
