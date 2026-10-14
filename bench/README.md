@@ -160,7 +160,11 @@ moved), and `undoRedo` undoes and redoes an edit of the rows (moved and
 colored) with a history of the page: the Store has no history of its own,
 so the values before and after are written back through the Store
 (`applyRows` for rows, `updateMany` for features), and the bytes that
-history holds are shown.
+history holds are shown. `boxHeld` draws a box with Shift from the
+center of the map, grown to its corner and shrunk, a move of the pointer
+per rep, each move timed (the rows in the box are marked while it is
+drawn; zoom so that it meets about `held` rows), and lets it go at the
+last rep.
 
 The changes of others are written in place
 (`color`, `attr`, `position`, `corner`) or placed elsewhere: `reorder`

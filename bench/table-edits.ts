@@ -30,7 +30,9 @@
  * the order of the rows moved is noted); an edit of `members` rows undone and redone by a history
  * of the page (the Store of the page has none): the values before and after the edit written back
  * through the Store (`applyRows`, which returns the values before; the features of the Store are
- * updated with their values for the Store of objects), with the bytes the history holds noted.
+ * updated with their values for the Store of objects), with the bytes the history holds noted. A
+ * box drawn with Shift (`boxHeld`) is grown and shrunk a step per frame, each move of the pointer
+ * timed.
  *
  * Each run measures the frames before, during and after it, the JS heap and the GPU memory (and
  * the highest heap during it), and what the writes, the deltas and the versions of the row groups
@@ -403,6 +405,8 @@ function stepsOf(
     case 'orderMany':
     case 'undoRedo':
       return manySteps(target, op, params);
+    case 'boxHeld':
+      return boxSteps(target, params);
   }
 }
 
@@ -594,6 +598,40 @@ function manySteps(
 }
 
 /**
+ * The steps of a box drawn with Shift as the select mode takes it: the events of the mouse sent
+ * to the canvas, the box grown from the center of the map by a step per frame until it is as
+ * large as the map, then shrunk, and let go at the last step (the time each move of the pointer
+ * takes is an input: a Store of rows marks the rows in the box, a Store of objects selects the
+ * features in it). Run where the box meets about `held` rows (zoom so)
+ */
+function boxSteps(target: EditTarget, params: TableBenchPageParams): (i: number) => Promise<void> {
+  const { map, store } = target;
+  const canvas = map.getCanvas();
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const cx = width / 2;
+  const cy = height / 2;
+  const half = Math.max(1, Math.floor(params.reps / 2));
+  return async (i) => {
+    if (i === 0) {
+      store.setSelection(null, []);
+      mouse(map, 'mousemove', cx, cy, 0, true);
+      mouse(map, 'mousedown', cx, cy, 1, true);
+    }
+    // Grown to the corner of the map over half of the steps, then shrunk
+    const k = i < half ? (i + 1) / half : Math.max(0.05, (params.reps - i) / half);
+    const t0 = performance.now();
+    mouse(map, 'mousemove', cx + (k * width) / 2, cy + (k * height) / 2, 1, true);
+    inputs.push(performance.now() - t0);
+    if (i === params.reps - 1) {
+      const point = [cx + (k * width) / 2, cy + (k * height) / 2];
+      mouse(map, 'mouseup', point[0], point[1], 0, true);
+      notes.push(`selected when let go ${store.getSelection().ids.length}`);
+    }
+  };
+}
+
+/**
  * The steps of an edit of rows undone and redone by a history of the page: the edit (the rows
  * moved and colored) is made once, then undone and redone in turn, each a write of the values
  * the history holds (through `applyRows` for rows, `updateMany` for features of the Store)
@@ -668,6 +706,7 @@ function mouse(
   x: number,
   y: number,
   buttons = 0,
+  shiftKey = false,
 ): void {
   const canvas = map.getCanvas();
   const rect = canvas.getBoundingClientRect();
@@ -679,6 +718,7 @@ function mouse(
       clientY: rect.top + y,
       button: 0,
       buttons,
+      shiftKey,
       view: window,
     }),
   );

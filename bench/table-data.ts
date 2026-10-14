@@ -93,7 +93,8 @@ export interface TableBenchPageParams extends TableBenchParams {
  * and put back, a feature selected and deleted; and the edits of many rows (`moveHeld` to
  * `undoRedo`): `held` rows selected and dragged, `held` rows selected while the map pans,
  * `members` rows grouped and ungrouped, put in another layer and back, one row and `members`
- * rows brought to the front and sent to the back, an edit of `members` rows undone and redone
+ * rows brought to the front and sent to the back, an edit of `members` rows undone and redone,
+ * and a box drawn with Shift grown and shrunk over the map (`boxHeld`)
  */
 export const EDIT_OPS = [
   'color1',
@@ -116,6 +117,7 @@ export const EDIT_OPS = [
   'order1',
   'orderMany',
   'undoRedo',
+  'boxHeld',
 ] as const;
 
 /** An edit a page repeats */
