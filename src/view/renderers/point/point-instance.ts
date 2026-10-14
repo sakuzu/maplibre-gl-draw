@@ -695,13 +695,13 @@ void main() {
     g_anchor_elevation_on = 1.0;
 
 #ifdef TABLE_ROWS
-    // The state of the row: a hidden row draws nothing, a moving one is translated
+    // The state of the row: a hidden row draws nothing, a moving one is moved by its set
     uint rowState = readRowState(a_row);
     if (rowStateHidden(rowState)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
-    vec2 lnglatOffset = a_instance_lnglat_offset + rowStateTranslation(rowState);
+    vec2 lnglatOffset = rowStateMove(rowState, a_instance_lnglat_offset);
 #else
     vec2 lnglatOffset = a_instance_lnglat_offset;
 #endif
@@ -1178,7 +1178,12 @@ void main() {
     run.useProgram(program);
     this.setProjectionUniformsWith(program, zoom, projectionData, offsetUniforms, originShift);
     this.setDrawFactors(program, factors);
-    bindRowState(run, this.rowStateUniforms as RowStateUniforms, rowState);
+    bindRowState(
+      run,
+      this.rowStateUniforms as RowStateUniforms,
+      rowState,
+      cameraUniforms ? cameraUniforms.centerLngLat : batch.origin,
+    );
 
     run.bindVertexArray(batch.vao);
     if (batch.pointedFirst !== first) {

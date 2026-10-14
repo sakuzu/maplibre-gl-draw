@@ -133,13 +133,13 @@ flat out vec4 v_dash_next;
 // outline: the signed distance. A sprite: the texture coordinates
 out vec4 v_geom;
 
-// The translation of the row of the instance (its moving set), added to every coordinate read
-vec2 g_row_shift = vec2(0.0);
+// The state of the row of the instance: its moving set moves every coordinate read
+uint g_row_state = 0u;
 int g_corner = 0;
 
 vec2 rowsCoord(float index) {
     int i = int(index + 0.5);
-    return texelFetch(u_coords, ivec2(i % u_coord_width, i / u_coord_width), 0).xy + g_row_shift;
+    return rowStateMove(g_row_state, texelFetch(u_coords, ivec2(i % u_coord_width, i / u_coord_width), 0).xy);
 }
 
 vec4 rowsStyle(int style, int texel) {
@@ -485,14 +485,14 @@ void main() {
     v_dash_next = vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
     v_geom = vec4(0.0);
 
-    // The state of the row: a hidden row draws nothing, a moving one is translated
+    // The state of the row: a hidden row draws nothing, a moving one is moved by its set
     uint rowState = readRowState(row);
     if (rowStateHidden(rowState)) {
         emitShadeOffset(vec2(0.0));
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
-    g_row_shift = rowStateTranslation(rowState);
+    g_row_state = rowState;
 
     int local = int(row + 0.5) - u_row_base;
     vec4 rowStyle = texelFetch(

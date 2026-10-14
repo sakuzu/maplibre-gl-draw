@@ -16,6 +16,7 @@
  */
 
 import { DrawError } from '../shared/draw-error.js';
+import type { PlaneTransform } from '../shared/math/plane-transform.js';
 import type { RowHandle } from './types.js';
 
 // === The bits of the copy kept by a row group (16 bits per row) ===
@@ -102,11 +103,13 @@ export class RowStateSets {
   private readonly bulk = new Set<RowHandle>();
   /** The translation of each moving set, `[dLng, dLat]` (set 0 is unused) */
   private readonly translations = new Float64Array((MOVE_SETS + 1) * 2);
+  /** The rotation or resize of each moving set (null for none; set 0 is unused) */
+  private readonly transforms: Array<PlaneTransform | null> = new Array(MOVE_SETS + 1).fill(null);
   private translationRevision = 0;
 
   constructor(private readonly onChange: (handles: Int32Array) => void) {}
 
-  /** Changes with every change of a translation (the GPU writes its uniforms again) */
+  /** Changes with every change of a translation or a transform (the GPU writes its uniforms again) */
   get revision(): number {
     return this.translationRevision;
   }
@@ -177,6 +180,26 @@ export class RowStateSets {
     }
     this.translations[set * 2] = dLng;
     this.translations[set * 2 + 1] = dLat;
+    this.translationRevision++;
+  }
+
+  /**
+   * The rotation or resize of a moving set, applied before its translation (null for none)
+   */
+  transform(set: number): PlaneTransform | null {
+    return this.transforms[set] ?? null;
+  }
+
+  /**
+   * Sets the rotation or resize of a moving set (null: it only translates)
+   *
+   * @throws when the set is not 1 to 3
+   */
+  setTransform(set: number, transform: PlaneTransform | null): void {
+    if (!Number.isInteger(set) || set < 1 || set > MOVE_SETS) {
+      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+    }
+    this.transforms[set] = transform;
     this.translationRevision++;
   }
 

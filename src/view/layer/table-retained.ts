@@ -51,6 +51,8 @@ import {
   type RowGroupHandle,
 } from '../../feature-table/types.js';
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
+import { type PlaneTransform, transformPosition } from '../../shared/math/plane-transform.js';
+import { drawProperties, getDrawProperty, hasDrawProperty } from '../../shared/properties.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -449,6 +451,8 @@ export class TableLayerRenderer {
   /** Whether the uploads of the frame were written before its main pass */
   private prepared = false;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
+  /** The rotation or resize of each moving set (one array of the renderer, as the translations) */
+  private readonly transforms: Array<PlaneTransform | null> = new Array(MOVE_SETS + 1).fill(null);
   /** The time of the last pass before the main one, and of the drawing of the frames (ms) */
   private prerenderMs = 0;
   private drawMs = 0;
@@ -755,6 +759,7 @@ export class TableLayerRenderer {
       const [dLng, dLat] = tables.states.translation(k);
       this.translations[k * 2] = dLng;
       this.translations[k * 2 + 1] = dLat;
+      this.transforms[k] = tables.states.transform(k);
     }
 
     const bounds = frame.bounds ?? WORLD;
@@ -1672,9 +1677,14 @@ export class TableLayerRenderer {
           uploadRowState(this.options.gl, texture, group.gpuState);
           groupCache.uploadedVersion = group.stateVersion;
         }
-        // The binding is kept with the group (the translations are the one array of the renderer)
+        // The binding is kept with the group (the translations and the transforms are the arrays
+        // of the renderer)
         if (groupCache.binding?.texture !== texture) {
-          groupCache.binding = { texture, translations: this.translations };
+          groupCache.binding = {
+            texture,
+            translations: this.translations,
+            transforms: this.transforms,
+          };
         }
       }
     }
@@ -1970,7 +1980,9 @@ export class TableLayerRenderer {
         feature = rowFeature(tables.readContext, pass.layerId, group, row);
       }
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
-      features.push(set > 0 ? translated(feature, this.translations, set) : feature);
+      features.push(
+        set > 0 ? movedFeature(feature, this.translations, this.transforms[set], set) : feature,
+      );
     }
     if (features.length === 0) return;
     const run = (pass.renderers as RetainedRendererSet).run;
@@ -2373,24 +2385,51 @@ function rowInView(rowBounds: Float64Array, row: number, bounds: BoundingBox): b
   );
 }
 
-/** A feature moved by the translation of its moving set (the rows drawn at once) */
-function translated(feature: Feature, translations: Float32Array, set: number): Feature {
+/**
+ * A feature moved by its moving set (the rows drawn at once): rotated or resized by the transform
+ * of the set as the drags compute it, its rotation, scale and radius with it, then translated
+ */
+function movedFeature(
+  feature: Feature,
+  translations: Float32Array,
+  transform: PlaneTransform | null,
+  set: number,
+): Feature {
   const dLng = translations[set * 2];
   const dLat = translations[set * 2 + 1];
-  if (dLng === 0 && dLat === 0) return feature;
+  if (dLng === 0 && dLat === 0 && !transform) return feature;
+  const keepsShape = feature.type === 'Circle' || hasDrawProperty(feature.properties, 'scale');
   const shift = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;
     if (typeof value[0] === 'number') {
-      const position = value as Coordinate;
+      const position = transform
+        ? transformPosition(transform, value as number[], keepsShape)
+        : (value as Coordinate);
       return [position[0] + dLng, position[1] + dLat, ...position.slice(2)];
     }
     return value.map(shift);
   };
   const geometry = feature.geometry as { type: string; coordinates?: unknown };
-  return {
+  const moved: Feature = {
     ...feature,
     geometry: { ...geometry, coordinates: shift(geometry.coordinates) } as Feature['geometry'],
   };
+  if (!transform) return moved;
+  const values: Partial<Record<'rotation' | 'scale' | 'radiusMeters', number>> = {};
+  const rotation = getDrawProperty(feature, 'rotation');
+  if (transform.rotationDeg !== 0 && (feature.type === 'Image' || rotation !== undefined)) {
+    values.rotation = (rotation ?? 0) + transform.rotationDeg;
+  }
+  if (transform.scale !== 1) {
+    const scale = getDrawProperty(feature, 'scale');
+    if (feature.type === 'Image' || scale !== undefined)
+      values.scale = (scale ?? 1) * transform.scale;
+    const radius = getDrawProperty(feature, 'radiusMeters');
+    if (feature.type === 'Circle' && radius !== undefined)
+      values.radiusMeters = radius * transform.scale;
+  }
+  if (Object.keys(values).length === 0) return moved;
+  return { ...moved, properties: { ...feature.properties, ...drawProperties(values) } };
 }
 
 // === The builds of the batches ===

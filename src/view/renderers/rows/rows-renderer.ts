@@ -595,7 +595,12 @@ export class RowsRenderer {
       );
     }
     this.writeUniforms(program, chunk, zoom, factors);
-    bindRowState(run, program.rowState as RowStateUniforms, rowState);
+    bindRowState(
+      run,
+      program.rowState as RowStateUniforms,
+      rowState,
+      camera ? camera.centerLngLat : data.origin,
+    );
     this.bindTextures(chunk);
 
     run.bindVertexArray(chunk.vao);

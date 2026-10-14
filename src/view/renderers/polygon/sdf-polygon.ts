@@ -545,16 +545,15 @@ out float v_halfWidth;    // the half width of the line (for stroke)
 
 void main() {
 #ifdef TABLE_ROWS
-    // The state of the row: a hidden row draws nothing, a moving one is translated
+    // The state of the row: a hidden row draws nothing, a moving one is moved by its set
     uint rowState = readRowState(a_row);
     if (rowStateHidden(rowState)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
-    vec2 rowShift = rowStateTranslation(rowState);
-    vec2 pos = a_pos + rowShift;
-    vec2 prev = a_prev + rowShift;
-    vec2 next = a_next + rowShift;
+    vec2 pos = rowStateMove(rowState, a_pos);
+    vec2 prev = rowStateMove(rowState, a_prev);
+    vec2 next = rowStateMove(rowState, a_next);
 #else
     vec2 pos = a_pos;
     vec2 prev = a_prev;
@@ -1049,7 +1048,12 @@ void main() {
     }
     row.uniforms.setShape(viewport, batch.widthZoom ?? zoom);
     row.uniforms.setFactors(factors);
-    bindRowState(run, row.state, rowState);
+    bindRowState(
+      run,
+      row.state,
+      rowState,
+      cameraUniforms ? cameraUniforms.centerLngLat : batch.origin,
+    );
 
     run.bindVertexArray(batch.vao);
     const culled = beginTerrainCull(gl, this.terrain);

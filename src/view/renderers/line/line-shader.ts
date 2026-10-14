@@ -52,8 +52,8 @@ layout(location = 3) in vec4 a_extra;
 layout(location = 4) in vec4 a_color;    // line color (opacity already folded in)
 #ifdef TABLE_ROWS
 layout(location = 5) in float a_row;     // the number of the row in its group
-// The translation of the row of this instance (its moving set), added to every coordinate read
-vec2 g_row_shift = vec2(0.0);
+// The state of the row of this instance: its moving set moves every coordinate read
+uint g_row_state = 0u;
 #endif
 
 // Uniforms
@@ -84,7 +84,7 @@ vec2 getCoordOffset(int idx) {
     int x = idx % int(u_tex_size);
     int y = idx / int(u_tex_size);
 #ifdef TABLE_ROWS
-    return texelFetch(u_coord_tex, ivec2(x, y), 0).xy + g_row_shift;
+    return rowStateMove(g_row_state, texelFetch(u_coord_tex, ivec2(x, y), 0).xy);
 #else
     return texelFetch(u_coord_tex, ivec2(x, y), 0).xy;
 #endif
@@ -136,13 +136,13 @@ vec2 screenToClipOffset(vec2 screenOffset, float w) {
 
 void main() {
 #ifdef TABLE_ROWS
-    // The state of the row: a hidden row draws nothing, a moving one is translated
+    // The state of the row: a hidden row draws nothing, a moving one is moved by its set
     uint rowState = readRowState(a_row);
     if (rowStateHidden(rowState)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
-    g_row_shift = rowStateTranslation(rowState);
+    g_row_state = rowState;
 #endif
 
     // Get the indices

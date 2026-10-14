@@ -747,7 +747,7 @@ export class SDFLineRenderer {
     );
     uniforms.setDrawFactors(factors);
     uniforms.setDash(batch.shape, resolvePixelRatio(this.pixelRatio));
-    bindRowState(run, state, rowState);
+    bindRowState(run, state, rowState, cameraUniforms ? cameraUniforms.centerLngLat : batch.origin);
 
     run.activateUnitZero();
     gl.bindTexture(gl.TEXTURE_2D, batch.texture);
