@@ -12,6 +12,7 @@ import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { insertGroup, itemNeighbors } from '../store/item-lists.js';
 import type { Store } from '../store/store.js';
 import type { Feature, ObjectGroup } from '../store/types.js';
+import { groupBulkSelection, ungroupBulkSelection } from './bulk-selection.js';
 
 /**
  * Removes a feature from a group: it goes just in front of the group in the layer (or to the
@@ -50,6 +51,9 @@ export function groupSelection(
 
   // Do nothing when it is not a feature selection
   if (selection.type !== 'feature') return null;
+
+  // Features selected in bulk: grouped on their rows
+  if (selection.bulk) return groupBulkSelection(store, generateFeatureId, autoNameGenerator);
 
   const selectedIds = selection.ids;
 
@@ -119,6 +123,8 @@ function dissolveGroup(store: Store, groupId: string): void {
  */
 export function ungroupSelection(store: Store): boolean {
   const selection = store.getSelection();
+  // Features selected in bulk: taken out of their groups on their rows
+  if (selection.bulk && selection.type === 'feature') return ungroupBulkSelection(store);
   if (selection.ids.length === 0) return false;
 
   // A group selection -> dissolve

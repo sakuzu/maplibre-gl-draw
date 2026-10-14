@@ -10,6 +10,11 @@
  * have left it (a layer of objects only).
  */
 
+import {
+  bulkSelectionLocked,
+  groupBlocks,
+  placeBulkSelection,
+} from '../../operations/bulk-selection.js';
 import { itemNeighbors, placeAtIndex } from '../../store/item-lists.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Group, ItemPlacement, Layer } from '../../store/types.js';
@@ -198,4 +203,52 @@ export function moveGroups(
   store.transact(() => {
     store.moveItems(ids, placementOf(store, layer.id, undefined, place, new Set(ids)));
   });
+}
+
+/**
+ * Moves the features selected in bulk to a target, in one transaction, as `moveFeatures` does for
+ * features: into a layer or a group in their order, or out of their groups, just in front of
+ * each (a layer held as rows takes no index)
+ *
+ * @returns false when the move is refused (read-only, the interaction lock, a feature or the
+ *   target locked)
+ * @throws DrawError `invalid-state` for a position by index in a layer held as rows
+ * @internal
+ */
+export function moveBulkSelection(store: Store, to: MoveTarget): boolean {
+  const rows = store.getSelectedRows();
+  const target = resolveMoveTarget(store, to);
+  if (!rows || store.isReadOnly() || store.isInteractionLocked()) return false;
+  if (bulkSelectionLocked(store) || target.locked) return false;
+  if (target.kind === 'layer') {
+    return placeBulkSelection(
+      store,
+      placementOf(store, target.layer.id, undefined, target.place, new Set()),
+    );
+  }
+  if (target.kind === 'group') {
+    const { group } = target;
+    return placeBulkSelection(
+      store,
+      placementOf(store, group.layerId, group.id, target.place, new Set()),
+    );
+  }
+  const blocks = groupBlocks(store, rows);
+  if (target.index !== undefined && blocks.length > 0) {
+    // Raises invalid-state: a layer held as rows takes a place by the items around it
+    placementOf(store, blocks[0].layerId, undefined, { index: target.index }, new Set());
+  }
+  store.transact(() => {
+    for (const block of blocks) {
+      const around = itemNeighbors(store, block.layerId, undefined, block.groupId);
+      store.applyBulk(
+        {
+          kind: 'place',
+          to: { layerId: block.layerId, below: block.groupId, above: around?.above ?? null },
+        },
+        block.rows,
+      );
+    }
+  });
+  return true;
 }

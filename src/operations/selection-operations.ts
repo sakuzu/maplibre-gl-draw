@@ -14,6 +14,7 @@ import { listedItems } from '../shared/utils/listed-items.js';
 import { isFeatureLocked, isGroupLocked } from '../store/lock.js';
 import type { Store } from '../store/store.js';
 import type { FeatureCoordinates, Group, VertexSelection } from '../store/types.js';
+import { deleteBulkSelection } from './bulk-selection.js';
 import { deleteVertex as deleteVertexOp, sortVertexRefsForDeletion } from './vertex.js';
 
 /**
@@ -59,6 +60,9 @@ export function deleteSelectedItems(store: Store): boolean {
   if (store.isReadOnly() || store.isInteractionLocked()) return false;
 
   const selection = store.getSelection();
+  // Features selected in bulk (their own, or of groups): their rows not locked are deleted (a
+  // group left empty with them)
+  if (selection.bulk && selection.type !== 'layer') return deleteBulkSelection(store);
   if (selection.ids.length === 0) return false;
 
   if (selection.type === 'feature') {

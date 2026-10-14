@@ -383,13 +383,13 @@ export class DrawStore implements Store {
     this.setSelection(ids.length > 0 ? type : null, ids);
   }
 
-  applyBulk(op: BulkOperation): boolean {
+  applyBulk(op: BulkOperation, rows?: TableSelection): boolean {
     const contract = this.#contract;
-    const bulk = this.#bulk;
+    const target = rows ?? this.#bulk?.rows;
     const internals = featureTablesInternals(contract.tables);
-    if (!bulk || !internals || !contract.applyRows) return false;
+    if (!target || !internals || !contract.applyRows) return false;
     if (contract.isReadOnly() || contract.isInteractionLocked()) return false;
-    const write = internals.planBulk(op, bulk.rows, this.#containers());
+    const write = internals.planBulk(op, target, this.#containers());
     if (!write) return false;
     return this.applyRows(write);
   }

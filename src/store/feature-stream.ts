@@ -132,6 +132,54 @@ export interface RowFilter {
 }
 
 /**
+ * Whether a row matches a filter, read on its columns (the extent of the filter is not tested:
+ * the rows are found by it)
+ *
+ * @returns The test, or null when no row can match (a group that is not there)
+ * @internal
+ */
+export function rowMatcher(
+  store: FeatureSource,
+  filter: RowFilter,
+): ((handle: RowHandle) => boolean) | null {
+  const tables = store.tables;
+  const internals = featureTablesInternals(tables);
+  if (!tables || !internals) return null;
+  const groupHandle = filter.groupId !== undefined ? (tables.findGroup(filter.groupId) ?? -2) : -1;
+  if (groupHandle === -2) return null;
+  const layerShown = new Map<string, boolean>();
+  return (handle) => {
+    const place = internals.placeOf(handle);
+    if (!place) return false;
+    const layerId = place.layer.layerId;
+    if (filter.layerId !== undefined && layerId !== filter.layerId) return false;
+    const data = place.group.data;
+    const row = place.row;
+    const group = data.groups[row];
+    if (groupHandle >= 0 && group !== groupHandle) return false;
+    const flags = data.flags[row];
+    const visible = (flags & ROW_FLAG_VISIBLE) !== 0;
+    if (filter.visible !== undefined && visible !== filter.visible) return false;
+    if (filter.locked !== undefined && ((flags & ROW_FLAG_LOCKED) !== 0) !== filter.locked) {
+      return false;
+    }
+    if (filter.type !== undefined && tables.get(layerId)?.getRowType(handle) !== filter.type) {
+      return false;
+    }
+    if (filter.shown !== undefined) {
+      let shownLayer = layerShown.get(layerId);
+      if (shownLayer === undefined) {
+        shownLayer = store.getLayer(layerId)?.visible !== false;
+        layerShown.set(layerId, shownLayer);
+      }
+      const shown = visible && shownLayer && (group < 0 || internals.groups.isVisible(group));
+      if (shown !== filter.shown) return false;
+    }
+    return true;
+  };
+}
+
+/**
  * Visits the rows that match a filter, in the order they are drawn, without making features
  *
  * @param visit Called with each row; returning false stops
@@ -147,12 +195,11 @@ export function forEachMatchingRow(
 ): void {
   const tables = store.tables;
   const internals = featureTablesInternals(tables);
-  if (!tables || !internals) return;
+  const matches = rowMatcher(store, filter);
+  if (!tables || !internals || !matches) return;
   // The layer of the row the visit starts after: the layers before it are not read
   const afterLayer = after === undefined ? undefined : internals.placeOf(after)?.layer.layerId;
   let started = after === undefined;
-  const groupHandle = filter.groupId !== undefined ? (tables.findGroup(filter.groupId) ?? -2) : -1;
-  if (groupHandle === -2) return;
   const layerIds =
     filter.layerId !== undefined
       ? store.getLayer(filter.layerId)
@@ -161,7 +208,6 @@ export function forEachMatchingRow(
       : layerIdsInOrder(store);
   for (const layerId of layerIds) {
     if (!started && layerId !== afterLayer) continue;
-    const layerShown = store.getLayer(layerId)?.visible !== false;
     const cursor = tables.scan({
       layerIds: [layerId],
       ...(filter.bbox && { bbox: [...filter.bbox] as [number, number, number, number] }),
@@ -172,25 +218,7 @@ export function forEachMatchingRow(
           started = handle === after;
           continue;
         }
-        const place = internals.placeOf(handle);
-        if (!place) continue;
-        const data = place.group.data;
-        const row = place.row;
-        const group = data.groups[row];
-        if (groupHandle >= 0 && group !== groupHandle) continue;
-        const flags = data.flags[row];
-        const visible = (flags & ROW_FLAG_VISIBLE) !== 0;
-        if (filter.visible !== undefined && visible !== filter.visible) continue;
-        if (filter.locked !== undefined && ((flags & ROW_FLAG_LOCKED) !== 0) !== filter.locked) {
-          continue;
-        }
-        if (filter.type !== undefined && tables.get(layerId)?.getRowType(handle) !== filter.type) {
-          continue;
-        }
-        if (filter.shown !== undefined) {
-          const shown = visible && layerShown && (group < 0 || internals.groups.isVisible(group));
-          if (shown !== filter.shown) continue;
-        }
+        if (!matches(handle)) continue;
         if (!visit(handle)) return;
       }
     }

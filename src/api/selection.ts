@@ -5,7 +5,15 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
-import type { Feature, Group, MoveTarget } from './model.js';
+import type {
+  Feature,
+  FeatureFilter,
+  FeatureListOptions,
+  FeaturePatch,
+  FeatureStyleSample,
+  Group,
+  MoveTarget,
+} from './model.js';
 import type { Selection, SelectionType, VertexRef, VertexSelection } from './state.js';
 
 /**
@@ -13,7 +21,11 @@ import type { Selection, SelectionType, VertexRef, VertexSelection } from './sta
  * verbs that act on what is selected.
  */
 export interface SelectionResource {
-  /** The type and the IDs of what is selected. */
+  /**
+   * The type and the IDs of what is selected. Many features selected at once in a Store that
+   * holds its features as rows have no list of IDs: `bulk` tells how many, in which layers and
+   * where.
+   */
   get(): Selection;
   /**
    * Selects these items instead of the current selection.
@@ -24,6 +36,24 @@ export interface SelectionResource {
    *   type
    */
   set(type: SelectionType, ids: readonly string[]): boolean;
+  /**
+   * Selects every feature that matches a filter (every feature when it is left out), as
+   * Cmd+A does. Only what can be seen is selected. In a Store that holds its features as rows,
+   * more features than are made at once are selected in bulk (`Selection.bulk`), and no ID is
+   * listed.
+   *
+   * @returns False when no feature can be selected
+   * @throws `DrawError` with the code `invalid-input` when the filter has another shape
+   */
+  setAll(filter?: FeatureFilter): boolean;
+  /**
+   * Selects again what a selection read before held (`get`, `selection.changed`, a change of the
+   * document), features selected in bulk included: what is no longer there or cannot be seen is
+   * left out.
+   *
+   * @returns False when nothing of it can be selected (the selection is cleared then)
+   */
+  restore(selection: Selection): boolean;
   /**
    * Adds items of the selected type to the selection.
    *
@@ -40,8 +70,43 @@ export interface SelectionResource {
   remove(ids: readonly string[]): boolean;
   /** Clears the selection. */
   clear(): void;
-  /** The selected features; for a group or a layer, the features in it. */
-  features(): Feature[];
+  /**
+   * The selected features that match a filter (all when it is left out); for a group or a layer,
+   * the features in it, in stacking order.
+   *
+   * @param options - At most `limit` features, read on after the feature `after`. Features
+   *   selected in bulk (`Selection.bulk`) are read a page at a time: they need it
+   * @throws `DrawError` with the code `invalid-state` for features selected in bulk without a
+   *   limit; `not-found` when `after` is not a selected feature; `invalid-input` when the filter
+   *   or the options have another shape
+   */
+  features(filter?: FeatureFilter, options?: FeatureListOptions): Feature[];
+  /**
+   * The number of the selected features that match a filter (all when it is left out); for a
+   * group or a layer, of the features in it. No feature is made for it, so it counts features
+   * selected in bulk too.
+   *
+   * @throws `DrawError` with the code `invalid-input` when the filter has another shape
+   */
+  count(filter?: FeatureFilter): number;
+  /**
+   * Changes the selected features that match a filter (all when it is left out), as
+   * `features.updateMany` does, in one change. The patch is the same for every feature, or made
+   * by a function once per kind of feature (`FeatureStyleSample`: the type, the style and the zoom
+   * it was created at) and given to every feature of the kind: a selection of many features asks
+   * for a few patches. A patch that changes the geometry is refused.
+   *
+   * @param patch - The patch, or the function that makes it for a kind of feature (null: the kind
+   *   is left as it is)
+   * @returns False when nothing is changed, or the change is refused (read-only, the interaction
+   *   lock, a locked feature for a change other than of `locked` and `visible`)
+   * @throws `DrawError` with the code `invalid-input` when a patch has another shape or changes
+   *   the geometry
+   */
+  update(
+    patch: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
+    filter?: FeatureFilter,
+  ): boolean;
   /**
    * Deletes what is selected.
    *

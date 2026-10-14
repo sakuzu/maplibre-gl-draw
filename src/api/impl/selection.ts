@@ -5,27 +5,45 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
+import type { RowUpdate } from '../../feature-table/bulk-plan.js';
+import { rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { TableSelection } from '../../feature-table/selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import {
   deleteSelectedItems,
   deleteSelectedVertices,
 } from '../../operations/selection-operations.js';
+import { getDrawProperty } from '../../shared/properties.js';
 import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordinates.js';
+import { forEachMatchingRow } from '../../store/feature-stream.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
 import type { FeaturesCollection } from '../features.js';
 import type { GroupsCollection } from '../groups.js';
-import type { Feature } from '../model.js';
+import type { Feature, FeaturePatch, FeatureStyleSample } from '../model.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
-import type { SelectionType } from '../state.js';
+import type { Selection, SelectionType } from '../state.js';
+import {
+  checkSharedPatch,
+  featureMatcher,
+  featureRowFilter,
+  featureRowMatcher,
+  pageOf,
+  preparePatch,
+} from './features.js';
+import { moveBulkSelection } from './placement.js';
 import type { ResourceDeps } from './shared.js';
 import {
+  featureLocked,
   getItem,
   invalidInput,
+  invalidState,
   isRecord,
   isShown,
   notFound,
+  onlyLockOrVisibility,
   requireId,
   requireIds,
 } from './shared.js';
@@ -55,6 +73,43 @@ export function createSelection(
     return list;
   };
 
+  /** The rows of the features selected in bulk, with the tables they are read from */
+  const bulkRows = () => {
+    const rows = store.getSelectedRows();
+    const internals = featureTablesInternals(store.tables);
+    return rows && internals ? { rows, internals } : null;
+  };
+
+  /** The selected features (for a group or a layer, the features in it), in stacking order */
+  const selectedFeatures = (): StoredFeature[] => {
+    const { type, ids } = store.getSelection();
+    if (type === 'feature') {
+      return ids
+        .map((id) => store.getFeature(id))
+        .filter((feature): feature is StoredFeature => feature !== undefined);
+    }
+    if (type === null) return [];
+    const wanted = new Set(ids);
+    const inside = (feature: StoredFeature): boolean =>
+      type === 'group'
+        ? feature.groupId !== undefined && wanted.has(feature.groupId)
+        : wanted.has(feature.layerId);
+    return listEveryFeatureInOrder(store).filter(inside);
+  };
+
+  /** The rows selected in bulk that match a filter, in stacking order */
+  const matchingRows = (filter: Parameters<SelectionResource['count']>[0]): number[] => {
+    const found = bulkRows();
+    if (!found) return [];
+    const matches = featureRowMatcher(store, filter);
+    if (!matches) return [];
+    const out: number[] = [];
+    for (const handles of rowsByLayerInOrder(found.internals, found.rows).values()) {
+      for (const handle of handles) if (matches(handle)) out.push(handle);
+    }
+    return out;
+  };
+
   return {
     get: () => store.getSelection(),
 
@@ -68,6 +123,32 @@ export function createSelection(
       return true;
     },
 
+    setAll(filter) {
+      if (store.tables) {
+        const rowFilter = featureRowFilter(filter);
+        const handles: number[] = [];
+        forEachMatchingRow(store, rowFilter, (handle) => {
+          handles.push(handle);
+          return true;
+        });
+        store.selectRows(TableSelection.of(handles));
+        return store.getSelection().type !== null;
+      }
+      const matches = featureMatcher(deps, filter);
+      const ids = listEveryFeatureInOrder(store)
+        .filter((feature) => matches(feature) && isShown(store, 'feature', feature.id))
+        .map((feature) => feature.id);
+      if (ids.length === 0) return false;
+      store.setSelection('feature', ids);
+      return true;
+    },
+
+    restore(selection: Selection) {
+      if (!isRecord(selection)) throw invalidInput('The selection must be an object');
+      store.restoreSelection(selection as Selection);
+      return store.getSelection().type !== null;
+    },
+
     add(ids) {
       const current = store.getSelection();
       const list = requireIds(ids);
@@ -76,6 +157,17 @@ export function createSelection(
       if (type === undefined) {
         if (list.length === 0) return false;
         throw notFound('feature, group or layer', list[0]);
+      }
+      const found = current.bulk && type === 'feature' ? bulkRows() : null;
+      if (found && store.tables) {
+        const tables = store.tables;
+        const handles = requireItems(type, list)
+          .filter((id) => isShown(store, type, id))
+          .map((id) => tables.findRow(id) ?? -1)
+          .filter((handle) => handle >= 0 && !found.rows.has(handle));
+        if (handles.length === 0) return false;
+        store.selectRows(found.rows.with(handles));
+        return true;
       }
       const added = requireItems(type, list).filter(
         (id) => !current.ids.includes(id) && isShown(store, type, id),
@@ -87,7 +179,18 @@ export function createSelection(
 
     remove(ids) {
       const current = store.getSelection();
-      const removed = new Set(requireIds(ids).filter((id) => current.ids.includes(id)));
+      const list = requireIds(ids);
+      const found = current.bulk && current.type === 'feature' ? bulkRows() : null;
+      if (found && store.tables) {
+        const tables = store.tables;
+        const handles = list
+          .map((id) => tables.findRow(id) ?? -1)
+          .filter((handle) => found.rows.has(handle));
+        if (handles.length === 0) return false;
+        store.selectRows(found.rows.without(handles));
+        return true;
+      }
+      const removed = new Set(list.filter((id) => current.ids.includes(id)));
       if (removed.size === 0) return false;
       const kept = current.ids.filter((id) => !removed.has(id));
       store.setSelection(kept.length > 0 ? current.type : null, kept);
@@ -98,20 +201,105 @@ export function createSelection(
       store.setSelection(null, []);
     },
 
-    features() {
-      const { type, ids } = store.getSelection();
-      if (type === 'feature') {
-        return ids
-          .map((id) => store.getFeature(id))
-          .filter((feature): feature is StoredFeature => feature !== undefined);
+    features(filter, options) {
+      const page = options === undefined ? undefined : pageOf(options);
+      if (store.getSelectedRows()) {
+        if (page === undefined) {
+          throw invalidState(
+            'The features selected in bulk are read up to a limit: pass { limit }',
+          );
+        }
+        const rows = matchingRows(filter);
+        let from = 0;
+        if (page.after !== undefined) {
+          const after = store.tables?.findRow(page.after);
+          const found = bulkRows();
+          if (after === undefined || !found?.rows.has(after)) throw notFound('feature', page.after);
+          const at = rows.indexOf(after);
+          // The feature read last may not match the filter: read on after its place in the order
+          from = at >= 0 ? at + 1 : firstAfter(found, rows, after);
+        }
+        const out: Feature[] = [];
+        for (let i = from; i < rows.length && out.length < page.limit; i++) {
+          const feature = store.getFeature(store.tables?.getRowId(rows[i]) as string);
+          if (feature) out.push(feature as Feature);
+        }
+        return out;
       }
-      if (type === null) return [];
-      const wanted = new Set(ids);
-      const inside = (feature: StoredFeature): boolean =>
-        type === 'group'
-          ? feature.groupId !== undefined && wanted.has(feature.groupId)
-          : wanted.has(feature.layerId);
-      return listEveryFeatureInOrder(store).filter(inside) as Feature[];
+      const matches = featureMatcher(deps, filter);
+      let features = selectedFeatures();
+      if (page?.after !== undefined) {
+        const at = features.findIndex((feature) => feature.id === page.after);
+        if (at < 0) throw notFound('feature', page.after);
+        features = features.slice(at + 1);
+      }
+      features = features.filter(matches);
+      return (page === undefined ? features : features.slice(0, page.limit)) as Feature[];
+    },
+
+    count(filter) {
+      if (store.getSelectedRows()) return matchingRows(filter).length;
+      const matches = featureMatcher(deps, filter);
+      return selectedFeatures().filter(matches).length;
+    },
+
+    update(patch, filter) {
+      const make =
+        typeof patch === 'function'
+          ? (sample: FeatureStyleSample) => {
+              const made = patch(sample);
+              return made === null ? null : checkSharedPatch(made);
+            }
+          : (() => {
+              const checked = checkSharedPatch(patch);
+              return () => checked;
+            })();
+      if (store.getSelectedRows()) {
+        const rows = TableSelection.of(matchingRows(filter));
+        if (rows.count === 0) return false;
+        return store.applyBulk(
+          {
+            kind: 'update',
+            make: (sample) => {
+              const made = make(sample);
+              return made === null ? null : toRowUpdate(made);
+            },
+          },
+          rows,
+        );
+      }
+      const matches = featureMatcher(deps, filter);
+      const features = selectedFeatures().filter(matches);
+      // One patch per kind of feature: its type, its style and its created zoom
+      const patches = new Map<string, FeaturePatch | null>();
+      const prepared: Array<{ feature: StoredFeature; patch: FeaturePatch }> = [];
+      for (const feature of features) {
+        const createdZoom = getDrawProperty(feature, 'createdZoom');
+        const key = JSON.stringify([feature.type, feature.style, createdZoom ?? null]);
+        let made = patches.get(key);
+        if (made === undefined) {
+          made = make({ type: feature.type, style: feature.style, createdZoom });
+          patches.set(key, made);
+        }
+        if (made) prepared.push({ feature, patch: made });
+      }
+      if (prepared.length === 0 || store.isReadOnly()) return false;
+      if (
+        prepared.some(
+          ({ feature, patch: made }) =>
+            featureLocked(store, feature) && !onlyLockOrVisibility(made),
+        )
+      ) {
+        return false;
+      }
+      const updates = prepared.map(({ feature, patch: made }) => ({
+        id: feature.id,
+        updates: preparePatch(feature, made),
+      }));
+      store.transact(() => {
+        for (const { id, updates: fields } of updates) store.updateFeature(id, fields);
+      });
+      return true;
     },
 
     delete() {
@@ -131,12 +319,49 @@ export function createSelection(
     },
 
     move(to) {
-      const { type, ids } = store.getSelection();
+      const { type, ids, bulk } = store.getSelection();
+      if (bulk && type === 'feature') return moveBulkSelection(store, to);
       if (type === 'feature' && ids.length > 0) return collections.features.moveMany(ids, to);
       if (type === 'group' && ids.length > 0) return collections.groups.moveMany(ids, to);
       return false;
     },
   };
+}
+
+/** A patch given to many features as the change of a kind of row */
+function toRowUpdate(patch: FeaturePatch): RowUpdate {
+  return {
+    ...(patch.style !== undefined && { style: patch.style as Record<string, unknown> }),
+    ...(patch.properties !== undefined && {
+      properties: patch.properties as Record<string, unknown>,
+    }),
+    ...(patch.visible !== undefined && { visible: patch.visible }),
+    ...(patch.locked !== undefined && { locked: patch.locked }),
+  };
+}
+
+/**
+ * Where the reading of the rows selected in bulk goes on after a row that does not match the
+ * filter: the first matching row after it in the order
+ */
+function firstAfter(
+  found: {
+    rows: TableSelection;
+    internals: NonNullable<ReturnType<typeof featureTablesInternals>>;
+  },
+  matching: readonly number[],
+  after: number,
+): number {
+  const position = new Map<number, number>();
+  let n = 0;
+  for (const handles of rowsByLayerInOrder(found.internals, found.rows).values()) {
+    for (const handle of handles) position.set(handle, n++);
+  }
+  const from = position.get(after) ?? -1;
+  for (let i = 0; i < matching.length; i++) {
+    if ((position.get(matching[i]) ?? -1) > from) return i;
+  }
+  return matching.length;
 }
 
 /**

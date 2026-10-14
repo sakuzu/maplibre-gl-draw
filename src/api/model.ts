@@ -407,6 +407,20 @@ export interface FeaturePatch {
   locked?: boolean;
 }
 
+/**
+ * What `selection.update` makes a patch from: the type of the features, their own style and the
+ * zoom they were created at. Features that share these get the same patch, so a selection of many
+ * features asks for one patch per kind of feature rather than one per feature.
+ */
+export interface FeatureStyleSample {
+  /** The type of the features */
+  readonly type: FeatureType;
+  /** Their own style (`Feature.style`) */
+  readonly style: Readonly<FeatureStyle>;
+  /** The zoom they were created at (`properties` of the library), when they have one */
+  readonly createdZoom: number | undefined;
+}
+
 /** What `features.list` and `features.count` keep: every key given must match. */
 export interface FeatureFilter {
   /** Only the features in this layer */

@@ -5,10 +5,11 @@
  * `draw.features`: the features of the document
  */
 
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
-import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
+import { forEachMatchingRow, type RowFilter, rowMatcher } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -102,62 +103,10 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] =>
     featuresInStackingOrder(store, features);
 
-  /** The entries of a filter checked: `shown` a boolean and `bbox` an extent in degrees */
-  const checkedEntries = (filter: FeatureFilter | undefined): Array<[string, unknown]> => {
-    const entries = filterEntries(filter, FILTER_KEYS);
-    const shown = entries.find(([key]) => key === 'shown')?.[1];
-    if (shown !== undefined && typeof shown !== 'boolean') {
-      throw invalidInput('shown must be a boolean');
-    }
-    const bbox = entries.find(([key]) => key === 'bbox')?.[1];
-    if (
-      bbox !== undefined &&
-      (!Array.isArray(bbox) ||
-        bbox.length !== 4 ||
-        bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value)))
-    ) {
-      throw invalidInput('bbox must be [west, south, east, north] in degrees');
-    }
-    return entries;
-  };
-
-  /**
-   * The checks of a filter: the entries compared as they are, and the IDs within the extent
-   * when the filter has one
-   */
-  const filterOf = (filter: FeatureFilter | undefined) => {
-    const all = checkedEntries(filter);
-    const shown = all.find(([key]) => key === 'shown')?.[1] as boolean | undefined;
-    const entries = all.filter(([key]) => key !== 'shown');
-    const bbox = entries.find(([key]) => key === 'bbox')?.[1];
-    if (bbox === undefined) return { entries, inside: null, shown };
-    const [minX, minY, maxX, maxY] = bbox as number[];
-    const bounds = { minX, minY, maxX, maxY };
-    const inside = new Set(
-      deps.spatialIndex
-        ? deps.spatialIndex.findInBounds(bounds)
-        : store
-            .listFeatures()
-            .filter((feature) => {
-              const box = getBoundingBox(feature);
-              return box.minX <= maxX && box.maxX >= minX && box.minY <= maxY && box.maxY >= minY;
-            })
-            .map((feature) => feature.id),
-    );
-    return { entries: entries.filter(([key]) => key !== 'bbox'), inside, shown };
-  };
-  /** Whether the feature, its group and its layer are all visible in the document */
-  const isShown = (feature: StoredFeature): boolean =>
-    feature.visible &&
-    (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false) &&
-    store.getLayer(feature.layerId)?.visible !== false;
-  const keep = (
-    feature: StoredFeature,
-    { entries, inside, shown }: ReturnType<typeof filterOf>,
-  ): boolean =>
-    (inside === null || inside.has(feature.id)) &&
-    (shown === undefined || isShown(feature) === shown) &&
-    matches(feature, entries);
+  const checkedEntries = (filter: FeatureFilter | undefined) => checkedFilterEntries(filter);
+  const filterOf = (filter: FeatureFilter | undefined) => featureFilterOf(deps, filter);
+  const keep = (feature: StoredFeature, checks: FeatureFilterChecks): boolean =>
+    featureKept(store, feature, checks);
 
   /**
    * Visits the rows of a Store of rows that match a filter, in stacking order, without making
@@ -466,8 +415,131 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   }
 }
 
-/** The limit of `features.list`, checked */
-function pageOf(options: FeatureListOptions): { limit: number; after: string | undefined } {
+/** The entries of a filter checked: `shown` a boolean and `bbox` an extent in degrees */
+function checkedFilterEntries(filter: FeatureFilter | undefined): Array<[string, unknown]> {
+  const entries = filterEntries(filter, FILTER_KEYS);
+  const shown = entries.find(([key]) => key === 'shown')?.[1];
+  if (shown !== undefined && typeof shown !== 'boolean') {
+    throw invalidInput('shown must be a boolean');
+  }
+  const bbox = entries.find(([key]) => key === 'bbox')?.[1];
+  if (
+    bbox !== undefined &&
+    (!Array.isArray(bbox) ||
+      bbox.length !== 4 ||
+      bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value)))
+  ) {
+    throw invalidInput('bbox must be [west, south, east, north] in degrees');
+  }
+  return entries;
+}
+
+/** The checks of a filter of features */
+interface FeatureFilterChecks {
+  /** The entries compared as they are */
+  readonly entries: Array<[string, unknown]>;
+  /** The IDs within the extent, when the filter has one */
+  readonly inside: ReadonlySet<string> | null;
+  readonly shown: boolean | undefined;
+}
+
+/**
+ * The checks of a filter: the entries compared as they are, and the IDs within the extent when
+ * the filter has one
+ */
+function featureFilterOf(
+  deps: ResourceDeps,
+  filter: FeatureFilter | undefined,
+): FeatureFilterChecks {
+  const { store } = deps;
+  const all = checkedFilterEntries(filter);
+  const shown = all.find(([key]) => key === 'shown')?.[1] as boolean | undefined;
+  const entries = all.filter(([key]) => key !== 'shown');
+  const bbox = entries.find(([key]) => key === 'bbox')?.[1];
+  if (bbox === undefined) return { entries, inside: null, shown };
+  const [minX, minY, maxX, maxY] = bbox as number[];
+  const bounds = { minX, minY, maxX, maxY };
+  const inside = new Set(
+    deps.spatialIndex
+      ? deps.spatialIndex.findInBounds(bounds)
+      : store
+          .listFeatures()
+          .filter((feature) => {
+            const box = getBoundingBox(feature);
+            return box.minX <= maxX && box.maxX >= minX && box.minY <= maxY && box.maxY >= minY;
+          })
+          .map((feature) => feature.id),
+  );
+  return { entries: entries.filter(([key]) => key !== 'bbox'), inside, shown };
+}
+
+/** Whether the feature, its group and its layer are all visible in the document */
+function featureShown(store: Store, feature: StoredFeature): boolean {
+  return (
+    feature.visible &&
+    (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false) &&
+    store.getLayer(feature.layerId)?.visible !== false
+  );
+}
+
+/** Whether a feature passes the checks of a filter */
+function featureKept(store: Store, feature: StoredFeature, checks: FeatureFilterChecks): boolean {
+  return (
+    (checks.inside === null || checks.inside.has(feature.id)) &&
+    (checks.shown === undefined || featureShown(store, feature) === checks.shown) &&
+    matches(feature, checks.entries)
+  );
+}
+
+/**
+ * The test of a filter of features on a feature (the filter checked once: a filter of the wrong
+ * shape throws here)
+ *
+ * @internal
+ */
+export function featureMatcher(
+  deps: ResourceDeps,
+  filter: FeatureFilter | undefined,
+): (feature: StoredFeature) => boolean {
+  const checks = featureFilterOf(deps, filter);
+  return (feature) => featureKept(deps.store, feature, checks);
+}
+
+/**
+ * The test of a filter of features on a row of a Store of rows (the filter checked once: a filter
+ * of the wrong shape throws here); null when no row can match
+ *
+ * @internal
+ */
+export function featureRowMatcher(
+  store: Store,
+  filter: FeatureFilter | undefined,
+): ((handle: number) => boolean) | null {
+  const rowFilter = Object.fromEntries(checkedFilterEntries(filter)) as RowFilter;
+  const matches = rowMatcher(store, rowFilter);
+  if (!matches) return null;
+  const bbox = rowFilter.bbox;
+  if (!bbox) return matches;
+  const internals = featureTablesInternals(store.tables);
+  return (handle) => {
+    if (!matches(handle)) return false;
+    const place = internals?.placeOf(handle);
+    if (!place) return false;
+    const b = place.group.data.rowBounds;
+    const at = place.row * 4;
+    return b[at] <= bbox[2] && b[at + 2] >= bbox[0] && b[at + 1] <= bbox[3] && b[at + 3] >= bbox[1];
+  };
+}
+
+/**
+ * The limit and the feature to read on after of a reading of features, checked
+ *
+ * @internal
+ */
+export function pageOf(options: FeatureListOptions): {
+  limit: number;
+  after: string | undefined;
+} {
   requireRecord(options, 'The options');
   onlyKeys(options as unknown as Record<string, unknown>, ['limit', 'after'], 'The options');
   const { limit, after } = options;
@@ -550,6 +622,41 @@ function prepareFeature(
     visible: input.visible ?? true,
     locked: input.locked ?? false,
   };
+}
+
+/**
+ * Checks a patch of `selection.update`, which is given to many features: as a patch of
+ * `features.update`, without a geometry
+ *
+ * @throws DrawError `invalid-input` for a patch of another shape, or one with a geometry
+ * @internal
+ */
+export function checkSharedPatch(patch: unknown): FeaturePatch {
+  requireRecord(patch, 'The patch');
+  const record = patch as Record<string, unknown>;
+  onlyKeys(record, PATCH_KEYS, 'The patch');
+  if (record.geometry !== undefined) {
+    throw invalidInput('A patch given to many features does not change their geometry');
+  }
+  optionalBoolean(record, 'visible');
+  optionalBoolean(record, 'locked');
+  if (record.properties !== undefined && !isRecord(record.properties)) {
+    throw invalidInput('properties must be an object');
+  }
+  if (record.style !== undefined) {
+    const problem = describeStyleProblem(record.style as never);
+    if (problem) throw invalidInput(`The patch has ${problem}`);
+  }
+  return patch as FeaturePatch;
+}
+
+/**
+ * The test of a filter of features as a filter of rows (the filter checked)
+ *
+ * @internal
+ */
+export function featureRowFilter(filter: FeatureFilter | undefined): RowFilter {
+  return Object.fromEntries(checkedFilterEntries(filter)) as RowFilter;
 }
 
 /**

@@ -72,6 +72,7 @@ const MAIN = [
   'FeatureListOptions',
   'ItemListOptions',
   'FeaturePatch',
+  'FeatureStyleSample',
   'FeatureRenderer',
   'FeaturesCollection',
   'featuresToGeoJSON',

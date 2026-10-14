@@ -473,10 +473,10 @@ export interface Store extends StoreView, UiState {
    */
   restoreSelection(selection: Selection): void;
   /**
-   * Writes an operation on the rows selected in bulk, through the gates of read-only and the
-   * interaction lock (false when refused, or when nothing is selected in bulk)
+   * Writes an operation on the rows selected in bulk (or on `rows`, some of them), through the
+   * gates of read-only and the interaction lock (false when refused, or when there are no rows)
    */
-  applyBulk(op: BulkOperation): boolean;
+  applyBulk(op: BulkOperation, rows?: TableSelection): boolean;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

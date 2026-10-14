@@ -105,6 +105,7 @@ export type {
   FeatureInput,
   FeatureListOptions,
   FeaturePatch,
+  FeatureStyleSample,
   GroupFilter,
   GroupInput,
   GroupPatch,
