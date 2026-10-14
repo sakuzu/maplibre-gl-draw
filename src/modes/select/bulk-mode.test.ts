@@ -20,6 +20,7 @@ import type {
 } from '../../dispatcher/types.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/row-state.js';
+import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { applyMarginToBoundingBox } from '../../shared/math/index.js';
 import { DrawStore } from '../../store/draw-store.js';
@@ -247,6 +248,47 @@ describe('the select mode over features selected in bulk', () => {
     expect(written[0].previousValues).toBeDefined();
     expect(emitted.some(([name]) => name === 'drag.ended')).toBe(true);
     expect(store.getSelection().bulk?.bounds).toEqual([2, 1, 13, 2]);
+  });
+
+  it('writes many of them in steps once let go, and announces the end of the drag after the last', () => {
+    // More rows than a step writes, and a clock that spends the time of a step at each slice
+    const more = Array.from({ length: BULK_SLICE_ROWS + 10 }, (_, i) => `m${i}`);
+    store.transact(() => {
+      more.forEach((id, i) => {
+        store.createFeature(square(id, i * 2, 10));
+      });
+    });
+    vi.useFakeTimers();
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += BULK_SLICE_BUDGET_MS));
+    store.setSelection('feature', [...ids, ...more]);
+    top = rowHit('f3');
+    mode.onMouseDown({
+      ...drag('dragstart', 6.5, 0.5, [6.5, 0.5]),
+      type: 'mousedown',
+    } as unknown as MouseNormalizedEvent);
+    mode.onDragStart(drag('dragstart', 6.5, 0.5, [6.5, 0.5]));
+    mode.onDragMove(drag('dragmove', 8.5, 1.5, [6.5, 0.5]));
+    mode.onDragEnd(drag('dragend', 8.5, 1.5, [6.5, 0.5]));
+    // The first rows are written and leave the moving set; the others are still drawn moved by it
+    const states = featureTablesInternals(store.tables)?.states;
+    expect(store.slicedWritePending).toBe(true);
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
+    expect(movingSetOf(more[more.length - 1])).toBe(BULK_MOVE_SET);
+    expect(states?.translation(BULK_MOVE_SET)).toEqual([2, 1]);
+    expect(emitted.some(([name]) => name === 'drag.ended')).toBe(false);
+    vi.runAllTimers();
+    expect(store.slicedWritePending).toBe(false);
+    expect(movingSetOf(more[more.length - 1])).toBe(0);
+    expect(states?.translation(BULK_MOVE_SET)).toEqual([0, 0]);
+    expect(emitted.filter(([name]) => name === 'drag.ended')).toHaveLength(1);
+    const last = store.tables
+      ?.get('l')
+      ?.getRow(store.tables.findRow(more[more.length - 1]) as number);
+    expect(((last as Feature).geometry as { coordinates: number[][][] }).coordinates[0][0]).toEqual(
+      [(more.length - 1) * 2 + 2, 11],
+    );
+    vi.restoreAllMocks();
   });
 
   it('resizes and rotates them from the handles of their frame', () => {

@@ -847,6 +847,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     },
 
     hasPendingWork(): boolean {
+      if (store.slicedWritePending) return true;
       if (drape.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
       if (engine.tableRetained?.hasPendingWork) return true;

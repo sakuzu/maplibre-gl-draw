@@ -2284,7 +2284,19 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const places = Array.from(handles, (handle) => this.placeOf(handle));
     // The values are made what the columns hold before anything is written
     const styles = fields.get('style');
-    const styleNumbers = styles?.map((style) => this.styles.intern((style ?? {}) as FeatureStyle));
+    // A style given to many rows (a change of the style of many rows gives each kind of row the
+    // same object) is made canonical once
+    const internedStyles = new Map<unknown, number>();
+    const styleNumbers = styles?.map((style) => {
+      let number = internedStyles.get(style);
+      if (number === undefined) {
+        number = this.styles.intern((style ?? {}) as FeatureStyle);
+        internedStyles.set(style, number);
+      }
+      return number;
+    });
+    /** The keys a row changes in its style, by the number of its style before and after */
+    const styleKeysOf = new Map<string, readonly string[]>();
 
     const number = ++this.writeCount;
     const writes = new Map<string, InPlaceRowWrite[]>();
@@ -2309,11 +2321,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const targetLayer = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
       const change = draftOf(changes, targetLayer as string);
       for (const field of fields.keys()) change.fields.add(field);
-      if (styles && place) {
-        const before = this.styles.get(place.group.data.styles[place.row]);
-        for (const key of changedKeys(before, (styles[i] ?? {}) as FeatureStyle)) {
-          change.styleKeys.add(key);
+      if (styles && styleNumbers && place) {
+        const beforeNumber = place.group.data.styles[place.row];
+        const pair = `${beforeNumber}:${styleNumbers[i]}`;
+        let keys = styleKeysOf.get(pair);
+        if (!keys) {
+          keys = changedKeys(this.styles.get(beforeNumber), (styles[i] ?? {}) as FeatureStyle);
+          styleKeysOf.set(pair, keys);
         }
+        for (const key of keys) change.styleKeys.add(key);
       }
       const wasDeleted = !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0;
       if (!place || revived || (wasDeleted && deleted && !deleted[i])) change.created.push(handle);
@@ -2383,10 +2399,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
 
     // A style interned for a row that kept its own is not held by any row
-    if (styleNumbers) {
-      for (const style of styleNumbers) {
-        if (this.styles.usesOf(style) === 0) this.styles.release(style);
-      }
+    for (const style of internedStyles.values()) {
+      if (this.styles.usesOf(style) === 0) this.styles.release(style);
     }
     for (const group of touched) {
       if (group.delta) continue;

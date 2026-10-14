@@ -76,7 +76,7 @@ export interface BulkRowReader {
  * - `update`: a change made once per kind of row (`RowStyleSample`), written to every row of the
  *   kind; refused (null) when a row is locked and the change is not of `locked` or `visible` only
  * - `rows`: values of fields made per row from its values (a move, a rotation, a resize);
- *   refused when a row is locked
+ *   refused when a row is locked (or the row left as it is, with `skipLocked`)
  * - `place`: the rows put in a place, in their order (another layer, a group)
  *
  * @internal
@@ -87,6 +87,11 @@ export type BulkOperation =
   | {
       readonly kind: 'rows';
       readonly fields: readonly RowField[];
+      /**
+       * Whether a locked row is left as it is rather than refusing the whole (a write made in
+       * steps, where a row can be locked from elsewhere between two of them)
+       */
+      readonly skipLocked?: boolean;
       /** The values of the fields of a row, in the order of `fields` (null: the row is not written) */
       readonly write: (handle: RowHandle, read: BulkRowReader) => readonly unknown[] | null;
     }
@@ -207,9 +212,22 @@ function planUpdate(
   for (const field of fieldNames) {
     const values = new Array<unknown>(handles.length);
     const before = current.fields.get(field) as readonly unknown[];
+    // The rows of a kind have the same style: it is merged once, and the rows share the result
+    // (the Store makes it canonical once)
+    const styleOfKind = field === 'style' ? new Map<Kind, unknown>() : null;
     for (let i = 0; i < handles.length; i++) {
-      const update = updates.get(kindOf[i]) as RowUpdate;
-      values[i] = updatedValue(field, update, before[i]);
+      const kind = kindOf[i];
+      const update = updates.get(kind) as RowUpdate;
+      if (styleOfKind) {
+        let style = styleOfKind.get(kind);
+        if (style === undefined) {
+          style = updatedValue(field, update, before[i]);
+          styleOfKind.set(kind, style);
+        }
+        values[i] = style;
+      } else {
+        values[i] = updatedValue(field, update, before[i]);
+      }
     }
     fields.set(field, values);
   }
@@ -265,7 +283,10 @@ function planRows(
   for (const handle of rows.handles) {
     const place = livePlaceOf(internals, handle);
     if (!place) continue;
-    if (isRowLocked(internals, containers, handle)) return null;
+    if (isRowLocked(internals, containers, handle)) {
+      if (op.skipLocked) continue;
+      return null;
+    }
     const values = op.write(handle, readerOf(internals, place));
     if (!values) continue;
     handles.push(handle);

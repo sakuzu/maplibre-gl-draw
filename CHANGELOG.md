@@ -71,8 +71,10 @@ writing it. Its changes are listed after those of 3.0.0.
   `bulk` and `previousBulk` in `DocumentChange.selection` and
   `selection.changed`). The verbs of `draw.selection` act on them, the
   select mode moves, rotates and resizes them by the state of their rows
-  and writes them once let go, and the arrow keys write the moves of a key
-  held once.
+  and writes them once let go, over several frames (each frame writes the
+  rows that fit in its time, the others drawn moved until then, and
+  `drag.ended` comes after the last), and the arrow keys write the moves
+  of a key held once.
 - `selection.setAll(filter)`, `selection.count(filter)`,
   `selection.update(patch | make, filter)` (a patch made once per kind of
   feature, `FeatureStyleSample`) and `selection.restore(selection)`;

@@ -413,6 +413,16 @@ export interface StoreView {
  * A plugin reaches it with `getStore()` of {@link PluginContext}; the host gets the read-only
  * {@link StoreView}. The write methods behave as those of {@link StoreContract}.
  */
+/**
+ * A write of many rows made over several tasks, which can be made whole at once
+ *
+ * @internal
+ */
+export interface SlicedWrite {
+  /** Writes the rest now (in this task) */
+  finish(): void;
+}
+
 export interface Store extends StoreView, UiState {
   /** Creates a feature (see {@link DocumentStore.createFeature}) */
   createFeature(feature: Feature): boolean;
@@ -482,6 +492,20 @@ export interface Store extends StoreView, UiState {
    * gates of read-only and the interaction lock (false when refused, or when there are no rows)
    */
   applyBulk(op: BulkOperation, rows?: TableSelection): boolean;
+  /**
+   * Begins a write of many rows made over several tasks (`operations/bulk-sliced.ts`), finishing
+   * the one under way first: another write of this client (not one of its steps, nor a write from
+   * elsewhere) finishes it before it is made, so the writes of this client keep their order
+   */
+  beginSlicedWrite(write: SlicedWrite): void;
+  /** Takes off a write over several tasks once it wrote its last rows */
+  endSlicedWrite(write: SlicedWrite): void;
+  /** Writes the rest of the write over several tasks under way now, if there is one */
+  finishSlicedWrite(): void;
+  /** Runs a step of the write over several tasks (its writes do not finish it) */
+  runSlicedStep<T>(fn: () => T): T;
+  /** Whether a write over several tasks is under way */
+  readonly slicedWritePending: boolean;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

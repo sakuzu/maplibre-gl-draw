@@ -42,9 +42,11 @@ export interface DragOperation {
   finish?(event?: DragNormalizedEvent): void;
   /**
    * Called once when the drag ends: committed (let go) or not (cancelled, aborted). Only the
-   * operations that write once at the end need it (the drags of features selected in bulk)
+   * operations that write once at the end need it (the drags of features selected in bulk).
+   * `done` is called once what the end writes is written, possibly in a later task (the drag's
+   * end is announced then)
    */
-  end?(store: DragStore, committed: boolean): void;
+  end?(store: DragStore, committed: boolean, done?: () => void): void;
 }
 
 /**

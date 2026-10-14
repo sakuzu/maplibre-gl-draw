@@ -21,10 +21,13 @@ import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import { TableSelection } from '../../feature-table/selection.js';
+import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import {
-  resizeBulkSelection,
-  rotateBulkSelection,
+  type BulkKinds,
+  resizeKinds,
+  rotationKinds,
   translateBulkSelection,
+  translationKinds,
 } from '../../operations/bulk-transform.js';
 import { computeResizeFactors, startResize } from '../../operations/resize.js';
 import { getRotationDelta, startRotation } from '../../operations/rotate.js';
@@ -186,6 +189,9 @@ abstract class BulkDrag implements DragOperation {
     protected readonly context: EngineModeContext,
     protected readonly rows: TableSelection,
   ) {
+    // A write of a drag let go before, still under way, is made first (its rows leave the moving
+    // set it shares)
+    context.store.finishSlicedWrite();
     const states = featureTablesInternals(context.store.tables)?.states;
     states?.setMoving(rows.handles, BULK_MOVE_SET);
     states?.setTranslation(BULK_MOVE_SET, 0, 0);
@@ -194,25 +200,40 @@ abstract class BulkDrag implements DragOperation {
 
   abstract update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void;
 
-  /** Writes the rows where the drag let them go */
-  protected abstract commit(store: DragStore): void;
+  /** The writes of the rows where the drag let them go (null: nothing to write) */
+  protected abstract kinds(store: DragStore): BulkKinds | null;
 
   /**
-   * Ends the drag: committed, the rows are written where they are drawn; then the moving set is
-   * let go of, in the same task (the drawing takes both in its next frame)
+   * Ends the drag. Committed, the rows are written where they are drawn, in steps
+   * (`bulk-sliced.ts`): each row leaves the moving set in the task it is written in, and the
+   * moving set is let go of with the last of them; then `done` is called. Not committed, the
+   * moving set is let go of at once
    */
-  end(store: DragStore, committed: boolean): void {
+  end(store: DragStore, committed: boolean, done?: () => void): void {
     if (this.#ended) return;
     this.#ended = true;
-    try {
-      if (committed) this.commit(store);
-    } finally {
-      const states = featureTablesInternals(store.tables)?.states;
+    const states = featureTablesInternals(store.tables)?.states;
+    const release = (): void => {
       states?.setMoving(this.rows.handles, 0);
       states?.setTranslation(BULK_MOVE_SET, 0, 0);
       states?.setTransform(BULK_MOVE_SET, null);
       this.context.map.triggerRepaint();
+      done?.();
+    };
+    let kinds: BulkKinds | null = null;
+    try {
+      kinds = committed ? this.kinds(store) : null;
+    } finally {
+      if (!kinds) release();
     }
+    if (!kinds) return;
+    writeKindsInSlices(store, this.rows, kinds, {
+      onWritten: (rows) => {
+        states?.setMoving(Int32Array.from(rows), 0);
+        this.context.map.triggerRepaint();
+      },
+      onDone: release,
+    });
   }
 }
 
@@ -244,9 +265,9 @@ export class BulkMoveDrag extends BulkDrag {
     this.context.map.triggerRepaint();
   }
 
-  protected commit(store: DragStore): void {
-    if (this.#dx === 0 && this.#dy === 0) return;
-    translateBulkSelection(store, this.#dx, this.#dy, this.rows);
+  protected kinds(): BulkKinds | null {
+    if (this.#dx === 0 && this.#dy === 0) return null;
+    return translationKinds(this.rows, this.#dx, this.#dy);
   }
 }
 
@@ -306,9 +327,9 @@ export class BulkRotateDrag extends BulkDrag {
     this.context.map.triggerRepaint();
   }
 
-  protected commit(store: DragStore): void {
-    if (this.#angle === 0) return;
-    rotateBulkSelection(
+  protected kinds(store: DragStore): BulkKinds | null {
+    if (this.#angle === 0) return null;
+    return rotationKinds(
       store,
       this.#state.center as [number, number],
       this.#angle,
@@ -365,9 +386,9 @@ export class BulkResizeDrag extends BulkDrag {
     this.context.map.triggerRepaint();
   }
 
-  protected commit(store: DragStore): void {
-    if (!this.#current) return;
-    resizeBulkSelection(
+  protected kinds(store: DragStore): BulkKinds | null {
+    if (!this.#current) return null;
+    return resizeKinds(
       store,
       {
         handle: this.#handle,
@@ -429,6 +450,8 @@ export class BulkNudge {
     if (!rows || !states) return false;
     if (this.#rows && !this.#rows.equals(rows)) this.flush();
     if (!this.#rows) {
+      // A write of a drag let go before, still under way, is made first (it shares the set)
+      context.store.finishSlicedWrite();
       this.#rows = rows;
       this.#context = context;
       this.#dx = 0;

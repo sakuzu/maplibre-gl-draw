@@ -475,6 +475,9 @@ export function createEngine(
   });
   // The extensions go first, while everything they use is there
   teardown.add(() => extensions.destroy());
+  // Before them, the rest of a write made in steps (a drag of many features let go) is made, and
+  // the end of its drag announced
+  teardown.add(() => store.finishSlicedWrite());
 
   return {
     map,

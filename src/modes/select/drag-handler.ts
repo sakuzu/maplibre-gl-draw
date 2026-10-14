@@ -274,18 +274,18 @@ export class SelectModeDragHandler {
       // Tell a delegate that the drag has ended (for an auxiliary handle core has written
       // nothing to the Store)
       this.operation?.finish?.(event);
-      // An operation that writes once at its end writes now (the drags of features selected in
-      // bulk)
-      this.operation?.end?.(store, true);
-
       // Commit the intermediate updates made during the drag in a single transaction before
       // announcing drag.ended (listeners see the state after the commit). If no feature was
       // touched, do nothing.
       this.writes.commit(store);
 
-      // Announce that the drag has ended (paired with drag.started, with the same IDs even
-      // when the selection changed during the drag; auxiliary handles are excluded)
-      if (!wasAuxiliary) this.announceEnd(false);
+      // An operation that writes once at its end writes now (the drags of features selected in
+      // bulk, in steps over several tasks): the end of the drag is announced once it has
+      // written (paired with drag.started, with the same IDs even when the selection changed
+      // during the drag; auxiliary handles are excluded)
+      const announce = wasAuxiliary ? null : this.takeEndAnnouncement(false);
+      if (this.operation?.end) this.operation.end(store, true, () => announce?.());
+      else announce?.();
     } finally {
       // Re-enable MapLibre's map dragging
       context.map.dragPan.enable();
@@ -320,6 +320,14 @@ export class SelectModeDragHandler {
    * Sends the drag.ended that pairs with the drag.started of the current drag, once
    */
   private announceEnd(cancelled: boolean): void {
+    this.takeEndAnnouncement(cancelled)?.();
+  }
+
+  /**
+   * Takes the drag.ended that pairs with the drag.started of the current drag, to send later
+   * (null when there is none to send)
+   */
+  private takeEndAnnouncement(cancelled: boolean): (() => void) | null {
     const featureIds = this.announcedFeatureIds;
     const kind = this.announcedKind;
     const announcer = this.announcer;
@@ -328,13 +336,14 @@ export class SelectModeDragHandler {
     this.announcedKind = null;
     this.announcer = null;
     this.announcedBulk = undefined;
-    if (!featureIds || !kind) return;
-    announcer?.emit('drag.ended', {
-      kind,
-      featureIds: [...featureIds],
-      ...(bulk && { bulk }),
-      cancelled,
-    });
+    if (!featureIds || !kind) return null;
+    return () =>
+      announcer?.emit('drag.ended', {
+        kind,
+        featureIds: [...featureIds],
+        ...(bulk && { bulk }),
+        cancelled,
+      });
   }
 
   /**

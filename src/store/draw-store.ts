@@ -51,7 +51,7 @@ import { rowsOfSummary, summaryOf } from './bulk-selection.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
-import type { Store, StoreContract } from './store.js';
+import type { SlicedWrite, Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
   DragState,
@@ -162,6 +162,9 @@ export class DrawStore implements Store {
   #releaseTimer: ReturnType<typeof setTimeout> | null = null;
   /** The features selected in bulk (null while the selection holds its features) */
   #bulk: BulkState | null = null;
+  /** The write of many rows made over several tasks under way, and whether a step of it runs */
+  #sliced: SlicedWrite | null = null;
+  #slicedSteps = 0;
   /** Whether the selection is being written here (its notification does not prune it) */
   #selecting = false;
   /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
@@ -288,6 +291,7 @@ export class DrawStore implements Store {
       throw new Error('The Store does not hold its features as rows: it writes no rows');
     }
     if (this.#contract.isReadOnly()) return null;
+    this.finishSlicedWrite();
     const before = tables.readValues(patch);
     return this.applyRows({ patch, before }) ? before : null;
   }
@@ -406,7 +410,36 @@ export class DrawStore implements Store {
     this.setSelection(ids.length > 0 ? type : null, ids);
   }
 
+  beginSlicedWrite(write: SlicedWrite): void {
+    this.finishSlicedWrite();
+    this.#sliced = write;
+  }
+  endSlicedWrite(write: SlicedWrite): void {
+    if (this.#sliced !== write) return;
+    this.#sliced = null;
+    // The extent of the features selected in bulk, kept while they were written in steps (they
+    // are drawn by it moved as they are, until the last of them is written)
+    if (this.#bulk) this.#refreshSummary(null);
+  }
+  finishSlicedWrite(): void {
+    const write = this.#sliced;
+    if (write && this.#slicedSteps === 0) write.finish();
+  }
+  runSlicedStep<T>(fn: () => T): T {
+    this.#slicedSteps++;
+    try {
+      return fn();
+    } finally {
+      this.#slicedSteps--;
+    }
+  }
+  get slicedWritePending(): boolean {
+    return this.#sliced !== null;
+  }
+
   applyBulk(op: BulkOperation, rows?: TableSelection): boolean {
+    // Planned from the values the rows have once the write under way is made
+    this.finishSlicedWrite();
     const contract = this.#contract;
     const target = rows ?? this.#bulk?.rows;
     const internals = featureTablesInternals(contract.tables);
@@ -519,6 +552,8 @@ export class DrawStore implements Store {
   }
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
+    // A write of this client comes after the write over several tasks under way
+    if (source !== 'remote') this.finishSlicedWrite();
     return this.#bus.transact(() => this.#contract.transact(fn, source), source);
   }
 
@@ -767,7 +802,7 @@ export class DrawStore implements Store {
   #refreshSummary(changes: StoreChange | null): void {
     const bulk = this.#bulk;
     const internals = featureTablesInternals(this.#contract.tables);
-    if (!bulk || !internals) return;
+    if (!bulk || !internals || (changes !== null && this.#sliced)) return;
     let touched = changes === null;
     for (const change of changes?.rows?.layers.values() ?? []) {
       if (touched) break;

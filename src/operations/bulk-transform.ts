@@ -12,7 +12,9 @@
  *
  * The rows are written by kind (the geometry alone, with a rotation, with a scale, with a radius,
  * with the values of an extension), each kind one write of the fields it changes, the writes
- * made in one transaction (one change, one step of the history).
+ * made in one transaction (one change, one step of the history). The kinds are made apart from
+ * their write (`translationKinds`, `rotationKinds`, `resizeKinds`), so that a drag let go writes
+ * them in steps (`bulk-sliced.ts`).
  */
 
 import type { BulkOperation, BulkRowReader } from '../feature-table/bulk-plan.js';
@@ -67,19 +69,30 @@ function mappedGeometry(
   return { type: geometry.type, coordinates: mapPositions(geometry.coordinates, map) };
 }
 
-/** Writes the kinds of rows of an operation, in one transaction */
-function writeKinds(
-  store: Store,
-  rows: TableSelection,
-  kinds: ReadonlyArray<{ rows: number[]; op: BulkOperation }>,
-): boolean {
+/**
+ * The writes of an operation on features selected in bulk, by kind of row: the rows of a kind
+ * (ascending) and the operation that writes them
+ *
+ * @internal
+ */
+export type BulkKinds = ReadonlyArray<{
+  readonly rows: readonly number[];
+  readonly op: BulkOperation;
+}>;
+
+/**
+ * Writes the kinds of rows of an operation, in one transaction
+ *
+ * @internal
+ */
+export function writeKinds(store: Store, rows: TableSelection, kinds: BulkKinds): boolean {
   // A locked feature refuses the whole of it, as a drag does not start then
   if (rows.count === 0 || rowsLocked(store, rows)) return false;
   let written = false;
   store.transact(() => {
     for (const kind of kinds) {
       if (kind.rows.length === 0) continue;
-      if (store.applyBulk(kind.op, TableSelection.of(kind.rows))) written = true;
+      if (store.applyBulk(kind.op, TableSelection.of([...kind.rows]))) written = true;
     }
   });
   return written;
@@ -98,17 +111,28 @@ export function translateBulkSelection(
   rows: TableSelection | null = store.getSelectedRows(),
 ): boolean {
   if (!rows) return false;
-  return store.applyBulk(
+  return writeKinds(store, rows, translationKinds(rows, dx, dy));
+}
+
+/**
+ * The writes of a move of features selected in bulk by a translation in degrees
+ *
+ * @internal
+ */
+export function translationKinds(rows: TableSelection, dx: number, dy: number): BulkKinds {
+  return [
     {
-      kind: 'rows',
-      fields: ['geometry'],
-      write: (_handle, read) => {
-        const geometry = mappedGeometry(read, (x, y) => [x + dx, y + dy]);
-        return geometry === undefined ? null : [geometry];
+      rows: Array.from(rows.handles),
+      op: {
+        kind: 'rows',
+        fields: ['geometry'],
+        write: (_handle, read) => {
+          const geometry = mappedGeometry(read, (x, y) => [x + dx, y + dy]);
+          return geometry === undefined ? null : [geometry];
+        },
       },
     },
-    rows,
-  );
+  ];
 }
 
 /**
@@ -128,8 +152,25 @@ export function rotateBulkSelection(
   extensions?: RotateExtensions,
   rows: TableSelection | null = store.getSelectedRows(),
 ): boolean {
+  if (!rows) return false;
+  const kinds = rotationKinds(store, center, deltaAngle, extensions, rows);
+  return kinds !== null && writeKinds(store, rows, kinds);
+}
+
+/**
+ * The writes of a rotation of features selected in bulk (null without rows)
+ *
+ * @internal
+ */
+export function rotationKinds(
+  store: Store,
+  center: [number, number],
+  deltaAngle: number,
+  extensions: RotateExtensions | undefined,
+  rows: TableSelection,
+): BulkKinds | null {
   const internals = featureTablesInternals(store.tables);
-  if (!rows || !internals) return false;
+  if (!internals) return null;
   const rotate = (x: number, y: number) => rotateCoordinate([x, y], center, deltaAngle);
   const deltaDeg = (deltaAngle * 180) / Math.PI;
   const plain: number[] = [];
@@ -145,7 +186,7 @@ export function rotateBulkSelection(
       view?.getRowValue(handle, ROTATION_KEY) !== undefined;
     (byProperty ? turned : plain).push(handle);
   }
-  return writeKinds(store, rows, [
+  return [
     {
       rows: plain,
       op: {
@@ -173,7 +214,7 @@ export function rotateBulkSelection(
         },
       },
     },
-  ]);
+  ];
 }
 
 /**
@@ -203,9 +244,25 @@ export function resizeBulkSelection(
   extensions?: ResizeExtensions,
   rows: TableSelection | null = store.getSelectedRows(),
 ): boolean {
+  if (!rows) return false;
+  const kinds = resizeKinds(store, resize, extensions, rows);
+  return kinds !== null && writeKinds(store, rows, kinds);
+}
+
+/**
+ * The writes of a resize of features selected in bulk (null without rows)
+ *
+ * @internal
+ */
+export function resizeKinds(
+  store: Store,
+  resize: Parameters<typeof resizeBulkSelection>[1],
+  extensions: ResizeExtensions | undefined,
+  rows: TableSelection,
+): BulkKinds | null {
   const internals = featureTablesInternals(store.tables);
   const tables = store.tables;
-  if (!rows || !internals || !tables) return false;
+  if (!internals || !tables) return null;
   const state = startResize(
     resize.handle,
     resize.startLngLat,
@@ -249,7 +306,7 @@ export function resizeBulkSelection(
       const geometry = mappedGeometry(read, map);
       return geometry === undefined ? null : [geometry];
     };
-  return writeKinds(store, rows, [
+  return [
     { rows: kinds.axes, op: { kind: 'rows', fields: ['geometry'], write: geometryBy(byAxes) } },
     {
       rows: kinds.scale,
@@ -284,7 +341,7 @@ export function resizeBulkSelection(
       rows: kinds.custom,
       op: customResize(store, resize, extensions),
     },
-  ]);
+  ];
 }
 
 /**
