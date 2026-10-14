@@ -217,37 +217,38 @@ export function exportGeoJSON(
   // of the export. listShownFeatures returns only the visible features, so on its own it
   // would lose visible:false across the GeoJSON round trip. Including the hidden ones
   // preserves it across the round trip.
-  let features: Feature[];
+  const featureIdSet =
+    options?.featureIds && options.featureIds.length > 0 ? new Set(options.featureIds) : null;
+  const layerIdSet =
+    options?.layerIds && options.layerIds.length > 0 ? new Set(options.layerIds) : null;
+  const exported = (feature: Feature): boolean =>
+    (featureIdSet === null || featureIdSet.has(feature.id)) &&
+    (layerIdSet === null || layerIdSet.has(feature.layerId));
+  const readFile: ReadFile = (id) => store.getFile(id);
+
   if (store.tables) {
     // A Store of rows: its features made from its rows one at a time, in the order they are
-    // drawn, the shown ones first
-    const shown: Feature[] = [];
-    const hidden: Feature[] = [];
+    // drawn, and written at once (none of them kept), the shown ones first
+    const shown: GeoJSON.Feature<GeoJSON.Geometry>[] = [];
+    const hidden: GeoJSON.Feature<GeoJSON.Geometry>[] = [];
     for (const feature of featuresInOrder(store)) {
+      if (!exported(feature)) continue;
+      const geoFeature = convertFeatureToGeoJSON(feature, readFile);
+      if (!geoFeature) continue;
       const isShown =
         feature.visible &&
         store.getLayer(feature.layerId)?.visible === true &&
         (feature.groupId === undefined || store.getGroup(feature.groupId)?.visible !== false);
-      (isShown ? shown : hidden).push(feature);
+      (isShown ? shown : hidden).push(geoFeature);
     }
-    features = [...shown, ...hidden];
-  } else {
-    const visibleOrdered = listShownFeatures(store);
-    const visibleIds = new Set(visibleOrdered.map((f) => f.id));
-    const hiddenFeatures = store.listFeatures().filter((f) => !visibleIds.has(f.id));
-    features = [...visibleOrdered, ...hiddenFeatures];
+    return featureCollectionOf([...shown, ...hidden]);
   }
 
-  if (options?.featureIds && options.featureIds.length > 0) {
-    const featureIdSet = new Set(options.featureIds);
-    features = features.filter((f) => featureIdSet.has(f.id));
-  }
-  if (options?.layerIds && options.layerIds.length > 0) {
-    const layerIdSet = new Set(options.layerIds);
-    features = features.filter((f) => layerIdSet.has(f.layerId));
-  }
-
-  return convertFeaturesToGeoJSON(features, (id) => store.getFile(id));
+  const visibleOrdered = listShownFeatures(store);
+  const visibleIds = new Set(visibleOrdered.map((f) => f.id));
+  const hiddenFeatures = store.listFeatures().filter((f) => !visibleIds.has(f.id));
+  const features = [...visibleOrdered, ...hiddenFeatures].filter(exported);
+  return convertFeaturesToGeoJSON(features, readFile);
 }
 
 /**
@@ -269,7 +270,13 @@ export function convertFeaturesToGeoJSON(
       geoJSONFeatures.push(geoFeature);
     }
   }
+  return featureCollectionOf(geoJSONFeatures);
+}
 
+/** A FeatureCollection of exported features, with the bbox of every exported position */
+function featureCollectionOf(
+  geoJSONFeatures: GeoJSON.Feature<GeoJSON.Geometry>[],
+): GeoJSON.FeatureCollection<GeoJSON.Geometry> {
   const bbox = featureCollectionBBox(geoJSONFeatures);
   return {
     type: 'FeatureCollection',
