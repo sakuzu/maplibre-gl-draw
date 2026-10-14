@@ -63,6 +63,7 @@ import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/ut
 import { ValueStringCache } from '../table/value-column.js';
 import { featureFields, featureWithFields } from './feature-fields.js';
 import { GroupTable } from './group-table.js';
+import { translationBetween } from './held-move.js';
 import { IdIndex } from './id-index.js';
 import { groupKeyMoves, type ItemOrderSource, ItemOrderWatch } from './item-order.js';
 import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
@@ -404,7 +405,19 @@ interface HeldRow {
   committed: Feature;
   /** The fields an edit wrote in its middle and did not end */
   readonly intermediate: Set<RowField>;
+  /**
+   * The geometry its row holds while the row is drawn moved by its state (the moving set of the
+   * rows held, `HELD_MOVE_SET`): the geometry of its feature is this one moved as a whole, and is
+   * not written to the row (undefined while the row is written)
+   */
+  moved: { readonly geometry: Feature['geometry'] } | undefined;
 }
+
+/** The moving set the rows held moved as a whole in the middle of an edit are in */
+const HELD_MOVE_SET = 1;
+
+/** The number of rows held from which a row held moved as a whole is moved by its state */
+const MOVE_HELD_BY_STATE_FROM = 100;
 
 /** A feature drawn over a row for this client */
 interface OverlayEntry {
@@ -488,6 +501,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly forgotten = new Set<RowHandle>();
   /** The groups of features deleted that rows still name (taken out once none does) */
   private readonly deletedGroups = new Set<GroupHandle>();
+  /** `FeatureTablesOptions.moveHeldByStateFrom` */
+  private readonly moveHeldByStateFrom: number;
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -498,6 +513,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.versions = new GroupVersions(this.versionHost());
     this.retainTokens = options.retainLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.retainLimit?.bytes ?? RETAIN_BYTES;
+    this.moveHeldByStateFrom = options.moveHeldByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
   }
 
   /** What the versions read and write of the tables */
@@ -1501,7 +1517,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
         continue;
       }
       const previous = held.feature;
-      held.feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
+      const read = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
+      // A row drawn moved by its state does not hold the geometry of its feature
+      held.feature = held.moved ? { ...read, geometry: previous.geometry } : read;
+      if (held.moved) held.moved = { geometry: read.geometry };
       held.committed = featureWithFields(held.committed, fields);
       updated.push({ id: previous.id, feature: held.feature, previous });
     }
@@ -1605,11 +1624,22 @@ class FeatureTablesStore implements FeatureTablesInternals {
         `FeatureTables: the layer and the group of "${id}" are written with apply, with its key`,
       );
     }
-    const fields = featureFields(held.feature, feature);
-    if (fields.size > 0) {
-      const columns = new Map<RowField, readonly unknown[]>();
-      for (const [field, value] of fields) columns.set(field, [value]);
-      this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
+    const translation = options.intermediate ? this.heldTranslation(held, feature) : null;
+    let fields: Map<RowField, unknown>;
+    if (translation) {
+      // Moved as a whole among many rows held: the row keeps its values without the ones of the
+      // edit, and is drawn moved by its state
+      fields = new Map([['geometry', feature.geometry]]);
+      if (!held.moved) {
+        this.writeHeldRow(handle, featureFields(held.feature, held.committed));
+        held.moved = { geometry: held.committed.geometry };
+        this.states.setMoving(Int32Array.of(handle), HELD_MOVE_SET);
+      }
+      this.states.setTranslation(HELD_MOVE_SET, translation[0], translation[1]);
+    } else {
+      fields = featureFields(held.feature, feature);
+      this.writeHeldRow(handle, featureFields(this.heldRowValues(held), feature));
+      this.stopMove(handle, held);
     }
     const previous = held.feature;
     held.feature = feature;
@@ -1626,6 +1656,38 @@ class FeatureTablesStore implements FeatureTablesInternals {
         ],
       },
     });
+  }
+
+  /**
+   * The translation a write in the middle of an edit moves a row held by as a whole, when it is
+   * drawn moved by its state: many rows are held, and the write changes nothing but the geometry
+   * the row holds without the edit, moved as a whole (null when the row is to be written)
+   */
+  private heldTranslation(held: HeldRow, feature: Feature): [number, number] | null {
+    if (this.heldRows.size < this.moveHeldByStateFrom) return null;
+    const fields = featureFields(held.committed, feature);
+    if (fields.size !== 1 || !fields.has('geometry')) return null;
+    return translationBetween((held.moved ?? held.committed).geometry, feature.geometry);
+  }
+
+  /** The values the row of a row held holds, as its feature has them */
+  private heldRowValues(held: HeldRow): Feature {
+    return held.moved ? { ...held.feature, geometry: held.moved.geometry } : held.feature;
+  }
+
+  /** Writes fields of a row held, as its feature has them */
+  private writeHeldRow(handle: RowHandle, fields: ReadonlyMap<RowField, unknown>): void {
+    if (fields.size === 0) return;
+    const columns = new Map<RowField, readonly unknown[]>();
+    for (const [field, value] of fields) columns.set(field, [value]);
+    this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
+  }
+
+  /** Takes a row held out of the moving set of the rows held, once its row is written */
+  private stopMove(handle: RowHandle, held: HeldRow): void {
+    if (!held.moved) return;
+    held.moved = undefined;
+    this.states.setMoving(Int32Array.of(handle), 0);
   }
 
   // === The features drawn over rows for this client ===
@@ -1726,7 +1788,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const place = this.placeOf(handle);
     if (!place) return null;
     const feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
-    this.heldRows.set(handle, { feature, committed: feature, intermediate: new Set() });
+    this.heldRows.set(handle, {
+      feature,
+      committed: feature,
+      intermediate: new Set(),
+      moved: undefined,
+    });
     // Its copy in the delta stays there until it is no longer held
     if (place.group.delta) place.layer.delta.setWritten(place.row, Number.POSITIVE_INFINITY);
     return feature;
@@ -1750,13 +1817,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (!held) return undefined;
     this.heldRows.delete(handle);
     if (held.intermediate.size > 0) {
-      const back = featureFields(held.feature, held.committed);
-      const columns = new Map<RowField, readonly unknown[]>();
-      for (const [field, value] of back) columns.set(field, [value]);
-      if (columns.size > 0) {
-        this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
-      }
+      this.writeHeldRow(handle, featureFields(this.heldRowValues(held), held.committed));
     }
+    this.stopMove(handle, held);
     const serial = this.ids.deltaLayer(handle);
     if (serial >= 0) {
       this.layerList[serial].delta.setWritten(this.ids.deltaSlot(handle), ++this.writeCount);
@@ -1767,6 +1830,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /** Takes a row out of every owner, without writing it (it was deleted) */
   private forgetHeld(handle: RowHandle): void {
+    const held = this.heldRows.get(handle);
+    if (held) this.stopMove(handle, held);
     this.heldRows.delete(handle);
     for (const [owner, handles] of [...this.holders]) {
       if (!handles.has(handle)) continue;

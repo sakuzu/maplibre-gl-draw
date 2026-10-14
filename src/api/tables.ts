@@ -432,6 +432,13 @@ export interface FeatureTablesOptions {
    * Past it, the oldest are let go of
    */
   readonly retainLimit?: { readonly tokens?: number; readonly bytes?: number };
+  /**
+   * The number of rows held as features from which a row held moved as a whole in the middle of
+   * an edit (a drag of the selection) is drawn moved by its state rather than written in every
+   * frame: its feature takes every value written, and its row is written once, with the values
+   * the edit ends with (100 when omitted; `Infinity`: every row is written)
+   */
+  readonly moveHeldByStateFrom?: number;
 }
 
 /**
