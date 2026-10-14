@@ -94,9 +94,9 @@ function memoryMb(): number {
 }
 
 /** Runs a command of the inspector of this process */
-function post(session: Session, method: string): Promise<unknown> {
+function post(session: Session, method: string, params?: object): Promise<unknown> {
   return new Promise((resolve, reject) =>
-    session.post(method, (error, result) => (error ? reject(error) : resolve(result))),
+    session.post(method, params, (error, result) => (error ? reject(error) : resolve(result))),
   );
 }
 
@@ -110,6 +110,8 @@ async function timed(name: string, work: () => unknown): Promise<void> {
   if (session) {
     session.connect();
     await post(session, 'Profiler.enable');
+    // A sample every 0.1 ms: the pieces of a work of tens of milliseconds are told apart
+    await post(session, 'Profiler.setSamplingInterval', { interval: 100 });
     await post(session, 'Profiler.start');
   }
   const t0 = performance.now();

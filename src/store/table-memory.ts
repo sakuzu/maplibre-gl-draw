@@ -440,6 +440,13 @@ export class TableContractStore implements StoreContract {
   applyRows(write: RowWrite): boolean {
     return this.#apply(() => {
       const { patch, created, place } = write;
+      if (!created && !place) {
+        // Values of rows there (a change of many rows selected): written as given
+        this.#leaveGroups(patch);
+        const deletes = patch.deleted?.some((value) => value !== 0) ?? false;
+        this.writer.apply(patch, { before: write.before, ...(deletes && this.#keeping()) });
+        return;
+      }
       const handles: number[] = Array.from(patch.handles);
       const indexOf = new Map(handles.map((handle, i) => [handle, i]));
       const fields = new Map<RowField, unknown[]>();
@@ -468,18 +475,7 @@ export class TableContractStore implements StoreContract {
         const at = row(handle);
         for (const [field, values] of created?.fields ?? []) set(field, at, values[k]);
       });
-      // A row deleted leaves its group, and so does a row whose group changes
-      patch.deleted?.forEach((flag, i) => {
-        const left = flag !== 0 ? this.#groupIdOfRow(patch.handles[i]) : undefined;
-        if (left !== undefined) this.#leftGroups.add(left);
-      });
-      const groupIds = fields.get('groupId');
-      if (groupIds) {
-        handles.forEach((handle, i) => {
-          const left = this.#groupIdOfRow(handle);
-          if (left !== undefined && (groupIds[i] || undefined) !== left) this.#leftGroups.add(left);
-        });
-      }
+      this.#leaveGroups(patch);
       // The rows put in a place, the new ones after them
       if (place) {
         const to = place.to;
@@ -522,6 +518,21 @@ export class TableContractStore implements StoreContract {
         { before: write.before, ...(deletes && this.#keeping()) },
       );
     });
+  }
+
+  /** A row deleted leaves its group, and so does a row whose group changes */
+  #leaveGroups(patch: RowValues): void {
+    patch.deleted?.forEach((flag, i) => {
+      const left = flag !== 0 ? this.#groupIdOfRow(patch.handles[i]) : undefined;
+      if (left !== undefined) this.#leftGroups.add(left);
+    });
+    const groupIds = patch.fields.get('groupId');
+    if (groupIds) {
+      patch.handles.forEach((handle, i) => {
+        const left = this.#groupIdOfRow(handle);
+        if (left !== undefined && (groupIds[i] || undefined) !== left) this.#leftGroups.add(left);
+      });
+    }
   }
 
   /**
@@ -1038,8 +1049,9 @@ export class TableContractStore implements StoreContract {
   #applyRows(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
     const { before: given, ...rest } = options;
     const before = given ?? (this.#bus.source === 'remote' ? null : this.#readBefore(patch));
+    // Only the rows that were not there are noted (a row not noted was there)
     for (const handle of patch.handles) {
-      if (!this.#written.has(handle)) this.#written.set(handle, this.#isThere(handle));
+      if (!this.#written.has(handle) && !this.#isThere(handle)) this.#written.set(handle, false);
     }
     const change = this.#writer.apply(patch, rest);
     if (before && before.handles.length > 0) this.#before.push(before);
@@ -1253,9 +1265,11 @@ function reconcile(
     return handle === undefined || !internals.isHeld(handle);
   });
   const before = valuesBefore(parts, updatedFeatures ?? [], released, tables);
-  const beforeRows = new Map(Array.from(before?.handles ?? [], (handle, i) => [handle, i]));
+  /** The places of the rows in the values before (made once a row held asks) */
+  let beforeRows: Map<RowHandle, number> | null = null;
   /** The feature of a row held before the transaction, from the values before */
   const previousOf = (handle: RowHandle, feature: Feature): Feature => {
+    beforeRows ??= new Map(Array.from(before?.handles ?? [], (h, i) => [h, i]));
     const i = beforeRows.get(handle);
     if (!before || i === undefined) return feature;
     const fields = new Map<RowField, unknown>();
@@ -1267,33 +1281,56 @@ function reconcile(
   const createdIds = new Set<string>();
   const layers = new Map<string, LayerRowsChange>();
   // The rows held at the end are changes of their features
+  /** The feature a row held at the end is (its id read only for a row held) */
+  const heldFeature = (handle: RowHandle): { id: string; feature: Feature } | undefined => {
+    if (!internals.isHeld(handle)) return undefined;
+    const id = tables.getRowId(handle) as string;
+    const feature = internals.getOpenedFeature(id);
+    return feature ? { id, feature } : undefined;
+  };
   for (const [layerId, change] of rows?.layers ?? []) {
-    const keep = { created: [] as number[], updated: [] as number[], deleted: [] as number[] };
-    for (const handle of change.created) {
-      const id = tables.getRowId(handle) as string;
-      const feature = internals.isHeld(handle) ? internals.getOpenedFeature(id) : undefined;
-      if (!feature) keep.created.push(handle);
-      else {
-        created.push(feature);
-        createdIds.add(id);
+    if (internals.heldCount === 0) {
+      // No row is held: the rows of the change are changes of rows
+      if (change.created.length + change.updated.length + change.deleted.length > 0) {
+        layers.set(layerId, change);
       }
+      continue;
     }
-    for (const handle of change.updated) {
-      const id = tables.getRowId(handle) as string;
-      const feature = internals.isHeld(handle) ? internals.getOpenedFeature(id) : undefined;
-      if (!feature) keep.updated.push(handle);
-      else if (!updated.some((entry) => entry.id === id)) {
-        updated.push({ id, feature, previous: previousOf(handle, feature) });
+    // The rows of the change as they are when none of them is held (most of a change of many)
+    let keptCreated: number[] | null = null;
+    let keptUpdated: number[] | null = null;
+    change.created.forEach((handle, i) => {
+      const held = heldFeature(handle);
+      if (!held) {
+        keptCreated?.push(handle);
+        return;
       }
-    }
-    keep.deleted.push(...change.deleted);
-    if (keep.created.length + keep.updated.length + keep.deleted.length === 0) continue;
-    layers.set(layerId, {
-      ...change,
-      created: Int32Array.from(keep.created),
-      updated: Int32Array.from(keep.updated),
-      deleted: Int32Array.from(keep.deleted),
+      keptCreated ??= Array.from(change.created.subarray(0, i));
+      created.push(held.feature);
+      createdIds.add(held.id);
     });
+    change.updated.forEach((handle, i) => {
+      const held = heldFeature(handle);
+      if (!held) {
+        keptUpdated?.push(handle);
+        return;
+      }
+      keptUpdated ??= Array.from(change.updated.subarray(0, i));
+      if (!updated.some((entry) => entry.id === held.id)) {
+        updated.push({
+          id: held.id,
+          feature: held.feature,
+          previous: previousOf(handle, held.feature),
+        });
+      }
+    });
+    const keep = {
+      created: keptCreated ? Int32Array.from(keptCreated) : change.created,
+      updated: keptUpdated ? Int32Array.from(keptUpdated) : change.updated,
+      deleted: change.deleted,
+    };
+    if (keep.created.length + keep.updated.length + keep.deleted.length === 0) continue;
+    layers.set(layerId, { ...change, ...keep });
   }
   for (const entry of released) {
     const handle = tables.findRow(entry.id);
