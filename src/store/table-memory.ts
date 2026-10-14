@@ -162,6 +162,7 @@ export class TableContractStore implements StoreContract {
       forget: (handles) => writer.forget(handles),
       allocateHandles: (ids, hashes) => writer.allocateHandles(ids, hashes),
       adopt: (layerId, groups) => writer.adopt(layerId, groups),
+      flushAdoption: () => writer.flushAdoption(),
       raiseDims: (layerId, dims) => writer.raiseDims(layerId, dims),
       apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
       applyGroups: (patch, options) => writer.applyGroups(patch, options),

@@ -287,6 +287,17 @@ export interface FeatureTables {
   /** The handle of a group of features by its id (undefined for an unknown group) */
   groupHandleOf(id: string): number | undefined;
   /**
+   * The key of the order of a group of features: where the group stands among the items of its
+   * layer (the key of the order of a row, a fractional index, compared byte by byte; its members
+   * follow each other at its place). It is the key last written, read at once: a new key puts
+   * the members at their new place over the frames, and the rows are read and drawn in the order
+   * before until then. The layer of the group is the `layerId` of the group (`Store.getGroup`).
+   *
+   * @param group - The handle of the group ({@link FeatureTables.groupHandleOf})
+   * @returns The key (undefined for an unknown handle)
+   */
+  groupOrderOf(group: number): string | undefined;
+  /**
    * Reads the handles of the rows of layers, a batch at a time (the deleted rows left out); read
    * their values with {@link LayerTableView}.
    */
@@ -387,6 +398,17 @@ export interface FeatureTablesWriter {
    *   when a row names a group of features that is not known (nothing is queued then)
    */
   adopt(layerId: string, groups: readonly RowGroupData[]): void;
+  /**
+   * Takes in, now and on this thread, every row group waiting: the groups given to `adopt`, in the
+   * order they were given, and the new rows written that wait to be built into row groups of
+   * their own (built here, not in the Worker; the ones a Worker is building are taken in once
+   * built). It is for a host that draws nothing, and for tests: the tables take the groups in
+   * over the frames of the drawing otherwise, and do so still when this is not called.
+   *
+   * @throws when a group given to `adopt` cannot be taken in (see `adopt`): the groups after it
+   *   keep waiting
+   */
+  flushAdoption(): void;
   /**
    * Raises the dimensions of the coordinates of a layer, so that it holds a `z` or an `m` it did
    * not (`xy` to `xyz`, `xyz` to `xyzm`; a layer of no rows yet included): no value is dropped.

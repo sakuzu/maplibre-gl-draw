@@ -201,6 +201,7 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
       const group = store.groups.handleOfId(id);
       return group >= 0 ? group : undefined;
     },
+    groupOrderOf: (group) => store.groupOrderOf(group),
     scan: (options) => store.scan(options ?? {}),
     hold: (owner, ids) => store.hold(owner, ids),
     heldFeature: (id) => store.heldFeature(id),
@@ -211,6 +212,7 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
     adopt: (layerId, groups) => store.adopt(layerId, groups),
+    flushAdoption: () => store.flushAdoption(),
     raiseDims: (layerId, dims) => store.raiseDims(layerId, dims),
     apply: (patch, options) => store.apply(patch, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
@@ -750,6 +752,20 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const place = this.placeOf(handle);
     if (!place) return undefined;
     return (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 ? undefined : handle;
+  }
+
+  /**
+   * The key of the order of a group of features last written: the one of the last reorder still
+   * going in that puts it in (its members are read in the order before until it is swapped in),
+   * or the one of the table of the groups
+   */
+  groupOrderOf(group: GroupHandle): string | undefined {
+    if (!this.groups.has(group)) return undefined;
+    let latest: GroupVersion | undefined;
+    for (const version of this.versions.reordersOf(group)) {
+      if (!latest || version.id > latest.id) latest = version;
+    }
+    return latest?.orders?.get(group) ?? this.groups.orderOf(group);
   }
 
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]> {
