@@ -150,14 +150,13 @@ before the transaction and its `layer` or `group` the state after it.
 
 A feature or a group put in another place of the stacking order fires
 `feature.moved` or `group.moved`, wherever it went: in its layer or
-group, into another one, or out of its group. Creating a feature, or
-moving an item, also changes the `items` of a layer of objects (or the
-`featureIds` of its group), so it comes with a `layer.updated` (or
-`group.updated`) of that layer or group with the new list. A layer held
-as rows (a Store that holds its features as rows) lists no items, and a
-group of it no features: a move there fires no `layer.updated` nor
-`group.updated`, and the items are read with `layers.listItems` and
-`groups.listMembers`.
+group, into another one, or out of its group. A change of the order is
+told by these events and by `DocumentChange.order` only, in every kind of
+layer: creating, deleting or moving an item changes the `items` of a
+layer of objects (or the `featureIds` of its group), but a change of the
+list alone fires no `layer.updated` nor `group.updated`. A layer held as
+rows (a Store that holds its features as rows) has no list; the items of
+any layer are read with `layers.listItems` and `groups.listMembers`.
 
 ### One event per transaction
 
@@ -292,8 +291,10 @@ Store tells them in `DocumentChange.order`. A Store tells every move in
 `order`; a move it leaves out is not told.
 
 A feature that changed its layer or its group fires `feature.updated`
-first. A move in the same layer or group changes no field of the item, so
-it fires no `feature.updated` nor `group.updated`. An item created or
+first, and a group that changed its layer `group.updated`. A move in the
+same layer or group changes no field of the item, so it fires no
+`feature.updated` nor `group.updated`, nor a `layer.updated` for the
+`items` of the layer. An item created or
 deleted fires its own event instead. Many rows of a layer held as rows put
 in another place at once are told by `document.changed` only (`order`).
 

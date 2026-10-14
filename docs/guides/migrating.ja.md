@@ -692,7 +692,11 @@ const members = draw.groups.listMembers(groupId);
 `DocumentChange.order` に入ります。元の場所と今の場所を、すぐ下と
 すぐ上の項目 (`ItemPosition`) で持ちます。`feature.moved` の `from`
 と `to` も `ItemPosition` になり、同じレイヤーやグループの中の移動でも
-届きます。`group.moved` が加わりました。
+届きます。`group.moved` が加わりました。レイヤーの `items` や
+グループの `featureIds` だけの変化では、`layer.updated` と
+`group.updated` は届かなくなりました。並びを追う画面は
+`feature.moved` と `group.moved`、または `document.changed` を
+受け取ります。
 
 ```ts
 draw.on('document.changed', (change) => {

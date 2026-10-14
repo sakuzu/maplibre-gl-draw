@@ -556,10 +556,16 @@ export class DrawStore implements Store {
     return normalized;
   }
 
-  /** A notification of the contract with its features and layers read like the getters */
+  /**
+   * A notification of the contract with its features and layers read like the getters. An
+   * update of a layer or a group that changed nothing but its list of items (`items`,
+   * `featureIds`) is left out: the change of the order is told by `order` alone, in every kind
+   * of layer (a layer held as rows has no list)
+   */
   #normalizeChanges(changes: StoreChange): StoreChange {
-    const { features, layers } = changes;
     const normalized: StoreChange = { ...changes };
+    withoutListOnlyUpdates(normalized);
+    const { features, layers } = normalized;
     if (features) {
       normalized.features = {
         ...features,
@@ -680,6 +686,46 @@ export class DrawStore implements Store {
     this.#heldStale = true;
     this.#contract.setSelectedVertices(null);
     this.#bus.merge({ uiStateChanged: true });
+  }
+}
+
+/** Whether two objects hold the same value for every key but one */
+function sameBut(a: object, b: object, key: string): boolean {
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  for (const name of new Set([...Object.keys(left), ...Object.keys(right)])) {
+    if (name !== key && left[name] !== right[name]) return false;
+  }
+  return true;
+}
+
+/**
+ * Takes out of a notification the updates of the layers and the groups that changed only their
+ * list of items, and the categories they leave empty
+ */
+function withoutListOnlyUpdates(changes: StoreChange): void {
+  const { layers, groups } = changes;
+  if (layers?.updated) {
+    const updated = layers.updated.filter(
+      (entry) => !sameBut(entry.layer, entry.previous, 'items'),
+    );
+    if (updated.length !== layers.updated.length) {
+      const { updated: _all, ...rest } = layers;
+      const next = updated.length > 0 ? { ...rest, updated } : rest;
+      if (Object.keys(next).length > 0) changes.layers = next;
+      else delete changes.layers;
+    }
+  }
+  if (groups?.updated) {
+    const updated = groups.updated.filter(
+      (entry) => !sameBut(entry.group, entry.previous, 'featureIds'),
+    );
+    if (updated.length !== groups.updated.length) {
+      const { updated: _all, ...rest } = groups;
+      const next = updated.length > 0 ? { ...rest, updated } : rest;
+      if (Object.keys(next).length > 0) changes.groups = next;
+      else delete changes.groups;
+    }
   }
 }
 

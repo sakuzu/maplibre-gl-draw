@@ -76,6 +76,13 @@ writing it. Its changes are listed after those of 3.0.0.
   and fires for a move in the same layer or group as well, once per
   transaction. It fires after the events of the groups, with
   `group.moved`.
+- A change of the order is told by `feature.moved`, `group.moved` and
+  `DocumentChange.order` only: an update of a layer that changed nothing
+  but its `items`, or of a group nothing but its `featureIds` (a feature
+  created, deleted or moved), is no longer in `layer.updated`,
+  `group.updated` nor `DocumentChange.layers.updated` and
+  `groups.updated`. An update of another field carries the lists as they
+  are.
 - A store that holds its features as rows refuses what would make or
   place every feature at once: `features.list` without a `limit`, and a
   place by `index`, throw a `DrawError` with the code `invalid-state`.

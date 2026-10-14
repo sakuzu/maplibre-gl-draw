@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectGroup, ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import { MemoryStore } from './memory.js';
+import { MemoryContractStore, MemoryStore } from './memory.js';
 import type { Feature, Group, Layer, StoreChange, StyleRule } from './types.js';
 
 // Test helper functions
@@ -53,6 +53,13 @@ function createTestGroup(overrides?: Partial<Group>): Group {
     visible: true,
     ...overrides,
   };
+}
+
+/** The in-memory contract (what the Store of core wraps) with the layer `layer-1` */
+function contractWithLayer(): MemoryContractStore {
+  const contract = new MemoryContractStore();
+  contract.createLayer(createTestLayer() as ObjectLayer);
+  return contract;
 }
 
 describe('MemoryStore', () => {
@@ -607,8 +614,8 @@ describe('MemoryStore', () => {
           items: [...((store.getLayer('layer-1') as ObjectLayer | undefined)?.items ?? [])],
         });
 
-        const changes: StoreChange = listener.mock.calls[0][0];
-        expect(changes.groups).toBeUndefined();
+        const changes: StoreChange | undefined = listener.mock.calls[0]?.[0];
+        expect(changes?.groups).toBeUndefined();
       });
     });
 
@@ -897,7 +904,10 @@ describe('MemoryStore', () => {
       expect(changes.source).toBe('silent');
     });
 
+    // The contract folds the updates of one layer or group; the Store of core leaves out the
+    // ones that changed the items alone, which the moves of the order tell
     it('layers.updated for the same layer is folded into one entry', () => {
+      const store = contractWithLayer();
       const listener = vi.fn();
       store.subscribe(listener);
 
@@ -920,7 +930,8 @@ describe('MemoryStore', () => {
     });
 
     it('with several layers, folding is independent for each layer', () => {
-      store.createLayer(createTestLayer({ id: 'layer-2' }));
+      const store = contractWithLayer();
+      store.createLayer(createTestLayer({ id: 'layer-2' }) as ObjectLayer);
       const listener = vi.fn();
       store.subscribe(listener);
 
@@ -938,9 +949,10 @@ describe('MemoryStore', () => {
     });
 
     it('groups.updated for the same group is folded into one entry', () => {
+      const store = contractWithLayer();
       store.createFeature(createTestFeature('feature-1'));
       store.createFeature(createTestFeature('feature-2'));
-      store.createGroup(createTestGroup());
+      store.createGroup(createTestGroup() as ObjectGroup);
       const listener = vi.fn();
       store.subscribe(listener);
 

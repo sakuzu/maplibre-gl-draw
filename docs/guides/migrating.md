@@ -681,7 +681,11 @@ The order inside a layer or a group is no longer in
 another place is in `DocumentChange.order`, with where it was and where
 it is, by the items just below and above it (`ItemPosition`). The
 `from` and `to` of `feature.moved` are `ItemPosition`s too, and it fires
-for a move in the same layer or group as well; `group.moved` is new.
+for a move in the same layer or group as well; `group.moved` is new. A
+change of the `items` of a layer or the `featureIds` of a group alone no
+longer fires `layer.updated` nor `group.updated`: a view that follows
+the order listens to `feature.moved` and `group.moved`, or to
+`document.changed`.
 
 ```ts
 draw.on('document.changed', (change) => {

@@ -108,8 +108,9 @@ describe('the objects the in-memory store returns', () => {
     store.createFeature(point('a'));
     store.createFeature(point('b'));
     const updated: Layer[] = [];
-    store.subscribe((changes) => {
-      for (const entry of changes.layers?.updated ?? []) updated.push(entry.layer);
+    // A change of the items alone is told by the moves of the order: the layer is read after it
+    store.subscribe(() => {
+      updated.push(store.getLayer('l1') as Layer);
     });
     const before = store.getLayer('l1') as Layer;
 
@@ -123,7 +124,7 @@ describe('the objects the in-memory store returns', () => {
       'a',
       'c',
     ]);
-    const notified = updated[0];
+    const notified = updated[updated.length - 1];
     store.createFeature(point('d'));
     expect((notified as ObjectLayer).items).toEqual(['b', 'a', 'c']);
     expect(() =>

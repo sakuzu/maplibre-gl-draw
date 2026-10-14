@@ -72,7 +72,11 @@ export interface DocumentChange {
     }>;
     deleted?: Feature[];
   };
-  /** The layers created, updated and deleted, and the change of their stacking order */
+  /**
+   * The layers created, updated and deleted, and the change of their stacking order. An update
+   * that changed nothing but the `items` of a layer is left out (`order` tells it), as is one of
+   * a group that changed nothing but its `featureIds`
+   */
   layers?: {
     created?: Layer[];
     updated?: Array<{ id: string; layer: Layer; previous: Layer }>;
@@ -161,7 +165,10 @@ export interface DrawEvents {
   'feature.moved': { feature: Feature; from: ItemPosition; to: ItemPosition; source: string };
   /** A layer was created */
   'layer.created': { layer: Layer; source: string };
-  /** A layer changed */
+  /**
+   * A layer changed. A change of its `items` alone (a feature or a group created, deleted or put
+   * in another place) is not told here: the moves of the order tell it
+   */
   'layer.updated': { layer: Layer; previous: Layer; source: string };
   /** A layer was deleted */
   'layer.deleted': { layer: Layer; source: string };
@@ -169,7 +176,10 @@ export interface DrawEvents {
   'layer.reordered': { order: readonly string[]; previous: readonly string[]; source: string };
   /** A group was created */
   'group.created': { group: Group; source: string };
-  /** A group changed */
+  /**
+   * A group changed. A change of its `featureIds` alone is not told here: the moves of the order
+   * tell it
+   */
   'group.updated': { group: Group; previous: Group; source: string };
   /** A group was ungrouped */
   'group.deleted': { group: Group; source: string };

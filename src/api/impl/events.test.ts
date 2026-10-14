@@ -19,7 +19,7 @@ import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
-import type { Feature } from '../model.js';
+import type { Feature, Group } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -226,6 +226,49 @@ describe('the events of the layers, the groups and the metadata', () => {
     expect(payloadsOf(events, 'layer.deleted')).toEqual([
       { layer: expect.objectContaining({ id: layer?.id }), source: 'local' },
     ]);
+  });
+
+  it('tells a change of the order by the moves only: no layer.updated nor group.updated for the items alone', () => {
+    const first = draw.layers.getActive()?.id as string;
+    const second = draw.layers.create({ name: 'Second' })?.id as string;
+    events.length = 0;
+    const a = draw.features.create(pointInput()) as Feature;
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const c = draw.features.create(pointInput(2, 2)) as Feature;
+    draw.features.move(a.id, { layerId: first, index: 2 });
+    draw.features.move(b.id, { layerId: second });
+    const group = draw.groups.create({ featureIds: [c.id], name: 'G' }) as Group;
+    draw.features.move(a.id, { groupId: group.id });
+    draw.features.move(a.id, { groupId: group.id, index: 0 });
+    draw.groups.move(group.id, { layerId: first, index: 0 });
+    draw.features.delete(b.id);
+
+    expect(payloadsOf(events, 'layer.updated')).toEqual([]);
+    expect(payloadsOf(events, 'group.updated')).toEqual([]);
+    for (const change of payloadsOf(events, 'document.changed')) {
+      expect(change.layers?.updated).toBeUndefined();
+      expect(change.groups?.updated).toBeUndefined();
+    }
+    expect(payloadsOf(events, 'feature.moved').length).toBeGreaterThan(0);
+    // A change of a field is still told: the name of a layer, the layer of a group
+    const renamed = draw.layers.update(second, { name: 'Renamed' });
+    expect(payloadsOf(events, 'layer.updated')).toEqual([
+      { layer: renamed, previous: expect.objectContaining({ name: 'Second' }), source: 'local' },
+    ]);
+    draw.groups.move(group.id, { layerId: second });
+    expect(payloadsOf(events, 'group.updated')).toEqual([
+      {
+        group: draw.groups.get(group.id),
+        previous: expect.objectContaining({ layerId: first }),
+        source: 'local',
+      },
+    ]);
+    expect(payloadsOf(events, 'layer.updated')).toHaveLength(1);
+    const groupMoves = payloadsOf(events, 'group.moved');
+    expect(groupMoves[groupMoves.length - 1]).toMatchObject({
+      group: { id: group.id },
+      to: { layerId: second },
+    });
   });
 
   it('group.created, group.updated and group.deleted', () => {
