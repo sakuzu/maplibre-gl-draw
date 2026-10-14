@@ -100,8 +100,10 @@ function computeAngle(center: Coordinate, point: { lng: number; lat: number }): 
 
 /**
  * Rotates a coordinate around the center in the transform plane
+ *
+ * @internal
  */
-function rotateCoordinate(coord: Coordinate, center: Coordinate, angle: number): Coordinate {
+export function rotateCoordinate(coord: Coordinate, center: Coordinate, angle: number): Coordinate {
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
   const [cx, cy] = toPlane(center);

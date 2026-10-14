@@ -42,8 +42,10 @@ export interface ResizeExtensions {
  * Decides whether a feature has a scale property
  *
  * For features that have a scale property (Text, Image, custom features and so on)
+ *
+ * @internal
  */
-function hasScaleProperty(feature: Feature, extensions?: ResizeExtensions): boolean {
+export function hasScaleProperty(feature: Feature, extensions?: ResizeExtensions): boolean {
   // Get resizeStrategy from the draw instance's registry
   const strategy = extensions?.getResizeStrategy(feature.type);
   if (strategy === 'scale') {
@@ -173,8 +175,10 @@ function getAnchorFromHandle(
 
 /**
  * Scales a coordinate in the transform plane around an anchor given in the plane
+ *
+ * @internal
  */
-function scaleCoordinate(
+export function scaleCoordinate(
   coord: Coordinate,
   anchor: [number, number],
   scaleX: number,
@@ -208,18 +212,28 @@ function planeDistance(a: [number, number], b: [number, number]): number {
 }
 
 /**
- * Computes the resize
- *
- * @param extensions The draw instance's extension points (custom resize calculators)
+ * The factors of a resize: the anchor in the transform plane, the scale of the features that
+ * scale the same in x and y (Circle, a feature that has a scale property), and the scales along
+ * the axes of the others
  *
  * @internal
  */
-export function computeResize(
+export interface ResizeFactors {
+  readonly anchor: [number, number];
+  readonly uniformScale: number;
+  readonly scaleX: number;
+  readonly scaleY: number;
+}
+
+/**
+ * Computes the factors of a resize, from the state at its start and the pointer now
+ *
+ * @internal
+ */
+export function computeResizeFactors(
   state: ResizeState,
   currentLngLat: { lng: number; lat: number },
-  features: Feature[],
-  extensions?: ResizeExtensions,
-): Map<string, ResizeResult> {
+): ResizeFactors {
   const { handle, startLngLat, startBbox } = state;
   const {
     anchor: anchorLngLat,
@@ -271,6 +285,25 @@ export function computeResize(
   // Limit the minimum scale
   scaleX = Math.max(scaleX, 0.1);
   scaleY = Math.max(scaleY, 0.1);
+
+  return { anchor, uniformScale, scaleX, scaleY };
+}
+
+/**
+ * Computes the resize
+ *
+ * @param extensions The draw instance's extension points (custom resize calculators)
+ *
+ * @internal
+ */
+export function computeResize(
+  state: ResizeState,
+  currentLngLat: { lng: number; lat: number },
+  features: Feature[],
+  extensions?: ResizeExtensions,
+): Map<string, ResizeResult> {
+  const { handle } = state;
+  const { anchor, uniformScale, scaleX, scaleY } = computeResizeFactors(state, currentLngLat);
 
   // Compute the new coordinates of each feature
   const result = new Map<string, ResizeResult>();
