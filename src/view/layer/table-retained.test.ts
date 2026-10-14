@@ -797,8 +797,10 @@ describe('the rows of a layer of xyz with an extension that answers from feature
     expect(frame).not.toThrow();
     expect(frame).not.toThrow();
     const byId = new Map(drawn.map((f) => [f.id, f]));
-    expect((byId.get('p')?.geometry as { coordinates: unknown }).coordinates).toEqual([1, 2, 30]);
-    expect((byId.get('l')?.geometry as { coordinates: unknown }).coordinates).toEqual([
+    const coordinatesOf = (id: string): unknown =>
+      (byId.get(id)?.geometry as { coordinates?: unknown } | undefined)?.coordinates;
+    expect(coordinatesOf('p')).toEqual([1, 2, 30]);
+    expect(coordinatesOf('l')).toEqual([
       [0, 0, 5],
       [1, 1, 6],
     ]);
