@@ -166,11 +166,14 @@ export class DrawStore implements Store {
   #selecting = false;
   /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
   #bulkLocked: boolean | null = null;
+  /** The selection as this Store told it last (what a change of it tells as the one before) */
+  #toldSelection: Selection;
   readonly holdLimit: number;
 
   constructor(contract: StoreContract, options: DrawStoreOptions = {}) {
     this.#contract = contract;
     this.holdLimit = options.holdLimit ?? HOLD_LIMIT;
+    this.#toldSelection = contract.getSelection();
     contract.subscribe((changes) => this.#receive(changes));
   }
 
@@ -613,19 +616,43 @@ export class DrawStore implements Store {
     this.#heldStale = true;
   }
 
-  /** Tells the selection now, and the one before it, in the notification being made */
-  #notifySelection(previous: Selection): void {
+  /**
+   * Tells the selection now, and the one this Store told before it, in the notification being
+   * made (the contract tells its own, which holds no feature selected in bulk)
+   */
+  #notifySelection(_previous?: Selection): void {
+    const change = this.#selectionChange();
+    if (change) this.#bus.merge({ selection: change });
+  }
+
+  /**
+   * The change of the selection from the one this Store told last to the one now (null when it
+   * is the same), which becomes the one told
+   */
+  #selectionChange(): StoreChange['selection'] | null {
     const now = this.getSelection();
-    this.#bus.merge({
-      selection: {
-        type: now.type,
-        ids: [...now.ids],
-        previousType: previous.type,
-        previousIds: [...previous.ids],
-        ...(now.bulk && { bulk: now.bulk }),
-        ...(previous.bulk && { previousBulk: previous.bulk }),
-      },
-    });
+    const previous = this.#toldSelection;
+    if (
+      now.type === previous.type &&
+      now.bulk === previous.bulk &&
+      now.ids.length === previous.ids.length &&
+      now.ids.every((id, i) => id === previous.ids[i])
+    ) {
+      return null;
+    }
+    this.#toldSelection = {
+      type: now.type,
+      ids: [...now.ids],
+      ...(now.bulk && { bulk: now.bulk }),
+    };
+    return {
+      type: now.type,
+      ids: [...now.ids],
+      previousType: previous.type,
+      previousIds: [...previous.ids],
+      ...(now.bulk && { bulk: now.bulk }),
+      ...(previous.bulk && { previousBulk: previous.bulk }),
+    };
   }
 
   /** What the rows read of the layers, the groups and what this client hides */
@@ -840,7 +867,14 @@ export class DrawStore implements Store {
     this.#bulkLocked = null;
     this.#bus.transact(() => {
       if (this.#contract.tables && this.#changesHeld(changes)) this.#heldStale = true;
-      this.#bus.merge(this.#normalizeChanges(withoutSource(changes)));
+      const normalized = this.#normalizeChanges(withoutSource(changes));
+      if (normalized.selection) {
+        // The selection as this Store reads it, from the one it told before
+        const change = this.#selectionChange();
+        if (change) normalized.selection = change;
+        else delete normalized.selection;
+      }
+      this.#bus.merge(normalized);
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);

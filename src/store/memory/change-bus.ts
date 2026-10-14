@@ -231,8 +231,23 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.restoreToken !== undefined && target.restoreToken === undefined)
     target.restoreToken = changes.restoreToken;
 
-  // selection (overwritten)
-  if (changes.selection) target.selection = changes.selection;
+  // selection: the last one, with the one before the transaction (the first before), as the
+  // updates of a layer or a group keep their first state
+  if (changes.selection) {
+    const first = target.selection;
+    if (!first) {
+      target.selection = changes.selection;
+    } else {
+      const { previousType, previousIds, previousBulk } = first;
+      const { previousBulk: _ignored, ...latest } = changes.selection;
+      target.selection = {
+        ...latest,
+        previousType,
+        previousIds,
+        ...(previousBulk && { previousBulk }),
+      };
+    }
+  }
 
   // editing
   if (changes.editing) {
