@@ -29,7 +29,14 @@ import {
 } from '../../feature-table/types.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, Layer } from '../../shared/types/model.js';
-import { createTestDrawer, feature, memoryGL, tablesOfFeatures } from '../../test-utils.js';
+import type { CoordinateDims } from '../../table/coordinates.js';
+import {
+  createTestDrawer,
+  feature,
+  memoryGL,
+  rowPatch,
+  tablesOfFeatures,
+} from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { retainedDrawRun } from '../renderers/draw-run.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
@@ -81,11 +88,18 @@ interface DrawnOptions {
   readonly pixelRatio?: () => number;
   /** Whether the first frames are left to the caller (they are drawn until settled otherwise) */
   readonly unsettled?: boolean;
+  /** The dimensions of the coordinates of the layer (`xy` when omitted) */
+  readonly dims?: CoordinateDims;
 }
 
 /** The tables of features drawn in one draw on a context that keeps what the GPU holds */
 function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
-  const tables = tablesOfFeatures('layer', features, options.targetRows);
+  const tables = tablesOfFeatures(
+    'layer',
+    features,
+    options.targetRows,
+    options.dims ? { dimsOf: () => options.dims as CoordinateDims } : undefined,
+  );
   const view = { layer: options.layer ?? LAYER };
   const mock = memoryGL();
   const rows = new RowsRenderer(null, mock.gl, 1, terrain);
@@ -603,5 +617,94 @@ describe('the writes in place and the building of the chunks', () => {
     );
     live.renderer.recordDraws(null);
     expect(coverage(record)).toContain('0:1');
+  });
+});
+
+describe('the rows of a layer of z or m', () => {
+  /** The features of the scene with a z and an m (or a z only) after every x and y */
+  const lifted = (features: Feature[], withM = true): Feature[] => {
+    let n = 0;
+    const lift = (value: unknown): unknown =>
+      Array.isArray(value) && typeof value[0] === 'number'
+        ? withM
+          ? [value[0], value[1], 100 + n, 1.7e12 + n++]
+          : [value[0], value[1], 100 + n++]
+        : Array.isArray(value)
+          ? value.map(lift)
+          : value;
+    return features.map((f) => ({
+      ...f,
+      geometry: {
+        ...f.geometry,
+        coordinates: lift((f.geometry as { coordinates: unknown }).coordinates),
+      } as Feature['geometry'],
+    }));
+  };
+
+  /** The bytes the GPU holds of the chunks of the groups, in their order */
+  const gpuBytes = (live: ReturnType<typeof drawn>): number[][] =>
+    live.made
+      .filter((chunk) => chunk.uploaded && !chunk.disposed)
+      .sort((a, b) => a.data.rowBase - b.data.rowBase)
+      .flatMap((chunk) => {
+        const held = [
+          live.mock.buffers.get(chunk.instanceBuffer as object),
+          chunk.pointBuffer ? live.mock.buffers.get(chunk.pointBuffer) : undefined,
+          live.mock.textures.get(chunk.coords?.texture as object)?.data,
+          live.mock.textures.get(chunk.rowStyles?.texture as object)?.data,
+        ];
+        return held.map((array) =>
+          array ? Array.from(new Uint8Array(array.buffer, array.byteOffset, array.byteLength)) : [],
+        );
+      });
+
+  it('are drawn as the rows of xy of the same x and y: the GPU holds the same bytes', () => {
+    const xy = drawn(scene());
+    const xyzm = drawn(lifted(scene()), { dims: 'xyzm' });
+    const xyz = drawn(lifted(scene(), false), { dims: 'xyz' });
+    expect(gpuBytes(xyzm)).toEqual(gpuBytes(xy));
+    expect(gpuBytes(xyz)).toEqual(gpuBytes(xy));
+    expect(xyzm.read()).toEqual(xy.read());
+  });
+
+  it('draw nothing again for a write of a z or an m only', () => {
+    const features = lifted(scene());
+    const live = drawn(features, { dims: 'xyzm' });
+    const calls = { coords: 0, rows: 0 };
+    const patchCoords = live.rows.patchCoords.bind(live.rows);
+    live.rows.patchCoords = (...args) => {
+      calls.coords++;
+      return patchCoords(...args);
+    };
+    const patchRows = live.rows.patchRows.bind(live.rows);
+    live.rows.patchRows = (...args) => {
+      calls.rows++;
+      return patchRows(...args);
+    };
+    const made = live.made.length;
+    const before = gpuBytes(live);
+    // The building with other z and m, the same x and y
+    const building = features[0].geometry as { coordinates: number[][][] };
+    const geometry = {
+      type: 'Polygon',
+      coordinates: [building.coordinates[0].map(([x, y, z, m]) => [x, y, z + 5, m + 5])],
+    };
+    live.writer.apply(
+      rowPatch([live.tables.handleOf('building') as number], { geometry: [geometry] }),
+    );
+    live.settle();
+    expect(calls).toEqual({ coords: 0, rows: 0 });
+    expect(live.made.length).toBe(made);
+    expect(gpuBytes(live)).toEqual(before);
+    // A move of x and y is written
+    const moved = {
+      type: 'Polygon',
+      coordinates: [building.coordinates[0].map(([x, y, z, m]) => [x + 0.001, y, z, m])],
+    };
+    live.writer.apply(
+      rowPatch([live.tables.handleOf('building') as number], { geometry: [moved] }),
+    );
+    live.settle();
+    expect(calls.coords).toBeGreaterThan(0);
   });
 });

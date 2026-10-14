@@ -521,7 +521,11 @@ export function tablesOfFeatures(
   writer: FeatureTablesWriter;
 } {
   const { tables, writer } = createFeatureTablesStore(options);
-  const builder = createRowGroupBuilder({ targetRows, rings: circleRowRings });
+  const builder = createRowGroupBuilder({
+    targetRows,
+    dims: options?.dimsOf?.(layerId),
+    rings: circleRowRings,
+  });
   features.forEach((feature, i) => {
     builder.addRow(rowOfFeature(feature, orderKey(i)));
   });
@@ -801,10 +805,31 @@ export function expectTablesMatch(
         members,
       );
     }
-    // The values of every row
+    // The values of every row (of a layer of z or m, read as they are written back: a row of it
+    // is not a feature)
+    const dims = internals?.readContext.dimsOf(layerId) ?? 'xy';
     for (const row of live) {
       const handle = tables.handleOf(row.id);
       expect(handle).toBeDefined();
+      if (dims !== 'xy') {
+        expect(() => view.getRow(handle as number)).toThrow(/is not a feature/);
+        const fields = ['type', 'geometry', 'style', 'visible', 'locked', 'groupId', 'layerId'];
+        const snapshot = tables.snapshot(
+          rowPatch([handle as number], Object.fromEntries(fields.map((field) => [field, [0]]))),
+        );
+        const value = (field: string) => snapshot.fields.get(field as RowField)?.[0];
+        expect(value('type')).toBe(row.type);
+        expect(value('geometry')).toEqual(row.geometry);
+        expect(value('style')).toEqual(row.style);
+        expect(value('visible')).toBe(row.visible);
+        expect(value('locked')).toBe(row.locked);
+        expect(value('groupId')).toBe(row.groupId);
+        expect(value('layerId')).toBe(layerId);
+        for (const [key, expected] of Object.entries(row.properties)) {
+          expect(view.valueAt(handle as number, key)).toEqual(expected);
+        }
+        continue;
+      }
       const feature = view.getRow(handle as number);
       expect(feature?.type).toBe(row.type);
       expect(feature?.geometry).toEqual(row.geometry);
@@ -916,18 +941,22 @@ export function randomRowGeometry(random: () => number, type: string): Geometry 
 
 const REFERENCE_TYPES = ['Point', 'LineString', 'Polygon'];
 
+/** A geometry at random of a type, as the tests of the rows make them */
+export type RandomGeometry = (random: () => number, type: string) => Geometry;
+
 /** A row of the reference at random */
 export function randomReferenceRow(
   random: () => number,
   id: string,
   layerId: string,
+  geometryOf: RandomGeometry = randomRowGeometry,
 ): ReferenceRow {
   const type = REFERENCE_TYPES[Math.floor(random() * REFERENCE_TYPES.length)];
   return {
     id,
     layerId,
     type,
-    geometry: randomRowGeometry(random, type),
+    geometry: geometryOf(random, type),
     order: referenceKey(random() * 1e6),
     groupId: undefined,
     member: '',
@@ -944,12 +973,13 @@ export function randomReference(
   random: () => number,
   count: number,
   layerIds: readonly string[],
+  geometryOf: RandomGeometry = randomRowGeometry,
 ): ReferenceRows {
   const reference = new ReferenceRows();
   reference.groups.set('ga', { order: referenceKey(250_000), layerId: layerIds[0], visible: true });
   reference.groups.set('gb', { order: referenceKey(750_000), layerId: layerIds[0], visible: true });
   for (let i = 0; i < count; i++) {
-    const row = randomReferenceRow(random, `r${i}`, layerIds[i % layerIds.length]);
+    const row = randomReferenceRow(random, `r${i}`, layerIds[i % layerIds.length], geometryOf);
     if (row.layerId === layerIds[0] && i % 7 === 0) {
       row.groupId = i % 2 === 0 ? 'ga' : 'gb';
       row.member = referenceKey(random() * 1e6);
@@ -972,9 +1002,12 @@ export function randomRowWrites(
     readonly internals: FeatureTablesInternals;
     readonly reference: ReferenceRows;
     readonly layerIds: readonly string[];
+    /** The geometries written (`randomRowGeometry` when omitted) */
+    readonly geometryOf?: RandomGeometry;
   },
 ) {
   const { tables, writer, internals, reference, layerIds } = setup;
+  const geometryOf = setup.geometryOf ?? randomRowGeometry;
   let created = 0;
   const step = (n: number): void => {
     const ids = [...reference.rows.values()].filter((row) => !row.deleted).map((row) => row.id);
@@ -984,7 +1017,7 @@ export function randomRowWrites(
     const handle = tables.handleOf(id) as number;
     const pick = random();
     if (pick < 0.15) {
-      const geometry = randomRowGeometry(random, row.type);
+      const geometry = geometryOf(random, row.type);
       writer.apply(rowPatch([handle], { geometry: [geometry] }));
       row.geometry = geometry;
     } else if (pick < 0.25) {
@@ -1028,6 +1061,7 @@ export function randomRowWrites(
         random,
         fresh,
         layerIds[Math.floor(random() * layerIds.length)],
+        geometryOf,
       );
       writer.apply(
         rowPatch([freshHandle], {

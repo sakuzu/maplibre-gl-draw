@@ -341,10 +341,24 @@ export interface FeatureTablesWriter {
    * the order of their keys, keys that overlap those of another group of the layer) is left out
    * and reported on the console.
    *
-   * @throws when an array of a group does not have one entry per row, when a group is empty, or
+   * @throws when an array of a group does not have one entry per row, when a group is empty, when
+   *   its coordinates do not have the dimensions of the layer (`FeatureTablesOptions.dimsOf`), or
    *   when a row names a group of features that is not known (nothing is queued then)
    */
   adopt(layerId: string, groups: readonly RowGroupData[]): void;
+  /**
+   * Raises the dimensions of the coordinates of a layer, so that it holds a `z` or an `m` it did
+   * not (`xy` to `xyz`, `xyz` to `xyzm`; a layer of no rows yet included): no value is dropped.
+   *
+   * The rows written from then on are held with the new dimensions (a position of fewer values
+   * gets NaN for the others), and every row group of the layer is due for its next version, which
+   * copies its coordinates into them over the frames; the groups of before are read and drawn as
+   * they are until then. The row groups given to `adopt` from then on have the new dimensions.
+   *
+   * @throws when the dimensions do not hold the ones of the layer (they are never lowered), or
+   *   when a row of the layer is held as a feature (`FeatureTables.hold`)
+   */
+  raiseDims(layerId: string, dims: CoordinateDims): void;
   /**
    * Writes values of rows, after the implementation of the Store recorded them.
    *
@@ -363,9 +377,17 @@ export interface FeatureTablesWriter {
    * are one run that no row of the layer is within are built into row groups of their own
    * instead, and are drawn once built.
    *
+   * The positions of a geometry are read as coordinates of the dimensions of the layer of the
+   * row (`FeatureTablesOptions.dimsOf`): `[x, y, z]` in a layer of `xyz`, `[x, y, m]` in one of
+   * `xym`; a position of fewer values gets NaN for the others. A position of more values than the
+   * dimensions is refused rather than cut: raise the dimensions of the layer first (`raiseDims`).
+   *
    * @returns The rows written, by layer
    * @throws when a handle names no row and a field a new row needs is missing, when a group of
-   *   features is unknown, or when a value cannot be held (nothing is written then)
+   *   features is unknown, when a row is moved without a geometry to a layer of dimensions that
+   *   would read its positions otherwise (only `xy` into any, and `xyz` into `xyzm`, keep them), or
+   *   when a value cannot be held (nothing is written then); when a position has more values than
+   *   the dimensions of its layer (the rows before it in the patch are written)
    */
   apply(patch: RowPatch, options?: RowApplyOptions): RowsChange;
   /**

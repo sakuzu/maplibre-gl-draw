@@ -62,7 +62,9 @@ export interface RowWrite {
   readonly what: number;
   /**
    * For a geometry written: whether the row kept its shape (only the positions of its
-   * coordinates changed), and the coordinates that moved, `[from, to)` from its first
+   * coordinates changed), and the coordinates whose `x` or `y` moved, `[from, to)` from its
+   * first: what is drawn again. A write of a `z` or an `m` only keeps the shape and moves none
+   * (the rows are told, nothing is drawn again)
    */
   readonly sameShape: boolean;
   readonly from: number;

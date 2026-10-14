@@ -50,6 +50,7 @@ import type {
 import {
   type CoordinateDims,
   type CoordinateSystem,
+  dimsWithin,
   isCoordinateDims,
   planarCoordinates,
 } from '../table/coordinates.js';
@@ -208,6 +209,7 @@ export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
     adopt: (layerId, groups) => store.adopt(layerId, groups),
+    raiseDims: (layerId, dims) => store.raiseDims(layerId, dims),
     apply: (patch, options) => store.apply(patch, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
     writeHeld: (id, feature, options) => store.writeHeld(id, feature, options),
@@ -514,6 +516,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly declaredDims: ((layerId: string) => CoordinateDims) | undefined;
   /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
   private readonly coordinates: CoordinateSystem;
+  /** The dimensions raised of the layers that hold no rows yet (`raiseDims`) */
+  private readonly raisedDims = new Map<string, CoordinateDims>();
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -651,11 +655,43 @@ class FeatureTablesStore implements FeatureTablesInternals {
   dimsOfLayer(layerId: string): CoordinateDims {
     const layer = this.layers.get(layerId);
     if (layer) return layer.dims;
+    const raised = this.raisedDims.get(layerId);
+    if (raised) return raised;
     const dims = this.declaredDims?.(layerId) ?? 'xy';
     if (!isCoordinateDims(dims)) {
       throw new Error(`FeatureTables: the layer "${layerId}" has the dimensions ${dims}`);
     }
     return dims;
+  }
+
+  /**
+   * Raises the dimensions of the coordinates of a layer (see `FeatureTablesWriter.raiseDims`):
+   * the rows built from then on have them, and every row group of the layer is due for its next
+   * version, which copies its coordinates into them (the groups of before are read as they are
+   * until then)
+   */
+  raiseDims(layerId: string, dims: CoordinateDims): void {
+    if (!isCoordinateDims(dims)) throw new Error(`FeatureTables: ${dims} are not dimensions`);
+    const current = this.dimsOfLayer(layerId);
+    if (!dimsWithin(current, dims)) {
+      throw new Error(`FeatureTables: the coordinates of ${current} cannot be lowered to ${dims}`);
+    }
+    if (current === dims) return;
+    const layer = this.layers.get(layerId);
+    if (!layer) {
+      this.raisedDims.set(layerId, dims);
+      return;
+    }
+    for (const handle of this.heldRows.keys()) {
+      if (this.placeOf(handle)?.layer === layer) {
+        throw new Error(
+          `FeatureTables: a row of the layer "${layerId}" is held as a feature, which holds x and y only`,
+        );
+      }
+    }
+    layer.dims = dims;
+    for (let g = 0; g < layer.groupCount; g++) this.versions.markDue(layer.groupAt(g).handle);
+    this.notifyWork();
   }
 
   /** The rows of a layer, made when first written (with the dimensions declared for it) */
@@ -1925,6 +1961,20 @@ class FeatureTablesStore implements FeatureTablesInternals {
       return group;
     });
     const places = Array.from(handles, (handle) => this.placeOf(handle));
+    // A row moved to a layer of other dimensions keeps its values only when the positions it
+    // has are read the same there (xy into any, xyz into xyzm), or when it is given a geometry
+    layerIds?.forEach((layerId, i) => {
+      const place = places[i];
+      if (typeof layerId !== 'string' || !place || place.layer.layerId === layerId) return;
+      if (geometries?.[i] !== undefined) return;
+      const from = place.layer.dims;
+      const to = this.dimsOfLayer(layerId);
+      if (from !== to && !to.startsWith(from)) {
+        throw new Error(
+          `FeatureTables: the row ${handles[i]} has coordinates of ${from}, the layer "${layerId}" of ${to}`,
+        );
+      }
+    });
     const strings: Array<[string, readonly unknown[] | undefined, boolean]> = [
       ['type', types, false],
       ['layerId', layerIds, false],
@@ -2715,6 +2765,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.groups.delete(group);
       }
     }
+    // A version started before the dimensions of its layer were raised has the ones of before:
+    // its groups are due again
+    for (const group of groups) {
+      if (!hasDims(group.data, layer.dims)) this.versions.markDue(group.handle);
+    }
     return null;
   }
 
@@ -3054,6 +3109,12 @@ function checkShape(data: RowGroupData): void {
     if (column.length !== n)
       throw new Error('FeatureTables: an attribute column has another length');
   }
+}
+
+/** Whether every geometry column of a row group has coordinates of dimensions */
+function hasDims(data: RowGroupData, dims: CoordinateDims): boolean {
+  for (const child of data.geometry.children) if ((child.dims ?? 'xy') !== dims) return false;
+  return true;
 }
 
 /**
