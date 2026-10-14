@@ -496,7 +496,8 @@ function bulkSteps(
     let at: [number, number];
     if (op === 'bulkRotate') {
       // A quarter turn around the center of the frame
-      const angle = Math.atan2(start[1] - center[1], start[0] - center[0]) + sign * t * (Math.PI / 2);
+      const angle =
+        Math.atan2(start[1] - center[1], start[0] - center[0]) + sign * t * (Math.PI / 2);
       const radius = Math.hypot(start[0] - center[0], start[1] - center[1]);
       at = [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius];
     } else {

@@ -270,8 +270,8 @@ async function selection(page: Page): Promise<{ bulk: boolean; count: number }> 
 async function cornerOf(page: Page, id: string): Promise<number[]> {
   return page.evaluate((id) => {
     const draw = (window as unknown as { draw: import('../index.js').Draw }).draw;
-    const feature = draw.features.get(id);
-    return (feature?.geometry as { coordinates: number[][][] }).coordinates[0][0];
+    const geometry = draw.features.get(id)?.geometry as { coordinates: number[][][] } | undefined;
+    return geometry ? geometry.coordinates[0][0] : [];
   }, id);
 }
 
