@@ -120,7 +120,8 @@ export interface GroupsCollection {
    *
    * @returns True when it moved, false when the move is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when the group or the target does not
-   *   exist, or `invalid-input` when the target is a group
+   *   exist, `invalid-input` when the target is a group, or `invalid-state` when it is a position
+   *   by `index` in a layer held as rows (which takes the items around the place instead)
    */
   move(id: string, to: MoveTarget): boolean;
   /**

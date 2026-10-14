@@ -142,15 +142,15 @@ export interface FeaturesCollection {
    *
    * @returns True when it moved, false when the move is refused (read-only, a lock)
    * @throws `DrawError` with the code `not-found` when the feature or the target does not
-   *   exist
+   *   exist, or `invalid-state` when the target is a position by `index` in a layer held as rows
+   *   (which takes the items around the place instead)
    */
   move(id: string, to: MoveTarget): boolean;
   /**
    * Moves several features in one transaction, keeping their order: all of them or none.
    *
    * @returns True when they moved, false when the move is refused
-   * @throws `DrawError` with the code `not-found` when one of the features or the target does
-   *   not exist; nothing moves then
+   * @throws `DrawError` as {@link FeaturesCollection.move} does; nothing moves then
    */
   moveMany(ids: readonly string[], to: MoveTarget): boolean;
   /**

@@ -548,7 +548,7 @@ export interface GroupFilter {
  * of the group. `index` is the position within the destination, 0 at the back; the front
  * when it is left out. A place can be given by the items it goes between instead
  * ({@link ItemPlacement}: `{ layerId, groupId?, below?, above? }`), which is how a layer held as
- * rows is moved into: a position by `index` there is refused.
+ * rows is moved into: a position by `index` there is refused (`invalid-state`).
  */
 export type MoveTarget =
   | { layerId: string; index?: number }

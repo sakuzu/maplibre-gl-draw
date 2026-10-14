@@ -17,6 +17,7 @@ import type { MoveTarget } from '../model.js';
 import {
   groupLocked,
   invalidInput,
+  invalidState,
   isRecord,
   layerLocked,
   notFound,
@@ -109,7 +110,7 @@ export function resolveMoveTarget(store: Store, to: MoveTarget): ResolvedTarget 
 /**
  * The place of a target in a layer or a group, by the items around it
  *
- * @throws DrawError `invalid-input` for a position by index in a layer held as rows
+ * @throws DrawError `invalid-state` for a position by index in a layer held as rows
  */
 function placementOf(
   store: Store,
@@ -122,7 +123,7 @@ function placementOf(
   // The front, when no position is given
   if (place.index === undefined) return { layerId, groupId, above: null };
   if (store.getLayer(layerId)?.kind === 'table') {
-    throw invalidInput(
+    throw invalidState(
       'A layer held as rows takes a place by the items around it ({ below, above }), not an index',
     );
   }

@@ -116,8 +116,11 @@ describe('the moves of features held as rows', () => {
     expect(store.getFeature('s1')?.layerId).toBe('other');
   });
 
-  it('refuses a position by index in a layer held as rows', () => {
+  it('refuses a position by index in a layer held as rows, as a refusal of its state', () => {
     expect(() => draw.features.move('s0', { layerId: 'rows', index: 2 })).toThrow(DrawError);
+    expect(() => draw.features.move('s0', { layerId: 'rows', index: 2 })).toThrow(
+      expect.objectContaining({ code: 'invalid-state' }),
+    );
     expect(items()).toEqual(['s0', 's1', 's2', 's3', 's4']);
   });
 
