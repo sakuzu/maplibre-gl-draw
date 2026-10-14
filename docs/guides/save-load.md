@@ -501,6 +501,52 @@ Layers, groups, and the group of a deleted feature come in the same change
 as the features. A change you apply from a listener can carry a source of
 your own, so that the listener can leave it out by that source.
 
+### A store that holds its features as rows
+
+A store that holds its features as rows of columns
+(`createTableMemoryStore`, or a store of your own over
+`createFeatureTables`) notifies the rows that are not features (not
+selected or edited) as rows, by their handles, rather than as features.
+What puts them back is in the change as well:
+
+- `change.rows.before` holds the values the rows had before a write of
+  this client, for the fields written: an update or a deletion through
+  `draw.features`, a deletion of a layer, a write of rows. Written back
+  with `draw.tables.applyRows`, they put the rows back. A row created has
+  none: written deleted, it is taken back
+- the place of an item (its layer, its group and its place among the
+  others) is in `change.order`, whether it is a feature or a row: a move
+  with where the item stood (`ItemMove.from`), or many rows with their
+  keys before (`RowRangeMove.before`, written back with
+  `draw.tables.applyRows`)
+- a deletion of this client keeps the rows it deleted (`change.retain`)
+  until they are let go of (`store.tables.release`). Written not deleted,
+  a row comes back where it was, and `draw.groups.create` with the ID of a
+  group deleted with its rows brings the group back at its place
+
+```ts
+import type { RowValuesSnapshot } from '@sakuzu/maplibre-gl-draw';
+
+const steps: RowValuesSnapshot[] = [];
+draw.getStore().subscribe((change) => {
+  if (change.source === 'local' && change.rows?.before) {
+    steps.push(change.rows.before);
+  }
+});
+
+// Later: the rows of the last write as they were
+const last = steps.pop();
+if (last) draw.transact(() => draw.tables.applyRows(last), { source: 'history' });
+```
+
+`draw.tables.applyRows` goes through the gate of the instance: it returns
+`null` while read-only, as the other writes do.
+
+A store of your own that keeps the items of its layers and groups as
+lists, and changes them otherwise than by putting items in a place, makes
+the moves of `change.order` from the lists before and after with
+`itemMovesBetween`.
+
 ## Examples
 
 - [Save and load](../examples/save-and-load.md) loads a GeoJSON file

@@ -173,6 +173,12 @@ const created = draw.selection.group(); // まとめられないときは null
 - 地物は必ずどこか 1 か所に並んでいます。`groupId` を持つならその
   グループの `featureIds` に、持たないならレイヤーの `items` にあります
 
+行で持つレイヤー (地物を行で持つストアのレイヤー) では、
+`groups.create({ featureIds: [], layerId })` で地物のないグループを
+レイヤーの最も手前に作れます。地物は `features.move` で入れます。
+行と一緒に削除したグループを、行が残っているあいだにその ID で作ると、
+元の場所に戻ります。
+
 変更すると `group.created`、`group.updated`、`group.deleted` が
 届きます。
 

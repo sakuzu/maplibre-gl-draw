@@ -499,6 +499,50 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 届きます。リスナーが自分で適用する変更には、自分の出どころを付け
 られるので、リスナーはその出どころで自分の変更を除けます。
 
+### 地物を行で持つストア
+
+地物を列の行で持つストア (`createTableMemoryStore` や、
+`createFeatureTables` の上に作った自前のストア) は、地物になっていない
+行 (選んでいない、編集していない行) を、地物でなく行として、行の番号
+(handle) で知らせます。元に戻すためのものも変更に入っています。
+
+- `change.rows.before` は、この端末の書き込みの前に行が持っていた値を、
+  書いた項目について持ちます。`draw.features` での更新や削除、
+  レイヤーの削除、行の書き込みのどれでも付きます。`draw.tables.applyRows`
+  で書き戻すと、行が元に戻ります。作った行には付きません。削除として
+  書くと取り消せます
+- 項目の場所 (レイヤー、グループ、ほかの項目との並び) は、地物か行かに
+  よらず `change.order` に入ります。1 つの移動なら項目がいた場所
+  (`ItemMove.from`) を、たくさんの行なら移動の前の並びの鍵
+  (`RowRangeMove.before`。`draw.tables.applyRows` で書き戻します) を
+  持ちます
+- この端末の削除は、消した行を手放すまで (`store.tables.release`) 残し
+  ます (`change.retain`)。削除でない値を書くと、行は元の場所に戻ります。
+  行と一緒に削除したグループは、その ID で `draw.groups.create` を
+  呼ぶと元の場所に戻ります
+
+```ts
+import type { RowValuesSnapshot } from '@sakuzu/maplibre-gl-draw';
+
+const steps: RowValuesSnapshot[] = [];
+draw.getStore().subscribe((change) => {
+  if (change.source === 'local' && change.rows?.before) {
+    steps.push(change.rows.before);
+  }
+});
+
+// あとで、最後の書き込みの前の行に戻す
+const last = steps.pop();
+if (last) draw.transact(() => draw.tables.applyRows(last), { source: 'history' });
+```
+
+`draw.tables.applyRows` は、インスタンスの門を通ります。ほかの書き込み
+と同じく、読み取り専用のあいだは `null` を返します。
+
+レイヤーとグループの項目をリストで持ち、項目を場所に置く以外の方法で
+リストを変える自前のストアは、変更の前と後のリストから `itemMovesBetween`
+で `change.order` の移動を作ります。
+
 ## 関連する例
 
 - [Save and load](../examples/save-and-load.ja.md) では、GeoJSON の
