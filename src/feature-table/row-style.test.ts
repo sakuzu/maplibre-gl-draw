@@ -41,21 +41,21 @@ describe('the style of a row', () => {
       metadata: undefined,
     });
     store.transact(() => {
-      store.createFeature(point('a', 0, { pointIcon: 'emoji:🏫' }));
-      store.createFeature(point('b', 1, { pointIcon: 'emoji:🏫' }));
+      store.createFeature(point('a', 0, { pointColor: '#ff0000' }));
+      store.createFeature(point('b', 1, { pointColor: '#ff0000' }));
       store.createFeature(point('c', 2, {}));
     });
     const tables = store.tables as FeatureTables;
     const view = tables.get('l');
     const handle = (id: string) => tables.findRow(id) as number;
     const a = view?.getRowStyle(handle('a'));
-    expect(a).toEqual({ pointIcon: 'emoji:🏫' });
+    expect(a).toEqual({ pointColor: '#ff0000' });
     expect(Object.isFrozen(a)).toBe(true);
     expect(view?.getRowStyle(handle('b'))).toBe(a);
     expect(view?.getRowStyle(handle('c'))).toEqual({});
     expect(view?.getRow(handle('a'))?.style).toEqual(a);
     expect(view?.getRowStyle(-5)).toBeUndefined();
-    store.updateFeature('c', { style: { pointIcon: 'emoji:🌳' } });
-    expect(view?.getRowStyle(handle('c'))).toEqual({ pointIcon: 'emoji:🌳' });
+    store.updateFeature('c', { style: { pointColor: '#00ff00' } });
+    expect(view?.getRowStyle(handle('c'))).toEqual({ pointColor: '#00ff00' });
   });
 });
