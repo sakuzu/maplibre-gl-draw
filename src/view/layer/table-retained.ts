@@ -37,7 +37,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { type LayerTable, type RowGroup, widenBounds } from '../../feature-table/layer-table.js';
-import { rowFeature, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
+import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   GPU_STATE_BULK,
   MOVE_SETS,
@@ -1190,7 +1190,7 @@ export class TableLayerRenderer {
         if (chunk.features && row - chunk.range.from < chunk.filled && cache.tables) {
           // The feature kept for the row is made again from its columns
           chunk.features[row - chunk.range.from] = rowHasGeometry(group, row)
-            ? rowFeature(cache.tables.readContext, cache.layer?.id ?? '', group, row)
+            ? rowFeatureToRead(cache.tables.readContext, cache.layer?.id ?? '', group, row)
             : null;
         }
       } else if (chunk.type === 'retained') {
@@ -1315,7 +1315,7 @@ export class TableLayerRenderer {
       slots: cache.slots,
       customTypes: deps.customRenderers,
       companions: deps.companions as FeatureCompanionRegistry,
-      featureOf: (rows, r) => rowFeature(tables.readContext, layer.id, rows, r),
+      featureOf: (rows, r) => rowFeatureToRead(tables.readContext, layer.id, rows, r),
       view: tables.view(layer.id),
       layer,
       oneDraw,
@@ -1524,7 +1524,7 @@ export class TableLayerRenderer {
           slots: cache.slots as RowStyleSlots,
           customTypes: deps.customRenderers,
           companions: deps.companions as FeatureCompanionRegistry,
-          featureOf: (rows, r) => rowFeature(tables.readContext, table.layerId, rows, r),
+          featureOf: (rows, r) => rowFeatureToRead(tables.readContext, table.layerId, rows, r),
           view,
           layer,
           oneDraw,
@@ -1974,7 +1974,7 @@ export class TableLayerRenderer {
             // A row an extension draws from the rows needs no feature
             features[i] =
               rowHasGeometry(group, row) && !this.rowsDrawerOf(group, row, null)
-                ? rowFeature(tables.readContext, layerId, group, row)
+                ? rowFeatureToRead(tables.readContext, layerId, group, row)
                 : null;
           }
           this.cachedFeatures += end - chunk.filled;
@@ -2066,7 +2066,7 @@ export class TableLayerRenderer {
       if (!feature) {
         // A row not kept is made when it is in view
         if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
-        feature = rowFeature(tables.readContext, pass.layerId, group, row);
+        feature = rowFeatureToRead(tables.readContext, pass.layerId, group, row);
       }
       drawRows();
       drawer = null;
@@ -2102,7 +2102,7 @@ export class TableLayerRenderer {
     if (!renderer?.drawRows) return null;
     let feature = kept;
     const featureOf = (): Feature => {
-      feature ??= rowFeature(tables.readContext, pass.layerId, group, row);
+      feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
       return feature;
     };
     const view = tables.view(pass.layerId);
@@ -2236,7 +2236,7 @@ export class TableLayerRenderer {
             slots,
             customTypes: deps.customRenderers,
             companions: deps.companions as FeatureCompanionRegistry,
-            featureOf: (r, k) => rowFeature(tables.readContext, layerId, r, k),
+            featureOf: (r, k) => rowFeatureToRead(tables.readContext, layerId, r, k),
             view,
             layer,
             oneDraw: true,

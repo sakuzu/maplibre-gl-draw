@@ -735,3 +735,70 @@ describe('the rows an extension draws from the rows', () => {
     expect(made()).toBe(1);
   });
 });
+
+describe('the rows of a layer of xyz with an extension that answers from features', () => {
+  it('are classified and drawn from features read with their z, without a throw', () => {
+    const features = [
+      feature('p', 'Point', [1, 2, 30], { properties: { kind: 'a' } }),
+      feature('q', 'Point', [2, 2, 40]),
+      feature(
+        'l',
+        'LineString',
+        [
+          [0, 0, 5],
+          [1, 1, 6],
+        ],
+        { properties: { kind: 'b' } },
+      ),
+    ];
+    const { internals, table } = tablesOfFeatures('layer', features, undefined, {
+      dimensionsOf: () => 'xyz',
+    });
+    const mocks = createRenderers();
+    const drawn: Feature[] = [];
+    // A renderer that takes some points, and a provider of companions, both from features
+    mocks.deps.customRenderers.set('Point', {
+      name: 'some points',
+      onAdd: () => {},
+      onRemove: () => {},
+      draw: (f: Feature) => drawn.push(f),
+      appliesTo: (f: Feature) => f.properties.kind === 'a',
+    } as never);
+    mocks.deps.companions.register({
+      id: 'c',
+      has: (f: Feature) => f.properties.kind === 'b',
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => true,
+    });
+    mocks.deps.batchManager.processFeature = (f: Feature) => {
+      drawn.push(f);
+      return true;
+    };
+    const renderer = new TableLayerRenderer({
+      gl: createGL(),
+      terrain,
+      requestRepaint: () => {},
+      buildBudgetMs: Number.POSITIVE_INFINITY,
+    });
+    const frame = (): void => {
+      renderer.beginFrame();
+      renderer.drawLayer(
+        internals,
+        table,
+        LAYER,
+        { projectionData: PROJECTION, zoom: 10, bounds: undefined },
+        mocks.deps,
+      );
+      renderer.endFrame();
+    };
+    expect(frame).not.toThrow();
+    expect(frame).not.toThrow();
+    const byId = new Map(drawn.map((f) => [f.id, f]));
+    expect((byId.get('p')?.geometry as { coordinates: unknown }).coordinates).toEqual([1, 2, 30]);
+    expect((byId.get('l')?.geometry as { coordinates: unknown }).coordinates).toEqual([
+      [0, 0, 5],
+      [1, 1, 6],
+    ]);
+  });
+});

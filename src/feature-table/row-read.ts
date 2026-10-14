@@ -199,6 +199,22 @@ export function rowFeature(
       `FeatureTables: a row of a layer of ${dims} coordinates is not a feature`,
     );
   }
+  return rowFeatureToRead(context, layerId, group, row);
+}
+
+/**
+ * A row as a feature to read only, its positions with every value of the dimensions of its
+ * layer (a `z`, an `m`): what the drawing gives an extension that answers from a feature and the
+ * renderers of the rows drawn at once, never the paths that edit (a new object every time)
+ *
+ * @internal
+ */
+export function rowFeatureToRead(
+  context: RowReadContext,
+  layerId: string,
+  group: RowGroup,
+  row: number,
+): Feature {
   const data = group.data;
   const groupHandle = data.groups[row];
   const geometry = rowGeometry(group, row) ?? { type: 'Point', coordinates: [NaN, NaN] };
