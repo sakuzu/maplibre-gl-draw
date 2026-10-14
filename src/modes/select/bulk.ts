@@ -69,7 +69,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
     let open = layers.get(layerId);
     if (open === undefined) {
       const layer = store.getLayer(layerId);
-      open = layer !== undefined && layer.visible && !layer.locked && !store.isHidden(layerId);
+      open = layer?.visible === true && !layer.locked && !store.isHidden(layerId);
       layers.set(layerId, open);
     }
     return open;
