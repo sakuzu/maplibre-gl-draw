@@ -401,12 +401,47 @@ export function featureOfLine(
   };
 }
 
+/**
+ * Whether a line of a file of one feature per line holds a feature: it has a character other than
+ * the blanks of JSON (space, tab, carriage return), read the same from its text and from its bytes
+ * (`countFeatureLines`)
+ */
+export function isFeatureLine(line: string): boolean {
+  return /[^ \t\r\n]/.test(line);
+}
+
+/**
+ * Counts the lines that hold a feature in bytes of a file, as `isFeatureLine` reads them, a part
+ * of the file at a time
+ *
+ * @param open Whether the line the bytes begin in has a character other than a blank already
+ * @returns The lines ended in the bytes that hold a feature, and whether the line they end in has
+ *   such a character
+ */
+export function countFeatureLines(
+  bytes: Uint8Array,
+  open: boolean,
+): { lines: number; open: boolean } {
+  let lines = 0;
+  let filled = open;
+  for (let k = 0; k < bytes.length; k++) {
+    const b = bytes[k];
+    if (b === 10) {
+      if (filled) lines++;
+      filled = false;
+    } else if (b !== 32 && b !== 9 && b !== 13) {
+      filled = true;
+    }
+  }
+  return { lines, open: filled };
+}
+
 /** The features of a file as text, one feature per line (`ndjson`) or a FeatureCollection */
 export function rawFeaturesOf(text: string, lines: boolean): RawFeature[] {
   return lines
     ? text
         .split('\n')
-        .filter((line) => line.trim().length > 0)
+        .filter(isFeatureLine)
         .map((line) => JSON.parse(line))
     : (JSON.parse(text).features ?? []);
 }

@@ -99,16 +99,28 @@ A `line` has 10 vertices, `polygon5` and `polygon50` have 5 and 50, and
 
 A file of one feature per line (`data=<file>.ndjson`, in the order of
 the file) is fetched by the page and sent to the Workers as it comes,
-about as many bytes to each, cut at the ends of lines; each Worker reads
-its lines, and once the parts before it are read it builds them with the
-ids and keys of their places in the file. Rows put in an order at random
-(`shuffle=1`) or a FeatureCollection are read and built whole in one
-Worker. The steps of the opening are `fetch` (the file fetched and sent),
-`generate` (every part read, or the file read whole), `addRows` and
-`buildGroups` (the longest of the Workers; made features are made as they
-are added), `firstGroups` (the first groups taken in), `workerTotal`
-(every group built), `adoptQueue` (the page taking the groups in) and
-`firstDraw` (the rest of the drawing after the last group).
+about as many bytes to each, cut at the ends of lines. Each Worker counts
+the lines of its part from their bytes as they come; once the parts
+before it are counted, it reads and builds its lines a part of the bytes
+at a time, with the ids and keys of their places in the file, and sends
+the row groups in batches of 16,384 rows. A Worker holds the bytes it has
+not read yet and one batch of features, not the features of its whole
+part. Rows put in an order at random (`shuffle=1`) or a FeatureCollection
+are read and built whole in one Worker. The steps of the opening are
+`fetch` (the file fetched and sent), `counted` (the lines of every part
+counted), `generate`, `addRows` and `buildGroups` (the longest a Worker
+took reading its lines, adding them and building the groups; made
+features are made as they are added), `firstGroups` (the first groups
+taken in), `workerTotal` (every group built), `adoptQueue` (the page
+taking the groups in) and `firstDraw` (the rest of the drawing after the
+last group).
+
+The opening does not wait silently: while it runs, the status line tells
+how many bytes were sent and what each Worker did, and it stops with the
+reason when a Worker fails or cannot run, when nothing comes from the
+Workers and the file for 30 seconds, or when the drawing still has work
+60 seconds after the last group. The opening runs without a browser in
+its tests (`npx vitest run --config bench/vitest.config.ts`).
 
 More than 100,000 features need the confirmation button before Start.
 Start opens the map, shows the whole of it, stops at zoom 14, then pans

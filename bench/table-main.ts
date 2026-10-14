@@ -256,16 +256,24 @@ function overLimit(): boolean {
   return heap !== null && heap > params.limitMb;
 }
 
-/** Draws frames until the drawing has nothing left to build (or the time runs out) */
-async function settle(timeoutMs = 120_000): Promise<void> {
+/**
+ * Draws frames until the drawing has nothing left to build (or the time runs out)
+ *
+ * @returns Whether it has nothing left
+ */
+async function settle(timeoutMs = 120_000): Promise<boolean> {
   const start = performance.now();
   await nextFrame();
   while (draw.hasPendingWork() || !map.loaded()) {
-    if (performance.now() - start > timeoutMs) break;
+    if (performance.now() - start > timeoutMs) return false;
     map.triggerRepaint();
     await nextFrame();
   }
+  return true;
 }
+
+/** The longest the drawing of the rows taken in may take before the opening stops (ms) */
+const OPEN_DRAW_MS = 60_000;
 
 /** The address of the file the features are read from (null for features made in the page) */
 const dataUrl = params.data ? new URL(`./data/${params.data}`, location.href).href : null;
@@ -305,7 +313,9 @@ async function open(result: TableBenchResult): Promise<void> {
         new Worker(new URL('./table-worker.ts', import.meta.url), { type: 'module' }),
       cores: navigator.hardwareConcurrency,
       start: t0,
+      onProgress: (text) => setStatus(`Opening: ${text}`),
     });
+    setStatus('Opening: drawing the rows taken in');
     Object.assign(result.open, rows.open);
     opened = { extent: rows.extent, candidates: rows.candidates };
     if (overLimit()) return;
@@ -351,7 +361,12 @@ async function open(result: TableBenchResult): Promise<void> {
     result.open.load = performance.now() - l0;
   }
   const d0 = performance.now();
-  await settle();
+  if (!(await settle(OPEN_DRAW_MS))) {
+    throw new Error(
+      `the drawing still had work after ${OPEN_DRAW_MS / 1000} s ` +
+        `(work left: ${draw.hasPendingWork()}, map loaded: ${map.loaded()})`,
+    );
+  }
   result.open.firstDraw = performance.now() - d0;
   result.open.total = performance.now() - t0;
   if (params.bigArea > 0 && opened) {
@@ -440,7 +455,7 @@ async function runTableBench(): Promise<TableBenchResult> {
     }),
   );
   result.phases.push(phaseOf(draw, 'opening', openIntervals));
-  if (failure) return finish(`the features could not be read: ${failure}`);
+  if (failure) return finish(`the opening stopped: ${failure}`);
   render(result);
   if (overLimit())
     return finish(
