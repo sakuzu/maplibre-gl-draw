@@ -21,8 +21,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { createRowGroupBuilder } from '../table/row-group-builder.js';
 import { utf8String } from '../table/utf8-column.js';
 import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
+import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';
 import { createTableMemoryStore } from './table-memory.js';
 import type { Feature, StoreChange } from './types.js';
@@ -332,5 +334,114 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
     store.deleteGroup('g');
     expect(items(tables, store)).toEqual(['p0', 'p2', 'p3', 'p1', 'p4']);
     expect(store.getFeature('p3')?.groupId).toBeUndefined();
+  });
+
+  it('puts the members of a new group in it in one write, the ones held too', () => {
+    const { store, writer, tables, notified } = setup(8);
+    store.setSelection('feature', ['p5']);
+    notified.length = 0;
+    const apply = vi.spyOn(writer, 'apply');
+    store.transact(() =>
+      insertGroup(store, {
+        id: 'g',
+        layerId: 'layer',
+        name: 'g',
+        featureIds: ['p1', 'p3', 'p5'],
+        visible: true,
+        locked: false,
+      }),
+    );
+    // One write of the rows of the members, in one notification
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(Array.from(apply.mock.calls[0][0].handles, (h) => tables.idOf(h))).toEqual([
+      'p1',
+      'p3',
+      'p5',
+    ]);
+    expect(notified).toHaveLength(1);
+    apply.mockRestore();
+    // At the place of the frontmost member, the members in their order
+    expect(items(tables, store)).toEqual(['p0', 'p2', 'p4', 'g', 'p6', 'p7']);
+    const view = tables.layer('layer');
+    const handle = featureTablesInternals(tables)?.groups.handleOfId('g') ?? -1;
+    expect(
+      Array.from(view?.groupMembersInOrder(handle, 0, 3) ?? [], (h) => tables.idOf(h)),
+    ).toEqual(['p1', 'p3', 'p5']);
+    for (const id of ['p1', 'p3', 'p5']) expect(store.getFeature(id)?.groupId).toBe('g');
+  });
+
+  it('leaves no work behind when rows spread over the layer are grouped and ungrouped again and again', () => {
+    const { store, writer } = createTableMemoryStore();
+    store.createLayer({
+      id: 'layer',
+      name: 'Layer',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      items: [],
+      metadata: undefined,
+      styleRule: undefined,
+    });
+    // 10,000 rows in groups of the target size; 50 members spread over the first half of them
+    const builder = createRowGroupBuilder();
+    for (let i = 0; i < 10_000; i++) {
+      builder.addRow({
+        id: `r${i}`,
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [i * 1e-4, 0] },
+        order: `k${String(i).padStart(6, '0')}`,
+        style: {},
+        properties: { n: i },
+      });
+    }
+    writer.adopt('layer', builder.finish());
+    const internals = featureTablesInternals(store.tables);
+    if (!internals) throw new Error('a Store of rows has tables');
+    internals.flushAdoption();
+    const layer = internals.layerTable('layer');
+    const members = Array.from({ length: 50 }, (_, k) => `r${k * 100}`);
+    const apply = vi.spyOn(writer, 'apply');
+    const work: string[] = [];
+    for (let rep = 0; rep < 40; rep++) {
+      apply.mockClear();
+      const swapped = internals.versionStats().swapped;
+      if (rep % 2 === 0) {
+        // As `draw.groups.create` makes it: in one transaction
+        store.transact(() =>
+          insertGroup(store, {
+            id: 'g',
+            layerId: 'layer',
+            name: 'g',
+            featureIds: members,
+            visible: true,
+            locked: false,
+          }),
+        );
+      } else {
+        store.deleteGroup('g');
+      }
+      // Each change writes the rows of the members once
+      expect(apply).toHaveBeenCalledTimes(1);
+      internals.flushVersions();
+      expect(internals.hasPendingWork).toBe(false);
+      expect(internals.deltaRowCount()).toBe(0);
+      // What a change leaves: the versions it made, the row groups of the layer, the longest key
+      // of the members
+      let longest = 0;
+      for (const id of members) {
+        const place = internals.placeOf(store.tables?.handleOf(id) as number);
+        const data = place?.group.data;
+        if (!data || !place) continue;
+        const keys = [utf8String(data.itemKeys, place.row), utf8String(data.memberKeys, place.row)];
+        for (const key of keys) longest = Math.max(longest, key.length);
+      }
+      work.push(
+        `${rep % 2}:${internals.versionStats().swapped - swapped}:${layer?.groupCount}:${longest}`,
+      );
+    }
+    apply.mockRestore();
+    // After the first round, every grouping and every ungrouping does and leaves what the one
+    // before did
+    for (let rep = 3; rep < work.length; rep++) expect(work[rep]).toBe(work[rep - 2]);
   });
 });

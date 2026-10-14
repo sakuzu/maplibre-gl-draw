@@ -603,7 +603,10 @@ export class TableContractStore implements StoreContract {
       });
       this.#groups.set(created.id, created);
       this.#bus.merge({ groups: { created: [created] } });
-      for (const id of members) this.updateFeature(id, { groupId: created.id });
+      // The members join it in one write, in their order, with the keys of their places in it
+      // made at once (one change of the order, as a deletion of a group puts them back)
+      if (members.length > 0)
+        this.moveItems(members, { layerId: created.layerId, groupId: created.id });
     });
   }
 
