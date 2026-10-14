@@ -81,12 +81,35 @@ float rowSinh(float x) {
     return 0.5 * (exp(x) - exp(-x));
 }
 
+// The sine and the cosine of an angle, by their series for a small one: the built-in functions of
+// a GPU may be off by an error of the order of a float32 step of 1, a large share of the sine of
+// the half angles here (a few hundred-thousandths of a radian)
+vec2 rowSinCos(float x) {
+    if (abs(x) < 0.1) {
+        float x2 = x * x;
+        return vec2(
+            x * (1.0 - x2 / 6.0 * (1.0 - x2 / 20.0 * (1.0 - x2 / 42.0))),
+            1.0 - x2 / 2.0 * (1.0 - x2 / 12.0 * (1.0 - x2 / 30.0))
+        );
+    }
+    return vec2(sin(x), cos(x));
+}
+
+// The arctangent of a value, by its series for a small one (as rowSinCos)
+float rowAtan(float x) {
+    if (abs(x) < 0.1) {
+        float x2 = x * x;
+        return x * (1.0 - x2 * (1.0 / 3.0 - x2 * (0.2 - x2 * (1.0 / 7.0 - x2 / 9.0))));
+    }
+    return atan(x);
+}
+
 // The difference of the northing of Mercator, in degrees, of a latitude delta degrees north of
 // the center (c: the sine, the cosine and the tangent of its latitude)
 float rowMercatorDelta(float delta, vec3 c) {
-    float halfAngle = delta * 0.008726646259971648;
-    float sinHalf = sin(halfAngle);
-    float cosHalf = cos(halfAngle);
+    vec2 halfAngle = rowSinCos(delta * 0.008726646259971648);
+    float sinHalf = halfAngle.x;
+    float cosHalf = halfAngle.y;
     float cosMid = c.y * cosHalf - c.x * sinHalf;
     float sinTo = c.x * (cosHalf * cosHalf - sinHalf * sinHalf) + c.y * 2.0 * sinHalf * cosHalf;
     return rowAtanh(2.0 * cosMid * sinHalf / (1.0 - sinTo * c.x)) * 57.29577951308232;
@@ -98,7 +121,7 @@ float rowLatitudeDelta(float y, vec3 c) {
     float coshHalf = sqrt(1.0 + sinhHalf * sinhHalf);
     float coshMid = coshHalf / c.y + c.z * sinhHalf;
     float deltaTan = 2.0 * coshMid * sinhHalf;
-    return atan(deltaTan / (1.0 + c.z * (c.z + deltaTan))) * 57.29577951308232;
+    return rowAtan(deltaTan / (1.0 + c.z * (c.z + deltaTan))) * 57.29577951308232;
 }
 
 // An offset of a row moved by its moving set: rotated or resized around the center of the set,

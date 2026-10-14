@@ -103,6 +103,9 @@ describe('the uniforms of the transforms of the moving sets', () => {
       'u_state_center',
       'u_state_center_lat',
       'vec2 rowStateMove(uint state, vec2 offset)',
+      // The small half angles and differences of tangent by their series
+      'vec2 halfAngle = rowSinCos(delta',
+      'return rowAtan(deltaTan',
     ]) {
       expect(ROW_STATE_GLSL).toContain(name);
     }

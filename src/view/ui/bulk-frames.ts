@@ -14,7 +14,9 @@
  * A frame is the extent of the row, moved as the row is, widened by the margin of the selection UI
  * on the plane of the map as the frame of a feature is (`marginOnMapPlane`), and outlined by the
  * line of the stroke of the selection UI as StrokeRenderer draws it; a row of one position gets
- * the square of the extent of its marker plus the margin, on the screen, as a point does.
+ * the square of the extent of its marker plus the margin, on the screen, as a point does (while
+ * the rows are turned from the rotation handle, the box of the margin alone, as the selection UI
+ * turns the box of no extent of a point).
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -84,6 +86,7 @@ export class BulkFramesRenderer {
   private readonly frames = new Map<number, GroupFrames>();
   private readonly originShift: [number, number] = [0, 0];
   private shaderData: ShaderData | null = null;
+  private rotating = false;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -129,6 +132,7 @@ export class BulkFramesRenderer {
       'u_deg_per_px',
       'u_ratio',
       'u_origin_latitude',
+      'u_rotating',
     ];
     this.locations = Object.fromEntries(
       names.map((name) => [name, gl.getUniformLocation(this.program as WebGLProgram, name)]),
@@ -139,6 +143,15 @@ export class BulkFramesRenderer {
   /** Sets the uniforms of the offset mode (the camera of the copy of the world being drawn) */
   setOffsetUniforms(uniforms: OffsetUniforms): void {
     this.offsetUniforms = uniforms;
+  }
+
+  /**
+   * Sets whether the features selected in bulk are being turned from the rotation handle: the
+   * selection UI then frames a feature of one position by the margin alone, as a box of no
+   * extent turned with the others (not by its marker)
+   */
+  setRotating(rotating: boolean): void {
+    this.rotating = rotating;
   }
 
   /**
@@ -182,6 +195,7 @@ export class BulkFramesRenderer {
     }
     if (loc.u_deg_per_px) gl.uniform1f(loc.u_deg_per_px, 360 / (DEFAULT_TILE_SIZE * 2 ** zoom));
     if (loc.u_origin_latitude) gl.uniform1f(loc.u_origin_latitude, frames.origin[1]);
+    if (loc.u_rotating) gl.uniform1f(loc.u_rotating, this.rotating ? 1 : 0);
     gl.bindVertexArray(frames.vao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, VERTICES_PER_FRAME, frames.rows);
     gl.bindVertexArray(null);
@@ -281,7 +295,9 @@ export class BulkFramesRenderer {
  * move, so a resize does not scale the margin), and outlined by the line of StrokeRenderer (the
  * miters at the corners and the band of one pixel the coverage fades in). A row of one position
  * gets the square of its marker and the margin on the screen, as AnchoredOutlineRenderer draws
- * the frame of a point.
+ * the frame of a point; while the rows are turned from the rotation handle it is a box of no
+ * extent, widened by the margin as the others are (the selection UI turns the initial box of
+ * every feature, and the box of a point has no extent).
  *
  * @internal
  */
@@ -307,6 +323,8 @@ uniform float u_ratio;
 uniform float u_deg_per_px;
 // The latitude of the origin of the group (the offsets are taken from it)
 uniform float u_origin_latitude;
+// 1 while the rows are turned from the rotation handle
+uniform float u_rotating;
 
 out float v_dist;
 out float v_width;
@@ -340,7 +358,8 @@ vec2 miterAt(vec2 previous, vec2 corner, vec2 next) {
 void main() {
     uint state = a_meta.x < 0.0 ? 1u : readRowState(a_meta.x);
     v_width = u_half_width;
-    v_point = a_meta.y > 0.0 ? 1.0 : 0.0;
+    bool marker = a_meta.y > 0.0 && u_rotating < 0.5;
+    v_point = marker ? 1.0 : 0.0;
     v_dist = 0.0;
     if ((state & 8u) == 0u || rowStateHidden(state)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
@@ -348,7 +367,7 @@ void main() {
     }
     // The corners on the screen (y up): top left, top right, bottom right, bottom left
     vec2 corners[4];
-    if (a_meta.y > 0.0) {
+    if (marker) {
         // A row of one position: the square of its marker and the margin, on the screen
         vec4 clip = project_position_to_clipspace_from_offset(rowStateMove(state, a_bounds.xy), u_projection_matrix);
         if (clip.w <= 0.0) {

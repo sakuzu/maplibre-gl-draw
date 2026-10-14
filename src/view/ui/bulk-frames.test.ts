@@ -122,4 +122,34 @@ describe('the frames of the features selected in bulk', () => {
     expect(source).toContain('scale > 4.0');
     expect(source).toContain('float reach = u_half_width + 1.0');
   });
+
+  it('frame a row of one position by the margin alone while the rows are turned', () => {
+    const source = buildBulkFramesVertexSource('', '');
+    expect(source).toContain('bool marker = a_meta.y > 0.0 && u_rotating < 0.5');
+    const { gl, calls } = recordingGl();
+    const renderer = new BulkFramesRenderer(gl);
+    renderer.ensureShader(SHADER as never);
+    const draw = () =>
+      renderer.drawGroup(
+        groupOf([0, 0, 0, 0]),
+        binding,
+        1,
+        {} as never,
+        10,
+        DEFAULT_SELECTION_CONFIG,
+        () => [8, 5],
+      );
+    const rotating = () => {
+      const set = calls.filter(
+        (call) =>
+          call.name === 'uniform1f' && (call.args[0] as { name: string }).name === 'u_rotating',
+      );
+      return set[set.length - 1]?.args[1];
+    };
+    draw();
+    expect(rotating()).toBe(0);
+    renderer.setRotating(true);
+    draw();
+    expect(rotating()).toBe(1);
+  });
 });

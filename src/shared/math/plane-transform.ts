@@ -17,7 +17,9 @@
  * northing of Mercator, mapped there, and turned back to a difference of degrees. The
  * differences of the northing are computed from the sine of the half angle and of `tan`, which
  * do not cancel for small differences (`mercatorDelta`, `latitudeDelta`): the functions here are
- * the reference of the shader (`ROW_STATE_GLSL`), tested against the CPU.
+ * the reference of the shader (`ROW_STATE_GLSL`), tested against the CPU. The shader takes the
+ * sine, the cosine and the arctangent of these small values from their series, as a GPU's own
+ * functions may be off by a float32 step of 1, a large share of a small sine.
  */
 
 import { fromPlane, toPlane } from './mercator-plane.js';
