@@ -90,9 +90,16 @@ writing it. Its changes are listed after those of 3.0.0.
 - Experimental: the answers and the drawing of an extension from the rows
   of a layer held as rows, without making their features:
   `FeatureTypeDefinition.appliesToRow`, `CompanionProvider.hasRow` and
-  `FeatureRenderer.drawRows`. `draggedRowsOf` keeps the shape of a row with
-  a scale being resized, as it is drawn. `LayerTableView.getRowStyle` reads
-  the style of a row, shared and frozen, without a copy.
+  `FeatureRenderer.drawRows`. `LayerTableView.getRowStyle` reads the style
+  of a row, shared and frozen, without a copy.
+- Features selected in bulk and turned or resized are drawn during the drag
+  as they are written once let go: an image, a type resized by its scale
+  and a feature with a rotation or a scale keep their shape and change
+  those values, as features dragged one by one do. `DraggedRows.rotation`
+  and `scale` give the change of those values for such features (and the
+  factor of the radius of a Circle), 0 and 1 for the others.
+- A group hidden on this client (`draw.hidden`) hides its features in a
+  layer held as rows too, as in a layer of objects.
 
 ### Changed in 3.0.0
 
