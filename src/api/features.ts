@@ -67,7 +67,9 @@ export interface FeaturesCollection {
    */
   list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[];
   /**
-   * Counts the features, without making them.
+   * Counts the features, without making them. Over a Store that holds its features as rows, a
+   * count by a layer, a group or both and nothing else reads the number the tables keep rather
+   * than the rows, so `count({ groupId })` is the cheap count of the features of a group.
    *
    * @param filter - Counts only the features that match every key given
    */

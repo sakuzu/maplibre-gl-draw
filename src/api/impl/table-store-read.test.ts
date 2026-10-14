@@ -8,7 +8,7 @@
  * in-memory Store of objects holding the same features.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { featuresInOrder } from '../../store/feature-stream.js';
 import { MemoryStore } from '../../store/memory.js';
@@ -246,6 +246,34 @@ describe('features.list and features.count over a Store of rows', () => {
     expect(fromRows.list({ type: 'Polygon' }, { limit: 10 }).map((f) => f.id)).toEqual(['h', 'd']);
     rows.createFeature(featureOf('k', 14));
     expect(fromRows.count({ layerId: 'l1' })).toBe(6);
+  });
+
+  it('counts the features of a layer or a group without reading the rows, the deleted ones left out', () => {
+    rows.deleteFeature('c');
+    objects.deleteFeature('c');
+    const tables = rows.tables as NonNullable<Store['tables']>;
+    const scan = vi.spyOn(tables, 'scan');
+    const filters: FeatureFilter[] = [
+      { layerId: 'l1' },
+      { layerId: 'l2' },
+      { layerId: 'none' },
+      { groupId: 'g' },
+      { groupId: 'hidden' },
+      { groupId: 'none' },
+      { layerId: 'l1', groupId: 'g' },
+      { layerId: 'l2', groupId: 'g' },
+    ];
+    for (const filter of filters) {
+      expect(fromRows.count(filter)).toBe(fromObjects.count(filter));
+    }
+    expect(fromRows.count({ layerId: 'l1' })).toBe(5);
+    expect(fromRows.count({ groupId: 'g' })).toBe(1);
+    expect(scan).not.toHaveBeenCalled();
+    // Another key of the filter reads the rows
+    expect(fromRows.count({ layerId: 'l1', type: 'Polygon' })).toBe(
+      fromObjects.count({ layerId: 'l1', type: 'Polygon' }),
+    );
+    expect(scan).toHaveBeenCalled();
   });
 
   it('checks the limit and the filter', () => {

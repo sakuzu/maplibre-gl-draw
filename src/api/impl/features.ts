@@ -179,6 +179,30 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     );
   };
 
+  /**
+   * The number of the rows of a layer or of the members of a group, read from the tables without
+   * reading the rows (the deleted ones left out), when the filter names a layer, a group or both
+   * and nothing else (undefined otherwise)
+   */
+  const countByPlace = (entries: Array<[string, unknown]>): number | undefined => {
+    const tables = store.tables;
+    if (!tables || entries.length === 0) return undefined;
+    if (entries.some(([key]) => key !== 'layerId' && key !== 'groupId')) return undefined;
+    const { layerId, groupId } = Object.fromEntries(entries) as {
+      layerId?: unknown;
+      groupId?: unknown;
+    };
+    if (groupId !== undefined) {
+      const group = typeof groupId === 'string' ? store.getGroup(groupId) : undefined;
+      if (!group || (layerId !== undefined && group.layerId !== layerId)) return 0;
+      const handle = tables.findGroup(group.id);
+      const view = tables.get(group.layerId);
+      return handle === undefined || !view ? 0 : view.countGroupMembers(handle);
+    }
+    if (typeof layerId !== 'string' || !store.getLayer(layerId)) return 0;
+    return tables.get(layerId)?.rowCount ?? 0;
+  };
+
   function list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[] {
     const page = options === undefined ? undefined : pageOf(options);
     const tables = store.tables;
@@ -224,6 +248,8 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     list,
     count(filter) {
       if (store.tables) {
+        const counted = countByPlace(checkedEntries(filter));
+        if (counted !== undefined) return counted;
         let count = 0;
         forEachRow(filter, () => {
           count++;
