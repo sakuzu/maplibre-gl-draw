@@ -14,12 +14,15 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { LayerTableView } from '../../api/tables.js';
+import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
 import {
   createFeatureTablesStore,
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
+import { toPlane } from '../../shared/math/mercator-plane.js';
+import { resizeTransform, rotationTransform } from '../../shared/math/plane-transform.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import {
@@ -559,6 +562,64 @@ describe('the state of the rows', () => {
       [2, 4],
       [3, 4],
     ]);
+  });
+});
+
+describe('the rows drawn at once while they are dragged in bulk', () => {
+  it('are given to the renderer of their type moved, turned and resized as the drag draws them, with their rotation and scale', () => {
+    // A type of an extension at a point, with a rotation and a scale (a note, a text), and a
+    // point drawn at once (a picture with an arrow of direction)
+    const features = [
+      feature('n', 'Note', [139.7, 35.6], {
+        properties: { 'maplibre-gl-draw:rotation': 10, 'maplibre-gl-draw:scale': 2 },
+      }),
+      feature('p', 'Marker', [139.8, 35.7]),
+    ];
+    for (const transform of [
+      rotationTransform(toPlane([139.75, 35.65]), 0.5),
+      resizeTransform(toPlane([139.6, 35.5]), 1.5, 0.75, 1.5),
+    ]) {
+      const { internals, table, tables } = tablesOfFeatures('layer', features);
+      const mocks = createRenderers();
+      const drawn: Feature[] = [];
+      const extension = {
+        name: 'extension',
+        onAdd: () => {},
+        onRemove: () => {},
+        draw: (f: Feature) => drawn.push(f),
+      };
+      mocks.deps.customRenderers.set('Note', extension as never);
+      mocks.deps.customRenderers.set('Marker', extension as never);
+      const handles = ['n', 'p'].map((id) => internals.ids.handleOf(id));
+      internals.states.setMoving(Int32Array.from(handles), 2);
+      internals.states.setTransform(2, transform);
+      internals.states.setTranslation(2, 0.5, -0.25);
+      const renderer = new TableLayerRenderer({
+        gl: createGL(),
+        terrain,
+        requestRepaint: () => {},
+      });
+      renderer.beginFrame();
+      renderer.drawLayer(
+        internals,
+        table,
+        LAYER,
+        { projectionData: PROJECTION, zoom: 10, bounds: undefined },
+        mocks.deps,
+      );
+      const dragged = draggedRowsOf(tables);
+      expect(drawn.map((f) => f.id)).toEqual(['n', 'p']);
+      features.forEach((f, i) => {
+        const at = (f.geometry as { coordinates: number[] }).coordinates;
+        const expected = dragged?.position(handles[i], at) as number[];
+        const coordinates = (drawn[i].geometry as { coordinates: number[] }).coordinates;
+        expect(coordinates[0]).toBeCloseTo(expected[0], 6);
+        expect(coordinates[1]).toBeCloseTo(expected[1], 6);
+      });
+      const properties = drawn[0].properties;
+      expect(properties['maplibre-gl-draw:rotation']).toBeCloseTo(10 + transform.rotationDeg, 9);
+      expect(properties['maplibre-gl-draw:scale']).toBeCloseTo(2 * transform.scale, 9);
+    }
   });
 });
 
