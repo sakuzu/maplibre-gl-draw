@@ -39,6 +39,7 @@
  * - `draw.document` (load, toJSON, toGeoJSON): {@link DocumentResource}
  * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
  * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
+ * - `draw.tables` (applyRows, for a store that holds its features as rows): {@link TablesResource}
  * - events with `draw.on`: {@link DrawEvents}; errors: {@link DrawError}
  *
  * Read next: [getting started](https://sakuzu.github.io/maplibre-gl-draw/getting-started),
@@ -201,6 +202,7 @@ export type {
   TableGroupField,
   TableGroupPatch,
   TableScanOptions,
+  TablesResource,
 } from './api/tables.js';
 export {
   createFeatureTables,

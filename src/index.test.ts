@@ -49,6 +49,7 @@ const MAIN = [
   'TableGroupField',
   'TableGroupPatch',
   'TableScanOptions',
+  'TablesResource',
   'TableEditStats',
   'CompanionProvider',
   'createDraw',

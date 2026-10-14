@@ -229,6 +229,47 @@ export interface RowApplyOptions {
 }
 
 /**
+ * `draw.tables`: the writes of the rows of a Store that holds its features as rows, made by this
+ * client through the gate of the instance (read-only), as its other writes are.
+ *
+ * What a Store of rows notifies of a write of this client carries the values the rows had
+ * (`RowsChange.before`); written back with {@link TablesResource.applyRows}, they put the rows
+ * back, as a history undoes a write.
+ */
+export interface TablesResource {
+  /**
+   * Writes values of rows through the Store, as a write of this client: the values the rows have
+   * for the fields of the patch are read (`FeatureTables.snapshot`), the patch is written
+   * (`Store.applyLocal`), and the notification carries the values read (`RowsChange.before`).
+   *
+   * A row is written whether it is a feature (selected, edited) or not, and whatever the locks of
+   * the row, its group and its layer: it is what puts values back. A row deleted and kept
+   * (`StoreChange.retain`) written not deleted comes back where it was. The place of a row (its
+   * layer, group and keys of the order) is written as given, and the changes of the order it
+   * makes are notified (`StoreChange.order`).
+   *
+   * @param patch - The rows by their handles, and the values of each field written
+   * @returns The values the rows had for the fields written (written back, they put the rows
+   *   back), or `null` when the document is read-only
+   * @throws `DrawError` with the code `invalid-state` when the Store does not hold its features
+   *   as rows, `invalid-input` when the patch has the wrong shape, or `not-found` when a handle
+   *   names no row; the error of the Store when it cannot write a value (see
+   *   `FeatureTablesWriter.apply`)
+   *
+   * @example Writing back the values before of a write
+   * ```ts
+   * draw.getStore().subscribe((change) => {
+   *   if (change.source === 'local' && change.rows?.before) steps.push(change.rows.before);
+   * });
+   * // Later: the rows as they were
+   * const before = steps.pop();
+   * if (before) draw.transact(() => draw.tables.applyRows(before), { source: 'history' });
+   * ```
+   */
+  applyRows(patch: RowPatch): RowValuesSnapshot | null;
+}
+
+/**
  * The reading side of the features held as rows: what a Store hands out as its `tables`.
  */
 export interface FeatureTables {
