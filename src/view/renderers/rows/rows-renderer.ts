@@ -137,6 +137,7 @@ interface RowsUniformLocations {
   readonly opacity: WebGLUniformLocation | null;
   readonly cullBack: WebGLUniformLocation | null;
   readonly sprites: WebGLUniformLocation | null;
+  readonly spritePremultiplied: WebGLUniformLocation | null;
 }
 
 /** The program of one projection variant */
@@ -162,6 +163,7 @@ interface RowsUniformMemo {
   rowBase: number;
   rowStyleWidth: number;
   spriteScale: string;
+  spritePremultiplied: number;
 }
 
 function emptyMemo(): RowsUniformMemo {
@@ -174,6 +176,7 @@ function emptyMemo(): RowsUniformMemo {
     rowBase: Number.NaN,
     rowStyleWidth: Number.NaN,
     spriteScale: '',
+    spritePremultiplied: Number.NaN,
   };
 }
 
@@ -778,6 +781,11 @@ export class RowsRenderer {
       }
       memo.spriteScale = spriteScale;
     }
+    const premultiplied = chunk.data.sprites?.premultipliedAlpha === true ? 1 : 0;
+    if (locations.spritePremultiplied && (stale || memo.spritePremultiplied !== premultiplied)) {
+      gl.uniform1f(locations.spritePremultiplied, premultiplied);
+      memo.spritePremultiplied = premultiplied;
+    }
   }
 
   /** The bearing of the map, read once per frame */
@@ -1116,6 +1124,7 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     opacity: at('u_opacity'),
     cullBack: at('u_cull_back'),
     sprites: at('u_sprites'),
+    spritePremultiplied: at('u_sprite_premultiplied'),
   };
 }
 

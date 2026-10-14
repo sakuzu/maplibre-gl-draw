@@ -543,6 +543,8 @@ uniform float u_opacity;
 uniform float u_cull_back;
 // The pictures of the sprites of the chunk
 uniform sampler2D u_sprites;
+// 1 when the pictures hold their colors multiplied by their alpha (they are divided back)
+uniform float u_sprite_premultiplied;
 
 out vec4 fragColor;
 
@@ -688,7 +690,9 @@ void main() {
     } else if (v_kind == ${ROWS_KIND.fill}) {
         fragColor = shadeFill();
     } else {
-        fragColor = texture(u_sprites, v_geom.xy) * (u_opacity * v_params.x);
+        vec4 texel = texture(u_sprites, v_geom.xy);
+        if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
+        fragColor = texel * (u_opacity * v_params.x);
     }
 }`;
 }

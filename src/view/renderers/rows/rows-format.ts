@@ -353,8 +353,9 @@ export interface RowSpriteDistanceScale {
  * the drawing of the rows, which draws such points among the others, in their order, in the
  * draw of their chunk (`FeatureTypeRenderer.rowSprites`)
  *
- * The fragment is the texel of the picture times the opacity of the layer, blended as the
- * other drawing of the layer is.
+ * The fragment is the texel of the picture (its colors divided by its alpha for a texture of
+ * premultiplied alpha, `premultipliedAlpha`) times the opacity of the layer, blended as the other
+ * drawing of the layer is.
  *
  * @experimental
  */
@@ -373,4 +374,10 @@ export interface RowSpriteSource {
   sprite(style: PublicFeatureStyle | undefined): RowSprite | null;
   /** How the size follows the distance from the camera (the same size everywhere when omitted) */
   readonly distanceScale?: RowSpriteDistanceScale;
+  /**
+   * True when the texture holds its colors multiplied by their alpha (a canvas uploaded with
+   * `UNPACK_PREMULTIPLY_ALPHA_WEBGL`): they are divided back before they are blended as the other
+   * drawing of the layer is. Straight alpha when omitted
+   */
+  readonly premultipliedAlpha?: boolean;
 }
