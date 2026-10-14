@@ -34,9 +34,10 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { type LayerTable, type RowGroup, widenBounds } from '../../feature-table/layer-table.js';
-import { rowFeature, rowHasGeometry } from '../../feature-table/row-read.js';
+import { rowFeature, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   GPU_STATE_BULK,
   MOVE_SETS,
@@ -119,6 +120,8 @@ import {
   classifyRow,
   type OrderedChunkRange,
   partitionRowGroup,
+  rendererTakesRow,
+  rowHasCompanion,
   type TableRunKind,
 } from './table-partition.js';
 
@@ -1313,6 +1316,7 @@ export class TableLayerRenderer {
       customTypes: deps.customRenderers,
       companions: deps.companions as FeatureCompanionRegistry,
       featureOf: (rows, r) => rowFeature(tables.readContext, layer.id, rows, r),
+      view: tables.view(layer.id),
       layer,
       oneDraw,
       onSprite: (_r, found) => {
@@ -1512,6 +1516,7 @@ export class TableLayerRenderer {
     const group = groupCache.group;
     const oneDraw = drawing === 'one-draw';
     const sprites = new Map<number, RowSpriteSource>();
+    const view = tables.view(table.layerId);
     const ranges = partitionRowGroup(
       group,
       (row) =>
@@ -1520,6 +1525,7 @@ export class TableLayerRenderer {
           customTypes: deps.customRenderers,
           companions: deps.companions as FeatureCompanionRegistry,
           featureOf: (rows, r) => rowFeature(tables.readContext, table.layerId, rows, r),
+          view,
           layer,
           oneDraw,
           onSprite: (r, source) => sprites.set(r, source),
@@ -1965,9 +1971,11 @@ export class TableLayerRenderer {
           const end = Math.min(count, chunk.filled + SLICE_ROWS);
           for (let i = chunk.filled; i < end; i++) {
             const row = from + i;
-            features[i] = rowHasGeometry(group, row)
-              ? rowFeature(tables.readContext, layerId, group, row)
-              : null;
+            // A row an extension draws from the rows needs no feature
+            features[i] =
+              rowHasGeometry(group, row) && !this.rowsDrawerOf(group, row, null)
+                ? rowFeature(tables.readContext, layerId, group, row)
+                : null;
           }
           this.cachedFeatures += end - chunk.filled;
           chunk.filled = end;
@@ -2010,32 +2018,97 @@ export class TableLayerRenderer {
     const tables = pass.tables as FeatureTablesInternals;
     const bounds = frame.bounds ?? WORLD;
     const rowBounds = group.data.rowBounds;
+    const deps = pass.deps as StoreRetainedDrawDeps;
     const features: Feature[] = [];
+    // The rows an extension draws from the rows, consecutive ones of one renderer at a time
+    let drawer: FeatureTypeRenderer | null = null;
+    const handles: number[] = [];
+    let ended = false;
+    const end = (): void => {
+      if (ended) return;
+      (pass.renderers as RetainedRendererSet).run?.end();
+      ended = true;
+    };
+    const drawFeatures = (): void => {
+      if (features.length === 0) return;
+      end();
+      drawImmediateFeatures(features, pass.layer as Layer, frame.projectionData, frame.zoom, deps);
+      features.length = 0;
+    };
+    const drawRows = (): void => {
+      const view = tables.view(pass.layerId);
+      if (!drawer || handles.length === 0 || !view) return;
+      end();
+      drawer.drawRows?.(
+        view,
+        Int32Array.from(handles),
+        frame.projectionData,
+        frame.zoom,
+        deps.customRendererContext,
+      );
+      deps.restoreBlendState?.();
+      handles.length = 0;
+    };
     for (let row = from; row < to; row++) {
       const state = group.state[row];
       if ((state & STATE_HIDDEN_MASK) !== 0) continue;
       let feature = kept(row);
+      const rows = this.rowsDrawerOf(group, row, feature);
+      if (rows) {
+        if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
+        // The features before are drawn first, and the rows of another renderer
+        drawFeatures();
+        if (rows !== drawer) drawRows();
+        drawer = rows;
+        handles.push(group.data.handles[row]);
+        continue;
+      }
       if (!feature) {
         // A row not kept is made when it is in view
         if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
         feature = rowFeature(tables.readContext, pass.layerId, group, row);
       }
+      drawRows();
+      drawer = null;
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
       features.push(
         set > 0 ? movedFeature(feature, this.translations, this.transforms[set], set) : feature,
       );
     }
-    if (features.length === 0) return;
-    const run = (pass.renderers as RetainedRendererSet).run;
-    run?.end();
-    drawImmediateFeatures(
-      features,
-      pass.layer as Layer,
-      frame.projectionData,
-      frame.zoom,
-      pass.deps as StoreRetainedDrawDeps,
-    );
-    run?.begin();
+    drawFeatures();
+    drawRows();
+    if (ended) (pass.renderers as RetainedRendererSet).run?.begin();
+  }
+
+  /**
+   * The renderer that draws a row at once from the rows (`drawRows`): the one of its type, when
+   * it takes the row and the row has no companion (null otherwise, and when no renderer draws
+   * from the rows)
+   *
+   * @param kept The feature kept for the row (read by an extension that answers from a feature)
+   */
+  private rowsDrawerOf(
+    group: RowGroup,
+    row: number,
+    kept: Feature | null,
+  ): FeatureTypeRenderer | null {
+    const pass = this.pass;
+    const deps = pass.deps;
+    const tables = pass.tables;
+    if (!deps || !tables || !anyRowsDrawer(deps.customRenderers)) return null;
+    const renderer = deps.customRenderers.get(rowType(group.data, row)) as
+      | FeatureTypeRenderer
+      | undefined;
+    if (!renderer?.drawRows) return null;
+    let feature = kept;
+    const featureOf = (): Feature => {
+      feature ??= rowFeature(tables.readContext, pass.layerId, group, row);
+      return feature;
+    };
+    const view = tables.view(pass.layerId);
+    if (!rendererTakesRow(renderer, view, group, row, featureOf)) return null;
+    if (rowHasCompanion(deps.companions, view, group, row, featureOf)) return null;
+    return renderer;
   }
 
   // === The rows of the delta ===
@@ -2155,6 +2228,7 @@ export class TableLayerRenderer {
         continue;
       }
       const sprites = new Map<number, RowSpriteSource>();
+      const view = tables.view(layerId);
       const ranges = partitionRowGroup(
         group,
         (row) =>
@@ -2163,6 +2237,7 @@ export class TableLayerRenderer {
             customTypes: deps.customRenderers,
             companions: deps.companions as FeatureCompanionRegistry,
             featureOf: (r, k) => rowFeature(tables.readContext, layerId, r, k),
+            view,
             layer,
             oneDraw: true,
             onSprite: (r, source) => sprites.set(r, source),
@@ -2442,6 +2517,14 @@ function holdsBulkMark(groupCache: GroupCache): boolean {
  * A feature moved by its moving set (the rows drawn at once): rotated or resized by the transform
  * of the set as the drags compute it, its rotation, scale and radius with it, then translated
  */
+/** Whether a renderer of a custom type draws rows from the rows (`drawRows`) */
+function anyRowsDrawer(renderers: ReadonlyMap<string, unknown>): boolean {
+  for (const renderer of renderers.values()) {
+    if ((renderer as FeatureTypeRenderer).drawRows) return true;
+  }
+  return false;
+}
+
 function movedFeature(
   feature: Feature,
   translations: Float32Array,

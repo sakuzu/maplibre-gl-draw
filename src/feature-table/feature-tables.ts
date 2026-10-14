@@ -278,6 +278,8 @@ export interface FeatureTablesInternals {
   readonly revision: number;
   /** The rows of a layer (undefined for a layer that holds none) */
   layerTable(layerId: string): LayerTable | undefined;
+  /** The reads of the rows of a layer without making features (undefined for a layer of none) */
+  view(layerId: string): LayerTableView | undefined;
   /** The layer and the row group of a handle of a row group */
   rowGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | undefined;
   /** Where the row of a handle is read (undefined for a handle of no row) */

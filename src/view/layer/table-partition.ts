@@ -17,6 +17,7 @@
  * A row without a geometry draws nothing and joins the run it is in.
  */
 
+import type { LayerTableView } from '../../api/tables.js';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { geometryAt } from '../../feature-table/layer-table.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
@@ -51,10 +52,16 @@ export interface RowClassifyContext {
   /** The providers of the companions of the features */
   readonly companions: FeatureCompanionRegistry;
   /**
-   * The feature of a row, made only for an extension that answers from a feature (a renderer
-   * that refuses some features of its type, a provider of companions)
+   * The feature of a row, made only for an extension that answers from a feature and not from
+   * the row (a renderer that refuses some features of its type without `appliesToRow`, a provider
+   * of companions without `hasRow`)
    */
   featureOf(group: RowGroup, row: number): Feature;
+  /**
+   * The rows of the layer, which an extension that answers from a row reads (`appliesToRow`,
+   * `hasRow`); without it, every extension answers from the feature of the row
+   */
+  readonly view?: LayerTableView;
   /** The layer (its style rule is in `slots`) */
   readonly layer?: Layer;
   /**
@@ -72,7 +79,46 @@ export interface RowClassifyContext {
 /** A renderer of a custom type, as the classification reads it */
 interface CustomTypeOfRow {
   appliesTo?: (feature: Feature) => boolean;
+  appliesToRow?: (view: LayerTableView, handle: number) => boolean;
   rowSprites?: RowSpriteSource;
+}
+
+/**
+ * Whether a renderer of a custom type draws a row: from the row when it answers so and the rows
+ * of the layer are given, from the feature of the row otherwise (every row of its type when it
+ * refuses none)
+ *
+ * @param featureOf Makes the feature of the row
+ * @internal
+ */
+export function rendererTakesRow(
+  renderer: CustomTypeOfRow,
+  view: LayerTableView | undefined,
+  group: RowGroup,
+  row: number,
+  featureOf: () => Feature,
+): boolean {
+  if (!renderer.appliesTo) return true;
+  if (renderer.appliesToRow && view) return renderer.appliesToRow(view, group.data.handles[row]);
+  return renderer.appliesTo(featureOf());
+}
+
+/**
+ * Whether a row has a companion: answered from the row when the rows of the layer are given
+ *
+ * @param featureOf Makes the feature of the row
+ * @internal
+ */
+export function rowHasCompanion(
+  companions: FeatureCompanionRegistry,
+  view: LayerTableView | undefined,
+  group: RowGroup,
+  row: number,
+  featureOf: () => Feature,
+): boolean {
+  if (!companions.any()) return false;
+  if (!view) return companions.has(featureOf());
+  return companions.hasRow(view, group.data.handles[row], featureOf);
 }
 
 /**
@@ -96,15 +142,18 @@ export function classifyRow(
   // A custom type is drawn at once, unless its renderer refuses this feature (or, in one draw,
   // gives a picture for it)
   const renderer = context.customTypes.get(type) as CustomTypeOfRow | undefined;
-  const custom =
-    renderer !== undefined &&
-    (!renderer.appliesTo || renderer.appliesTo(context.featureOf(group, row)));
+  // The feature of the row, made once for the extensions that answer from it
+  let feature: Feature | undefined;
+  const featureOf = (): Feature => {
+    feature ??= context.featureOf(group, row);
+    return feature;
+  };
+  const view = context.view;
+  const custom = renderer !== undefined && rendererTakesRow(renderer, view, group, row, featureOf);
   if (custom && !(oneDraw && renderer?.rowSprites)) return 'immediate';
 
   // A feature with a companion is drawn at once (the companion is drawn right before it)
-  if (context.companions.any() && context.companions.has(context.featureOf(group, row))) {
-    return 'immediate';
-  }
+  if (rowHasCompanion(context.companions, view, group, row, featureOf)) return 'immediate';
 
   const slots = context.slots;
   if (custom) {

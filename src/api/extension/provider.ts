@@ -11,6 +11,7 @@
 
 import type { Position } from 'geojson';
 import type { Feature, FeaturePatch } from '../model.js';
+import type { LayerTableView, RowHandle } from '../tables.js';
 import type { HitTestContext, ScreenContext, SnapContext } from './context.js';
 import type { Handle } from './feature-type.js';
 import type { DrawPointerEvent } from './mode.js';
@@ -102,6 +103,16 @@ export interface CompanionProvider {
    * every hit test, so it must answer at once.
    */
   has(feature: Feature): boolean;
+  /**
+   * Whether the feature of a row of a layer held as rows has a companion, answered from the row
+   * without making it a feature: the answer `has` gives for the feature of the row (the two must
+   * agree). Without it, a feature is made from each row to ask `has` whenever the rows are
+   * classified for the drawing, so a provider should have it. Its types are in
+   * `@sakuzu/maplibre-gl-draw/kasane`.
+   *
+   * @experimental
+   */
+  hasRow?(view: LayerTableView, handle: RowHandle): boolean;
   /** Draws the companion of a feature. */
   draw(feature: Feature, ctx: RenderContext): void;
   /**

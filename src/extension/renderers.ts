@@ -13,6 +13,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import type { LayerTableView, RowHandle } from '../api/tables.js';
 import type { Feature } from '../shared/types/model.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
@@ -120,6 +121,26 @@ export interface FeatureTypeRenderer {
    * features it refuses. Every feature of the type when it is left out.
    */
   appliesTo?(feature: Feature): boolean;
+
+  /**
+   * Whether it draws the feature of a row of a layer held as rows, answered from the row: the
+   * answer of `appliesTo` for the feature of the row, read with it only. Without it, the
+   * classification of the rows makes the feature of each row of the type to ask `appliesTo`
+   */
+  appliesToRow?(view: LayerTableView, handle: RowHandle): boolean;
+
+  /**
+   * Draws rows it draws one after the other at once, from the rows (the ones not hidden and in
+   * view, of its type, without a companion), in place of `draw` for each of their features.
+   * Optional: without it, the features of the rows are made and drawn by `draw`
+   */
+  drawRows?(
+    view: LayerTableView,
+    handles: Int32Array,
+    projectionData: ProjectionData,
+    zoom: number,
+    context: FrameDrawContext,
+  ): void;
 
   /**
    * The pictures it draws its points with, for the layers held as rows: such a point is drawn

@@ -11,7 +11,8 @@
  *   between two rows
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { LayerTableView } from '../../api/tables.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
@@ -220,6 +221,80 @@ describe('classifyRow', () => {
     expect(
       classifyAll(new Map([['Point', { appliesTo: (f: Feature) => f.properties.kind === 'a' }]])),
     ).toEqual(Array(pointRows).fill('Point'));
+  });
+
+  it('agrees with a renderer and a provider that answer from the rows, and makes no feature for them', () => {
+    const features = variety();
+    const { internals, table } = tablesOfFeatures('layer', features);
+    const group = table.groupAt(0);
+    const resolver = createTestDrawer();
+    const slots = new RowStyleSlots(resolver, internals.styles, undefined);
+    const view = internals.view('layer');
+    const kindOf = (view: LayerTableView, handle: number): unknown =>
+      view.getRowValue(handle, 'kind');
+    const customTypes = new Map<string, unknown>([
+      ['Marker', {}],
+      [
+        'Point',
+        {
+          appliesTo: (f: Feature) => f.properties.kind === 'a',
+          appliesToRow: (v: LayerTableView, h: number) => kindOf(v, h) === 'a',
+        },
+      ],
+    ]);
+    const companions = createFeatureCompanionRegistry();
+    companions.register({
+      id: 'b',
+      has: (f: Feature) => f.properties.kind === 'b',
+      hasRow: (v: LayerTableView, h: number) => kindOf(v, h) === 'b',
+    } as unknown as FeatureCompanionProvider);
+    let made = 0;
+    const rows = features.map((_, row) =>
+      classifyRow(group, row, {
+        slots,
+        customTypes,
+        companions,
+        featureOf: (g, r) => {
+          made++;
+          return rowFeature(internals.readContext, 'layer', g, r);
+        },
+        view,
+      }),
+    );
+    expect(rows).toEqual(
+      features.map((f) => classifyFeature(f, resolver, customTypes, companions, undefined)),
+    );
+    expect(made).toBe(0);
+    expect(rows[features.findIndex((f) => f.id === 'kind-a')]).toBe('immediate');
+    expect(rows[features.findIndex((f) => f.id === 'kind-b')]).toBe('immediate');
+  });
+
+  it('asks a provider without hasRow from the feature of a row, made once for the providers of the row', () => {
+    const features = variety();
+    const { internals, table } = tablesOfFeatures('layer', features);
+    const group = table.groupAt(0);
+    const slots = new RowStyleSlots(createTestDrawer(), internals.styles, undefined);
+    const companions = createFeatureCompanionRegistry();
+    const fromRows = vi.fn(() => false);
+    companions.register({ id: 'rows', has: () => false, hasRow: fromRows } as never);
+    companions.register({ id: 'a', has: () => false } as never);
+    companions.register({ id: 'b', has: (f: Feature) => f.properties.kind === 'b' } as never);
+    let made = 0;
+    const rows = features.map((_, row) =>
+      classifyRow(group, row, {
+        slots,
+        customTypes: new Map(),
+        companions,
+        featureOf: (g, r) => {
+          made++;
+          return rowFeature(internals.readContext, 'layer', g, r);
+        },
+        view: internals.view('layer'),
+      }),
+    );
+    expect(made).toBe(features.length);
+    expect(fromRows).toHaveBeenCalledTimes(features.length);
+    expect(rows[features.findIndex((f) => f.id === 'kind-b')]).toBe('immediate');
   });
 
   it('gives a row without a geometry no kind', () => {

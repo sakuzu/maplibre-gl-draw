@@ -26,6 +26,7 @@ import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js
 import type { Hit } from '../extension/provider.js';
 import type { RenderContext } from '../extension/render.js';
 import type { Feature, FeatureInput } from '../model.js';
+import type { LayerTableView } from '../tables.js';
 import type { AdapterDeps } from './adapters.js';
 import { adaptCompanionProvider } from './adapters.js';
 import { createTerrainAnchors } from './contexts.js';
@@ -268,6 +269,72 @@ describe('the pictures of the points of a custom feature type', () => {
       renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rowSprites },
     });
     expect((registered as unknown as FeatureTypeRenderer).rowSprites).toBe(rowSprites);
+    engine.destroy();
+  });
+});
+
+describe('the answers of a custom feature type and a companion provider from the rows', () => {
+  it('reach the classification of the rows with the answer of appliesTo, and only with it', () => {
+    const engine = engineWithDraw();
+    const registered: FeatureTypeRenderer[] = [];
+    const register = engine.customLayer.registerFeatureRenderer.bind(engine.customLayer);
+    vi.spyOn(engine.customLayer, 'registerFeatureRenderer').mockImplementation((type, r) => {
+      registered.push(r);
+      return register(type, r);
+    });
+    const appliesToRow = vi.fn(() => true);
+    const drawRows = vi.fn();
+    engine.extensions.collections.featureTypes.override({
+      type: 'Point',
+      geometry: 'Point',
+      appliesTo: () => true,
+      appliesToRow,
+      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), drawRows },
+    });
+    engine.extensions.collections.featureTypes.add({
+      type: 'pin',
+      geometry: 'Point',
+      appliesToRow,
+      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() },
+    });
+    const [point, pin] = registered;
+    const view = {} as LayerTableView;
+    expect(point.appliesToRow?.(view, 3)).toBe(true);
+    expect(appliesToRow).toHaveBeenCalledWith(view, 3);
+    // A type added takes every feature of its type: it is not asked
+    expect(pin.appliesToRow).toBeUndefined();
+    expect(typeof point.drawRows).toBe('function');
+    expect(pin.drawRows).toBeUndefined();
+    engine.destroy();
+  });
+
+  it('refuses an appliesToRow, a hasRow or a drawRows that is not a function', () => {
+    const engine = engineWithDraw();
+    const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+    expect(() =>
+      engine.extensions.collections.featureTypes.add({
+        type: 'pin',
+        geometry: 'Point',
+        appliesToRow: true as never,
+        renderer,
+      }),
+    ).toThrow(/appliesToRow/);
+    expect(() =>
+      engine.extensions.collections.featureTypes.add({
+        type: 'pin',
+        geometry: 'Point',
+        renderer: { ...renderer, drawRows: 1 as never },
+      }),
+    ).toThrow(/drawRows/);
+    expect(() =>
+      engine.extensions.collections.companionProviders.add({
+        name: 'leaders',
+        has: () => false,
+        hasRow: 'yes' as never,
+        draw: () => {},
+        hitTest: () => null,
+      }),
+    ).toThrow(/hasRow/);
     engine.destroy();
   });
 });
@@ -695,6 +762,29 @@ describe('a companion provider', () => {
     } as MouseNormalizedEvent;
     provider.onCompanionClick('f', hit as never, click);
     expect(onClick).toHaveBeenCalledWith(feature, own, expect.objectContaining({ lngLat: [1, 1] }));
+  });
+
+  it('answers from the rows with its hasRow, and has none without it', () => {
+    const deps = {
+      store: { getFeature: () => undefined },
+      screen: {},
+      customLayer: { getGL: () => null },
+      anchors: createTerrainAnchors,
+    } as unknown as AdapterDeps;
+    const hasRow = vi.fn((_view: LayerTableView, handle: number) => handle === 2);
+    const fromRows = adaptCompanionProvider(
+      { name: 'rows', has: () => false, hasRow, draw() {}, hitTest: () => null },
+      deps,
+    );
+    const view = {} as LayerTableView;
+    expect(fromRows.hasRow?.(view, 2)).toBe(true);
+    expect(fromRows.hasRow?.(view, 1)).toBe(false);
+    expect(hasRow).toHaveBeenCalledWith(view, 2);
+    const fromFeatures = adaptCompanionProvider(
+      { name: 'features', has: () => true, draw() {}, hitTest: () => null },
+      deps,
+    );
+    expect(fromFeatures.hasRow).toBeUndefined();
   });
 });
 

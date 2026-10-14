@@ -35,6 +35,7 @@ import type {
   RenderContext,
 } from '../extension/render.js';
 import type { Feature } from '../model.js';
+import type { LayerTableView } from '../tables.js';
 
 // ============================================================================
 // Terrain anchors
@@ -243,6 +244,17 @@ export function adaptFeatureRenderer(
     },
     // The pictures of the points drawn with the rows, as the renderer gives them
     ...(renderer.rowSprites && { rowSprites: renderer.rowSprites }),
+    // The rows drawn at once, from the rows, when the renderer draws them so
+    ...(renderer.drawRows && {
+      drawRows(view: LayerTableView, handles: Int32Array, projectionData, zoom, context) {
+        if (!attachment) return;
+        renderer.drawRows?.(
+          view,
+          handles,
+          contextFor(attachment.gl, context, projectionData, zoom),
+        );
+      },
+    }),
   };
 }
 

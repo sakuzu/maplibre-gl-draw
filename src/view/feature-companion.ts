@@ -34,6 +34,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { LayerTableView, RowHandle } from '../api/tables.js';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
 import type { FrameDrawContext } from '../extension/index.js';
 import type { LngLat, ScreenPoint } from '../shared/math/index.js';
@@ -91,6 +92,12 @@ export interface FeatureCompanionProvider {
    * be O(1).
    */
   has(feature: Feature): boolean;
+  /**
+   * Whether the feature of a row of a layer held as rows has companions, answered from the row
+   * (the answer of `has` for the feature of the row). Optional: without it, the classification
+   * of the rows makes the feature of each row to ask `has`
+   */
+  hasRow?(view: LayerTableView, handle: RowHandle): boolean;
   /**
    * Called immediately before the feature itself (= one z step lower).
    *
@@ -187,6 +194,14 @@ export interface FeatureCompanionRegistry {
   clear(): void;
   /** Whether there is a provider that has companions for this feature */
   has(feature: Feature): boolean;
+  /**
+   * Whether there is a provider that has companions for the feature of a row of a layer held as
+   * rows: each provider answers from the row (`hasRow`), or from the feature of the row when it
+   * cannot, which is made once, when one is asked first
+   *
+   * @param featureOf Makes the feature of the row
+   */
+  hasRow(view: LayerTableView, handle: RowHandle, featureOf: () => Feature): boolean;
 }
 
 /**
@@ -226,6 +241,20 @@ export function createFeatureCompanionRegistry(): FeatureCompanionRegistry {
     has(feature: Feature): boolean {
       if (providers.size === 0) return false;
       for (const provider of providers.values()) {
+        if (provider.has(feature)) return true;
+      }
+      return false;
+    },
+
+    hasRow(view: LayerTableView, handle: RowHandle, featureOf: () => Feature): boolean {
+      if (providers.size === 0) return false;
+      let feature: Feature | undefined;
+      for (const provider of providers.values()) {
+        if (provider.hasRow) {
+          if (provider.hasRow(view, handle)) return true;
+          continue;
+        }
+        feature ??= featureOf();
         if (provider.has(feature)) return true;
       }
       return false;

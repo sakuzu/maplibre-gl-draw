@@ -10,6 +10,7 @@ import type { Geometry, Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch } from '../model.js';
+import type { LayerTableView, RowHandle } from '../tables.js';
 import type { HitTestContext, ScreenContext, SnapContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
@@ -57,6 +58,17 @@ export interface FeatureTypeDefinition {
    * definition given to `add`: a custom type takes every feature of its type.
    */
   appliesTo?(feature: Feature): boolean;
+  /**
+   * Whether the definition takes the feature of a row of a layer held as rows, answered from the
+   * row without making it a feature: the answer `appliesTo` gives for the feature of the row (the
+   * two must agree). It is read with `appliesTo` only, and as it, only in a definition that
+   * overrides a built-in type. Without it, a feature is made from each row of the type to ask
+   * `appliesTo` whenever the rows are classified for the drawing, so a type of many rows should
+   * have it. Its types are in `@sakuzu/maplibre-gl-draw/kasane`.
+   *
+   * @experimental
+   */
+  appliesToRow?(view: LayerTableView, handle: RowHandle): boolean;
   /**
    * The extent of a feature on the map, `[west, south, east, north]` in degrees, for a type
    * that draws beyond its geometry by a distance on the ground. The spatial index takes it:

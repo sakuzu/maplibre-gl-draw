@@ -75,6 +75,7 @@ const SHAPES: Readonly<
     required: [],
     optional: [
       'appliesTo',
+      'appliesToRow',
       'hitTest',
       'boxSelect',
       'bounds',
@@ -96,7 +97,7 @@ const SHAPES: Readonly<
     required: ['handles', 'onDrag'],
     optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
   },
-  'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
+  'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['hasRow', 'onClick'] },
 };
 
 /** The error for a value of the wrong shape */
@@ -189,7 +190,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       }
       const renderer = value.renderer;
       if (!isObject(renderer)) throw wrongShape(kind, 'must have a renderer', 'renderer');
-      requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], [], 'renderer.');
+      requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], ['drawRows'], 'renderer.');
       optionalNumber(kind, value, 'hitPaddingPx', true);
       return;
     }

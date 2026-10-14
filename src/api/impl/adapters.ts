@@ -64,6 +64,7 @@ import type {
   SnapProvider,
 } from '../extension/provider.js';
 import type { Feature, FeaturePatch } from '../model.js';
+import type { LayerTableView } from '../tables.js';
 import { toPosition, toScreenPoint } from './contexts.js';
 import { toPointerEvent } from './input.js';
 import type { RenderAdapterDeps } from './render-context.js';
@@ -315,13 +316,23 @@ export function installFeatureType(
   // An override can take only some features of the type; the others keep the built-in type
   const appliesTo = overriding ? definition.appliesTo?.bind(definition) : undefined;
   const applies = (feature: StoredFeature): boolean => appliesTo?.(feature as Feature) !== false;
+  // The same answer, from a row of a layer held as rows (read with appliesTo only)
+  const appliesToRow = appliesTo ? definition.appliesToRow?.bind(definition) : undefined;
 
   try {
     const renderer = adaptFeatureRenderer(type, definition.renderer, deps);
     add(
       deps.customLayer.registerFeatureRenderer(
         type,
-        appliesTo ? { ...renderer, appliesTo: applies } : renderer,
+        appliesTo
+          ? {
+              ...renderer,
+              appliesTo: applies,
+              ...(appliesToRow && {
+                appliesToRow: (view, handle) => appliesToRow(view, handle) !== false,
+              }),
+            }
+          : renderer,
       ),
     );
     if (!overriding || definition.hitTest) {
@@ -643,6 +654,10 @@ export function adaptCompanionProvider(
   return {
     id: provider.name,
     has: (feature) => provider.has(feature as Feature),
+    // The same answer, from a row of a layer held as rows
+    ...(provider.hasRow && {
+      hasRow: (view: LayerTableView, handle: number) => provider.hasRow?.(view, handle) === true,
+    }),
     draw(feature, projectionData, zoom, context) {
       drawCompanion(draw, feature, projectionData, zoom, context);
     },

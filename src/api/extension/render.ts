@@ -10,6 +10,7 @@ import type { Position } from 'geojson';
 import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
 import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { Feature, LineStyle, PointShape } from '../model.js';
+import type { LayerTableView } from '../tables.js';
 import type { TerrainAnchors } from './context.js';
 
 /**
@@ -167,6 +168,18 @@ export interface FeatureRenderer {
    * @experimental
    */
   readonly rowSprites?: RowSpriteSource;
+  /**
+   * Draws features of rows of a layer held as rows, from the rows, without making features of
+   * them: the rows `draw` would draw one after the other, in that order (rows next to each other
+   * in the order of the layer, of the same type, not hidden and in view). A row with a companion
+   * is drawn by `draw`. A row being dragged in bulk is given as it is written: read where it is
+   * drawn with `draggedRowsOf`. Without it, the instance makes the features of the rows (keeping
+   * them up to a limit) and draws them by `draw`. Its types are in
+   * `@sakuzu/maplibre-gl-draw/kasane`.
+   *
+   * @experimental
+   */
+  drawRows?(view: LayerTableView, handles: Int32Array, ctx: RenderContext): void;
 }
 
 /**
