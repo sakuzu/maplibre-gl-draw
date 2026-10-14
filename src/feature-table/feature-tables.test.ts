@@ -6,8 +6,9 @@
  * reading of a layer
  */
 
-import type { Geometry } from 'geojson';
-import { describe, expect, it, vi } from 'vitest';
+import type { Geometry, Position } from 'geojson';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
@@ -87,6 +88,34 @@ function groups(
   }
   return builder.finish();
 }
+
+describe('the counts and the lists of the rows of a layer', () => {
+  it('count the rows not deleted, and every row read with rowCountWithDeleted, which the list reads', () => {
+    const { tables, writer } = createFeatureTables();
+    writer.addBlocks('layer', groups(6, { targetRows: 4 }));
+    featureTablesInternals(tables)?.addQueuedBlocks();
+    const view = tables.get('layer') as LayerTableView;
+    writer.apply({
+      handles: Int32Array.of(tables.findRow('r2') as number),
+      fields: new Map(),
+      deleted: Uint8Array.of(1),
+    });
+    expect(view.rowCount).toBe(5);
+    expect(view.rowCountWithDeleted).toBe(6);
+    expect(
+      Array.from(view.listRowHandles(0, view.rowCountWithDeleted), (h) => tables.getRowId(h)),
+    ).toEqual(['r0', 'r1', 'r2', 'r3', 'r4', 'r5']);
+  });
+
+  it('read the point of a row as a Position', () => {
+    const { tables, writer } = createFeatureTables();
+    writer.addBlocks('layer', groups(2));
+    featureTablesInternals(tables)?.addQueuedBlocks();
+    const view = tables.get('layer') as LayerTableView;
+    expectTypeOf(view.getRowPoint).returns.toEqualTypeOf<Position | null>();
+    expect(view.getRowPoint(tables.findRow('r1') as number)).toEqual([1, 1]);
+  });
+});
 
 describe('createFeatureTables', () => {
   it('takes row groups into a layer and gives their rows handles', () => {

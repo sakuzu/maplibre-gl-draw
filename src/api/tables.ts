@@ -15,6 +15,7 @@
  * implementation of the Store keeps and calls, after it has recorded what it writes.
  */
 
+import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
@@ -61,8 +62,14 @@ export type RowHandle = number;
 export interface LayerTableView {
   /** The layer */
   readonly layerId: string;
-  /** The number of rows (deleted ones included until they are dropped) */
+  /** The number of rows, deleted rows left out */
   readonly rowCount: number;
+  /**
+   * The number of rows read, deleted rows included until they are dropped (a deleted row kept by
+   * a deletion, `DocumentChange.restoreToken`, among them): what a Store compares with the rows
+   * it gave the layer
+   */
+  readonly rowCountWithDeleted: number;
   /**
    * The handles of the rows drawn whose bbox meets a box `[west, south, east, north]`, in the
    * order of the layer (a hidden row is not drawn)
@@ -72,8 +79,8 @@ export interface LayerTableView {
   getRowBounds(handle: RowHandle): BBox | null;
   /** The type of a row (null for a row not in this layer) */
   getRowType(handle: RowHandle): FeatureType | null;
-  /** The position of a row whose geometry is a Point (null for any other row) */
-  getRowPoint(handle: RowHandle): [number, number] | null;
+  /** The position of a row whose geometry is a Point, `[x, y]` (null for any other row) */
+  getRowPoint(handle: RowHandle): Position | null;
   /** The value of an attribute of a row (undefined when it does not hold the key) */
   getRowValue(handle: RowHandle, key: string): unknown;
   /**
@@ -83,7 +90,10 @@ export interface LayerTableView {
   getRow(handle: RowHandle): Feature | undefined;
   /** Changes whenever the rows drawn may have changed (added, hidden, shown) */
   getDrawnRowsRevision(): number;
-  /** The handles of `count` rows from the `start`-th one, in the order of the layer */
+  /**
+   * The handles of `count` rows from the `start`-th one, in the order of the layer: the rows read,
+   * deleted rows included until they are dropped (`rowCountWithDeleted` of them)
+   */
   listRowHandles(start: number, count: number): Int32Array;
   /**
    * The number of items of the layer: its rows outside a group of features, and its groups of

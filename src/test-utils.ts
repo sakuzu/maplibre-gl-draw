@@ -788,7 +788,8 @@ export function expectTablesMatch(
       return handle >= 0 && internals?.placeOf(handle) !== undefined;
     });
     expect(idsOf(view.listRowHandles(0, 1_000_000))).toEqual(present.map((row) => row.id));
-    expect(view.rowCount).toBe(present.length);
+    expect(view.rowCountWithDeleted).toBe(present.length);
+    expect(view.rowCount).toBe(rows.filter((row) => !row.deleted).length);
     // The rows that are not deleted, a batch at a time
     const scanned: number[] = [];
     const cursor = tables.scan({ layerIds: [layerId], batchSize: 7 });

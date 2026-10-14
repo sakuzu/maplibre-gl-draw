@@ -203,6 +203,8 @@ export interface LayerItems {
   readonly handles: Int32Array;
   /** The handles of the rows of each group of features, in their order */
   readonly members: ReadonlyMap<number, Int32Array>;
+  /** The number of the rows that are not deleted */
+  readonly rowCount: number;
 }
 
 /**
@@ -650,12 +652,16 @@ export class LayerTable {
     const handles: number[] = [];
     const members = new Map<number, number[]>();
     let last = -1;
+    let deleted = 0;
     const order = this.rowOrder();
     for (let i = 0; i < order.handles.length; i++) {
       const data = order.groups[i].data;
       const r = order.rows[i];
       {
-        if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) continue;
+        if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) {
+          deleted++;
+          continue;
+        }
         const group = data.groups[r];
         if (group < 0) {
           kinds.push(ITEM_KIND_ROW);
@@ -682,6 +688,7 @@ export class LayerTable {
       kinds: Uint8Array.from(kinds),
       handles: Int32Array.from(handles),
       members: byGroup,
+      rowCount: order.handles.length - deleted,
     };
     return this.items;
   }

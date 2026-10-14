@@ -15,6 +15,7 @@
  * layer, and a new row, put a copy of the row in the delta.
  */
 
+import type { Position } from 'geojson';
 import type {
   FeatureTables,
   FeatureTablesOptions,
@@ -3258,6 +3259,10 @@ class LayerTableViewImpl implements LayerTableView {
   }
 
   get rowCount(): number {
+    return this.table.itemsOf().rowCount;
+  }
+
+  get rowCountWithDeleted(): number {
     return this.table.rowCount;
   }
 
@@ -3283,7 +3288,7 @@ class LayerTableViewImpl implements LayerTableView {
     return at ? rowType(at.group.data, at.row) : null;
   }
 
-  getRowPoint(handle: RowHandle): [number, number] | null {
+  getRowPoint(handle: RowHandle): Position | null {
     const at = this.locate(handle);
     return at ? rowPoint(at.group, at.row) : null;
   }
