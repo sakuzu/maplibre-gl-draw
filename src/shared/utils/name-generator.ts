@@ -27,12 +27,27 @@ import type { Feature, FeatureType, Group, Layer, StoreChange } from '../types/m
  * from its contents alone.
  */
 interface NameSource {
+  readonly tables?: NameRows;
   listFeatures(): Feature[];
   listLayers(): Layer[];
   listGroups(): Group[];
   subscribe(listener: (changes: StoreChange) => void): () => void;
   getMaxNameNumber?(type: AutoNameType): number | undefined;
   recordNameNumber?(type: AutoNameType, number: number): void;
+}
+
+/**
+ * The rows of a Store that holds its features as rows, as the generator reads them: the type and
+ * the name of each row, without making features (such a Store does not list its features)
+ */
+interface NameRows {
+  layer(layerId: string):
+    | {
+        getRowType(handle: number): FeatureType | null;
+        valueAt(handle: number, key: string): unknown;
+      }
+    | undefined;
+  scan(options: { readonly layerIds: readonly string[] }): { next(): Int32Array | null };
 }
 
 /**
@@ -176,6 +191,7 @@ export class AutoNameGenerator {
 
   constructor(
     store: {
+      readonly tables?: NameRows;
       listFeatures(): Feature[];
       listLayers(): Layer[];
       listGroups(): Group[];
@@ -323,6 +339,14 @@ export class AutoNameGenerator {
     for (const { feature } of changes.features?.updated ?? []) {
       this.observeFeatureName(feature);
     }
+    for (const [layerId, rows] of changes.rows?.layers ?? []) {
+      const view = this.store.tables?.layer(layerId);
+      if (!view) continue;
+      for (const handle of rows.created) this.observeRowName(view, handle);
+      if (rows.fields.has('property:name') || rows.fields.has('type')) {
+        for (const handle of rows.updated) this.observeRowName(view, handle);
+      }
+    }
 
     const layerTypeName = this.getLayerTypeName();
     for (const layer of changes.layers?.created ?? []) {
@@ -351,6 +375,16 @@ export class AutoNameGenerator {
   }
 
   /**
+   * Takes in the number from the name of a row
+   */
+  private observeRowName(view: NonNullable<ReturnType<NameRows['layer']>>, handle: number): void {
+    const name = view.valueAt(handle, 'name');
+    const type = view.getRowType(handle);
+    if (typeof name !== 'string' || type === null) return;
+    this.observeName(type, this.getTypeName(type), name);
+  }
+
+  /**
    * Extracts the number from a name and takes it into the counter
    */
   private observeName(counterKey: string, typeName: string, name: string): void {
@@ -376,6 +410,8 @@ export class AutoNameGenerator {
    * Gets the largest number from the existing Features
    */
   private getMaxNumberFromFeatures(featureType: FeatureType, typeName: string): number {
+    const tables = this.store.tables;
+    if (tables) return this.getMaxNumberFromRows(tables, featureType, typeName);
     const features = this.store.listFeatures();
     let maxNumber = 0;
 
@@ -398,6 +434,33 @@ export class AutoNameGenerator {
       }
     }
 
+    return maxNumber;
+  }
+
+  /**
+   * Gets the largest number from the rows of a Store that holds its features as rows, reading
+   * the type and the name of each row in place
+   */
+  private getMaxNumberFromRows(
+    tables: NameRows,
+    featureType: FeatureType,
+    typeName: string,
+  ): number {
+    let maxNumber = 0;
+    for (const layer of this.store.listLayers()) {
+      const view = tables.layer(layer.id);
+      if (!view) continue;
+      const cursor = tables.scan({ layerIds: [layer.id] });
+      for (let batch = cursor.next(); batch; batch = cursor.next()) {
+        for (const handle of batch) {
+          if (view.getRowType(handle) !== featureType) continue;
+          const name = view.valueAt(handle, 'name');
+          if (typeof name !== 'string') continue;
+          const number = extractNumberFromName(name, typeName);
+          if (number !== null && number > maxNumber) maxNumber = number;
+        }
+      }
+    }
     return maxNumber;
   }
 

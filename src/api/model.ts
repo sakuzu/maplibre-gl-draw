@@ -423,6 +423,24 @@ export interface FeatureFilter {
   bbox?: BBox;
 }
 
+/**
+ * How many features `features.list` makes at most. A Store that holds its features as rows
+ * needs it: it holds more features than can be made at once, so it makes only the ones within
+ * the limit.
+ */
+export interface FeatureListOptions {
+  /** The number of features made at most (a non-negative integer) */
+  limit: number;
+}
+
+/** What `features.list` returns with a limit: the features within it, in stacking order. */
+export interface FeatureListPage {
+  /** The first features that match, in stacking order from the back, up to the limit */
+  features: Feature[];
+  /** Whether more features match than the limit */
+  truncated: boolean;
+}
+
 /** What `layers.create` takes. */
 export interface LayerInput {
   /** The ID; one is generated when it is left out */

@@ -5,7 +5,7 @@
  * `draw.layers`: the layers of the document
  */
 
-import { listedItems } from '../../shared/utils/listed-items.js';
+import { holdsLockedItem } from '../../operations/selection-operations.js';
 import type { Store } from '../../store/store.js';
 import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
 import { DrawError } from '../errors.js';
@@ -13,7 +13,6 @@ import type { LayersCollection } from '../layers.js';
 import type { Layer, LayerFilter, LayerInput, LayerPatch } from '../model.js';
 import type { ResourceDeps } from './shared.js';
 import {
-  featureLocked,
   filterEntries,
   invalidInput,
   isRecord,
@@ -213,13 +212,7 @@ export function createLayers(
 /** Whether a deletion of the layer is refused: it, or a feature or group in it, is locked */
 function holdsLock(store: Store, layer: StoredLayer): boolean {
   if (locksIgnored(store)) return false;
-  if (layer.locked) return true;
-  for (const itemId of listedItems(layer)) {
-    if (store.getGroup(itemId)?.locked) return true;
-  }
-  return store
-    .listFeatures()
-    .some((feature) => feature.layerId === layer.id && featureLocked(store, feature));
+  return layer.locked || holdsLockedItem(store, layer.id);
 }
 
 /**

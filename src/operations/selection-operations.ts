@@ -134,9 +134,12 @@ export function deleteSelectedItems(store: Store): boolean {
 }
 
 /**
- * Whether a layer holds a feature or a group that is locked on its own
+ * Whether a layer holds a feature or a group that is locked on its own (read from the rows for
+ * a layer held as rows)
+ *
+ * @internal
  */
-function holdsLockedItem(store: Store, layerId: string): boolean {
+export function holdsLockedItem(store: Store, layerId: string): boolean {
   const layer = store.getLayer(layerId);
   if (!layer) return false;
   if (layer.kind === 'table') {

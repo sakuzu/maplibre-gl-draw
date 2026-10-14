@@ -9,6 +9,8 @@ import type {
   Feature,
   FeatureFilter,
   FeatureInput,
+  FeatureListOptions,
+  FeatureListPage,
   FeaturePatch,
   FeatureStyleResolved,
   MoveTarget,
@@ -39,11 +41,24 @@ export interface FeaturesCollection {
   /**
    * Lists the features in stacking order, from the back.
    *
+   * A Store that holds its features as rows (its `tables`) is listed only up to a
+   * limit (the overload below): its features are made when they are read, and it can hold more
+   * than can be made at once. Read every feature of such a Store with `tables.scan`.
+   *
    * @param filter - Keeps only the features that match every key given
+   * @throws `DrawError` with the code `invalid-input` when the Store holds its features as rows
    */
   list(filter?: FeatureFilter): Feature[];
   /**
-   * Counts the features.
+   * Lists the first features in stacking order, from the back, up to a limit.
+   *
+   * @param filter - Keeps only the features that match every key given
+   * @param options - The number of features made at most
+   * @returns The features within the limit, and whether more match
+   */
+  list(filter: FeatureFilter | undefined, options: FeatureListOptions): FeatureListPage;
+  /**
+   * Counts the features, without making them.
    *
    * @param filter - Counts only the features that match every key given
    */

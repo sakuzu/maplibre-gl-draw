@@ -8,6 +8,7 @@
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
+import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -23,6 +24,8 @@ import type {
   Feature,
   FeatureFilter,
   FeatureInput,
+  FeatureListOptions,
+  FeatureListPage,
   FeaturePatch,
   FeatureStyleResolved,
   MoveTarget,
@@ -98,26 +101,35 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] =>
     featuresInStackingOrder(store, features);
 
+  /** The entries of a filter checked: `shown` a boolean and `bbox` an extent in degrees */
+  const checkedEntries = (filter: FeatureFilter | undefined): Array<[string, unknown]> => {
+    const entries = filterEntries(filter, FILTER_KEYS);
+    const shown = entries.find(([key]) => key === 'shown')?.[1];
+    if (shown !== undefined && typeof shown !== 'boolean') {
+      throw invalidInput('shown must be a boolean');
+    }
+    const bbox = entries.find(([key]) => key === 'bbox')?.[1];
+    if (
+      bbox !== undefined &&
+      (!Array.isArray(bbox) ||
+        bbox.length !== 4 ||
+        bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value)))
+    ) {
+      throw invalidInput('bbox must be [west, south, east, north] in degrees');
+    }
+    return entries;
+  };
+
   /**
    * The checks of a filter: the entries compared as they are, and the IDs within the extent
    * when the filter has one
    */
   const filterOf = (filter: FeatureFilter | undefined) => {
-    const all = filterEntries(filter, FILTER_KEYS);
-    const shown = all.find(([key]) => key === 'shown')?.[1];
-    if (shown !== undefined && typeof shown !== 'boolean') {
-      throw invalidInput('shown must be a boolean');
-    }
+    const all = checkedEntries(filter);
+    const shown = all.find(([key]) => key === 'shown')?.[1] as boolean | undefined;
     const entries = all.filter(([key]) => key !== 'shown');
     const bbox = entries.find(([key]) => key === 'bbox')?.[1];
     if (bbox === undefined) return { entries, inside: null, shown };
-    if (
-      !Array.isArray(bbox) ||
-      bbox.length !== 4 ||
-      bbox.some((value) => typeof value !== 'number' || !Number.isFinite(value))
-    ) {
-      throw invalidInput('bbox must be [west, south, east, north] in degrees');
-    }
     const [minX, minY, maxX, maxY] = bbox as number[];
     const bounds = { minX, minY, maxX, maxY };
     const inside = new Set(
@@ -146,10 +158,45 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     (shown === undefined || isShown(feature) === shown) &&
     matches(feature, entries);
 
-  const list = (filter?: FeatureFilter): Feature[] => {
-    const checks = filterOf(filter);
-    return listEveryFeatureInOrder(store).filter((feature) => keep(feature, checks));
+  /**
+   * Visits the rows of a Store of rows that match a filter, in stacking order, without making
+   * features
+   */
+  const forEachRow = (filter: FeatureFilter | undefined, visit: (id: string) => boolean): void => {
+    const rowFilter = Object.fromEntries(checkedEntries(filter)) as RowFilter;
+    const tables = store.tables;
+    if (!tables) return;
+    forEachMatchingRow(store, rowFilter, (handle) => visit(tables.idOf(handle) as string));
   };
+
+  function list(filter?: FeatureFilter): Feature[];
+  function list(filter: FeatureFilter | undefined, options: FeatureListOptions): FeatureListPage;
+  function list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[] | FeatureListPage {
+    const limit = options === undefined ? undefined : limitOf(options);
+    if (!store.tables) {
+      const checks = filterOf(filter);
+      const features = listEveryFeatureInOrder(store).filter((feature) => keep(feature, checks));
+      if (limit === undefined) return features;
+      return { features: features.slice(0, limit), truncated: features.length > limit };
+    }
+    if (limit === undefined) {
+      throw invalidInput(
+        'The features of a Store that holds them as rows are listed up to a limit: pass { limit }',
+      );
+    }
+    const features: Feature[] = [];
+    let truncated = false;
+    forEachRow(filter, (id) => {
+      if (features.length >= limit) {
+        truncated = true;
+        return false;
+      }
+      const feature = store.getFeature(id);
+      if (feature) features.push(feature);
+      return true;
+    });
+    return { features, truncated };
+  }
 
   return {
     get: (id) => store.getFeature(id),
@@ -159,6 +206,14 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     },
     list,
     count(filter) {
+      if (store.tables) {
+        let count = 0;
+        forEachRow(filter, () => {
+          count++;
+          return true;
+        });
+        return count;
+      }
       const checks = filterOf(filter);
       if (checks.entries.length === 0 && checks.inside === null && checks.shown === undefined) {
         return store.listFeatures().length;
@@ -366,6 +421,17 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     );
     return store.getFeature(resultId) ?? null;
   }
+}
+
+/** The limit of `features.list`, checked */
+function limitOf(options: FeatureListOptions): number {
+  requireRecord(options, 'The options');
+  onlyKeys(options as unknown as Record<string, unknown>, ['limit'], 'The options');
+  const { limit } = options;
+  if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 0) {
+    throw invalidInput('limit must be a non-negative integer');
+  }
+  return limit;
 }
 
 // ============================================================================

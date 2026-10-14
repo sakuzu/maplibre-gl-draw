@@ -105,6 +105,8 @@ export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 export type {
   FeatureFilter,
   FeatureInput,
+  FeatureListOptions,
+  FeatureListPage,
   FeaturePatch,
   GroupFilter,
   GroupInput,
