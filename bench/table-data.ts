@@ -123,6 +123,11 @@ export const EDIT_OPS = [
   'orderMany',
   'undoRedo',
   'boxHeld',
+  'selectAll',
+  'bulkMove',
+  'bulkRotate',
+  'bulkResize',
+  'bulkColor',
 ] as const;
 
 /** An edit a page repeats */

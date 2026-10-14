@@ -194,6 +194,24 @@ per rep, each move timed (the rows in the box are marked while it is
 drawn; zoom so that it meets about `held` rows), and lets it go at the
 last rep.
 
+The edits of every feature selected are the same in both modes, so that
+`mode=table` (the features selected in bulk past 2,000) is compared with
+`mode=store` (every feature selected one by one): each selects every
+feature shown with `draw.selection.setAll` (an input) and fits the map to
+them. `selectAll` selects them and clears the selection, each time timed
+to the frame nothing is left to build. `bulkMove` drags them from a
+building selected, `bulkRotate` from the rotation handle of their frame (a
+quarter turn around its center) and `bulkResize` from its north east
+corner, as the select mode drags them (the events of the mouse sent to the
+canvas): a drag of 10 frames, each move of the pointer an input, then the
+release, whose time to the frame nothing is left to build is noted
+(`released`). `bulkColor` writes a color to all of them with
+`draw.selection.update`, each an input to the frame nothing is left to
+build. For the rows of the stage of many features selected (all of them
+selected and moved, rotated, resized, colored), run them at `n=100000`
+in both modes, with `reps=100`: the frames of the run, its longest task
+and the JS heap and GPU memory before and after are the measures.
+
 The changes of others are written in place
 (`color`, `attr`, `position`, `corner`) or placed elsewhere: `reorder`
 puts rows in another place of the order, `group` puts groups of features

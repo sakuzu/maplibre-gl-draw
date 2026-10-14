@@ -405,7 +405,146 @@ function stepsOf(
       return manySteps(target, op, params);
     case 'boxHeld':
       return boxSteps(target, params);
+    case 'selectAll':
+    case 'bulkMove':
+    case 'bulkRotate':
+    case 'bulkResize':
+    case 'bulkColor':
+      return bulkSteps(target, op);
   }
+}
+
+/** The frames of one drag of the edits of every feature selected */
+const BULK_DRAG_FRAMES = 10;
+
+/**
+ * The steps of the edits of every feature selected, made as the select mode makes them, the same
+ * in both modes (`draw.selection.setAll`, the events of the mouse sent to the canvas): every
+ * feature selected (`selectAll`, timed to the frame nothing is left to build, then cleared); a
+ * drag of 10 frames from a feature selected (`bulkMove`), from the rotation handle of their frame
+ * (`bulkRotate`) or from its north east corner (`bulkResize`), each move of the pointer timed and
+ * the time from the release to the frame nothing is left to build noted; a color written to all of
+ * them (`bulkColor`, `draw.selection.update`). The map is fitted to the features selected first,
+ * so that their frame and its handles are in view
+ */
+function bulkSteps(
+  target: EditTarget,
+  op: 'selectAll' | 'bulkMove' | 'bulkRotate' | 'bulkResize' | 'bulkColor',
+): ((i: number) => Promise<void>) | string {
+  const { draw, map, candidates } = target;
+  const building = candidates.polygon ?? candidates.point;
+  if (!building) return 'no polygon or point to press';
+  /** Every feature selected, timed, and the map fitted to them */
+  const selectAll = async (): Promise<[number, number, number, number] | null> => {
+    const t0 = performance.now();
+    draw.selection.setAll({ shown: true });
+    await settled(draw);
+    inputs.push(performance.now() - t0);
+    const bounds = selectedBounds(draw);
+    notes.push(`selected ${draw.selection.count()}`);
+    if (bounds) {
+      map.fitBounds(
+        [
+          [bounds[0], bounds[1]],
+          [bounds[2], bounds[3]],
+        ],
+        { padding: 80, animate: false },
+      );
+      await settled(draw);
+    }
+    return bounds;
+  };
+  if (op === 'selectAll') {
+    return async () => {
+      await selectAll();
+      draw.selection.clear();
+      await settled(draw);
+    };
+  }
+  if (op === 'bulkColor') {
+    return async (i) => {
+      if (i === 0) await selectAll();
+      const t0 = performance.now();
+      draw.selection.update({ style: colored(hue((i * 137) % 360)) as never });
+      await settled(draw);
+      inputs.push(performance.now() - t0);
+    };
+  }
+  let start: [number, number] = [0, 0];
+  let center: [number, number] = [0, 0];
+  return async (i) => {
+    if (i === 0) {
+      const bounds = await selectAll();
+      if (!bounds) return;
+      const ne = map.project([bounds[2], bounds[3]]);
+      const nw = map.project([bounds[0], bounds[3]]);
+      const sw = map.project([bounds[0], bounds[1]]);
+      center = [(nw.x + ne.x) / 2, (ne.y + sw.y) / 2];
+      // The margin of the frame and the distance of the rotation handle are 10 px by default
+      if (op === 'bulkResize') start = [ne.x + 10, ne.y - 10];
+      else if (op === 'bulkRotate') start = [(nw.x + ne.x) / 2, ne.y - 20];
+      else {
+        const feature = target.store.getFeature(building);
+        const inside = feature ? insideOf(feature) : null;
+        const point = inside ? map.project([inside[0], inside[1]]) : { x: center[0], y: center[1] };
+        start = [point.x, point.y];
+      }
+    }
+    const frame = i % BULK_DRAG_FRAMES;
+    const sign = Math.floor(i / BULK_DRAG_FRAMES) % 2 === 0 ? 1 : -1;
+    const t = (frame + 1) / BULK_DRAG_FRAMES;
+    let at: [number, number];
+    if (op === 'bulkRotate') {
+      // A quarter turn around the center of the frame
+      const angle = Math.atan2(start[1] - center[1], start[0] - center[0]) + sign * t * (Math.PI / 2);
+      const radius = Math.hypot(start[0] - center[0], start[1] - center[1]);
+      at = [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius];
+    } else {
+      const d = sign * t * 40;
+      at = [start[0] + d, start[1] - d / 2];
+    }
+    if (frame === 0) {
+      mouse(map, 'mousemove', start[0], start[1], 0);
+      mouse(map, 'mousedown', start[0], start[1], 1);
+    }
+    const t0 = performance.now();
+    mouse(map, 'mousemove', at[0], at[1], 1);
+    inputs.push(performance.now() - t0);
+    if (frame === BULK_DRAG_FRAMES - 1) {
+      const released = performance.now();
+      mouse(map, 'mouseup', at[0], at[1], 0);
+      await settled(draw);
+      notes.push(`released ${(performance.now() - released).toFixed(1)} ms`);
+      // The next drag starts where the features are now
+      if (op !== 'bulkRotate') start = at;
+    }
+  };
+}
+
+/** The extent of the features selected (read from the selection of features in bulk) */
+function selectedBounds(draw: Draw): [number, number, number, number] | null {
+  const bulk = draw.selection.get().bulk;
+  if (bulk) return bulk.bounds;
+  let bounds: [number, number, number, number] | null = null;
+  const widen = (position: Position): void => {
+    const [x, y] = position;
+    if (!bounds) bounds = [x, y, x, y];
+    else {
+      bounds[0] = Math.min(bounds[0], x);
+      bounds[1] = Math.min(bounds[1], y);
+      bounds[2] = Math.max(bounds[2], x);
+      bounds[3] = Math.max(bounds[3], y);
+    }
+  };
+  const walk = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === 'number') widen(value as Position);
+    else for (const child of value) walk(child);
+  };
+  for (const feature of draw.selection.features()) {
+    walk((feature.geometry as { coordinates?: unknown }).coordinates);
+  }
+  return bounds;
 }
 
 /** What an edit noted, as it is made */
