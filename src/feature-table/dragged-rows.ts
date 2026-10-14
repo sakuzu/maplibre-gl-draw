@@ -13,9 +13,13 @@
 import type { Position } from 'geojson';
 import type { FeatureTables, RowHandle } from '../api/tables.js';
 import { transformPosition } from '../shared/math/plane-transform.js';
+import { drawPropertyKey } from '../shared/properties.js';
 import { featureTablesInternals } from './feature-tables.js';
-import { rowType } from './row-read.js';
+import { rowType, rowValue } from './row-read.js';
 import { MOVE_SETS, STATE_MOVE_MASK, STATE_MOVE_SHIFT } from './row-state.js';
+
+/** The key of the scale of a row (a row that has one keeps its shape when it is resized) */
+const SCALE_KEY = drawPropertyKey('scale');
 
 /**
  * The rows being dragged and how they are moved, while they are drawn moved and not written yet
@@ -63,8 +67,12 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
       const transform = states.transform(set);
       let moved: number[] = [...position];
       if (transform) {
+        // A Circle and a row with a scale keep their shape, as the rows drawn at once are drawn
         const place = internals.placeOf(handle);
-        const keepsShape = place ? rowType(place.group.data, place.row) === 'Circle' : false;
+        const keepsShape = place
+          ? rowType(place.group.data, place.row) === 'Circle' ||
+            rowValue(place.group, place.row, SCALE_KEY) !== undefined
+          : false;
         moved = transformPosition(transform, moved, keepsShape);
       }
       const [dx, dy] = states.translation(set);

@@ -10,7 +10,12 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
-import { rotationTransform, transformPosition } from '../shared/math/plane-transform.js';
+import { toPlane } from '../shared/math/mercator-plane.js';
+import {
+  resizeTransform,
+  rotationTransform,
+  transformPosition,
+} from '../shared/math/plane-transform.js';
 import { listSelectedRows } from '../store/bulk-selection.js';
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
@@ -83,6 +88,30 @@ describe('the rows dragged', () => {
     expect(dragged?.rotation(handleOf('a'))).toBeCloseTo((0.25 * 180) / Math.PI, 12);
     expect(dragged?.rotation(handleOf('c'))).toBe(0);
     expect(dragged?.scale(handleOf('b'))).toBe(1);
+  });
+
+  it('keep the shape of a Circle and of a row with a scale when they are resized, as they are drawn', () => {
+    const { store, tables, handleOf } = setup();
+    store.transact(() => {
+      store.createFeature({
+        ...point('e', 139.4, 'Note'),
+        properties: { 'maplibre-gl-draw:scale': 2 },
+      });
+    });
+    const states = internalsOf(tables).states;
+    const rows = ['a', 'b', 'e'].map(handleOf);
+    states.setMoving(Int32Array.from(rows), BULK_MOVE_SET);
+    const transform = resizeTransform(toPlane([139, 34.9]), 2, 0.5, 2);
+    states.setTransform(BULK_MOVE_SET, transform);
+    const dragged = draggedRowsOf(tables);
+    expect(dragged?.position(handleOf('a'), [139, 35])).toEqual(
+      transformPosition(transform, [139, 35], false),
+    );
+    for (const id of ['b', 'e']) {
+      expect(dragged?.position(handleOf(id), [139, 35])).toEqual(
+        transformPosition(transform, [139, 35], true),
+      );
+    }
   });
 
   it('of a selection of many features are read by its summary', () => {
