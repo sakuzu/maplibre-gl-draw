@@ -124,12 +124,14 @@ describe('the native export of a Store of rows', () => {
   it('writes the features in the order they are drawn, and the items and members read from the rows', () => {
     const data = exportNative(store);
     expect(data.features.map((feature) => feature.id)).toEqual(['a', 'b', 'd', 'c', 'f', 'e']);
-    const l1 = data.layers.find((layer) => layer.id === 'l1');
+    const layers = data.layers ?? [];
+    const groups = data.groups ?? [];
+    const l1 = layers.find((layer) => layer.id === 'l1');
     expect(l1 && 'items' in l1 ? l1.items : undefined).toEqual(['a', 'g', 'c', 'f']);
-    const g = data.groups.find((group) => group.id === 'g');
+    const g = groups.find((group) => group.id === 'g');
     expect(g && 'featureIds' in g ? g.featureIds : undefined).toEqual(['b', 'd']);
-    for (const layer of data.layers) expect('kind' in layer).toBe(false);
-    for (const group of data.groups) expect('kind' in group).toBe(false);
+    for (const layer of layers) expect('kind' in layer).toBe(false);
+    for (const group of groups) expect('kind' in group).toBe(false);
   });
 
   it('loads into a Store of objects as the same document', async () => {
