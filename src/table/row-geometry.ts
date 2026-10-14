@@ -60,18 +60,14 @@ export interface RowGeometry {
 export function toRowGeometry(geometry: Geometry, dims: CoordinateDims = 'xy'): RowGeometry {
   const stride = strideOf(dims);
   const positions: number[] = [];
-  const tooLong = (position: Position): Error =>
-    new Error(
-      `RowGroupBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
-    );
   const push =
     stride === 2
       ? (position: Position): void => {
-          if (position.length > 2) throw tooLong(position);
+          if (position.length > 2) throw positionTooLong(position, dims);
           positions.push(Number(position[0]), Number(position[1]));
         }
       : (position: Position): void => {
-          if (position.length > stride) throw tooLong(position);
+          if (position.length > stride) throw positionTooLong(position, dims);
           for (let k = 0; k < stride; k++) {
             positions.push(k < position.length ? Number(position[k]) : Number.NaN);
           }
@@ -113,6 +109,13 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDims = 'xy'): 
     parts,
     polygons,
   };
+}
+
+/** The error of a position of more values than the dimensions of its coordinates */
+function positionTooLong(position: Position, dims: CoordinateDims): Error {
+  return new Error(
+    `RowGroupBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
+  );
 }
 
 /**

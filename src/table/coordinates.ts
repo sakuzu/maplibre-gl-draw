@@ -96,7 +96,8 @@ export function copyCoordinates(
 ): void {
   if (sourceDims === targetDims) {
     const stride = STRIDES[sourceDims];
-    target.set(source.subarray(from * stride, (from + count) * stride), at * stride);
+    const end = (from + count) * stride;
+    for (let i = from * stride, o = at * stride; i < end; i++, o++) target[o] = source[i];
     return;
   }
   if (!dimsWithin(sourceDims, targetDims)) {
