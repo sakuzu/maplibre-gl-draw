@@ -77,7 +77,8 @@ export type UpdateSource =
  * - The state of this client (the selection, the editing, the selected vertices, the mode,
  *   read-only, the interaction lock and the hidden items) is not part of the document: it is
  *   not saved, and a change from outside the instance does not carry it.
- * - A Store that holds its features as rows (`tables`) notifies the rows written as `rows`,
+ * - A Store that holds its features as rows (`tables`) notifies the rows written as `rows`
+ *   (with the values they had before, for the writes of this client: `RowsChange.before`),
  *   and the rows held as features (`FeatureTables.hold`) as features, with their changes: a row
  *   is in one of the two in a notification, as it is when the outermost transaction ends (a row
  *   created and selected in one transaction is a feature created). The rows made features and no

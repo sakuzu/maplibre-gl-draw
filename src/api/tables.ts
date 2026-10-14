@@ -498,7 +498,8 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  * it is held as rows, read from its tables (`store.tables`).
  *
  * A row is a {@link Feature} while it is selected or edited (it is then notified as a feature),
- * and when one is asked for (`getFeature`); its writes are notified as rows written otherwise.
+ * and when one is asked for (`getFeature`); its writes are notified as rows written otherwise,
+ * with the values the rows had before (`RowsChange.before`; none for a change from elsewhere).
  * `listFeatures` and `listFeaturesInOrder` throw: read the rows from the tables.
  *
  * @param options The options of its tables (the Worker that builds the rows)

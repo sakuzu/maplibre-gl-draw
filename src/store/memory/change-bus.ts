@@ -292,6 +292,11 @@ export class ChangeBus {
     };
   }
 
+  /** The source of the outermost transaction being run ('local' outside one) */
+  get source(): UpdateSource {
+    return this.#currentSource;
+  }
+
   /**
    * Runs fn inside a transaction. Nesting is supported, and pendingChanges is flushed to the
    * listeners at the moment the outermost transact finishes.

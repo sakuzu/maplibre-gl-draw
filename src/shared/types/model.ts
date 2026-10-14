@@ -822,8 +822,14 @@ export interface RowsChange {
   /** The rows of each layer */
   readonly layers: ReadonlyMap<string, LayerRowsChange>;
   /**
-   * The values the rows had before, for the fields written (a write of rows from the drawing
-   * instance, `draw.tables.applyRows`): what writes them back
+   * The values the rows had before a write of this client, for the fields written: what writes
+   * them back (`draw.tables.applyRows`). A Store that holds its features as rows gives them for
+   * the rows that were there when the transaction began, through any of its writes: a write of
+   * rows (`draw.tables.applyRows`, `Store.applyLocal`) with the values it read or was given, and
+   * a write of a row that is not a feature (`updateFeature`, `deleteFeature`, a deletion of its
+   * layer) with the values of the fields written other than its place (its layer, group and keys
+   * of the order, which `StoreChange.order` tells). A row created has none (written deleted, it is
+   * taken back). Absent for a change from elsewhere
    */
   readonly before?: RowValuesSnapshot;
 }

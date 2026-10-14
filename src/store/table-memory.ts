@@ -19,6 +19,12 @@
  * - One notification per outermost transaction. A row is in it once: as a change of its feature
  *   when it is held when the transaction ends, as a change of its row otherwise. A row created
  *   and held in the same transaction is a feature created
+ * - Every write of rows of this client (not `remote`), through the Store or its writer, reads the
+ *   values the rows that are not held had for the fields it writes, other than their place (the
+ *   layer, the group and the keys of the order, which the changes of the order tell), and the
+ *   notification carries them (`rows.before`): the rows that were there when the transaction
+ *   began, with the values they had then. A write through `applyLocal` carries the values it is
+ *   given
  * - The writes of rows from elsewhere go through the writer it returns, in a transaction with
  *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
@@ -29,10 +35,12 @@ import type {
   FeatureTablesOptions,
   FeatureTablesWriter,
   LocalRowWrite,
+  RowApplyOptions,
   RowField,
   RowHandle,
+  RowPatch,
 } from '../api/tables.js';
-import { featureFields } from '../feature-table/feature-fields.js';
+import { featureFields, featureWithFields } from '../feature-table/feature-fields.js';
 import {
   createFeatureTablesStore,
   type FeatureTablesInternals,
@@ -47,6 +55,7 @@ import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { keyAfter, keysBetween } from './order-keys.js';
+import { combineValuesBefore } from './row-values-before.js';
 import type { Store, StoreContract } from './store.js';
 import type {
   Feature,
@@ -59,6 +68,7 @@ import type {
   Mode,
   RetainToken,
   RowsChange,
+  RowValuesSnapshot,
   Selection,
   SelectionType,
   StoreChange,
@@ -94,8 +104,11 @@ export function createTableMemoryStore(options: Omit<FeatureTablesOptions, 'hook
  */
 export const REMOTE_DELETED_KEPT = 10_000;
 
-/** The writes of a feature not held, by row, with the feature before them (one transaction) */
-type Before = Map<RowHandle, Feature>;
+/**
+ * The fields of the place of a row: a write of them is told by the changes of the order, not by
+ * the values before
+ */
+const PLACE_FIELDS: ReadonlySet<RowField> = new Set(['layerId', 'groupId', 'order', 'member']);
 
 /**
  * The in-memory {@link StoreContract} of rows
@@ -108,15 +121,20 @@ export class TableContractStore implements StoreContract {
   readonly #files = new FileStore();
   readonly #listeners = new Set<(changes: StoreChange) => void>();
   readonly tables: FeatureTables;
+  /** The writer of the tables, through which every write reads the values before it writes */
   readonly writer: FeatureTablesWriter;
+  /** The writer of the tables as they make it */
+  readonly #writer: FeatureTablesWriter;
   readonly #internals: FeatureTablesInternals;
   readonly #layers = new Map<string, TableLayer>();
   #order: string[] = [];
   readonly #groups = new Map<string, TableGroup>();
   #nextGroup = 0;
   #metadata: Metadata = {};
-  /** The features before the writes of this transaction of the rows not held */
-  #before: Before = new Map();
+  /** The values the writes of this transaction read before they wrote, in their order */
+  #before: RowValuesSnapshot[] = [];
+  /** The rows this transaction wrote, and whether each was there when it began */
+  #written = new Map<RowHandle, boolean>();
   /** The depth of the writes of the document being made */
   #depth = 0;
   /** What keeps the rows deleted in this transaction (made at the first deletion) */
@@ -132,11 +150,22 @@ export class TableContractStore implements StoreContract {
       hooks: {
         emit: (change) => this.#bus.merge(change as StoreChange),
         // Nothing else needs the ids of the rows deleted that nothing keeps any more
-        released: (handles) => this.writer.forget(handles),
+        released: (handles) => this.#writer.forget(handles),
       },
     });
     this.tables = tables;
-    this.writer = writer;
+    this.#writer = writer;
+    this.writer = {
+      lookup: (id) => writer.lookup(id),
+      retainToken: () => writer.retainToken(),
+      forget: (handles) => writer.forget(handles),
+      allocateHandles: (ids, hashes) => writer.allocateHandles(ids, hashes),
+      adopt: (layerId, groups) => writer.adopt(layerId, groups),
+      raiseDims: (layerId, dims) => writer.raiseDims(layerId, dims),
+      apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
+      applyGroups: (patch, options) => writer.applyGroups(patch, options),
+      writeHeld: (id, feature, options) => writer.writeHeld(id, feature, options),
+    };
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
     this.#bus.subscribe((changes) => this.#deliver(changes));
   }
@@ -255,7 +284,6 @@ export class TableContractStore implements StoreContract {
         place.set('member', group ? keyAfter(this.#lastMemberKey(group)) : undefined);
       }
       if (!held) {
-        this.#rememberBefore(handle, current);
         const next = { ...current, ...updates, id, layerId, groupId } as Feature;
         const fields = featureFields(current, next);
         for (const [field, value] of place) fields.set(field, value);
@@ -545,7 +573,6 @@ export class TableContractStore implements StoreContract {
         const handle = code >> 1;
         const left = this.#groupIdOfRow(handle);
         if (left !== undefined && left !== group?.id) this.#leftGroups.add(left);
-        if (!this.#internals.isHeld(handle)) this.#rememberBefore(handle);
         rows.push(handle);
         rowKeys.push(keys[k]);
       });
@@ -654,9 +681,6 @@ export class TableContractStore implements StoreContract {
       if (members.length > 0) {
         const place = this.#neighborsOf(group.layerId, handle * 2 + 1);
         const keys = keysBetween(place.below, place.above, members.length);
-        for (const member of members) {
-          if (!this.#internals.isHeld(member)) this.#rememberBefore(member);
-        }
         this.writer.apply({
           handles: Int32Array.from(members),
           fields: new Map<RowField, unknown[]>([
@@ -919,18 +943,53 @@ export class TableContractStore implements StoreContract {
     this.writer.apply({ handles: Int32Array.of(handle), fields: columns });
   }
 
+  /**
+   * Writes rows, after reading the values the rows there were when the transaction began and are
+   * not held have for the fields written other than their place (none for a write from
+   * elsewhere): the values given (`before`) instead, when there are
+   */
+  #applyRows(patch: RowPatch, options: RowApplyOptions = {}): RowsChange {
+    const { before: given, ...rest } = options;
+    const before = given ?? (this.#bus.source === 'remote' ? null : this.#readBefore(patch));
+    for (const handle of patch.handles) {
+      if (!this.#written.has(handle)) this.#written.set(handle, this.#isThere(handle));
+    }
+    const change = this.#writer.apply(patch, rest);
+    if (before && before.handles.length > 0) this.#before.push(before);
+    return change;
+  }
+
+  /**
+   * The values the rows of a patch that were there when the transaction began and are not held
+   * have for the fields it writes other than their place (null for none)
+   */
+  #readBefore(patch: RowPatch): RowValuesSnapshot | null {
+    const fields = [...patch.fields.keys()].filter((field) => !PLACE_FIELDS.has(field));
+    if (fields.length === 0 && !patch.deleted) return null;
+    const rows: number[] = [];
+    for (const handle of patch.handles) {
+      if (this.#internals.isHeld(handle) || !(this.#written.get(handle) ?? true)) continue;
+      if (this.#isThere(handle)) rows.push(handle);
+    }
+    if (rows.length === 0) return null;
+    return this.tables.snapshot({
+      handles: Int32Array.from(rows),
+      fields: new Map(fields.map((field) => [field, []])),
+      ...(patch.deleted && { deleted: new Uint8Array(0) }),
+    });
+  }
+
+  /** Whether a row is there (a row, not deleted) */
+  #isThere(handle: RowHandle): boolean {
+    const place = this.#internals.placeOf(handle);
+    return !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
+  }
+
   /** A row not held as a feature (undefined for a deleted row) */
   #rowFeature(handle: RowHandle): Feature | undefined {
     const place = this.#internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) return undefined;
     return rowFeature(this.#internals.readContext, place.layer.layerId, place.group, place.row);
-  }
-
-  /** Keeps the feature of a row before the first write of it in this transaction */
-  #rememberBefore(handle: RowHandle, feature?: Feature): void {
-    if (this.#before.has(handle)) return;
-    const before = feature ?? this.#rowFeature(handle);
-    if (before) this.#before.set(handle, before);
   }
 
   /** The key of the order of the last item of a layer (null for none) */
@@ -1003,7 +1062,8 @@ export class TableContractStore implements StoreContract {
    */
   #deliver(changes: StoreChange): void {
     const before = this.#before;
-    this.#before = new Map();
+    this.#before = [];
+    this.#written = new Map();
     this.#retain = null;
     if (changes.source === 'remote') this.#forgetRemote(changes);
     const out = reconcile(changes, this.tables, this.#internals, before);
@@ -1018,20 +1078,107 @@ export class TableContractStore implements StoreContract {
 }
 
 /**
+ * The value of a field of a row as a feature holds it (undefined for the keys of the order, which
+ * a feature does not hold)
+ */
+function featureValue(feature: Feature, field: RowField): { value: unknown } | undefined {
+  switch (field) {
+    case 'type':
+      return { value: feature.type };
+    case 'layerId':
+      return { value: feature.layerId };
+    case 'groupId':
+      return { value: feature.groupId || undefined };
+    case 'geometry':
+      return { value: feature.geometry };
+    case 'style':
+      return { value: feature.style ?? {} };
+    case 'visible':
+      return { value: feature.visible !== false };
+    case 'locked':
+      return { value: feature.locked === true };
+    case 'order':
+    case 'member':
+      return undefined;
+    default:
+      return {
+        value: (feature.properties as Record<string, unknown> | undefined)?.[
+          field.slice('property:'.length)
+        ],
+      };
+  }
+}
+
+/**
+ * The values the rows had when the transaction began (see `TableContractStore`): the values the
+ * writes read, and the values the features of the rows held when they were written had before
+ * (the rows no longer held at its end); a field of a row no write read had the value its feature
+ * had before when it was held, the one it has now otherwise
+ */
+function valuesBefore(
+  parts: readonly RowValuesSnapshot[],
+  updated: readonly { id: string; feature: Feature; previous: Feature }[],
+  released: readonly { id: string; feature: Feature; previous: Feature }[],
+  tables: FeatureTables,
+): RowValuesSnapshot | undefined {
+  const fromFeatures: RowValuesSnapshot[] = [];
+  for (const entry of released) {
+    const handle = tables.handleOf(entry.id);
+    if (handle === undefined) continue;
+    const fields = featureFields(entry.feature, entry.previous);
+    if (fields.size === 0) continue;
+    fromFeatures.push({
+      handles: Int32Array.of(handle),
+      fields: new Map([...fields].map(([field, value]) => [field, [value]])),
+    });
+  }
+  const previous = new Map(updated.map((entry) => [entry.id, entry.previous]));
+  return combineValuesBefore([...parts, ...fromFeatures], {
+    field: (handles, field) => {
+      const now = tables.snapshot({ handles, fields: new Map([[field, []]]) }).fields.get(field);
+      return Array.from(handles, (handle, k) => {
+        const feature = previous.get(tables.idOf(handle) as string);
+        const value = feature && featureValue(feature, field);
+        return value ? value.value : now?.[k];
+      });
+    },
+    deleted: (handles) =>
+      tables.snapshot({ handles, fields: new Map(), deleted: new Uint8Array(0) }).deleted ??
+      new Uint8Array(handles.length),
+  });
+}
+
+/**
  * A notification with each row in it once (see `TableContractStore`): the rows written that are
  * held at its end are changes of their features (a row created and held a feature created, not
- * held), and the features of rows no longer held are changes of their rows
+ * held), and the features of rows no longer held are changes of their rows; the values the rows
+ * had before go with them (`rows.before`), and make the features before of the rows held
  */
 function reconcile(
   changes: StoreChange,
   tables: FeatureTables,
   internals: FeatureTablesInternals,
-  before: Before,
+  parts: readonly RowValuesSnapshot[],
 ): StoreChange {
   const rows = changes.rows;
   const updatedFeatures = changes.features?.updated;
-  if (!rows && !updatedFeatures?.length) return changes;
+  if (!rows && !updatedFeatures?.length && parts.length === 0) return changes;
   const out: StoreChange = { ...changes };
+  // The features no longer held at the end are changes of their rows
+  const released = (updatedFeatures ?? []).filter((entry) => {
+    const handle = tables.handleOf(entry.id);
+    return handle === undefined || !internals.isHeld(handle);
+  });
+  const before = valuesBefore(parts, updatedFeatures ?? [], released, tables);
+  const beforeRows = new Map(Array.from(before?.handles ?? [], (handle, i) => [handle, i]));
+  /** The feature of a row held before the transaction, from the values before */
+  const previousOf = (handle: RowHandle, feature: Feature): Feature => {
+    const i = beforeRows.get(handle);
+    if (!before || i === undefined) return feature;
+    const fields = new Map<RowField, unknown>();
+    for (const [field, values] of before.fields) fields.set(field, values[i]);
+    return featureWithFields(feature, fields);
+  };
   const created: Feature[] = [...(changes.features?.created ?? [])];
   const updated = [...(updatedFeatures ?? [])];
   const createdIds = new Set<string>();
@@ -1053,7 +1200,7 @@ function reconcile(
       const feature = internals.isHeld(handle) ? tables.heldFeature(id) : undefined;
       if (!feature) keep.updated.push(handle);
       else if (!updated.some((entry) => entry.id === id)) {
-        updated.push({ id, feature, previous: before.get(handle) ?? feature });
+        updated.push({ id, feature, previous: previousOf(handle, feature) });
       }
     }
     keep.deleted.push(...change.deleted);
@@ -1065,11 +1212,6 @@ function reconcile(
       deleted: Int32Array.from(keep.deleted),
     });
   }
-  // The features no longer held at the end are changes of their rows
-  const released = updated.filter((entry) => {
-    const handle = tables.handleOf(entry.id);
-    return handle === undefined || !internals.isHeld(handle);
-  });
   for (const entry of released) {
     const handle = tables.handleOf(entry.id);
     if (handle === undefined) continue;
@@ -1099,8 +1241,8 @@ function reconcile(
   if (Object.keys(features).length > 0) out.features = features;
   else delete out.features;
   // The values before go with the rows (whether each row is a feature or a row at the end)
-  if (layers.size > 0 || rows?.before) {
-    out.rows = { layers, ...(rows?.before && { before: rows.before }) } as RowsChange;
+  if (layers.size > 0 || before) {
+    out.rows = { layers, ...(before && { before }) } as RowsChange;
   } else {
     delete out.rows;
   }
