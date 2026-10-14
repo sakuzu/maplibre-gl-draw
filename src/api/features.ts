@@ -10,7 +10,6 @@ import type {
   FeatureFilter,
   FeatureInput,
   FeatureListOptions,
-  FeatureListPage,
   FeaturePatch,
   FeatureStyleResolved,
   FeatureValues,
@@ -43,22 +42,30 @@ export interface FeaturesCollection {
   /**
    * Lists the features in stacking order, from the back.
    *
-   * A Store that holds its features as rows (its `tables`) is listed only up to a
-   * limit (the overload below): its features are made when they are read, and it can hold more
-   * than can be made at once. Read every feature of such a Store with `tables.scan`.
+   * With `limit`, at most that many features are made, from the first or from the one after
+   * `after`: the pages of a long list are read one after the other, each from the last feature of
+   * the one before. A Store that holds its features as rows is listed only so: its features are
+   * made when they are read, and it can hold more than can be made at once.
    *
    * @param filter - Keeps only the features that match every key given
-   * @throws `DrawError` with the code `invalid-input` when the Store holds its features as rows
-   */
-  list(filter?: FeatureFilter): Feature[];
-  /**
-   * Lists the first features in stacking order, from the back, up to a limit.
+   * @param options - The number of features made at most, and the feature read last
+   * @returns The features, from the back (fewer than `limit` once the last page is read)
+   * @throws `DrawError` with the code `invalid-state` when the Store holds its features as rows
+   *   and no limit is given, `not-found` when there is no feature `after` (it was deleted
+   *   meanwhile), or `invalid-input` when the filter or the options have the wrong shape
    *
-   * @param filter - Keeps only the features that match every key given
-   * @param options - The number of features made at most
-   * @returns The features within the limit, and whether more match
+   * @example Reading every feature, a page at a time
+   * ```ts
+   * let after: string | undefined;
+   * for (;;) {
+   *   const page = draw.features.list(undefined, { limit: 1000, after });
+   *   page.forEach(read);
+   *   if (page.length < 1000) break;
+   *   after = page[page.length - 1].id;
+   * }
+   * ```
    */
-  list(filter: FeatureFilter | undefined, options: FeatureListOptions): FeatureListPage;
+  list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[];
   /**
    * Counts the features, without making them.
    *

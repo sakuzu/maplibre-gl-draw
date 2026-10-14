@@ -444,14 +444,11 @@ export interface FeatureFilter {
 export interface FeatureListOptions {
   /** The number of features made at most (a non-negative integer) */
   limit: number;
-}
-
-/** What `features.list` returns with a limit: the features within it, in stacking order. */
-export interface FeatureListPage {
-  /** The first features that match, in stacking order from the back, up to the limit */
-  features: Feature[];
-  /** Whether more features match than the limit */
-  truncated: boolean;
+  /**
+   * The ID of the feature read last: the features are read from the one after it in stacking
+   * order (from the first when omitted), so that pages are read one after the other
+   */
+  after?: string;
 }
 
 /** What `layers.create` takes. */

@@ -135,16 +135,22 @@ export interface RowFilter {
  * Visits the rows that match a filter, in the order they are drawn, without making features
  *
  * @param visit Called with each row; returning false stops
+ * @param after A row the visit starts after (the ones before it and it are not visited, whether
+ *   they match or not); every row when omitted
  * @internal
  */
 export function forEachMatchingRow(
   store: FeatureSource,
   filter: RowFilter,
   visit: (handle: RowHandle) => boolean,
+  after?: RowHandle,
 ): void {
   const tables = store.tables;
   const internals = featureTablesInternals(tables);
   if (!tables || !internals) return;
+  // The layer of the row the visit starts after: the layers before it are not read
+  const afterLayer = after === undefined ? undefined : internals.placeOf(after)?.layer.layerId;
+  let started = after === undefined;
   const groupHandle = filter.groupId !== undefined ? (tables.findGroup(filter.groupId) ?? -2) : -1;
   if (groupHandle === -2) return;
   const layerIds =
@@ -154,6 +160,7 @@ export function forEachMatchingRow(
         : []
       : layerIdsInOrder(store);
   for (const layerId of layerIds) {
+    if (!started && layerId !== afterLayer) continue;
     const layerShown = store.getLayer(layerId)?.visible !== false;
     const cursor = tables.scan({
       layerIds: [layerId],
@@ -161,6 +168,10 @@ export function forEachMatchingRow(
     });
     for (let batch = cursor.next(); batch; batch = cursor.next()) {
       for (const handle of batch) {
+        if (!started) {
+          started = handle === after;
+          continue;
+        }
         const place = internals.placeOf(handle);
         if (!place) continue;
         const data = place.group.data;

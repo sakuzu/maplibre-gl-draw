@@ -25,7 +25,6 @@ import type {
   FeatureFilter,
   FeatureInput,
   FeatureListOptions,
-  FeatureListPage,
   FeaturePatch,
   FeatureStyleResolved,
   MoveTarget,
@@ -53,6 +52,7 @@ import {
   featureLocked,
   filterEntries,
   invalidInput,
+  invalidState,
   isRecord,
   isTaken,
   matches,
@@ -163,40 +163,55 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
    * Visits the rows of a Store of rows that match a filter, in stacking order, without making
    * features
    */
-  const forEachRow = (filter: FeatureFilter | undefined, visit: (id: string) => boolean): void => {
+  const forEachRow = (
+    filter: FeatureFilter | undefined,
+    visit: (id: string) => boolean,
+    after?: number,
+  ): void => {
     const rowFilter = Object.fromEntries(checkedEntries(filter)) as RowFilter;
     const tables = store.tables;
     if (!tables) return;
-    forEachMatchingRow(store, rowFilter, (handle) => visit(tables.getRowId(handle) as string));
+    forEachMatchingRow(
+      store,
+      rowFilter,
+      (handle) => visit(tables.getRowId(handle) as string),
+      after,
+    );
   };
 
-  function list(filter?: FeatureFilter): Feature[];
-  function list(filter: FeatureFilter | undefined, options: FeatureListOptions): FeatureListPage;
-  function list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[] | FeatureListPage {
-    const limit = options === undefined ? undefined : limitOf(options);
-    if (!store.tables) {
+  function list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[] {
+    const page = options === undefined ? undefined : pageOf(options);
+    const tables = store.tables;
+    if (!tables) {
       const checks = filterOf(filter);
-      const features = listEveryFeatureInOrder(store).filter((feature) => keep(feature, checks));
-      if (limit === undefined) return features;
-      return { features: features.slice(0, limit), truncated: features.length > limit };
+      let features = listEveryFeatureInOrder(store);
+      if (page?.after !== undefined) {
+        const at = features.findIndex((feature) => feature.id === page.after);
+        if (at < 0) throw notFound('feature', page.after);
+        features = features.slice(at + 1);
+      }
+      features = features.filter((feature) => keep(feature, checks));
+      return page === undefined ? features : features.slice(0, page.limit);
     }
-    if (limit === undefined) {
-      throw invalidInput(
+    if (page === undefined) {
+      throw invalidState(
         'The features of a Store that holds them as rows are listed up to a limit: pass { limit }',
       );
     }
+    const after = page.after === undefined ? undefined : tables.findRow(page.after);
+    if (page.after !== undefined && after === undefined) throw notFound('feature', page.after);
     const features: Feature[] = [];
-    let truncated = false;
-    forEachRow(filter, (id) => {
-      if (features.length >= limit) {
-        truncated = true;
-        return false;
-      }
-      const feature = store.getFeature(id);
-      if (feature) features.push(feature);
-      return true;
-    });
-    return { features, truncated };
+    if (page.limit === 0) return features;
+    forEachRow(
+      filter,
+      (id) => {
+        const feature = store.getFeature(id);
+        if (feature) features.push(feature);
+        return features.length < page.limit;
+      },
+      after,
+    );
+    return features;
   }
 
   return {
@@ -426,14 +441,17 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 }
 
 /** The limit of `features.list`, checked */
-function limitOf(options: FeatureListOptions): number {
+function pageOf(options: FeatureListOptions): { limit: number; after: string | undefined } {
   requireRecord(options, 'The options');
-  onlyKeys(options as unknown as Record<string, unknown>, ['limit'], 'The options');
-  const { limit } = options;
+  onlyKeys(options as unknown as Record<string, unknown>, ['limit', 'after'], 'The options');
+  const { limit, after } = options;
   if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 0) {
     throw invalidInput('limit must be a non-negative integer');
   }
-  return limit;
+  if (after !== undefined && typeof after !== 'string') {
+    throw invalidInput('after must be the ID of a feature');
+  }
+  return { limit, after };
 }
 
 // ============================================================================

@@ -148,8 +148,8 @@ const FILTERS: Array<FeatureFilter | undefined> = [
 
 describe('features.list and features.count over a Store of rows', () => {
   it('refuses to list without a limit, and makes no feature to count', () => {
-    expect(codeOf(() => fromRows.list())).toBe('invalid-input');
-    expect(codeOf(() => fromRows.list({ layerId: 'l1' }))).toBe('invalid-input');
+    expect(codeOf(() => fromRows.list())).toBe('invalid-state');
+    expect(codeOf(() => fromRows.list({ layerId: 'l1' }))).toBe('invalid-state');
     expect(fromRows.count()).toBe(7);
   });
 
@@ -167,43 +167,83 @@ describe('features.list and features.count over a Store of rows', () => {
       const expected = expectedIds(filter);
       const page = fromRows.list(filter, { limit: 100 });
       expect(
-        page.features.map((feature) => feature.id),
+        page.map((feature) => feature.id),
         JSON.stringify(filter),
       ).toEqual(expected);
-      expect(page.truncated).toBe(false);
       expect(fromRows.count(filter), JSON.stringify(filter)).toBe(expected.length);
       expect(fromObjects.count(filter)).toBe(expected.length);
     }
   });
 
-  it('makes only the features within the limit, and tells that more match', () => {
+  it('makes only the features within the limit, as an array', () => {
     const all = expectedIds(undefined);
     for (const limit of [0, 1, 3, all.length - 1, all.length, all.length + 1]) {
       const page = fromRows.list(undefined, { limit });
-      expect(page.features.map((feature) => feature.id)).toEqual(all.slice(0, limit));
-      expect(page.truncated).toBe(all.length > limit);
-      expect(fromObjects.list(undefined, { limit })).toEqual({
-        features: fromObjects.list().slice(0, limit),
-        truncated: all.length > limit,
-      });
+      expect(page.map((feature) => feature.id)).toEqual(all.slice(0, limit));
+      expect(fromObjects.list(undefined, { limit })).toEqual(fromObjects.list().slice(0, limit));
     }
     const polygons = fromRows.list({ type: 'Polygon' }, { limit: 2 });
-    expect(polygons.features.map((feature) => feature.id)).toEqual(['h', 'd']);
-    expect(polygons.truncated).toBe(true);
+    expect(polygons.map((feature) => feature.id)).toEqual(['h', 'd']);
+  });
+
+  it('reads on after a feature read before, a page at a time, in both kinds of Store', () => {
+    for (const filter of [undefined, ...FILTERS]) {
+      for (const features of [fromRows, fromObjects]) {
+        const expected =
+          features === fromRows
+            ? expectedIds(filter)
+            : fromObjects.list(filter).map((feature) => feature.id);
+        const read: string[] = [];
+        let after: string | undefined;
+        for (;;) {
+          const page = features.list(filter, { limit: 2, ...(after !== undefined && { after }) });
+          read.push(...page.map((feature) => feature.id));
+          if (page.length < 2) break;
+          after = page[page.length - 1].id;
+        }
+        expect(read, JSON.stringify(filter)).toEqual(expected);
+      }
+    }
+    // After a feature the filter leaves out: from its place in the stacking order
+    const rowsOrder = expectedIds(undefined);
+    expect(fromRows.list({ type: 'Polygon' }, { limit: 10, after: 'c' }).map((f) => f.id)).toEqual(
+      expectedIds({ type: 'Polygon' }).filter(
+        (id) => rowsOrder.indexOf(id) > rowsOrder.indexOf('c'),
+      ),
+    );
+    const objectsOrder = fromObjects.list().map((feature) => feature.id);
+    expect(
+      fromObjects.list({ type: 'Polygon' }, { limit: 10, after: 'c' }).map((f) => f.id),
+    ).toEqual(
+      fromObjects
+        .list({ type: 'Polygon' })
+        .map((f) => f.id)
+        .filter((id) => objectsOrder.indexOf(id) > objectsOrder.indexOf('c')),
+    );
+  });
+
+  it('throws not-found for a feature to read after that is not there', () => {
+    expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'nothing' }))).toBe(
+      'not-found',
+    );
+    expect(codeOf(() => fromObjects.list(undefined, { limit: 2, after: 'nothing' }))).toBe(
+      'not-found',
+    );
+    rows.deleteFeature('c');
+    objects.deleteFeature('c');
+    expect(codeOf(() => fromRows.list(undefined, { limit: 2, after: 'c' }))).toBe('not-found');
+    expect(codeOf(() => fromObjects.list(undefined, { limit: 2, after: 'c' }))).toBe('not-found');
   });
 
   it('gives the features of the rows as the Store reads them', () => {
     const page = fromRows.list({ layerId: 'l1' }, { limit: 1 });
-    expect(page.features[0]).toEqual(rows.getFeature('a'));
+    expect(page[0]).toEqual(rows.getFeature('a'));
   });
 
   it('leaves out the deleted rows, and counts a row created after', () => {
     rows.deleteFeature('b');
     expect(fromRows.count()).toBe(6);
-    expect(fromRows.list({ type: 'Polygon' }, { limit: 10 }).features.map((f) => f.id)).toEqual([
-      'h',
-      'd',
-    ]);
+    expect(fromRows.list({ type: 'Polygon' }, { limit: 10 }).map((f) => f.id)).toEqual(['h', 'd']);
     rows.createFeature(featureOf('k', 14));
     expect(fromRows.count({ layerId: 'l1' })).toBe(6);
   });
@@ -214,6 +254,12 @@ describe('features.list and features.count over a Store of rows', () => {
       expect(codeOf(() => fromObjects.list(undefined, { limit } as never))).toBe('invalid-input');
     }
     expect(codeOf(() => fromRows.list(undefined, { limit: 1, other: 1 } as never))).toBe(
+      'invalid-input',
+    );
+    expect(codeOf(() => fromRows.list(undefined, { limit: 1, after: 3 } as never))).toBe(
+      'invalid-input',
+    );
+    expect(codeOf(() => fromObjects.list(undefined, { limit: 1, after: 3 } as never))).toBe(
       'invalid-input',
     );
     expect(codeOf(() => fromRows.count({ name: 'x' } as never))).toBe('invalid-input');

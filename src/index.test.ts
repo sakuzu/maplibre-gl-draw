@@ -70,7 +70,6 @@ const MAIN = [
   'FeatureFilter',
   'FeatureInput',
   'FeatureListOptions',
-  'FeatureListPage',
   'FeaturePatch',
   'FeatureRenderer',
   'FeaturesCollection',
