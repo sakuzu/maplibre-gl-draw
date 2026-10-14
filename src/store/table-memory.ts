@@ -89,7 +89,10 @@ import type {
  *
  * @internal
  */
-export type TableStoreOptions = Omit<FeatureTablesInternalOptions, 'onChange' | 'onRelease'>;
+export type TableStoreOptions = Omit<FeatureTablesInternalOptions, 'onChange' | 'onRelease'> & {
+  /** The most features opened at once for the selection (`HOLD_LIMIT` when omitted) */
+  readonly holdLimit?: number;
+};
 
 /**
  * Creates an empty in-memory Store that holds its features as rows of columns
@@ -104,8 +107,12 @@ export function createTableStore(options: TableStoreOptions = {}): {
   store: Store;
   writer: FeatureTablesWriter;
 } {
-  const contract = new TableContractStore(options);
-  return { store: new DrawStore(contract), writer: contract.writer };
+  const { holdLimit, ...tableOptions } = options;
+  const contract = new TableContractStore(tableOptions);
+  return {
+    store: new DrawStore(contract, holdLimit === undefined ? {} : { holdLimit }),
+    writer: contract.writer,
+  };
 }
 
 /**
