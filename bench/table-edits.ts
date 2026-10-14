@@ -472,6 +472,7 @@ function bulkSteps(
   }
   let start: [number, number] = [0, 0];
   let center: [number, number] = [0, 0];
+  let firstBefore: Position | null = null;
   return async (i) => {
     if (i === 0) {
       const bounds = await selectAll();
@@ -480,10 +481,16 @@ function bulkSteps(
       const nw = map.project([bounds[0], bounds[3]]);
       const sw = map.project([bounds[0], bounds[1]]);
       center = [(nw.x + ne.x) / 2, (ne.y + sw.y) / 2];
-      // The margin of the frame and the distance of the rotation handle are 10 px by default
+      // The margin of the frame and the distance of the rotation handle are 10 by default: the
+      // margin in px on the map, the distance in degrees of tiles of 256 px above the frame (as
+      // the rotation handle is placed)
       if (op === 'bulkResize') start = [ne.x + 10, ne.y - 10];
-      else if (op === 'bulkRotate') start = [(nw.x + ne.x) / 2, ne.y - 20];
-      else {
+      else if (op === 'bulkRotate') {
+        const frameTop = map.unproject([(nw.x + ne.x) / 2, ne.y - 10]);
+        const distance = 10 / ((256 * 2 ** map.getZoom()) / 360);
+        const handle = map.project([frameTop.lng, frameTop.lat + distance]);
+        start = [handle.x, handle.y];
+      } else {
         const feature = target.store.getFeature(building);
         const inside = feature ? insideOf(feature) : null;
         const point = inside ? map.project([inside[0], inside[1]]) : { x: center[0], y: center[1] };
@@ -505,6 +512,7 @@ function bulkSteps(
       at = [start[0] + d, start[1] - d / 2];
     }
     if (frame === 0) {
+      firstBefore = firstPositionOf(target.store.getFeature(building));
       mouse(map, 'mousemove', start[0], start[1], 0);
       mouse(map, 'mousedown', start[0], start[1], 1);
     }
@@ -516,10 +524,29 @@ function bulkSteps(
       mouse(map, 'mouseup', at[0], at[1], 0);
       await settled(draw);
       notes.push(`released ${(performance.now() - released).toFixed(1)} ms`);
+      // Whether the drag wrote them (a press beside the handle would move the map instead)
+      const firstAfter = firstPositionOf(target.store.getFeature(building));
+      const changed =
+        firstBefore !== null &&
+        firstAfter !== null &&
+        (firstBefore[0] !== firstAfter[0] || firstBefore[1] !== firstAfter[1]);
+      notes.push(`${op === 'bulkRotate' ? 'turned' : 'written'} ${changed ? 'yes' : 'no'}`);
       // The next drag starts where the features are now
       if (op !== 'bulkRotate') start = at;
     }
   };
+}
+
+/** The first position of a feature (null for none) */
+function firstPositionOf(feature: Feature | undefined): Position | null {
+  let found: Position | null = null;
+  const walk = (value: unknown): void => {
+    if (found || !Array.isArray(value)) return;
+    if (typeof value[0] === 'number') found = value as Position;
+    else for (const child of value) walk(child);
+  };
+  walk((feature?.geometry as { coordinates?: unknown } | undefined)?.coordinates);
+  return found;
 }
 
 /** The extent of the features selected (read from the selection of features in bulk) */

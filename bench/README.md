@@ -210,7 +210,18 @@ release, whose time to the frame nothing is left to build is noted
 build. For the rows of the stage of many features selected (all of them
 selected and moved, rotated, resized, colored), run them at `n=100000`
 in both modes, with `reps=100`: the frames of the run, its longest task
-and the JS heap and GPU memory before and after are the measures.
+and the JS heap and GPU memory before and after are the measures. A drag
+notes whether it wrote the features (`written yes`, `turned yes` for the
+rotation), so that a press beside the handle is seen.
+
+The work of one of these edits without a browser (the rows of the page
+held by the in-memory Store of rows, the drags written at once and in
+steps, and the colors) is printed by
+`BULK_WORK=100000 npx vitest run --config bench/vitest.config.ts
+table-bulk-work --pool=forks --execArgv=--expose-gc`: the time of each, the
+longest step of a write in steps, and the memory before, at its end and
+after a collection. `BULK_WORK_PROFILE=<directory>` writes the CPU profile
+of each there.
 
 The changes of others are written in place
 (`color`, `attr`, `position`, `corner`) or placed elsewhere: `reorder`
