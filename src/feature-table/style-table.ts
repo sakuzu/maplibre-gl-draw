@@ -22,6 +22,7 @@
  * style itself (`get`), not its number.
  */
 
+import { DrawError } from '../shared/draw-error.js';
 import type { FeatureStyle } from '../shared/types/model.js';
 import { decodeCanonicalValue, encodeCanonicalValue } from '../table/canonical-value.js';
 import { hashByteRun } from '../table/utf8-column.js';
@@ -115,7 +116,7 @@ export class StyleTable {
 
   /** Counts `count` more rows that use a number */
   retain(id: number, count = 1): void {
-    if (!this.entries[id]) throw new Error(`StyleTable: no style ${id}`);
+    if (!this.entries[id]) throw new DrawError('not-found', `StyleTable: no style ${id}`);
     this.uses[id] += count;
   }
 
@@ -160,7 +161,7 @@ export class StyleTable {
     const cached = this.styles[id];
     if (cached) return cached;
     const bytes = this.entries[id];
-    if (!bytes) throw new Error(`StyleTable: no style ${id}`);
+    if (!bytes) throw new DrawError('not-found', `StyleTable: no style ${id}`);
     const style = Object.freeze(decodeCanonicalValue(bytes) as FeatureStyle);
     this.styles[id] = style;
     return style;

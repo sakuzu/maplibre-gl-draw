@@ -35,6 +35,7 @@ import type {
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import { circleRowRings } from '../shared/circle-rings.js';
+import { DrawError } from '../shared/draw-error.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type {
   BoundingBox,
@@ -546,6 +547,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly worker: FeatureTablesWorker | undefined;
   private readonly onChange: ((change: StoreChange) => void) | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
+  private readonly onBlockRejected: ((layerId: string, reason: DrawError) => void) | undefined;
   /** The features drawn over rows for this client, by owner and by id */
   private readonly overlays = new Map<string, Map<string, OverlayEntry>>();
   /** The rows of the deltas that are features drawn over rows (drawn, not read) */
@@ -591,6 +593,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.worker = options.worker;
     this.onChange = options.onChange;
     this.onRelease = options.onRelease;
+    this.onBlockRejected = options.onBlockRejected;
     this.versions = new GroupVersions(this.versionHost());
     this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
@@ -730,7 +733,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (raised) return raised;
     const dims = this.declaredDims?.(layerId) ?? 'xy';
     if (!isCoordinateDimensions(dims)) {
-      throw new Error(`FeatureTables: the layer "${layerId}" has the dimensions ${dims}`);
+      throw new DrawError(
+        'invalid-state',
+        `FeatureTables: the layer "${layerId}" has the dimensions ${dims}`,
+      );
     }
     return dims;
   }
@@ -742,10 +748,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * until then)
    */
   raiseDimensions(layerId: string, dims: CoordinateDimensions): void {
-    if (!isCoordinateDimensions(dims)) throw new Error(`FeatureTables: ${dims} are not dimensions`);
+    if (!isCoordinateDimensions(dims))
+      throw new DrawError('invalid-input', `FeatureTables: ${dims} are not dimensions`);
     const current = this.dimsOfLayer(layerId);
     if (!dimsWithin(current, dims)) {
-      throw new Error(`FeatureTables: the coordinates of ${current} cannot be lowered to ${dims}`);
+      throw new DrawError(
+        'invalid-input',
+        `FeatureTables: the coordinates of ${current} cannot be lowered to ${dims}`,
+      );
     }
     if (current === dims) return;
     const layer = this.layers.get(layerId);
@@ -755,8 +765,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     for (const handle of this.heldRows.keys()) {
       if (this.placeOf(handle)?.layer === layer) {
-        throw new Error(
-          `FeatureTables: a row of the layer "${layerId}" is held as a feature, which holds x and y only`,
+        throw new DrawError(
+          'invalid-state',
+          `FeatureTables: a row of the layer "${layerId}" is opened as a feature, which holds x and y only`,
         );
       }
     }
@@ -857,11 +868,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const data of groups) {
       checkShape(data);
       checkDims(data, dims);
-      if (data.length === 0) throw new Error('FeatureTables: an empty row group');
+      if (data.length === 0)
+        throw new DrawError('invalid-input', 'FeatureTables: an empty row group');
       for (let r = 0; r < data.length; r++) {
         const group = data.groups[r];
         if (group >= 0 && !this.groups.has(group)) {
-          throw new Error(`FeatureTables: a row names the group ${group}, which is unknown`);
+          throw new DrawError(
+            'not-found',
+            `FeatureTables: a row names the group ${group}, which is unknown`,
+          );
         }
       }
     }
@@ -889,8 +904,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
         try {
           this.takeIn(next);
         } catch (error) {
-          // A group given to `adopt` is left out (there is no caller to throw to any more)
-          console.error(error);
+          // A block given to `addBlocks` is left out (there is no caller to throw to any more)
+          if (this.onBlockRejected && error instanceof DrawError) {
+            this.onBlockRejected(next.layer.layerId, error);
+          } else {
+            console.error(error);
+          }
         }
       });
     }
@@ -1766,11 +1785,17 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const n = patch.handles.length;
     for (const [field, values] of patch.fields) {
       if (values.length !== n) {
-        throw new Error(`FeatureTables: "${field}" has ${values.length} values for ${n} rows`);
+        throw new DrawError(
+          'invalid-input',
+          `FeatureTables: "${field}" has ${values.length} values for ${n} rows`,
+        );
       }
     }
     if (patch.deleted && patch.deleted.length !== n) {
-      throw new Error('FeatureTables: deleted has another length than the rows');
+      throw new DrawError(
+        'invalid-input',
+        'FeatureTables: deleted has another length than the rows',
+      );
     }
   }
 
@@ -1829,14 +1854,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
   applyOpened(id: string, feature: Feature, options: OpenedApplyOptions = {}): void {
     const handle = this.ids.handleOf(id);
     const held = handle >= 0 ? this.heldRows.get(handle) : undefined;
-    if (!held) throw new Error(`FeatureTables: the row "${id}" is not held`);
+    if (!held) throw new DrawError('invalid-state', `FeatureTables: the row "${id}" is not opened`);
     if (feature.id !== id)
-      throw new Error(`FeatureTables: the feature of "${id}" names another id`);
+      throw new DrawError(
+        'invalid-input',
+        `FeatureTables: the feature of "${id}" names another id`,
+      );
     if (
       feature.layerId !== held.feature.layerId ||
       (feature.groupId ?? undefined) !== (held.feature.groupId ?? undefined)
     ) {
-      throw new Error(
+      throw new DrawError(
+        'invalid-input',
         `FeatureTables: the layer and the group of "${id}" are written with apply, with its key`,
       );
     }
@@ -2071,7 +2100,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     geometries?.forEach((geometry, i) => {
       if (geometry === undefined) return;
       if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) {
-        throw new Error(`FeatureTables: the geometry of the row ${handles[i]} is not a geometry`);
+        throw new DrawError(
+          'invalid-input',
+          `FeatureTables: the geometry of the row ${handles[i]} is not a geometry`,
+        );
       }
     });
     const types = fields.get('type');
@@ -2082,10 +2114,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const groupHandles = groupIds?.map((id, i) => {
       if (id === undefined || id === null || id === '') return -1;
       if (typeof id !== 'string') {
-        throw new Error(`FeatureTables: the group of the row ${handles[i]} is not an id`);
+        throw new DrawError(
+          'invalid-input',
+          `FeatureTables: the group of the row ${handles[i]} is not an id`,
+        );
       }
       const group = this.groups.handleOfId(id);
-      if (group < 0) throw new Error(`FeatureTables: the group "${id}" is unknown`);
+      if (group < 0)
+        throw new DrawError('not-found', `FeatureTables: the group "${id}" is unknown`);
       return group;
     });
     const places = Array.from(handles, (handle) => this.placeOf(handle));
@@ -2098,7 +2134,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const from = place.layer.dims;
       const to = this.dimsOfLayer(layerId);
       if (from !== to && !to.startsWith(from)) {
-        throw new Error(
+        throw new DrawError(
+          'invalid-input',
           `FeatureTables: the row ${handles[i]} has coordinates of ${from}, the layer "${layerId}" of ${to}`,
         );
       }
@@ -2114,13 +2151,16 @@ class FeatureTablesStore implements FeatureTablesInternals {
         if (typeof value === 'string' || (value === undefined && (optional || !!places[i]))) {
           return;
         }
-        throw new Error(`FeatureTables: the ${name} of the row ${handles[i]} is not a string`);
+        throw new DrawError(
+          'invalid-input',
+          `FeatureTables: the ${name} of the row ${handles[i]} is not a string`,
+        );
       });
     }
     places.forEach((place, i) => {
       if (place) return;
       if (!this.ids.has(handles[i])) {
-        throw new Error(`FeatureTables: no row has the handle ${handles[i]}`);
+        throw new DrawError('not-found', `FeatureTables: no row has the handle ${handles[i]}`);
       }
       // A new row: what a feature cannot be without
       const missing = [
@@ -2130,7 +2170,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
         ['order', orders?.[i]],
       ].filter(([, value]) => value === undefined);
       if (missing.length > 0) {
-        throw new Error(
+        throw new DrawError(
+          'invalid-input',
           `FeatureTables: no row has the handle ${handles[i]}, and a new row needs ${missing
             .map(([name]) => name)
             .join(', ')}`,
@@ -2304,11 +2345,17 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const n = handles.length;
     for (const [field, values] of fields) {
       if (values.length !== n) {
-        throw new Error(`FeatureTables: "${field}" has ${values.length} values for ${n} groups`);
+        throw new DrawError(
+          'invalid-input',
+          `FeatureTables: "${field}" has ${values.length} values for ${n} groups`,
+        );
       }
     }
     if (deleted && deleted.length !== n) {
-      throw new Error('FeatureTables: deleted has another length than the groups');
+      throw new DrawError(
+        'invalid-input',
+        'FeatureTables: deleted has another length than the groups',
+      );
     }
     const value = (field: 'id' | 'name' | 'order' | 'layerId' | 'visible' | 'locked', i: number) =>
       fields.get(field)?.[i];
@@ -2317,21 +2364,31 @@ class FeatureTablesStore implements FeatureTablesInternals {
       // The name is the Store's (the tables do not hold it)
       const name = value('name', i);
       if (name !== undefined && typeof name !== 'string') {
-        throw new Error(`FeatureTables: the name of the group ${handles[i]} is not a string`);
+        throw new DrawError(
+          'invalid-input',
+          `FeatureTables: the name of the group ${handles[i]} is not a string`,
+        );
       }
       for (const field of ['id', 'order', 'layerId'] as const) {
         const v = value(field, i);
         if (v !== undefined && typeof v !== 'string') {
-          throw new Error(`FeatureTables: the ${field} of the group ${handles[i]} is not a string`);
+          throw new DrawError(
+            'invalid-input',
+            `FeatureTables: the ${field} of the group ${handles[i]} is not a string`,
+          );
         }
         if (v === undefined && !this.groups.has(handles[i])) {
-          throw new Error(`FeatureTables: the new group ${handles[i]} needs its ${field}`);
+          throw new DrawError(
+            'invalid-input',
+            `FeatureTables: the new group ${handles[i]} needs its ${field}`,
+          );
         }
       }
       for (const field of ['visible', 'locked'] as const) {
         const v = value(field, i);
         if (v !== undefined && typeof v !== 'boolean') {
-          throw new Error(
+          throw new DrawError(
+            'invalid-input',
             `FeatureTables: the ${field} of the group ${handles[i]} is not a boolean`,
           );
         }
@@ -3016,16 +3073,23 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
-      if (!this.ids.has(handle)) throw new Error(`FeatureTables: the handle ${handle} is unknown`);
+      if (!this.ids.has(handle))
+        throw new DrawError('not-found', `FeatureTables: the handle ${handle} is unknown`);
       if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) {
-        throw new Error(`FeatureTables: "${this.ids.idOf(handle)}" is already a row`);
+        throw new DrawError(
+          'already-exists',
+          `FeatureTables: "${this.ids.idOf(handle)}" is already a row`,
+        );
       }
     }
     // The styles of a group built in a Worker get the numbers of the table of styles
     this.numberStyles(data);
     for (let r = 0; r < data.length; r++) {
       if (!this.styles.has(data.styles[r])) {
-        throw new Error(`FeatureTables: a row names the style ${data.styles[r]}, which is unknown`);
+        throw new DrawError(
+          'not-found',
+          `FeatureTables: a row names the style ${data.styles[r]}, which is unknown`,
+        );
       }
     }
     // A group whose rows are not in the order of their keys, or whose keys overlap the rows of
@@ -3218,12 +3282,15 @@ function checkShape(data: RowBlockData): void {
   ];
   for (const [name, length] of perRow) {
     if (length !== n) {
-      throw new Error(`FeatureTables: ${name} has ${length} entries for ${n} rows`);
+      throw new DrawError(
+        'invalid-input',
+        `FeatureTables: ${name} has ${length} entries for ${n} rows`,
+      );
     }
   }
   for (const column of data.properties.columns) {
     if (column.length !== n)
-      throw new Error('FeatureTables: an attribute column has another length');
+      throw new DrawError('invalid-input', 'FeatureTables: an attribute column has another length');
   }
 }
 
@@ -3242,7 +3309,10 @@ function checkDims(data: RowBlockData, dims: CoordinateDimensions): void {
   for (const child of data.geometry.children) {
     const own = child.dimensions ?? 'xy';
     if (own !== dims) {
-      throw new Error(`FeatureTables: a row group has coordinates of ${own}, its layer ${dims}`);
+      throw new DrawError(
+        'invalid-input',
+        `FeatureTables: a row group has coordinates of ${own}, its layer ${dims}`,
+      );
     }
   }
 }

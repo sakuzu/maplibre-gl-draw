@@ -89,6 +89,26 @@ function groups(
   return builder.finish();
 }
 
+describe('a block of rows that cannot be added', () => {
+  it('is left out and told to onBlockRejected, with its layer and why', () => {
+    const rejected: Array<[string, string | undefined]> = [];
+    const { tables, writer } = createFeatureTablesStore({
+      onBlockRejected: (layerId, reason) => rejected.push([layerId, reason.code]),
+    });
+    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    writer.addBlocks('layer', groups(3));
+    internals.advanceQueuedBlocks(stepBudget(10));
+    // Its ids are rows already
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    writer.addBlocks('layer', groups(2));
+    internals.advanceQueuedBlocks(stepBudget(10));
+    expect(rejected).toEqual([['layer', 'already-exists']]);
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+    expect(tables.get('layer')?.rowCount).toBe(3);
+  });
+});
+
 describe('the counts and the lists of the rows of a layer', () => {
   it('count the rows not deleted, and every row read with rowCountWithDeleted, which the list reads', () => {
     const { tables, writer } = createFeatureTables();

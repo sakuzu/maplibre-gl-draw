@@ -506,13 +506,13 @@ describe('the dimensions of a layer raised', () => {
     expect(dimsOfGroups(internals, 'a')).toEqual(['xyz']);
   });
 
-  it('is refused to fewer dimensions, and while a row of the layer is held', () => {
+  it('is refused to fewer dimensions, and while a row of the layer is opened', () => {
     const { tables, writer } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2] }]]);
     expect(() => writer.raiseDimensions('a', 'xym')).toThrow(/cannot be lowered/);
     expect(() => writer.raiseDimensions('a', 'xy')).toThrow(/cannot be lowered/);
     const xy = smallTables('xy', [['p', { type: 'Point', coordinates: [1, 2] }]]);
     internalsOf(xy.tables).open('owner', ['p']);
-    expect(() => xy.writer.raiseDimensions('a', 'xyz')).toThrow(/held as a feature/);
+    expect(() => xy.writer.raiseDimensions('a', 'xyz')).toThrow(/opened as a feature/);
     internalsOf(xy.tables).open('owner', []);
     xy.writer.raiseDimensions('a', 'xyz');
     expect(tables.get('a')).toBeDefined();

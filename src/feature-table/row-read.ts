@@ -11,6 +11,7 @@
  */
 
 import type { Geometry } from 'geojson';
+import { DrawError } from '../shared/draw-error.js';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
 import type { CoordinateDimensions } from '../table/coordinates.js';
 import type { RowInput } from '../table/row-group-builder.js';
@@ -193,7 +194,10 @@ export function rowFeature(
 ): Feature {
   const dims = context.dimensionsOf(layerId);
   if (dims !== 'xy') {
-    throw new Error(`FeatureTables: a row of a layer of ${dims} coordinates is not a feature`);
+    throw new DrawError(
+      'invalid-state',
+      `FeatureTables: a row of a layer of ${dims} coordinates is not a feature`,
+    );
   }
   const data = group.data;
   const groupHandle = data.groups[row];

@@ -392,13 +392,13 @@ export interface FeatureTablesWriter {
    * another block of the layer (one added, or built of rows written, since it was made), is not
    * left out: its rows go to the rows of the layer changed since their blocks were built (the
    * delta), read and drawn at their places at once, and into the blocks with their next
-   * versions. A block with an id that is already a row of the document is left out and reported
-   * on the console.
+   * versions. A block with an id that is already a row of the document is left out, and told to
+   * `FeatureTablesOptions.onBlockRejected` (reported on the console without it).
    *
-   * @throws when an array of a block does not have one entry per row, when a block is empty, when
-   *   its coordinates do not have the dimensions of the layer
-   *   (`FeatureTablesOptions.dimensionsOf`), or when a row names a group of features that is not
-   *   known (nothing is queued then)
+   * @throws `DrawError` with the code `invalid-input` when an array of a block does not have one
+   *   entry per row, when a block is empty, or when its coordinates do not have the dimensions of
+   *   the layer (`FeatureTablesOptions.dimensionsOf`), or `not-found` when a row names a group of
+   *   features that is not known (nothing is queued then)
    */
   addBlocks(layerId: string, blocks: readonly RowBlock[]): void;
   /**
@@ -410,8 +410,9 @@ export interface FeatureTablesWriter {
    * copies its coordinates into them over the frames; the blocks of before are read and drawn as
    * they are until then. The blocks given to `addBlocks` from then on have the new dimensions.
    *
-   * @throws when the dimensions do not hold the ones of the layer (they are never lowered), or
-   *   when a row of the layer is made a feature for this client (`DocumentChange.opened`)
+   * @throws `DrawError` with the code `invalid-input` when the dimensions do not hold the ones of
+   *   the layer (they are never lowered), or `invalid-state` when a row of the layer is opened as
+   *   a feature for this client (`DocumentChange.opened`)
    */
   raiseDimensions(layerId: string, dimensions: CoordinateDimensions): void;
   /**
@@ -439,11 +440,12 @@ export interface FeatureTablesWriter {
    * (`raiseDimensions`).
    *
    * @returns The rows written, by layer
-   * @throws when a handle names no row and a field a new row needs is missing, when a group of
-   *   features is unknown, when a row is moved without a geometry to a layer of dimensions that
-   *   would read its positions otherwise (only `xy` into any, and `xyz` into `xyzm`, keep them), or
-   *   when a value cannot be held (nothing is written then); when a position has more values than
-   *   the dimensions of its layer (the rows before it in the values are written)
+   * @throws `DrawError`: `not-found` when a handle names no row or a group of features is
+   *   unknown; `invalid-input` when a field a new row needs is missing, when a row is moved without
+   *   a geometry to a layer of dimensions that would read its positions otherwise (only `xy` into
+   *   any, and `xyz` into `xyzm`, keep them), or when a value cannot be held (nothing is written
+   *   then), and when a position has more values than the dimensions of its layer (the rows before
+   *   it in the values are written)
    */
   apply(values: RowValues, options?: RowApplyOptions): RowsChange;
   /**
@@ -459,8 +461,8 @@ export interface FeatureTablesWriter {
    * their rows (`apply`). A group shown or hidden shows or hides its members. A group deleted is
    * taken out once no row names it.
    *
-   * @throws when a new group misses its id, its key or its layer, or a value is not of its kind
-   *   (nothing is written then)
+   * @throws `DrawError` with the code `invalid-input` when a new group misses its id, its key or
+   *   its layer, or a value is not of its kind (nothing is written then)
    */
   applyGroups(patch: TableGroupPatch, options?: RowApplyOptions): void;
   /**
@@ -470,7 +472,8 @@ export interface FeatureTablesWriter {
    * with `apply`, with the key of the order, not here). The change is notified as an update of
    * the feature.
    *
-   * @throws when the row is not opened, or the feature names another id, layer or group
+   * @throws `DrawError` with the code `invalid-state` when the row is not opened, or
+   *   `invalid-input` when the feature names another id, layer or group
    */
   applyOpened(id: string, feature: Feature, options?: OpenedApplyOptions): void;
   /**
@@ -509,6 +512,13 @@ export interface FeatureTablesOptions {
    * needs their ids
    */
   readonly onRelease?: (handles: Int32Array) => void;
+  /**
+   * Tells the Store a block given to `addBlocks` that was left out when its turn came, with its
+   * layer and why (`already-exists` for a block with an id that is already a row of the
+   * document): the rows of the block are not in the layer. Without it, the block is reported on
+   * the console
+   */
+  readonly onBlockRejected?: (layerId: string, reason: DrawError) => void;
   /**
    * The most the deletions kept and not let go of may hold: tokens (100 when omitted), and bytes
    * of the rows they keep (64 MiB when omitted, counted at the size of a row of five corners).

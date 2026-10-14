@@ -21,6 +21,7 @@
  * which the group is due for its next version.
  */
 
+import { DrawError } from '../shared/draw-error.js';
 import { decodeCanonicalValue, encodeCanonicalValue } from '../table/canonical-value.js';
 import { GeometryColumnReader } from '../table/table.js';
 import type { TableGeometry } from '../table/types.js';
@@ -84,7 +85,8 @@ export function encodeOverrideValue(value: unknown): OverrideValue {
   if (value === false) return { tag: VALUE_FALSE, number: 0, bytes: null };
   if (value === true) return { tag: VALUE_TRUE, number: 0, bytes: null };
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error(`ValueOverrides: ${value} is not a value`);
+    if (!Number.isFinite(value))
+      throw new DrawError('invalid-input', `ValueOverrides: ${value} is not a value`);
     return { tag: VALUE_NUMBER, number: value, bytes: null };
   }
   if (typeof value === 'string') return { tag: VALUE_STRING, number: 0, bytes: utf8Bytes(value) };

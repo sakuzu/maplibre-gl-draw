@@ -25,6 +25,7 @@
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
 
+import { DrawError } from '../shared/draw-error.js';
 import { compareByteRuns, type Utf8Column } from './utf8-column.js';
 
 /**
@@ -101,7 +102,10 @@ function groupEntry(group: number, groups: GroupKeySource | null): number {
   if (group < 0) return -1;
   const entry = groups ? groups.entryOf(group) : -1;
   if (entry < 0)
-    throw new Error(`compareRowKeys: a row names the group ${group}, which is unknown`);
+    throw new DrawError(
+      'not-found',
+      `compareRowKeys: a row names the group ${group}, which is unknown`,
+    );
   return entry;
 }
 

@@ -16,6 +16,7 @@
  */
 
 import RBush from 'rbush';
+import { DrawError } from '../shared/draw-error.js';
 import type { BoundingBox } from '../shared/types/model.js';
 import type { CoordinateDimensions } from '../table/coordinates.js';
 import { searchPackedRTree } from '../table/packed-rtree.js';
@@ -417,13 +418,19 @@ export class LayerTable {
    */
   insert(group: RowGroup): void {
     const data = group.data;
-    if (data.length === 0) throw new Error('LayerTable: an empty row group');
+    if (data.length === 0) throw new DrawError('invalid-input', 'LayerTable: an empty row group');
     if (!this.inKeyOrder(data)) {
-      throw new Error('LayerTable: the rows of a group are not in the order of their keys');
+      throw new DrawError(
+        'invalid-state',
+        'LayerTable: the rows of a group are not in the order of their keys',
+      );
     }
     const lo = this.placeOfGroup(data);
     if (lo < 0) {
-      throw new Error('LayerTable: the rows of a group overlap the rows of another group');
+      throw new DrawError(
+        'invalid-state',
+        'LayerTable: the rows of a group overlap the rows of another group',
+      );
     }
     this.order.splice(lo, 0, group.handle);
     this.groups.set(group.handle, group);
@@ -446,7 +453,7 @@ export class LayerTable {
   ): void {
     for (const group of before) {
       if (this.groups.get(group.handle) !== group) {
-        throw new Error('LayerTable: a group replaced is not in the layer');
+        throw new DrawError('invalid-state', 'LayerTable: a group replaced is not in the layer');
       }
       this.groups.delete(group.handle);
       this.rows -= group.data.length;
@@ -463,7 +470,7 @@ export class LayerTable {
       const a = groups[i - 1].data;
       const b = groups[i].data;
       if (compareRowKeys(a, a.length - 1, b, 0, groupKeys) >= 0) {
-        throw new Error('LayerTable: the rows of two groups overlap');
+        throw new DrawError('invalid-state', 'LayerTable: the rows of two groups overlap');
       }
     }
     this.order.length = 0;
@@ -793,7 +800,7 @@ export class LayerTable {
   private extraOf(at: OrderRow): number {
     if (!at.group.delta && !at.group.pending) return -1;
     const k = this.readExtras().entries.get(at.group)?.[at.row] ?? -1;
-    if (k < 0) throw new Error('LayerTable: the row is not read in the layer');
+    if (k < 0) throw new DrawError('invalid-state', 'LayerTable: the row is not read in the layer');
     return k;
   }
 
@@ -801,7 +808,7 @@ export class LayerTable {
   private mainOf(at: OrderRow): [number, number] {
     const g = this.orderOf(at.group.handle);
     if (g < 0 || this.groupAt(g) !== at.group || (at.group.state[at.row] & STATE_ELSEWHERE) !== 0) {
-      throw new Error('LayerTable: the row is not read in the layer');
+      throw new DrawError('invalid-state', 'LayerTable: the row is not read in the layer');
     }
     return [g, at.row];
   }
@@ -906,7 +913,8 @@ export class LayerTable {
   comparePositions(a: TablePosition, b: TablePosition): number {
     const ai = this.orderOf(a.group);
     const bi = this.orderOf(b.group);
-    if (ai < 0 || bi < 0) throw new Error('LayerTable: a place names a group not in the layer');
+    if (ai < 0 || bi < 0)
+      throw new DrawError('invalid-state', 'LayerTable: a place names a group not in the layer');
     if (ai !== bi) return ai - bi;
     if (a.slot !== b.slot) return a.slot - b.slot;
     return a.k - b.k;

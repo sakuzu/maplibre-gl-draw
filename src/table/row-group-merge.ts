@@ -20,6 +20,7 @@
  * same function the main thread runs.
  */
 
+import { DrawError } from '../shared/draw-error.js';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
@@ -106,8 +107,8 @@ export interface RowBlockDataMerge extends Omit<RowBlockMerge, 'sources' | 'grou
  * Merges rows of blocks into new blocks, in the order of the layer
  *
  * @returns The new blocks (none for no row); their handles are those of the rows
- * @throws when a source holds styles not numbered yet, or when a row names a group of features
- *   the keys do not give
+ * @throws `DrawError` with the code `invalid-input` when a source holds styles not numbered yet,
+ *   or `not-found` when a row names a group of features the keys do not give
  */
 export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
   return mergeRowBlockData(merge as RowBlockDataMerge);
@@ -122,7 +123,10 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const { sources, rows } = merge;
   for (const source of sources) {
     if (source.styleDictionary) {
-      throw new Error('mergeRowBlock: the styles of a source are not numbered');
+      throw new DrawError(
+        'invalid-input',
+        'mergeRowBlock: the styles of a source are not numbered',
+      );
     }
   }
   const count = rows.length / 2;
@@ -204,7 +208,8 @@ function mergeDims(
       const own = child.dimensions ?? 'xy';
       if (dims === undefined) dims = own;
       else if (given === undefined ? own !== dims : !dimsWithin(own, dims)) {
-        throw new Error(
+        throw new DrawError(
+          'invalid-input',
           `mergeRowBlock: a source has coordinates of ${own}, the merge ${given === undefined ? 'has' : 'makes'} ${dims}`,
         );
       }
@@ -306,7 +311,8 @@ function copyRows(
     const typeName = data.typeNames[data.types[row]];
     let type = typeIndex.get(typeName);
     if (type === undefined) {
-      if (typeNames.length >= 255) throw new Error('mergeRowBlock: more than 255 types');
+      if (typeNames.length >= 255)
+        throw new DrawError('invalid-input', 'mergeRowBlock: more than 255 types');
       type = typeNames.length;
       typeNames.push(typeName);
       typeIndex.set(typeName, type);

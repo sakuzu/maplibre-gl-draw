@@ -17,6 +17,7 @@
 
 import type { Geometry } from 'geojson';
 import { circleRowRings } from '../shared/circle-rings.js';
+import { DrawError } from '../shared/draw-error.js';
 import { encodeCanonicalValue } from './canonical-value.js';
 import {
   type CoordinateDimensions,
@@ -157,15 +158,15 @@ export interface RowBlockBuilder {
   /**
    * Adds a row
    *
-   * @throws when the id was already added, when the geometry is not a GeoJSON geometry of one
-   *   of the six types, or when a value of the style or the attributes cannot be held (a
-   *   number that is not finite, a function)
+   * @throws `DrawError` with the code `invalid-input` when the id was already added, when the
+   *   geometry is not a GeoJSON geometry of one of the six types, or when a value of the style or
+   *   the attributes cannot be held (a number that is not finite, a function)
    */
   addRow(row: RowInput): void;
   /**
    * Puts the rows in the order of the layer and cuts them into blocks
    *
-   * @throws when a row names a group the options do not give
+   * @throws `DrawError` with the code `not-found` when a row names a group the options do not give
    */
   finish(): RowBlock[];
 }
@@ -217,7 +218,8 @@ export function createRowBlockDataBuilder(
       return rows.length;
     },
     addRow(row: RowInput): void {
-      if (seen.has(row.id)) throw new Error(`RowBlockBuilder: the id "${row.id}" is added twice`);
+      if (seen.has(row.id))
+        throw new DrawError('invalid-input', `RowBlockBuilder: the id "${row.id}" is added twice`);
       const geometry = row.geometry ? toRowGeometry(row.geometry, shape.dims) : null;
       const style = styles.intern(row.style ?? {});
       seen.add(row.id);
@@ -485,7 +487,8 @@ function buildGroup(
 
     let type = typeIndex.get(row.type);
     if (type === undefined) {
-      if (typeNames.length >= 255) throw new Error('RowBlockBuilder: more than 255 types');
+      if (typeNames.length >= 255)
+        throw new DrawError('invalid-input', 'RowBlockBuilder: more than 255 types');
       type = typeNames.length;
       typeNames.push(row.type);
       typeIndex.set(row.type, type);

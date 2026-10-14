@@ -35,6 +35,7 @@
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
 
+import { DrawError } from '../shared/draw-error.js';
 import { utf8LengthOf, writeUtf8 } from './utf8-column.js';
 
 /** The kinds of the canonical form */
@@ -213,7 +214,8 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
       writer.byte(value ? CANONICAL_TRUE : CANONICAL_FALSE);
       return;
     case 'number':
-      if (!Number.isFinite(value)) throw new Error(`Canonical value: ${value} is not a value`);
+      if (!Number.isFinite(value))
+        throw new DrawError('invalid-input', `Canonical value: ${value} is not a value`);
       if (Number.isSafeInteger(value) && !Object.is(value, -0)) {
         writer.byte(CANONICAL_INTEGER);
         writer.varInt(value);
@@ -228,7 +230,10 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
       return;
     case 'object': {
       if (depth >= CANONICAL_MAX_DEPTH) {
-        throw new Error(`Canonical value: nested deeper than ${CANONICAL_MAX_DEPTH}`);
+        throw new DrawError(
+          'invalid-input',
+          `Canonical value: nested deeper than ${CANONICAL_MAX_DEPTH}`,
+        );
       }
       if (Array.isArray(value)) {
         writer.byte(CANONICAL_ARRAY);
@@ -258,7 +263,7 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
       return;
     }
     default:
-      throw new Error(`Canonical value: a ${typeof value} is not a value`);
+      throw new DrawError('invalid-input', `Canonical value: a ${typeof value} is not a value`);
   }
 }
 
@@ -330,7 +335,8 @@ class ByteReader {
   }
 
   byte(): number {
-    if (this.at >= this.end) throw new Error('Canonical value: the bytes end too early');
+    if (this.at >= this.end)
+      throw new DrawError('invalid-input', 'Canonical value: the bytes end too early');
     return this.bytes[this.at++];
   }
 
@@ -361,7 +367,8 @@ class ByteReader {
   }
 
   float64(): number {
-    if (this.at + 8 > this.end) throw new Error('Canonical value: the bytes end too early');
+    if (this.at + 8 > this.end)
+      throw new DrawError('invalid-input', 'Canonical value: the bytes end too early');
     const value = this.view.getFloat64(this.at, false);
     this.at += 8;
     return value;
@@ -369,7 +376,8 @@ class ByteReader {
 
   string(): string {
     const length = this.varUint();
-    if (this.at + length > this.end) throw new Error('Canonical value: the bytes end too early');
+    if (this.at + length > this.end)
+      throw new DrawError('invalid-input', 'Canonical value: the bytes end too early');
     const value = decoder.decode(this.bytes.subarray(this.at, this.at + length));
     this.at += length;
     return value;
@@ -387,7 +395,8 @@ class ByteReader {
 export function decodeCanonicalValue(bytes: Uint8Array, start = 0, end = bytes.length): unknown {
   const reader = new ByteReader(bytes, start, end);
   const value = readValue(reader, 0);
-  if (reader.at !== end) throw new Error('Canonical value: bytes are left over');
+  if (reader.at !== end)
+    throw new DrawError('invalid-input', 'Canonical value: bytes are left over');
   return value;
 }
 
@@ -407,14 +416,16 @@ function readValue(reader: ByteReader, depth: number): unknown {
     case CANONICAL_STRING:
       return reader.string();
     case CANONICAL_ARRAY: {
-      if (depth >= CANONICAL_MAX_DEPTH) throw new Error('Canonical value: nested too deep');
+      if (depth >= CANONICAL_MAX_DEPTH)
+        throw new DrawError('invalid-input', 'Canonical value: nested too deep');
       const count = reader.varUint();
       const out: unknown[] = new Array(count);
       for (let i = 0; i < count; i++) out[i] = readValue(reader, depth + 1);
       return out;
     }
     case CANONICAL_OBJECT: {
-      if (depth >= CANONICAL_MAX_DEPTH) throw new Error('Canonical value: nested too deep');
+      if (depth >= CANONICAL_MAX_DEPTH)
+        throw new DrawError('invalid-input', 'Canonical value: nested too deep');
       const count = reader.varUint();
       const out: Record<string, unknown> = {};
       for (let i = 0; i < count; i++) {
@@ -435,6 +446,6 @@ function readValue(reader: ByteReader, depth: number): unknown {
       return out;
     }
     default:
-      throw new Error(`Canonical value: unknown kind ${kind}`);
+      throw new DrawError('invalid-input', `Canonical value: unknown kind ${kind}`);
   }
 }

@@ -24,6 +24,7 @@
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
 
+import { DrawError } from '../shared/draw-error.js';
 import { appendCanonicalValue, decodeCanonicalValue } from './canonical-value.js';
 import {
   compareByteRuns,
@@ -270,7 +271,8 @@ export class ValueColumnBuilder {
     } else if (value === true) {
       this.setTag(row, VALUE_TRUE);
     } else if (typeof value === 'number') {
-      if (!Number.isFinite(value)) throw new Error(`ValueColumn: ${value} is not a value`);
+      if (!Number.isFinite(value))
+        throw new DrawError('invalid-input', `ValueColumn: ${value} is not a value`);
       this.setNumber(row, value);
     } else if (typeof value === 'string') {
       this.textsFor(row, VALUE_STRING).add(value);

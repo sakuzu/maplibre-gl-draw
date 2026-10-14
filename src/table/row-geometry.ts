@@ -18,6 +18,7 @@
 
 import earcut from 'earcut';
 import type { Geometry, Position } from 'geojson';
+import { DrawError } from '../shared/draw-error.js';
 import { type CoordinateDimensions, copyCoordinates, strideOf } from './coordinates.js';
 import { polygonRingRuns } from './polygon-rings.js';
 import type { GeometryType, TableGeometry } from './types.js';
@@ -99,7 +100,10 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDimensions = '
       }
       break;
     default:
-      throw new Error(`RowBlockBuilder: a ${geometry.type} geometry cannot be a row`);
+      throw new DrawError(
+        'invalid-input',
+        `RowBlockBuilder: a ${geometry.type} geometry cannot be a row`,
+      );
   }
   return {
     type: geometry.type,
@@ -113,7 +117,8 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDimensions = '
 
 /** The error of a position of more values than the dimensions of its coordinates */
 function positionTooLong(position: Position, dims: CoordinateDimensions): Error {
-  return new Error(
+  return new DrawError(
+    'invalid-input',
     `RowBlockBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
   );
 }
