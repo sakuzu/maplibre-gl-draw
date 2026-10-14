@@ -5,6 +5,7 @@
  * `draw.groups`: the groups of the document
  */
 
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   featuresInStackingOrder,
   groupsInStackingOrder,
@@ -27,6 +28,7 @@ import {
   groupLocked,
   invalidInput,
   isTaken,
+  layerLocked,
   matches,
   notFound,
   onlyKeys,
@@ -153,6 +155,32 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
     },
 
     moveMany,
+
+    restore(id) {
+      if (typeof id !== 'string') throw invalidInput('The ID must be a string');
+      if (store.getGroup(id)) {
+        throw new DrawError(
+          'already-exists',
+          `There is a group with the ID ${JSON.stringify(id)}`,
+          {
+            id,
+          },
+        );
+      }
+      // A Store of objects keeps no group it deleted; a Store of rows keeps the ones whose
+      // deleted rows are kept
+      const internals = featureTablesInternals(store.tables);
+      const handle = internals?.groups.handleOfId(id) ?? -1;
+      const layerId = handle >= 0 ? internals?.groups.layerOf(handle) : undefined;
+      if (layerId === undefined) throw notFound('group kept by a deletion', id);
+      const layer = store.getLayer(layerId);
+      if (!layer) throw notFound('layer', layerId);
+      if (store.isReadOnly() || layerLocked(store, layer)) return null;
+      const shell = prepareGroupShell(deps, { id }, INPUT_KEYS, new Set());
+      // The Store gives it the place it had (the key of its order its rows were kept with)
+      store.createGroup({ ...shell, id, layerId, kind: 'table' });
+      return store.getGroup(id) ?? null;
+    },
   };
 
   function moveMany(ids: readonly string[], to: MoveTarget): boolean {

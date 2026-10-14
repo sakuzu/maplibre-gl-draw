@@ -48,9 +48,7 @@ export interface GroupsCollection {
    *
    * The group takes the place of its frontmost feature in their layer. In a layer held as rows (a
    * Store that holds its features as rows), a group can be created without features, at the front
-   * of the layer (`featureIds: []` with its `layerId`); and a group created with the ID of a group
-   * deleted whose rows are kept (`StoreChange.retain`) comes back at the place it had, as an undo
-   * of its deletion puts it back.
+   * of the layer (`featureIds: []` with its `layerId`).
    *
    * @returns The new group, or `null` when the document is read-only
    * @throws `DrawError` with the code `not-found` when one of the features or the layer does not
@@ -59,6 +57,22 @@ export interface GroupsCollection {
    *   taken
    */
   create(input: GroupInput): Group | null;
+  /**
+   * Brings back a group this client deleted whose features a Store that holds its features as
+   * rows keeps (`DocumentChange.restoreToken`), at the place it had in its layer, without
+   * features: its features come back into it with `features.restore`, and its name and its flags
+   * are written with `update`. A Store that holds its features as objects keeps no group it
+   * deleted.
+   *
+   * A lock of its layer refuses it, as it refuses the restore of a feature: an undo writes in a
+   * transaction that ignores the locks (`draw.transact(fn, { ignoreLocks: true })`).
+   *
+   * @returns The group, or `null` when it is refused (read-only, a lock)
+   * @throws `DrawError` with the code `not-found` when no deletion keeps a group of this ID (or
+   *   its layer is not there), `already-exists` when there is a group of this ID, or
+   *   `invalid-input` when the ID is not a string
+   */
+  restore(id: string): Group | null;
   /**
    * Creates several groups in one transaction: all of them or none.
    *

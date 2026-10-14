@@ -509,8 +509,8 @@ export interface GroupInput {
    */
   layerId?: string;
   /**
-   * The ID; one is generated when it is left out. In a layer held as rows, the ID of a group
-   * deleted whose rows are kept (`StoreChange.retain`) creates it again at the place it had
+   * The ID; one is generated when it is left out. A group deleted whose features are kept
+   * (`DocumentChange.restoreToken`) is brought back with `groups.restore`
    */
   id?: string;
   /** The name; one is generated when it is left out */
