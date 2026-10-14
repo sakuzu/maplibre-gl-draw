@@ -35,6 +35,7 @@ import type {
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
+import { circleRowRings } from '../shared/circle-rings.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type {
   BoundingBox,
@@ -46,6 +47,12 @@ import type {
   RowValuesSnapshot,
   StoreChange,
 } from '../shared/types/model.js';
+import {
+  type CoordinateDims,
+  type CoordinateSystem,
+  isCoordinateDims,
+  planarCoordinates,
+} from '../table/coordinates.js';
 import {
   createRowGroupBuilder,
   ROW_GROUP_TARGET_ROWS,
@@ -503,11 +510,22 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly deletedGroups = new Set<GroupHandle>();
   /** `FeatureTablesOptions.moveHeldByStateFrom` */
   private readonly moveHeldByStateFrom: number;
+  /** `FeatureTablesOptions.dimsOf` */
+  private readonly declaredDims: ((layerId: string) => CoordinateDims) | undefined;
+  /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
+  private readonly coordinates: CoordinateSystem;
 
   constructor(options: FeatureTablesOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
-    this.readContext = { styles: this.styles, groups: this.groups, strings: this.strings };
+    this.declaredDims = options.dimsOf;
+    this.coordinates = options.coordinates ?? planarCoordinates;
+    this.readContext = {
+      styles: this.styles,
+      groups: this.groups,
+      strings: this.strings,
+      dimsOf: (layerId) => this.dimsOfLayer(layerId),
+    };
     this.worker = options.worker;
     this.hooks = options.hooks;
     this.versions = new GroupVersions(this.versionHost());
@@ -529,7 +547,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
       drawnOnly: (handle) => this.drawnOnlyRows.has(handle),
       mainGroup: (handle) => this.ids.mainGroup(handle),
       rowInput: (group, row) => rowInputOf(this.readContext, group, row),
-      buildRows: (inputs) => this.buildRows(inputs),
+      buildRows: (inputs, dims) => this.buildRows(inputs, dims),
+      coordinates: this.coordinates,
+      ringVertices: circleRowRings.ringVertices,
       groupKeys: this.groups,
       groupKeyList: () => this.groups.keyList(),
       orderVersionOf: (group) => this.groups.orderVersionOf(group),
@@ -622,11 +642,33 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return this.rowGroups.get(handle);
   }
 
-  /** The rows of a layer, made when first written */
+  /**
+   * The dimensions of the coordinates of the rows of a layer: its own once it holds rows, the
+   * ones the options declare for it before
+   *
+   * @throws when the options declare what is not dimensions
+   */
+  dimsOfLayer(layerId: string): CoordinateDims {
+    const layer = this.layers.get(layerId);
+    if (layer) return layer.dims;
+    const dims = this.declaredDims?.(layerId) ?? 'xy';
+    if (!isCoordinateDims(dims)) {
+      throw new Error(`FeatureTables: the layer "${layerId}" has the dimensions ${dims}`);
+    }
+    return dims;
+  }
+
+  /** The rows of a layer, made when first written (with the dimensions declared for it) */
   private layerOf(layerId: string): LayerTable {
     let layer = this.layers.get(layerId);
     if (!layer) {
-      layer = new LayerTable(layerId, this.groups, this.layerList.length, this.nextGroup++);
+      layer = new LayerTable(
+        layerId,
+        this.groups,
+        this.layerList.length,
+        this.nextGroup++,
+        this.dimsOfLayer(layerId),
+      );
       const table = layer;
       layer.setPendingSource(() => this.pendingGroups(table));
       layer.setDrawnOnly((handle) => this.drawnOnlyRows.has(handle));
@@ -694,8 +736,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
   adopt(layerId: string, groups: readonly RowGroupData[]): void {
     // The checks of the shape of the groups are cheap and done here, so that a group made wrong
     // is refused before anything is queued; the checks of the rows are done when it is taken in
+    const dims = this.dimsOfLayer(layerId);
     for (const data of groups) {
       checkShape(data);
+      checkDims(data, dims);
       if (data.length === 0) throw new Error('FeatureTables: an empty row group');
       for (let r = 0; r < data.length; r++) {
         const group = data.groups[r];
@@ -796,7 +840,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (worker && wait) {
         creation.status = 'building';
         const inputs = creation.rows.map((row) => row.input);
-        worker.build(inputs, { groups: this.groups.keyList() }).then(
+        worker.build(inputs, { groups: this.groups.keyList(), dims: creation.layer.dims }).then(
           (groups) => {
             if (creation.status !== 'building') return;
             this.queueCreation(creation, groups);
@@ -848,7 +892,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /** Builds the rows of a creation into row groups on the main thread */
   private buildCreation(creation: Creation): RowGroupData[] {
-    const builder = createRowGroupBuilder({ groups: this.groups.keyList() });
+    const builder = createRowGroupBuilder({
+      groups: this.groups.keyList(),
+      dims: creation.layer.dims,
+      coordinates: this.coordinates,
+      rings: circleRowRings,
+    });
     for (const row of creation.rows) builder.addRow(row.input);
     return builder.finish();
   }
@@ -913,7 +962,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The rows of a creation not taken in yet, built to be read (made when first read) */
   private readingOf(creation: Creation): Creation['reading'] {
     if (creation.reading || creation.rows.length === 0) return creation.reading;
-    const data = this.buildRows(creation.rows.map((row) => row.input));
+    const data = this.buildRows(
+      creation.rows.map((row) => row.input),
+      creation.layer.dims,
+    );
     if (!data) return null;
     const group = createRowGroup(-1, data, false, true);
     const rows = new Map<RowHandle, number>();
@@ -2265,7 +2317,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
         group.data.length,
       ];
       for (let k = 0; k + 1 < points.length; k++) {
-        if (points[k + 1] > points[k]) pieces.push(this.sliceRows(group, points[k], points[k + 1]));
+        if (points[k + 1] > points[k])
+          pieces.push(this.sliceRows(group, points[k], points[k + 1], layer.dims));
       }
     }
     this.versions.startReorder(layer, groups, pieces, orders);
@@ -2275,7 +2328,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * The rows `[from, to)` of a group as a group of their own (the values written in place built
    * into them)
    */
-  private sliceRows(group: RowGroup, from: number, to: number): RowGroupData {
+  private sliceRows(group: RowGroup, from: number, to: number, dims: CoordinateDims): RowGroupData {
     const sources: RowGroupData[] = [group.data];
     const pairs: number[] = [];
     const inputs: RowInput[] = [];
@@ -2290,7 +2343,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         pairs.push(0, r);
       }
     }
-    const built = inputs.length > 0 ? this.buildRows(inputs) : null;
+    const built = inputs.length > 0 ? this.buildRows(inputs, dims) : null;
     if (built) {
       sources.push(built);
       for (let r = 0; r < built.length; r++) pairs.push(1, r);
@@ -2301,6 +2354,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
       groups: this.groups,
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
+      dims,
+      ringVertices: circleRowRings.ringVertices,
+      coordinates: this.coordinates,
     });
     return data;
   }
@@ -2698,7 +2754,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       writtenOf.set(entry.handle, number);
     }
     if (inputs.length > 0) {
-      const built = this.buildRows(inputs);
+      const built = this.buildRows(inputs, layer.dims);
       if (built) {
         sources.push(built);
         for (let r = 0; r < built.length; r++) pairs.push(sources.length - 1, r);
@@ -2710,6 +2766,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
       groups: this.groups,
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
+      dims: layer.dims,
+      ringVertices: circleRowRings.ringVertices,
+      coordinates: this.coordinates,
     });
     const group = merged.length > 0 ? createRowGroup(delta.handle, merged[0], true) : null;
     const written = new Float64Array(group?.data.length ?? 0);
@@ -2749,12 +2808,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const listener of this.deltaListeners) listener(layer.layerId);
   }
 
-  /** Builds rows into one row group, numbered and with their handles (null for no row) */
-  private buildRows(inputs: readonly RowInput[]): RowGroupData | null {
+  /**
+   * Builds rows into one row group of coordinates of dimensions, numbered and with their handles
+   * (null for no row)
+   */
+  private buildRows(inputs: readonly RowInput[], dims: CoordinateDims): RowGroupData | null {
     const builder = createRowGroupBuilder({
       groups: this.groups.keyList(),
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
+      dims,
+      coordinates: this.coordinates,
+      rings: circleRowRings,
     });
     for (const input of inputs) builder.addRow(input);
     const [data] = builder.finish();
@@ -2782,6 +2847,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /** Takes in one row group: the handles, the numbers of its styles, the state of its rows */
   private adoptGroup(layer: LayerTable, data: RowGroupData): void {
+    checkDims(data, layer.dims);
     if (data.handles.some((handle) => handle < 0)) {
       data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     }
@@ -2987,6 +3053,20 @@ function checkShape(data: RowGroupData): void {
   for (const column of data.properties.columns) {
     if (column.length !== n)
       throw new Error('FeatureTables: an attribute column has another length');
+  }
+}
+
+/**
+ * Checks that the coordinates of a row group have the dimensions of its layer
+ *
+ * @throws when a geometry column of the group has others
+ */
+function checkDims(data: RowGroupData, dims: CoordinateDims): void {
+  for (const child of data.geometry.children) {
+    const own = child.dims ?? 'xy';
+    if (own !== dims) {
+      throw new Error(`FeatureTables: a row group has coordinates of ${own}, its layer ${dims}`);
+    }
   }
 }
 

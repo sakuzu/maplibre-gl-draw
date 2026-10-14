@@ -16,9 +16,9 @@
  */
 
 import type { Geometry } from 'geojson';
+import { circleRingCoords } from '../shared/circle-rings.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import {
-  circleRingCoords,
   polygonRanges,
   type RowGeometry,
   ringOffsetsOf,
@@ -60,8 +60,9 @@ export interface GeometryWrite {
    */
   readonly sameShape: boolean;
   /**
-   * The coordinates of the row that changed, `[from, to)` counted from its first coordinate (a
-   * Circle counts the coordinates of its ring). Empty when nothing moved
+   * The coordinates of the row whose `x` or `y` changed, `[from, to)` counted from its first
+   * coordinate (a Circle counts the coordinates of its ring): what is drawn of them. Empty when
+   * nothing moved, a write of a `z` or an `m` only included
    */
   readonly from: number;
   readonly to: number;
@@ -94,10 +95,13 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
 }
 
 /**
- * Writes the geometry of a row in place
+ * Writes the geometry of a row in place, as coordinates of the dimensions of its layer: every
+ * value of a coordinate is written (a `z` or an `m` a position does not have is NaN), and the
+ * coordinates whose `x` or `y` changed are told apart (only they are drawn again)
  *
- * @param table The layer of the row (its index of the moved rows)
- * @throws when the geometry is not of one of the six types a row holds
+ * @param table The layer of the row (its dimensions, its index of the moved rows)
+ * @throws when the geometry is not of one of the six types a row holds, or when a position has
+ *   more values than the dimensions of the layer
  * @internal
  */
 export function writeRowGeometry(
@@ -106,29 +110,32 @@ export function writeRowGeometry(
   row: number,
   geometry: Geometry,
 ): GeometryWrite {
-  const next = toRowGeometry(geometry);
+  const next = toRowGeometry(geometry, table.dims);
+  const stride = next.stride;
   const current = geometryAt(group, row);
   let sameStructure = false;
   let from = 0;
-  let to = next.coords.length / 2;
+  let to = next.coords.length / stride;
   if (current && fits(current, next)) {
     // The coordinates are written over the ones of the column the row is read from
     sameStructure = true;
     const { reader, at } = current;
     const first = reader.vertexStart(at);
-    const stride = reader.dimensions;
     const coords = reader.coords;
     from = to;
     let last = -1;
-    for (let v = 0; v < next.coords.length / 2; v++) {
+    for (let v = 0; v < next.coords.length / stride; v++) {
       const target = (first + v) * stride;
-      const x = next.coords[v * 2];
-      const y = next.coords[v * 2 + 1];
-      if (coords[target] === x && coords[target + 1] === y) continue;
-      if (v < from) from = v;
-      last = v;
-      coords[target] = x;
-      coords[target + 1] = y;
+      const x = next.coords[v * stride];
+      const y = next.coords[v * stride + 1];
+      if (coords[target] !== x || coords[target + 1] !== y) {
+        if (v < from) from = v;
+        last = v;
+        coords[target] = x;
+        coords[target + 1] = y;
+      }
+      // A `z` and an `m` are written, and are not drawn
+      for (let k = 2; k < stride; k++) coords[target + k] = next.coords[v * stride + k];
     }
     to = last + 1;
     if (last < 0) from = to = 0;
@@ -137,11 +144,7 @@ export function writeRowGeometry(
     if (main && fits(main, next)) {
       // Back to the shape of the column: written there, and the override is dropped
       const first = main.reader.vertexStart(main.at);
-      const stride = main.reader.dimensions;
-      for (let v = 0; v < next.coords.length / 2; v++) {
-        main.reader.coords[(first + v) * stride] = next.coords[v * 2];
-        main.reader.coords[(first + v) * stride + 1] = next.coords[v * 2 + 1];
-      }
+      main.reader.coords.set(next.coords, first * stride);
       group.geometries?.deleteGeometry(row);
     } else {
       group.geometries ??= new GeometryOverrides();
@@ -203,17 +206,20 @@ export function isRadiusKey(group: RowGroup, row: number, key: string): boolean 
   return key === RADIUS_KEY && rowType(group.data, row) === 'Circle';
 }
 
-/** Whether a geometry has the type and the numbers of parts, rings and coordinates of a row */
+/**
+ * Whether a geometry has the type, the dimensions and the numbers of parts, rings and coordinates
+ * of a row
+ */
 function fits(current: RowGeometryAt, next: RowGeometry): boolean {
   const { reader, at } = current;
-  if (reader.type !== next.type) return false;
+  if (reader.type !== next.type || reader.stride !== next.stride) return false;
   const o = reader.offsets;
   switch (reader.type) {
     case 'Point':
-      return next.coords.length === 2;
+      return next.coords.length === next.stride;
     case 'LineString':
     case 'MultiPoint':
-      return o[0][at + 1] - o[0][at] === next.coords.length / 2;
+      return o[0][at + 1] - o[0][at] === next.coords.length / next.stride;
     case 'Polygon':
     case 'MultiLineString': {
       if (o[0][at + 1] - o[0][at] !== next.parts.length) return false;
@@ -260,7 +266,7 @@ function shapeOf(group: RowGroup, row: number, geometry: RowGeometryAt): RowShap
     if (!ring) {
       return {
         coords: reader.coords,
-        stride: reader.dimensions,
+        stride: reader.stride,
         from: at,
         to: at + 1,
         fill: [],
@@ -274,11 +280,16 @@ function shapeOf(group: RowGroup, row: number, geometry: RowGeometryAt): RowShap
   const from = reader.vertexStart(at);
   const to = reader.vertexStart(at + 1);
   if (reader.type !== 'Polygon' && reader.type !== 'MultiPolygon') {
-    return { coords: reader.coords, stride: reader.dimensions, from, to, fill: null, ring: 0 };
+    return { coords: reader.coords, stride: reader.stride, from, to, fill: null, ring: 0 };
   }
   const local = rowGeometryOfColumn(reader, at);
-  const fill = triangulateRow(local.coords, ringOffsetsOf(local), polygonRanges(local)).indices;
-  return { coords: reader.coords, stride: reader.dimensions, from, to, fill, ring: 0 };
+  const fill = triangulateRow(
+    local.coords,
+    ringOffsetsOf(local),
+    polygonRanges(local),
+    local.stride,
+  ).indices;
+  return { coords: reader.coords, stride: reader.stride, from, to, fill, ring: 0 };
 }
 
 /**

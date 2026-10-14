@@ -12,6 +12,7 @@
 
 import type { Geometry } from 'geojson';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
+import type { CoordinateDims } from '../table/coordinates.js';
 import type { RowInput } from '../table/row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
@@ -40,6 +41,8 @@ export interface RowReadContext {
   readonly styles: StyleTable;
   readonly groups: GroupTable;
   readonly strings: ValueStringCache;
+  /** The dimensions of the coordinates of a layer */
+  dimsOf(layerId: string): CoordinateDims;
 }
 
 /**
@@ -150,7 +153,8 @@ export function indexOfRow(rows: Int32Array, row: number): number {
 }
 
 /**
- * The GeoJSON geometry of a row (null for a row without one)
+ * The GeoJSON geometry of a row with every value of its coordinates (`fullPosition`: a `z` and
+ * an `m` it has), null for a row without one
  *
  * @internal
  */
@@ -158,7 +162,7 @@ export function rowGeometry(group: RowGroup, row: number): Geometry | null {
   const geometry = geometryAt(group, row);
   if (!geometry) return null;
   const { reader, at } = geometry;
-  return { type: reader.type, coordinates: reader.coordinatesOf(at) } as Geometry;
+  return { type: reader.type, coordinates: reader.fullCoordinatesOf(at) } as Geometry;
 }
 
 /**
@@ -175,6 +179,10 @@ export function rowPoint(group: RowGroup, row: number): Coordinate | null {
 /**
  * A row as a feature (a new object every time)
  *
+ * A feature holds coordinates of `x` and `y`: a row of a layer whose coordinates have a `z` or
+ * an `m` is not made a feature, so that a feature written back does not lose them
+ *
+ * @throws when the coordinates of the layer are not `xy`
  * @internal
  */
 export function rowFeature(
@@ -183,6 +191,10 @@ export function rowFeature(
   group: RowGroup,
   row: number,
 ): Feature {
+  const dims = context.dimsOf(layerId);
+  if (dims !== 'xy') {
+    throw new Error(`FeatureTables: a row of a layer of ${dims} coordinates is not a feature`);
+  }
   const data = group.data;
   const groupHandle = data.groups[row];
   const geometry = rowGeometry(group, row) ?? { type: 'Point', coordinates: [NaN, NaN] };

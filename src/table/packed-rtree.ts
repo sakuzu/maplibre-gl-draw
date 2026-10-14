@@ -44,12 +44,16 @@ export interface PackedRTree {
  * A row whose bbox is NaN (a row without a geometry) is left out.
  *
  * @param bounds `[minX, minY, maxX, maxY]` per row
+ * @param nodeSize The number of entries of one node
+ * @param sortKey The key the leaves are put in order by, from the center of a bbox (the Hilbert
+ *   curve of the centers over the extent of the rows when omitted)
  *
  * @internal
  */
 export function buildPackedRTree(
   bounds: Float64Array,
   nodeSize: number = DEFAULT_NODE_SIZE,
+  sortKey?: (centerX: number, centerY: number) => number,
 ): PackedRTree {
   const rowCount = bounds.length >> 2;
   let numItems = 0;
@@ -112,6 +116,10 @@ export function buildPackedRTree(
     for (let i = 0; i < numItems; i++) {
       const cx = (boxes[i * 4] + boxes[i * 4 + 2]) / 2;
       const cy = (boxes[i * 4 + 1] + boxes[i * 4 + 3]) / 2;
+      if (sortKey) {
+        values[i] = sortKey(cx, cy);
+        continue;
+      }
       const x = Math.floor((scale * (cx - minX)) / width);
       const y = Math.floor((scale * (cy - minY)) / height);
       values[i] = hilbertIndex(x, y);

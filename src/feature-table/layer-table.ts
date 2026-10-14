@@ -17,6 +17,7 @@
 
 import RBush from 'rbush';
 import type { BoundingBox } from '../shared/types/model.js';
+import type { CoordinateDims } from '../table/coordinates.js';
 import { searchPackedRTree } from '../table/packed-rtree.js';
 import { ROW_FLAG_DELETED, type RowGroupData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
@@ -293,18 +294,27 @@ export class LayerTable {
   private extrasKey = '';
 
   /**
+   * The dimensions of the coordinates of the rows of the layer. The groups built since it was
+   * last raised have them; a group of before keeps its own (fewer) until its next version
+   */
+  dims: CoordinateDims;
+
+  /**
    * @param layerId The layer
    * @param groupKeys The keys of the groups of features the rows name
    * @param serial The number of the layer among the layers of its tables
    * @param deltaHandle The handle of the group of its delta
+   * @param dims The dimensions of the coordinates of its rows
    */
   constructor(
     readonly layerId: string,
     private readonly groupKeys: GroupKeySource & { readonly revision?: number },
     readonly serial = 0,
     deltaHandle: RowGroupHandle = -1,
+    dims: CoordinateDims = 'xy',
   ) {
     this.delta = new DeltaRows(deltaHandle);
+    this.dims = dims;
   }
 
   /** The number of rows read in the layer (deleted ones included until they are dropped) */

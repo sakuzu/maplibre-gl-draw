@@ -5,6 +5,7 @@ import earcut from 'earcut';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
+import { circleRowRings } from '../shared/circle-rings.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { decodeCanonicalValue } from './canonical-value.js';
@@ -260,9 +261,9 @@ describe('createRowGroupBuilder', () => {
     ]);
   });
 
-  it('triangulates a Circle from its radius', () => {
+  it('triangulates a Circle from its radius, with the rings of the Circles', () => {
     const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
-    const builder = createRowGroupBuilder();
+    const builder = createRowGroupBuilder({ rings: circleRowRings });
     builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
     const [group] = builder.finish();
     const ring = generateCirclePolygon([139.7, 35.7], 1000);
@@ -272,6 +273,16 @@ describe('createRowGroupBuilder', () => {
     // The bbox is the one of the circle, not of its center
     expect(group.rowBounds[2] - group.rowBounds[0]).toBeGreaterThan(0.01);
     expect(group.vertexCount).toBe(ring.length);
+  });
+
+  it('draws a Circle as its point without the rings of the Circles', () => {
+    const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
+    const builder = createRowGroupBuilder();
+    builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
+    const [group] = builder.finish();
+    expect(trianglesOf(group, 0)).toEqual([]);
+    expect(Array.from(group.rowBounds)).toEqual([139.7, 35.7, 139.7, 35.7]);
+    expect(group.vertexCount).toBe(1);
   });
 
   it('keeps the indices of a large fill in 32 bits', { timeout: 60_000 }, () => {

@@ -27,6 +27,7 @@
  */
 
 import type { BoundingBox, RowsChange } from '../shared/types/model.js';
+import type { CoordinateDims, CoordinateSystem } from '../table/coordinates.js';
 import type { RowGroupBuilderOptions, RowGroupKey, RowInput } from '../table/row-group-builder.js';
 import { ROW_GROUP_TARGET_ROWS, ROW_GROUP_TARGET_VERTICES } from '../table/row-group-builder.js';
 import { mergeRowGroup, type RowGroupMerge } from '../table/row-group-merge.js';
@@ -38,12 +39,23 @@ import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './
  * The work the tables hand to a Worker of the host: the functions of the
  * `@sakuzu/maplibre-gl-draw/table` subpath, run there on copies of the columns.
  *
+ * What is handed over can be posted as it is: it holds no function. The Worker gives the
+ * builder the rings of the Circles (`circleRowRings`), and the system of the coordinates to the
+ * builder and the merge when the tables are given one (`FeatureTablesOptions.coordinates`).
+ *
  * @example A Worker of the host
  * ```ts
  * // in the Worker
- * import { createRowGroupBuilder, mergeRowGroup, rowGroupTransferList } from '@sakuzu/maplibre-gl-draw/table';
+ * import {
+ *   circleRowRings,
+ *   createRowGroupBuilder,
+ *   mergeRowGroup,
+ *   rowGroupTransferList,
+ * } from '@sakuzu/maplibre-gl-draw/table';
  * self.onmessage = ({ data }) => {
- *   const groups = data.merge ? mergeRowGroup(data.merge) : build(data.rows, data.options);
+ *   const groups = data.merge
+ *     ? mergeRowGroup(data.merge)
+ *     : build(data.rows, { ...data.options, rings: circleRowRings });
  *   self.postMessage({ id: data.id, groups }, rowGroupTransferList(groups));
  * };
  * ```
@@ -180,8 +192,15 @@ export interface VersionHost {
   mainGroup(handle: RowHandle): RowGroupHandle;
   /** The values of a row with what was written in place, as the builder takes them */
   rowInput(group: RowGroup, row: number): RowInput;
-  /** Builds rows into one row group, numbered and with their handles (null for none) */
-  buildRows(inputs: readonly RowInput[]): RowGroupData | null;
+  /**
+   * Builds rows into one row group of coordinates of dimensions, numbered and with their handles
+   * (null for none)
+   */
+  buildRows(inputs: readonly RowInput[], dims: CoordinateDims): RowGroupData | null;
+  /** The system of the coordinates of the rows */
+  readonly coordinates: CoordinateSystem;
+  /** The number of coordinates a row that draws a ring is counted as (`RowRings.ringVertices`) */
+  readonly ringVertices: number;
   /** The keys of the order of the groups of features */
   readonly groupKeys: RowGroupMerge['groups'];
   /** The same as a list (what a Worker is sent) */
@@ -461,7 +480,9 @@ export class GroupVersions {
     const rows = merge.rows.length / 2;
     const worker = host.worker;
     if (worker && rows > FOLD_INLINE_ROWS) {
-      worker.merge({ ...merge, groups: host.groupKeyList() }).then(
+      // What is posted holds no function: the Worker has its own system of coordinates
+      const { coordinates: _coordinates, ...posted } = merge;
+      worker.merge({ ...posted, groups: host.groupKeyList() }).then(
         (built) => {
           if (version.status !== 'building') return;
           // The keys of the groups of features of its rows changed meanwhile: dropped (the
@@ -541,13 +562,21 @@ export class GroupVersions {
       }
     }
     if (inputs.length > 0) {
-      const built = host.buildRows(inputs);
+      const built = host.buildRows(inputs, layer.dims);
       if (built) {
         sources.push(built);
         for (let r = 0; r < built.length; r++) pairs.push(sources.length - 1, r);
       }
     }
-    return { sources, rows: Int32Array.from(pairs), groups: host.groupKeys, cutPast: 2 };
+    return {
+      sources,
+      rows: Int32Array.from(pairs),
+      groups: host.groupKeys,
+      cutPast: 2,
+      dims: layer.dims,
+      ringVertices: host.ringVertices,
+      coordinates: host.coordinates,
+    };
   }
 
   /**

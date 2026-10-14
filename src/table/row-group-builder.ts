@@ -16,11 +16,16 @@
  */
 
 import type { Geometry } from 'geojson';
-import { readDrawProperty } from '../shared/properties.js';
 import { encodeCanonicalValue } from './canonical-value.js';
+import {
+  type CoordinateDims,
+  type CoordinateSystem,
+  planarCoordinates,
+  sortKeyOf,
+  strideOf,
+} from './coordinates.js';
 import { buildPackedRTree } from './packed-rtree.js';
 import {
-  circleRingCoords,
   polygonRanges,
   type RowGeometry,
   ringOffsetsOf,
@@ -36,6 +41,7 @@ import {
   type TriangleCache,
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
+import type { RowRings } from './row-rings.js';
 import type { GeometryType, TableGeometry, TableMixedGeometry } from './types.js';
 import {
   hashByteRun,
@@ -89,6 +95,21 @@ export interface RowGroupBuilderOptions {
    * omitted). A single row of more coordinates makes a group of its own
    */
   readonly targetVertices?: number;
+  /**
+   * The dimensions of the coordinates of the rows: those of their layer (`xy` when omitted). A
+   * position of fewer values gets NaN for the others; one of more values is refused
+   */
+  readonly dims?: CoordinateDims;
+  /**
+   * The system of the coordinates the bbox of the rows and their spatial index are made in (the
+   * plane when omitted). A function: a Worker passes its own
+   */
+  readonly coordinates?: CoordinateSystem;
+  /**
+   * The rings the rows of some types draw around their point (a Circle and its radius; none when
+   * omitted). A function: a Worker passes its own (`circleRowRings` for the Circles)
+   */
+  readonly rings?: RowRings;
 }
 
 /**
@@ -150,6 +171,11 @@ export interface RowGroupBuilder {
 export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): RowGroupBuilder {
   const targetRows = Math.max(1, options.targetRows ?? ROW_GROUP_TARGET_ROWS);
   const targetVertices = Math.max(1, options.targetVertices ?? ROW_GROUP_TARGET_VERTICES);
+  const shape: GroupShape = {
+    dims: options.dims ?? 'xy',
+    coordinates: options.coordinates ?? planarCoordinates,
+    rings: options.rings ?? null,
+  };
 
   const ids = new Utf8ColumnBuilder(256);
   const itemKeys = new Utf8ColumnBuilder(256);
@@ -167,7 +193,7 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
     },
     addRow(row: RowInput): void {
       if (seen.has(row.id)) throw new Error(`RowGroupBuilder: the id "${row.id}" is added twice`);
-      const geometry = row.geometry ? toRowGeometry(row.geometry) : null;
+      const geometry = row.geometry ? toRowGeometry(row.geometry, shape.dims) : null;
       const style = styles.intern(row.style ?? {});
       seen.add(row.id);
       const at = rows.length;
@@ -198,7 +224,9 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
 
       const dictionary = styles.finish();
       const vertexCounts = new Int32Array(n);
-      for (let i = 0; i < n; i++) vertexCounts[i] = vertexCountOf(rows[i], geometries[i]);
+      for (let i = 0; i < n; i++) {
+        vertexCounts[i] = vertexCountOf(rows[i], geometries[i], shape.rings);
+      }
 
       const out: RowGroupData[] = [];
       let start = 0;
@@ -212,7 +240,15 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
           end++;
         }
         out.push(
-          buildGroup(order.subarray(start, end), keys, rows, geometries, styleRefs, dictionary),
+          buildGroup(
+            order.subarray(start, end),
+            keys,
+            rows,
+            geometries,
+            styleRefs,
+            dictionary,
+            shape,
+          ),
         );
         start = end;
       }
@@ -284,13 +320,23 @@ export class ChildBuilder {
   level1: number[] = [0];
   level2: number[] = [0];
   rows = 0;
+  private readonly stride: number;
 
-  constructor(readonly type: GeometryType) {}
+  /**
+   * @param type The geometry type of the column
+   * @param dims The dimensions of its coordinates (those of every row added)
+   */
+  constructor(
+    readonly type: GeometryType,
+    readonly dims: CoordinateDims = 'xy',
+  ) {
+    this.stride = strideOf(dims);
+  }
 
-  /** Adds the geometry of a row; returns its row in the child */
+  /** Adds the geometry of a row (of the dimensions of the column); returns its row in the child */
   add(geometry: RowGeometry): number {
     for (let k = 0; k < geometry.coords.length; k++) this.coords.push(geometry.coords[k]);
-    const vertices = this.coords.length / 2;
+    const vertices = this.coords.length / this.stride;
     switch (this.type) {
       case 'Point':
         break;
@@ -327,23 +373,26 @@ export class ChildBuilder {
 
   finish(): TableGeometry {
     const coords = Float64Array.from(this.coords);
+    const dims = this.dims;
     switch (this.type) {
       case 'Point':
-        return { type: 'Point', coords };
+        return { type: 'Point', coords, dims };
       case 'LineString':
       case 'MultiPoint':
-        return { type: this.type, coords, offsets: [Int32Array.from(this.level0)] };
+        return { type: this.type, coords, dims, offsets: [Int32Array.from(this.level0)] };
       case 'Polygon':
       case 'MultiLineString':
         return {
           type: this.type,
           coords,
+          dims,
           offsets: [Int32Array.from(this.level0), Int32Array.from(this.level1)],
         };
       case 'MultiPolygon':
         return {
           type: 'MultiPolygon',
           coords,
+          dims,
           offsets: [
             Int32Array.from(this.level0),
             Int32Array.from(this.level1),
@@ -354,6 +403,13 @@ export class ChildBuilder {
   }
 }
 
+/** What the coordinates of the groups are, and what they are read as */
+interface GroupShape {
+  readonly dims: CoordinateDims;
+  readonly coordinates: CoordinateSystem;
+  readonly rings: RowRings | null;
+}
+
 /** Builds one group from its rows in order (`order` holds the indices of the rows added) */
 function buildGroup(
   order: Int32Array,
@@ -362,6 +418,7 @@ function buildGroup(
   geometries: ReadonlyArray<RowGeometry | null>,
   styleRefs: Int32Array,
   dictionary: Utf8Column,
+  shape: GroupShape,
 ): RowGroupData {
   const length = order.length;
   const ids = new Utf8ColumnBuilder(length);
@@ -439,21 +496,35 @@ function buildGroup(
     let child = childIndex.get(geometry.type);
     if (child === undefined) {
       child = children.length;
-      children.push(new ChildBuilder(geometry.type));
+      children.push(new ChildBuilder(geometry.type, shape.dims));
       childIndex.set(geometry.type, child);
     }
     childTypes[r] = child;
     childRows[r] = children[child].add(geometry);
-    vertexCount += vertexCountOf(row, geometry);
+    vertexCount += vertexCountOf(row, geometry, shape.rings);
 
-    const circle = circleRing(row, geometry);
-    if (circle) {
-      writeBounds(rowBounds, r, circle, 0, circle.length / 2);
-      triangles.polygonRow(r, circle, new Int32Array([0, circle.length / 2]), [[0, 1]]);
+    const ring = ringOfRow(row, geometry, shape.rings);
+    if (ring) {
+      shape.coordinates.rowBox(ring, 2, 0, ring.length / 2, rowBounds, r * 4);
+      triangles.polygonRow(r, ring, 2, new Int32Array([0, ring.length / 2]), [[0, 1]]);
     } else {
-      writeBounds(rowBounds, r, geometry.coords, 0, geometry.coords.length / 2);
+      const stride = geometry.stride;
+      shape.coordinates.rowBox(
+        geometry.coords,
+        stride,
+        0,
+        geometry.coords.length / stride,
+        rowBounds,
+        r * 4,
+      );
       if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-        triangles.polygonRow(r, geometry.coords, ringOffsetsOf(geometry), polygonRanges(geometry));
+        triangles.polygonRow(
+          r,
+          geometry.coords,
+          stride,
+          ringOffsetsOf(geometry),
+          polygonRanges(geometry),
+        );
       } else {
         triangles.skip(r);
       }
@@ -488,60 +559,36 @@ function buildGroup(
     properties: { keys: keysOfProperties, columns },
     rowBounds,
     triangles: triangles.finish(),
-    index: buildPackedRTree(rowBounds),
+    index: buildPackedRTree(rowBounds, undefined, sortKeyOf(shape.coordinates)),
     vertexCount,
   };
 }
 
-/** The coordinates of the ring of a Circle, or null for any other row */
-function circleRing(row: RowInput, geometry: RowGeometry): Float64Array | null {
-  if (row.type !== 'Circle' || geometry.type !== 'Point') return null;
-  const radius = readDrawProperty(row.properties, 'radiusMeters');
-  return circleRingCoords([geometry.coords[0], geometry.coords[1]], radius ?? 0);
+/** The ring a row draws around its point, or null for a row that draws its geometry */
+function ringOfRow(
+  row: RowInput,
+  geometry: RowGeometry,
+  rings: RowRings | null,
+): Float64Array | null {
+  if (!rings || geometry.type !== 'Point' || !rings.draws(row.type)) return null;
+  const properties = row.properties;
+  return rings.ringOf(row.type, geometry.coords[0], geometry.coords[1], (key) =>
+    properties ? properties[key] : undefined,
+  );
 }
 
 /** The number of coordinates a row draws (the estimate of the work of a group) */
-function vertexCountOf(row: RowInput, geometry: RowGeometry | null): number {
+function vertexCountOf(
+  row: RowInput,
+  geometry: RowGeometry | null,
+  rings: RowRings | null,
+): number {
   if (!geometry) return 0;
-  if (row.type === 'Circle' && geometry.type === 'Point') {
-    const ring = circleRing(row, geometry);
+  if (rings && geometry.type === 'Point' && rings.draws(row.type)) {
+    const ring = ringOfRow(row, geometry, rings);
     return ring ? ring.length / 2 : 1;
   }
-  return geometry.coords.length / 2;
-}
-
-/** Writes the bbox of the coordinates `[from, to)` (NaN when there is none or one is NaN) */
-function writeBounds(
-  bounds: Float64Array,
-  row: number,
-  coords: Float64Array,
-  from: number,
-  to: number,
-): void {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (let v = from; v < to; v++) {
-    const x = coords[v * 2];
-    const y = coords[v * 2 + 1];
-    if (Number.isNaN(x) || Number.isNaN(y)) {
-      setNaNBounds(bounds, row);
-      return;
-    }
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  if (minX === Number.POSITIVE_INFINITY) {
-    setNaNBounds(bounds, row);
-    return;
-  }
-  bounds[row * 4] = minX;
-  bounds[row * 4 + 1] = minY;
-  bounds[row * 4 + 2] = maxX;
-  bounds[row * 4 + 3] = maxY;
+  return geometry.coords.length / geometry.stride;
 }
 
 function setNaNBounds(bounds: Float64Array, row: number): void {
@@ -568,16 +615,18 @@ class TriangleWriter {
   /**
    * The triangles of the polygons of a row
    *
+   * @param stride The number of values of a coordinate of `coords`
    * @param ringOffsets The offsets from a ring to its first coordinate
    * @param polygons The rings of each polygon, `[first, end)`
    */
   polygonRow(
     row: number,
     coords: Float64Array,
+    stride: number,
     ringOffsets: Int32Array,
     polygons: ReadonlyArray<readonly [number, number]>,
   ): void {
-    const { indices: out, vertices: base } = triangulateRow(coords, ringOffsets, polygons);
+    const { indices: out, vertices: base } = triangulateRow(coords, ringOffsets, polygons, stride);
     if (base >= WIDE_VERTICES) {
       this.wideRows.push(row);
       for (const index of out) this.wideIndices.push(index);

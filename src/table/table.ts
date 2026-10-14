@@ -12,11 +12,12 @@
  * type, or the children of a mixed geometry column, where every row names its child and its row
  * within it.
  *
- * A pure module (it imports only types), so it runs in a Worker as well.
+ * A pure module (it depends on nothing outside `/table`), so it runs in a Worker as well.
  */
 
-import type { Geometry } from 'geojson';
+import type { Geometry, Position } from 'geojson';
 import type { Coordinate, Feature, FeatureCoordinates } from '../shared/types/model.js';
+import { type CoordinateDims, isCoordinateDims, strideOf } from './coordinates.js';
 import type {
   Column,
   DictionaryColumn,
@@ -86,8 +87,10 @@ export function columnValue(column: Column, row: number): unknown {
 export class GeometryColumnReader {
   readonly type: GeometryType;
   readonly coords: Float64Array;
-  /** The number of values per coordinate (2 or 3) */
-  readonly dimensions: number;
+  /** The dimensions of the coordinates */
+  readonly dims: CoordinateDims;
+  /** The number of values per coordinate (2 to 4) */
+  readonly stride: number;
   readonly offsets: readonly Int32Array[];
   /** The number of rows the column holds */
   readonly length: number;
@@ -108,10 +111,14 @@ export class GeometryColumnReader {
     if (!(geometry.coords instanceof Float64Array)) {
       throw new Error(`Table: ${path}.coords must be a Float64Array`);
     }
-    const dimensions = geometry.dimensions ?? 2;
-    if (dimensions !== 2 && dimensions !== 3) {
-      throw new Error(`Table: ${at}dimensions must be 2 or 3 (got ${dimensions})`);
+    if ('dimensions' in geometry) {
+      throw new Error(`Table: ${at}dimensions is replaced by dims ('xy', 'xyz', 'xym', 'xyzm')`);
     }
+    const dims = geometry.dims ?? 'xy';
+    if (!isCoordinateDims(dims)) {
+      throw new Error(`Table: ${at}dims must be 'xy', 'xyz', 'xym' or 'xyzm' (got ${dims})`);
+    }
+    const stride = strideOf(dims);
     const offsets = geometry.offsets ?? [];
     const levels = OFFSET_LEVELS[geometry.type];
     if (offsets.length !== levels) {
@@ -119,7 +126,7 @@ export class GeometryColumnReader {
         `Table: ${at}a ${geometry.type} ${rows === undefined ? 'column' : 'table'} has ${levels} offset arrays (got ${offsets.length})`,
       );
     }
-    const vertexCount = Math.floor(geometry.coords.length / dimensions);
+    const vertexCount = Math.floor(geometry.coords.length / stride);
     let length = rows;
     if (length === undefined) {
       const first = offsets[0];
@@ -149,7 +156,8 @@ export class GeometryColumnReader {
 
     this.type = geometry.type;
     this.coords = geometry.coords;
-    this.dimensions = dimensions;
+    this.dims = dims;
+    this.stride = stride;
     this.offsets = offsets;
     this.length = length;
   }
@@ -161,10 +169,27 @@ export class GeometryColumnReader {
     return at;
   }
 
-  /** Coordinate `v` as `[lng, lat]` */
+  /** Coordinate `v` as `[x, y]` (what is drawn and hit; a `z` and an `m` are not read) */
   position(v: number): Coordinate {
-    const at = v * this.dimensions;
+    const at = v * this.stride;
     return [this.coords[at], this.coords[at + 1]];
+  }
+
+  /**
+   * Coordinate `v` with every value of its dimensions, in their order, without the values at
+   * the end that are NaN (a `z` or an `m` it does not have): `[x, y]`, `[x, y, z]`, `[x, y, z, m]`
+   * in a column of `xyzm`, `[x, y, m]` in a column of `xym`
+   */
+  fullPosition(v: number): Position {
+    const stride = this.stride;
+    const at = v * stride;
+    const coords = this.coords;
+    if (stride === 2) return [coords[at], coords[at + 1]];
+    let end = stride;
+    while (end > 2 && Number.isNaN(coords[at + end - 1])) end--;
+    const out: number[] = new Array(end);
+    for (let k = 0; k < end; k++) out[k] = coords[at + k];
+    return out;
   }
 
   /** The coordinates `[from, to)` as an array of positions */
@@ -174,7 +199,7 @@ export class GeometryColumnReader {
     return out;
   }
 
-  /** The coordinates of a row, shaped as for its geometry type */
+  /** The coordinates of a row, shaped as for its geometry type (`x` and `y` only) */
   coordinatesOf(row: number): FeatureCoordinates {
     const o = this.offsets;
     switch (this.type) {
@@ -198,6 +223,50 @@ export class GeometryColumnReader {
           for (let r = o[1][p]; r < o[1][p + 1]; r++) {
             rings.push(this.positions(o[2][r], o[2][r + 1]));
           }
+          polygons.push(rings);
+        }
+        return polygons;
+      }
+    }
+  }
+
+  /**
+   * The coordinates of a row with every value of their dimensions (`fullPosition`), shaped as
+   * for its geometry type
+   */
+  fullCoordinatesOf(row: number): Position | Position[] | Position[][] | Position[][][] {
+    if (this.stride === 2) return this.coordinatesOf(row);
+    return this.shaped(row, (v) => this.fullPosition(v));
+  }
+
+  /** The positions of a row, shaped as for its geometry type */
+  private shaped(
+    row: number,
+    position: (v: number) => Position,
+  ): Position | Position[] | Position[][] | Position[][][] {
+    const o = this.offsets;
+    const run = (from: number, to: number): Position[] => {
+      const out: Position[] = new Array(to - from);
+      for (let v = from; v < to; v++) out[v - from] = position(v);
+      return out;
+    };
+    switch (this.type) {
+      case 'Point':
+        return position(row);
+      case 'LineString':
+      case 'MultiPoint':
+        return run(o[0][row], o[0][row + 1]);
+      case 'Polygon':
+      case 'MultiLineString': {
+        const rings: Position[][] = [];
+        for (let r = o[0][row]; r < o[0][row + 1]; r++) rings.push(run(o[1][r], o[1][r + 1]));
+        return rings;
+      }
+      case 'MultiPolygon': {
+        const polygons: Position[][][] = [];
+        for (let p = o[0][row]; p < o[0][row + 1]; p++) {
+          const rings: Position[][] = [];
+          for (let r = o[1][p]; r < o[1][p + 1]; r++) rings.push(run(o[2][r], o[2][r + 1]));
           polygons.push(rings);
         }
         return polygons;
@@ -333,7 +402,7 @@ export class TableReader {
         const r = this.childRowOf(row);
         const end = column.vertexStart(r + 1);
         const coords = column.coords;
-        const stride = column.dimensions;
+        const stride = column.stride;
         for (let v = column.vertexStart(r); v < end; v++) {
           const x = coords[v * stride];
           const y = coords[v * stride + 1];

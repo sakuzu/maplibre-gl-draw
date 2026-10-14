@@ -44,6 +44,10 @@ export type { Table } from './types.js';
 export { prepareTable, transferList } from './prepare.js';
 export type { PreparedTable } from './types.js';
 
+// Coordinates
+export type { CoordinateDims, CoordinateSystem } from './coordinates.js';
+export { planarCoordinates } from './coordinates.js';
+
 // Column types
 export type {
   Column,
@@ -66,6 +70,8 @@ export {
   ROW_GROUP_TARGET_VERTICES,
   rowGroupTransferList,
 } from './row-group-builder.js';
+export type { RowRings } from './row-rings.js';
+export { circleRowRings } from '../shared/circle-rings.js';
 export type { RowGroupMerge } from './row-group-merge.js';
 export { mergeRowGroup } from './row-group-merge.js';
 export type { PackedRTree } from './packed-rtree.js';

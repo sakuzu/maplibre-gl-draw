@@ -19,6 +19,13 @@
  * same function the main thread runs.
  */
 
+import {
+  type CoordinateDims,
+  type CoordinateSystem,
+  dimsWithin,
+  planarCoordinates,
+  sortKeyOf,
+} from './coordinates.js';
 import { buildPackedRTree } from './packed-rtree.js';
 import { rowGeometryOfColumn, WIDE_VERTICES } from './row-geometry.js';
 import {
@@ -33,9 +40,6 @@ import { compareRowKeys, type GroupKeySource } from './row-keys.js';
 import type { GeometryType, TableMixedGeometry } from './types.js';
 import { Utf8ColumnBuilder } from './utf8-column.js';
 import { readValue, type ValueColumn, ValueColumnBuilder } from './value-column.js';
-
-/** The number of coordinates a Circle is counted as (its ring) */
-const CIRCLE_VERTICES = 65;
 
 /**
  * What {@link mergeRowGroup} merges
@@ -62,6 +66,23 @@ export interface RowGroupMerge {
    * (2), so a group that grew a little stays one group
    */
   readonly cutPast?: number;
+  /**
+   * The dimensions of the coordinates of the new groups: those of the layer. A source of fewer
+   * dimensions is copied with NaN for the others (a layer whose dimensions were raised). Every
+   * source has the same when omitted
+   */
+  readonly dims?: CoordinateDims;
+  /**
+   * The number of coordinates a row that draws a ring around its point (a row of a Point with a
+   * fill: a Circle) is counted as when the rows are cut into groups (`RowRings.ringVertices`; 1
+   * when omitted)
+   */
+  readonly ringVertices?: number;
+  /**
+   * The system of the coordinates the spatial index of the new groups is made in (the plane when
+   * omitted). A function: a Worker passes its own
+   */
+  readonly coordinates?: CoordinateSystem;
 }
 
 /**
@@ -80,6 +101,12 @@ export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
   }
   const count = rows.length / 2;
   if (count === 0) return [];
+  const dims = mergeDims(sources, merge.dims);
+  const shape: MergeShape = {
+    dims,
+    ringVertices: merge.ringVertices ?? 1,
+    sortKey: sortKeyOf(merge.coordinates ?? planarCoordinates),
+  };
   const keys = isKeySource(merge.groups)
     ? merge.groups
     : groupKeySource((merge.groups as readonly RowGroupKey[] | null | undefined) ?? []);
@@ -100,7 +127,7 @@ export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
   const vertices = new Int32Array(count);
   let total = 0;
   for (let i = 0; i < count; i++) {
-    vertices[i] = vertexCountOf(sources[rows[i * 2]], rows[i * 2 + 1]);
+    vertices[i] = vertexCountOf(sources[rows[i * 2]], rows[i * 2 + 1], shape.ringVertices);
     total += vertices[i];
   }
   const targetRows = Math.max(1, merge.targetRows ?? ROW_GROUP_TARGET_ROWS);
@@ -108,7 +135,7 @@ export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
   const past = Math.max(1, merge.cutPast ?? 1);
   // One group while the rows are within the targets times the share
   if (count <= targetRows * past && total <= targetVertices * past) {
-    return [copyRows(sources, rows, order, vertices)];
+    return [copyRows(sources, rows, order, vertices, shape)];
   }
   const out: RowGroupData[] = [];
   let start = 0;
@@ -121,10 +148,43 @@ export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
       sum += n;
       end++;
     }
-    out.push(copyRows(sources, rows, order.subarray(start, end), vertices));
+    out.push(copyRows(sources, rows, order.subarray(start, end), vertices, shape));
     start = end;
   }
   return out;
+}
+
+/** What the new groups of a merge are made of */
+interface MergeShape {
+  readonly dims: CoordinateDims;
+  readonly ringVertices: number;
+  readonly sortKey: ((centerX: number, centerY: number) => number) | undefined;
+}
+
+/**
+ * The dimensions of the new groups of a merge: the ones given, which hold those of every source,
+ * or the ones every source has
+ *
+ * @throws when a source has a dimension the ones given do not, or when the sources have
+ *   different ones and none are given
+ */
+function mergeDims(
+  sources: readonly RowGroupData[],
+  given: CoordinateDims | undefined,
+): CoordinateDims {
+  let dims = given;
+  for (const source of sources) {
+    for (const child of source.geometry.children) {
+      const own = child.dims ?? 'xy';
+      if (dims === undefined) dims = own;
+      else if (given === undefined ? own !== dims : !dimsWithin(own, dims)) {
+        throw new Error(
+          `mergeRowGroup: a source has coordinates of ${own}, the merge ${given === undefined ? 'has' : 'makes'} ${dims}`,
+        );
+      }
+    }
+  }
+  return dims ?? 'xy';
 }
 
 /** Whether the groups of a merge are given as the keys themselves */
@@ -132,15 +192,18 @@ function isKeySource(groups: RowGroupMerge['groups']): groups is GroupKeySource 
   return groups !== null && groups !== undefined && !Array.isArray(groups);
 }
 
-/** The number of coordinates a row draws (the estimate of the work of a group) */
-function vertexCountOf(data: RowGroupData, row: number): number {
+/**
+ * The number of coordinates a row draws (the estimate of the work of a group): a Point with a
+ * fill draws a ring around it
+ */
+function vertexCountOf(data: RowGroupData, row: number, ringVertices: number): number {
   const child = data.geometry.types[row];
   if (child < 0) return 0;
   const column = data.geometry.children[child];
   const at = data.geometry.offsets[row];
-  if (data.typeNames[data.types[row]] === 'Circle' && column.type === 'Point') {
+  if (column.type === 'Point') {
     const t = data.triangles;
-    return t.offsets[row + 1] > t.offsets[row] ? CIRCLE_VERTICES : 1;
+    return t.offsets[row + 1] > t.offsets[row] ? ringVertices : 1;
   }
   let first = at;
   let end = at + 1;
@@ -175,6 +238,7 @@ function copyRows(
   rows: Int32Array,
   order: Int32Array,
   vertices: Int32Array,
+  shape: MergeShape,
 ): RowGroupData {
   const length = order.length;
   const handles = new Int32Array(length);
@@ -260,11 +324,13 @@ function copyRows(
     let target = childIndex.get(column.type);
     if (target === undefined) {
       target = children.length;
-      children.push(new ChildBuilder(column.type));
+      children.push(new ChildBuilder(column.type, shape.dims));
       childIndex.set(column.type, target);
     }
     childTypes[r] = target;
-    childRows[r] = children[target].add(rowGeometryOfColumn(column, data.geometry.offsets[row]));
+    childRows[r] = children[target].add(
+      rowGeometryOfColumn(column, data.geometry.offsets[row], shape.dims),
+    );
     vertexCount += vertices[pair];
   }
 
@@ -301,7 +367,7 @@ function copyRows(
       wideOffsets: Int32Array.from(wideOffsets),
       wideIndices: Uint32Array.from(wide),
     },
-    index: buildPackedRTree(rowBounds),
+    index: buildPackedRTree(rowBounds, undefined, shape.sortKey),
     vertexCount,
   };
 }

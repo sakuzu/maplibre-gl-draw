@@ -239,8 +239,11 @@ const GEOMETRY = [
 
 /** The table entry (layer 1) */
 const TABLE = [
+  'circleRowRings',
   'Column',
   'compareRowKeys',
+  'CoordinateDims',
+  'CoordinateSystem',
   'createRowGroupBuilder',
   'createTableBuilder',
   'DictionaryColumn',
@@ -248,6 +251,7 @@ const TABLE = [
   'GroupKeySource',
   'mergeRowGroup',
   'PackedRTree',
+  'planarCoordinates',
   'PreparedTable',
   'prepareTable',
   'PropertyColumns',
@@ -264,6 +268,7 @@ const TABLE = [
   'rowGroupTransferList',
   'RowInput',
   'RowKeySource',
+  'RowRings',
   'Table',
   'TableBuilder',
   'tableFromFeatures',

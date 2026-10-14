@@ -366,7 +366,7 @@ export function writePointRow(
   const first = reader.vertexStart(at);
   const end = reader.vertexStart(at + 1);
   const coords = reader.coords;
-  const stride = reader.dimensions;
+  const stride = reader.stride;
   let written = 0;
   for (let v = first; v < end; v++) {
     const lng = coords[v * stride];
@@ -481,7 +481,7 @@ export function writeLineRow(
   const screenDpr = resolvePixelRatio(context.pixelRatio);
   const contentDpr = resolveContentPixelRatio(context.pixelRatio);
   const coords = reader.coords;
-  const stride = reader.dimensions;
+  const stride = reader.stride;
   const firstInstance = arrays.instanceCount;
   for (let k = 0; k < parts.length; k += 2) {
     const start = parts[k];
@@ -633,7 +633,7 @@ export function planPolygonRow(
     first = reader.vertexStart(at);
     polygons.push({
       coords: reader.coords,
-      stride: reader.dimensions,
+      stride: reader.stride,
       rings: o[1],
       from: o[0][at],
       to: o[0][at + 1],
@@ -644,7 +644,7 @@ export function planPolygonRow(
     for (let p = o[0][at]; p < o[0][at + 1]; p++) {
       polygons.push({
         coords: reader.coords,
-        stride: reader.dimensions,
+        stride: reader.stride,
         rings: o[2],
         from: o[1][p],
         to: o[1][p + 1],
@@ -1354,7 +1354,7 @@ function collectPointRow(
   const { kind, style } = resolved;
   writeRowStyle(draft, styleAt, style, undefined);
   const coords = reader.coords;
-  const stride = reader.dimensions;
+  const stride = reader.stride;
   const first = reader.vertexStart(at);
   for (let v = first; v < reader.vertexStart(at + 1); v++) {
     const index = draft.coord(
@@ -1447,7 +1447,7 @@ function collectLineRow(
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
   const dashed = context.slots.line(data.styles[row], type, ruleColor).stroke.lineStyle !== 'solid';
   const coords = reader.coords;
-  const stride = reader.dimensions;
+  const stride = reader.stride;
   for (let k = 0; k < parts.length; k += 2) {
     const start = parts[k];
     const end = parts[k + 1];

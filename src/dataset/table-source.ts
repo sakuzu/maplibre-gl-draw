@@ -483,7 +483,7 @@ class RowCollector {
       builder = new PackedPointsBuilder();
       this.draft.packedPoints.set(slot.shape, builder);
     }
-    const at = v * column.dimensions;
+    const at = v * column.stride;
     builder.push(column.coords[at], column.coords[at + 1], slot.packed);
   }
 
@@ -521,7 +521,7 @@ class RowCollector {
     // A fixed line width is declared by the negative convention (as in `collectLine`)
     builder.push(
       column.coords,
-      column.dimensions,
+      column.stride,
       start,
       end,
       fixed ? -stroke.width : stroke.width,

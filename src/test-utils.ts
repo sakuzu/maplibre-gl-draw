@@ -38,6 +38,7 @@ import {
 } from './feature-table/feature-tables.js';
 import type { LayerTable } from './feature-table/layer-table.js';
 import type { ModeManager } from './modes/manager.js';
+import { circleRowRings } from './shared/circle-rings.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
@@ -520,7 +521,7 @@ export function tablesOfFeatures(
   writer: FeatureTablesWriter;
 } {
   const { tables, writer } = createFeatureTablesStore(options);
-  const builder = createRowGroupBuilder({ targetRows });
+  const builder = createRowGroupBuilder({ targetRows, rings: circleRowRings });
   features.forEach((feature, i) => {
     builder.addRow(rowOfFeature(feature, orderKey(i)));
   });
@@ -863,7 +864,12 @@ export function tablesOfReference(
     order: group.order,
   }));
   for (const layerId of layerIds) {
-    const builder = createRowGroupBuilder({ groups: groupKeys, targetRows });
+    const builder = createRowGroupBuilder({
+      groups: groupKeys,
+      targetRows,
+      dims: options.dimsOf?.(layerId),
+      rings: circleRowRings,
+    });
     for (const row of reference.rows.values()) {
       if (row.layerId !== layerId) continue;
       builder.addRow({

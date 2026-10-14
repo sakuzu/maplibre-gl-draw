@@ -8,6 +8,7 @@
  */
 
 import {
+  circleRowRings,
   createRowGroupBuilder,
   mergeRowGroup,
   type RowGroupBuilderOptions,
@@ -30,7 +31,8 @@ self.onmessage = (event: MessageEvent<RowsWorkerRequest>) => {
   if (merge) {
     groups = mergeRowGroup(merge);
   } else {
-    const builder = createRowGroupBuilder(options);
+    // The rings of the Circles: a function, which is not posted
+    const builder = createRowGroupBuilder({ ...options, rings: circleRowRings });
     for (const row of rows ?? []) builder.addRow(row);
     groups = builder.finish();
   }

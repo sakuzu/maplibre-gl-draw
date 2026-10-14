@@ -118,7 +118,7 @@ export function rowHitShape(group: RowGroup, row: number): HitShape | null {
   const { reader } = at;
   const o = reader.offsets;
   const run = (from: number, to: number): PositionRun =>
-    new ColumnRun(reader.coords, from, to - from, reader.dimensions);
+    new ColumnRun(reader.coords, from, to - from, reader.stride);
   let parts: PositionRun[][];
   switch (reader.type) {
     case 'Point': {

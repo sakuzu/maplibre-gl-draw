@@ -17,10 +17,11 @@
 
 import * as maplibregl from 'maplibre-gl';
 import { createDraw, createFeatureTables, createTableMemoryStore } from '../index.js';
+import { circleRowRings } from '../shared/circle-rings.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { MemoryContractStore } from '../store/memory.js';
 import { prepareTable } from '../table/index.js';
-import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { createRowGroupBuilder, type RowGroupBuilderOptions } from '../table/row-group-builder.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
   getMapTerrain,
@@ -36,7 +37,14 @@ installTestDem(maplibregl);
   maplibregl,
   createDraw,
   prepareTable,
-  tables: { createFeatureTables, createRowGroupBuilder, createTableMemoryStore },
+  tables: {
+    createFeatureTables,
+    // The rows of the pages are built as a Worker of a host builds them: with the rings of the
+    // Circles
+    createRowGroupBuilder: (options: RowGroupBuilderOptions = {}) =>
+      createRowGroupBuilder({ rings: circleRowRings, ...options }),
+    createTableMemoryStore,
+  },
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {
     DemAtlas,

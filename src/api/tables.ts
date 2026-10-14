@@ -28,6 +28,7 @@ import type {
   RowValuesSnapshot,
 } from '../shared/types/model.js';
 import { createTableMemoryStore as createTableMemoryStoreOf } from '../store/table-memory.js';
+import type { CoordinateDims, CoordinateSystem } from '../table/coordinates.js';
 import type { RowGroupData } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
 import type { DocumentChange } from './events.js';
@@ -439,6 +440,18 @@ export interface FeatureTablesOptions {
    * the edit ends with (100 when omitted; `Infinity`: every row is written)
    */
   readonly moveHeldByStateFrom?: number;
+  /**
+   * The dimensions of the coordinates of the rows of a layer, read once, when the layer first
+   * holds rows (`xy` for every layer when omitted): `xy`, `xyz`, `xym` or `xyzm`. The rows of a
+   * layer of `z` or `m` are drawn and hit by their `x` and `y`, and are read with every value
+   * (`snapshot`); they are not made features (`hold`, `getRow`)
+   */
+  readonly dimsOf?: (layerId: string) => CoordinateDims;
+  /**
+   * The system of the coordinates the bbox of the rows and their spatial index are made in (the
+   * plane of the longitudes and latitudes when omitted). A Worker passes its own
+   */
+  readonly coordinates?: CoordinateSystem;
 }
 
 /**

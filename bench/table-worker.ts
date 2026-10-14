@@ -7,7 +7,11 @@
  * without a copy, with the rows the edits change and the extent of the features
  */
 
-import { createRowGroupBuilder, rowGroupTransferList } from '@sakuzu/maplibre-gl-draw/table';
+import {
+  circleRowRings,
+  createRowGroupBuilder,
+  rowGroupTransferList,
+} from '@sakuzu/maplibre-gl-draw/table';
 import {
   type BenchCandidates,
   type BenchFeature,
@@ -78,7 +82,7 @@ self.onmessage = async (event: MessageEvent<TableWorkerRequest>) => {
     return;
   }
   const t1 = performance.now();
-  const builder = createRowGroupBuilder();
+  const builder = createRowGroupBuilder({ rings: circleRowRings });
   for (const feature of features) {
     builder.addRow({
       id: feature.id,

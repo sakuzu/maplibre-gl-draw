@@ -664,7 +664,7 @@ function withZ(geometry: TableGeometry): TableGeometry {
     xyz[v * 3 + 1] = xy[v * 2 + 1];
     xyz[v * 3 + 2] = 99;
   }
-  return { ...geometry, coords: xyz, dimensions: 3 };
+  return { ...geometry, coords: xyz, dims: 'xyz' };
 }
 
 /**

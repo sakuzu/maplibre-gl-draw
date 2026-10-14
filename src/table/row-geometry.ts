@@ -9,13 +9,16 @@
  * its fills. Keeping both on these functions keeps the triangles of a row written in place the
  * ones the builder would have made.
  *
- * A pure module: it depends on nothing outside `/table` but the circle of the geometry, so it
- * runs in a Worker as well.
+ * The coordinates of a row have the dimensions of its layer (`coordinates.ts`): a position
+ * shorter than them gets NaN for the values it does not have, and a longer one is refused rather
+ * than cut. The triangles and the bbox are made of `x` and `y`.
+ *
+ * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
 
 import earcut from 'earcut';
 import type { Geometry, Position } from 'geojson';
-import { generateCirclePolygon } from '../geometry/circle.js';
+import { type CoordinateDims, copyCoordinates, strideOf } from './coordinates.js';
 import { polygonRingRuns } from './polygon-rings.js';
 import type { GeometryType, TableGeometry } from './types.js';
 
@@ -29,7 +32,11 @@ export const WIDE_VERTICES = 65_536;
  */
 export interface RowGeometry {
   readonly type: GeometryType;
-  /** The coordinates (two values each) */
+  /** The dimensions of the coordinates */
+  readonly dims: CoordinateDims;
+  /** The number of values of a coordinate */
+  readonly stride: number;
+  /** The coordinates (`stride` values each) */
   readonly coords: Float64Array;
   /**
    * The sizes of the levels: [] for Point, LineString and MultiPoint; the number of coordinates
@@ -41,16 +48,34 @@ export interface RowGeometry {
 }
 
 /**
- * The geometry of a row from a GeoJSON geometry
+ * The geometry of a row from a GeoJSON geometry, its positions read as coordinates of
+ * dimensions: a position of fewer values gets NaN for the others, the values of a position are
+ * those of the dimensions in their order (`[x, y, m]` for `xym`)
  *
- * @throws when the geometry is not of one of the six types a row holds
+ * @param dims The dimensions of the coordinates (`xy` when omitted)
+ * @throws when the geometry is not of one of the six types a row holds, or when a position has
+ *   more values than the dimensions
  * @internal
  */
-export function toRowGeometry(geometry: Geometry): RowGeometry {
+export function toRowGeometry(geometry: Geometry, dims: CoordinateDims = 'xy'): RowGeometry {
+  const stride = strideOf(dims);
   const positions: number[] = [];
-  const push = (position: Position): void => {
-    positions.push(Number(position[0]), Number(position[1]));
-  };
+  const tooLong = (position: Position): Error =>
+    new Error(
+      `RowGroupBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
+    );
+  const push =
+    stride === 2
+      ? (position: Position): void => {
+          if (position.length > 2) throw tooLong(position);
+          positions.push(Number(position[0]), Number(position[1]));
+        }
+      : (position: Position): void => {
+          if (position.length > stride) throw tooLong(position);
+          for (let k = 0; k < stride; k++) {
+            positions.push(k < position.length ? Number(position[k]) : Number.NaN);
+          }
+        };
   const parts: number[] = [];
   const polygons: number[] = [];
   switch (geometry.type) {
@@ -80,7 +105,14 @@ export function toRowGeometry(geometry: Geometry): RowGeometry {
     default:
       throw new Error(`RowGroupBuilder: a ${geometry.type} geometry cannot be a row`);
   }
-  return { type: geometry.type, coords: Float64Array.from(positions), parts, polygons };
+  return {
+    type: geometry.type,
+    dims,
+    stride,
+    coords: Float64Array.from(positions),
+    parts,
+    polygons,
+  };
 }
 
 /**
@@ -111,23 +143,6 @@ export function polygonRanges(geometry: RowGeometry): Array<[number, number]> {
 }
 
 /**
- * The coordinates of the ring of a Circle of a center and a radius (null for no ring)
- *
- * @internal
- */
-export function circleRingCoords(center: [number, number], radius: number): Float64Array | null {
-  if (!(radius > 0)) return null;
-  const ring = generateCirclePolygon(center, radius);
-  if (ring.length === 0) return null;
-  const coords = new Float64Array(ring.length * 2);
-  for (let i = 0; i < ring.length; i++) {
-    coords[i * 2] = ring[i][0];
-    coords[i * 2 + 1] = ring[i][1];
-  }
-  return coords;
-}
-
-/**
  * The triangles of the fills of the polygons of a row, in pairs, as indices into the vertices of
  * its fill (the rings drawn of each polygon in turn, `polygon-rings.ts`)
  *
@@ -135,9 +150,10 @@ export function circleRingCoords(center: [number, number], radius: number): Floa
  * strips of 4 vertices (`pairTriangles`): 4 indices per pair, a lone triangle with its third
  * index twice. The pairs of a polygon come before the pairs of the next.
  *
- * @param coords The coordinates (two values each)
+ * @param coords The coordinates (`stride` values each; only `x` and `y` are read)
  * @param ringOffsets The offsets from a ring to its first coordinate
  * @param polygons The rings of each polygon, `[first, end)`
+ * @param stride The number of values of a coordinate (2 when omitted)
  * @returns The indices of the pairs and the number of vertices of the fill
  * @internal
  */
@@ -145,13 +161,14 @@ export function triangulateRow(
   coords: Float64Array,
   ringOffsets: Int32Array,
   polygons: ReadonlyArray<readonly [number, number]>,
+  stride = 2,
 ): { indices: number[]; vertices: number } {
   const out: number[] = [];
   const runs: number[] = [];
   let base = 0;
   for (const [ringStart, ringEnd] of polygons) {
     runs.length = 0;
-    const count = polygonRingRuns(coords, 2, ringOffsets, ringStart, ringEnd, runs);
+    const count = polygonRingRuns(coords, stride, ringOffsets, ringStart, ringEnd, runs);
     if (count === 0) continue;
     const flat: number[] = new Array(count * 2);
     const holes: number[] = [];
@@ -159,8 +176,8 @@ export function triangulateRow(
     for (let k = 0; k < runs.length; k += 2) {
       if (k > 0) holes.push(at);
       for (let v = runs[k]; v < runs[k + 1]; v++) {
-        flat[at * 2] = coords[v * 2];
-        flat[at * 2 + 1] = coords[v * 2 + 1];
+        flat[at * 2] = coords[v * stride];
+        flat[at * 2 + 1] = coords[v * stride + 1];
         at++;
       }
     }
@@ -246,19 +263,21 @@ export function pairTriangles(
  */
 export function singleRowColumn(geometry: RowGeometry): TableGeometry {
   const coords = geometry.coords.slice();
-  const vertices = coords.length / 2;
+  const dims = geometry.dims;
+  const vertices = coords.length / geometry.stride;
   switch (geometry.type) {
     case 'Point':
-      return { type: 'Point', coords };
+      return { type: 'Point', coords, dims };
     case 'LineString':
     case 'MultiPoint':
-      return { type: geometry.type, coords, offsets: [Int32Array.of(0, vertices)] };
+      return { type: geometry.type, coords, dims, offsets: [Int32Array.of(0, vertices)] };
     case 'Polygon':
     case 'MultiLineString': {
       const rings = ringOffsetsOf(geometry);
       return {
         type: geometry.type,
         coords,
+        dims,
         offsets: [Int32Array.of(0, geometry.parts.length), rings],
       };
     }
@@ -270,6 +289,7 @@ export function singleRowColumn(geometry: RowGeometry): TableGeometry {
       return {
         type: 'MultiPolygon',
         coords,
+        dims,
         offsets: [Int32Array.of(0, geometry.polygons.length), polygons, ringOffsetsOf(geometry)],
       };
     }
@@ -277,35 +297,35 @@ export function singleRowColumn(geometry: RowGeometry): TableGeometry {
 }
 
 /**
- * The geometry of one row of a geometry column, as a row geometry (its coordinates copied, two
- * values each)
+ * The geometry of one row of a geometry column, as a row geometry (its coordinates copied)
  *
- * @param column The column (its coordinates may have 3 values each)
+ * @param column The column
  * @param at The row in the column
+ * @param dims The dimensions of the coordinates of the row geometry (those of the column when
+ *   omitted): a dimension the column does not have is NaN
+ * @throws when the column has a dimension that `dims` does not
  * @internal
  */
 export function rowGeometryOfColumn(
   column: {
     readonly type: GeometryType;
     readonly coords: Float64Array;
-    readonly dimensions?: number;
+    readonly dims?: CoordinateDims;
     readonly offsets?: readonly Int32Array[];
   },
   at: number,
+  dims: CoordinateDims = column.dims ?? 'xy',
 ): RowGeometry {
   const o = column.offsets ?? [];
-  const stride = column.dimensions ?? 2;
   let first = at;
   let end = at + 1;
   for (const level of o) {
     first = level[first];
     end = level[end];
   }
-  const coords = new Float64Array((end - first) * 2);
-  for (let v = first; v < end; v++) {
-    coords[(v - first) * 2] = column.coords[v * stride];
-    coords[(v - first) * 2 + 1] = column.coords[v * stride + 1];
-  }
+  const stride = strideOf(dims);
+  const coords = new Float64Array((end - first) * stride);
+  copyCoordinates(column.coords, column.dims ?? 'xy', first, end - first, coords, dims, 0);
   const parts: number[] = [];
   const polygons: number[] = [];
   if (column.type === 'Polygon' || column.type === 'MultiLineString') {
@@ -316,5 +336,5 @@ export function rowGeometryOfColumn(
       for (let r = o[1][p]; r < o[1][p + 1]; r++) parts.push(o[2][r + 1] - o[2][r]);
     }
   }
-  return { type: column.type, coords, parts, polygons };
+  return { type: column.type, dims, stride, coords, parts, polygons };
 }

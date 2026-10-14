@@ -73,7 +73,7 @@ export interface RowGroupData {
   readonly typeNames: readonly string[];
   /**
    * The geometry of each row. A Circle and an Image hold a Point, a Freehand a LineString; the
-   * coordinates have two dimensions
+   * coordinates have the dimensions of the layer (`TableGeometry.dims` of every child)
    */
   readonly geometry: TableMixedGeometry;
   /** The key of the order of each row */
