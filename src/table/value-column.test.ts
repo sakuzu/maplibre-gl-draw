@@ -159,4 +159,24 @@ describe('ValueStringCache', () => {
     expect(readValue(column, 0, cache)).toBe('alpha');
     expect(cache.size).toBe(2);
   });
+
+  it('drops the oldest strings at no cost growing with the strings it keeps', () => {
+    // 20,000 strings through a cache of 10,000, read twice: every read misses and drops one
+    const column = columnOf(Array.from({ length: 20_000 }, (_, i) => `name ${i}`));
+    const timed = (strings?: ValueStringCache): number => {
+      const start = performance.now();
+      for (let pass = 0; pass < 2; pass++) {
+        for (let row = 0; row < column.length; row++) readValue(column, row, strings);
+      }
+      return performance.now() - start;
+    };
+    timed();
+    const decoded = Math.min(timed(), timed());
+    const cache = new ValueStringCache(10_000);
+    const cached = timed(cache);
+    expect(cache.size).toBeLessThanOrEqual(10_000);
+    expect(readValue(column, 19_999, cache)).toBe('name 19999');
+    // A read that misses costs about a decode, not a scan of the strings kept
+    expect(cached).toBeLessThan(decoded * 3 + 10);
+  });
 });

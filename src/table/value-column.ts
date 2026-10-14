@@ -175,23 +175,33 @@ export function readValue(column: ValueColumn, row: number, strings?: ValueStrin
  *
  * A column holds its strings as bytes, and a reader that asks for the same strings again and
  * again (the names of the rows a label draws, frame after frame) would decode them every time.
- * The strings read are kept, keyed by the dictionary and the index, and the least recently read
- * ones are dropped once there are more than the limit, so reading the name of every row once
- * does not keep a string per row.
+ * The strings read are kept, keyed by the dictionary and the index, in two generations of half
+ * the limit each: a string read goes to the current one, and when it is full, it becomes the old
+ * one and the strings of the old one before are dropped together. A string read again from the
+ * old one goes back to the current one. Dropping costs the same however many strings are kept
+ * (a map that drops its oldest entry one at a time walks the entries it dropped before), so
+ * reading the name of every row of a large layer, more of them than the limit, stays linear.
  *
  * @internal
  */
 export class ValueStringCache {
-  private readonly entries = new Map<number, string>();
+  /** The strings read since the generation began */
+  private current = new Map<number, string>();
+  /** The strings of the generation before */
+  private old = new Map<number, string>();
   private readonly serials = new WeakMap<Utf8Column, number>();
   private nextSerial = 1;
+  /** The number of strings of a generation */
+  private readonly half: number;
 
   /** @param limit The number of strings kept */
-  constructor(readonly limit = 50_000) {}
+  constructor(readonly limit = 50_000) {
+    this.half = Math.max(1, Math.floor(limit / 2));
+  }
 
   /** The number of strings kept */
   get size(): number {
-    return this.entries.size;
+    return this.current.size + this.old.size;
   }
 
   /** The string of entry `index` of a dictionary */
@@ -203,25 +213,21 @@ export class ValueStringCache {
     }
     // The index of an entry is below 2^24 (a group has at most a few thousand rows)
     const key = serial * 0x1000000 + index;
-    const hit = this.entries.get(key);
-    if (hit !== undefined) {
-      // The most recently read goes to the end (a Map keeps the order of insertion)
-      this.entries.delete(key);
-      this.entries.set(key, hit);
-      return hit;
+    const hit = this.current.get(key);
+    if (hit !== undefined) return hit;
+    const value = this.old.get(key) ?? utf8String(values, index);
+    if (this.current.size >= this.half) {
+      this.old = this.current;
+      this.current = new Map();
     }
-    const value = utf8String(values, index);
-    this.entries.set(key, value);
-    if (this.entries.size > this.limit) {
-      const oldest = this.entries.keys().next().value as number;
-      this.entries.delete(oldest);
-    }
+    this.current.set(key, value);
     return value;
   }
 
   /** Drops every string kept */
   clear(): void {
-    this.entries.clear();
+    this.current.clear();
+    this.old.clear();
   }
 }
 
