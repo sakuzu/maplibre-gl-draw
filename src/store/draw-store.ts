@@ -114,6 +114,15 @@ export class DrawStore implements Store {
   readonly #normalized = new WeakMap<object, object>();
   /** The ids of the rows held for the selection, as last held */
   #heldIds = new Set<string>();
+  /**
+   * Whether what the rows held for the selection are read from may have changed since they were
+   * last held (the selection, the editing, the vertices selected, the vertices that follow a drag,
+   * the members of a group or a layer selected): a write of the document that changes none of it
+   * (a feature moved in the middle of a drag) does not read them again
+   */
+  #heldStale = true;
+  /** The type of the selection the rows held were read from (current while they are not stale) */
+  #heldSelectionType: SelectionType | null = null;
   /** The rows the selection let go of, held a moment longer */
   readonly #released = new Set<string>();
   #releaseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -374,6 +383,7 @@ export class DrawStore implements Store {
   setFollowedVertices(selections: VertexSelection[] | null): void {
     this.#bus.transact(() => {
       this.#drawing.setFollowedVertices(selections);
+      this.#heldStale = true;
       this.#syncHeld();
     }, 'local');
   }
@@ -410,6 +420,7 @@ export class DrawStore implements Store {
     this.#bus.transact(() => {
       fn();
       if (redraw) this.#bus.merge({ uiStateChanged: true });
+      this.#heldStale = true;
       this.#syncHeld();
     }, 'local');
   }
@@ -443,9 +454,11 @@ export class DrawStore implements Store {
    */
   #syncHeld(): void {
     const tables = this.#contract.tables;
-    if (!tables) return;
+    if (!tables || !this.#heldStale) return;
+    this.#heldStale = false;
     const ids = new Set<string>();
     const selection = this.#contract.getSelection();
+    this.#heldSelectionType = selection.type;
     if (selection.type === 'feature') {
       for (const id of selection.ids) ids.add(id);
     } else if (selection.type === 'group') {
@@ -496,6 +509,7 @@ export class DrawStore implements Store {
    */
   #receive(changes: StoreChange): void {
     this.#bus.transact(() => {
+      if (this.#contract.tables && this.#changesHeld(changes)) this.#heldStale = true;
       this.#bus.merge(this.#normalizeChanges(withoutSource(changes)));
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
@@ -575,16 +589,44 @@ export class DrawStore implements Store {
     return normalized;
   }
 
+  /**
+   * Whether a notification of the contract may change the rows held for the selection: a change
+   * of the state of this client (the selection, the editing, the vertices), a deletion or a
+   * reset, and for a group or a layer selected, a change of what is in a group or a layer
+   */
+  #changesHeld(changes: StoreChange): boolean {
+    if (changes.selection || changes.editing || changes.uiStateChanged || changes.reset) {
+      return true;
+    }
+    if (changes.features?.deleted?.length) return true;
+    if (changes.groups?.deleted?.length || changes.layers?.deleted?.length) return true;
+    if (mayHide(changes)) return true;
+    // A change of the selection marks them stale above, so the type they were read from is the
+    // type of the selection now (reading the selection copies its ids)
+    const type = this.#heldSelectionType;
+    if (type !== 'group' && type !== 'layer') return false;
+    if (changes.features?.created?.length || changes.groups || changes.layers) return true;
+    for (const rows of changes.rows?.layers.values() ?? []) {
+      if (rows.created.length > 0 || rows.deleted.length > 0) return true;
+      if (rows.fields.has('groupId') || rows.fields.has('layerId')) return true;
+    }
+    return false;
+  }
+
   /** Removes an id that no longer names anything from the state of this client */
   #forget(id: string): void {
     const contract = this.#contract;
     if (contract.getFeature(id) || contract.getGroup(id) || contract.getLayer(id)) return;
     const selection = contract.getSelection();
     if (selection.ids.includes(id)) {
+      this.#heldStale = true;
       const ids = selection.ids.filter((selected) => selected !== id);
       contract.setSelection(ids.length === 0 ? null : selection.type, ids);
     }
-    if (contract.getEditingIds().includes(id)) contract.endEditing([id]);
+    if (contract.getEditingIds().includes(id)) {
+      this.#heldStale = true;
+      contract.endEditing([id]);
+    }
     if (contract.isHidden(id)) {
       contract.setLocallyHidden(id, false);
       this.#bus.merge({ uiStateChanged: true });
@@ -602,6 +644,7 @@ export class DrawStore implements Store {
     const shown = createShownLookup(this.#contract);
     const kept = selection.ids.filter((id) => shown(type, id));
     if (kept.length !== selection.ids.length) {
+      this.#heldStale = true;
       this.#contract.setSelection(kept.length > 0 ? type : null, kept);
     }
   }
@@ -632,6 +675,7 @@ export class DrawStore implements Store {
 
   /** Clears the vertex selection, marking the notification for the drawing */
   #endVertexSelection(): void {
+    this.#heldStale = true;
     this.#contract.setSelectedVertices(null);
     this.#bus.merge({ uiStateChanged: true });
   }
