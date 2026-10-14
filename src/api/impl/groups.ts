@@ -167,8 +167,8 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
           },
         );
       }
-      // A Store of objects keeps no group it deleted; a Store of rows keeps the ones whose
-      // deleted rows are kept
+      // A Store of objects keeps no group it deleted; a Store of rows keeps the ones this client
+      // deleted, by the token of the deletion, and the ones its deleted rows kept still name
       const internals = featureTablesInternals(store.tables);
       const handle = internals?.groups.handleOfId(id) ?? -1;
       const layerId = handle >= 0 ? internals?.groups.layerOf(handle) : undefined;
@@ -251,17 +251,7 @@ function prepareGroup(
   requireRecord(input, 'The input');
   const ids = requireIds(input.featureIds, 'featureIds');
   optionalString(input as unknown as Record<string, unknown>, 'layerId');
-  if (ids.length === 0) {
-    // A group without features: in a layer held as rows only
-    if (input.layerId === undefined) throw invalidInput('A group needs at least one feature');
-    const layer = store.getLayer(input.layerId);
-    if (!layer) throw notFound('layer', input.layerId);
-    if (layer.kind !== 'table') {
-      throw invalidInput('A group needs at least one feature, but in a layer held as rows');
-    }
-    const shell = prepareGroupShell(deps, input, INPUT_KEYS, pending);
-    return { ...shell, layerId: layer.id, featureIds: [] };
-  }
+  if (ids.length === 0) throw invalidInput('A group needs at least one feature');
   const members = ids.map((featureId) => {
     const feature = store.getFeature(featureId);
     if (!feature) throw notFound('feature', featureId);

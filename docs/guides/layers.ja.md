@@ -173,11 +173,12 @@ const created = draw.selection.group(); // まとめられないときは null
 - 地物は必ずどこか 1 か所に並んでいます。`groupId` を持つならその
   グループの `featureIds` に、持たないならレイヤーの `items` にあります
 
-行で持つレイヤー (地物を行で持つストアのレイヤー) では、
-`groups.create({ featureIds: [], layerId })` で地物のないグループを
-レイヤーの最も手前に作れます。地物は `features.move` で入れます。
-行と一緒に削除したグループを、行が残っているあいだにその ID で作ると、
-元の場所に戻ります。
+行で持つレイヤー (地物を行で持つストアのレイヤー) でも、グループには
+地物が要ります。このクライアントが削除したグループ (地物と一緒に削除
+したもの、最後の地物が出たもの、解除したもの) は、削除の札
+(`DocumentChange.restoreToken`) が離されるまでストアに残ります。
+`groups.restore(id)` は、そのグループを地物のないまま元の場所に
+戻します。地物は `features.restore` か `features.move` で戻します。
 
 変更すると `group.created`、`group.updated`、`group.deleted` が
 届きます。

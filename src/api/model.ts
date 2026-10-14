@@ -497,16 +497,9 @@ export interface LayerFilter {
 
 /** What `groups.create` takes. The features must be in the same layer. */
 export interface GroupInput {
-  /**
-   * The IDs of the features to put in the group: at least one, but in a layer held as rows (a
-   * Store that holds its features as rows), where a group can be created without features
-   * (`layerId`) and features are put in it by moving them there (`features.move`)
-   */
+  /** The IDs of the features to put in the group: at least one */
   featureIds: readonly string[];
-  /**
-   * The layer of the group: needed for a group without features, in a layer held as rows; with
-   * features, it must be their layer (theirs when it is left out)
-   */
+  /** The layer of the group: it must be the layer of its features (theirs when it is left out) */
   layerId?: string;
   /**
    * The ID; one is generated when it is left out. A group deleted whose features are kept

@@ -25,6 +25,8 @@
  *   notification carries them (`previousValues`): the rows that were there when the transaction
  *   began, with the values they had then. A write through `applyRows` carries the values it is
  *   given
+ * - A group this client deletes (with its features, left by its last feature, or dissolved) is
+ *   kept by the token of the transaction, as its rows deleted are (`groups.restore`)
  * - The writes of rows from elsewhere go through the writer it returns, in a transaction with
  *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
@@ -1090,7 +1092,11 @@ export class TableContractStore implements StoreContract {
     return last === null ? null : this.#keyOfCode(last, true);
   }
 
-  /** Deletes groups of features with the rows that name them */
+  /**
+   * Deletes groups of features with the rows that name them. A group this client deletes (not
+   * from elsewhere) is kept by the token of the transaction, as its rows deleted are, so that
+   * `draw.groups.restore` brings it back at the place it had
+   */
   #deleteGroups(groups: readonly TableGroup[]): void {
     if (groups.length === 0) return;
     for (const group of groups) {
@@ -1104,11 +1110,14 @@ export class TableContractStore implements StoreContract {
       .map((group) => this.#internals.groups.handleOfId(group.id))
       .filter((handle) => handle >= 0);
     if (handles.length > 0) {
-      this.#writer.applyGroups({
-        handles: Int32Array.from(handles),
-        fields: new Map(),
-        deleted: new Uint8Array(handles.length).fill(1),
-      });
+      this.#writer.applyGroups(
+        {
+          handles: Int32Array.from(handles),
+          fields: new Map(),
+          deleted: new Uint8Array(handles.length).fill(1),
+        },
+        this.#bus.source === 'remote' ? {} : { restoreToken: this.#token() },
+      );
     }
     for (const group of groups) this.#groups.delete(group.id);
     this.#bus.merge({ groups: { deleted: [...groups] } });

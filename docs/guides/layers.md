@@ -174,11 +174,12 @@ group takes the place of the frontmost of its features in the layer.
 - A feature is always listed in exactly one place: in the `featureIds` of
   its group when it has a `groupId`, otherwise in the `items` of its layer
 
-In a layer held as rows (a store that holds its features as rows),
-`groups.create({ featureIds: [], layerId })` creates a group without
-features, at the front of the layer, and `features.move` puts features in
-it. A group created with the ID of a group deleted with its rows, while
-the rows are kept, comes back at the place it had.
+In a layer held as rows (a store that holds its features as rows), a
+group needs features as well. The store keeps a group this client deletes
+(deleted with its features, left by its last feature, or dissolved) until
+the token of the deletion is let go of (`DocumentChange.restoreToken`):
+`groups.restore(id)` brings it back without features at the place it had,
+and `features.restore` or `features.move` puts its features back in it.
 
 Changes emit `group.created`, `group.updated` and `group.deleted`.
 

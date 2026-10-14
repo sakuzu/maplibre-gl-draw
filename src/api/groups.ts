@@ -46,23 +46,24 @@ export interface GroupsCollection {
   /**
    * Creates a group of features and returns it as it was stored.
    *
-   * The group takes the place of its frontmost feature in their layer. In a layer held as rows (a
-   * Store that holds its features as rows), a group can be created without features, at the front
-   * of the layer (`featureIds: []` with its `layerId`).
+   * The group takes the place of its frontmost feature in their layer. A group needs at least
+   * one feature, in every kind of layer; a group deleted is brought back with `restore`.
    *
    * @returns The new group, or `null` when the document is read-only
-   * @throws `DrawError` with the code `not-found` when one of the features or the layer does not
-   *   exist, `invalid-input` when the features are not in the same layer (or not in `layerId`),
-   *   or when there is no feature in a layer not held as rows, or `already-exists` when its ID is
-   *   taken
+   * @throws `DrawError` with the code `not-found` when one of the features does not exist,
+   *   `invalid-input` when there is no feature or the features are not in the same layer (or not
+   *   in `layerId`), or `already-exists` when its ID is taken
    */
   create(input: GroupInput): Group | null;
   /**
-   * Brings back a group this client deleted whose features a Store that holds its features as
-   * rows keeps (`DocumentChange.restoreToken`), at the place it had in its layer, without
-   * features: its features come back into it with `features.restore`, and its name and its flags
-   * are written with `update`. A Store that holds its features as objects keeps no group it
-   * deleted.
+   * Brings back a group this client deleted that a Store that holds its features as rows keeps
+   * (`DocumentChange.restoreToken`), at the place it had in its layer, without features: its
+   * features come back into it with `features.restore` (the ones deleted with it) or by moving
+   * them there (`features.move`), and its name and its flags are written with `update`. Such a
+   * Store keeps every group this client deletes (its features deleted with it, moved out of it,
+   * or the group deleted) until the token of the deletion is let go of
+   * (`features.releaseRestore`); a group deleted from elsewhere is not kept. A Store that holds
+   * its features as objects keeps no group it deleted.
    *
    * A lock of its layer refuses it, as it refuses the restore of a feature: an undo writes in a
    * transaction that ignores the locks (`draw.transact(fn, { ignoreLocks: true })`).

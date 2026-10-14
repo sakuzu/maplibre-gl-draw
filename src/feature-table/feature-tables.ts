@@ -558,17 +558,27 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly holders = new Map<string, ReadonlySet<RowHandle>>();
   /** The rows held, with their features */
   private readonly heldRows = new Map<RowHandle, HeldRow>();
-  /** The rows each deletion of this client keeps, by token, in the order the tokens were made */
+  /**
+   * The rows each deletion of this client keeps, by token, in the order the tokens were made (a
+   * token that keeps groups only has no row)
+   */
   private readonly retained = new Map<number, Set<RowHandle>>();
   /** The token that keeps each deleted row kept */
   private readonly retainOf = new Map<RowHandle, number>();
+  /** The groups of features each deletion of this client keeps, by token */
+  private readonly retainedGroups = new Map<number, Set<GroupHandle>>();
+  /** The token that keeps each deleted group kept */
+  private readonly groupRetainOf = new Map<GroupHandle, number>();
   private nextToken = 1;
   /** The most tokens and bytes the deletions kept may hold (`FeatureTablesOptions.restoreLimit`) */
   private readonly retainTokens: number;
   private readonly retainBytes: number;
   /** The deleted rows whose ids are forgotten, freed once their rows are gone */
   private readonly forgotten = new Set<RowHandle>();
-  /** The groups of features deleted that rows still name (taken out once none does) */
+  /**
+   * The groups of features deleted that rows still name or a token keeps (taken out once none
+   * does)
+   */
   private readonly deletedGroups = new Set<GroupHandle>();
   /** `FeatureTablesInternalOptions.moveOpenedByStateFrom` */
   private readonly moveHeldByStateFrom: number;
@@ -1530,6 +1540,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const set = this.retained.get(token);
     if (!set) return;
     this.retained.delete(token);
+    this.releaseGroups(token);
     const out: RowHandle[] = [];
     const groups = new Set<RowGroup>();
     for (const handle of set) {
@@ -1541,6 +1552,42 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     for (const group of groups) this.checkDeleted(group);
     if (out.length > 0) this.onRelease?.(Int32Array.from(out));
+  }
+
+  /** Keeps a group deleted with a token (the token counts among the tokens kept) */
+  private keepGroup(group: GroupHandle, token: number): void {
+    this.unkeepGroup(group);
+    let set = this.retainedGroups.get(token);
+    if (!set) {
+      set = new Set();
+      this.retainedGroups.set(token, set);
+    }
+    set.add(group);
+    this.groupRetainOf.set(group, token);
+    if (!this.retained.has(token)) this.retained.set(token, new Set());
+  }
+
+  /** Takes a group out of the token that keeps it */
+  private unkeepGroup(group: GroupHandle): void {
+    const token = this.groupRetainOf.get(group);
+    if (token === undefined) return;
+    this.groupRetainOf.delete(group);
+    this.retainedGroups.get(token)?.delete(group);
+  }
+
+  /** Lets go of the groups a token keeps: the deleted ones no row names are taken out */
+  private releaseGroups(token: number): void {
+    const set = this.retainedGroups.get(token);
+    if (!set) return;
+    this.retainedGroups.delete(token);
+    for (const group of set) {
+      if (this.groupRetainOf.get(group) !== token) continue;
+      this.groupRetainOf.delete(group);
+      if (!this.deletedGroups.has(group) || this.groupNamed(group)) continue;
+      this.deletedGroups.delete(group);
+      this.groups.delete(group);
+      this.writtenOrders.delete(group);
+    }
   }
 
   /**
@@ -2340,7 +2387,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * the order of a group puts its members in another order (`reorderGroups`), a group shown or
    * hidden makes the copies of the state of its members again
    */
-  applyGroups(patch: TableGroupPatch, _options: RowApplyOptions = {}): void {
+  applyGroups(patch: TableGroupPatch, options: RowApplyOptions = {}): void {
     const { handles, fields, deleted } = patch;
     const n = handles.length;
     for (const [field, values] of fields) {
@@ -2404,6 +2451,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         continue;
       }
       this.deletedGroups.delete(group);
+      this.unkeepGroup(group);
       if (!this.groups.has(group)) {
         this.groups.set(group, {
           id: value('id', i) as string,
@@ -2464,15 +2512,24 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
     // The new rows read from their creations are built again with the groups as they are now
     for (const creation of this.creations) this.dropReading(creation);
+    // A group deleted with a token is kept until the token is let go of
+    const token = options.restoreToken;
+    let kept = false;
     for (const group of removed) {
-      if (this.groupNamed(group)) this.deletedGroups.add(group);
+      if (token !== undefined && this.groups.has(group)) {
+        this.keepGroup(group, token);
+        kept = true;
+      }
+      if (this.groupNamed(group) || this.groupRetainOf.has(group)) this.deletedGroups.add(group);
       else {
         this.groups.delete(group);
         this.writtenOrders.delete(group);
       }
     }
+    if (kept) this.limitRetained(token as number);
     this.revisionCount++;
     this.notifyWork();
+    if (kept) this.onChange?.({ restoreToken: token });
   }
 
   /**
@@ -2924,7 +2981,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const handle of version.dropped) this.freeIfGone(handle);
     if (version.dropped.length > 0) {
       for (const group of [...this.deletedGroups]) {
-        if (this.groupNamed(group)) continue;
+        if (this.groupNamed(group) || this.groupRetainOf.has(group)) continue;
         this.deletedGroups.delete(group);
         this.groups.delete(group);
         this.writtenOrders.delete(group);

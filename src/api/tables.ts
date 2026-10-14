@@ -214,10 +214,11 @@ export interface RowApplyOptions {
   /** Where the change comes from */
   readonly source?: UpdateSource;
   /**
-   * What keeps the rows the write deletes (`FeatureTablesWriter.createRestoreToken`): they stay
-   * as they were until it is let go of, so that writing them not deleted puts them back where
-   * they were. Given, it is added to the notification (`DocumentChange.restoreToken`). Rows
-   * deleted without one go with the next versions of their blocks
+   * What keeps the rows (or the groups, `applyGroups`) the write deletes
+   * (`FeatureTablesWriter.createRestoreToken`): they stay as they were until it is let go of, so
+   * that writing them not deleted puts them back where they were. Given, it is added to the
+   * notification (`DocumentChange.restoreToken`). Rows deleted without one go with the next
+   * versions of their blocks
    */
   readonly restoreToken?: RestoreToken;
   /**
@@ -364,7 +365,7 @@ export interface FeatureTablesWriter {
    * forgotten (undefined for an id never seen, or forgotten)
    */
   lookup(id: string): { readonly handle: RowHandle; readonly deleted: boolean } | undefined;
-  /** A new token to keep the rows a write deletes (`RowApplyOptions.restoreToken`) */
+  /** A new token to keep the rows and groups a write deletes (`RowApplyOptions.restoreToken`) */
   createRestoreToken(): RestoreToken;
   /**
    * Forgets the ids of deleted rows that nothing keeps any more: they leave the table of the ids
@@ -459,7 +460,10 @@ export interface FeatureTablesWriter {
    * frames, read and drawn in the order before until then; the rows are not written. A group
    * given another `layerId` is in that layer from then on; its members go there by the writes of
    * their rows (`apply`). A group shown or hidden shows or hides its members. A group deleted is
-   * taken out once no row names it.
+   * taken out once no row names it and no token keeps it: deleted with a token
+   * (`RowApplyOptions.restoreToken`, added to the notification), it keeps its handle, its key and
+   * its layer until the token is let go of, so that writing it again with its handle puts it back
+   * where it was.
    *
    * @throws `DrawError` with the code `invalid-input` when a new group misses its id, its key or
    *   its layer, or a value is not of its kind (nothing is written then)

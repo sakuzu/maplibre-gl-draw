@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * `draw.groups.create` in a layer held as rows (13.4 of the design): a group without features at
- * the front of its layer, and a group deleted whose rows are kept created again at the place it
- * had, as an undo of a deletion puts it back with the rows written not deleted.
+ * `draw.groups.create` and `draw.groups.restore` in a layer held as rows (13.4 of the design): a
+ * group needs features in every layer, and a group this client deleted is kept with its rows
+ * deleted, by the token of the deletion, and brought back at the place it had.
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -50,8 +50,8 @@ function drawOn(store?: Store): Draw {
   return draw;
 }
 
-function setup() {
-  const { store } = createTableStore();
+function setup(options: Parameters<typeof createTableStore>[0] = {}) {
+  const { store } = createTableStore(options);
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -83,15 +83,6 @@ function itemsOf(tables: FeatureTables): string[] {
 }
 
 describe('draw.groups.create in a layer held as rows', () => {
-  it('creates a group without features at the front, which features are moved into', () => {
-    const { draw, tables } = setup();
-    const group = draw.groups.create({ id: 'g', featureIds: [], layerId: 'rows' });
-    expect(group).toMatchObject({ id: 'g', layerId: 'rows' });
-    expect(draw.features.move('p1', { layerId: 'rows', groupId: 'g' })).toBe(true);
-    expect(draw.features.move('p3', { layerId: 'rows', groupId: 'g', below: 'p1' })).toBe(true);
-    expect(itemsOf(tables)).toEqual(['p0', 'p2', 'p4', 'g[p1,p3]']);
-  });
-
   it('keeps the place of a group created again with features, which join it', () => {
     const { draw, tables, notified } = setup();
     draw.groups.create({ id: 'g', featureIds: ['p1'] });
@@ -101,13 +92,13 @@ describe('draw.groups.create in a layer held as rows', () => {
     expect(itemsOf(tables)).toEqual(['p0', 'g[p4]', 'p2', 'p3']);
   });
 
-  it('refuses a group without features without a layer, in a missing layer, or in another layer than its features', () => {
+  it('refuses a group without features, as in a layer of objects, and a layer other than its features', () => {
     const { draw } = setup();
     expect(() => draw.groups.create({ featureIds: [] })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
-    expect(() => draw.groups.create({ featureIds: [], layerId: 'none' })).toThrow(
-      expect.objectContaining({ code: 'not-found' }),
+    expect(() => draw.groups.create({ featureIds: [], layerId: 'rows' })).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
     );
     expect(() => draw.groups.create({ featureIds: ['p1'], layerId: 'other' })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
@@ -147,6 +138,67 @@ describe('draw.groups.restore', () => {
     expect(itemsOf(tables)).toEqual(['g[p1,p2]', 'p3', 'p4', 'p0']);
     expect(draw.groups.get('g')?.name).toBe('G');
     expect(draw.getStore().getFeature('p1')?.groupId).toBe('g');
+  });
+
+  it('brings back a group whose features left it (an ungrouping), kept by the token of its deletion', () => {
+    const { draw, tables, notified } = setup();
+    draw.groups.create({ id: 'g', featureIds: ['p1', 'p2'], name: 'G' });
+    draw.groups.delete('g');
+    const deletion = notified[notified.length - 1];
+    expect(deletion.groups?.deleted?.map((group) => group.id)).toEqual(['g']);
+    expect(deletion.restoreToken).toBeDefined();
+    expect(itemsOf(tables)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
+    // Undone: the group brought back at the place it had, and its features moved into it
+    draw.transact(() => {
+      expect(draw?.groups.restore('g')).toMatchObject({ id: 'g', layerId: 'rows' });
+      draw?.features.moveMany(['p1', 'p2'], { layerId: 'rows', groupId: 'g' });
+    });
+    expect(itemsOf(tables)).toEqual(['p0', 'g[p1,p2]', 'p3', 'p4']);
+  });
+
+  it('brings back a group its last feature left for another place', () => {
+    const { draw, tables, notified } = setup();
+    draw.groups.create({ id: 'g', featureIds: ['p2'] });
+    draw.features.move('p2', { layerId: 'rows', above: null });
+    expect(notified[notified.length - 1].groups?.deleted?.map((group) => group.id)).toEqual(['g']);
+    expect(notified[notified.length - 1].restoreToken).toBeDefined();
+    draw.transact(() => {
+      draw?.groups.restore('g');
+      draw?.features.move('p2', { layerId: 'rows', groupId: 'g' });
+    });
+    expect(itemsOf(tables)).toEqual(['p0', 'p1', 'g[p2]', 'p3', 'p4']);
+  });
+
+  it('lets go of a group kept once the token of its deletion is let go of', () => {
+    const { draw, notified } = setup();
+    draw.groups.create({ id: 'g', featureIds: ['p1'] });
+    draw.groups.delete('g');
+    const token = notified[notified.length - 1].restoreToken;
+    expect(token).toBeDefined();
+    draw.features.releaseRestore(token as NonNullable<typeof token>);
+    expect(() => draw.groups.restore('g')).toThrow(expect.objectContaining({ code: 'not-found' }));
+  });
+
+  it('lets go of the groups of the oldest deletions past the most tokens kept', () => {
+    const { draw } = setup({ restoreLimit: { tokens: 1 } });
+    draw.groups.create({ id: 'g', featureIds: ['p1'] });
+    draw.groups.create({ id: 'h', featureIds: ['p3'] });
+    draw.groups.delete('g');
+    draw.groups.delete('h');
+    expect(() => draw.groups.restore('g')).toThrow(expect.objectContaining({ code: 'not-found' }));
+    expect(draw.groups.restore('h')).toMatchObject({ id: 'h' });
+  });
+
+  it('keeps no group deleted from elsewhere', () => {
+    const { draw, notified } = setup();
+    draw.groups.create({ id: 'g', featureIds: ['p1'] });
+    const store = draw.getStore();
+    store.transact(() => {
+      draw?.features.move('p1', { layerId: 'rows', above: null });
+    }, 'remote');
+    expect(notified[notified.length - 1].groups?.deleted?.map((group) => group.id)).toEqual(['g']);
+    expect(notified[notified.length - 1].restoreToken).toBeUndefined();
+    expect(() => draw.groups.restore('g')).toThrow(expect.objectContaining({ code: 'not-found' }));
   });
 
   it('throws not-found for a group that is not kept, and already-exists for a group there is', () => {
