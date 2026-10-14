@@ -12,13 +12,13 @@
 
 import type { Geometry } from 'geojson';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
-import type { CoordinateDims } from '../table/coordinates.js';
+import type { CoordinateDimensions } from '../table/coordinates.js';
 import type { RowInput } from '../table/row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
   ROW_FLAG_VISIBLE,
-  type RowGroupData,
+  type RowBlockData,
 } from '../table/row-group-types.js';
 import { utf8String } from '../table/utf8-column.js';
 import {
@@ -42,7 +42,7 @@ export interface RowReadContext {
   readonly groups: GroupTable;
   readonly strings: ValueStringCache;
   /** The dimensions of the coordinates of a layer */
-  dimsOf(layerId: string): CoordinateDims;
+  dimensionsOf(layerId: string): CoordinateDimensions;
 }
 
 /**
@@ -50,7 +50,7 @@ export interface RowReadContext {
  *
  * @internal
  */
-export function rowType(data: RowGroupData, row: number): FeatureType {
+export function rowType(data: RowBlockData, row: number): FeatureType {
   return data.typeNames[data.types[row]] as FeatureType;
 }
 
@@ -191,7 +191,7 @@ export function rowFeature(
   group: RowGroup,
   row: number,
 ): Feature {
-  const dims = context.dimsOf(layerId);
+  const dims = context.dimensionsOf(layerId);
   if (dims !== 'xy') {
     throw new Error(`FeatureTables: a row of a layer of ${dims} coordinates is not a feature`);
   }

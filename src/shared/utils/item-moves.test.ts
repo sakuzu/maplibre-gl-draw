@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../../test-utils.js';
 import type { ItemMove, ItemPosition } from '../types/model.js';
-import { itemMovesBetween, type OrderContainer } from './item-moves.js';
+import { diffItemOrder, type OrderContainer } from './item-moves.js';
 
 /** The items of each container, by `layerId/groupId` */
 type State = Map<string, string[]>;
@@ -70,7 +70,7 @@ function clean(state: State): State {
   return new Map([...state].filter(([, items]) => items.length > 0));
 }
 
-describe('itemMovesBetween', () => {
+describe('diffItemOrder', () => {
   it('moves the fewest items, and the moves made back put the order back', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const random = seededRandom(seed);
@@ -115,7 +115,7 @@ describe('itemMovesBetween', () => {
         items.splice(items.indexOf('g'), 1);
         deleted.push('g');
       }
-      const moves = itemMovesBetween(containersOf(before, clean(after)), {
+      const moves = diffItemOrder(containersOf(before, clean(after)), {
         deleted,
         isGroup: (item) => item === 'g',
         idOf: (item) => item,
@@ -128,7 +128,7 @@ describe('itemMovesBetween', () => {
   it('moves only the items given as moved', () => {
     const before: State = new Map([['a/', ['x', 'y', 'z']]]);
     const after: State = new Map([['a/', ['y', 'x', 'z']]]);
-    const moves = itemMovesBetween(containersOf(before, after), {
+    const moves = diffItemOrder(containersOf(before, after), {
       moved: new Set(['y']),
       deleted: [],
       isGroup: () => false,
@@ -150,7 +150,7 @@ describe('itemMovesBetween', () => {
       ['a/', ['x', 'g']],
       ['a/g', ['y', 'z']],
     ]);
-    const moves = itemMovesBetween(containersOf(before, after), {
+    const moves = diffItemOrder(containersOf(before, after), {
       deleted: [],
       isGroup: (item) => item === 'g',
       idOf: (item) => item,

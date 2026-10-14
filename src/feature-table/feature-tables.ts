@@ -17,19 +17,17 @@
 
 import type {
   FeatureTables,
-  FeatureTablesHooks,
   FeatureTablesOptions,
   FeatureTablesWorker,
   FeatureTablesWriter,
-  HeldWriteOptions,
-  ItemRefs,
+  ItemHandles,
   LayerRowsChange,
   LayerTableView,
+  OpenedApplyOptions,
   RowApplyOptions,
   RowCursor,
   RowField,
   RowHandle,
-  RowPatch,
   RowsChange,
   TableGroupPatch,
   TableScanOptions,
@@ -43,28 +41,28 @@ import type {
   FeatureStyle,
   FeatureType,
   ItemOrderChange,
-  RetainToken,
-  RowValuesSnapshot,
+  RestoreToken,
+  RowValues,
   StoreChange,
 } from '../shared/types/model.js';
 import {
-  type CoordinateDims,
+  type CoordinateDimensions,
   type CoordinateSystem,
   dimsWithin,
-  isCoordinateDims,
+  isCoordinateDimensions,
   planarCoordinates,
 } from '../table/coordinates.js';
 import {
-  createRowGroupBuilder,
-  ROW_GROUP_TARGET_ROWS,
+  createRowBlockDataBuilder,
+  ROW_BLOCK_TARGET_ROWS,
   type RowInput,
 } from '../table/row-group-builder.js';
-import { mergeRowGroup } from '../table/row-group-merge.js';
+import { mergeRowBlockData } from '../table/row-group-merge.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
   ROW_FLAG_VISIBLE,
-  type RowGroupData,
+  type RowBlockData,
 } from '../table/row-group-types.js';
 import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
 import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/utf8-column.js';
@@ -107,12 +105,12 @@ import {
 import { StyleTable } from './style-table.js';
 import {
   type GroupHandle,
+  type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
   ROW_WRITE_VALUES,
   type RowGroupHandle,
-  type RowWrite,
   type TableWorkBudget,
 } from './types.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
@@ -130,7 +128,7 @@ const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
 /** The attributes the cutting of the rows into chunks reads (a write of one moves the row) */
 const CLASSIFY_KEYS: ReadonlySet<string> = new Set([CREATED_ZOOM_KEY]);
 
-/** The tokens of the deletions kept, at most, when the options do not tell (`retainLimit`) */
+/** The tokens of the deletions kept, at most, when the options do not tell (`restoreLimit`) */
 const RETAIN_TOKENS = 100;
 
 /** The bytes of the rows the deletions keep, at most, when the options do not tell */
@@ -182,41 +180,59 @@ export const CREATE_GROUP_MIN_ROWS = 64;
 export const CREATE_WAIT_FRAMES = 2;
 
 /**
+ * The options of the tables, with the ones core keeps to itself (the tests and the measurements
+ * set them)
+ *
+ * @internal
+ */
+export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
+  /** The number of strings read from the columns that are kept (50,000 when omitted) */
+  readonly stringCacheSize?: number;
+  /**
+   * The number of rows opened as features from which a row opened moved as a whole in the middle
+   * of an edit (a drag of the selection) is drawn moved by its state rather than written in every
+   * frame: its feature takes every value written, and its row is written once, with the values
+   * the edit ends with (100 when omitted; `Infinity`: every row is written)
+   */
+  readonly moveOpenedByStateFrom?: number;
+}
+
+/**
  * Creates the tables of the features of a document, as its reading and writing sides (the
  * implementation of `createFeatureTables`)
  *
  * @internal
  */
-export function createFeatureTablesStore(options: FeatureTablesOptions = {}): {
+export function createFeatureTablesStore(options: FeatureTablesInternalOptions = {}): {
   tables: FeatureTables;
   writer: FeatureTablesWriter;
 } {
   const store = new FeatureTablesStore(options);
   const tables: FeatureTables = {
-    layer: (layerId) => store.view(layerId),
-    handleOf: (id) => store.handleOf(id),
-    idOf: (handle) => store.ids.idOf(handle),
-    groupIdOf: (group) => store.groups.idOf(group),
-    groupHandleOf: (id) => {
+    get: (layerId) => store.view(layerId),
+    findRow: (id) => store.handleOf(id),
+    getRowId: (handle) => store.ids.idOf(handle),
+    getGroupId: (groupHandle) => store.groups.idOf(groupHandle),
+    findGroup: (id) => {
       const group = store.groups.handleOfId(id);
       return group >= 0 ? group : undefined;
     },
-    groupOrderOf: (group) => store.groupOrderOf(group),
     scan: (options) => store.scan(options ?? {}),
-    snapshot: (patch) => store.snapshot(patch),
+    readValues: (rows) => store.readValues(rows),
     release: (token) => store.release(token),
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
-    adopt: (layerId, groups) => store.adopt(layerId, groups),
-    flushAdoption: () => store.flushAdoption(),
-    raiseDims: (layerId, dims) => store.raiseDims(layerId, dims),
-    apply: (patch, options) => store.apply(patch, options),
+    // The blocks are made by the builder and the merge of the library
+    addBlocks: (layerId, blocks) => store.addBlocks(layerId, blocks as readonly RowBlockData[]),
+    raiseDimensions: (layerId, dimensions) => store.raiseDimensions(layerId, dimensions),
+    apply: (values, options) => store.apply(values, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
-    writeHeld: (id, feature, options) => store.writeHeld(id, feature, options),
+    applyOpened: (id, feature, options) => store.applyOpened(id, feature, options),
     lookup: (id) => store.lookup(id),
-    retainToken: () => store.retainToken(),
+    createRestoreToken: () => store.createRestoreToken(),
     forget: (handles) => store.forget(handles),
+    getGroupOrder: (groupHandle) => store.getGroupOrder(groupHandle),
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
@@ -263,7 +279,7 @@ export interface FeatureTablesInternals {
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
   /** Whether row groups given to `adopt` are still waiting to be taken in */
-  readonly hasPendingAdoption: boolean;
+  readonly hasQueuedBlocks: boolean;
   /**
    * Takes in the row groups waiting, one group per step, within the budget of the frame (at
    * least one group per call), but the ones of a layer whose reorder of groups of features waits
@@ -271,14 +287,14 @@ export interface FeatureTablesInternals {
    *
    * @returns Whether groups are still waiting
    */
-  advanceAdoption(budget: TableWorkBudget): boolean;
+  advanceQueuedBlocks(budget: TableWorkBudget): boolean;
   /**
    * Takes in every row group waiting at once (a host without frames, the tests), but the ones
    * of a layer whose reorder of groups of features waits (they are taken in once it is in)
    *
    * @throws when a group cannot be taken in (the groups after it keep waiting)
    */
-  flushAdoption(): void;
+  addQueuedBlocks(): void;
   /**
    * Calls `listener` when row groups start waiting, so the drawing asks for a frame
    *
@@ -292,7 +308,9 @@ export interface FeatureTablesInternals {
    *
    * @returns The function that stops the calls
    */
-  onRowsWritten(listener: (layerId: string, writes: readonly RowWrite[]) => void): () => void;
+  onRowsWritten(
+    listener: (layerId: string, writes: readonly InPlaceRowWrite[]) => void,
+  ): () => void;
   /**
    * Calls `listener` when the rows of the delta of a layer came in, left or were made again, so
    * the drawing packs them again before its next frame
@@ -368,7 +386,7 @@ export interface FeatureTablesInternals {
   /**
    * Makes rows features for this client: the rows `owner` names are now these (the ones it named
    * before and no other owner names are no longer). A row held is a {@link Feature} the Store
-   * gives as it is (`heldFeature`) until it is no longer held; it stays a row of the table, drawn
+   * gives as it is (`getOpenedFeature`) until it is no longer held; it stays a row of the table, drawn
    * from the table while it is not changed. The change is notified as `held`, not as a change of
    * the document. An id of no row, or of a deleted one, is not held.
    *
@@ -378,9 +396,9 @@ export interface FeatureTablesInternals {
    * @param owner Who holds the rows
    * @param ids The ids of the rows it holds (none: it holds no row any more)
    */
-  hold(owner: string, ids: readonly string[]): void;
+  open(owner: string, ids: readonly string[]): void;
   /** The feature of a row held (undefined for an id not held) */
-  heldFeature(id: string): Feature | undefined;
+  getOpenedFeature(id: string): Feature | undefined;
   /**
    * Draws features in the places of rows, for this client only: the features `owner` draws over
    * rows are now these (the ones it drew before and does not give are no longer drawn). A
@@ -478,7 +496,7 @@ interface OverlayEntry {
 /** A row group given to `adopt`, or built of new rows, waiting to be taken in */
 interface Adoption {
   readonly layer: LayerTable;
-  readonly data: RowGroupData;
+  readonly data: RowBlockData;
   /** The new rows written the group is built of (put in the delta when it cannot be taken in) */
   readonly creation?: Creation;
 }
@@ -518,14 +536,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly creationOf = new Map<RowHandle, Creation>();
   private readonly workListeners = new Set<() => void>();
   private readonly writeListeners = new Set<
-    (layerId: string, writes: readonly RowWrite[]) => void
+    (layerId: string, writes: readonly InPlaceRowWrite[]) => void
   >();
   private readonly deltaListeners = new Set<(layerId: string) => void>();
   private readonly touchListeners = new Set<(layerId: string, bounds: BoundingBox) => void>();
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
-  private readonly hooks: FeatureTablesHooks | undefined;
+  private readonly onChange: ((change: StoreChange) => void) | undefined;
+  private readonly onRelease: ((handles: Int32Array) => void) | undefined;
   /** The features drawn over rows for this client, by owner and by id */
   private readonly overlays = new Map<string, Map<string, OverlayEntry>>();
   /** The rows of the deltas that are features drawn over rows (drawn, not read) */
@@ -541,39 +560,40 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The token that keeps each deleted row kept */
   private readonly retainOf = new Map<RowHandle, number>();
   private nextToken = 1;
-  /** The most tokens and bytes the deletions kept may hold (`FeatureTablesOptions.retainLimit`) */
+  /** The most tokens and bytes the deletions kept may hold (`FeatureTablesOptions.restoreLimit`) */
   private readonly retainTokens: number;
   private readonly retainBytes: number;
   /** The deleted rows whose ids are forgotten, freed once their rows are gone */
   private readonly forgotten = new Set<RowHandle>();
   /** The groups of features deleted that rows still name (taken out once none does) */
   private readonly deletedGroups = new Set<GroupHandle>();
-  /** `FeatureTablesOptions.moveHeldByStateFrom` */
+  /** `FeatureTablesInternalOptions.moveOpenedByStateFrom` */
   private readonly moveHeldByStateFrom: number;
-  /** `FeatureTablesOptions.dimsOf` */
-  private readonly declaredDims: ((layerId: string) => CoordinateDims) | undefined;
+  /** `FeatureTablesOptions.dimensionsOf` */
+  private readonly declaredDims: ((layerId: string) => CoordinateDimensions) | undefined;
   /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
   private readonly coordinates: CoordinateSystem;
-  /** The dimensions raised of the layers that hold no rows yet (`raiseDims`) */
-  private readonly raisedDims = new Map<string, CoordinateDims>();
+  /** The dimensions raised of the layers that hold no rows yet (`raiseDimensions`) */
+  private readonly raisedDims = new Map<string, CoordinateDimensions>();
 
-  constructor(options: FeatureTablesOptions) {
+  constructor(options: FeatureTablesInternalOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
-    this.declaredDims = options.dimsOf;
-    this.coordinates = options.coordinates ?? planarCoordinates;
+    this.declaredDims = options.dimensionsOf;
+    this.coordinates = options.coordinateSystem ?? planarCoordinates;
     this.readContext = {
       styles: this.styles,
       groups: this.groups,
       strings: this.strings,
-      dimsOf: (layerId) => this.dimsOfLayer(layerId),
+      dimensionsOf: (layerId) => this.dimsOfLayer(layerId),
     };
     this.worker = options.worker;
-    this.hooks = options.hooks;
+    this.onChange = options.onChange;
+    this.onRelease = options.onRelease;
     this.versions = new GroupVersions(this.versionHost());
-    this.retainTokens = options.retainLimit?.tokens ?? RETAIN_TOKENS;
-    this.retainBytes = options.retainLimit?.bytes ?? RETAIN_BYTES;
-    this.moveHeldByStateFrom = options.moveHeldByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
+    this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
+    this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
+    this.moveHeldByStateFrom = options.moveOpenedByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
   }
 
   /** What the versions read and write of the tables */
@@ -624,13 +644,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   flushVersions(): void {
     const unbounded = UNBOUNDED_BUDGET;
-    this.flushAdoption();
+    this.addQueuedBlocks();
     for (let i = 0; i < 64 && (i === 0 || this.versions.hasWork); i++) {
       const before = this.versions.swapped;
       this.versions.advance(unbounded, false);
       this.versions.swapReady();
       // The row groups that waited for a reorder swapped in now
-      this.flushAdoption();
+      this.addQueuedBlocks();
       if (this.versions.swapped === before && this.versions.built().length > 0) break;
     }
   }
@@ -702,26 +722,26 @@ class FeatureTablesStore implements FeatureTablesInternals {
    *
    * @throws when the options declare what is not dimensions
    */
-  dimsOfLayer(layerId: string): CoordinateDims {
+  dimsOfLayer(layerId: string): CoordinateDimensions {
     const layer = this.layers.get(layerId);
     if (layer) return layer.dims;
     const raised = this.raisedDims.get(layerId);
     if (raised) return raised;
     const dims = this.declaredDims?.(layerId) ?? 'xy';
-    if (!isCoordinateDims(dims)) {
+    if (!isCoordinateDimensions(dims)) {
       throw new Error(`FeatureTables: the layer "${layerId}" has the dimensions ${dims}`);
     }
     return dims;
   }
 
   /**
-   * Raises the dimensions of the coordinates of a layer (see `FeatureTablesWriter.raiseDims`):
+   * Raises the dimensions of the coordinates of a layer (see `FeatureTablesWriter.raiseDimensions`):
    * the rows built from then on have them, and every row group of the layer is due for its next
    * version, which copies its coordinates into them (the groups of before are read as they are
    * until then)
    */
-  raiseDims(layerId: string, dims: CoordinateDims): void {
-    if (!isCoordinateDims(dims)) throw new Error(`FeatureTables: ${dims} are not dimensions`);
+  raiseDimensions(layerId: string, dims: CoordinateDimensions): void {
+    if (!isCoordinateDimensions(dims)) throw new Error(`FeatureTables: ${dims} are not dimensions`);
     const current = this.dimsOfLayer(layerId);
     if (!dimsWithin(current, dims)) {
       throw new Error(`FeatureTables: the coordinates of ${current} cannot be lowered to ${dims}`);
@@ -805,7 +825,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * (its members are read in the order before until its reorder goes in), or the one of the table
    * of the groups
    */
-  groupOrderOf(group: GroupHandle): string | undefined {
+  getGroupOrder(group: GroupHandle): string | undefined {
     if (!this.groups.has(group)) return undefined;
     return this.writtenOrders.get(group) ?? this.groups.orderOf(group);
   }
@@ -827,9 +847,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /**
    * Checks the row groups and queues them: they are taken in a group at a time within the
-   * budget of the frames (`advanceAdoption`), so a large file does not hold a frame
+   * budget of the frames (`advanceQueuedBlocks`), so a large file does not hold a frame
    */
-  adopt(layerId: string, groups: readonly RowGroupData[]): void {
+  addBlocks(layerId: string, groups: readonly RowBlockData[]): void {
     // The checks of the shape of the groups are cheap and done here, so that a group made wrong
     // is refused before anything is queued; the checks of the rows are done when it is taken in
     const dims = this.dimsOfLayer(layerId);
@@ -850,11 +870,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (!wasPending && this.adoptions.length > 0) this.notifyWork();
   }
 
-  get hasPendingAdoption(): boolean {
+  get hasQueuedBlocks(): boolean {
     return this.adoptions.length > 0;
   }
 
-  advanceAdoption(budget: TableWorkBudget): boolean {
+  advanceQueuedBlocks(budget: TableWorkBudget): boolean {
     let at = 0;
     while (at < this.adoptions.length && budget.canStep()) {
       const next = this.adoptions[at];
@@ -876,7 +896,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return this.adoptions.length > 0;
   }
 
-  flushAdoption(): void {
+  addQueuedBlocks(): void {
     this.advanceCreations(UNBOUNDED_BUDGET, false);
     let at = 0;
     while (at < this.adoptions.length) {
@@ -914,7 +934,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Takes the rows of a group of a creation taken in (or put in the delta) out of the creation,
    * and ends it once its last group is
    */
-  private settleCreated(creation: Creation, data: RowGroupData): void {
+  private settleCreated(creation: Creation, data: RowBlockData): void {
     const taken = new Set<RowHandle>();
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
@@ -954,16 +974,19 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (worker && wait) {
         creation.status = 'building';
         const inputs = creation.rows.map((row) => row.input);
-        worker.build(inputs, { groups: this.groups.keyList(), dims: creation.layer.dims }).then(
-          (groups) => {
-            if (creation.status !== 'building') return;
-            this.queueCreation(creation, groups);
-          },
-          (error) => {
-            console.error(error);
-            if (creation.status === 'building') this.creationToDelta(creation);
-          },
-        );
+        worker
+          .build(inputs, { groups: this.groups.keyList(), dimensions: creation.layer.dims })
+          .then(
+            (groups) => {
+              if (creation.status !== 'building') return;
+              // The host builds with the builder of the library
+              this.queueCreation(creation, groups as RowBlockData[]);
+            },
+            (error) => {
+              console.error(error);
+              if (creation.status === 'building') this.creationToDelta(creation);
+            },
+          );
         continue;
       }
       if (!budget.canStep()) break;
@@ -976,11 +999,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * creation of their own (built at once), the rest staying
    */
   private splitCreation(creation: Creation): void {
-    if (creation.rows.length < ROW_GROUP_TARGET_ROWS) return;
+    if (creation.rows.length < ROW_BLOCK_TARGET_ROWS) return;
     const keys = keySourceOf(creation.rows.map((row) => row.input));
     const order = creation.rows.map((_, i) => i);
     order.sort((a, b) => compareRowKeys(keys, a, keys, b, this.groups));
-    const whole = order.length - (order.length % ROW_GROUP_TARGET_ROWS);
+    const whole = order.length - (order.length % ROW_BLOCK_TARGET_ROWS);
     if (whole === 0) return;
     const rows = order.map((i) => creation.rows[i]);
     const head: Creation = {
@@ -1005,11 +1028,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /** Builds the rows of a creation into row groups on the main thread */
-  private buildCreation(creation: Creation): RowGroupData[] {
-    const builder = createRowGroupBuilder({
+  private buildCreation(creation: Creation): RowBlockData[] {
+    const builder = createRowBlockDataBuilder({
       groups: this.groups.keyList(),
-      dims: creation.layer.dims,
-      coordinates: this.coordinates,
+      dimensions: creation.layer.dims,
+      coordinateSystem: this.coordinates,
       rings: circleRowRings,
     });
     for (const row of creation.rows) builder.addRow(row.input);
@@ -1020,7 +1043,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Queues the groups of a creation built, to be taken in (its rows are read from it until they
    * are)
    */
-  private queueCreation(creation: Creation, groups: RowGroupData[]): void {
+  private queueCreation(creation: Creation, groups: RowBlockData[]): void {
     if (groups.length === 0) {
       this.endCreation(creation);
       return;
@@ -1125,7 +1148,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Puts the rows of a row group that cannot be taken in as a group into the delta of its layer
    * (given to `adopt`, or built of new rows)
    */
-  private rowsToDelta(layer: LayerTable, data: RowGroupData): void {
+  private rowsToDelta(layer: LayerTable, data: RowBlockData): void {
     this.numberStyles(data);
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     const group = createRowGroup(-1, data);
@@ -1180,7 +1203,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // Rows of the delta within the run (from the last row of the creation continued)
     const from = target ? target.last : keys;
     if (this.deltaWithin(layer, from, target ? 0 : first, keys, last)) return false;
-    if (target && target.rows.length >= ROW_GROUP_TARGET_ROWS) target = null;
+    if (target && target.rows.length >= ROW_BLOCK_TARGET_ROWS) target = null;
     if (!target) {
       if (rows.length < CREATE_GROUP_MIN_ROWS) return false;
       target = {
@@ -1276,7 +1299,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return count;
   }
 
-  onRowsWritten(listener: (layerId: string, writes: readonly RowWrite[]) => void): () => void {
+  onRowsWritten(
+    listener: (layerId: string, writes: readonly InPlaceRowWrite[]) => void,
+  ): () => void {
     this.writeListeners.add(listener);
     return () => {
       this.writeListeners.delete(listener);
@@ -1295,7 +1320,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const layers = (options.layerIds ?? [...this.layers.keys()])
       .map((id) => this.layers.get(id))
       .filter((layer): layer is LayerTable => layer !== undefined);
-    const batch = Math.max(1, Math.floor(options.batch ?? SCAN_BATCH));
+    const batch = Math.max(1, Math.floor(options.batchSize ?? SCAN_BATCH));
     const bbox = options.bbox;
     let layerAt = 0;
     let handles: number[] | null = null;
@@ -1359,9 +1384,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /**
    * Writes values of rows (see `FeatureTablesWriter.apply`). A row held as a feature gets its
    * feature written too, notified as a change of the feature rather than of the row; the fields
-   * an edit of it writes in its middle are kept for when the edit ends (`HeldWriteOptions`)
+   * an edit of it writes in its middle are kept for when the edit ends (`OpenedApplyOptions`)
    */
-  apply(patch: RowPatch, options: RowApplyOptions = {}): RowsChange {
+  apply(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
     const watch = this.watchOrder(patch);
     const drafts = new Map<string, LayerChangeDraft>();
     const heldWritten: Array<{ handle: RowHandle; fields: Map<RowField, unknown> }> = [];
@@ -1395,29 +1420,29 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     const features = this.heldChanges(heldWritten, drafts);
-    const kept = this.keepDeleted(patch, options.retain);
+    const kept = this.keepDeleted(patch, options.restoreToken);
     const change: RowsChange = { layers: finishChanges(drafts) };
-    if (this.hooks) {
+    if (this.onChange) {
       // The values before, the token that keeps the rows deleted and the changes of the order go
       // with the last of the additions to the notification
       const order = watch?.finish() ?? [];
       const extra: StoreChange = {
         ...(order.length > 0 && { order }),
-        ...(kept && options.retain !== undefined && { retain: options.retain }),
+        ...(kept && options.restoreToken !== undefined && { restoreToken: options.restoreToken }),
       };
       const rows = options.before ? { ...change, before: options.before } : change;
       const hasRows = change.layers.size > 0 || options.before !== undefined;
-      if (hasRows) this.hooks.emit({ rows, ...(!features && extra) });
-      if (features) this.hooks.emit({ features, ...extra });
-      if (!hasRows && !features && Object.keys(extra).length > 0) this.hooks.emit(extra);
+      if (hasRows) this.onChange({ rows, ...(!features && extra) });
+      if (features) this.onChange({ features, ...extra });
+      if (!hasRows && !features && Object.keys(extra).length > 0) this.onChange(extra);
     }
     return change;
   }
 
   // === The rows deleted kept, forgotten ===
 
-  retainToken(): RetainToken {
-    return this.nextToken++ as RetainToken;
+  createRestoreToken(): RestoreToken {
+    return this.nextToken++ as RestoreToken;
   }
 
   /**
@@ -1427,7 +1452,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    *
    * @returns Whether the token keeps a row
    */
-  private keepDeleted(patch: RowPatch, token: RetainToken | undefined): boolean {
+  private keepDeleted(patch: RowValues, token: RestoreToken | undefined): boolean {
     const deleted = patch.deleted;
     if (!deleted) return false;
     let kept = false;
@@ -1472,11 +1497,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.retainOf.size * RETAINED_ROW_BYTES > this.retainBytes;
       if (!over) break;
       if (token === current && this.retained.size > 1) continue;
-      this.release(token as RetainToken);
+      this.release(token as RestoreToken);
     }
   }
 
-  release(token: RetainToken): void {
+  release(token: RestoreToken): void {
     const set = this.retained.get(token);
     if (!set) return;
     this.retained.delete(token);
@@ -1490,7 +1515,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (place) groups.add(place.group);
     }
     for (const group of groups) this.checkDeleted(group);
-    if (out.length > 0) this.hooks?.released?.(Int32Array.from(out));
+    if (out.length > 0) this.onRelease?.(Int32Array.from(out));
   }
 
   /**
@@ -1559,7 +1584,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.ids.free(handle);
   }
 
-  snapshot(patch: RowPatch): RowValuesSnapshot {
+  readValues(patch: RowValues): RowValues {
     const n = patch.handles.length;
     const fields = new Map<RowField, unknown[]>();
     for (const field of patch.fields.keys()) fields.set(field, new Array(n).fill(undefined));
@@ -1612,8 +1637,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * deletes rows in, kept before it to tell the changes of the order it makes (null when it makes
    * none, or when nothing is told)
    */
-  private watchOrder(patch: RowPatch): ItemOrderWatch | null {
-    if (!this.hooks) return null;
+  private watchOrder(patch: RowValues): ItemOrderWatch | null {
+    if (!this.onChange) return null;
     const watch = new ItemOrderWatch(this.orderSource);
     const { handles, fields, deleted } = patch;
     const layerIds = fields.get('layerId');
@@ -1731,7 +1756,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Checks the shape of a patch: one value per row in every field (the values are checked where
    * they are written)
    */
-  private checkPatch(patch: RowPatch): void {
+  private checkPatch(patch: RowValues): void {
     const n = patch.handles.length;
     for (const [field, values] of patch.fields) {
       if (values.length !== n) {
@@ -1745,7 +1770,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   // === The rows held as features ===
 
-  hold(owner: string, ids: readonly string[]): void {
+  open(owner: string, ids: readonly string[]): void {
     const next = new Set<RowHandle>();
     for (const id of ids) {
       const handle = this.handleOf(id);
@@ -1766,12 +1791,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const id = this.releaseRow(handle);
       if (id !== undefined) removed.push(id);
     }
-    if (this.hooks && (added.length > 0 || removed.length > 0)) {
-      this.hooks.emit({ held: { added, removed } });
+    if (this.onChange && (added.length > 0 || removed.length > 0)) {
+      this.onChange({ opened: { added, removed } });
     }
   }
 
-  heldFeature(id: string): Feature | undefined {
+  getOpenedFeature(id: string): Feature | undefined {
     const handle = this.ids.handleOf(id);
     return handle >= 0 ? this.heldRows.get(handle)?.feature : undefined;
   }
@@ -1795,7 +1820,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return handle >= 0 ? this.heldRows.get(handle)?.committed : undefined;
   }
 
-  writeHeld(id: string, feature: Feature, options: HeldWriteOptions = {}): void {
+  applyOpened(id: string, feature: Feature, options: OpenedApplyOptions = {}): void {
     const handle = this.ids.handleOf(id);
     const held = handle >= 0 ? this.heldRows.get(handle) : undefined;
     if (!held) throw new Error(`FeatureTables: the row "${id}" is not held`);
@@ -1834,7 +1859,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       held.committed = feature;
       held.intermediate.clear();
     }
-    this.hooks?.emit({
+    this.onChange?.({
       features: {
         updated: [
           { id, feature, previous, ...(options.intermediate === true && { isIntermediate: true }) },
@@ -2033,7 +2058,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    *
    * @returns The handle of the group of features of each row, when the patch writes them
    */
-  private checkRows(patch: RowPatch): number[] | undefined {
+  private checkRows(patch: RowValues): number[] | undefined {
     const { handles, fields } = patch;
     this.checkPatch(patch);
     const geometries = fields.get('geometry');
@@ -2114,7 +2139,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * written in place, and the rows placed elsewhere and the new ones are put in the delta of
    * their layer, and the drawing is told
    */
-  private applyPatch(patch: RowPatch, changes: Map<string, LayerChangeDraft>): void {
+  private applyPatch(patch: RowValues, changes: Map<string, LayerChangeDraft>): void {
     const { handles, fields, deleted } = patch;
     const n = handles.length;
     const groupHandles = this.checkRows(patch);
@@ -2130,7 +2155,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const styleNumbers = styles?.map((style) => this.styles.intern((style ?? {}) as FeatureStyle));
 
     const number = ++this.writeCount;
-    const writes = new Map<string, RowWrite[]>();
+    const writes = new Map<string, InPlaceRowWrite[]>();
     const touched = new Set<RowGroup>();
     const moving = new Map<LayerTable, DeltaInput[]>();
     const leaving = new Map<LayerTable, Set<RowHandle>>();
@@ -2366,12 +2391,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     // The moves of the groups that are items, with the keys before (told when they are written,
     // whenever the order of their members goes in)
-    if (this.hooks) {
+    if (this.onChange) {
       const moves: ItemOrderChange[] = [];
       for (const [layerId, list] of orders) {
         moves.push(...groupKeyMoves(this.orderSource, layerId, list));
       }
-      if (moves.length > 0) this.hooks.emit({ order: moves });
+      if (moves.length > 0) this.onChange({ order: moves });
     }
     for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
     // The new rows read from their creations are built again with the groups as they are now
@@ -2423,7 +2448,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const groups = [...cuts.keys()].sort(
       (a, b) => layer.orderOf(a.handle) - layer.orderOf(b.handle),
     );
-    const pieces: RowGroupData[] = [];
+    const pieces: RowBlockData[] = [];
     for (const group of groups) {
       const points = [
         0,
@@ -2443,8 +2468,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * The rows `[from, to)` of a group as a group of their own (the values written in place built
    * into them)
    */
-  private sliceRows(group: RowGroup, from: number, to: number, dims: CoordinateDims): RowGroupData {
-    const sources: RowGroupData[] = [group.data];
+  private sliceRows(
+    group: RowGroup,
+    from: number,
+    to: number,
+    dims: CoordinateDimensions,
+  ): RowBlockData {
+    const sources: RowBlockData[] = [group.data];
     const pairs: number[] = [];
     const inputs: RowInput[] = [];
     for (let r = from; r < to; r++) {
@@ -2463,15 +2493,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
       sources.push(built);
       for (let r = 0; r < built.length; r++) pairs.push(1, r);
     }
-    const [data] = mergeRowGroup({
+    const [data] = mergeRowBlockData({
       sources,
       rows: Int32Array.from(pairs),
       groups: this.groups,
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
-      dims,
+      dimensions: dims,
       ringVertices: circleRowRings.ringVertices,
-      coordinates: this.coordinates,
+      coordinateSystem: this.coordinates,
     });
     return data;
   }
@@ -2605,7 +2635,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     fields: ReadonlyMap<RowField, readonly unknown[]>,
     deleted: Uint8Array | undefined,
     styleNumbers: number[] | undefined,
-  ): RowWrite | null {
+  ): InPlaceRowWrite | null {
     const { layer, group, row } = place;
     const data = group.data;
     let what = 0;
@@ -2787,7 +2817,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     for (const [delta, set] of leaving) this.rebuildDelta(delta, set, [], this.writeCount);
     // The values written in place since the version started
-    const writes = new Map<string, RowWrite[]>();
+    const writes = new Map<string, InPlaceRowWrite[]>();
     for (const entry of version.log) {
       const place = this.placeOf(entry.handle);
       if (!place || place.group.delta || !groups.includes(place.group)) continue;
@@ -2858,7 +2888,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   ): void {
     const delta = layer.delta;
     const old = delta.group;
-    const sources: RowGroupData[] = [];
+    const sources: RowBlockData[] = [];
     const pairs: number[] = [];
     const writtenOf = new Map<RowHandle, number>();
     const inputs: RowInput[] = [];
@@ -2887,15 +2917,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
         for (let r = 0; r < built.length; r++) pairs.push(sources.length - 1, r);
       }
     }
-    const merged = mergeRowGroup({
+    const merged = mergeRowBlockData({
       sources,
       rows: Int32Array.from(pairs),
       groups: this.groups,
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
-      dims: layer.dims,
+      dimensions: layer.dims,
       ringVertices: circleRowRings.ringVertices,
-      coordinates: this.coordinates,
+      coordinateSystem: this.coordinates,
     });
     const group = merged.length > 0 ? createRowGroup(delta.handle, merged[0], true) : null;
     const written = new Float64Array(group?.data.length ?? 0);
@@ -2939,13 +2969,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Builds rows into one row group of coordinates of dimensions, numbered and with their handles
    * (null for no row)
    */
-  private buildRows(inputs: readonly RowInput[], dims: CoordinateDims): RowGroupData | null {
-    const builder = createRowGroupBuilder({
+  private buildRows(inputs: readonly RowInput[], dims: CoordinateDimensions): RowBlockData | null {
+    const builder = createRowBlockDataBuilder({
       groups: this.groups.keyList(),
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
-      dims,
-      coordinates: this.coordinates,
+      dimensions: dims,
+      coordinateSystem: this.coordinates,
       rings: circleRowRings,
     });
     for (const input of inputs) builder.addRow(input);
@@ -2957,7 +2987,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /** Gives the styles of a group built in a Worker the numbers of the table of styles */
-  private numberStyles(data: RowGroupData): void {
+  private numberStyles(data: RowBlockData): void {
     const dictionary = data.styleDictionary;
     if (!dictionary) return;
     const numbers = new Uint32Array(utf8ColumnLength(dictionary));
@@ -2973,7 +3003,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /** Takes in one row group: the handles, the numbers of its styles, the state of its rows */
-  private adoptGroup(layer: LayerTable, data: RowGroupData): void {
+  private adoptGroup(layer: LayerTable, data: RowBlockData): void {
     checkDims(data, layer.dims);
     if (data.handles.some((handle) => handle < 0)) {
       data.handles.set(this.ids.allocate(data.ids, data.idHashes));
@@ -3163,7 +3193,7 @@ function changedKeys(a: FeatureStyle, b: FeatureStyle): string[] {
 }
 
 /** Checks that the arrays of a group have one entry per row */
-function checkShape(data: RowGroupData): void {
+function checkShape(data: RowBlockData): void {
   const n = data.length;
   const perRow: Array<[string, number]> = [
     ['handles', data.handles.length],
@@ -3192,8 +3222,8 @@ function checkShape(data: RowGroupData): void {
 }
 
 /** Whether every geometry column of a row group has coordinates of dimensions */
-function hasDims(data: RowGroupData, dims: CoordinateDims): boolean {
-  for (const child of data.geometry.children) if ((child.dims ?? 'xy') !== dims) return false;
+function hasDims(data: RowBlockData, dims: CoordinateDimensions): boolean {
+  for (const child of data.geometry.children) if ((child.dimensions ?? 'xy') !== dims) return false;
   return true;
 }
 
@@ -3202,9 +3232,9 @@ function hasDims(data: RowGroupData, dims: CoordinateDims): boolean {
  *
  * @throws when a geometry column of the group has others
  */
-function checkDims(data: RowGroupData, dims: CoordinateDims): void {
+function checkDims(data: RowBlockData, dims: CoordinateDimensions): void {
   for (const child of data.geometry.children) {
-    const own = child.dims ?? 'xy';
+    const own = child.dimensions ?? 'xy';
     if (own !== dims) {
       throw new Error(`FeatureTables: a row group has coordinates of ${own}, its layer ${dims}`);
     }
@@ -3253,7 +3283,7 @@ class LayerTableViewImpl implements LayerTableView {
     return at ? rowPoint(at.group, at.row) : null;
   }
 
-  valueAt(handle: RowHandle, key: string): unknown {
+  getRowValue(handle: RowHandle, key: string): unknown {
     const at = this.locate(handle);
     return at ? rowValue(at.group, at.row, key, this.store.strings) : undefined;
   }
@@ -3268,7 +3298,7 @@ class LayerTableViewImpl implements LayerTableView {
     return this.store.revision;
   }
 
-  rowsInOrder(start: number, count: number): Int32Array {
+  listRowHandles(start: number, count: number): Int32Array {
     const handles = this.table.rowOrder().handles;
     const from = Math.max(0, Math.min(start, handles.length));
     return handles.slice(from, Math.max(from, Math.min(handles.length, from + Math.max(0, count))));
@@ -3278,7 +3308,7 @@ class LayerTableViewImpl implements LayerTableView {
     return this.table.itemsOf().kinds.length;
   }
 
-  itemsInOrder(start: number, count: number): ItemRefs {
+  listItems(start: number, count: number): ItemHandles {
     const items = this.table.itemsOf();
     const from = Math.max(0, Math.min(start, items.kinds.length));
     const to = Math.max(from, Math.min(items.kinds.length, from + Math.max(0, count)));
@@ -3288,13 +3318,13 @@ class LayerTableViewImpl implements LayerTableView {
   // The members of a group are read from the list of the items when it is made, and from the
   // rows of the group otherwise (the list is made from every row of the layer)
 
-  groupMemberCount(group: number): number {
+  countGroupMembers(group: number): number {
     const items = this.table.itemsMade;
     if (items) return items.members.get(group)?.length ?? 0;
     return new ItemWalk(this.table, this.store).memberCount(group);
   }
 
-  groupMembersInOrder(group: number, start: number, count: number): Int32Array {
+  listGroupMembers(group: number, start: number, count: number): Int32Array {
     const items = this.table.itemsMade;
     if (!items) {
       const from = Math.max(0, start);
@@ -3317,7 +3347,7 @@ class LayerTableViewImpl implements LayerTableView {
 }
 
 /** The rows `rows` of a patch, as a patch */
-function subsetPatch(patch: RowPatch, rows: readonly number[]): RowPatch {
+function subsetPatch(patch: RowValues, rows: readonly number[]): RowValues {
   const fields = new Map<RowField, readonly unknown[]>();
   for (const [field, values] of patch.fields) {
     fields.set(

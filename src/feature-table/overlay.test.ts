@@ -32,11 +32,11 @@ function setup() {
   const emitted: StoreChange[] = [];
   const list = Array.from({ length: 12 }, (_, i) => feature(`p${i}`, 'Polygon', square(i * 2)));
   const tables = tablesOfFeatures('layer', list, 4, {
-    hooks: { emit: (change) => emitted.push(change) },
+    onChange: (change) => emitted.push(change),
   });
   const ids = () =>
-    Array.from(tables.tables.layer('layer')?.rowsInOrder(0, 100) ?? [], (h) =>
-      tables.tables.idOf(h),
+    Array.from(tables.tables.get('layer')?.listRowHandles(0, 100) ?? [], (h) =>
+      tables.tables.getRowId(h),
     );
   return { ...tables, emitted, ids };
 }
@@ -58,25 +58,25 @@ describe('the features drawn over rows for this client', () => {
   it('are drawn in the places of the rows, which are not drawn, and read as before', () => {
     const { tables, internals, table, emitted, ids } = setup();
     const before = ids();
-    const p3 = tables.layer('layer')?.getRow(tables.handleOf('p3') ?? -1);
+    const p3 = tables.get('layer')?.getRow(tables.findRow('p3') ?? -1);
     internalsOf(tables).overlay('peer', [
       { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
     ]);
     // Drawn as a row of the delta, at the place of p3
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p3']);
     const place = table.deltaPlaces();
-    const p3Place = internals.placeOf(tables.handleOf('p3') ?? -1);
+    const p3Place = internals.placeOf(tables.findRow('p3') ?? -1);
     expect(place.groups[0]).toBe(table.orderOf(p3Place?.group.handle ?? -1));
     expect(place.cuts[0]).toBe(p3Place?.row);
     // The row drawn over is not drawn
     expect((p3Place?.group.state[p3Place.row] ?? 0) & STATE_HIDDEN_OVERLAY).not.toBe(0);
     // Read as before
     expect(ids()).toEqual(before);
-    expect(tables.layer('layer')?.getRow(tables.handleOf('p3') ?? -1)).toEqual(p3);
+    expect(tables.get('layer')?.getRow(tables.findRow('p3') ?? -1)).toEqual(p3);
     const scanned: number[] = [];
     const cursor = tables.scan({ layerIds: ['layer'] });
     for (let batch = cursor.next(); batch; batch = cursor.next()) scanned.push(...batch);
-    expect(scanned.map((h) => tables.idOf(h))).toEqual(before);
+    expect(scanned.map((h) => tables.getRowId(h))).toEqual(before);
     expect(emitted).toEqual([]);
     // Hit where it is, not where it is drawn
     const hit = (x: number) =>
@@ -91,7 +91,7 @@ describe('the features drawn over rows for this client', () => {
         },
       });
     const at = hit(6.5);
-    expect(at && tables.idOf(at.group.data.handles[at.row])).toBe('p3');
+    expect(at && tables.getRowId(at.group.data.handles[at.row])).toBe('p3');
     expect(hit(30.5)).toBeNull();
   });
 
@@ -111,11 +111,11 @@ describe('the features drawn over rows for this client', () => {
       { ...feature('p5', 'Polygon', square(50)), layerId: 'layer' },
     ]);
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p5']);
-    const p3 = internals.placeOf(tables.handleOf('p3') ?? -1);
+    const p3 = internals.placeOf(tables.findRow('p3') ?? -1);
     expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
     internalsOf(tables).overlay('peer', []);
     expect(table.delta.group).toBeNull();
-    const p5 = internals.placeOf(tables.handleOf('p5') ?? -1);
+    const p5 = internals.placeOf(tables.findRow('p5') ?? -1);
     expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
   });
 
@@ -126,7 +126,7 @@ describe('the features drawn over rows for this client', () => {
     ]);
     // A row moved in the same layer goes to the delta and to the next version
     writer.apply({
-      handles: Int32Array.of(tables.handleOf('p1') ?? -1),
+      handles: Int32Array.of(tables.findRow('p1') ?? -1),
       fields: new Map([['order', ['k000009m']]]),
     });
     internals.flushVersions();

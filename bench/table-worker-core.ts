@@ -25,11 +25,10 @@
  */
 
 import {
-  circleRowRings,
-  createRowGroupBuilder,
-  type RowGroupData,
-  rowGroupTransferList,
-} from '@sakuzu/maplibre-gl-draw/table';
+  createRowBlockBuilder,
+  type RowBlock,
+  transferList,
+} from '@sakuzu/maplibre-gl-draw/kasane';
 import {
   type BenchFeature,
   benchFeature,
@@ -72,7 +71,7 @@ export type TableWorkerMessage =
   /** Every part has come: the lines of them (the blank ones left out) */
   | { readonly kind: 'counted'; readonly lines: number }
   /** Row groups built, the ones of the run before them sent already */
-  | { readonly kind: 'groups'; readonly groups: RowGroupData[] }
+  | { readonly kind: 'groups'; readonly groups: RowBlock[] }
   /** Every row group is sent */
   | {
       readonly kind: 'built';
@@ -122,7 +121,7 @@ export function createOpenWork(
   let styles: Record<string, unknown>[] = [];
   let failed = false;
   /** What is being built */
-  let builder = createRowGroupBuilder({ rings: circleRowRings });
+  let builder = createRowBlockBuilder();
   const extent = emptyExtent();
   let built = 0;
   let readMs = 0;
@@ -139,8 +138,8 @@ export function createOpenWork(
     const b0 = performance.now();
     const groups = builder.finish();
     buildMs += performance.now() - b0;
-    builder = createRowGroupBuilder({ rings: circleRowRings });
-    post({ kind: 'groups', groups }, rowGroupTransferList(groups));
+    builder = createRowBlockBuilder();
+    post({ kind: 'groups', groups }, transferList(groups));
   };
 
   const add = (feature: BenchFeature): void => {

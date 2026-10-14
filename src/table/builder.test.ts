@@ -172,7 +172,7 @@ describe('createTableBuilder: the geometry', () => {
     const builder = createTableBuilder();
     builder.add({ type: 'Point', coordinates: [1, 2, 30] });
     const geometry = builder.finish().geometry as TableGeometry;
-    expect(geometry.dims).toBe('xyz');
+    expect(geometry.dimensions).toBe('xyz');
     expect(Array.from(geometry.coords)).toEqual([1, 2, 30]);
   });
 
@@ -200,7 +200,7 @@ describe('createTableBuilder: the geometry', () => {
     builder.add({ type: 'Point', coordinates: [9, 9] });
     const table = builder.finish();
     const lines = (table.geometry as TableMixedGeometry).children[0];
-    expect(lines.dims).toBe('xyzm');
+    expect(lines.dimensions).toBe('xyzm');
     const n = Number.NaN;
     expect(Array.from(lines.coords)).toEqual([
       0,
@@ -229,7 +229,7 @@ describe('createTableBuilder: the geometry', () => {
       n,
     ]);
     // The point stays a column of xy
-    expect((table.geometry as TableMixedGeometry).children[1].dims).toBeUndefined();
+    expect((table.geometry as TableMixedGeometry).children[1].dimensions).toBeUndefined();
     const reader = new TableReader(table);
     expect(reader.coordinatesOf(1)).toEqual([
       [2, 2],
@@ -254,13 +254,13 @@ describe('createTableBuilder: the geometry', () => {
         { type: 'Feature', geometry: { type: 'Point', coordinates: [3, 4] }, properties: {} },
         { type: 'Feature', geometry: null, properties: {} },
       ],
-      { dims: 'xym' },
+      { dimensions: 'xym' },
     );
     const geometry = table.geometry as TableGeometry;
-    expect(geometry.dims).toBe('xym');
+    expect(geometry.dimensions).toBe('xym');
     const n = Number.NaN;
     expect(Array.from(geometry.coords)).toEqual([1, 2, 1.7e12, 3, 4, n, n, n, n]);
-    const builder = createTableBuilder({ dims: 'xyz' });
+    const builder = createTableBuilder({ dimensions: 'xyz' });
     expect(() => builder.add({ type: 'Point', coordinates: [1, 2, 3, 4] })).toThrow(
       /4 values does not fit coordinates of xyz/,
     );

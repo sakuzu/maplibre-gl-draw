@@ -11,18 +11,13 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
-import type {
-  ItemMove,
-  ItemOrderChange,
-  ItemPosition,
-  RowRangeMove,
-} from '../shared/types/model.js';
+import type { ItemMove, ItemOrderChange, ItemPosition, RowsMove } from '../shared/types/model.js';
 import {
-  itemMovesBetween,
+  diffItemOrder,
   type OrderContainer,
   trimmedContainer,
 } from '../shared/utils/item-moves.js';
-import { createTableMemoryStore } from '../store/table-memory.js';
+import { createTableStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
@@ -69,7 +64,7 @@ interface RowAt {
   readonly row: number;
 }
 
-/** The fields of a row that place it, as a row holds them (what `RowRangeMove.before` keeps) */
+/** The fields of a row that place it, as a row holds them (what `RowsMove.before` keeps) */
 const PLACE_FIELDS: readonly RowField[] = ['layerId', 'groupId', 'order', 'member'];
 
 /**
@@ -196,7 +191,7 @@ class FullListWatch {
     const deleted = [...this.deleted];
     for (const code of beforeItems) if (!afterItems.has(code)) deleted.push(code);
     const groupIds = new Map<GroupHandle, string>();
-    return itemMovesBetween(containers, {
+    return diffItemOrder(containers, {
       moved: this.moved,
       deleted,
       isGroup: (code) => (code & 1) === 1,
@@ -218,7 +213,7 @@ class FullListWatch {
    * The rows moved told together, one move per layer: the rows in a place before and after, in
    * their new order, with the place they were put at together or the item just below each
    */
-  private rowRanges(): RowRangeMove[] {
+  private rowRanges(): RowsMove[] {
     const byLayer = new Map<LayerTable, RowAt[]>();
     for (const handle of this.before.keys()) {
       const at = this.source.placeOf(handle);
@@ -230,7 +225,7 @@ class FullListWatch {
       }
       list.push(at);
     }
-    const out: RowRangeMove[] = [];
+    const out: RowsMove[] = [];
     const groupIds = new Map<GroupHandle, string>();
     for (const [layer, rows] of byLayer) {
       rows.sort((a, b) =>
@@ -379,7 +374,7 @@ function fullGroupKeyMoves(
     }
     after.splice(lo, 0, code);
   }
-  return itemMovesBetween([trimmedContainer(layerId, undefined, before, after)], {
+  return diffItemOrder([trimmedContainer(layerId, undefined, before, after)], {
     moved,
     deleted: [],
     isGroup: (code) => (code & 1) === 1,
@@ -486,7 +481,7 @@ const LAYERS = ['a', 'b'];
 const GROUPS = ['g0', 'g1', 'g2', 'g3'];
 
 function setup(rows: number) {
-  const { store, writer } = createTableMemoryStore();
+  const { store, writer } = createTableStore();
   for (const id of LAYERS) {
     store.createLayer({
       id,
@@ -532,7 +527,7 @@ function rowIds(tables: FeatureTables): string[] {
   const out: string[] = [];
   const cursor = tables.scan({ layerIds: LAYERS });
   for (let batch = cursor.next(); batch; batch = cursor.next()) {
-    for (const handle of batch) out.push(tables.idOf(handle) as string);
+    for (const handle of batch) out.push(tables.getRowId(handle) as string);
   }
   return out;
 }
@@ -559,7 +554,7 @@ function randomPatch(
     [pool[picked.length], pool[k]] = [pool[k], pool[picked.length]];
     picked.push(pool[picked.length]);
   }
-  const handles = Int32Array.from(picked, (id) => tables.handleOf(id) as number);
+  const handles = Int32Array.from(picked, (id) => tables.findRow(id) as number);
   const layerOfRow = (handle: number) => internals.placeOf(handle)?.layer.layerId ?? 'a';
   const kind = random();
   if (kind < 0.3 || many) {
@@ -654,7 +649,7 @@ describe('the changes of the order read from the items next to the ones a write 
         ranges += actual.filter((change) => change.kind === 'rows').length;
         // The next versions of the row groups now and then: the rows written go back to them
         if (step % 30 === 29) {
-          internals.flushAdoption();
+          internals.addQueuedBlocks();
           internals.flushVersions();
         }
       }

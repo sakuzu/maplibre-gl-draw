@@ -21,7 +21,7 @@ import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
 import { MemoryStore } from './memory.js';
 import type { Store } from './store.js';
-import { createTableMemoryStore } from './table-memory.js';
+import { createTableStore } from './table-memory.js';
 import type { Feature, StoreChange } from './types.js';
 
 const LAYERS = ['a', 'b'];
@@ -48,7 +48,7 @@ function contents(store: Store): unknown[] {
       const cursor = tables.scan({ layerIds: [layerId] });
       for (let batch = cursor.next(); batch; batch = cursor.next()) {
         for (const handle of batch) {
-          features.push(store.getFeature(tables.idOf(handle) as string) as Feature);
+          features.push(store.getFeature(tables.getRowId(handle) as string) as Feature);
         }
       }
     }
@@ -84,15 +84,15 @@ function checkNotification(change: StoreChange, store: Store): void {
   for (const id of updated) put(id, 'features.updated');
   for (const rows of change.rows?.layers.values() ?? []) {
     for (const list of [rows.created, rows.updated, rows.deleted]) {
-      for (const handle of new Set(list)) put(tables.idOf(handle) as string, 'rows');
+      for (const handle of new Set(list)) put(tables.getRowId(handle) as string, 'rows');
     }
   }
   // A row deleted is never among the rows no longer held
   const deleted = new Set((change.features?.deleted ?? []).map((f) => f.id));
-  for (const id of change.held?.removed ?? []) expect(deleted.has(id)).toBe(false);
+  for (const id of change.opened?.removed ?? []) expect(deleted.has(id)).toBe(false);
   // A row created and held is a feature created, not a row made a feature
   const created = new Set((change.features?.created ?? []).map((f) => f.id));
-  for (const f of change.held?.added ?? []) expect(created.has(f.id)).toBe(false);
+  for (const f of change.opened?.added ?? []) expect(created.has(f.id)).toBe(false);
 }
 
 describe('the Store of rows against the Store of objects', () => {
@@ -100,7 +100,7 @@ describe('the Store of rows against the Store of objects', () => {
     for (const seed of [1, 2, 3, 4]) {
       const random = seededRandom(seed);
       const objects = new MemoryStore();
-      const rows = createTableMemoryStore().store;
+      const rows = createTableStore().store;
       // A listener that throws is reported and does not stop the Store: the errors are kept
       const errors: unknown[] = [];
       rows.subscribe((change) => {
@@ -240,7 +240,7 @@ describe('the Store of rows against the Store of objects, with the order (stage 
     for (const seed of [11, 12, 13, 14, 15]) {
       const random = seededRandom(seed);
       const objects = new MemoryStore();
-      const rows = createTableMemoryStore().store;
+      const rows = createTableStore().store;
       const errors: unknown[] = [];
       rows.subscribe((change) => {
         try {

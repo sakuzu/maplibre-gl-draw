@@ -23,7 +23,7 @@ import type {
   Layer,
   LoadResult,
   Metadata,
-  RetainToken,
+  RestoreToken,
 } from './model.js';
 import type { RuntimeOptions } from './options.js';
 import type {
@@ -96,7 +96,7 @@ export interface DocumentChange {
    * holds its features as rows: what undoes the deletion holds it, and lets go of it with
    * `FeatureTables.release` once it no longer needs them
    */
-  retain?: RetainToken;
+  restoreToken?: RestoreToken;
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;
@@ -114,15 +114,19 @@ export interface DocumentChange {
   files?: { created?: FileData[]; deleted?: FileData[] };
   /**
    * The rows of the layers held as rows of columns written ({@link StoreView.tables}); a feature
-   * is in `features` or here, never in both
+   * is in `features` or here, never in both. Its type is in `@sakuzu/maplibre-gl-draw/kasane`
+   *
+   * @experimental
    */
   rows?: RowsChange;
   /**
-   * The rows held as columns made features for this client (`added`, their features) and no
-   * longer (`removed`, their ids): not a change of the document. A row deleted is in
-   * `features.deleted`, never in `removed`
+   * The rows held as columns opened as features for this client (`added`, their features) and
+   * no longer (`removed`, their ids): not a change of the document. A row is opened while it is
+   * selected or edited; a row deleted is in `features.deleted`, never in `removed`
+   *
+   * @experimental
    */
-  held?: { added: Feature[]; removed: string[] };
+  opened?: { added: Feature[]; removed: string[] };
 }
 
 /**

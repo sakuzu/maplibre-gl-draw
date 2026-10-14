@@ -29,12 +29,12 @@ export function tableGroupMemberIds(
   group: { readonly id: string; readonly layerId: string },
 ): string[] {
   const internals = featureTablesInternals(tables);
-  const view = tables?.layer(group.layerId);
+  const view = tables?.get(group.layerId);
   if (!internals || !view || !tables) return [];
   const handle = internals.groups.handleOfId(group.id);
   if (handle < 0) return [];
-  const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
-  return Array.from(members, (row) => tables.idOf(row) as string);
+  const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
+  return Array.from(members, (row) => tables.getRowId(row) as string);
 }
 
 /**
@@ -48,7 +48,7 @@ export function tableLayerFeatureIds(tables: FeatureTables | undefined, layerId:
   if (!tables) return out;
   const cursor = tables.scan({ layerIds: [layerId] });
   for (let batch = cursor.next(); batch; batch = cursor.next()) {
-    for (const handle of batch) out.push(tables.idOf(handle) as string);
+    for (const handle of batch) out.push(tables.getRowId(handle) as string);
   }
   return out;
 }
@@ -63,10 +63,10 @@ export function tableGroupMemberCount(
   group: { readonly id: string; readonly layerId: string },
 ): number {
   const internals = featureTablesInternals(tables);
-  const view = tables?.layer(group.layerId);
+  const view = tables?.get(group.layerId);
   if (!internals || !view) return 0;
   const handle = internals.groups.handleOfId(group.id);
-  return handle < 0 ? 0 : view.groupMemberCount(handle);
+  return handle < 0 ? 0 : view.countGroupMembers(handle);
 }
 
 /**
@@ -75,12 +75,12 @@ export function tableGroupMemberCount(
  * @internal
  */
 export function tableLayerFeatureCount(tables: FeatureTables | undefined, layerId: string): number {
-  const view = tables?.layer(layerId);
+  const view = tables?.get(layerId);
   if (!view) return 0;
-  const items = view.itemsInOrder(0, view.itemCount);
+  const items = view.listItems(0, view.itemCount);
   let count = 0;
   for (let i = 0; i < items.kinds.length; i++) {
-    count += items.kinds[i] === 0 ? 1 : view.groupMemberCount(items.handles[i]);
+    count += items.kinds[i] === 0 ? 1 : view.countGroupMembers(items.handles[i]);
   }
   return count;
 }
@@ -105,7 +105,7 @@ export function tableRowIdsWithVertexAt(
         const place = internals.placeOf(handle);
         if (!place || (place.group.state[place.row] & STATE_HIDDEN_MASK) !== 0) continue;
         const shape = rowHitShape(place.group, place.row);
-        if (shape && hasVertexAt(shape, x, y)) out.add(tables.idOf(handle) as string);
+        if (shape && hasVertexAt(shape, x, y)) out.add(tables.getRowId(handle) as string);
       }
     }
   }
@@ -151,13 +151,13 @@ function walkOf(tables: FeatureTables, layerId: string): ItemWalk | null {
 
 /** The id of an item numbered as the walk numbers it */
 function idOfCode(tables: FeatureTables, code: number): string | undefined {
-  if ((code & 1) === 0) return tables.idOf(code >> 1);
+  if ((code & 1) === 0) return tables.getRowId(code >> 1);
   return featureTablesInternals(tables)?.groups.idOf(code >> 1);
 }
 
 /** The number of an item by its id (-1 for none) */
 function codeOfId(tables: FeatureTables, id: string): number {
-  const handle = tables.handleOf(id);
+  const handle = tables.findRow(id);
   if (handle !== undefined) return handle * 2;
   const group = featureTablesInternals(tables)?.groups.handleOfId(id) ?? -1;
   return group >= 0 ? group * 2 + 1 : -1;
@@ -277,7 +277,7 @@ export function tableIdsInOrder(
   if (!internals || !tables) return [...ids];
   const layerRank = new Map(layerOrder.map((id, i) => [id, i]));
   const entries = ids.map((id) => {
-    const handle = tables.handleOf(id);
+    const handle = tables.findRow(id);
     const place = handle === undefined ? undefined : internals.placeOf(handle);
     return { id, place };
   });

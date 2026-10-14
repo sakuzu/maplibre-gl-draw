@@ -17,14 +17,19 @@
 
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { ITEM_GROUP, ITEM_ROW, type RowField, type RowPatch } from '../api/tables.js';
+import { ITEM_GROUP, ITEM_ROW, type RowField, type RowValues } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
-import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
-import { ROW_WRITE_GEOMETRY, ROW_WRITE_STATE, ROW_WRITE_STYLE, type RowWrite } from './types.js';
+import {
+  type InPlaceRowWrite,
+  ROW_WRITE_GEOMETRY,
+  ROW_WRITE_STATE,
+  ROW_WRITE_STYLE,
+} from './types.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 
 /** Points in a row, `count` of them */
@@ -42,16 +47,16 @@ function readAll(cursor: { next(): Int32Array | null }): number[] {
 }
 
 /** A patch of one field of rows */
-function patchOf(handles: number[], field: RowField, values: unknown[]): RowPatch {
+function patchOf(handles: number[], field: RowField, values: unknown[]): RowValues {
   return { handles: Int32Array.from(handles), fields: new Map([[field, values]]) };
 }
 
 describe('scan', () => {
   it('reads the rows of a layer in its order, a batch at a time, the deleted ones left out', () => {
     const { tables, writer, internals } = tablesOfFeatures('layer', points(50), 8);
-    const ids = (handles: number[]) => handles.map((h) => tables.idOf(h));
+    const ids = (handles: number[]) => handles.map((h) => tables.getRowId(h));
     const batches: number[] = [];
-    const cursor = tables.scan({ layerIds: ['layer'], batch: 7 });
+    const cursor = tables.scan({ layerIds: ['layer'], batchSize: 7 });
     for (let batch = cursor.next(); batch; batch = cursor.next()) batches.push(batch.length);
     expect(batches.slice(0, -1).every((n) => n === 7)).toBe(true);
     expect(ids(readAll(tables.scan()))).toEqual(points(50).map((f) => f.id));
@@ -64,7 +69,7 @@ describe('scan', () => {
   it('reads the rows whose bbox meets a box, a row moved where it is now', () => {
     const { tables, writer, internals } = tablesOfFeatures('layer', points(30), 8);
     const ids = (box: [number, number, number, number], order?: 'any') =>
-      readAll(tables.scan({ bbox: box, order })).map((h) => tables.idOf(h));
+      readAll(tables.scan({ bbox: box, order })).map((h) => tables.getRowId(h));
     expect(ids([4.5, -1, 9.5, 1])).toEqual(['p5', 'p6', 'p7', 'p8', 'p9']);
     writer.apply(
       patchOf([internals.ids.handleOf('p20')], 'geometry', [
@@ -90,7 +95,7 @@ describe('the items of a layer', () => {
       visible: true,
       locked: false,
     });
-    const builder = createRowGroupBuilder({
+    const builder = createRowBlockDataBuilder({
       groups: [{ handle: 7, id: 'g', order: 'k000003' }],
       targetRows: 2,
     });
@@ -100,18 +105,18 @@ describe('the items of a layer', () => {
       const member = i === 1 || i === 2 || i === 4;
       builder.addRow(member ? { ...row, group: 7, member: orderKey(i) } : row);
     }
-    writer.adopt('layer', builder.finish());
-    internals?.flushAdoption();
-    const view = tables.layer('layer');
+    writer.addBlocks('layer', builder.finish());
+    internals?.addQueuedBlocks();
+    const view = tables.get('layer');
     if (!view) throw new Error('no layer');
     expect(view.itemCount).toBe(4);
-    const items = view.itemsInOrder(0, 10);
-    const handle = (id: string) => tables.handleOf(id) as number;
+    const items = view.listItems(0, 10);
+    const handle = (id: string) => tables.findRow(id) as number;
     expect(Array.from(items.kinds)).toEqual([ITEM_ROW, ITEM_ROW, ITEM_GROUP, ITEM_ROW]);
     expect(Array.from(items.handles)).toEqual([handle('f0'), handle('f3'), 7, handle('f5')]);
-    expect(view.groupMemberCount(7)).toBe(3);
-    expect(Array.from(view.groupMembersInOrder(7, 1, 5))).toEqual([handle('f2'), handle('f4')]);
-    expect(Array.from(view.itemsInOrder(1, 2).handles)).toEqual([handle('f3'), 7]);
+    expect(view.countGroupMembers(7)).toBe(3);
+    expect(Array.from(view.listGroupMembers(7, 1, 5))).toEqual([handle('f2'), handle('f4')]);
+    expect(Array.from(view.listItems(1, 2).handles)).toEqual([handle('f3'), 7]);
     // A deleted member leaves the group, and a deleted row its item
     writer.apply({
       handles: Int32Array.of(handle('f2'), handle('f3')),
@@ -119,7 +124,7 @@ describe('the items of a layer', () => {
       deleted: Uint8Array.of(1, 1),
     });
     expect(view.itemCount).toBe(3);
-    expect(view.groupMemberCount(7)).toBe(2);
+    expect(view.countGroupMembers(7)).toBe(2);
   });
 });
 
@@ -133,7 +138,7 @@ describe('writer.apply', () => {
       ]),
     ];
     const { tables, writer, internals } = tablesOfFeatures('layer', features);
-    const told: Array<[string, readonly RowWrite[]]> = [];
+    const told: Array<[string, readonly InPlaceRowWrite[]]> = [];
     internals.onRowsWritten((layerId, writes) => told.push([layerId, writes]));
     const a = internals.ids.handleOf('a');
     const b = internals.ids.handleOf('b');
@@ -160,14 +165,14 @@ describe('writer.apply', () => {
         ['property:name', ['A', undefined]],
       ]),
     });
-    const view = tables.layer('layer');
+    const view = tables.get('layer');
     const rowA = view?.getRow(a);
     expect(rowA?.geometry).toEqual({ type: 'Point', coordinates: [5, 5] });
     expect(rowA?.style).toEqual({ pointColor: '#00ff00' });
     expect(rowA?.locked).toBe(true);
     expect(rowA?.properties).toEqual({ name: 'A' });
     expect(view?.getRow(b)?.visible).toBe(false);
-    expect(view?.valueAt(a, 'name')).toBe('A');
+    expect(view?.getRowValue(a, 'name')).toBe('A');
     expect(told).toHaveLength(1);
     const [layerId, writes] = told[0];
     expect(layerId).toBe('layer');
@@ -185,12 +190,12 @@ describe('writer.apply', () => {
     const { tables, writer, internals } = tablesOfFeatures('layer', points(3));
     const handle = internals.ids.handleOf('p1');
     // A known row and an unknown one: nothing is written
-    const patch: RowPatch = {
+    const patch: RowValues = {
       handles: Int32Array.of(handle, 999),
       fields: new Map([['property:name', ['x', 'y']]]),
     };
     expect(() => writer.apply(patch)).toThrow(/no row/);
-    expect(tables.layer('layer')?.valueAt(handle, 'name')).toBeUndefined();
+    expect(tables.get('layer')?.getRowValue(handle, 'name')).toBeUndefined();
     // A new row without what it needs
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
     expect(() => writer.apply(patchOf([fresh], 'property:name', ['x']))).toThrow(
@@ -280,7 +285,7 @@ describe('writes at random against a list of features', () => {
         const i = Math.floor(random() * features.length);
         const current = alive[i];
         if (!current) continue;
-        const handle = tables.handleOf(current.id) as number;
+        const handle = tables.findRow(current.id) as number;
         const pick = random();
         let field: RowField;
         let value: unknown;
@@ -319,21 +324,21 @@ describe('writes at random against a list of features', () => {
         }
         writer.apply(patchOf([handle], field, [value]));
       }
-      const view = tables.layer('layer');
+      const view = tables.get('layer');
       if (!view) throw new Error('no layer');
       const expected = alive.filter((f): f is Feature => f !== null);
       const scanned = readAll(tables.scan());
-      expect(scanned.map((h) => tables.idOf(h))).toEqual(expected.map((f) => f.id));
-      expect(Array.from(view.itemsInOrder(0, 1000).handles)).toEqual(scanned);
+      expect(scanned.map((h) => tables.getRowId(h))).toEqual(expected.map((f) => f.id));
+      expect(Array.from(view.listItems(0, 1000).handles)).toEqual(scanned);
       for (const f of expected) {
-        const handle = tables.handleOf(f.id) as number;
+        const handle = tables.findRow(f.id) as number;
         const row = view.getRow(handle);
         expect(row?.geometry).toEqual(f.geometry);
         expect(row?.properties).toEqual(f.properties);
         expect(row?.style).toEqual(f.style);
         expect(row?.visible).toBe(f.visible);
         for (const key of ['n', 'name', 'extra']) {
-          expect(view.valueAt(handle, key)).toEqual(f.properties[key]);
+          expect(view.getRowValue(handle, key)).toEqual(f.properties[key]);
         }
       }
     }

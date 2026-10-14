@@ -33,13 +33,12 @@ import {
   type Group as DrawGroup,
   type Feature,
   type FeatureStyleResolved,
-  type FeatureTables,
   getStyleRuleChannel,
-  ITEM_ROW,
   type Layer,
   type Selection,
   type SelectionType,
 } from '@sakuzu/maplibre-gl-draw';
+import { type FeatureTables, ITEM_ROW } from '@sakuzu/maplibre-gl-draw/kasane';
 import { fillWord, type Messages } from '../messages.js';
 
 /** The kinds of the nodes that are selected, which are the types of the selection of core */
@@ -85,7 +84,7 @@ export interface TreeSource {
   readonly hidden?: { has(id: string): boolean };
   /**
    * The Store, whose tables hold the items of the layers held as rows (read with
-   * `itemsInOrder` and `groupMembersInOrder`: such a layer lists no item, nor such a group a
+   * `listItems` and `listGroupMembers`: such a layer lists no item, nor such a group a
    * member)
    */
   getStore?(): { readonly tables?: FeatureTables };
@@ -95,13 +94,15 @@ export interface TreeSource {
 function layerItems(source: TreeSource, layer: Layer): readonly string[] {
   if (layer.kind !== 'table') return layer.items;
   const tables = source.getStore?.().tables;
-  const view = tables?.layer(layer.id);
+  const view = tables?.get(layer.id);
   if (!tables || !view) return [];
-  const refs = view.itemsInOrder(0, view.itemCount);
+  const refs = view.listItems(0, view.itemCount);
   const out: string[] = [];
   for (let i = 0; i < refs.kinds.length; i++) {
     const id =
-      refs.kinds[i] === ITEM_ROW ? tables.idOf(refs.handles[i]) : tables.groupIdOf(refs.handles[i]);
+      refs.kinds[i] === ITEM_ROW
+        ? tables.getRowId(refs.handles[i])
+        : tables.getGroupId(refs.handles[i]);
     if (id !== undefined) out.push(id);
   }
   return out;
@@ -111,11 +112,11 @@ function layerItems(source: TreeSource, layer: Layer): readonly string[] {
 function groupMembers(source: TreeSource, group: DrawGroup): readonly string[] {
   if (group.kind !== 'table') return group.featureIds;
   const tables = source.getStore?.().tables;
-  const view = tables?.layer(group.layerId);
-  const handle = tables?.groupHandleOf(group.id);
+  const view = tables?.get(group.layerId);
+  const handle = tables?.findGroup(group.id);
   if (!tables || !view || handle === undefined) return [];
-  const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
-  return Array.from(members, (row) => tables.idOf(row) as string);
+  const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
+  return Array.from(members, (row) => tables.getRowId(row) as string);
 }
 
 /**
@@ -131,12 +132,12 @@ function featureTotal(source: TreeSource, layer: Layer): number {
     }
     return total;
   }
-  const view = source.getStore?.().tables?.layer(layer.id);
+  const view = source.getStore?.().tables?.get(layer.id);
   if (!view) return 0;
-  const refs = view.itemsInOrder(0, view.itemCount);
+  const refs = view.listItems(0, view.itemCount);
   let total = 0;
   for (let i = 0; i < refs.kinds.length; i++) {
-    total += refs.kinds[i] === ITEM_ROW ? 1 : view.groupMemberCount(refs.handles[i]);
+    total += refs.kinds[i] === ITEM_ROW ? 1 : view.countGroupMembers(refs.handles[i]);
   }
   return total;
 }

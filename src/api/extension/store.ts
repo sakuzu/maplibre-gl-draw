@@ -19,7 +19,7 @@ import type {
   Metadata,
 } from '../model.js';
 import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
-import type { FeatureTables, LocalRowWrite } from '../tables.js';
+import type { FeatureTables, RowWrite } from '../tables.js';
 
 /**
  * Where a write came from, as it arrives in {@link DocumentChange.source} and in the `source` of
@@ -79,12 +79,12 @@ export type UpdateSource =
  *   not saved, and a change from outside the instance does not carry it.
  * - A Store that holds its features as rows (`tables`) notifies the rows written as `rows`
  *   (with the values they had before, for the writes of this client: `RowsChange.before`),
- *   and the rows held as features (`FeatureTables.hold`) as features, with their changes: a row
- *   is in one of the two in a notification, as it is when the outermost transaction ends (a row
- *   created and selected in one transaction is a feature created). The rows made features and no
- *   longer are notified as `held`, which is not a change of the document; a row deleted is a
- *   feature deleted or a row deleted, never in `held`. `listFeatures` and `listFeaturesInOrder`
- *   throw: the rows are read from the tables.
+ *   and the rows opened as features (the rows selected and edited) as features, with their
+ *   changes: a row is in one of the two in a notification, as it is when the outermost
+ *   transaction ends (a row created and selected in one transaction is a feature created). The
+ *   rows opened and no longer are notified as `opened`, which is not a change of the document; a
+ *   row deleted is a feature deleted or a row deleted, never in `opened`. `listFeatures` and
+ *   `listFeaturesInOrder` throw: the rows are read from the tables.
  */
 export interface StoreView {
   /** A feature by ID, or `undefined` */
@@ -141,7 +141,9 @@ export interface StoreView {
    * The features of the layers the Store holds as rows of columns, when it holds them so
    * ({@link createFeatureTables}). The instance draws and hit tests such a layer from its rows,
    * and makes a feature of a row only when one is asked for. Undefined for a Store that holds
-   * its features as objects
+   * its features as objects. Its type is in `@sakuzu/maplibre-gl-draw/kasane`
+   *
+   * @experimental
    */
   readonly tables?: FeatureTables;
 }
@@ -216,9 +218,12 @@ export interface Store extends StoreView {
    * Writes rows held as columns for this client (the operations of the instance on many rows at
    * once, and what undoes them): makes the keys of the order of the rows put in a place and the
    * handles of the new rows, writes the rows (`FeatureTablesWriter.apply`), and notifies them with
-   * the values they had before. A Store that holds its features as rows has it.
+   * the values they had before. A Store that holds its features as rows has it. Its type is in
+   * `@sakuzu/maplibre-gl-draw/kasane`
+   *
+   * @experimental
    */
-  applyLocal?(write: LocalRowWrite): boolean;
+  applyRows?(write: RowWrite): boolean;
   /** Creates a group. */
   createGroup(group: Group): boolean;
   /** Changes the fields given of a group. */

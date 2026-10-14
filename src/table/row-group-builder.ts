@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Builds the row groups of one layer (`createRowGroupBuilder`)
+ * Builds the row groups of one layer (`createRowBlockBuilder`)
  *
  * The rows are added in any order. `finish` puts them in the order of the layer
  * (`compareRowKeys`), cuts them into groups of at most a target number of rows and of
@@ -12,13 +12,14 @@
  * canonical bytes, shared within a group; the main thread numbers them in its table of styles.
  *
  * A pure module: it depends on neither maplibre, nor WebGL, nor the DOM, so a Worker builds the
- * groups and sends them with `rowGroupTransferList`.
+ * groups and sends them with `blockTransferList`.
  */
 
 import type { Geometry } from 'geojson';
+import { circleRowRings } from '../shared/circle-rings.js';
 import { encodeCanonicalValue } from './canonical-value.js';
 import {
-  type CoordinateDims,
+  type CoordinateDimensions,
   type CoordinateSystem,
   planarCoordinates,
   sortKeyOf,
@@ -37,7 +38,8 @@ import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
   ROW_FLAG_VISIBLE,
-  type RowGroupData,
+  type RowBlock,
+  type RowBlockData,
   type TriangleCache,
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
@@ -53,27 +55,27 @@ import {
 import { type ValueColumn, ValueColumnBuilder } from './value-column.js';
 
 /**
- * The target number of rows of a group
+ * The target number of rows of a block
  *
- * A group is the unit that is built again when its rows change, so a smaller group costs less
+ * A block is the unit that is built again when its rows change, so a smaller block costs less
  * to build again and a larger one gives fewer draws. It starts from the target of a chunk of a
  * large dataset (`LARGE_CHUNK_TARGET_SIZE`), to be set from measured data.
  */
-export const ROW_GROUP_TARGET_ROWS = 4096;
+export const ROW_BLOCK_TARGET_ROWS = 4096;
 
 /**
- * The target number of coordinates of a group
+ * The target number of coordinates of a block
  *
- * Cutting by the rows alone would make a group of polygons of 50 coordinates hold 200,000
+ * Cutting by the rows alone would make a block of polygons of 50 coordinates hold 200,000
  * coordinates, and building it again would take about a second. It starts from the target of a
  * chunk (`CHUNK_TARGET_VERTICES`), to be set from measured data.
  */
-export const ROW_GROUP_TARGET_VERTICES = 40_000;
+export const ROW_BLOCK_TARGET_VERTICES = 40_000;
 
 /**
- * A group the rows can belong to: its handle, its id and the key of its order
+ * A group of features the rows can belong to: its handle, its id and the key of its order
  */
-export interface RowGroupKey {
+export interface GroupEntry {
   /** The handle of the group, which a row names */
   readonly handle: number;
   /** The id of the group */
@@ -83,31 +85,31 @@ export interface RowGroupKey {
 }
 
 /**
- * The options of {@link createRowGroupBuilder}
+ * The options of {@link createRowBlockBuilder}
  */
-export interface RowGroupBuilderOptions {
-  /** The groups the rows can belong to (none when omitted) */
-  readonly groups?: readonly RowGroupKey[];
-  /** The largest number of rows of a group ({@link ROW_GROUP_TARGET_ROWS} when omitted) */
+export interface RowBlockBuilderOptions {
+  /** The groups of features the rows can belong to (none when omitted) */
+  readonly groups?: readonly GroupEntry[];
+  /** The largest number of rows of a block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
   readonly targetRows?: number;
   /**
-   * The largest number of coordinates of a group ({@link ROW_GROUP_TARGET_VERTICES} when
-   * omitted). A single row of more coordinates makes a group of its own
+   * The largest number of coordinates of a block ({@link ROW_BLOCK_TARGET_VERTICES} when
+   * omitted). A single row of more coordinates makes a block of its own
    */
   readonly targetVertices?: number;
   /**
    * The dimensions of the coordinates of the rows: those of their layer (`xy` when omitted). A
    * position of fewer values gets NaN for the others; one of more values is refused
    */
-  readonly dims?: CoordinateDims;
+  readonly dimensions?: CoordinateDimensions;
   /**
    * The system of the coordinates the bbox of the rows and their spatial index are made in (the
    * plane when omitted). A function: a Worker passes its own
    */
-  readonly coordinates?: CoordinateSystem;
+  readonly coordinateSystem?: CoordinateSystem;
   /**
-   * The rings the rows of some types draw around their point (a Circle and its radius; none when
-   * omitted). A function: a Worker passes its own (`circleRowRings` for the Circles)
+   * The rings the rows of some types draw around their point (the rings of the Circles, each of
+   * its radius, when omitted). A function: it is given in the Worker that builds the rows
    */
   readonly rings?: RowRings;
 }
@@ -127,9 +129,12 @@ export interface RowInput {
   readonly geometry: Geometry | null;
   /** The key of the order of the row in its layer */
   readonly order: string;
-  /** The key of the order of the row within its group (when it is in a group) */
+  /** The key of the order of the row within its group of features (when it is in one) */
   readonly member?: string;
-  /** The handle of the group of the row (outside a group when omitted or negative) */
+  /**
+   * The handle of the group of features of the row (`GroupEntry.handle`; outside a group when
+   * omitted or negative)
+   */
   readonly group?: number;
   /** The style of the row */
   readonly style?: Readonly<Record<string, unknown>>;
@@ -144,9 +149,9 @@ export interface RowInput {
 }
 
 /**
- * Builds the row groups of one layer
+ * Builds the blocks of rows of one layer
  */
-export interface RowGroupBuilder {
+export interface RowBlockBuilder {
   /** The number of rows added */
   readonly length: number;
   /**
@@ -158,23 +163,43 @@ export interface RowGroupBuilder {
    */
   addRow(row: RowInput): void;
   /**
-   * Puts the rows in the order of the layer and cuts them into groups
+   * Puts the rows in the order of the layer and cuts them into blocks
    *
    * @throws when a row names a group the options do not give
    */
-  finish(): RowGroupData[];
+  finish(): RowBlock[];
 }
 
 /**
- * Creates the builder of the row groups of one layer
+ * The builder as the tables use it: its blocks with every column
+ *
+ * @internal
  */
-export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): RowGroupBuilder {
-  const targetRows = Math.max(1, options.targetRows ?? ROW_GROUP_TARGET_ROWS);
-  const targetVertices = Math.max(1, options.targetVertices ?? ROW_GROUP_TARGET_VERTICES);
+export interface RowBlockDataBuilder extends RowBlockBuilder {
+  finish(): RowBlockData[];
+}
+
+/**
+ * Creates the builder of the blocks of rows of one layer
+ */
+export function createRowBlockBuilder(options: RowBlockBuilderOptions = {}): RowBlockBuilder {
+  return createRowBlockDataBuilder(options);
+}
+
+/**
+ * Creates the builder of the blocks of rows of one layer, as the tables use it
+ *
+ * @internal
+ */
+export function createRowBlockDataBuilder(
+  options: RowBlockBuilderOptions = {},
+): RowBlockDataBuilder {
+  const targetRows = Math.max(1, options.targetRows ?? ROW_BLOCK_TARGET_ROWS);
+  const targetVertices = Math.max(1, options.targetVertices ?? ROW_BLOCK_TARGET_VERTICES);
   const shape: GroupShape = {
-    dims: options.dims ?? 'xy',
-    coordinates: options.coordinates ?? planarCoordinates,
-    rings: options.rings ?? null,
+    dims: options.dimensions ?? 'xy',
+    coordinates: options.coordinateSystem ?? planarCoordinates,
+    rings: options.rings ?? circleRowRings,
   };
 
   const ids = new Utf8ColumnBuilder(256);
@@ -192,7 +217,7 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
       return rows.length;
     },
     addRow(row: RowInput): void {
-      if (seen.has(row.id)) throw new Error(`RowGroupBuilder: the id "${row.id}" is added twice`);
+      if (seen.has(row.id)) throw new Error(`RowBlockBuilder: the id "${row.id}" is added twice`);
       const geometry = row.geometry ? toRowGeometry(row.geometry, shape.dims) : null;
       const style = styles.intern(row.style ?? {});
       seen.add(row.id);
@@ -209,7 +234,7 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
       rows.push(row);
       geometries.push(geometry);
     },
-    finish(): RowGroupData[] {
+    finish(): RowBlockData[] {
       const n = rows.length;
       const keys: RowKeySource = {
         ids: ids.finish(),
@@ -228,7 +253,7 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
         vertexCounts[i] = vertexCountOf(rows[i], geometries[i], shape.rings);
       }
 
-      const out: RowGroupData[] = [];
+      const out: RowBlockData[] = [];
       let start = 0;
       while (start < n) {
         let end = start;
@@ -258,9 +283,11 @@ export function createRowGroupBuilder(options: RowGroupBuilderOptions = {}): Row
 }
 
 /**
- * Every buffer of the groups, for `postMessage` with transfer (each one once)
+ * Every buffer of the blocks, for `postMessage` with transfer (each one once)
+ *
+ * @internal
  */
-export function rowGroupTransferList(groups: readonly RowGroupData[]): ArrayBuffer[] {
+export function blockTransferList(groups: readonly RowBlockData[]): ArrayBuffer[] {
   const buffers = new Set<ArrayBuffer>();
   const add = (array: ArrayBufferView | null | undefined): void => {
     if (array && array.buffer instanceof ArrayBuffer) buffers.add(array.buffer);
@@ -328,7 +355,7 @@ export class ChildBuilder {
    */
   constructor(
     readonly type: GeometryType,
-    readonly dims: CoordinateDims = 'xy',
+    readonly dims: CoordinateDimensions = 'xy',
   ) {
     this.stride = strideOf(dims);
   }
@@ -376,23 +403,28 @@ export class ChildBuilder {
     const dims = this.dims;
     switch (this.type) {
       case 'Point':
-        return { type: 'Point', coords, dims };
+        return { type: 'Point', coords, dimensions: dims };
       case 'LineString':
       case 'MultiPoint':
-        return { type: this.type, coords, dims, offsets: [Int32Array.from(this.level0)] };
+        return {
+          type: this.type,
+          coords,
+          dimensions: dims,
+          offsets: [Int32Array.from(this.level0)],
+        };
       case 'Polygon':
       case 'MultiLineString':
         return {
           type: this.type,
           coords,
-          dims,
+          dimensions: dims,
           offsets: [Int32Array.from(this.level0), Int32Array.from(this.level1)],
         };
       case 'MultiPolygon':
         return {
           type: 'MultiPolygon',
           coords,
-          dims,
+          dimensions: dims,
           offsets: [
             Int32Array.from(this.level0),
             Int32Array.from(this.level1),
@@ -405,7 +437,7 @@ export class ChildBuilder {
 
 /** What the coordinates of the groups are, and what they are read as */
 interface GroupShape {
-  readonly dims: CoordinateDims;
+  readonly dims: CoordinateDimensions;
   readonly coordinates: CoordinateSystem;
   readonly rings: RowRings | null;
 }
@@ -419,7 +451,7 @@ function buildGroup(
   styleRefs: Int32Array,
   dictionary: Utf8Column,
   shape: GroupShape,
-): RowGroupData {
+): RowBlockData {
   const length = order.length;
   const ids = new Utf8ColumnBuilder(length);
   const itemKeys = new Utf8ColumnBuilder(length);
@@ -453,7 +485,7 @@ function buildGroup(
 
     let type = typeIndex.get(row.type);
     if (type === undefined) {
-      if (typeNames.length >= 255) throw new Error('RowGroupBuilder: more than 255 types');
+      if (typeNames.length >= 255) throw new Error('RowBlockBuilder: more than 255 types');
       type = typeNames.length;
       typeNames.push(row.type);
       typeIndex.set(row.type, type);
@@ -700,7 +732,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
  *
  * @internal
  */
-export function groupKeySource(groups: readonly RowGroupKey[]): GroupKeySource | null {
+export function groupKeySource(groups: readonly GroupEntry[]): GroupKeySource | null {
   if (groups.length === 0) return null;
   const entries = new Map<number, number>();
   groups.forEach((group, i) => {

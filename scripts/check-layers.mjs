@@ -41,8 +41,9 @@ const RANK = {
   dispatcher: 6,
   api: 8,
   entry: 9,
-  // The layer 2 entry: an entry like src/index.ts, and imported by nothing (rule 10)
+  // The layer 2 entries: entries like src/index.ts, and imported by nothing (rule 10)
   webgl: 9,
+  kasane: 9,
 };
 
 /** Files at the root of src/ belong to the area given here */

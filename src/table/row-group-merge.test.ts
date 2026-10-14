@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The merge of rows of row groups (`mergeRowGroup`)
+ * The merge of rows of row groups (`mergeRowBlockData`)
  *
  * - The rows merged are the rows built at once, in the order of the layer: the same ids, keys,
  *   types, geometries, attributes, styles, flags, bboxes and triangles
@@ -16,15 +16,15 @@ import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
 import { searchPackedRTree } from './packed-rtree.js';
-import { createRowGroupBuilder, type RowInput } from './row-group-builder.js';
-import { mergeRowGroup } from './row-group-merge.js';
-import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowGroupData } from './row-group-types.js';
+import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
+import { mergeRowBlockData } from './row-group-merge.js';
+import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowBlockData } from './row-group-types.js';
 import { GeometryColumnReader } from './table.js';
 import { utf8ColumnLength, utf8String } from './utf8-column.js';
 import { readValue } from './value-column.js';
 
 /** Numbers the styles of groups built by builders, as the table of styles of a document does */
-function numbered(groups: RowGroupData[], numbers: Map<string, number>): RowGroupData[] {
+function numbered(groups: RowBlockData[], numbers: Map<string, number>): RowBlockData[] {
   for (const group of groups) {
     const dictionary = group.styleDictionary;
     if (!dictionary) continue;
@@ -45,7 +45,7 @@ function numbered(groups: RowGroupData[], numbers: Map<string, number>): RowGrou
 
 /** Builds rows into groups */
 function build(rows: RowInput[], numbers: Map<string, number>, targetRows?: number) {
-  const builder = createRowGroupBuilder({ targetRows });
+  const builder = createRowBlockDataBuilder({ targetRows });
   for (const row of rows) builder.addRow(row);
   return numbered(builder.finish(), numbers);
 }
@@ -130,7 +130,7 @@ function randomRow(random: () => number, i: number): RowInput {
 }
 
 /** Everything a row holds, read back */
-function readRow(group: RowGroupData, r: number, styles: Map<number, string>) {
+function readRow(group: RowBlockData, r: number, styles: Map<number, string>) {
   const child = group.geometry.types[r];
   const t = group.triangles;
   const wide = Array.from(t.wideRows).indexOf(r);
@@ -168,7 +168,7 @@ function readRow(group: RowGroupData, r: number, styles: Map<number, string>) {
 }
 
 /** Every row of groups, group after group */
-function readAll(groups: RowGroupData[], numbers: Map<string, number>) {
+function readAll(groups: RowBlockData[], numbers: Map<string, number>) {
   const styles = new Map([...numbers].map(([bytes, n]) => [n, bytes]));
   return groups.flatMap((group) =>
     Array.from({ length: group.length }, (_, r) => readRow(group, r, styles)),
@@ -176,13 +176,13 @@ function readAll(groups: RowGroupData[], numbers: Map<string, number>) {
 }
 
 /** The pairs `[source, row]` of every row of the groups */
-function everyRow(groups: RowGroupData[], first = 0): number[] {
+function everyRow(groups: RowBlockData[], first = 0): number[] {
   return groups.flatMap((group, g) =>
     Array.from({ length: group.length }, (_, r) => [first + g, r]).flat(),
   );
 }
 
-describe('mergeRowGroup', () => {
+describe('mergeRowBlockData', () => {
   it('merges rows of groups into the rows built at once, in the order of the layer', () => {
     for (const seed of [1, 2, 3]) {
       const random = seededRandom(seed);
@@ -201,7 +201,7 @@ describe('mergeRowGroup', () => {
       for (let i = 0; i < taken.length; i += 2) {
         kept.add(utf8String(base[taken[i]].ids, taken[i + 1]));
       }
-      const merged = mergeRowGroup({
+      const merged = mergeRowBlockData({
         sources: [...base, ...changed],
         rows: Int32Array.from([...taken, ...everyRow(changed, base.length)]),
         targetRows: 1000,
@@ -238,7 +238,10 @@ describe('mergeRowGroup', () => {
       if (t.offsets[r + 1] - t.offsets[r] >= 4) marked = r;
     }
     t.indices[t.offsets[marked]] = 7777;
-    const merged = mergeRowGroup({ sources: [group], rows: Int32Array.from(everyRow([group])) });
+    const merged = mergeRowBlockData({
+      sources: [group],
+      rows: Int32Array.from(everyRow([group])),
+    });
     const at = merged[0].triangles.offsets[marked];
     expect(merged[0].triangles.indices[at]).toBe(7777);
   });
@@ -251,7 +254,7 @@ describe('mergeRowGroup', () => {
       numbers,
     );
     for (let r = 0; r < group.length; r++) group.handles[r] = 1000 + r;
-    const [merged] = mergeRowGroup({
+    const [merged] = mergeRowBlockData({
       sources: [group],
       rows: Int32Array.from(everyRow([group])),
       sort: false,
@@ -266,7 +269,7 @@ describe('mergeRowGroup', () => {
   it('puts the members of a group of features at the key of the group', () => {
     const numbers = new Map<string, number>();
     const groups = [{ handle: 3, id: 'g', order: 'k5' }];
-    const builder = createRowGroupBuilder({ groups });
+    const builder = createRowBlockDataBuilder({ groups });
     const point = { type: 'Point', coordinates: [0, 0] } as Geometry;
     for (const [id, order] of [
       ['a', 'k1'],
@@ -275,11 +278,11 @@ describe('mergeRowGroup', () => {
       builder.addRow({ id, type: 'Point', geometry: point, order });
     }
     const outside = numbered(builder.finish(), numbers);
-    const members = createRowGroupBuilder({ groups });
+    const members = createRowBlockDataBuilder({ groups });
     members.addRow({ id: 'm2', type: 'Point', geometry: point, order: 'z', group: 3, member: 'b' });
     members.addRow({ id: 'm1', type: 'Point', geometry: point, order: 'z', group: 3, member: 'a' });
     const inside = numbered(members.finish(), numbers);
-    const merged = mergeRowGroup({
+    const merged = mergeRowBlockData({
       sources: [...outside, ...inside],
       rows: Int32Array.from([...everyRow(outside), ...everyRow(inside, outside.length)]),
       groups,
@@ -297,16 +300,16 @@ describe('mergeRowGroup', () => {
     }));
     const [group] = build(rows, numbers);
     const all = Int32Array.from(everyRow([group]));
-    expect(mergeRowGroup({ sources: [group], rows: all, targetRows: 40, cutPast: 2 })).toHaveLength(
-      1,
-    );
-    const cut = mergeRowGroup({ sources: [group], rows: all, targetRows: 20, cutPast: 2 });
+    expect(
+      mergeRowBlockData({ sources: [group], rows: all, targetRows: 40, cutPast: 2 }),
+    ).toHaveLength(1);
+    const cut = mergeRowBlockData({ sources: [group], rows: all, targetRows: 20, cutPast: 2 });
     expect(cut.map((g) => g.length)).toEqual([20, 20, 20, 10]);
     expect(readAll(cut, numbers).map((row) => row.id)).toEqual(
       readAll([group], numbers).map((row) => row.id),
     );
     // The coordinates count too
-    const byVertices = mergeRowGroup({
+    const byVertices = mergeRowBlockData({
       sources: [group],
       rows: all,
       targetRows: 1000,
@@ -316,16 +319,16 @@ describe('mergeRowGroup', () => {
   });
 
   it('refuses sources whose styles are not numbered', () => {
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow({ id: 'a', type: 'Point', geometry: null, order: 'k' });
     const [group] = builder.finish();
-    expect(() => mergeRowGroup({ sources: [group], rows: Int32Array.of(0, 0) })).toThrow(
+    expect(() => mergeRowBlockData({ sources: [group], rows: Int32Array.of(0, 0) })).toThrow(
       /not numbered/,
     );
   });
 });
 
-function countNoBounds(group: RowGroupData): number {
+function countNoBounds(group: RowBlockData): number {
   let n = 0;
   for (let r = 0; r < group.length; r++) if (Number.isNaN(group.rowBounds[r * 4])) n++;
   return n;

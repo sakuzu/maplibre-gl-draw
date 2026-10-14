@@ -58,7 +58,7 @@ export function getBoxMarkedFeatureIds(store: Store): readonly string[] | null {
   if (!marked) return null;
   const ids: string[] = [];
   for (const handle of marked) {
-    const id = tables.idOf(handle);
+    const id = tables.getRowId(handle);
     if (id !== undefined) ids.push(id);
   }
   return ids;

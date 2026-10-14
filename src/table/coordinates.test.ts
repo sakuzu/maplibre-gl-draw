@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   copyCoordinates,
   dimsWithin,
-  isCoordinateDims,
+  isCoordinateDimensions,
   planarCoordinates,
   planarRowBox,
   sortKeyOf,
@@ -24,8 +24,8 @@ describe('the dimensions of the coordinates', () => {
       2, 3, 3, 4,
     ]);
     expect(strideOf(undefined)).toBe(2);
-    expect(['xy', 'xyz', 'xym', 'xyzm'].every(isCoordinateDims)).toBe(true);
-    expect([2, 'xz', 'XYZ', null].some(isCoordinateDims)).toBe(false);
+    expect(['xy', 'xyz', 'xym', 'xyzm'].every(isCoordinateDimensions)).toBe(true);
+    expect([2, 'xz', 'XYZ', null].some(isCoordinateDimensions)).toBe(false);
   });
 
   it('hold one another when every dimension of one is in the other', () => {

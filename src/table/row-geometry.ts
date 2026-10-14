@@ -18,7 +18,7 @@
 
 import earcut from 'earcut';
 import type { Geometry, Position } from 'geojson';
-import { type CoordinateDims, copyCoordinates, strideOf } from './coordinates.js';
+import { type CoordinateDimensions, copyCoordinates, strideOf } from './coordinates.js';
 import { polygonRingRuns } from './polygon-rings.js';
 import type { GeometryType, TableGeometry } from './types.js';
 
@@ -33,7 +33,7 @@ export const WIDE_VERTICES = 65_536;
 export interface RowGeometry {
   readonly type: GeometryType;
   /** The dimensions of the coordinates */
-  readonly dims: CoordinateDims;
+  readonly dims: CoordinateDimensions;
   /** The number of values of a coordinate */
   readonly stride: number;
   /** The coordinates (`stride` values each) */
@@ -57,7 +57,7 @@ export interface RowGeometry {
  *   more values than the dimensions
  * @internal
  */
-export function toRowGeometry(geometry: Geometry, dims: CoordinateDims = 'xy'): RowGeometry {
+export function toRowGeometry(geometry: Geometry, dims: CoordinateDimensions = 'xy'): RowGeometry {
   const stride = strideOf(dims);
   const positions: number[] = [];
   const push =
@@ -99,7 +99,7 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDims = 'xy'): 
       }
       break;
     default:
-      throw new Error(`RowGroupBuilder: a ${geometry.type} geometry cannot be a row`);
+      throw new Error(`RowBlockBuilder: a ${geometry.type} geometry cannot be a row`);
   }
   return {
     type: geometry.type,
@@ -112,9 +112,9 @@ export function toRowGeometry(geometry: Geometry, dims: CoordinateDims = 'xy'): 
 }
 
 /** The error of a position of more values than the dimensions of its coordinates */
-function positionTooLong(position: Position, dims: CoordinateDims): Error {
+function positionTooLong(position: Position, dims: CoordinateDimensions): Error {
   return new Error(
-    `RowGroupBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
+    `RowBlockBuilder: a position of ${position.length} values does not fit coordinates of ${dims}`,
   );
 }
 
@@ -270,17 +270,22 @@ export function singleRowColumn(geometry: RowGeometry): TableGeometry {
   const vertices = coords.length / geometry.stride;
   switch (geometry.type) {
     case 'Point':
-      return { type: 'Point', coords, dims };
+      return { type: 'Point', coords, dimensions: dims };
     case 'LineString':
     case 'MultiPoint':
-      return { type: geometry.type, coords, dims, offsets: [Int32Array.of(0, vertices)] };
+      return {
+        type: geometry.type,
+        coords,
+        dimensions: dims,
+        offsets: [Int32Array.of(0, vertices)],
+      };
     case 'Polygon':
     case 'MultiLineString': {
       const rings = ringOffsetsOf(geometry);
       return {
         type: geometry.type,
         coords,
-        dims,
+        dimensions: dims,
         offsets: [Int32Array.of(0, geometry.parts.length), rings],
       };
     }
@@ -292,7 +297,7 @@ export function singleRowColumn(geometry: RowGeometry): TableGeometry {
       return {
         type: 'MultiPolygon',
         coords,
-        dims,
+        dimensions: dims,
         offsets: [Int32Array.of(0, geometry.polygons.length), polygons, ringOffsetsOf(geometry)],
       };
     }
@@ -313,11 +318,11 @@ export function rowGeometryOfColumn(
   column: {
     readonly type: GeometryType;
     readonly coords: Float64Array;
-    readonly dims?: CoordinateDims;
+    readonly dimensions?: CoordinateDimensions;
     readonly offsets?: readonly Int32Array[];
   },
   at: number,
-  dims: CoordinateDims = column.dims ?? 'xy',
+  dims: CoordinateDimensions = column.dimensions ?? 'xy',
 ): RowGeometry {
   const o = column.offsets ?? [];
   let first = at;
@@ -328,7 +333,7 @@ export function rowGeometryOfColumn(
   }
   const stride = strideOf(dims);
   const coords = new Float64Array((end - first) * stride);
-  copyCoordinates(column.coords, column.dims ?? 'xy', first, end - first, coords, dims, 0);
+  copyCoordinates(column.coords, column.dimensions ?? 'xy', first, end - first, coords, dims, 0);
   const parts: number[] = [];
   const polygons: number[] = [];
   if (column.type === 'Polygon' || column.type === 'MultiLineString') {

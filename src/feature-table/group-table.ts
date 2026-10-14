@@ -8,13 +8,13 @@
  * are here, so moving a group writes one entry and none of its members (`compareRowKeys`).
  */
 
-import type { RowGroupKey } from '../table/row-group-builder.js';
+import type { GroupEntry } from '../table/row-group-builder.js';
 import type { GroupKeySource } from '../table/row-keys.js';
 import { type Utf8Column, utf8ColumnFromStrings } from '../table/utf8-column.js';
 import type { GroupHandle } from './types.js';
 
 /** One group */
-interface GroupEntry {
+interface GroupState {
   readonly id: string;
   order: string;
   layerId: string;
@@ -30,7 +30,7 @@ interface GroupEntry {
  * @internal
  */
 export class GroupTable implements GroupKeySource {
-  private readonly entries = new Map<GroupHandle, GroupEntry>();
+  private readonly entries = new Map<GroupHandle, GroupState>();
   /** The handle of each id */
   private readonly byId = new Map<string, GroupHandle>();
   /** The handles in the order of the columns below (rebuilt on a change) */
@@ -147,7 +147,7 @@ export class GroupTable implements GroupKeySource {
   }
 
   /** Every group, as the builder of the row groups takes them */
-  keyList(): RowGroupKey[] {
+  keyList(): GroupEntry[] {
     return [...this.entries].map(([handle, entry]) => ({
       handle,
       id: entry.id,
@@ -162,7 +162,7 @@ export class GroupTable implements GroupKeySource {
   withOrders(orders: ReadonlyMap<GroupHandle, string>): GroupKeySource {
     const handles = [...this.entries.keys()];
     const index = new Map(handles.map((handle, i) => [handle, i]));
-    const entries = handles.map((handle) => this.entries.get(handle) as GroupEntry);
+    const entries = handles.map((handle) => this.entries.get(handle) as GroupState);
     const ids = utf8ColumnFromStrings(entries.map((entry) => entry.id));
     const keys = utf8ColumnFromStrings(
       handles.map((handle, i) => orders.get(handle) ?? entries[i].order),
@@ -174,7 +174,7 @@ export class GroupTable implements GroupKeySource {
     if (!this.stale) return;
     this.handles = [...this.entries.keys()];
     this.entryIndex = new Map(this.handles.map((handle, i) => [handle, i]));
-    const entries = this.handles.map((handle) => this.entries.get(handle) as GroupEntry);
+    const entries = this.handles.map((handle) => this.entries.get(handle) as GroupState);
     this.idColumn = utf8ColumnFromStrings(entries.map((entry) => entry.id));
     this.keyColumn = utf8ColumnFromStrings(entries.map((entry) => entry.order));
     this.stale = false;

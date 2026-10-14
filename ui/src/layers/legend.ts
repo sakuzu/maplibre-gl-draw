@@ -16,12 +16,12 @@ import {
   type Dataset,
   deriveLegend,
   type Feature,
-  type FeatureTables,
   type FeatureType,
   getStyleRuleChannel,
   type Layer,
   type LegendEntry,
 } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureTables } from '@sakuzu/maplibre-gl-draw/kasane';
 import type { Messages } from '../messages.js';
 
 /** The shape of the swatches of a layer, after the kind of what its features draw */
@@ -116,7 +116,7 @@ function shapeOfTypes(types: Iterable<FeatureType>): LegendShape {
 function layerShape(source: LegendSource, layer: Layer): LegendShape {
   if (layer.kind !== 'table') return legendShape(source.features.list({ layerId: layer.id }));
   const tables = source.getStore?.().tables;
-  const view = tables?.layer(layer.id);
+  const view = tables?.get(layer.id);
   if (!tables || !view) return shapeOfTypes([]);
   function* types(): Generator<FeatureType> {
     if (!tables || !view) return;

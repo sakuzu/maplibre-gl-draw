@@ -54,7 +54,7 @@ export const ROW_WRITE_STATE = 8;
  *
  * @internal
  */
-export interface RowWrite {
+export interface InPlaceRowWrite {
   /** The row group and the row */
   readonly group: RowGroupHandle;
   readonly row: number;

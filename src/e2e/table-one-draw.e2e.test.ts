@@ -283,8 +283,8 @@ async function drawScene(
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createFeatureTables: typeof import('../index.js').createFeatureTables;
-            createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
+            createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
+            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;
@@ -335,9 +335,9 @@ async function drawScene(
               ? value.map(lift)
               : value;
         const { tables, writer } = w.e2e.tables.createFeatureTables(
-          dims ? { dimsOf: () => dims } : undefined,
+          dims ? { dimensionsOf: () => dims } : undefined,
         );
-        const builder = w.e2e.tables.createRowGroupBuilder(dims ? { dims } : {});
+        const builder = w.e2e.tables.createRowBlockBuilder(dims ? { dimensions: dims } : {});
         features.forEach((f, i) => {
           builder.addRow({
             id: f.id,
@@ -352,7 +352,7 @@ async function drawScene(
             locked: false,
           } as never);
         });
-        writer.adopt('rows', builder.finish());
+        writer.addBlocks('rows', builder.finish());
         Object.defineProperty(store, 'tables', { value: tables });
       }
       w.draw.destroy();

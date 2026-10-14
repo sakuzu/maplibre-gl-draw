@@ -86,7 +86,7 @@ export interface TableBenchPageParams extends TableBenchParams {
   readonly held: number;
   /**
    * The number of rows held from which a row held moved as a whole is drawn moved by its state
-   * (`moveHeldByStateFrom` of the tables; null for the default of the library)
+   * (`moveOpenedByStateFrom` of the tables; null for the default of the library)
    */
   readonly moveFrom: number | null;
 }

@@ -18,19 +18,19 @@ import { createHash } from 'node:crypto';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { circleRowRings } from '../shared/circle-rings.js';
-import type { CoordinateDims } from './coordinates.js';
+import type { CoordinateDimensions } from './coordinates.js';
 import { toRowGeometry } from './row-geometry.js';
 import {
-  createRowGroupBuilder,
-  type RowGroupBuilderOptions,
+  blockTransferList,
+  createRowBlockDataBuilder,
+  type RowBlockBuilderOptions,
   type RowInput,
-  rowGroupTransferList,
 } from './row-group-builder.js';
-import { mergeRowGroup } from './row-group-merge.js';
-import type { RowGroupData } from './row-group-types.js';
+import { mergeRowBlockData } from './row-group-merge.js';
+import type { RowBlockData } from './row-group-types.js';
 import { GeometryColumnReader } from './table.js';
 
-const ALL_DIMS: readonly CoordinateDims[] = ['xy', 'xyz', 'xym', 'xyzm'];
+const ALL_DIMS: readonly CoordinateDimensions[] = ['xy', 'xyz', 'xym', 'xyzm'];
 
 /** A random number generator with a seed (mulberry32) */
 function seeded(seed: number): () => number {
@@ -125,26 +125,26 @@ function randomRows(
   return rows;
 }
 
-function build(rows: readonly RowInput[], options: RowGroupBuilderOptions = {}): RowGroupData[] {
-  const builder = createRowGroupBuilder({ rings: circleRowRings, ...options });
+function build(rows: readonly RowInput[], options: RowBlockBuilderOptions = {}): RowBlockData[] {
+  const builder = createRowBlockDataBuilder({ rings: circleRowRings, ...options });
   for (const row of rows) builder.addRow(row);
   return builder.finish();
 }
 
 /** The hash of every array of groups (the bytes a Worker sends) */
-function hashOf(groups: readonly RowGroupData[]): string {
+function hashOf(groups: readonly RowBlockData[]): string {
   const hash = createHash('sha256');
-  for (const buffer of rowGroupTransferList(groups)) hash.update(new Uint8Array(buffer));
+  for (const buffer of blockTransferList(groups)) hash.update(new Uint8Array(buffer));
   return hash.digest('hex');
 }
 
 /** The bytes of every array of groups */
-function bytesOf(groups: readonly RowGroupData[]): number {
-  return rowGroupTransferList(groups).reduce((sum, buffer) => sum + buffer.byteLength, 0);
+function bytesOf(groups: readonly RowBlockData[]): number {
+  return blockTransferList(groups).reduce((sum, buffer) => sum + buffer.byteLength, 0);
 }
 
 /** The number of values of the coordinates the geometry columns of groups hold */
-function coordinatesOf(groups: readonly RowGroupData[]): number {
+function coordinatesOf(groups: readonly RowBlockData[]): number {
   let count = 0;
   for (const group of groups) {
     for (const child of group.geometry.children) {
@@ -155,7 +155,7 @@ function coordinatesOf(groups: readonly RowGroupData[]): number {
 }
 
 /** The values after `x` and `y` of the positions of each dimensions, at random */
-const EXTRA: Readonly<Record<CoordinateDims, (random: () => number) => number[]>> = {
+const EXTRA: Readonly<Record<CoordinateDimensions, (random: () => number) => number[]>> = {
   xy: () => [],
   xyz: (random) => [Math.round(random() * 1000)],
   xym: (random) => [1.7e12 + Math.floor(random() * 1e6)],
@@ -194,7 +194,7 @@ describe('the positions of a row', () => {
     expect(() => toRowGeometry({ type: 'LineString', coordinates: [[0, 0, 1, 2]] }, 'xyz')).toThrow(
       /4 values does not fit coordinates of xyz/,
     );
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     expect(() =>
       builder.addRow({
         id: 'a',
@@ -210,11 +210,11 @@ describe('the row groups of every dimensions', () => {
   it('draw and index the same: the bboxes, the triangles and the index of x and y', () => {
     const xy = build(randomRows(600, 3), { targetRows: 100 });
     for (const dims of ALL_DIMS) {
-      const groups = build(randomRows(600, 3, EXTRA[dims]), { targetRows: 100, dims });
+      const groups = build(randomRows(600, 3, EXTRA[dims]), { targetRows: 100, dimensions: dims });
       expect(groups.length).toBe(xy.length);
       groups.forEach((group, g) => {
         const other = xy[g];
-        expect(group.geometry.children.every((child) => child.dims === dims)).toBe(true);
+        expect(group.geometry.children.every((child) => child.dimensions === dims)).toBe(true);
         expect(group.rowBounds).toEqual(other.rowBounds);
         expect(group.triangles).toEqual(other.triangles);
         expect(group.index).toEqual(other.index);
@@ -229,9 +229,9 @@ describe('the row groups of every dimensions', () => {
     const xy = build(randomRows(800, 5));
     const coordinates = coordinatesOf(xy) / 2;
     expect(coordinates).toBeGreaterThan(1000);
-    const extra: Record<CoordinateDims, number> = { xy: 0, xyz: 8, xym: 8, xyzm: 16 };
+    const extra: Record<CoordinateDimensions, number> = { xy: 0, xyz: 8, xym: 8, xyzm: 16 };
     for (const dims of ALL_DIMS) {
-      const groups = build(randomRows(800, 5, EXTRA[dims]), { dims });
+      const groups = build(randomRows(800, 5, EXTRA[dims]), { dimensions: dims });
       expect(bytesOf(groups)).toBe(bytesOf(xy) + extra[dims] * coordinates);
     }
   });
@@ -248,7 +248,7 @@ describe('the row groups of every dimensions', () => {
     groups.forEach((group, source) => {
       for (let r = 0; r < group.length; r += 2) pairs.push(source, r);
     });
-    const merged = mergeRowGroup({
+    const merged = mergeRowBlockData({
       sources: groups,
       rows: Int32Array.from(pairs),
       ringVertices: circleRowRings.ringVertices,
@@ -274,7 +274,7 @@ describe('the row groups of every dimensions', () => {
           order: 'k',
         },
       ],
-      { dims: 'xyzm' },
+      { dimensions: 'xyzm' },
     );
     const reader = new GeometryColumnReader(group.geometry.children[0], undefined, 'child');
     expect(reader.stride).toBe(4);
@@ -295,7 +295,7 @@ describe('the row groups of every dimensions', () => {
 });
 
 describe('a merge of row groups of dimensions', () => {
-  const numbered = (groups: RowGroupData[]): RowGroupData[] => {
+  const numbered = (groups: RowBlockData[]): RowBlockData[] => {
     for (const group of groups) group.styleDictionary = null;
     return groups;
   };
@@ -303,18 +303,18 @@ describe('a merge of row groups of dimensions', () => {
   it('copies the coordinates into the dimensions of the merge, the ones missing NaN', () => {
     const xy = numbered(build(randomRows(40, 11), { targetRows: 1000 }));
     const xyz = numbered(
-      build(randomRows(40, 12, EXTRA.xyz, 'z'), { targetRows: 1000, dims: 'xyz' }),
+      build(randomRows(40, 12, EXTRA.xyz, 'z'), { targetRows: 1000, dimensions: 'xyz' }),
     );
     const rows: number[] = [];
     for (let r = 0; r < 40; r++) rows.push(0, r, 1, r);
-    const [merged] = mergeRowGroup({
+    const [merged] = mergeRowBlockData({
       sources: [xy[0], xyz[0]],
       rows: Int32Array.from(rows),
-      dims: 'xyz',
+      dimensions: 'xyz',
       targetRows: 1000,
       targetVertices: 1e9,
     });
-    expect(merged.geometry.children.every((child) => child.dims === 'xyz')).toBe(true);
+    expect(merged.geometry.children.every((child) => child.dimensions === 'xyz')).toBe(true);
     const readers = merged.geometry.children.map(
       (child) => new GeometryColumnReader(child, undefined, 'child'),
     );
@@ -324,7 +324,7 @@ describe('a merge of row groups of dimensions', () => {
         (child) => new GeometryColumnReader(child, undefined, 'child'),
       ),
     }));
-    const byId = (data: RowGroupData, readers: GeometryColumnReader[]) => {
+    const byId = (data: RowBlockData, readers: GeometryColumnReader[]) => {
       const out = new Map<string, unknown>();
       for (let r = 0; r < data.length; r++) {
         const child = data.geometry.types[r];
@@ -345,11 +345,11 @@ describe('a merge of row groups of dimensions', () => {
 
   it('is refused for sources of other dimensions, or of more dimensions than the merge', () => {
     const xy = numbered(build(randomRows(10, 13)));
-    const xyz = numbered(build(randomRows(10, 14, EXTRA.xyz, 'z'), { dims: 'xyz' }));
+    const xyz = numbered(build(randomRows(10, 14, EXTRA.xyz, 'z'), { dimensions: 'xyz' }));
     const rows = Int32Array.of(0, 0, 1, 0);
-    expect(() => mergeRowGroup({ sources: [xy[0], xyz[0]], rows })).toThrow(/coordinates of/);
+    expect(() => mergeRowBlockData({ sources: [xy[0], xyz[0]], rows })).toThrow(/coordinates of/);
     expect(() =>
-      mergeRowGroup({ sources: [xyz[0]], rows: Int32Array.of(0, 0), dims: 'xym' }),
+      mergeRowBlockData({ sources: [xyz[0]], rows: Int32Array.of(0, 0), dimensions: 'xym' }),
     ).toThrow(/coordinates of xyz/);
   });
 });

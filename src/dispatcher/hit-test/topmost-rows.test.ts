@@ -22,7 +22,7 @@ import { DrawStore, RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
-import { createRowGroupBuilder } from '../../table/row-group-builder.js';
+import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { feature, internalsOf, orderKey, rowOfFeature } from '../../test-utils.js';
 import { HitTestServiceImpl } from './service.js';
 import { createTopmostHitTester, POINTER_HOLD_MS, POINTER_OWNER, type TopHit } from './topmost.js';
@@ -61,12 +61,12 @@ function layer(id: string): void {
 }
 
 function adopt(layerId: string, features: Feature[]): void {
-  const builder = createRowGroupBuilder({ targetRows: 2 });
+  const builder = createRowBlockDataBuilder({ targetRows: 2 });
   features.forEach((f, i) => {
     builder.addRow(rowOfFeature(f, orderKey(i)));
   });
-  tables.writer.adopt(layerId, builder.finish());
-  featureTablesInternals(tables.tables)?.flushAdoption();
+  tables.writer.addBlocks(layerId, builder.finish());
+  featureTablesInternals(tables.tables)?.addQueuedBlocks();
 }
 
 beforeEach(() => {
@@ -104,7 +104,7 @@ describe('the hit testing of the rows held as columns', () => {
     expect(rowId(hit)).toBe('front');
     if (hit?.kind !== 'row') throw new Error('row');
     expect(hit.layerId).toBe('l');
-    expect(hit.handle).toBe(tables.tables.handleOf('front'));
+    expect(hit.handle).toBe(tables.tables.findRow('front'));
     expect(hit.locked).toBe(false);
     expect(rowId(tester()(at(6, 6)))).toBe('middle');
     expect(tester()(at(30, 30))).toBeNull();
@@ -128,9 +128,9 @@ describe('the hit testing of the rows held as columns', () => {
     ]);
     expect(rowId(tester()(at(5, 5)))).toBe('back');
     const internals = featureTablesInternals(tables.tables);
-    internals?.states.setHidden(Int32Array.of(tables.tables.handleOf('back') as number), true);
+    internals?.states.setHidden(Int32Array.of(tables.tables.findRow('back') as number), true);
     expect(tester()(at(5, 5))).toBeNull();
-    internals?.states.setHidden(Int32Array.of(tables.tables.handleOf('back') as number), false);
+    internals?.states.setHidden(Int32Array.of(tables.tables.findRow('back') as number), false);
     store.setLocallyHidden('l', true);
     expect(tester()(at(5, 5))).toBeNull();
   });
@@ -178,31 +178,33 @@ describe('the hit testing that holds the row hit', () => {
     adopt('l', [feature('p', 'Polygon', square(0, 0))]);
     const hit = tester()(at(5, 5), { hold: true });
     expect(hit?.kind).toBe('store');
-    const held = internalsOf(tables.tables).heldFeature('p');
+    const held = internalsOf(tables.tables).getOpenedFeature('p');
     expect(held).toBeDefined();
     expect(hit?.kind === 'store' && hit.feature).toBe(held);
     // The selection holds it before the moment is over
     store.setSelection('feature', ['p']);
     vi.advanceTimersByTime(POINTER_HOLD_MS);
-    expect(internalsOf(tables.tables).heldFeature('p')).toBe(held);
+    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBe(held);
     store.setSelection(null, []);
     // Let go a moment after the selection lets go of it
     vi.advanceTimersByTime(RELEASE_DELAY_MS);
-    expect(internalsOf(tables.tables).heldFeature('p')).toBeUndefined();
+    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBeUndefined();
     // Without the selection it is let go after the moment
     tester()(at(5, 5), { hold: true });
-    expect(internalsOf(tables.tables).heldFeature('p')).toBeDefined();
+    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBeDefined();
     vi.advanceTimersByTime(POINTER_HOLD_MS);
-    expect(internalsOf(tables.tables).heldFeature('p')).toBeUndefined();
+    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBeUndefined();
   });
 
   it('returns a row held as a feature of the Store, held or not by the hit', () => {
     layer('l');
     adopt('l', [feature('p', 'Polygon', square(0, 0))]);
-    internalsOf(tables.tables).hold(POINTER_OWNER, []);
+    internalsOf(tables.tables).open(POINTER_OWNER, []);
     store.setSelection('feature', ['p']);
     const hit = tester()(at(5, 5));
     expect(hit?.kind).toBe('store');
-    expect(hit?.kind === 'store' && hit.feature).toBe(internalsOf(tables.tables).heldFeature('p'));
+    expect(hit?.kind === 'store' && hit.feature).toBe(
+      internalsOf(tables.tables).getOpenedFeature('p'),
+    );
   });
 });

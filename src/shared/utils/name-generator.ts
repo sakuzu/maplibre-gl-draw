@@ -41,10 +41,10 @@ interface NameSource {
  * the name of each row, without making features (such a Store does not list its features)
  */
 interface NameRows {
-  layer(layerId: string):
+  get(layerId: string):
     | {
         getRowType(handle: number): FeatureType | null;
-        valueAt(handle: number, key: string): unknown;
+        getRowValue(handle: number, key: string): unknown;
       }
     | undefined;
   scan(options: { readonly layerIds: readonly string[] }): { next(): Int32Array | null };
@@ -340,7 +340,7 @@ export class AutoNameGenerator {
       this.observeFeatureName(feature);
     }
     for (const [layerId, rows] of changes.rows?.layers ?? []) {
-      const view = this.store.tables?.layer(layerId);
+      const view = this.store.tables?.get(layerId);
       if (!view) continue;
       for (const handle of rows.created) this.observeRowName(view, handle);
       if (rows.fields.has('property:name') || rows.fields.has('type')) {
@@ -377,8 +377,8 @@ export class AutoNameGenerator {
   /**
    * Takes in the number from the name of a row
    */
-  private observeRowName(view: NonNullable<ReturnType<NameRows['layer']>>, handle: number): void {
-    const name = view.valueAt(handle, 'name');
+  private observeRowName(view: NonNullable<ReturnType<NameRows['get']>>, handle: number): void {
+    const name = view.getRowValue(handle, 'name');
     const type = view.getRowType(handle);
     if (typeof name !== 'string' || type === null) return;
     this.observeName(type, this.getTypeName(type), name);
@@ -448,13 +448,13 @@ export class AutoNameGenerator {
   ): number {
     let maxNumber = 0;
     for (const layer of this.store.listLayers()) {
-      const view = tables.layer(layer.id);
+      const view = tables.get(layer.id);
       if (!view) continue;
       const cursor = tables.scan({ layerIds: [layer.id] });
       for (let batch = cursor.next(); batch; batch = cursor.next()) {
         for (const handle of batch) {
           if (view.getRowType(handle) !== featureType) continue;
-          const name = view.valueAt(handle, 'name');
+          const name = view.getRowValue(handle, 'name');
           if (typeof name !== 'string') continue;
           const number = extractNumberFromName(name, typeName);
           if (number !== null && number > maxNumber) maxNumber = number;

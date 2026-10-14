@@ -10,8 +10,8 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
-import type { Feature, RowValuesSnapshot, StoreChange } from '../../store/types.js';
+import { createTableStore } from '../../store/table-memory.js';
+import type { Feature, RowValues, StoreChange } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureTables, RowField } from '../tables.js';
@@ -51,7 +51,7 @@ function drawOn(store: Store): Draw {
 }
 
 function setup() {
-  const { store } = createTableMemoryStore();
+  const { store } = createTableStore();
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -72,9 +72,12 @@ function setup() {
 
 /** The rows as features, in their order */
 function rowsOf(instance: Draw, tables: FeatureTables): Feature[] {
-  const view = tables.layer('rows');
-  return Array.from(view?.rowsInOrder(0, 100) ?? [], (handle) => tables.idOf(handle) as string)
-    .filter((id) => tables.handleOf(id) !== undefined)
+  const view = tables.get('rows');
+  return Array.from(
+    view?.listRowHandles(0, 100) ?? [],
+    (handle) => tables.getRowId(handle) as string,
+  )
+    .filter((id) => tables.findRow(id) !== undefined)
     .map((id) => instance.getStore().getFeature(id) as Feature);
 }
 
@@ -82,7 +85,7 @@ describe('draw.tables.applyRows', () => {
   it('writes the rows, notifies the values before and returns them', () => {
     const { draw, tables, notified } = setup();
     const start = rowsOf(draw, tables);
-    const handles = Int32Array.from(['p1', 'p2'], (id) => tables.handleOf(id) as number);
+    const handles = Int32Array.from(['p1', 'p2'], (id) => tables.findRow(id) as number);
     const before = draw.tables.applyRows({
       handles,
       fields: new Map<RowField, unknown[]>([
@@ -94,7 +97,7 @@ describe('draw.tables.applyRows', () => {
     expect(notified[notified.length - 1].rows?.before).toBe(before);
     expect(draw.getStore().getFeature('p2')?.properties).toEqual({ n: 20 });
     // Written back
-    draw.tables.applyRows(before as RowValuesSnapshot);
+    draw.tables.applyRows(before as RowValues);
     expect(rowsOf(draw, tables)).toEqual(start);
   });
 
@@ -102,7 +105,7 @@ describe('draw.tables.applyRows', () => {
     const { draw, tables, notified } = setup();
     const start = rowsOf(draw, tables);
     expect(draw.features.delete('p1')).toBe(true);
-    const before = notified[notified.length - 1].rows?.before as RowValuesSnapshot;
+    const before = notified[notified.length - 1].rows?.before as RowValues;
     expect(Array.from(before.deleted ?? [])).toEqual([0]);
     draw.tables.applyRows(before);
     expect(rowsOf(draw, tables)).toEqual(start);
@@ -111,7 +114,7 @@ describe('draw.tables.applyRows', () => {
   it('is refused while read-only', () => {
     const { draw, tables } = setup();
     draw.setReadOnly(true);
-    const handle = tables.handleOf('p1') as number;
+    const handle = tables.findRow('p1') as number;
     expect(
       draw.tables.applyRows({
         handles: Int32Array.of(handle),
@@ -123,7 +126,7 @@ describe('draw.tables.applyRows', () => {
 
   it('throws on a patch of the wrong shape or a handle of no row, writing nothing', () => {
     const { draw, tables, notified } = setup();
-    const handle = tables.handleOf('p1') as number;
+    const handle = tables.findRow('p1') as number;
     const count = notified.length;
     const call = (patch: unknown) => () =>
       draw.tables.applyRows(patch as Parameters<Draw['tables']['applyRows']>[0]);
@@ -147,7 +150,7 @@ describe('draw.tables.applyRows', () => {
   });
 
   it('throws invalid-state on a Store of objects, and after destroy', () => {
-    const instance = drawOn(createTableMemoryStore().store);
+    const instance = drawOn(createTableStore().store);
     instance.destroy();
     expect(() =>
       instance.tables.applyRows({ handles: new Int32Array(0), fields: new Map() }),
@@ -164,7 +167,7 @@ describe('the writes of draw.features of rows that are not selected', () => {
   it('are notified with the values before, and undone by writing them back', () => {
     const { draw, tables, notified } = setup();
     // A history of the writes of this client
-    const steps: RowValuesSnapshot[] = [];
+    const steps: RowValues[] = [];
     draw.getStore().subscribe((change) => {
       if (change.source === 'local' && change.rows?.before) steps.push(change.rows.before);
     });
@@ -178,7 +181,7 @@ describe('the writes of draw.features of rows that are not selected', () => {
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);
     expect(Array.from(change.rows?.layers.get('rows')?.updated ?? [])).toEqual([
-      tables.handleOf('p2'),
+      tables.findRow('p2'),
     ]);
     draw.features.update('p3', { visible: false });
     expect(steps).toHaveLength(2);

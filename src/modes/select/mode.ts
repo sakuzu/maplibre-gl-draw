@@ -437,7 +437,7 @@ export class SelectMode implements EngineModeHandler {
     if (!states || !store.tables) return;
     const tables = store.tables;
     const next = Int32Array.from(
-      ids.map((id) => tables.handleOf(id) ?? -1).filter((handle) => handle >= 0),
+      ids.map((id) => tables.findRow(id) ?? -1).filter((handle) => handle >= 0),
     );
     const kept = new Set(next);
     const dropped = this.#boxMarked.filter((handle) => !kept.has(handle));

@@ -19,7 +19,7 @@
  */
 
 import {
-  itemMovesBetween,
+  diffItemOrder,
   type OrderContainer,
   trimmedContainer,
 } from '../shared/utils/item-moves.js';
@@ -898,7 +898,7 @@ export class MemoryDocumentStore implements DocumentStore {
       containers.push(container);
     }
     const groups = this.#groupsSeen;
-    const moves = itemMovesBetween(containers, {
+    const moves = diffItemOrder(containers, {
       deleted: [...before].filter((id) => !after.has(id)),
       isGroup: (id) => groups.has(id) || this.#groups.has(id),
       idOf: (id) => id,

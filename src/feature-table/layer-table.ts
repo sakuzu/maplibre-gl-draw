@@ -17,9 +17,9 @@
 
 import RBush from 'rbush';
 import type { BoundingBox } from '../shared/types/model.js';
-import type { CoordinateDims } from '../table/coordinates.js';
+import type { CoordinateDimensions } from '../table/coordinates.js';
 import { searchPackedRTree } from '../table/packed-rtree.js';
-import { ROW_FLAG_DELETED, type RowGroupData } from '../table/row-group-types.js';
+import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
 import { DeltaRows } from './delta.js';
@@ -39,7 +39,7 @@ export interface RowGroup {
   /** The handle of the group */
   readonly handle: RowGroupHandle;
   /** The columns of the rows */
-  readonly data: RowGroupData;
+  readonly data: RowBlockData;
   /** The copy of the state of each row (`row-state.ts`) */
   readonly state: Uint16Array;
   /** The byte of the state of each row the GPU reads */
@@ -106,7 +106,7 @@ export interface TablePosition {
  */
 export function createRowGroup(
   handle: RowGroupHandle,
-  data: RowGroupData,
+  data: RowBlockData,
   delta = false,
   pending = false,
 ): RowGroup {
@@ -308,7 +308,7 @@ export class LayerTable {
    * The dimensions of the coordinates of the rows of the layer. The groups built since it was
    * last raised have them; a group of before keeps its own (fewer) until its next version
    */
-  dims: CoordinateDims;
+  dims: CoordinateDimensions;
 
   /**
    * @param layerId The layer
@@ -322,7 +322,7 @@ export class LayerTable {
     private readonly groupKeys: GroupKeySource & { readonly revision?: number },
     readonly serial = 0,
     deltaHandle: RowGroupHandle = -1,
-    dims: CoordinateDims = 'xy',
+    dims: CoordinateDimensions = 'xy',
   ) {
     this.delta = new DeltaRows(deltaHandle);
     this.dims = dims;
@@ -369,7 +369,7 @@ export class LayerTable {
   }
 
   /** Whether the rows of a row group are in the order of their keys */
-  inKeyOrder(data: RowGroupData): boolean {
+  inKeyOrder(data: RowBlockData): boolean {
     for (let r = 1; r < data.length; r++) {
       if (compareRowKeys(data, r - 1, data, r, this.groupKeys) >= 0) return false;
     }
@@ -381,7 +381,7 @@ export class LayerTable {
    * layer: it then cannot be put among them (its rows are not in the order of their keys
    * otherwise: see `insert`)
    */
-  overlaps(data: RowGroupData): boolean {
+  overlaps(data: RowBlockData): boolean {
     return this.placeOfGroup(data) < 0;
   }
 
@@ -389,7 +389,7 @@ export class LayerTable {
    * The place in the order of a row group (the number of groups whose first row comes before
    * its first row), or -1 when its rows overlap the rows of the group before or after it there
    */
-  private placeOfGroup(data: RowGroupData): number {
+  private placeOfGroup(data: RowBlockData): number {
     let lo = 0;
     let hi = this.order.length;
     while (lo < hi) {

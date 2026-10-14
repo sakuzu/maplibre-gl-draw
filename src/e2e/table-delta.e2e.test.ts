@@ -171,8 +171,8 @@ async function drawWritten(
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createFeatureTables: typeof import('../index.js').createFeatureTables;
-            createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
+            createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
+            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;
@@ -195,7 +195,7 @@ async function drawWritten(
         });
       }, 'remote');
       const { tables, writer } = w.e2e.tables.createFeatureTables();
-      const builder = w.e2e.tables.createRowGroupBuilder({ targetRows: 8 });
+      const builder = w.e2e.tables.createRowBlockBuilder({ targetRows: 8 });
       for (const f of features) {
         builder.addRow({
           id: f.id,
@@ -205,7 +205,7 @@ async function drawWritten(
           style: f.style ?? {},
         } as never);
       }
-      writer.adopt('rows', builder.finish());
+      writer.addBlocks('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
@@ -246,7 +246,7 @@ async function drawWritten(
       if (change) {
         const ids = change.moves.map((m) => m.id);
         writer.apply({
-          handles: Int32Array.from(ids.map((id) => tables.handleOf(id) as number)),
+          handles: Int32Array.from(ids.map((id) => tables.findRow(id) as number)),
           fields: new Map([['order', change.moves.map((m) => m.order)]]),
         });
         const encoder = new TextEncoder();

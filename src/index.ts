@@ -127,11 +127,8 @@ export type {
   ItemOrderChange,
   ItemPlacement,
   ItemPosition,
-  RetainToken,
-  RowRangeMove,
-  RowValuesSnapshot,
+  RestoreToken,
 } from './api/model.js';
-export { itemMovesBetween } from './api/model.js';
 
 // State
 export type {
@@ -174,39 +171,10 @@ export type {
 
 // Store
 export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
+export { diffItemOrder } from './api/model.js';
 
 // Features held as rows of columns
-export type {
-  CreatedRows,
-  FeatureTables,
-  FeatureTablesHooks,
-  FeatureTablesOptions,
-  FeatureTablesWorker,
-  FeatureTablesWriter,
-  HeldWriteOptions,
-  ItemRefs,
-  LayerRowsChange,
-  LayerTableView,
-  LocalRowWrite,
-  RowApplyOptions,
-  RowCursor,
-  RowField,
-  RowFieldValues,
-  RowHandle,
-  RowPatch,
-  RowPlacement,
-  RowsChange,
-  TableGroupField,
-  TableGroupPatch,
-  TableScanOptions,
-  TablesResource,
-} from './api/tables.js';
-export {
-  createFeatureTables,
-  createTableMemoryStore,
-  ITEM_GROUP,
-  ITEM_ROW,
-} from './api/tables.js';
+export type { TablesResource } from './api/tables.js';
 
 // Extensions
 export type {

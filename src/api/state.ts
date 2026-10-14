@@ -127,8 +127,6 @@ export interface GpuMemoryDiagnostics {
   readonly bufferBytes: number;
   /** The bytes of the textures */
   readonly textureBytes: number;
-  /** The bytes per renderer (`points`, `lines`, `polygons`, `rows`, `row-state`) */
-  readonly byRenderer: Readonly<Record<string, number>>;
 }
 
 /**

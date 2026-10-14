@@ -259,10 +259,10 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     const tables = featureTablesInternals(store.tables);
     if (!tables) return;
     if (pointerTimer !== null) clearTimeout(pointerTimer);
-    tables.hold(POINTER_OWNER, [id]);
+    tables.open(POINTER_OWNER, [id]);
     pointerTimer = setTimeout(() => {
       pointerTimer = null;
-      tables.hold(POINTER_OWNER, []);
+      tables.open(POINTER_OWNER, []);
     }, POINTER_HOLD_MS);
   };
 
@@ -311,11 +311,11 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       const data = hit.group.data;
       const handle = data.handles[hit.row];
       const id = tables.ids.idOf(handle) as string;
-      const held = tables.heldFeature(id);
+      const held = tables.getOpenedFeature(id);
       if (held) return { kind: 'store', feature: held };
       if (hold) {
         holdForPointer(id);
-        const feature = tables.heldFeature(id);
+        const feature = tables.getOpenedFeature(id);
         if (feature) return { kind: 'store', feature };
       }
       const groupHandle = data.groups[hit.row];

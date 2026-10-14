@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
+import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
 import { createMapStub, createSyntheticInput, internalsOf } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -54,7 +54,7 @@ function square(id: string, x: number, y: number, size: number): Feature {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  store = createTableMemoryStore().store;
+  store = createTableStore().store;
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -115,14 +115,14 @@ describe('the input of the user over a Store of rows', () => {
     if (!tables) throw new Error('rows');
     createSyntheticInput(engine).click([0.25, 0.25]);
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['a'] });
-    const held = internalsOf(tables).heldFeature('a');
+    const held = internalsOf(tables).getOpenedFeature('a');
     expect(held).toBeDefined();
     expect(draw.features.get('a')).toEqual(held);
     // A click on nothing lets go of it a moment later
     createSyntheticInput(engine).click([5, 5]);
     expect(store.getSelection().ids).toEqual([]);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).heldFeature('a')).toBeUndefined();
+    expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
   });
 
   it('writes the row of a vertex dragged, in the middle of the drag and at its end', () => {
@@ -142,7 +142,7 @@ describe('the input of the user over a Store of rows', () => {
     // The corner dragged, as the row reads it
     const corner = () =>
       (
-        tables.layer('rows')?.getRow(tables.handleOf('a') ?? -1)?.geometry as
+        tables.get('rows')?.getRow(tables.findRow('a') ?? -1)?.geometry as
           | { coordinates: number[][][] }
           | undefined
       )?.coordinates[0][1];
@@ -155,7 +155,7 @@ describe('the input of the user over a Store of rows', () => {
     // Read so once it is no longer held
     store.setSelection(null, []);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).heldFeature('a')).toBeUndefined();
+    expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
     expect(corner()).toEqual([0.7, -0.2]);
   });
 
@@ -166,7 +166,7 @@ describe('the input of the user over a Store of rows', () => {
     expect(store.getSelection().ids).toEqual(['b']);
     createSyntheticInput(engine).key('Delete');
     expect(store.getFeature('b')).toBeUndefined();
-    expect(tables.handleOf('b')).toBeUndefined();
+    expect(tables.findRow('b')).toBeUndefined();
     expect(store.getSelection().ids).toEqual([]);
   });
 });

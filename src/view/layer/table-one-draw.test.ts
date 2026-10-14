@@ -679,7 +679,7 @@ describe('the check of the classification of a row written in place (7.2 of the 
     frame();
     frame();
     const line = features.find((f) => f.id.startsWith('l')) as Feature;
-    const handle = tables.handleOf(line.id) as number;
+    const handle = tables.findRow(line.id) as number;
     writer.apply({
       handles: Int32Array.of(handle),
       fields: new Map([['property:leader', [true]]]),
@@ -704,7 +704,7 @@ describe('the check of the classification of a row written in place (7.2 of the 
     frame();
     frame();
     const polygon = features.find((f) => f.id.startsWith('g')) as Feature;
-    const handle = tables.handleOf(polygon.id) as number;
+    const handle = tables.findRow(polygon.id) as number;
     writer.apply({
       handles: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
@@ -746,7 +746,7 @@ describe('the check of the classification of a row written in place (7.2 of the 
     frame();
     frame();
     writer.apply({
-      handles: Int32Array.of(tables.handleOf('c1') as number),
+      handles: Int32Array.of(tables.findRow('c1') as number),
       fields: new Map([['property:custom', [true]]]),
     });
     for (let i = 0; i < 3; i++) {

@@ -6,7 +6,7 @@
  *
  * A layer of objects lists its items and a group of it its members. A layer held as rows lists
  * neither: its items and the members of its groups are read from its rows
- * (`LayerTableView.itemsInOrder`, `groupMembersInOrder`). What reads the lists of a layer that
+ * (`LayerTableView.listItems`, `listGroupMembers`). What reads the lists of a layer that
  * may be held as rows reads them here, and is refused rather than given an empty list.
  */
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A drag of many features held as rows (9.4 of the design): from `moveHeldByStateFrom` rows held,
+ * A drag of many features held as rows (9.4 of the design): from `moveOpenedByStateFrom` rows held,
  * the rows of the selection are drawn moved by their state while the drag goes on, their features
  * follow the pointer, and the rows are written once, when the drag ends. With fewer, the rows are
  * written in the middle of the drag, as before.
@@ -13,7 +13,7 @@ import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_MOVE_MASK } from '../../feature-table/row-state.js';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
+import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -55,7 +55,7 @@ const IDS = ['a', 'b', 'c', 'd'];
 
 function setup(from: number): FeatureTables {
   vi.useFakeTimers();
-  store = createTableMemoryStore({ moveHeldByStateFrom: from }).store;
+  store = createTableStore({ moveOpenedByStateFrom: from }).store;
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -114,7 +114,7 @@ function event<T extends MouseNormalizedEvent | DragNormalizedEvent>(
 
 /** The first corner of the square of a row, as the row holds it */
 function rowCorner(tables: FeatureTables, id: string): number[] | undefined {
-  const geometry = tables.layer('rows')?.getRow(tables.handleOf(id) ?? -1)?.geometry as
+  const geometry = tables.get('rows')?.getRow(tables.findRow(id) ?? -1)?.geometry as
     | { coordinates: number[][][] }
     | undefined;
   return geometry?.coordinates[0][0];
@@ -128,7 +128,7 @@ function featureCorner(id: string): number[] | undefined {
 
 /** Whether a row is in a moving set */
 function moving(tables: FeatureTables, id: string): boolean {
-  const state = featureTablesInternals(tables)?.states.stateOf(tables.handleOf(id) ?? -1) ?? 0;
+  const state = featureTablesInternals(tables)?.states.stateOf(tables.findRow(id) ?? -1) ?? 0;
   return (state & STATE_MOVE_MASK) !== 0;
 }
 

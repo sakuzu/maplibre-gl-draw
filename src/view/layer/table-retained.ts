@@ -44,11 +44,11 @@ import {
   STATE_MOVE_SHIFT,
 } from '../../feature-table/row-state.js';
 import {
+  type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
   type RowGroupHandle,
-  type RowWrite,
 } from '../../feature-table/types.js';
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
 import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
@@ -607,7 +607,7 @@ export class TableLayerRenderer {
    *
    * @param layerId The layer of the rows
    */
-  rowsWritten(layerId: string, writes: readonly RowWrite[]): void {
+  rowsWritten(layerId: string, writes: readonly InPlaceRowWrite[]): void {
     if (writes.length === 0) return;
     let groups = this.written.get(layerId);
     if (!groups) {
@@ -684,7 +684,7 @@ export class TableLayerRenderer {
     if (!tables.hasPendingWork) return;
     const budget = this.budget ?? createChunkBuildBudget(TABLE_BUILD_BUDGET_MS);
     this.budget = budget;
-    if (tables.hasPendingAdoption && tables.advanceAdoption(budget)) this.pending = true;
+    if (tables.hasQueuedBlocks && tables.advanceQueuedBlocks(budget)) this.pending = true;
     tables.advanceVersions(budget);
     if (tables.hasPendingWork) this.pending = true;
   }

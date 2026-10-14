@@ -26,7 +26,7 @@
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { RowField, RowPatch } from '../../api/tables.js';
+import type { RowField, RowValues } from '../../api/tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { utf8ColumnFromStrings } from '../../table/utf8-column.js';
@@ -75,7 +75,7 @@ function patchOf(
   handles: number[],
   fields: Record<string, unknown[]>,
   deleted?: number[],
-): RowPatch {
+): RowValues {
   return {
     handles: Int32Array.from(handles),
     fields: new Map(Object.entries(fields) as Array<[RowField, unknown[]]>),
@@ -237,11 +237,11 @@ describe('the drawing of the rows of the delta', () => {
     const ids = [list[0].id, list[50].id, list[100].id];
     const keys = [`${orderKey(70)}x`, orderKey(0).slice(0, -1), orderKey(999)];
     for (let i = 0; i < ids.length; i++) {
-      const handle = live.tables.handleOf(ids[i]) as number;
+      const handle = live.tables.findRow(ids[i]) as number;
       if (handle === undefined) continue;
       live.writer.apply(patchOf([handle], { order: [keys[i]] }));
       const { record } = live.frame();
-      expect(drawnIds(record, table)).toEqual(shownIds(table, live.tables.idOf));
+      expect(drawnIds(record, table)).toEqual(shownIds(table, live.tables.getRowId));
       // The row of the delta is drawn from its chunk, on the GPU in this frame
       expect(record.some((entry) => entry.delta && entry.kind === 'rows')).toBe(true);
     }
@@ -263,7 +263,7 @@ describe('the drawing of the rows of the delta', () => {
       }),
     );
     const { record } = live.frame();
-    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     expect(drawnIds(record, live.table)).toContain('new');
     // A layer that has only rows of its delta
     live.writer.apply(
@@ -310,12 +310,12 @@ describe('the drawing of the rows of the delta', () => {
     const live = setup(list, 64);
     live.frame();
     live.frame();
-    const handles = [3, 9, 9].map((i, k) => live.tables.handleOf(list[i + k * 20].id) as number);
+    const handles = [3, 9, 9].map((i, k) => live.tables.findRow(list[i + k * 20].id) as number);
     live.writer.apply(
       patchOf(handles, { order: [`${orderKey(10)}a`, `${orderKey(30)}a`, `${orderKey(30)}b`] }),
     );
     const { record } = live.frame();
-    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     // One chunk of the group, cut at two places: three ranges, and two of the delta in between
     const main = record.filter((entry) => !entry.delta);
     const delta = record.filter((entry) => entry.delta);
@@ -339,7 +339,7 @@ describe('the drawing of the rows of the delta', () => {
     );
     const live = setup(list);
     live.frame();
-    const handle = live.tables.handleOf(list[5].id) as number;
+    const handle = live.tables.findRow(list[5].id) as number;
     live.writer.apply(patchOf([handle], { order: [`${orderKey(30)}a`] }));
     live.frame();
     const chunk = live.renderer.deltaChunks('layer')[0];
@@ -362,7 +362,7 @@ describe('the drawing of the rows of the delta', () => {
     let { record } = live.frame();
     expect(live.made.length).toBe(made);
     expect(live.renderer.deltaChunks('layer')[0]).toBe(chunk);
-    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     // Past its place: the chunk of the delta is packed again, in the same frame
     live.writer.apply(
       patchOf([handle], {
@@ -383,7 +383,7 @@ describe('the drawing of the rows of the delta', () => {
     expect(live.made.length).toBe(made + 1);
     expect(live.renderer.deltaChunks('layer')[0]).not.toBe(chunk);
     expect(record.some((entry) => entry.delta && entry.kind === 'rows')).toBe(true);
-    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
   });
 
   it('draws the rows of the delta at once at their places when the layer is drawn by kind', () => {
@@ -392,10 +392,10 @@ describe('the drawing of the rows of the delta', () => {
     live.renderer.setDrawingByKind(true);
     live.frame();
     live.frame();
-    const handle = live.tables.handleOf(list[7].id) as number;
+    const handle = live.tables.findRow(list[7].id) as number;
     live.writer.apply(patchOf([handle], { order: [`${orderKey(40)}a`] }));
     const { record, atOnce } = live.frame();
-    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     expect(record.filter((entry) => entry.delta).every((entry) => entry.kind === 'immediate')).toBe(
       true,
     );
@@ -457,7 +457,7 @@ describe('the drawing of the rows of the delta', () => {
         );
         const drawn = drawnIds(record, live.table);
         // Every row once, in the order of the layer (out of the view, the chunks are skipped)
-        const shown = shownIds(live.table, live.tables.idOf);
+        const shown = shownIds(live.table, live.tables.getRowId);
         expect(new Set(drawn).size).toBe(drawn.length);
         const place = new Map(shown.map((id, i) => [id, i]));
         for (let i = 1; i < drawn.length; i++) {
@@ -481,7 +481,7 @@ describe('the drawing of the rows of the delta', () => {
     const all = live.table.rowOrder();
     const expected: string[] = [];
     for (let i = 0; i < all.handles.length; i++) {
-      const id = live.tables.idOf(all.handles[i]) as string;
+      const id = live.tables.getRowId(all.handles[i]) as string;
       if (id === over.id) expected.push(`\u0000overlay\u0000peer\u0000${id}`);
       else expected.push(id);
     }
@@ -489,9 +489,9 @@ describe('the drawing of the rows of the delta', () => {
     // Taken away: the row is drawn again in its place
     internalsOf(live.tables).overlay('peer', []);
     expect(drawnIds(live.frame().record, live.table)).toEqual(
-      shownIds(live.table, live.tables.idOf),
+      shownIds(live.table, live.tables.getRowId),
     );
-    expect(shownIds(live.table, live.tables.idOf)).toContain(over.id);
+    expect(shownIds(live.table, live.tables.getRowId)).toContain(over.id);
   });
 
   it('draws every row once in every frame while the next versions are built and swapped', () => {
@@ -516,14 +516,14 @@ describe('the drawing of the rows of the delta', () => {
           }
         }
         const { record } = live.frame();
-        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
       }
       // Once nothing is written, the versions take every row of the delta
       for (let i = 0; i < 20 && live.internals.hasPendingWork; i++) live.frame();
       const { record } = live.frame();
       expect(live.internals.deltaRowCount()).toBe(0);
       expect(live.internals.versionStats().swapped).toBeGreaterThan(3);
-      expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+      expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
       expect(record.some((entry) => entry.delta)).toBe(false);
     }
   });
@@ -543,7 +543,7 @@ describe('the drawing of the rows of the delta', () => {
         ['layerId', ['layer']],
       ]),
     });
-    const members = [30, 31, 32, 150, 151].map((i) => live.tables.handleOf(list[i].id) as number);
+    const members = [30, 31, 32, 150, 151].map((i) => live.tables.findRow(list[i].id) as number);
     live.writer.apply(
       patchOf(members, {
         groupId: members.map(() => 'g'),
@@ -552,10 +552,10 @@ describe('the drawing of the rows of the delta', () => {
     );
     for (let i = 0; i < 30 && live.internals.hasPendingWork; i++) {
       const { record } = live.frame();
-      expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+      expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     }
     expect(live.internals.deltaRowCount()).toBe(0);
-    const before = shownIds(live.table, live.tables.idOf);
+    const before = shownIds(live.table, live.tables.getRowId);
     live.writer.applyGroups({
       handles: Int32Array.of(5),
       fields: new Map([['order', [`${orderKey(120)}g`]]]),
@@ -563,7 +563,7 @@ describe('the drawing of the rows of the delta', () => {
     let changed = false;
     for (let i = 0; i < 30; i++) {
       const { record } = live.frame();
-      const shown = shownIds(live.table, live.tables.idOf);
+      const shown = shownIds(live.table, live.tables.getRowId);
       expect(drawnIds(record, live.table)).toEqual(shown);
       changed ||= shown.join() !== before.join();
       if (!live.internals.hasPendingWork) break;
@@ -600,7 +600,7 @@ describe('the drawing of the rows of the delta', () => {
         // the rows in their order, once each, and a row drawn is drawn in every frame after
         expect(live.internals.deltaRowCount()).toBe(0);
         const drawn = drawnIds(record, live.table);
-        const shown = shownIds(live.table, live.tables.idOf);
+        const shown = shownIds(live.table, live.tables.getRowId);
         const place = new Map(shown.map((id, k) => [id, k]));
         for (let k = 1; k < drawn.length; k++) {
           expect(place.get(drawn[k]) as number).toBeGreaterThan(place.get(drawn[k - 1]) as number);
@@ -614,7 +614,7 @@ describe('the drawing of the rows of the delta', () => {
     for (let i = 0; i < 20 && live.internals.hasPendingWork; i++) live.frame();
     const { record } = live.frame();
     expect(live.table.rowCount).toBe(6100);
-    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+    expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     expect(made).toBeGreaterThan(100);
   });
 
@@ -628,11 +628,11 @@ describe('the drawing of the rows of the delta', () => {
       live.frame();
       live.renderer.setVersionBudgetWhileMoving(budget);
       setTerrainCameraMoving(terrain, true);
-      const handle = live.tables.handleOf(list[10].id) as number;
+      const handle = live.tables.findRow(list[10].id) as number;
       live.writer.apply(patchOf([handle], { order: [`${orderKey(150)}x`] }));
       for (let i = 0; i < 12; i++) {
         const { record } = live.frame();
-        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.idOf));
+        expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
       }
       // Without a budget the versions wait for the camera to stop: the row stays in the delta
       expect(live.internals.deltaRowCount()).toBe(budget === 0 ? 1 : 0);
@@ -654,7 +654,7 @@ describe('the drawing of the rows of the delta', () => {
       // Rows put at places spread over the layer: as many cuts in the frames
       const handles = Array.from(
         { length: scattered },
-        (_, i) => live.tables.handleOf(list[i].id) as number,
+        (_, i) => live.tables.findRow(list[i].id) as number,
       );
       live.writer.apply(
         patchOf(handles, {

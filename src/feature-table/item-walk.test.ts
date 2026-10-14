@@ -15,8 +15,8 @@ import { createDrawOnEngine } from '../api/impl/create-draw.js';
 import { createEngine } from '../api/impl/engine.js';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-lists.js';
-import { createTableMemoryStore } from '../store/table-memory.js';
-import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { createTableStore } from '../store/table-memory.js';
+import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { createMapStub, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupCode, ItemWalk, rowCode } from './item-walk.js';
@@ -34,9 +34,9 @@ const LAYER = {
 
 /** A Store of rows of one layer `rows` of `n` points, taken in as row groups */
 function storeOf(n: number) {
-  const { store, writer } = createTableMemoryStore();
+  const { store, writer } = createTableStore();
   store.createLayer({ ...LAYER, id: 'rows' });
-  const builder = createRowGroupBuilder({ targetRows: 512 });
+  const builder = createRowBlockDataBuilder({ targetRows: 512 });
   for (let i = 0; i < n; i++) {
     builder.addRow({
       id: `r${i}`,
@@ -45,10 +45,10 @@ function storeOf(n: number) {
       order: `k${String(i).padStart(6, '0')}`,
     });
   }
-  writer.adopt('rows', builder.finish());
+  writer.addBlocks('rows', builder.finish());
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.flushAdoption();
+  internals.addQueuedBlocks();
   return { store, writer, tables, internals };
 }
 
@@ -194,7 +194,7 @@ describe('ItemWalk', () => {
           groupsInStackingOrder(store).filter((group) => group.id !== groups[0].id),
         );
         if (step % 10 === 9) {
-          internals.flushAdoption();
+          internals.addQueuedBlocks();
           internals.flushVersions();
           expectWalkAsLists(internals);
         }

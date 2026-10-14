@@ -18,12 +18,13 @@
 import * as maplibregl from 'maplibre-gl';
 import { tableDiagnosticsOf } from '../api/impl/table-diagnostics.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { createDraw, createFeatureTables, createTableMemoryStore } from '../index.js';
-import { circleRowRings } from '../shared/circle-rings.js';
+import { createDraw } from '../index.js';
+import { createFeatureTables } from '../kasane/index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { MemoryContractStore } from '../store/memory.js';
+import { createTableStore } from '../store/table-memory.js';
 import { prepareTable } from '../table/index.js';
-import { createRowGroupBuilder, type RowGroupBuilderOptions } from '../table/row-group-builder.js';
+import { createRowBlockBuilder, type RowBlockBuilderOptions } from '../table/row-group-builder.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
   getMapTerrain,
@@ -41,11 +42,8 @@ installTestDem(maplibregl);
   prepareTable,
   tables: {
     createFeatureTables,
-    // The rows of the pages are built as a Worker of a host builds them: with the rings of the
-    // Circles
-    createRowGroupBuilder: (options: RowGroupBuilderOptions = {}) =>
-      createRowGroupBuilder({ rings: circleRowRings, ...options }),
-    createTableMemoryStore,
+    createRowBlockBuilder: (options: RowBlockBuilderOptions = {}) => createRowBlockBuilder(options),
+    createTableStore,
   },
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {

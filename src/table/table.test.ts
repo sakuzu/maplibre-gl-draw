@@ -72,7 +72,7 @@ describe('the rows', () => {
       length: 1,
       geometry: {
         type: 'MultiPolygon',
-        dims: 'xyz',
+        dimensions: 'xyz',
         coords: Float64Array.of(
           0,
           0,
@@ -165,7 +165,7 @@ const mixed = (): Table & { geometry: TableMixedGeometry } => ({
       { type: 'Point', coords: Float64Array.of(7, 7, 8, 8) },
       {
         type: 'LineString',
-        dims: 'xyz',
+        dimensions: 'xyz',
         coords: Float64Array.of(0, 0, 9, 1, 2, 9),
         offsets: [Int32Array.of(0, 2)],
       },

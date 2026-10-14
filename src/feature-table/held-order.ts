@@ -29,7 +29,7 @@ export function heldFeaturesInOrder(
   const layerAt = new Map(layerOrder.map((id, i) => [id, i]));
   const entries: Array<{ feature: Feature; layer: number; handle: number }> = [];
   for (const handle of internals.heldHandles()) {
-    const feature = internals.heldFeature(tables.idOf(handle) as string);
+    const feature = internals.getOpenedFeature(tables.getRowId(handle) as string);
     const layer = feature ? layerAt.get(feature.layerId) : undefined;
     if (!feature || layer === undefined) continue;
     entries.push({ feature, layer, handle });

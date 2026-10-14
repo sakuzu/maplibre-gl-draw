@@ -20,7 +20,7 @@ import type { Messages } from '../messages.js';
 import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
 import type { ItemMove, ItemPlacement } from '../shared/types/model.js';
 import type { LineStyle } from '../shared/types/style.js';
-import { longestRisingRun, itemMovesBetween as movesBetween } from '../shared/utils/item-moves.js';
+import { longestRisingRun, diffItemOrder as movesBetween } from '../shared/utils/item-moves.js';
 import {
   deriveLegend as deriveRuleLegend,
   evaluateStyleRule as evaluateRule,
@@ -234,7 +234,7 @@ export interface ObjectLayer {
 
 /**
  * A layer a Store holds as rows of columns (the tables of the Store): its items are read from
- * its rows (`LayerTableView.itemsInOrder`), not listed in it.
+ * its rows (`LayerTableView.listItems`), not listed in it.
  */
 export interface TableLayer {
   /** The ID */
@@ -283,7 +283,7 @@ export interface ObjectGroup {
 
 /**
  * A set of features in one layer held as rows: its features are read from the rows
- * (`LayerTableView.groupMembersInOrder`), not listed in it.
+ * (`LayerTableView.listGroupMembers`), not listed in it.
  */
 export interface TableGroup {
   /** The ID */
@@ -559,19 +559,19 @@ export type MoveTarget =
   | ItemPlacement;
 
 export type {
+  ItemHandles,
   ItemMove,
   ItemOrderChange,
   ItemPlacement,
   ItemPosition,
-  ItemRefs,
-  RetainToken,
-  RowRangeMove,
-  RowValuesSnapshot,
+  RestoreToken,
+  RowsMove,
+  RowValues,
 } from '../shared/types/model.js';
 
 /**
  * The items of a layer (its features outside a group, and its groups) or the members of a group,
- * from the back, before and after a change: what {@link itemMovesBetween} reads.
+ * from the back, before and after a change: what {@link diffItemOrder} reads.
  */
 export interface ItemListChange {
   /** The layer (the layer of the group, for a group) */
@@ -608,7 +608,7 @@ export interface ItemListChange {
  *
  * @example The moves of a layer whose items were reordered
  * ```ts
- * const moves = itemMovesBetween(
+ * const moves = diffItemOrder(
  *   [{ layerId: 'l1', groupId: undefined, before: ['a', 'b', 'c'], after: ['c', 'a', 'b'] }],
  *   (id) => draw.groups.has(id),
  * );
@@ -616,7 +616,7 @@ export interface ItemListChange {
  * //   above: null }, to: { layerId: 'l1', groupId: undefined, below: null, above: 'a' } }]
  * ```
  */
-export function itemMovesBetween(
+export function diffItemOrder(
   lists: readonly ItemListChange[],
   isGroup: (id: string) => boolean,
 ): ItemMove[] {

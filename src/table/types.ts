@@ -11,7 +11,7 @@
  */
 
 import type { BBox } from '../geometry/types.js';
-import type { CoordinateDims } from './coordinates.js';
+import type { CoordinateDimensions } from './coordinates.js';
 
 /**
  * The geometry type of a geometry column of a single type.
@@ -64,7 +64,7 @@ export interface TableGeometry {
   type: GeometryType;
   /**
    * The coordinates in degrees, interleaved: `[lng0, lat0, lng1, lat1, ...]`, or with the values
-   * of `dims` per coordinate (`[lng0, lat0, z0, lng1, ...]` with `dims: 'xyz'`)
+   * of `dimensions` per coordinate (`[lng0, lat0, z0, lng1, ...]` with `dimensions: 'xyz'`)
    */
   coords: Float64Array;
   /**
@@ -72,7 +72,7 @@ export interface TableGeometry {
    * names of GeoArrow. The rows are drawn and hit by their `x` and `y`; a `z` or an `m` that a
    * coordinate does not have is NaN
    */
-  dims?: CoordinateDims;
+  dimensions?: CoordinateDimensions;
   /** The offset arrays, outermost first (see the table above). Omitted or empty for Point */
   offsets?: Int32Array[];
 }

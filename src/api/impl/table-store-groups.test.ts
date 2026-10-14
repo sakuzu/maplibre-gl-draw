@@ -10,8 +10,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
-import type { Feature, RowValuesSnapshot, StoreChange } from '../../store/types.js';
+import { createTableStore } from '../../store/table-memory.js';
+import type { Feature, RowValues, StoreChange } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { type FeatureTables, ITEM_GROUP } from '../tables.js';
@@ -51,7 +51,7 @@ function drawOn(store?: Store): Draw {
 }
 
 function setup() {
-  const { store } = createTableMemoryStore();
+  const { store } = createTableStore();
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -72,13 +72,13 @@ function setup() {
 
 /** The items of the layer in their order: a feature by its id, a group as `id[members]` */
 function itemsOf(tables: FeatureTables): string[] {
-  const view = tables.layer('rows');
+  const view = tables.get('rows');
   if (!view) return [];
-  const items = view.itemsInOrder(0, view.itemCount);
+  const items = view.listItems(0, view.itemCount);
   return Array.from(items.handles, (handle, i) => {
-    if (items.kinds[i] !== ITEM_GROUP) return tables.idOf(handle) as string;
-    const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
-    return `${tables.groupIdOf(handle)}[${Array.from(members, (m) => tables.idOf(m)).join(',')}]`;
+    if (items.kinds[i] !== ITEM_GROUP) return tables.getRowId(handle) as string;
+    const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
+    return `${tables.getGroupId(handle)}[${Array.from(members, (m) => tables.getRowId(m)).join(',')}]`;
   });
 }
 
@@ -101,14 +101,14 @@ describe('draw.groups.create in a layer held as rows', () => {
     draw.features.deleteMany(['p1', 'p2']);
     const deletion = notified[notified.length - 1];
     expect(deletion.groups?.deleted?.map((group) => group.id)).toEqual(['g']);
-    expect(deletion.retain).toBeDefined();
+    expect(deletion.restoreToken).toBeDefined();
     expect(itemsOf(tables)).toEqual(['p0', 'p3', 'p4']);
     // Something else changes the front meanwhile
     draw.features.move('p0', { layerId: 'rows', above: null });
     // Undone: the group created again, then its rows written not deleted
     draw.transact(() => {
       draw?.groups.create({ id: 'g', featureIds: [], layerId: 'rows', name: 'G' });
-      draw?.tables.applyRows(deletion.rows?.before as RowValuesSnapshot);
+      draw?.tables.applyRows(deletion.rows?.before as RowValues);
     });
     expect(itemsOf(tables)).toEqual(['g[p1,p2]', 'p3', 'p4', 'p0']);
     expect(draw.groups.get('g')?.name).toBe('G');

@@ -214,7 +214,7 @@ export function insertGroup(store: GroupInsertStore, group: Group): void {
   const kept =
     heldAsRows(store, layerId) &&
     store.getGroup(group.id) === undefined &&
-    store.tables?.groupHandleOf(group.id) !== undefined;
+    store.tables?.findGroup(group.id) !== undefined;
   const frontmost = frontmostItem(store, layerId, members);
   const around = frontmost ? itemNeighbors(store, layerId, undefined, frontmost, members) : null;
   store.createGroup(group);

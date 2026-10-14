@@ -3,7 +3,7 @@
 
 /**
  * Many rows held moved as a whole in the middle of an edit (9.4 of the design): from
- * `moveHeldByStateFrom` rows held, a row held moved as a whole is drawn moved by its state and
+ * `moveOpenedByStateFrom` rows held, a row held moved as a whole is drawn moved by its state and
  * the translation of its moving set, its row is not written until the edit ends, and its feature
  * takes every value written. Fewer rows, or another change than a move, write the row as before.
  */
@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { RELEASE_DELAY_MS } from '../store/draw-store.js';
 import type { Store } from '../store/store.js';
-import { createTableMemoryStore } from '../store/table-memory.js';
+import { createTableStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
 import { internalsOf } from '../test-utils.js';
 import { featureTablesInternals } from './feature-tables.js';
@@ -143,7 +143,7 @@ describe('translationBetween', () => {
 
 /** A Store of rows with five squares, moved by its state from `from` rows held */
 function setup(from: number) {
-  const { store, writer } = createTableMemoryStore({ moveHeldByStateFrom: from });
+  const { store, writer } = createTableStore({ moveOpenedByStateFrom: from });
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -163,13 +163,13 @@ function setup(from: number) {
 
 /** The geometry a row holds */
 function rowGeometry(tables: FeatureTables, id: string): Geometry | null | undefined {
-  return tables.layer('rows')?.getRow(tables.handleOf(id) ?? -1)?.geometry;
+  return tables.get('rows')?.getRow(tables.findRow(id) ?? -1)?.geometry;
 }
 
 /** The moving set of a row (0 for none), in the sets of handles and in the copy of its group */
 function movingSet(tables: FeatureTables, id: string): [number, number] {
   const internals = featureTablesInternals(tables);
-  const handle = tables.handleOf(id) ?? -1;
+  const handle = tables.findRow(id) ?? -1;
   const place = internals?.placeOf(handle);
   const copy = place ? place.group.state[place.row] : 0;
   return [
@@ -209,7 +209,7 @@ describe('many rows held moved as a whole', () => {
     drag(store, ids, 1, 0.5);
     for (const id of ids) {
       expect(rowGeometry(tables, id)).toEqual(squareAt(Number(id.slice(1)) * 2, 0));
-      expect(internalsOf(tables).heldFeature(id)?.geometry).toEqual(
+      expect(internalsOf(tables).getOpenedFeature(id)?.geometry).toEqual(
         moved(rowGeometry(tables, id) as Geometry, 1, 0.5),
       );
       expect(movingSet(tables, id)).toEqual([1, 1]);
@@ -244,14 +244,14 @@ describe('many rows held moved as a whole', () => {
     for (const id of ids) {
       const start = squareAt(Number(id.slice(1)) * 2, 0);
       expect(rowGeometry(tables, id)).toEqual(start);
-      expect(internalsOf(tables).heldFeature(id)?.geometry).toEqual(start);
+      expect(internalsOf(tables).getOpenedFeature(id)?.geometry).toEqual(start);
       expect(movingSet(tables, id)).toEqual([0, 0]);
     }
     // Let go of in the middle of a move: the rows hold the values before it
     drag(store, ids, 2, 2);
     store.setSelection(null, []);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).heldFeature('s0')).toBeUndefined();
+    expect(internalsOf(tables).getOpenedFeature('s0')).toBeUndefined();
     for (const id of ids) {
       expect(rowGeometry(tables, id)).toEqual(squareAt(Number(id.slice(1)) * 2, 0));
       expect(movingSet(tables, id)).toEqual([0, 0]);
@@ -281,7 +281,7 @@ describe('many rows held moved as a whole', () => {
     expect(movingSet(tables, 's1')).toEqual([1, 1]);
     // A write of another field than the geometry is written to the row
     store.updateFeature('s1', { properties: { name: 'x' } }, { isIntermediate: true });
-    expect(tables.layer('rows')?.valueAt(tables.handleOf('s1') ?? -1, 'name')).toBe('x');
+    expect(tables.get('rows')?.getRowValue(tables.findRow('s1') ?? -1, 'name')).toBe('x');
     expect(movingSet(tables, 's1')).toEqual([0, 0]);
     expect(rowGeometry(tables, 's1')).toEqual(moved(squareAt(2, 0), 1, 0.5));
   });
@@ -290,7 +290,7 @@ describe('many rows held moved as a whole', () => {
     const { store, writer, tables } = setup(3);
     store.setSelection('feature', ids);
     drag(store, ids, 1, 0.5);
-    const handle = tables.handleOf('s2') as number;
+    const handle = tables.findRow('s2') as number;
     store.transact(() => {
       writer.apply({
         handles: Int32Array.of(handle),
@@ -301,8 +301,10 @@ describe('many rows held moved as a whole', () => {
       });
     }, 'remote');
     // The name is written; the geometry the move writes is kept apart until it ends
-    expect(internalsOf(tables).heldFeature('s2')?.properties.name).toBe('other');
-    expect(internalsOf(tables).heldFeature('s2')?.geometry).toEqual(moved(squareAt(4, 0), 1, 0.5));
+    expect(internalsOf(tables).getOpenedFeature('s2')?.properties.name).toBe('other');
+    expect(internalsOf(tables).getOpenedFeature('s2')?.geometry).toEqual(
+      moved(squareAt(4, 0), 1, 0.5),
+    );
     expect(rowGeometry(tables, 's2')).toEqual(squareAt(4, 0));
     expect(movingSet(tables, 's2')).toEqual([1, 1]);
     // Let go of without an end, the row takes the geometry the other wrote
@@ -315,7 +317,7 @@ describe('many rows held moved as a whole', () => {
     const { store, tables } = setup(3);
     store.setSelection('feature', ids);
     drag(store, ids, 1, 0.5);
-    const handle = tables.handleOf('s3') as number;
+    const handle = tables.findRow('s3') as number;
     store.deleteFeature('s3');
     expect(featureTablesInternals(tables)?.states.stateOf(handle)).toBe(0);
   });

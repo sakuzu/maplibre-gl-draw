@@ -546,7 +546,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     });
     const marked = (id: string): boolean => {
       const tables = store.tables;
-      const handle = tables?.handleOf(id) ?? -1;
+      const handle = tables?.findRow(id) ?? -1;
       const place = featureTablesInternals(tables)?.placeOf(handle);
       return place ? (place.group.state[place.row] & STATE_BULK) !== 0 : false;
     };
@@ -560,7 +560,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       mode.onDragMove(shiftDrag('dragmove', 12, 12));
       expect(marked('f1')).toBe(true);
       expect(store.getSelection()).toEqual({ type: null, ids: [] });
-      expect(internalsOf(store.tables).heldFeature('f1')).toBeUndefined();
+      expect(internalsOf(store.tables).getOpenedFeature('f1')).toBeUndefined();
       mode.onDragEnd(shiftDrag('dragend', 12, 12));
       expect(marked('f1')).toBe(false);
       expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });

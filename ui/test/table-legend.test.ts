@@ -4,7 +4,8 @@
 // The legend of a layer held as rows: the shape of its swatches read from the types of its rows,
 // without listing its features (a Store of rows lists none)
 
-import type { FeatureTables, FeatureType, Layer } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureType, Layer } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureTables } from '@sakuzu/maplibre-gl-draw/kasane';
 import { describe, expect, it } from 'vitest';
 import { type LegendSource, legendBlocks } from '../src/layers/legend.js';
 import { resolveMessages } from '../src/messages.js';
@@ -32,7 +33,7 @@ function tableSource(types: Array<FeatureType | null>): LegendSource {
       ];
       return { next: () => batches.shift() ?? null };
     },
-    layer: (layerId: string) =>
+    get: (layerId: string) =>
       layerId === 'rows' ? { getRowType: (handle: number) => types[handle] } : undefined,
   } as unknown as FeatureTables;
   return {

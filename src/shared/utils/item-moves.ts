@@ -115,7 +115,7 @@ export interface ItemMovesOptions<T> {
  *
  * @internal
  */
-export function itemMovesBetween<T>(
+export function diffItemOrder<T>(
   containers: readonly OrderContainer<T>[],
   options: ItemMovesOptions<T>,
 ): ItemMove[] {

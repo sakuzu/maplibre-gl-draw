@@ -102,7 +102,7 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     const reference = randomReference(seededRandom(1), 40, ['a']);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const drape = fakeDrape(internals, ['a']);
-    writer.apply(rowPatch([tables.handleOf('r3') as number], { order: [key(999_000)] }));
+    writer.apply(rowPatch([tables.findRow('r3') as number], { order: [key(999_000)] }));
     drape.answer(false);
     internals.flushVersions();
     expect(drape.statuses.every((status) => status === 'built')).toBe(true);
@@ -114,7 +114,7 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     );
     expect(drape.statuses).toContain('swapped partial');
     drape.answer(true);
-    writer.apply(rowPatch([tables.handleOf('r4') as number], { order: [key(998_000)] }));
+    writer.apply(rowPatch([tables.findRow('r4') as number], { order: [key(998_000)] }));
     internals.flushVersions();
     expect(drape.statuses[drape.statuses.length - 1]).toBe('swapped');
     expect(drape.problems).toEqual([]);
@@ -148,7 +148,7 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     const reference = randomReference(seededRandom(2), 40, ['a']);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const delta = internals.layerTable('a')?.delta;
-    const at = (id: string) => tables.handleOf(id) as number;
+    const at = (id: string) => tables.findRow(id) as number;
     writer.apply(rowPatch([at('r1'), at('r2'), at('r3')], { order: [key(10), key(20), key(30)] }));
     const before = ['r1', 'r2', 'r3'].map((id) => delta?.copyOf(at(id)));
     expect(new Set(before).size).toBe(3);
@@ -168,7 +168,7 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const told: Array<[string, BoundingBox]> = [];
     internals.onTouched((layerId, bounds) => told.push([layerId, bounds]));
-    const at = (id: string) => tables.handleOf(id) as number;
+    const at = (id: string) => tables.findRow(id) as number;
     const contains = (b: BoundingBox, x: number, y: number) =>
       b.minX <= x && x <= b.maxX && b.minY <= y && y <= b.maxY;
     writer.apply(
@@ -189,11 +189,11 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
   it('finds a row of a delta moved far where it is now', () => {
     const reference = randomReference(seededRandom(4), 40, ['a']);
     const { tables, writer } = tablesOfReference(reference, ['a'], 8);
-    const handle = tables.handleOf('r7') as number;
+    const handle = tables.findRow('r7') as number;
     writer.apply(rowPatch([handle], { order: [key(5)] }));
     writer.apply(rowPatch([handle], { geometry: [{ type: 'Point', coordinates: [80, 80] }] }));
-    expect(Array.from(tables.layer('a')?.listDrawnRows([79, 79, 81, 81]) ?? [])).toEqual([handle]);
-    expect(Array.from(tables.layer('a')?.listDrawnRows([-1, -1, 11, 11]) ?? [])).not.toContain(
+    expect(Array.from(tables.get('a')?.listDrawnRows([79, 79, 81, 81]) ?? [])).toEqual([handle]);
+    expect(Array.from(tables.get('a')?.listDrawnRows([-1, -1, 11, 11]) ?? [])).not.toContain(
       handle,
     );
   });

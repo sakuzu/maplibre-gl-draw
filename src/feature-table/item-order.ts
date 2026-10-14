@@ -9,9 +9,9 @@
  * from the order as it is then:
  *
  * - when few rows changed their places (`ORDER_ITEM_LIMIT` at most), a move per item, made one at
- *   a time (`itemMovesBetween`): an item created was nowhere, an item deleted is nowhere, a group
+ *   a time (`diffItemOrder`): an item created was nowhere, an item deleted is nowhere, a group
  *   of features is an item from its first member on and until its last member leaves
- * - when more did, one move of many rows per layer (`RowRangeMove`) with the rows that were in a
+ * - when more did, one move of many rows per layer (`RowsMove`) with the rows that were in a
  *   place before and are in one after, in their new order: the place they were put at together,
  *   or the item just below each of them, and their keys, layers and groups before (written back,
  *   they put the rows back). The rows created and deleted are told by the change of the rows
@@ -35,10 +35,10 @@ import type {
   ItemOrderChange,
   ItemPosition,
   RowField,
-  RowRangeMove,
+  RowsMove,
 } from '../shared/types/model.js';
 import {
-  itemMovesBetween,
+  diffItemOrder,
   type OrderContainer,
   trimmedContainer,
 } from '../shared/utils/item-moves.js';
@@ -86,7 +86,7 @@ export interface ItemOrderSource {
   readonly writtenOrders?: ReadonlyMap<GroupHandle, string>;
 }
 
-/** The fields of a row that place it, as a row holds them (what `RowRangeMove.before` keeps) */
+/** The fields of a row that place it, as a row holds them (what `RowsMove.before` keeps) */
 const PLACE_FIELDS: readonly RowField[] = ['layerId', 'groupId', 'order', 'member'];
 
 /**
@@ -238,7 +238,7 @@ export class ItemOrderWatch {
     gone.sort((a, b) => a.layer - b.layer || compareItemKeys(a.key, b.key));
     for (const { group } of gone) deleted.push(groupCode(group));
     const groupIds = new Map<GroupHandle, string>();
-    return itemMovesBetween(containers, {
+    return diffItemOrder(containers, {
       moved: this.moved,
       deleted,
       isGroup: (code) => (code & 1) === 1,
@@ -337,7 +337,7 @@ export class ItemOrderWatch {
    * their new order, with the place they were put at together or the item just below each (read
    * from the rows next to each)
    */
-  private rowRanges(): RowRangeMove[] {
+  private rowRanges(): RowsMove[] {
     const byLayer = new Map<LayerTable, RowAt[]>();
     for (const handle of this.before.keys()) {
       const at = this.source.placeOf(handle);
@@ -349,7 +349,7 @@ export class ItemOrderWatch {
       }
       list.push(at);
     }
-    const out: RowRangeMove[] = [];
+    const out: RowsMove[] = [];
     const groupIds = new Map<GroupHandle, string>();
     for (const [layer, rows] of byLayer) {
       // In the order written (the keys of the groups written and not read yet)
@@ -474,7 +474,7 @@ export function groupKeyMoves(
     stay(walk.itemNotBefore([order, id], moved));
     stay(walk.itemBefore([order, id], moved));
   }
-  return itemMovesBetween([trimmedContainer(layerId, undefined, inOrder(before), inOrder(after))], {
+  return diffItemOrder([trimmedContainer(layerId, undefined, inOrder(before), inOrder(after))], {
     moved,
     deleted: [],
     isGroup: (code) => (code & 1) === 1,

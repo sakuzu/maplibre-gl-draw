@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
+import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
 import { seededRandom } from '../../test-utils.js';
 import { createSnapTargetsRegistry } from '../custom-targets.js';
@@ -141,7 +141,7 @@ function stores(features: Feature[]) {
   const objects = new MemoryStore();
   objects.createLayer(LAYER);
   for (const feature of features) objects.createFeature(feature);
-  const rows = createTableMemoryStore().store;
+  const rows = createTableStore().store;
   rows.createLayer(LAYER);
   for (const feature of features) rows.createFeature(feature);
   const snapTargets = createSnapTargetsRegistry();

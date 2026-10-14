@@ -10,8 +10,8 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
-import { createTableMemoryStore } from '../store/table-memory.js';
-import type { Feature, ItemMove, ItemPosition, RowRangeMove, StoreChange } from '../store/types.js';
+import { createTableStore } from '../store/table-memory.js';
+import type { Feature, ItemMove, ItemPosition, RowsMove, StoreChange } from '../store/types.js';
 import { seededRandom } from '../test-utils.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { ORDER_ITEM_LIMIT } from './item-order.js';
@@ -23,23 +23,23 @@ function listsOf(tables: FeatureTables, layerIds: readonly string[]): Lists {
   const groups = featureTablesInternals(tables)?.groups;
   const out: Lists = new Map();
   for (const layerId of layerIds) {
-    const view = tables.layer(layerId);
+    const view = tables.get(layerId);
     if (!view) continue;
-    const items = view.itemsInOrder(0, view.itemCount);
+    const items = view.listItems(0, view.itemCount);
     const ids: string[] = [];
     for (let i = 0; i < items.kinds.length; i++) {
       const handle = items.handles[i];
       if (items.kinds[i] === 0) {
-        ids.push(tables.idOf(handle) as string);
+        ids.push(tables.getRowId(handle) as string);
         continue;
       }
       const id = groups?.idOf(handle) as string;
       ids.push(id);
-      const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
+      const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
       // The members of a group go with it to another layer: a group is named by itself
       out.set(
         `/${id}`,
-        Array.from(members, (h) => tables.idOf(h) as string),
+        Array.from(members, (h) => tables.getRowId(h) as string),
       );
     }
     if (ids.length > 0) out.set(`${layerId}/`, ids);
@@ -85,7 +85,7 @@ function point(id: string, layerId: string): Feature {
 }
 
 function setup() {
-  const { store, writer } = createTableMemoryStore();
+  const { store, writer } = createTableStore();
   for (const id of ['a', 'b']) {
     store.createLayer({
       id,
@@ -114,7 +114,7 @@ function writeKeys(
   store.transact(
     () =>
       writer.apply({
-        handles: Int32Array.from(keys, ([id]) => tables.handleOf(id) as number),
+        handles: Int32Array.from(keys, ([id]) => tables.findRow(id) as number),
         fields: new Map<RowField, unknown[]>([['order', keys.map(([, key]) => key)]]),
       }),
     'remote',
@@ -133,7 +133,7 @@ describe('the changes of the order of a Store of rows', () => {
         for (const layerId of ['a', 'b']) {
           const cursor = tables.scan({ layerIds: [layerId] });
           for (let batch = cursor.next(); batch; batch = cursor.next()) {
-            for (const handle of batch) ids.push(tables.idOf(handle) as string);
+            for (const handle of batch) ids.push(tables.getRowId(handle) as string);
           }
         }
         const pick = () => ids[Math.floor(random() * ids.length)];
@@ -220,9 +220,9 @@ describe('the changes of the order of a Store of rows', () => {
     );
     const order = notified.flatMap((change) => change.order ?? []);
     expect(order).toHaveLength(1);
-    const move = order[0] as RowRangeMove;
+    const move = order[0] as RowsMove;
     expect(move.kind).toBe('rows');
-    expect(Array.from(move.handles, (h) => tables.idOf(h))).toEqual(moved);
+    expect(Array.from(move.handles, (h) => tables.getRowId(h))).toEqual(moved);
     expect(move.to).toEqual({ layerId: 'a', groupId: undefined, below: null, above: ids[0] });
     expect(move.belows).toBeUndefined();
     // The values before written back put the rows back
@@ -241,7 +241,7 @@ describe('the changes of the order of a Store of rows', () => {
     notified.length = 0;
     // Every other row goes up by one: its key between the next row and the one after
     const keyOfRow = (id: string) => {
-      const handle = tables.handleOf(id) as number;
+      const handle = tables.findRow(id) as number;
       const place = featureTablesInternals(tables)?.placeOf(handle);
       return place ? new TextDecoder().decode(rowKey(place.group.data.itemKeys, place.row)) : '';
     };
@@ -250,10 +250,10 @@ describe('the changes of the order of a Store of rows', () => {
     writeKeys(store, writer, tables, keys);
     const order = notified.flatMap((change) => change.order ?? []);
     expect(order).toHaveLength(1);
-    const move = order[0] as RowRangeMove;
+    const move = order[0] as RowsMove;
     expect(move.to).toBeUndefined();
     // The item just below each row moved is the one it went past
-    const below = Array.from(move.belows?.handles ?? [], (h) => tables.idOf(h));
+    const below = Array.from(move.belows?.handles ?? [], (h) => tables.getRowId(h));
     expect(below).toEqual(keys.map(([id]) => ids[ids.indexOf(id) + 1]));
     store.transact(() => writer.apply(move.before), 'remote');
     expect(listsOf(tables, ['a'])).toEqual(before);

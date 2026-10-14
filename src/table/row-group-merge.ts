@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Merges rows of row groups into new row groups (`mergeRowGroup`)
+ * Merges rows of row groups into new row groups (`mergeRowBlock`)
  *
  * The next version of a row group is the rows of the group that stay, and the rows that come into
  * its range, in the order of the layer. Both are rows of groups already built: the rows of the
@@ -21,7 +21,7 @@
  */
 
 import {
-  type CoordinateDims,
+  type CoordinateDimensions,
   type CoordinateSystem,
   dimsWithin,
   planarCoordinates,
@@ -31,12 +31,12 @@ import { buildPackedRTree } from './packed-rtree.js';
 import { rowGeometryOfColumn, WIDE_VERTICES } from './row-geometry.js';
 import {
   ChildBuilder,
+  type GroupEntry,
   groupKeySource,
-  ROW_GROUP_TARGET_ROWS,
-  ROW_GROUP_TARGET_VERTICES,
-  type RowGroupKey,
+  ROW_BLOCK_TARGET_ROWS,
+  ROW_BLOCK_TARGET_VERTICES,
 } from './row-group-builder.js';
-import type { RowGroupData, TriangleCache } from './row-group-types.js';
+import type { RowBlock, RowBlockData, TriangleCache } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
 import type { GeometryType, TableMixedGeometry } from './types.js';
 import { Utf8ColumnBuilder } from './utf8-column.js';
@@ -48,74 +48,94 @@ import {
 } from './value-column.js';
 
 /**
- * What {@link mergeRowGroup} merges
+ * What {@link mergeRowBlock} merges
  */
-export interface RowGroupMerge {
-  /** The groups the rows are taken from (their styles numbered: no `styleDictionary`) */
-  readonly sources: readonly RowGroupData[];
+export interface RowBlockMerge {
+  /** The blocks the rows are taken from (their styles numbered: no `styleDictionary`) */
+  readonly sources: readonly RowBlock[];
   /**
    * The rows taken, two numbers each: the source and the row there (`[source, row, ...]`). A row
    * is taken once
    */
   readonly rows: Int32Array;
   /** The groups of features the rows name (their keys order their members) */
-  readonly groups?: readonly RowGroupKey[] | GroupKeySource | null;
+  readonly groups?: readonly GroupEntry[] | null;
   /** Whether the rows are put in the order of the layer (true when omitted) */
   readonly sort?: boolean;
-  /** The target number of rows of a group ({@link ROW_GROUP_TARGET_ROWS} when omitted) */
+  /** The target number of rows of a block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
   readonly targetRows?: number;
-  /** The target number of coordinates of a group ({@link ROW_GROUP_TARGET_VERTICES} when omitted) */
+  /** The target number of coordinates of a block ({@link ROW_BLOCK_TARGET_VERTICES} when omitted) */
   readonly targetVertices?: number;
   /**
-   * The share of the targets past which the rows are cut into groups of the target sizes (1 when
-   * omitted: cut at the targets). The next version of a group is cut only past twice the targets
-   * (2), so a group that grew a little stays one group
+   * The share of the targets past which the rows are cut into blocks of the target sizes (1 when
+   * omitted: cut at the targets). The next version of a block is cut only past twice the targets
+   * (2), so a block that grew a little stays one block
    */
   readonly cutPast?: number;
   /**
-   * The dimensions of the coordinates of the new groups: those of the layer. A source of fewer
+   * The dimensions of the coordinates of the new blocks: those of the layer. A source of fewer
    * dimensions is copied with NaN for the others (a layer whose dimensions were raised). Every
    * source has the same when omitted
    */
-  readonly dims?: CoordinateDims;
+  readonly dimensions?: CoordinateDimensions;
   /**
    * The number of coordinates a row that draws a ring around its point (a row of a Point with a
-   * fill: a Circle) is counted as when the rows are cut into groups (`RowRings.ringVertices`; 1
+   * fill: a Circle) is counted as when the rows are cut into blocks (`RowRings.ringVertices`; 1
    * when omitted)
    */
   readonly ringVertices?: number;
   /**
-   * The system of the coordinates the spatial index of the new groups is made in (the plane when
+   * The system of the coordinates the spatial index of the new blocks is made in (the plane when
    * omitted). A function: a Worker passes its own
    */
-  readonly coordinates?: CoordinateSystem;
+  readonly coordinateSystem?: CoordinateSystem;
 }
 
 /**
- * Merges rows of row groups into new row groups, in the order of the layer
+ * What the tables merge: blocks with every column, and the groups of features as the tables
+ * read them
  *
- * @returns The new groups (none for no row); their handles are those of the rows
+ * @internal
+ */
+export interface RowBlockDataMerge extends Omit<RowBlockMerge, 'sources' | 'groups'> {
+  readonly sources: readonly RowBlockData[];
+  readonly groups?: readonly GroupEntry[] | GroupKeySource | null;
+}
+
+/**
+ * Merges rows of blocks into new blocks, in the order of the layer
+ *
+ * @returns The new blocks (none for no row); their handles are those of the rows
  * @throws when a source holds styles not numbered yet, or when a row names a group of features
  *   the keys do not give
  */
-export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
+export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
+  return mergeRowBlockData(merge as RowBlockDataMerge);
+}
+
+/**
+ * Merges rows of blocks into new blocks, as the tables merge them
+ *
+ * @internal
+ */
+export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const { sources, rows } = merge;
   for (const source of sources) {
     if (source.styleDictionary) {
-      throw new Error('mergeRowGroup: the styles of a source are not numbered');
+      throw new Error('mergeRowBlock: the styles of a source are not numbered');
     }
   }
   const count = rows.length / 2;
   if (count === 0) return [];
-  const dims = mergeDims(sources, merge.dims);
+  const dims = mergeDims(sources, merge.dimensions);
   const shape: MergeShape = {
     dims,
     ringVertices: merge.ringVertices ?? 1,
-    sortKey: sortKeyOf(merge.coordinates ?? planarCoordinates),
+    sortKey: sortKeyOf(merge.coordinateSystem ?? planarCoordinates),
   };
   const keys = isKeySource(merge.groups)
     ? merge.groups
-    : groupKeySource((merge.groups as readonly RowGroupKey[] | null | undefined) ?? []);
+    : groupKeySource((merge.groups as readonly GroupEntry[] | null | undefined) ?? []);
   // The rows in the order of the layer
   const order = new Int32Array(count);
   for (let i = 0; i < count; i++) order[i] = i;
@@ -136,14 +156,14 @@ export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
     vertices[i] = vertexCountOf(sources[rows[i * 2]], rows[i * 2 + 1], shape.ringVertices);
     total += vertices[i];
   }
-  const targetRows = Math.max(1, merge.targetRows ?? ROW_GROUP_TARGET_ROWS);
-  const targetVertices = Math.max(1, merge.targetVertices ?? ROW_GROUP_TARGET_VERTICES);
+  const targetRows = Math.max(1, merge.targetRows ?? ROW_BLOCK_TARGET_ROWS);
+  const targetVertices = Math.max(1, merge.targetVertices ?? ROW_BLOCK_TARGET_VERTICES);
   const past = Math.max(1, merge.cutPast ?? 1);
   // One group while the rows are within the targets times the share
   if (count <= targetRows * past && total <= targetVertices * past) {
     return [copyRows(sources, rows, order, vertices, shape)];
   }
-  const out: RowGroupData[] = [];
+  const out: RowBlockData[] = [];
   let start = 0;
   while (start < count) {
     let end = start;
@@ -162,7 +182,7 @@ export function mergeRowGroup(merge: RowGroupMerge): RowGroupData[] {
 
 /** What the new groups of a merge are made of */
 interface MergeShape {
-  readonly dims: CoordinateDims;
+  readonly dims: CoordinateDimensions;
   readonly ringVertices: number;
   readonly sortKey: ((centerX: number, centerY: number) => number) | undefined;
 }
@@ -175,17 +195,17 @@ interface MergeShape {
  *   different ones and none are given
  */
 function mergeDims(
-  sources: readonly RowGroupData[],
-  given: CoordinateDims | undefined,
-): CoordinateDims {
+  sources: readonly RowBlockData[],
+  given: CoordinateDimensions | undefined,
+): CoordinateDimensions {
   let dims = given;
   for (const source of sources) {
     for (const child of source.geometry.children) {
-      const own = child.dims ?? 'xy';
+      const own = child.dimensions ?? 'xy';
       if (dims === undefined) dims = own;
       else if (given === undefined ? own !== dims : !dimsWithin(own, dims)) {
         throw new Error(
-          `mergeRowGroup: a source has coordinates of ${own}, the merge ${given === undefined ? 'has' : 'makes'} ${dims}`,
+          `mergeRowBlock: a source has coordinates of ${own}, the merge ${given === undefined ? 'has' : 'makes'} ${dims}`,
         );
       }
     }
@@ -194,7 +214,7 @@ function mergeDims(
 }
 
 /** Whether the groups of a merge are given as the keys themselves */
-function isKeySource(groups: RowGroupMerge['groups']): groups is GroupKeySource {
+function isKeySource(groups: RowBlockDataMerge['groups']): groups is GroupKeySource {
   return groups !== null && groups !== undefined && !Array.isArray(groups);
 }
 
@@ -202,7 +222,7 @@ function isKeySource(groups: RowGroupMerge['groups']): groups is GroupKeySource 
  * The number of coordinates a row draws (the estimate of the work of a group): a Point with a
  * fill draws a ring around it
  */
-function vertexCountOf(data: RowGroupData, row: number, ringVertices: number): number {
+function vertexCountOf(data: RowBlockData, row: number, ringVertices: number): number {
   const child = data.geometry.types[row];
   if (child < 0) return 0;
   const column = data.geometry.children[child];
@@ -240,12 +260,12 @@ function trianglesOf(cache: TriangleCache, row: number): Uint16Array | Uint32Arr
 
 /** Copies the rows `order` (indices into the pairs of `rows`) into one group */
 function copyRows(
-  sources: readonly RowGroupData[],
+  sources: readonly RowBlockData[],
   rows: Int32Array,
   order: Int32Array,
   vertices: Int32Array,
   shape: MergeShape,
-): RowGroupData {
+): RowBlockData {
   const length = order.length;
   const handles = new Int32Array(length);
   const ids = new Utf8ColumnBuilder(length);
@@ -286,7 +306,7 @@ function copyRows(
     const typeName = data.typeNames[data.types[row]];
     let type = typeIndex.get(typeName);
     if (type === undefined) {
-      if (typeNames.length >= 255) throw new Error('mergeRowGroup: more than 255 types');
+      if (typeNames.length >= 255) throw new Error('mergeRowBlock: more than 255 types');
       type = typeNames.length;
       typeNames.push(typeName);
       typeIndex.set(typeName, type);

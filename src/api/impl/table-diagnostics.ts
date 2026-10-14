@@ -81,6 +81,8 @@ export interface TableDiagnostics {
    * compare the two
    */
   setVersionBudgetWhileMoving(ms: number): void;
+  /** The bytes the GPU holds per renderer (`points`, `lines`, `polygons`, `rows`, `row-state`) */
+  gpuBytesByRenderer(): Readonly<Record<string, number>>;
 }
 
 /**
@@ -172,6 +174,9 @@ function createTableDiagnostics(
     engine.map.triggerRepaint?.();
   };
   return {
+    gpuBytesByRenderer() {
+      return { ...customLayer.getGpuMemory().byOwner };
+    },
     setArtificialCuts(count) {
       customLayer.getTableRenderer()?.setArtificialCuts(count);
       repaint();

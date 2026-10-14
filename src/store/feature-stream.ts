@@ -11,7 +11,7 @@
  * one write.
  */
 
-import type { FeatureTables, RowHandle, RowPatch } from '../api/tables.js';
+import type { FeatureTables, RowHandle, RowValues } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE } from '../table/row-group-types.js';
 import { listEveryFeatureInOrder } from './ordering.js';
@@ -58,7 +58,7 @@ export function* featuresInOrder(store: FeatureSource): Generator<Feature> {
     const cursor = tables.scan({ layerIds: [layerId] });
     for (let batch = cursor.next(); batch; batch = cursor.next()) {
       for (const handle of batch) {
-        const feature = store.getFeature(tables.idOf(handle) as string);
+        const feature = store.getFeature(tables.getRowId(handle) as string);
         if (feature) yield feature;
       }
     }
@@ -94,13 +94,13 @@ export function listedGroups(store: FeatureSource): ObjectGroup[] {
 
 /** The ids of the items of a layer held as rows, in their order */
 function tableItemIds(tables: FeatureTables | undefined, layerId: string): string[] {
-  const view = tables?.layer(layerId);
+  const view = tables?.get(layerId);
   if (!tables || !view) return [];
-  const refs = view.itemsInOrder(0, view.itemCount);
+  const refs = view.listItems(0, view.itemCount);
   const out: string[] = [];
   for (let i = 0; i < refs.kinds.length; i++) {
     const id =
-      refs.kinds[i] === 0 ? tables.idOf(refs.handles[i]) : tables.groupIdOf(refs.handles[i]);
+      refs.kinds[i] === 0 ? tables.getRowId(refs.handles[i]) : tables.getGroupId(refs.handles[i]);
     if (id !== undefined) out.push(id);
   }
   return out;
@@ -108,11 +108,11 @@ function tableItemIds(tables: FeatureTables | undefined, layerId: string): strin
 
 /** The ids of the members of a group of a layer held as rows, in their order */
 function tableMemberIds(tables: FeatureTables | undefined, group: Group): string[] {
-  const view = tables?.layer(group.layerId);
-  const handle = tables?.groupHandleOf(group.id);
+  const view = tables?.get(group.layerId);
+  const handle = tables?.findGroup(group.id);
   if (!tables || !view || handle === undefined) return [];
-  const members = view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle));
-  return Array.from(members, (row) => tables.idOf(row) as string);
+  const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
+  return Array.from(members, (row) => tables.getRowId(row) as string);
 }
 
 /**
@@ -145,8 +145,7 @@ export function forEachMatchingRow(
   const tables = store.tables;
   const internals = featureTablesInternals(tables);
   if (!tables || !internals) return;
-  const groupHandle =
-    filter.groupId !== undefined ? (tables.groupHandleOf(filter.groupId) ?? -2) : -1;
+  const groupHandle = filter.groupId !== undefined ? (tables.findGroup(filter.groupId) ?? -2) : -1;
   if (groupHandle === -2) return;
   const layerIds =
     filter.layerId !== undefined
@@ -174,10 +173,7 @@ export function forEachMatchingRow(
         if (filter.locked !== undefined && ((flags & ROW_FLAG_LOCKED) !== 0) !== filter.locked) {
           continue;
         }
-        if (
-          filter.type !== undefined &&
-          tables.layer(layerId)?.getRowType(handle) !== filter.type
-        ) {
+        if (filter.type !== undefined && tables.get(layerId)?.getRowType(handle) !== filter.type) {
           continue;
         }
         if (filter.shown !== undefined) {
@@ -194,7 +190,7 @@ export function forEachMatchingRow(
 export interface DocumentWriter extends FeatureSource {
   deleteFeature(id: string): unknown;
   deleteGroup(id: string): unknown;
-  applyRows(patch: RowPatch): unknown;
+  restoreRows(patch: RowValues): unknown;
 }
 
 /**
@@ -211,7 +207,7 @@ export function deleteFeaturesAndGroups(store: DocumentWriter): void {
       const cursor = tables.scan({ layerIds: [layerId] });
       for (let batch = cursor.next(); batch; batch = cursor.next()) handles.push(...batch);
       if (handles.length === 0) continue;
-      store.applyRows({
+      store.restoreRows({
         handles: Int32Array.from(handles),
         fields: new Map(),
         deleted: new Uint8Array(handles.length).fill(1),

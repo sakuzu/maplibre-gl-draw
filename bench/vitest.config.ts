@@ -19,6 +19,10 @@ export default defineConfig({
         find: '@sakuzu/maplibre-gl-draw/table',
         replacement: resolve(root, '../src/table/index.ts'),
       },
+      {
+        find: '@sakuzu/maplibre-gl-draw/kasane',
+        replacement: resolve(root, '../src/kasane/index.ts'),
+      },
       { find: '@sakuzu/maplibre-gl-draw', replacement: resolve(root, '../src/index.ts') },
     ],
   },

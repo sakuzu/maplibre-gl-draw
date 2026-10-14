@@ -15,7 +15,7 @@ import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { internalsOf } from '../test-utils.js';
 import type { Store } from './store.js';
-import { createTableMemoryStore } from './table-memory.js';
+import { createTableStore } from './table-memory.js';
 import type { Feature, ItemMove, StoreChange } from './types.js';
 
 function point(id: string, x: number, layerId = 'layer'): Feature {
@@ -46,7 +46,7 @@ function layer(id: string) {
 }
 
 function setup(count = 5) {
-  const { store, writer } = createTableMemoryStore();
+  const { store, writer } = createTableStore();
   store.createLayer(layer('layer'));
   store.createLayer(layer('other'));
   for (let i = 0; i < count; i++) store.createFeature(point(`p${i}`, i));
@@ -60,10 +60,10 @@ function setup(count = 5) {
 function stateOf(store: Store, tables: FeatureTables) {
   const out: Record<string, Feature[]> = {};
   for (const layerId of ['layer', 'other']) {
-    const view = tables.layer(layerId);
-    const handles = view?.rowsInOrder(0, 1_000) ?? new Int32Array(0);
-    out[layerId] = Array.from(handles, (handle) => tables.idOf(handle) as string)
-      .filter((id) => tables.handleOf(id) !== undefined)
+    const view = tables.get(layerId);
+    const handles = view?.listRowHandles(0, 1_000) ?? new Int32Array(0);
+    out[layerId] = Array.from(handles, (handle) => tables.getRowId(handle) as string)
+      .filter((id) => tables.findRow(id) !== undefined)
       .map((id) => store.getFeature(id) as Feature);
   }
   return out;
@@ -87,10 +87,10 @@ describe('the writes of the features of rows not held', () => {
     });
     const before = lastBefore(notified);
     expect(before).toBeDefined();
-    expect(Array.from(before?.handles ?? [])).toEqual([tables.handleOf('p1')]);
+    expect(Array.from(before?.handles ?? [])).toEqual([tables.findRow('p1')]);
     expect(before?.fields.get('geometry')).toEqual([{ type: 'Point', coordinates: [1, 0] }]);
     expect(before?.fields.get('property:m')).toEqual([undefined]);
-    expect(store.applyRows(before as NonNullable<typeof before>)).not.toBeNull();
+    expect(store.restoreRows(before as NonNullable<typeof before>)).not.toBeNull();
     expect(stateOf(store, tables)).toEqual(start);
   });
 
@@ -105,7 +105,7 @@ describe('the writes of the features of rows not held', () => {
     // Put back: the values, then the item where it was
     store.transact(() => {
       const before = change.rows?.before;
-      if (before) store.applyRows(before);
+      if (before) store.restoreRows(before);
       const from = moves[0].from;
       if (from) store.moveItem('p1', from);
     });
@@ -118,7 +118,7 @@ describe('the writes of the features of rows not held', () => {
     store.deleteFeature('p2');
     const before = lastBefore(notified);
     expect(Array.from(before?.deleted ?? [])).toEqual([0]);
-    store.applyRows(before as NonNullable<typeof before>);
+    store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
   });
 
@@ -131,7 +131,7 @@ describe('the writes of the features of rows not held', () => {
     store.transact(() => {
       store.createLayer(layer('layer'));
       store.setLayerOrder(['layer', 'other']);
-      store.applyRows(before as NonNullable<typeof before>);
+      store.restoreRows(before as NonNullable<typeof before>);
     });
     expect(stateOf(store, tables)).toEqual(start);
   });
@@ -143,8 +143,8 @@ describe('the writes of the features of rows not held', () => {
     const change = notified[notified.length - 1];
     expect(change.rows?.before).toBeUndefined();
     const created = change.rows?.layers.get('layer')?.created ?? new Int32Array(0);
-    expect(Array.from(created, (handle) => tables.idOf(handle))).toEqual(['q']);
-    store.applyRows({ handles: created, fields: new Map(), deleted: new Uint8Array(1).fill(1) });
+    expect(Array.from(created, (handle) => tables.getRowId(handle))).toEqual(['q']);
+    store.restoreRows({ handles: created, fields: new Map(), deleted: new Uint8Array(1).fill(1) });
     expect(stateOf(store, tables)).toEqual(start);
   });
 
@@ -160,10 +160,10 @@ describe('the writes of the features of rows not held', () => {
     const before = lastBefore(notified);
     expect(notified).toHaveLength(1);
     const handles = Array.from(before?.handles ?? []);
-    const at = handles.indexOf(tables.handleOf('p1') as number);
+    const at = handles.indexOf(tables.findRow('p1') as number);
     expect(before?.fields.get('property:n')?.[at]).toBe(1);
     expect(before?.fields.get('style')?.[at]).toEqual({});
-    store.applyRows(before as NonNullable<typeof before>);
+    store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
   });
 
@@ -182,16 +182,16 @@ describe('the writes of the features of rows not held', () => {
   it('give the values before of a row written while held and no longer held at the end', () => {
     const { store, tables, notified } = setup();
     const start = stateOf(store, tables);
-    internalsOf(tables).hold('test', ['p1']);
+    internalsOf(tables).open('test', ['p1']);
     store.transact(() => {
       store.updateFeature('p1', { properties: { n: 10 }, style: { pointColor: '#0000ff' } });
-      internalsOf(tables).hold('test', []);
+      internalsOf(tables).open('test', []);
     });
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);
     const before = change.rows?.before;
     expect(before?.fields.get('property:n')).toEqual([1]);
-    store.applyRows(before as NonNullable<typeof before>);
+    store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
   });
 
@@ -208,7 +208,7 @@ describe('the writes of the features of rows not held', () => {
 describe('the writes of rows through the writer of the Store', () => {
   function patchOf(tables: FeatureTables) {
     return {
-      handles: Int32Array.from(['p0', 'p4'], (id) => tables.handleOf(id) as number),
+      handles: Int32Array.from(['p0', 'p4'], (id) => tables.findRow(id) as number),
       fields: new Map<RowField, unknown[]>([
         ['property:n', [100, 400]],
         ['visible', [false, false]],
@@ -222,7 +222,7 @@ describe('the writes of rows through the writer of the Store', () => {
     store.transact(() => writer.apply(patchOf(tables)));
     const before = lastBefore(notified);
     expect(before?.fields.get('property:n')).toEqual([0, 4]);
-    store.applyRows(before as NonNullable<typeof before>);
+    store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
     // Outside a transaction too
     writer.apply(patchOf(tables));
@@ -238,9 +238,9 @@ describe('the writes of rows through the writer of the Store', () => {
   it('fold the writes of a transaction that write other fields of other rows', () => {
     const { store, writer, tables, notified } = setup();
     const start = stateOf(store, tables);
-    const h = (id: string) => tables.handleOf(id) as number;
+    const h = (id: string) => tables.findRow(id) as number;
     store.transact(() => {
-      store.applyRows({
+      store.restoreRows({
         handles: Int32Array.of(h('p0'), h('p1')),
         fields: new Map([['property:n', [10, 11]]]),
       });
@@ -254,7 +254,7 @@ describe('the writes of rows through the writer of the Store', () => {
       store.deleteFeature('p3');
     });
     const before = lastBefore(notified);
-    expect(Array.from(before?.handles ?? []).map((handle) => tables.idOf(handle))).toEqual([
+    expect(Array.from(before?.handles ?? []).map((handle) => tables.getRowId(handle))).toEqual([
       'p0',
       'p1',
       'p2',
@@ -264,7 +264,7 @@ describe('the writes of rows through the writer of the Store', () => {
     expect(before?.fields.get('property:n')).toEqual([0, 1, 2, 3]);
     expect(before?.fields.get('geometry')).toEqual([0, 1, 2, 3].map((x) => point('', x).geometry));
     expect(Array.from(before?.deleted ?? [])).toEqual([0, 0, 0, 0]);
-    store.applyRows(before as NonNullable<typeof before>);
+    store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
   });
 });
@@ -300,13 +300,13 @@ describe('the moves of the items and the groups', () => {
     store.deleteGroup('g');
     expect(notified[notified.length - 1].rows?.before).toBeUndefined();
     expect(store.getFeature('p1')?.groupId).toBeUndefined();
-    expect(tables.layer('layer')?.itemCount).toBe(5);
+    expect(tables.get('layer')?.itemCount).toBe(5);
   });
 });
 
 describe('the rows of a layer of z', () => {
   it('give the values before with their z, and are moved without being made features', () => {
-    const { store, writer } = createTableMemoryStore({ dimsOf: () => 'xyz' });
+    const { store, writer } = createTableStore({ dimensionsOf: () => 'xyz' });
     store.createLayer(layer('layer'));
     const tables = store.tables as FeatureTables;
     const ids = ['z0', 'z1'];
@@ -336,12 +336,12 @@ describe('the rows of a layer of z', () => {
       { type: 'Point', coordinates: [0, 0, 10] },
       { type: 'Point', coordinates: [1, 0, 11] },
     ]);
-    store.applyRows(before as NonNullable<typeof before>);
-    const now = tables.snapshot({ handles, fields: new Map([['geometry', []]]) });
+    store.restoreRows(before as NonNullable<typeof before>);
+    const now = tables.readValues({ handles, fields: new Map([['geometry', []]]) });
     expect(now.fields.get('geometry')).toEqual(before?.fields.get('geometry'));
     // Moved and deleted: the values before are read from the rows
     store.moveItems(['z1'], { layerId: 'layer', below: null });
-    expect(Array.from(tables.layer('layer')?.rowsInOrder(0, 2) ?? [])).toEqual([
+    expect(Array.from(tables.get('layer')?.listRowHandles(0, 2) ?? [])).toEqual([
       handles[1],
       handles[0],
     ]);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * `itemMovesBetween`: the moves of the items between two states of lists of items (13.6 of the
+ * `diffItemOrder`: the moves of the items between two states of lists of items (13.6 of the
  * design). They are the moves a reference made item by item over arrays makes (the items of a
  * list that stay are the longest run of them already in their order, the first such run the
  * patience method finds), they take the lists before to the lists after, and made back they take
@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ItemMove, ItemPosition } from '../shared/types/model.js';
-import { type ItemListChange, itemMovesBetween } from './model.js';
+import { diffItemOrder, type ItemListChange } from './model.js';
 
 /** The places in `after` of the items that stay: the longest run whose places in `before` go up */
 function stayingOf(before: readonly string[], after: readonly string[]): Set<number> {
@@ -188,9 +188,9 @@ function replay(lists: readonly ItemListChange[], moves: readonly ItemMove[], ba
   return lists.map((list) => state.get(list.groupId));
 }
 
-describe('itemMovesBetween', () => {
+describe('diffItemOrder', () => {
   it('moves the fewest items, each with where it stood and where it stands', () => {
-    const moves = itemMovesBetween(
+    const moves = diffItemOrder(
       [{ layerId: 'l', groupId: undefined, before: ['a', 'b', 'c'], after: ['c', 'a', 'b'] }],
       () => false,
     );
@@ -206,7 +206,7 @@ describe('itemMovesBetween', () => {
 
   it('places a group before its members go into it, and deletes it after they left', () => {
     const isGroup = (id: string) => id === 'g';
-    const grouped = itemMovesBetween(
+    const grouped = diffItemOrder(
       [
         { layerId: 'l', groupId: undefined, before: ['a', 'b', 'c'], after: ['a', 'g'] },
         { layerId: 'l', groupId: 'g', before: [], after: ['b', 'c'] },
@@ -219,7 +219,7 @@ describe('itemMovesBetween', () => {
       ['c', undefined, 'g'],
     ]);
     expect(grouped[0].from).toBeNull();
-    const ungrouped = itemMovesBetween(
+    const ungrouped = diffItemOrder(
       [
         { layerId: 'l', groupId: undefined, before: ['a', 'g'], after: ['a', 'b', 'c'] },
         { layerId: 'l', groupId: 'g', before: ['b', 'c'], after: [] },
@@ -234,7 +234,7 @@ describe('itemMovesBetween', () => {
     const lists: ItemListChange[] = [
       { layerId: 'l', groupId: undefined, before: ['a', 'b', 'a'], after: ['b', 'a', 'b'] },
     ];
-    const moves = itemMovesBetween(lists, () => false);
+    const moves = diffItemOrder(lists, () => false);
     expect(moves).toEqual(referenceMoves(lists, () => false));
     // Read once each: 'b' goes to the back, before 'a'
     expect(moves.map((move) => [move.itemId, move.to?.below, move.to?.above])).toEqual([
@@ -247,7 +247,7 @@ describe('itemMovesBetween', () => {
     for (let run = 0; run < 2000; run++) {
       const lists = randomCase(next);
       const isGroup = (id: string) => id.startsWith('g');
-      const moves = itemMovesBetween(lists, isGroup);
+      const moves = diffItemOrder(lists, isGroup);
       expect(moves).toEqual(referenceMoves(lists, isGroup));
       expect(replay(lists, moves, false)).toEqual(lists.map((list) => list.after));
       expect(replay(lists, moves, true)).toEqual(lists.map((list) => list.before));
@@ -264,7 +264,7 @@ describe('itemMovesBetween', () => {
         after: list.after.length > 1 && next() < 0.3 ? [...list.after, list.after[1]] : list.after,
       }));
       const isGroup = (id: string) => id.startsWith('g');
-      expect(itemMovesBetween(lists, isGroup)).toEqual(referenceMoves(lists, isGroup));
+      expect(diffItemOrder(lists, isGroup)).toEqual(referenceMoves(lists, isGroup));
     }
   });
 });

@@ -36,7 +36,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         for (const deleted of changes.features?.deleted ?? []) this.removed.push(deleted.id);
         for (const change of changes.rows?.layers.values() ?? []) {
           for (const handle of change.deleted) {
-            this.removed.push(store.tables?.idOf(handle) as string);
+            this.removed.push(store.tables?.getRowId(handle) as string);
           }
         }
       });

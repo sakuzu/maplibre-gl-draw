@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteFeaturesAndGroups, featuresInOrder } from '../../../store/feature-stream.js';
 import { MemoryStore } from '../../../store/memory.js';
 import type { Store } from '../../../store/store.js';
-import { createTableMemoryStore } from '../../../store/table-memory.js';
+import { createTableStore } from '../../../store/table-memory.js';
 import type { Feature, Group, Layer } from '../../../store/types.js';
 import { exportGeoJSON } from './geojson-export.js';
 import { exportNative, prepareNative } from './native-format.js';
@@ -53,7 +53,7 @@ function point(id: string, x: number, extra: Partial<Feature> = {}): Feature {
 let store: Store;
 
 beforeEach(() => {
-  store = createTableMemoryStore().store;
+  store = createTableStore().store;
   store.createLayer(tableLayer('l1'));
   store.createLayer(tableLayer('l2', { visible: false }));
   store.createGroup(tableGroup('g', 'l1'));
@@ -154,9 +154,9 @@ describe('the native export of a Store of rows', () => {
 
 describe('emptying a Store of rows', () => {
   it('deletes the rows of each layer in one write and every group, keeping the layers', () => {
-    const applyRows = vi.spyOn(store, 'applyRows');
+    const restoreRows = vi.spyOn(store, 'restoreRows');
     store.transact(() => deleteFeaturesAndGroups(store));
-    expect(applyRows).toHaveBeenCalledTimes(2);
+    expect(restoreRows).toHaveBeenCalledTimes(2);
     expect([...featuresInOrder(store)]).toEqual([]);
     expect(store.listGroups()).toEqual([]);
     expect(store.listLayers().map((layer) => layer.id)).toEqual(['l1', 'l2']);

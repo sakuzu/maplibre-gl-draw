@@ -234,7 +234,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
           order: 'any',
         });
         for (let batch = cursor?.next(); batch; batch = cursor?.next()) {
-          for (const handle of batch) ids.add(store.tables?.idOf(handle) as string);
+          for (const handle of batch) ids.add(store.tables?.getRowId(handle) as string);
         }
         return [...ids];
       };

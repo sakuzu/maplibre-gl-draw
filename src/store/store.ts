@@ -23,7 +23,7 @@
  */
 
 import type { Store as PublicStore } from '../api/extension/store.js';
-import type { FeatureTables, LocalRowWrite, RowPatch } from '../api/tables.js';
+import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type {
   BoxSelection,
   DragState,
@@ -35,7 +35,7 @@ import type {
   Layer,
   Metadata,
   Mode,
-  RowValuesSnapshot,
+  RowValues,
   Selection,
   SelectionType,
   StoreChange,
@@ -438,20 +438,20 @@ export interface Store extends StoreView, UiState {
   /** Puts items in a place, one after the other (see {@link DocumentStore.moveItems}) */
   moveItems(itemIds: readonly string[], to: ItemPlacement): boolean;
   /**
-   * Writes rows held as columns for this client (see the public `Store.applyLocal`)
+   * Writes rows held as columns for this client (see the public `Store.applyRows`)
    *
    * @throws when the Store does not hold its features as rows
    */
-  applyLocal(write: LocalRowWrite): boolean;
+  applyRows(write: RowWrite): boolean;
   /**
    * Writes values of rows held as columns for this client, as the operations of the instance on
    * many rows do and what undoes them: the values they have are read (`FeatureTables.snapshot`),
-   * the patch is written through the Store (`applyLocal`), and the values read are returned (null
+   * the patch is written through the Store (`applyRows`), and the values read are returned (null
    * when the Store refused the write, read-only)
    *
    * @throws when the Store does not hold its features as rows
    */
-  applyRows(patch: RowPatch): RowValuesSnapshot | null;
+  restoreRows(patch: RowValues): RowValues | null;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

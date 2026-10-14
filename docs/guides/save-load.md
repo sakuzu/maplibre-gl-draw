@@ -504,7 +504,7 @@ your own, so that the listener can leave it out by that source.
 ### A store that holds its features as rows
 
 A store that holds its features as rows of columns
-(`createTableMemoryStore`, or a store of your own over
+(`createTableStore`, or a store of your own over
 `createFeatureTables`) notifies the rows that are not features (not
 selected or edited) as rows, by their handles, rather than as features.
 What puts them back is in the change as well:
@@ -517,7 +517,7 @@ What puts them back is in the change as well:
 - the place of an item (its layer, its group and its place among the
   others) is in `change.order`, whether it is a feature or a row: a move
   with where the item stood (`ItemMove.from`), or many rows with their
-  keys before (`RowRangeMove.before`, written back with
+  keys before (`RowsMove.before`, written back with
   `draw.tables.applyRows`)
 - a deletion of this client keeps the rows it deleted (`change.retain`)
   until they are let go of (`store.tables.release`). Written not deleted,
@@ -525,9 +525,9 @@ What puts them back is in the change as well:
   group deleted with its rows brings the group back at its place
 
 ```ts
-import type { RowValuesSnapshot } from '@sakuzu/maplibre-gl-draw';
+import type { RowValues } from '@sakuzu/maplibre-gl-draw';
 
-const steps: RowValuesSnapshot[] = [];
+const steps: RowValues[] = [];
 draw.getStore().subscribe((change) => {
   if (change.source === 'local' && change.rows?.before) {
     steps.push(change.rows.before);
@@ -545,7 +545,7 @@ if (last) draw.transact(() => draw.tables.applyRows(last), { source: 'history' }
 A store of your own that keeps the items of its layers and groups as
 lists, and changes them otherwise than by putting items in a place, makes
 the moves of `change.order` from the lists before and after with
-`itemMovesBetween`.
+`diffItemOrder`.
 
 ## Examples
 

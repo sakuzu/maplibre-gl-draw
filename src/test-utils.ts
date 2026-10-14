@@ -25,7 +25,7 @@ import type {
   FeatureTablesOptions,
   FeatureTablesWriter,
   RowField,
-  RowPatch,
+  RowValues,
 } from './api/tables.js';
 import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
@@ -48,8 +48,8 @@ import { AutoNameGenerator } from './shared/utils/name-generator.js';
 import type { SnapResult } from './snapping/types.js';
 import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
-import { createTableMemoryStore } from './store/table-memory.js';
-import { createRowGroupBuilder, type RowInput } from './table/row-group-builder.js';
+import { createTableStore } from './store/table-memory.js';
+import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
 import { utf8ColumnFromStrings } from './table/utf8-column.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
 import type { ImageRenderer } from './view/renderers/image.js';
@@ -532,17 +532,17 @@ export function tablesOfFeatures(
   writer: FeatureTablesWriter;
 } {
   const { tables, writer } = createFeatureTablesStore(options);
-  const builder = createRowGroupBuilder({
+  const builder = createRowBlockDataBuilder({
     targetRows,
-    dims: options?.dimsOf?.(layerId),
+    dimensions: options?.dimensionsOf?.(layerId),
     rings: circleRowRings,
   });
   features.forEach((feature, i) => {
     builder.addRow(rowOfFeature(feature, orderKey(i)));
   });
-  writer.adopt(layerId, builder.finish());
+  writer.addBlocks(layerId, builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.flushAdoption();
+  internals.addQueuedBlocks();
   return { internals, table: internals.layerTable(layerId) as LayerTable, tables, writer };
 }
 
@@ -759,7 +759,7 @@ function compareBytes(a: string, b: string): number {
 
 /**
  * Expects the tables to read as the reference: the rows of every layer in their order (by
- * `scan` and `rowsInOrder`), the items and the members of the groups in their order, and the
+ * `scan` and `listRowHandles`), the items and the members of the groups in their order, and the
  * values of every row
  *
  * @param groupHandleOf The handle of a group of features by its id
@@ -771,10 +771,10 @@ export function expectTablesMatch(
   groupHandleOf: (id: string) => number,
 ): void {
   const idsOf = (handles: ArrayLike<number>): string[] =>
-    Array.from(handles, (handle) => tables.idOf(handle) as string);
+    Array.from(handles, (handle) => tables.getRowId(handle) as string);
   for (const layerId of layerIds) {
     const rows = reference.inOrder(layerId);
-    const view = tables.layer(layerId);
+    const view = tables.get(layerId);
     if (!view) {
       expect(rows).toEqual([]);
       continue;
@@ -787,21 +787,21 @@ export function expectTablesMatch(
       const handle = internals?.ids.handleOf(row.id) ?? -1;
       return handle >= 0 && internals?.placeOf(handle) !== undefined;
     });
-    expect(idsOf(view.rowsInOrder(0, 1_000_000))).toEqual(present.map((row) => row.id));
+    expect(idsOf(view.listRowHandles(0, 1_000_000))).toEqual(present.map((row) => row.id));
     expect(view.rowCount).toBe(present.length);
     // The rows that are not deleted, a batch at a time
     const scanned: number[] = [];
-    const cursor = tables.scan({ layerIds: [layerId], batch: 7 });
+    const cursor = tables.scan({ layerIds: [layerId], batchSize: 7 });
     for (let batch = cursor.next(); batch; batch = cursor.next()) scanned.push(...batch);
     const live = rows.filter((row) => !row.deleted);
     expect(idsOf(scanned)).toEqual(live.map((row) => row.id));
     // The items and the members of the groups
-    const items = view.itemsInOrder(0, 1_000_000);
+    const items = view.listItems(0, 1_000_000);
     const expected = reference.items(layerId);
     expect(
       Array.from(items.kinds, (kind, i) =>
         kind === 0
-          ? { kind: 'row', id: tables.idOf(items.handles[i]) }
+          ? { kind: 'row', id: tables.getRowId(items.handles[i]) }
           : { kind: 'group', id: items.handles[i] },
       ),
     ).toEqual(
@@ -812,20 +812,18 @@ export function expectTablesMatch(
     for (const item of expected) {
       if (item.kind !== 'group') continue;
       const members = live.filter((row) => row.groupId === item.id).map((row) => row.id);
-      expect(idsOf(view.groupMembersInOrder(groupHandleOf(item.id), 0, 1_000_000))).toEqual(
-        members,
-      );
+      expect(idsOf(view.listGroupMembers(groupHandleOf(item.id), 0, 1_000_000))).toEqual(members);
     }
     // The values of every row (of a layer of z or m, read as they are written back: a row of it
     // is not a feature)
-    const dims = internals?.readContext.dimsOf(layerId) ?? 'xy';
+    const dims = internals?.readContext.dimensionsOf(layerId) ?? 'xy';
     for (const row of live) {
-      const handle = tables.handleOf(row.id);
+      const handle = tables.findRow(row.id);
       expect(handle).toBeDefined();
       if (dims !== 'xy') {
         expect(() => view.getRow(handle as number)).toThrow(/is not a feature/);
         const fields = ['type', 'geometry', 'style', 'visible', 'locked', 'groupId', 'layerId'];
-        const snapshot = tables.snapshot(
+        const snapshot = tables.readValues(
           rowPatch([handle as number], Object.fromEntries(fields.map((field) => [field, [0]]))),
         );
         const value = (field: string) => snapshot.fields.get(field as RowField)?.[0];
@@ -837,7 +835,7 @@ export function expectTablesMatch(
         expect(value('groupId')).toBe(row.groupId);
         expect(value('layerId')).toBe(layerId);
         for (const [key, expected] of Object.entries(row.properties)) {
-          expect(view.valueAt(handle as number, key)).toEqual(expected);
+          expect(view.getRowValue(handle as number, key)).toEqual(expected);
         }
         continue;
       }
@@ -859,7 +857,7 @@ export function rowPatch(
   handles: number[],
   fields: Record<string, unknown[]>,
   deleted?: number[],
-): RowPatch {
+): RowValues {
   return {
     handles: Int32Array.from(handles),
     fields: new Map(Object.entries(fields) as Array<[RowField, unknown[]]>),
@@ -900,10 +898,10 @@ export function tablesOfReference(
     order: group.order,
   }));
   for (const layerId of layerIds) {
-    const builder = createRowGroupBuilder({
+    const builder = createRowBlockDataBuilder({
       groups: groupKeys,
       targetRows,
-      dims: options.dimsOf?.(layerId),
+      dimensions: options.dimensionsOf?.(layerId),
       rings: circleRowRings,
     });
     for (const row of reference.rows.values()) {
@@ -922,9 +920,9 @@ export function tablesOfReference(
         deleted: row.deleted,
       });
     }
-    if (builder.length > 0) writer.adopt(layerId, builder.finish());
+    if (builder.length > 0) writer.addBlocks(layerId, builder.finish());
   }
-  internals.flushAdoption();
+  internals.addQueuedBlocks();
   const groupHandleOf = (id: string): number => groupHandles.get(id) as number;
   return { tables, writer, internals, groupHandleOf };
 }
@@ -1025,7 +1023,7 @@ export function randomRowWrites(
     if (ids.length === 0) return;
     const id = ids[Math.floor(random() * ids.length)];
     const row = reference.rows.get(id) as ReferenceRow;
-    const handle = tables.handleOf(id) as number;
+    const handle = tables.findRow(id) as number;
     const pick = random();
     if (pick < 0.15) {
       const geometry = geometryOf(random, row.type);
@@ -1100,9 +1098,9 @@ export function randomRowWrites(
 
 /**
  * The kinds of Store the tests of the modes run on: the Store of objects, and the Store of rows
- * (`createTableMemoryStore`), which behave the same to a mode
+ * (`createTableStore`), which behave the same to a mode
  */
 export const STORE_KINDS: ReadonlyArray<readonly [string, () => Store]> = [
   ['a Store of objects', () => new MemoryStore()],
-  ['a Store of rows', () => createTableMemoryStore().store],
+  ['a Store of rows', () => createTableStore().store],
 ];

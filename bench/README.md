@@ -66,7 +66,7 @@ layer only (no network), in a fixed 1280 x 800 map. The features are made
 in the page; in `mode=table` several Workers build them into row groups,
 each Worker a run of the order of the rows, and hand them to the page
 without a copy, a batch at a time, and the rows are held by an in-memory
-Store of rows (`createTableMemoryStore`). The page takes the groups in a
+Store of rows (`createTableStore`). The page takes the groups in a
 run after the other, in the order of their keys, as they come.
 
 Open it from the root of the repository:

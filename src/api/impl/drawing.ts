@@ -52,7 +52,6 @@ export function createDrawing(
           bytes: memory.bytes,
           bufferBytes: memory.bufferBytes,
           textureBytes: memory.textureBytes,
-          byRenderer: memory.byOwner,
         });
       },
       terrain(): TerrainDiagnostics {

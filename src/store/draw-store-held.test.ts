@@ -101,15 +101,15 @@ describe('the rows held for the selection', () => {
     vi.useFakeTimers();
     const { store, tables } = setup(5);
     store.setSelection('feature', ['f0', 'f1']);
-    expect(internalsOf(tables).heldFeature('f1')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('f1')).toBeDefined();
     store.deleteFeature('f1');
     expect(store.getSelection().ids).toEqual(['f0']);
     store.setSelection('feature', ['f2']);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).heldFeature('f0')).toBeUndefined();
-    expect(internalsOf(tables).heldFeature('f2')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('f0')).toBeUndefined();
+    expect(internalsOf(tables).getOpenedFeature('f2')).toBeDefined();
     store.setSelectedVertices({ featureId: 'f3', vertices: [] } as never);
-    expect(internalsOf(tables).heldFeature('f3')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('f3')).toBeDefined();
   });
 
   it('follow what is in a group or a layer selected', () => {
@@ -126,17 +126,17 @@ describe('the rows held for the selection', () => {
     store.updateFeature('f0', { groupId: 'g' });
     store.updateFeature('f1', { groupId: 'g' });
     store.setSelection('group', ['g']);
-    expect(internalsOf(tables).heldFeature('f0')).toBeDefined();
-    expect(internalsOf(tables).heldFeature('f2')).toBeUndefined();
+    expect(internalsOf(tables).getOpenedFeature('f0')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('f2')).toBeUndefined();
     // A row put in the group is held, one taken out is let go of
     store.updateFeature('f2', { groupId: 'g' });
-    expect(internalsOf(tables).heldFeature('f2')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('f2')).toBeDefined();
     store.updateFeature('f0', { groupId: undefined });
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).heldFeature('f0')).toBeUndefined();
+    expect(internalsOf(tables).getOpenedFeature('f0')).toBeUndefined();
     // A layer selected: a row created in it is held
     store.setSelection('layer', ['l']);
     store.createFeature(square('new', 20));
-    expect(internalsOf(tables).heldFeature('new')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('new')).toBeDefined();
   });
 });

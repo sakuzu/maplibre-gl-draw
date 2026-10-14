@@ -493,7 +493,7 @@ export interface ObjectLayer extends LayerFields {
 
 /**
  * A layer of the document a Store holds as rows of columns (`StoreView.tables`): its items are
- * read from its rows (`LayerTableView.itemsInOrder`), not listed in it
+ * read from its rows (`LayerTableView.listItems`), not listed in it
  */
 export interface TableLayer extends LayerFields {
   /** A layer held as rows */
@@ -545,7 +545,7 @@ export interface ObjectGroup extends GroupFields {
 
 /**
  * A group of features of a layer held as rows: its members are read from the rows
- * (`LayerTableView.groupMembersInOrder`), not listed in it
+ * (`LayerTableView.listGroupMembers`), not listed in it
  */
 export interface TableGroup extends GroupFields {
   /** A group of a layer held as rows */
@@ -724,7 +724,7 @@ export interface StoreChange {
    * holds its features as rows): what undoes the deletion holds it, and lets it go with
    * `FeatureTables.release` once it no longer needs them
    */
-  retain?: RetainToken;
+  restoreToken?: RestoreToken;
   /** The new selection and the one before it */
   selection?: {
     type: SelectionType | null;
@@ -774,12 +774,12 @@ export interface StoreChange {
    */
   rows?: RowsChange;
   /**
-   * The rows held as columns made features for this client (`added`, their features) and no
-   * longer (`removed`, their ids): not a change of the document, so what records or sends the
-   * changes of the document does not read it. A row is held while it is selected or edited; a
+   * The rows held as columns opened as features for this client (`added`, their features) and
+   * no longer (`removed`, their ids): not a change of the document, so what records or sends the
+   * changes of the document does not read it. A row is opened while it is selected or edited; a
    * row deleted is in `features.deleted`, never in `removed`
    */
-  held?: { added: Feature[]; removed: string[] };
+  opened?: { added: Feature[]; removed: string[] };
 }
 
 /**
@@ -825,33 +825,38 @@ export interface RowsChange {
    * The values the rows had before a write of this client, for the fields written: what writes
    * them back (`draw.tables.applyRows`). A Store that holds its features as rows gives them for
    * the rows that were there when the transaction began, through any of its writes: a write of
-   * rows (`draw.tables.applyRows`, `Store.applyLocal`) with the values it read or was given, and
+   * rows (`draw.tables.applyRows`, `Store.applyRows`) with the values it read or was given, and
    * a write of a row that is not a feature (`updateFeature`, `deleteFeature`, a deletion of its
    * layer) with the values of the fields written other than its place (its layer, group and keys
    * of the order, which `StoreChange.order` tells). A row created has none (written deleted, it is
    * taken back). Absent for a change from elsewhere
    */
-  readonly before?: RowValuesSnapshot;
+  readonly before?: RowValues;
 }
 
 /**
- * Values of rows as they were at a moment: the rows by their handles, and the values of the
- * fields read, one per row (as a feature holds them); `deleted` holds non-zero for a row that
- * was deleted. Written to the rows, it puts the values back.
+ * Values of rows: the rows by their handles, and the values of fields, one per row (as the
+ * feature of the row holds them: a GeoJSON geometry, a style, a boolean; for an attribute its
+ * value, `undefined` taking the key off the row). Read from the rows, they are the values the rows
+ * have (`FeatureTables.readValues`); written to them, they put the values there.
  */
-export interface RowValuesSnapshot {
+export interface RowValues {
   /** The rows */
   readonly handles: Int32Array;
   /** The values of each field, one per row */
   readonly fields: ReadonlyMap<RowField, readonly unknown[]>;
-  /** Non-zero for a row that was deleted (absent when the deletion was not read) */
+  /**
+   * Non-zero for a row deleted, zero for a row not deleted (a row deleted and kept,
+   * `RestoreToken`, written not deleted comes back at its place, as it was); absent when the
+   * deletion is not read or written
+   */
   readonly deleted?: Uint8Array;
 }
 
 /**
  * Items of a layer, in their order: rows and groups of features.
  */
-export interface ItemRefs {
+export interface ItemHandles {
   /** The kind of each item: 0 for a row, 1 for a group of features */
   readonly kinds: Uint8Array;
   /** The handle of each item: of its row, or of its group (-1 for none) */
@@ -916,7 +921,7 @@ export interface ItemMove {
  * its group of features). `before` holds the keys of their order, their layer and their group as
  * they were (written back, it puts them back).
  */
-export interface RowRangeMove {
+export interface RowsMove {
   readonly kind: 'rows';
   /** The layer the rows are in */
   readonly layerId: string;
@@ -925,24 +930,24 @@ export interface RowRangeMove {
   /** The place they were put at, one after the other (absent when `belows` is given) */
   readonly to?: ItemPosition;
   /** The item just below each row (absent when `to` is given) */
-  readonly belows?: ItemRefs;
+  readonly belows?: ItemHandles;
   /** Their layer, group and keys of their order before */
-  readonly before: RowValuesSnapshot;
+  readonly before: RowValues;
 }
 
 /**
  * A change of the stacking order of the items of the layers: one item, or many rows at once.
  */
-export type ItemOrderChange = ItemMove | RowRangeMove;
+export type ItemOrderChange = ItemMove | RowsMove;
 
-declare const retainTokenBrand: unique symbol;
+declare const restoreTokenBrand: unique symbol;
 
 /**
- * What keeps the rows and the groups a deletion of this client deleted (`StoreChange.retain`):
- * they stay as they were, so that a deletion undone puts them back where they were, until it is
- * let go of (`FeatureTables.release`).
+ * What keeps the rows and the groups a deletion of this client deleted
+ * (`DocumentChange.restoreToken`): they stay as they were, so that a deletion undone puts them
+ * back where they were, until it is let go of (`FeatureTables.release`).
  */
-export type RetainToken = number & { readonly [retainTokenBrand]: true };
+export type RestoreToken = number & { readonly [restoreTokenBrand]: true };
 
 /**
  * An axis-aligned bounding box in longitude (X) and latitude (Y), in degrees

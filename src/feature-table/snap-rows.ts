@@ -64,7 +64,7 @@ export function forEachSnapRow(
       if (internals.isHeld(handle)) continue;
       const place = internals.placeOf(handle);
       if (!place || (place.group.state[place.row] & STATE_UNHIT_MASK) !== 0) continue;
-      const id = tables.idOf(handle) as string;
+      const id = tables.getRowId(handle) as string;
       if (skip(id)) continue;
       const group = place.group.data.groups[place.row];
       if (!shown(place.layer.layerId, group >= 0 ? internals.groups.idOf(group) : undefined)) {

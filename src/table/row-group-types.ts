@@ -7,8 +7,8 @@
  * The features of a document can be held as rows rather than as objects: the rows of a layer
  * are cut, in the order of the layer, into groups of a few thousand rows, and every group is a
  * set of columns of typed arrays that is never changed in place in its shape. A Worker builds
- * the groups (`createRowGroupBuilder`) and sends them to the main thread without a copy
- * (`rowGroupTransferList`); the main thread only gives the rows their handles and draws them.
+ * the groups (`createRowBlockBuilder`) and sends them to the main thread without a copy
+ * (`blockTransferList`); the main thread only gives the rows their handles and draws them.
  *
  * A pure module (types only), so it runs in a Worker as well.
  */
@@ -18,11 +18,11 @@ import type { TableMixedGeometry } from './types.js';
 import type { Utf8Column } from './utf8-column.js';
 import type { PropertyColumns } from './value-column.js';
 
-/** The bit of {@link RowGroupData.flags} of a row that is shown */
+/** The bit of {@link RowBlockData.flags} of a row that is shown */
 export const ROW_FLAG_VISIBLE = 1;
-/** The bit of {@link RowGroupData.flags} of a row that is locked */
+/** The bit of {@link RowBlockData.flags} of a row that is locked */
 export const ROW_FLAG_LOCKED = 2;
-/** The bit of {@link RowGroupData.flags} of a row that is deleted (kept for what refers to it) */
+/** The bit of {@link RowBlockData.flags} of a row that is deleted (kept for what refers to it) */
 export const ROW_FLAG_DELETED = 4;
 
 /**
@@ -50,38 +50,56 @@ export interface TriangleCache {
 }
 
 /**
- * A group of rows of one layer, in the order of the layer
+ * A block of rows of one layer, in the order of the layer: columns of typed arrays, built in a
+ * Worker (`createRowBlockBuilder`) and sent to the main thread without a copy (`transferList`).
  *
- * Every array has one entry per row (`length` of them) unless it says otherwise, and every
- * array can be sent from a Worker without a copy ({@link rowGroupTransferList}).
+ * Its other columns (the geometry, the keys of the order, the styles, the attributes, the spatial
+ * index) are read by the tables only: a block is given to them as it was built.
+ *
+ * @experimental
  */
-export interface RowGroupData {
+export interface RowBlock {
   /** The number of rows */
   readonly length: number;
   /**
    * The handle of each row: a number the document gives a row once and never changes. A Worker
-   * cannot give them, so a group built in a Worker holds -1 until the main thread does
+   * cannot give them, so a block built in a Worker holds -1 until the main thread does
+   * (`FeatureTablesWriter.allocateHandles`)
    */
   readonly handles: Int32Array;
   /** The id of each row */
   readonly ids: Utf8Column;
-  /** The hash of the bytes of each id (computed where the group is built) */
+  /** The hash of the bytes of each id (computed where the block is built) */
   readonly idHashes: Uint32Array;
+  /**
+   * The group of features of each row, by the handle the builder was given for it
+   * (`GroupEntry.handle`; -1 outside a group)
+   */
+  readonly groups: Int32Array;
+}
+
+/**
+ * A block of rows with every column, as the tables read it
+ *
+ * Every array has one entry per row (`length` of them) unless it says otherwise, and every
+ * array can be sent from a Worker without a copy ({@link blockTransferList}).
+ *
+ * @internal
+ */
+export interface RowBlockData extends RowBlock {
   /** The type of each row, as an index into `typeNames` */
   readonly types: Uint8Array;
   /** The names of the types (`'Point'`, `'Circle'`, the type of an extension) */
   readonly typeNames: readonly string[];
   /**
    * The geometry of each row. A Circle and an Image hold a Point, a Freehand a LineString; the
-   * coordinates have the dimensions of the layer (`TableGeometry.dims` of every child)
+   * coordinates have the dimensions of the layer (`TableGeometry.dimensions` of every child)
    */
   readonly geometry: TableMixedGeometry;
   /** The key of the order of each row */
   readonly itemKeys: Utf8Column;
   /** The key of the order of each row within its group (empty outside a group) */
   readonly memberKeys: Utf8Column;
-  /** The handle of the group of each row (-1 outside a group) */
-  readonly groups: Int32Array;
   /** The flags of each row: {@link ROW_FLAG_VISIBLE}, {@link ROW_FLAG_LOCKED}, {@link ROW_FLAG_DELETED} */
   readonly flags: Uint8Array;
   /**

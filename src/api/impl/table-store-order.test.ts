@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
+import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -52,12 +52,12 @@ function square(id: string, x: number, layerId = 'rows'): Feature {
 /** The ids of the items of a layer, in their order (a group as its id) */
 function items(layerId = 'rows'): string[] {
   const tables = store.tables;
-  const view = tables?.layer(layerId);
+  const view = tables?.get(layerId);
   if (!tables || !view) return [];
-  const refs = view.itemsInOrder(0, view.itemCount);
+  const refs = view.listItems(0, view.itemCount);
   const groups = featureTablesInternals(tables)?.groups;
   return Array.from(refs.handles, (h, i) =>
-    refs.kinds[i] === 0 ? (tables.idOf(h) as string) : (groups?.idOf(h) as string),
+    refs.kinds[i] === 0 ? (tables.getRowId(h) as string) : (groups?.idOf(h) as string),
   );
 }
 
@@ -66,16 +66,16 @@ function members(groupId: string): string[] {
   const tables = store.tables;
   const group = store.getGroup(groupId);
   const handle = featureTablesInternals(tables)?.groups.handleOfId(groupId) ?? -1;
-  const view = group && tables?.layer(group.layerId);
+  const view = group && tables?.get(group.layerId);
   if (!tables || !view || handle < 0) return [];
-  return Array.from(view.groupMembersInOrder(handle, 0, view.groupMemberCount(handle)), (h) =>
-    tables.idOf(h),
+  return Array.from(view.listGroupMembers(handle, 0, view.countGroupMembers(handle)), (h) =>
+    tables.getRowId(h),
   ) as string[];
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
-  store = createTableMemoryStore().store;
+  store = createTableStore().store;
   for (const id of ['rows', 'other']) {
     store.createLayer({
       id,

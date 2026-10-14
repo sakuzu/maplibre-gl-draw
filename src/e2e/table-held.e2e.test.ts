@@ -172,8 +172,8 @@ async function drawHeld(
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
-            createTableMemoryStore: typeof import('../index.js').createTableMemoryStore;
+            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
+            createTableStore: typeof import('../store/table-memory.js').createTableStore;
           };
           internals: {
             tableDiagnosticsOf: typeof import('../api/impl/table-diagnostics.js').tableDiagnosticsOf;
@@ -182,7 +182,7 @@ async function drawHeld(
         };
       };
       const { map } = w;
-      const { store, writer } = w.e2e.tables.createTableMemoryStore();
+      const { store, writer } = w.e2e.tables.createTableStore();
       store.createLayer({
         id: 'rows',
         name: 'rows',
@@ -193,7 +193,7 @@ async function drawHeld(
         styleRule: undefined,
         metadata: undefined,
       });
-      const builder = w.e2e.tables.createRowGroupBuilder({});
+      const builder = w.e2e.tables.createRowBlockBuilder({});
       features.forEach((f, i) => {
         builder.addRow({
           id: f.id,
@@ -206,7 +206,7 @@ async function drawHeld(
           locked: false,
         } as never);
       });
-      writer.adopt('rows', builder.finish());
+      writer.addBlocks('rows', builder.finish());
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
 
@@ -241,7 +241,7 @@ async function drawHeld(
       };
       await settle();
       // Held without a selection: no handle is drawn over them
-      w.e2e.internals.featureTablesInternals(store.tables)?.hold('e2e', held);
+      w.e2e.internals.featureTablesInternals(store.tables)?.open('e2e', held);
       for (const edit of edits) {
         const updates: Record<string, unknown> = {};
         if (edit.geometry) updates.geometry = edit.geometry;

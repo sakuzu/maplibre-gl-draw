@@ -12,8 +12,8 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { circleRowRings } from '../shared/circle-rings.js';
-import { createRowGroupBuilder, type RowInput } from '../table/row-group-builder.js';
-import type { RowGroupData } from '../table/row-group-types.js';
+import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
+import type { RowBlockData } from '../table/row-group-types.js';
 import { orderKey, randomRowGeometry, seededRandom } from '../test-utils.js';
 import {
   createFeatureTablesStore,
@@ -39,25 +39,25 @@ function rowsOf(random: () => number, n: number): RowInput[] {
 }
 
 /** The row groups of rows, built by one builder */
-function build(rows: readonly RowInput[]): RowGroupData[] {
-  const builder = createRowGroupBuilder({ targetRows: 64, rings: circleRowRings });
+function build(rows: readonly RowInput[]): RowBlockData[] {
+  const builder = createRowBlockDataBuilder({ targetRows: 64, rings: circleRowRings });
   for (const row of rows) builder.addRow(row);
   return builder.finish();
 }
 
 /** The tables of a layer `rows` that took in the row groups of each part, in the order given */
-function tablesOf(parts: readonly RowGroupData[][]): FeatureTables {
+function tablesOf(parts: readonly RowBlockData[][]): FeatureTables {
   const { tables, writer } = createFeatureTablesStore();
-  for (const groups of parts) writer.adopt('rows', groups);
-  (featureTablesInternals(tables) as FeatureTablesInternals).flushAdoption();
+  for (const groups of parts) writer.addBlocks('rows', groups);
+  (featureTablesInternals(tables) as FeatureTablesInternals).addQueuedBlocks();
   return tables;
 }
 
 /** What the tables read of the layer: its rows in their order, with their features */
 function readOf(tables: FeatureTables): unknown[] {
-  const view = tables.layer('rows');
+  const view = tables.get('rows');
   if (!view) return [];
-  return Array.from(view.rowsInOrder(0, view.rowCount), (handle) => view.getRow(handle));
+  return Array.from(view.listRowHandles(0, view.rowCount), (handle) => view.getRow(handle));
 }
 
 describe('the rows of a layer built in parts', () => {
@@ -69,13 +69,13 @@ describe('the rows of a layer built in parts', () => {
       // Cut at places at random: the runs of keys follow each other
       const cuts = [0, ...Array.from({ length: 5 }, () => Math.floor(random() * 1_000)), 1_000];
       cuts.sort((a, b) => a - b);
-      const parts: RowGroupData[][] = [];
+      const parts: RowBlockData[][] = [];
       for (let k = 0; k + 1 < cuts.length; k++) {
         if (cuts[k + 1] > cuts[k]) parts.push(build(rows.slice(cuts[k], cuts[k + 1])));
       }
       expect(readOf(tablesOf(parts)), `seed ${seed}`).toEqual(whole);
       // Taken in as they come (the last part first)
-      const again: RowGroupData[][] = [];
+      const again: RowBlockData[][] = [];
       for (let k = 0; k + 1 < cuts.length; k++) {
         if (cuts[k + 1] > cuts[k]) again.push(build(rows.slice(cuts[k], cuts[k + 1])));
       }

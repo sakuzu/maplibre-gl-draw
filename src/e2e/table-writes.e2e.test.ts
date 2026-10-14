@@ -228,8 +228,8 @@ async function drawWritten(
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createFeatureTables: typeof import('../index.js').createFeatureTables;
-            createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
+            createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
+            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;
@@ -252,7 +252,7 @@ async function drawWritten(
         });
       }, 'remote');
       const { tables, writer } = w.e2e.tables.createFeatureTables();
-      const builder = w.e2e.tables.createRowGroupBuilder({});
+      const builder = w.e2e.tables.createRowBlockBuilder({});
       features.forEach((f, i) => {
         builder.addRow({
           id: f.id,
@@ -265,7 +265,7 @@ async function drawWritten(
           locked: false,
         } as never);
       });
-      writer.adopt('rows', builder.finish());
+      writer.addBlocks('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
@@ -301,7 +301,7 @@ async function drawWritten(
       };
       await settle();
       for (const write of writes) {
-        const handle = tables.handleOf(write.id);
+        const handle = tables.findRow(write.id);
         if (handle === undefined) throw new Error(`no row ${write.id}`);
         writer.apply({
           handles: Int32Array.of(handle),

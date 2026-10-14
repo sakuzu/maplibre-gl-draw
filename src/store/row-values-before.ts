@@ -11,7 +11,7 @@
  */
 
 import type { RowField } from '../api/tables.js';
-import type { RowValuesSnapshot } from './types.js';
+import type { RowValues } from './types.js';
 
 /**
  * Where the values of the rows and fields no write read are read from, at the end of the
@@ -43,9 +43,9 @@ interface Column<T> {
  * @internal
  */
 export function combineValuesBefore(
-  parts: readonly RowValuesSnapshot[],
+  parts: readonly RowValues[],
   unread: UnreadValues,
-): RowValuesSnapshot | undefined {
+): RowValues | undefined {
   if (parts.length === 0) return undefined;
   if (parts.length === 1) return parts[0];
   const index = new Map<number, number>();

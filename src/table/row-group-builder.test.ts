@@ -5,18 +5,21 @@ import earcut from 'earcut';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
-import { circleRowRings } from '../shared/circle-rings.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { decodeCanonicalValue } from './canonical-value.js';
 import { searchPackedRTree } from './packed-rtree.js';
 import { pairTriangles } from './row-geometry.js';
-import { createRowGroupBuilder, type RowInput, rowGroupTransferList } from './row-group-builder.js';
+import {
+  blockTransferList,
+  createRowBlockDataBuilder,
+  type RowInput,
+} from './row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
   ROW_FLAG_VISIBLE,
-  type RowGroupData,
+  type RowBlockData,
 } from './row-group-types.js';
 import { GeometryColumnReader } from './table.js';
 import { hashUtf8, utf8String } from './utf8-column.js';
@@ -30,14 +33,14 @@ function row(id: string, order: string, geometry: Geometry | null, extra: Partia
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
 
 /** The ids of every group, group after group */
-function idsOf(groups: readonly RowGroupData[]): string[] {
+function idsOf(groups: readonly RowBlockData[]): string[] {
   return groups.flatMap((group) =>
     Array.from({ length: group.length }, (_, r) => utf8String(group.ids, r)),
   );
 }
 
 /** The coordinates of a row read back through the geometry columns */
-function coordinatesOf(group: RowGroupData, r: number): unknown {
+function coordinatesOf(group: RowBlockData, r: number): unknown {
   const child = group.geometry.types[r];
   if (child < 0) return null;
   const column = new GeometryColumnReader(group.geometry.children[child], undefined, 'child');
@@ -54,7 +57,7 @@ function paired(triangles: readonly number[], base = 0): number[] {
 }
 
 /** The indices of the pairs of triangles of a row */
-function trianglesOf(group: RowGroupData, r: number): number[] {
+function trianglesOf(group: RowBlockData, r: number): number[] {
   const t = group.triangles;
   const wide = Array.from(t.wideRows).indexOf(r);
   if (wide >= 0)
@@ -62,9 +65,9 @@ function trianglesOf(group: RowGroupData, r: number): number[] {
   return Array.from(t.indices.subarray(t.offsets[r], t.offsets[r + 1]));
 }
 
-describe('createRowGroupBuilder', () => {
+describe('createRowBlockDataBuilder', () => {
   it('puts the rows in the order of their keys', () => {
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow(row('c', 'a2', point(0, 0)));
     builder.addRow(row('a', 'a0', point(1, 1)));
     builder.addRow(row('b', 'a1', point(2, 2)));
@@ -77,7 +80,7 @@ describe('createRowGroupBuilder', () => {
   });
 
   it('puts the members of a group at the key of the group', () => {
-    const builder = createRowGroupBuilder({ groups: [{ handle: 4, id: 'g', order: 'a5' }] });
+    const builder = createRowBlockDataBuilder({ groups: [{ handle: 4, id: 'g', order: 'a5' }] });
     builder.addRow(row('y', 'a9', point(0, 0)));
     builder.addRow(row('m2', 'zz', point(0, 0), { group: 4, member: 'b' }));
     builder.addRow(row('x', 'a1', point(0, 0)));
@@ -90,7 +93,7 @@ describe('createRowGroupBuilder', () => {
   });
 
   it('cuts the rows into groups by their number and by their coordinates', () => {
-    const byRows = createRowGroupBuilder({ targetRows: 3 });
+    const byRows = createRowBlockDataBuilder({ targetRows: 3 });
     for (let i = 0; i < 8; i++) byRows.addRow(row(`r${i}`, `k${i}`, point(i, i)));
     const rowGroups = byRows.finish();
     expect(rowGroups.map((group) => group.length)).toEqual([3, 3, 2]);
@@ -100,7 +103,7 @@ describe('createRowGroupBuilder', () => {
       type: 'LineString',
       coordinates: Array.from({ length: n }, (_, i) => [i, 0]),
     });
-    const byVertices = createRowGroupBuilder({ targetVertices: 10 });
+    const byVertices = createRowBlockDataBuilder({ targetVertices: 10 });
     byVertices.addRow(row('a', 'a', line(4)));
     byVertices.addRow(row('b', 'b', line(4)));
     byVertices.addRow(row('c', 'c', line(4)));
@@ -184,7 +187,7 @@ describe('createRowGroupBuilder', () => {
         ],
       },
     ];
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     geometries.forEach((geometry, i) => {
       builder.addRow(row(`g${i}`, `k${i}`, geometry));
     });
@@ -219,7 +222,7 @@ describe('createRowGroupBuilder', () => {
         [6, 6],
       ],
     ];
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow(row('p', 'a', { type: 'Polygon', coordinates: rings }));
     builder.addRow(
       row('l', 'b', {
@@ -250,7 +253,7 @@ describe('createRowGroupBuilder', () => {
       [5, 6],
       [5, 5],
     ];
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow(row('m', 'a', { type: 'MultiPolygon', coordinates: [[a], [b]] }));
     const [group] = builder.finish();
     const first = buildEarcutInput([a as [number, number][]]);
@@ -261,9 +264,9 @@ describe('createRowGroupBuilder', () => {
     ]);
   });
 
-  it('triangulates a Circle from its radius, with the rings of the Circles', () => {
+  it('triangulates a Circle from its radius by default, with the rings of the Circles', () => {
     const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
-    const builder = createRowGroupBuilder({ rings: circleRowRings });
+    const builder = createRowBlockDataBuilder();
     builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
     const [group] = builder.finish();
     const ring = generateCirclePolygon([139.7, 35.7], 1000);
@@ -275,9 +278,11 @@ describe('createRowGroupBuilder', () => {
     expect(group.vertexCount).toBe(ring.length);
   });
 
-  it('draws a Circle as its point without the rings of the Circles', () => {
+  it('draws a Circle as its point with rings that draw none', () => {
     const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder({
+      rings: { draws: () => false, ringOf: () => null, ringVertices: 1 },
+    });
     builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
     const [group] = builder.finish();
     expect(trianglesOf(group, 0)).toEqual([]);
@@ -293,7 +298,7 @@ describe('createRowGroupBuilder', () => {
       ring.push([Math.cos(a), Math.sin(a)]);
     }
     ring.push(ring[0]);
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow(row('big', 'a', { type: 'Polygon', coordinates: [ring] }));
     builder.addRow(
       row('small', 'b', {
@@ -322,7 +327,7 @@ describe('createRowGroupBuilder', () => {
   });
 
   it('shares the styles of the rows and writes the flags', () => {
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow(
       row('a', 'a', point(0, 0), { style: { pointColor: '#ff0000', pointRadius: 4 } }),
     );
@@ -334,7 +339,7 @@ describe('createRowGroupBuilder', () => {
     const [group] = builder.finish();
     expect(group.styles[0]).toBe(group.styles[1]);
     expect(group.styles[2]).not.toBe(group.styles[0]);
-    const dictionary = group.styleDictionary as NonNullable<RowGroupData['styleDictionary']>;
+    const dictionary = group.styleDictionary as NonNullable<RowBlockData['styleDictionary']>;
     const style = (r: number) =>
       decodeCanonicalValue(
         dictionary.bytes,
@@ -352,7 +357,7 @@ describe('createRowGroupBuilder', () => {
   });
 
   it('keeps the attributes, dense and sparse, absent and null apart', () => {
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     for (let i = 0; i < 10; i++) {
       const properties: Record<string, unknown> = { n: i };
       if (i === 3) properties.rare = null;
@@ -370,7 +375,7 @@ describe('createRowGroupBuilder', () => {
   });
 
   it('indexes the rows of a group by their bbox', () => {
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     for (let i = 0; i < 50; i++)
       builder.addRow(row(`r${i}`, `k${String(i).padStart(2, '0')}`, point(i, i)));
     const [group] = builder.finish();
@@ -379,23 +384,23 @@ describe('createRowGroupBuilder', () => {
   });
 
   it('refuses an id added twice and a group it is not given', () => {
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     builder.addRow(row('a', 'a', point(0, 0)));
     expect(() => builder.addRow(row('a', 'b', point(0, 0)))).toThrow();
 
-    const grouped = createRowGroupBuilder();
+    const grouped = createRowBlockDataBuilder();
     grouped.addRow(row('a', 'a', point(0, 0), { group: 1 }));
     grouped.addRow(row('b', 'b', point(0, 0)));
     expect(() => grouped.finish()).toThrow();
   });
 
   it('lists every buffer of the groups once for the transfer', () => {
-    const builder = createRowGroupBuilder({ targetRows: 2 });
+    const builder = createRowBlockDataBuilder({ targetRows: 2 });
     for (let i = 0; i < 3; i++) {
       builder.addRow(row(`r${i}`, `k${i}`, point(i, 0), { properties: { name: `n${i}` } }));
     }
     const groups = builder.finish();
-    const buffers = rowGroupTransferList(groups);
+    const buffers = blockTransferList(groups);
     expect(new Set(buffers).size).toBe(buffers.length);
     expect(buffers).toContain(groups[0].ids.bytes.buffer);
     expect(buffers).toContain(groups[1].properties.columns[0].tags.buffer);

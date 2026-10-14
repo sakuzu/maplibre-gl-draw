@@ -22,14 +22,14 @@ import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { refreshRowShape, writeRowGeometry, writeRowValue } from '../../feature-table/row-write.js';
 import {
+  type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STYLE,
   ROW_WRITE_VALUES,
-  type RowWrite,
 } from '../../feature-table/types.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, Layer } from '../../shared/types/model.js';
-import type { CoordinateDims } from '../../table/coordinates.js';
+import type { CoordinateDimensions } from '../../table/coordinates.js';
 import {
   createTestDrawer,
   feature,
@@ -89,7 +89,7 @@ interface DrawnOptions {
   /** Whether the first frames are left to the caller (they are drawn until settled otherwise) */
   readonly unsettled?: boolean;
   /** The dimensions of the coordinates of the layer (`xy` when omitted) */
-  readonly dims?: CoordinateDims;
+  readonly dims?: CoordinateDimensions;
 }
 
 /** The tables of features drawn in one draw on a context that keeps what the GPU holds */
@@ -98,7 +98,7 @@ function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
     'layer',
     features,
     options.targetRows,
-    options.dims ? { dimsOf: () => options.dims as CoordinateDims } : undefined,
+    options.dims ? { dimensionsOf: () => options.dims as CoordinateDimensions } : undefined,
   );
   const view = { layer: options.layer ?? LAYER };
   const mock = memoryGL();
@@ -291,7 +291,7 @@ function scene(): Feature[] {
 /** The edits of the rows of a scene: written in place, and kept in the features */
 function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
   const group = live.table.groupAt(0);
-  const tell = (row: number, what: number, extra: Partial<RowWrite> = {}): void => {
+  const tell = (row: number, what: number, extra: Partial<InPlaceRowWrite> = {}): void => {
     live.renderer.rowsWritten('layer', [
       { group: group.handle, row, what, sameShape: true, from: 0, to: 0, keys: [], ...extra },
     ]);
@@ -690,7 +690,7 @@ describe('the rows of a layer of z or m', () => {
       coordinates: [building.coordinates[0].map(([x, y, z, m]) => [x, y, z + 5, m + 5])],
     };
     live.writer.apply(
-      rowPatch([live.tables.handleOf('building') as number], { geometry: [geometry] }),
+      rowPatch([live.tables.findRow('building') as number], { geometry: [geometry] }),
     );
     live.settle();
     expect(calls).toEqual({ coords: 0, rows: 0 });
@@ -701,9 +701,7 @@ describe('the rows of a layer of z or m', () => {
       type: 'Polygon',
       coordinates: [building.coordinates[0].map(([x, y, z, m]) => [x + 0.001, y, z, m])],
     };
-    live.writer.apply(
-      rowPatch([live.tables.handleOf('building') as number], { geometry: [moved] }),
-    );
+    live.writer.apply(rowPatch([live.tables.findRow('building') as number], { geometry: [moved] }));
     live.settle();
     expect(calls.coords).toBeGreaterThan(0);
   });

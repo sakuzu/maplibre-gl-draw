@@ -4,14 +4,14 @@
 /**
  * The public surface of the package
  *
- * - The names that the four entries export are pinned in four lists (see "The public
+ * - The names that the five entries export are pinned in five lists (see "The public
  *   surface" in CONTRIBUTING.md): src/index.ts, src/geometry/index.ts and src/table/index.ts
- *   (layer 1) and src/webgl/index.ts (layer 2). Adding or removing a name means editing these
- *   lists as well, so every change to the surface is deliberate.
+ *   (layer 1) and src/kasane/index.ts and src/webgl/index.ts (layer 2). Adding or removing a
+ *   name means editing these lists as well, so every change to the surface is deliberate.
  * - The emitted declarations (with `stripInternal`) are self-contained: nothing that a
  *   public declaration needs was stripped as `@internal`, and every named type that a
  *   public declaration refers to is exported too. A layer 1 declaration counts only the
- *   exports of layer 1.
+ *   exports of layer 1, and of /kasane for its experimental fields.
  */
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,35 +26,16 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
-  'createTableMemoryStore',
-  'ITEM_GROUP',
-  'ITEM_ROW',
-  'CreatedRows',
-  'LocalRowWrite',
-  'RowPlacement',
   'ItemListChange',
   'ItemMove',
-  'itemMovesBetween',
+  'diffItemOrder',
   'ItemOrderChange',
   'ItemPlacement',
   'ItemPosition',
-  'ItemRefs',
-  'RetainToken',
-  'RowRangeMove',
-  'RowValuesSnapshot',
-  'RowApplyOptions',
-  'RowCursor',
-  'RowField',
-  'RowFieldValues',
-  'RowPatch',
-  'RowsChange',
-  'TableGroupField',
-  'TableGroupPatch',
-  'TableScanOptions',
+  'RestoreToken',
   'TablesResource',
   'CompanionProvider',
   'createDraw',
-  'createFeatureTables',
   'Dataset',
   'DatasetBaseStyle',
   'DatasetCollisionThinning',
@@ -96,11 +77,6 @@ const MAIN = [
   'featuresToGeoJSON',
   'FeatureStyle',
   'FeatureStyleResolved',
-  'FeatureTables',
-  'FeatureTablesHooks',
-  'FeatureTablesOptions',
-  'FeatureTablesWorker',
-  'FeatureTablesWriter',
   'featureToGeoJSON',
   'FeatureType',
   'FeatureTypeDefinition',
@@ -117,7 +93,6 @@ const MAIN = [
   'Handle',
   'HandleProvider',
   'HiddenCollection',
-  'HeldWriteOptions',
   'Hit',
   'HitTestContext',
   'InputHandlers',
@@ -128,8 +103,6 @@ const MAIN = [
   'LayerPatch',
   'LayersCollection',
   'LayerStackEntry',
-  'LayerRowsChange',
-  'LayerTableView',
   'LegendEntry',
   'LineRenderer',
   'LineStyle',
@@ -167,7 +140,6 @@ const MAIN = [
   'ProvidersCollection',
   'RenderContext',
   'RenderingOptions',
-  'RowHandle',
   'RuntimeOptions',
   'ScreenContext',
   'ScreenPoint',
@@ -237,51 +209,66 @@ const GEOMETRY = [
 
 /** The table entry (layer 1) */
 const TABLE = [
-  'circleRowRings',
   'Column',
-  'compareRowKeys',
-  'CoordinateDims',
-  'CoordinateSystem',
-  'createRowGroupBuilder',
+  'CoordinateDimensions',
   'createTableBuilder',
   'DictionaryColumn',
   'GeometryType',
-  'GroupKeySource',
-  'mergeRowGroup',
-  'PackedRTree',
   'PreparedTable',
   'prepareTable',
-  'PropertyColumns',
-  'ROW_FLAG_DELETED',
-  'ROW_FLAG_LOCKED',
-  'ROW_FLAG_VISIBLE',
-  'ROW_GROUP_TARGET_ROWS',
-  'ROW_GROUP_TARGET_VERTICES',
-  'RowGroupBuilder',
-  'RowGroupBuilderOptions',
-  'RowGroupData',
-  'RowGroupKey',
-  'RowGroupMerge',
-  'rowGroupTransferList',
-  'RowInput',
-  'RowKeySource',
-  'RowRings',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
   'TableGeometry',
   'TableMixedGeometry',
   'transferList',
-  'TriangleCache',
+];
+
+/**
+ * The Kasane entry (layer 2, experimental): the parts that hold the features of a document as
+ * rows of columns
+ */
+const KASANE = [
+  'CoordinateSystem',
+  'CreatedRows',
+  'createFeatureTables',
+  'createRowBlockBuilder',
+  'createTableStore',
+  'FeatureTables',
+  'FeatureTablesOptions',
+  'FeatureTablesWorker',
+  'FeatureTablesWriter',
+  'GroupEntry',
+  'ITEM_GROUP',
+  'ITEM_ROW',
+  'ItemHandles',
+  'LayerRowsChange',
+  'LayerTableView',
+  'mergeRowBlock',
+  'OpenedApplyOptions',
+  'ROW_BLOCK_TARGET_ROWS',
+  'ROW_BLOCK_TARGET_VERTICES',
+  'RowApplyOptions',
+  'RowBlock',
+  'RowBlockBuilder',
+  'RowBlockBuilderOptions',
+  'RowBlockMerge',
+  'RowCursor',
+  'RowField',
+  'RowFieldValues',
+  'RowHandle',
+  'RowInput',
+  'RowPlacement',
+  'RowRings',
+  'RowsChange',
+  'RowsMove',
+  'RowValues',
+  'RowWrite',
+  'TableGroupField',
+  'TableGroupPatch',
+  'TableScanOptions',
+  'transferList',
   'Utf8Column',
-  'VALUE_ABSENT',
-  'VALUE_FALSE',
-  'VALUE_NESTED',
-  'VALUE_NULL',
-  'VALUE_NUMBER',
-  'VALUE_STRING',
-  'VALUE_TRUE',
-  'ValueColumn',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
@@ -380,12 +367,13 @@ function describeEntry(file: string, list: readonly string[], load: () => Promis
 describeEntry('src/index.ts', MAIN, () => import('./index.js'));
 describeEntry('src/geometry/index.ts', GEOMETRY, () => import('./geometry/index.js'));
 describeEntry('src/table/index.ts', TABLE, () => import('./table/index.js'));
+describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
-describe('the four entries', () => {
-  it('share no name', () => {
-    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...WEBGL];
-    expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual([]);
+describe('the five entries', () => {
+  it('share no name, but the transfer list of /table, which /kasane widens to blocks of rows', () => {
+    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...KASANE, ...WEBGL];
+    expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual(['transferList']);
   });
 });
 
@@ -543,8 +531,9 @@ describe('the emitted declarations', () => {
   const main = resolve(outDir, 'index.d.ts');
   const geometry = resolve(outDir, 'geometry/index.d.ts');
   const table = resolve(outDir, 'table/index.d.ts');
+  const kasane = resolve(outDir, 'kasane/index.d.ts');
   const webgl = resolve(outDir, 'webgl/index.d.ts');
-  const entries = [main, geometry, table, webgl];
+  const entries = [main, geometry, table, kasane, webgl];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -566,15 +555,23 @@ describe('the emitted declarations', () => {
     expect(errors).toEqual([]);
   }, 60_000);
 
-  it('export every named type that a layer 1 declaration refers to, from layer 1', () => {
+  it('export every named type that a layer 1 declaration refers to, from layer 1 or /kasane', () => {
     setup();
+    // The fields of layer 1 that a Store of rows fills (`StoreView.tables`, `Store.applyRows`,
+    // `DocumentChange.rows`, the moves of many rows of `ItemOrderChange`) are experimental, and
+    // their types are exported by /kasane only
     expect(
-      findForgottenExports(program, files, [main, geometry, table], [main, geometry, table]),
+      findForgottenExports(
+        program,
+        files,
+        [main, geometry, table, kasane],
+        [main, geometry, table],
+      ),
     ).toEqual([]);
   }, 60_000);
 
   it('export every named type that a layer 2 declaration refers to', () => {
     setup();
-    expect(findForgottenExports(program, files, entries, [webgl])).toEqual([]);
+    expect(findForgottenExports(program, files, entries, [webgl, kasane])).toEqual([]);
   }, 60_000);
 });

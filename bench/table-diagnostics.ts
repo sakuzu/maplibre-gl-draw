@@ -49,6 +49,8 @@ export interface TableDiagnostics {
   editStats(): TableEditStats;
   /** Sets the time the next versions of row groups may take to build while the camera moves */
   setVersionBudgetWhileMoving(ms: number): void;
+  /** The bytes the GPU holds per renderer */
+  gpuBytesByRenderer(): Readonly<Record<string, number>>;
 }
 
 /** The hooks of measurement of a draw instance */

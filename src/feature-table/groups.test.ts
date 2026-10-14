@@ -91,7 +91,7 @@ describe('the groups of features written', () => {
     const { tables, writer, internals, groupHandleOf } = setup;
     writer.applyGroups(groupPatch([7], { id: ['h'], order: [key(5500)], layerId: ['a'] }));
     reference.groups.set('h', { order: key(5500), layerId: 'a', visible: true });
-    const handles = ['p1', 'p2'].map((id) => tables.handleOf(id) as number);
+    const handles = ['p1', 'p2'].map((id) => tables.findRow(id) as number);
     writer.apply(rowPatch(handles, { groupId: ['h', 'h'], member: [key(1), key(2)] }));
     for (const id of ['p1', 'p2']) {
       Object.assign(reference.rows.get(id) as ReferenceRow, {
@@ -111,14 +111,14 @@ describe('the groups of features written', () => {
     const setup = tablesOfReference(reference, ['a'], 8);
     const { tables, writer, internals, groupHandleOf } = setup;
     const sides = gate(internals);
-    const before = Array.from(tables.layer('a')?.rowsInOrder(0, 100) ?? []);
+    const before = Array.from(tables.get('a')?.listRowHandles(0, 100) ?? []);
     const keysBefore = internals
       .layerTable('a')
       ?.rowOrder()
       .groups.map((group) => group.data.itemKeys);
     writer.applyGroups(groupPatch([groupHandleOf('g')], { order: [key(55_500)] }));
     // Until swapped in, the order before
-    expect(Array.from(tables.layer('a')?.rowsInOrder(0, 100) ?? [])).toEqual(before);
+    expect(Array.from(tables.get('a')?.listRowHandles(0, 100) ?? [])).toEqual(before);
     expect(internals.builtVersions('a').some((v) => v.orders !== null)).toBe(true);
     sides.open();
     internals.swapVersions();
@@ -135,7 +135,7 @@ describe('the groups of features written', () => {
     const { tables, writer, internals, groupHandleOf } = setup;
     const sides = gate(internals);
     // A version of the group of p3 being made
-    writer.apply(rowPatch([tables.handleOf('p4') as number], { order: [key(4500)] }));
+    writer.apply(rowPatch([tables.findRow('p4') as number], { order: [key(4500)] }));
     (reference.rows.get('p4') as ReferenceRow).order = key(4500);
     internals.flushVersions();
     const made = internals.builtVersions('a');
@@ -156,18 +156,20 @@ describe('the groups of features written', () => {
     const reference = withMembers(30);
     const setup = tablesOfReference(reference, ['a'], 8);
     const { tables, writer, internals, groupHandleOf } = setup;
-    const p13 = tables.handleOf('p13') as number;
+    const p13 = tables.findRow('p13') as number;
     writer.apply(rowPatch([p13], { member: [key(99)] }));
     expect(internals.placeOf(p13)?.group.delta).toBe(true);
     writer.applyGroups(groupPatch([groupHandleOf('g')], { visible: [false] }));
-    const drawn = Array.from(tables.layer('a')?.listDrawnRows([-1, -1, 100, 1]) ?? []);
+    const drawn = Array.from(tables.get('a')?.listDrawnRows([-1, -1, 100, 1]) ?? []);
     expect(
-      drawn.map((h) => tables.idOf(h)).filter((id) => ['p3', 'p13', 'p23'].includes(id as string)),
+      drawn
+        .map((h) => tables.getRowId(h))
+        .filter((id) => ['p3', 'p13', 'p23'].includes(id as string)),
     ).toEqual([]);
     const place = internals.placeOf(p13);
     expect(place && (place.group.state[place.row] & STATE_HIDDEN_GROUP) !== 0).toBe(true);
     writer.applyGroups(groupPatch([groupHandleOf('g')], { visible: [true] }));
-    expect(Array.from(tables.layer('a')?.listDrawnRows([-1, -1, 100, 1]) ?? [])).toHaveLength(30);
+    expect(Array.from(tables.get('a')?.listDrawnRows([-1, -1, 100, 1]) ?? [])).toHaveLength(30);
   });
 
   it('take a group out once no row names it', () => {
@@ -177,7 +179,7 @@ describe('the groups of features written', () => {
     const g = groupHandleOf('g');
     writer.applyGroups(groupPatch([g], {}, [1]));
     expect(internals.groups.has(g)).toBe(true);
-    const members = ['p3', 'p13'].map((id) => tables.handleOf(id) as number);
+    const members = ['p3', 'p13'].map((id) => tables.findRow(id) as number);
     writer.apply(
       rowPatch(members, { groupId: [undefined, undefined], member: [undefined, undefined] }),
     );

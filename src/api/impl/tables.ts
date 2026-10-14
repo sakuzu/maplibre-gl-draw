@@ -6,7 +6,7 @@
  */
 
 import { DrawError } from '../errors.js';
-import type { FeatureTables, RowPatch, TablesResource } from '../tables.js';
+import type { FeatureTables, RowValues, TablesResource } from '../tables.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, isRecord, notFound } from './shared.js';
 
@@ -37,15 +37,15 @@ export function createTables(deps: Pick<ResourceDeps, 'store'>): TablesResource 
         throw new DrawError('invalid-state', 'The Store does not hold its features as rows');
       }
       checkPatch(patch, tables);
-      return store.applyRows(patch);
+      return store.restoreRows(patch);
     },
   };
 }
 
 /** Throws a DrawError unless the patch names rows there are, with one value per row */
-function checkPatch(patch: RowPatch, tables: FeatureTables): void {
+function checkPatch(patch: RowValues, tables: FeatureTables): void {
   if (!isRecord(patch)) throw invalidInput('The patch must be an object');
-  const { handles, fields, deleted } = patch as Partial<RowPatch>;
+  const { handles, fields, deleted } = patch as Partial<RowValues>;
   if (!(handles instanceof Int32Array)) throw invalidInput('The handles must be an Int32Array');
   if (!(fields instanceof Map)) throw invalidInput('The fields must be a Map');
   const n = handles.length;
@@ -61,6 +61,6 @@ function checkPatch(patch: RowPatch, tables: FeatureTables): void {
     throw invalidInput('The deletions must be a Uint8Array of one value per row');
   }
   for (const handle of handles) {
-    if (tables.idOf(handle) === undefined) throw notFound('row', handle);
+    if (tables.getRowId(handle) === undefined) throw notFound('row', handle);
   }
 }

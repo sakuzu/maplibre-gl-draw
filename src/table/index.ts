@@ -44,10 +44,8 @@ export type { Table } from './types.js';
 export { prepareTable, transferList } from './prepare.js';
 export type { PreparedTable } from './types.js';
 
-// Coordinates
-export type { CoordinateDims, CoordinateSystem } from './coordinates.js';
-
 // Column types
+export type { CoordinateDimensions } from './coordinates.js';
 export type {
   Column,
   DictionaryColumn,
@@ -55,37 +53,3 @@ export type {
   TableGeometry,
   TableMixedGeometry,
 } from './types.js';
-
-// Rows of a document held as columns, built in a Worker
-export type {
-  RowGroupBuilder,
-  RowGroupBuilderOptions,
-  RowGroupKey,
-  RowInput,
-} from './row-group-builder.js';
-export {
-  createRowGroupBuilder,
-  ROW_GROUP_TARGET_ROWS,
-  ROW_GROUP_TARGET_VERTICES,
-  rowGroupTransferList,
-} from './row-group-builder.js';
-export type { RowRings } from './row-rings.js';
-export { circleRowRings } from '../shared/circle-rings.js';
-export type { RowGroupMerge } from './row-group-merge.js';
-export { mergeRowGroup } from './row-group-merge.js';
-export type { PackedRTree } from './packed-rtree.js';
-export type { RowGroupData, TriangleCache } from './row-group-types.js';
-export { ROW_FLAG_DELETED, ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE } from './row-group-types.js';
-export type { GroupKeySource, RowKeySource } from './row-keys.js';
-export { compareRowKeys } from './row-keys.js';
-export type { Utf8Column } from './utf8-column.js';
-export type { PropertyColumns, ValueColumn } from './value-column.js';
-export {
-  VALUE_ABSENT,
-  VALUE_FALSE,
-  VALUE_NESTED,
-  VALUE_NULL,
-  VALUE_NUMBER,
-  VALUE_STRING,
-  VALUE_TRUE,
-} from './value-column.js';

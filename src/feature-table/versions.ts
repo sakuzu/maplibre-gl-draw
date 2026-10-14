@@ -8,7 +8,7 @@
  * values written in place past a limit, its rows moved far, are kept beside it (the delta, the
  * overrides, the index of the moved rows) until the next version of the group takes them. The
  * next version is the rows of the group that stay and the rows of the delta whose keys fall in
- * its range, merged in the order of the layer (`mergeRowGroup`, on the main thread or in the
+ * its range, merged in the order of the layer (`mergeRowBlockData`, on the main thread or in the
  * Worker of the host), and cut into groups of the target sizes when it grew past twice them. A
  * small group is merged with its neighbor.
  *
@@ -27,11 +27,15 @@
  */
 
 import type { BoundingBox, RowsChange } from '../shared/types/model.js';
-import type { CoordinateDims, CoordinateSystem } from '../table/coordinates.js';
-import type { RowGroupBuilderOptions, RowGroupKey, RowInput } from '../table/row-group-builder.js';
-import { ROW_GROUP_TARGET_ROWS, ROW_GROUP_TARGET_VERTICES } from '../table/row-group-builder.js';
-import { mergeRowGroup, type RowGroupMerge } from '../table/row-group-merge.js';
-import type { RowGroupData } from '../table/row-group-types.js';
+import type { CoordinateDimensions, CoordinateSystem } from '../table/coordinates.js';
+import type { GroupEntry, RowBlockBuilderOptions, RowInput } from '../table/row-group-builder.js';
+import { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '../table/row-group-builder.js';
+import {
+  mergeRowBlockData,
+  type RowBlockDataMerge,
+  type RowBlockMerge,
+} from '../table/row-group-merge.js';
+import type { RowBlock, RowBlockData } from '../table/row-group-types.js';
 import { createRowGroup, type LayerTable, type RowGroup } from './layer-table.js';
 import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './types.js';
 
@@ -40,31 +44,31 @@ import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './
  * `@sakuzu/maplibre-gl-draw/table` subpath, run there on copies of the columns.
  *
  * What is handed over can be posted as it is: it holds no function. The Worker gives the
- * builder the rings of the Circles (`circleRowRings`), and the system of the coordinates to the
- * builder and the merge when the tables are given one (`FeatureTablesOptions.coordinates`).
+ * system of the coordinates to the builder and the merge when the tables are given one
+ * (`FeatureTablesOptions.coordinateSystem`); the builder draws the rings of the Circles by
+ * default.
  *
  * @example A Worker of the host
  * ```ts
  * // in the Worker
  * import {
- *   circleRowRings,
- *   createRowGroupBuilder,
- *   mergeRowGroup,
- *   rowGroupTransferList,
- * } from '@sakuzu/maplibre-gl-draw/table';
+ *   createRowBlockBuilder,
+ *   mergeRowBlock,
+ *   transferList,
+ * } from '@sakuzu/maplibre-gl-draw/kasane';
  * self.onmessage = ({ data }) => {
- *   const groups = data.merge
- *     ? mergeRowGroup(data.merge)
- *     : build(data.rows, { ...data.options, rings: circleRowRings });
- *   self.postMessage({ id: data.id, groups }, rowGroupTransferList(groups));
+ *   const blocks = data.merge
+ *     ? mergeRowBlock(data.merge)
+ *     : build(data.rows, data.options); // createRowBlockBuilder, addRow, finish
+ *   self.postMessage({ id: data.id, blocks }, transferList(blocks));
  * };
  * ```
  */
 export interface FeatureTablesWorker {
-  /** Merges rows of row groups (`mergeRowGroup`): the next version of row groups */
-  merge(merge: RowGroupMerge): Promise<RowGroupData[]>;
-  /** Builds rows into row groups (`createRowGroupBuilder`): many new rows written at once */
-  build(rows: readonly RowInput[], options: RowGroupBuilderOptions): Promise<RowGroupData[]>;
+  /** Merges rows of blocks (`mergeRowBlock`): the next version of blocks */
+  merge(merge: RowBlockMerge): Promise<RowBlock[]>;
+  /** Builds rows into blocks (`createRowBlockBuilder`): many new rows written at once */
+  build(rows: readonly RowInput[], options: RowBlockBuilderOptions): Promise<RowBlock[]>;
 }
 
 /**
@@ -196,21 +200,21 @@ export interface VersionHost {
    * Builds rows into one row group of coordinates of dimensions, numbered and with their handles
    * (null for none)
    */
-  buildRows(inputs: readonly RowInput[], dims: CoordinateDims): RowGroupData | null;
+  buildRows(inputs: readonly RowInput[], dims: CoordinateDimensions): RowBlockData | null;
   /** The system of the coordinates of the rows */
   readonly coordinates: CoordinateSystem;
   /** The number of coordinates a row that draws a ring is counted as (`RowRings.ringVertices`) */
   readonly ringVertices: number;
   /** The keys of the order of the groups of features */
-  readonly groupKeys: RowGroupMerge['groups'];
+  readonly groupKeys: RowBlockDataMerge['groups'];
   /** The same as a list (what a Worker is sent) */
-  groupKeyList(): RowGroupKey[];
+  groupKeyList(): GroupEntry[];
   /** The version of the key of the order of a group of features */
   orderVersionOf(group: GroupHandle): number;
   /** Puts the groups of a version in place of the ones it replaces (see `GroupVersions.swap`) */
   swapIn(version: GroupVersion, waiting: WaitingCopies): RowsChange | null;
   /** Counts the styles of the rows of groups as used (or not any more) */
-  retainStyles(data: RowGroupData, count: 1 | -1): void;
+  retainStyles(data: RowBlockData, count: 1 | -1): void;
   /** The Worker of the host (none: everything on the main thread) */
   readonly worker: FeatureTablesWorker | undefined;
   /** Asks for a frame (work is left) */
@@ -433,8 +437,8 @@ export class GroupVersions {
     const groups = [group];
     const data = group.data;
     if (
-      data.length < ROW_GROUP_TARGET_ROWS / 4 &&
-      data.vertexCount < ROW_GROUP_TARGET_VERTICES / 4 &&
+      data.length < ROW_BLOCK_TARGET_ROWS / 4 &&
+      data.vertexCount < ROW_BLOCK_TARGET_VERTICES / 4 &&
       layer.groupCount > 1
     ) {
       const at = layer.orderOf(group.handle);
@@ -485,7 +489,7 @@ export class GroupVersions {
     const worker = host.worker;
     if (worker && rows > FOLD_INLINE_ROWS) {
       // What is posted holds no function: the Worker has its own system of coordinates
-      const { coordinates: _coordinates, ...posted } = merge;
+      const { coordinateSystem: _coordinates, ...posted } = merge;
       worker.merge({ ...posted, groups: host.groupKeyList() }).then(
         (built) => {
           if (version.status !== 'building') return;
@@ -496,7 +500,8 @@ export class GroupVersions {
             for (const group of groups) this.markDue(group.handle);
             return;
           }
-          this.finish(version, built);
+          // The host builds and merges with the builder and the merge of the library
+          this.finish(version, built as RowBlockData[]);
           host.requestWork();
         },
         (error) => {
@@ -507,7 +512,7 @@ export class GroupVersions {
       return;
     }
     const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    this.finish(version, mergeRowGroup(merge));
+    this.finish(version, mergeRowBlockData(merge));
     this.lastMergeMs =
       (typeof performance !== 'undefined' ? performance.now() : Date.now()) - start;
   }
@@ -520,9 +525,9 @@ export class GroupVersions {
     layer: LayerTable,
     groups: readonly RowGroup[],
     dropped: RowHandle[],
-  ): RowGroupMerge {
+  ): RowBlockDataMerge {
     const host = this.host;
-    const sources: RowGroupData[] = [];
+    const sources: RowBlockData[] = [];
     const pairs: number[] = [];
     const inputs: RowInput[] = [];
     for (const group of groups) {
@@ -577,9 +582,9 @@ export class GroupVersions {
       rows: Int32Array.from(pairs),
       groups: host.groupKeys,
       cutPast: 2,
-      dims: layer.dims,
+      dimensions: layer.dims,
       ringVertices: host.ringVertices,
-      coordinates: host.coordinates,
+      coordinateSystem: host.coordinates,
     };
   }
 
@@ -587,7 +592,7 @@ export class GroupVersions {
    * The versions of the keys of the groups of features the rows of a merge name (a version built
    * with other keys has its rows in another order)
    */
-  private keysOf(merge: RowGroupMerge): Map<GroupHandle, number> {
+  private keysOf(merge: RowBlockDataMerge): Map<GroupHandle, number> {
     const out = new Map<GroupHandle, number>();
     for (let i = 0; i < merge.rows.length; i += 2) {
       const group = merge.sources[merge.rows[i]].groups[merge.rows[i + 1]];
@@ -605,7 +610,7 @@ export class GroupVersions {
   }
 
   /** Makes the groups of a version built (their styles counted while they are held) */
-  private finish(version: GroupVersion, built: RowGroupData[]): void {
+  private finish(version: GroupVersion, built: RowBlockData[]): void {
     const host = this.host;
     const reuse = version.replaces.length === 1 && built.length === 1;
     version.groups = built.map((data) => {
@@ -663,7 +668,7 @@ export class GroupVersions {
   startReorder(
     layer: LayerTable,
     groups: RowGroup[],
-    built: RowGroupData[],
+    built: RowBlockData[],
     orders: ReadonlyMap<GroupHandle, string>,
   ): GroupVersion {
     for (const group of groups) this.dropLock(group.handle);

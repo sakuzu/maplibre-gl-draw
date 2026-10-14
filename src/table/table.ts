@@ -17,7 +17,7 @@
 
 import type { Geometry, Position } from 'geojson';
 import type { Coordinate, Feature, FeatureCoordinates } from '../shared/types/model.js';
-import { type CoordinateDims, isCoordinateDims, strideOf } from './coordinates.js';
+import { type CoordinateDimensions, isCoordinateDimensions, strideOf } from './coordinates.js';
 import type {
   Column,
   DictionaryColumn,
@@ -88,7 +88,7 @@ export class GeometryColumnReader {
   readonly type: GeometryType;
   readonly coords: Float64Array;
   /** The dimensions of the coordinates */
-  readonly dims: CoordinateDims;
+  readonly dimensions: CoordinateDimensions;
   /** The number of values per coordinate (2 to 4) */
   readonly stride: number;
   readonly offsets: readonly Int32Array[];
@@ -111,12 +111,9 @@ export class GeometryColumnReader {
     if (!(geometry.coords instanceof Float64Array)) {
       throw new Error(`Table: ${path}.coords must be a Float64Array`);
     }
-    if ('dimensions' in geometry) {
-      throw new Error(`Table: ${at}dimensions is replaced by dims ('xy', 'xyz', 'xym', 'xyzm')`);
-    }
-    const dims = geometry.dims ?? 'xy';
-    if (!isCoordinateDims(dims)) {
-      throw new Error(`Table: ${at}dims must be 'xy', 'xyz', 'xym' or 'xyzm' (got ${dims})`);
+    const dims = geometry.dimensions ?? 'xy';
+    if (!isCoordinateDimensions(dims)) {
+      throw new Error(`Table: ${at}dimensions must be 'xy', 'xyz', 'xym' or 'xyzm' (got ${dims})`);
     }
     const stride = strideOf(dims);
     const offsets = geometry.offsets ?? [];
@@ -156,7 +153,7 @@ export class GeometryColumnReader {
 
     this.type = geometry.type;
     this.coords = geometry.coords;
-    this.dims = dims;
+    this.dimensions = dims;
     this.stride = stride;
     this.offsets = offsets;
     this.length = length;

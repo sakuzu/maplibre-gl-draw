@@ -14,7 +14,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { GPU_STATE_BULK, STATE_BULK, toGpuState } from '../../feature-table/row-state.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
+import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Layer } from '../../store/types.js';
 import { createMapStub, internalsOf } from '../../test-utils.js';
 import { getBoxMarkedFeatureIds, getSelectedFeatureIds } from '../../view/ui/helper.js';
@@ -60,7 +60,7 @@ function square(id: string, x: number, y: number): Feature {
 /** The same squares in a Store of rows or of objects, with an instance over it */
 function setup(rows: boolean): Instance {
   vi.useFakeTimers();
-  const store = rows ? createTableMemoryStore().store : new MemoryStore();
+  const store = rows ? createTableStore().store : new MemoryStore();
   const base = {
     id: 'l',
     name: 'l',
@@ -145,7 +145,7 @@ function drawBox(
 /** Whether a row is marked, in the sets of handles and in the byte the GPU reads */
 function marked(tables: FeatureTables, id: string): [boolean, boolean] {
   const internals = featureTablesInternals(tables);
-  const handle = tables.handleOf(id) ?? -1;
+  const handle = tables.findRow(id) ?? -1;
   const place = internals?.placeOf(handle);
   const copy = place ? place.group.state[place.row] : 0;
   return [
@@ -175,14 +175,14 @@ describe('a box drawn over a Store of rows', () => {
       expect([...(getBoxMarkedFeatureIds(rows.store) ?? [])].sort()).toEqual(shownByObjects[index]);
       // Marked, not selected nor held
       expect(rows.store.getSelection().ids).toEqual([]);
-      expect(internalsOf(tables).heldFeature('a')).toBeUndefined();
+      expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
       expect(marked(tables, 'a')).toEqual([true, true]);
       expect(marked(tables, 'b')).toEqual(index === 1 ? [true, true] : [false, false]);
       expect(marked(tables, 'locked')).toEqual([false, false]);
     });
     // Let go: selected and held, no mark left
     expect(rows.store.getSelection().ids).toEqual(['a']);
-    expect(internalsOf(tables).heldFeature('a')).toBeDefined();
+    expect(internalsOf(tables).getOpenedFeature('a')).toBeDefined();
     expect(getBoxMarkedFeatureIds(rows.store)).toBeNull();
     expect(featureTablesInternals(tables)?.states.bulkHandles().size).toBe(0);
     for (const id of ['a', 'b', 'c']) expect(marked(tables, id)).toEqual([false, false]);

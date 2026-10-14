@@ -38,7 +38,7 @@ describe('the delta of a layer', () => {
     const reference = referenceOf(random, 60, ['a']);
     const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a']);
     const row = reference.rows.get('r10') as ReferenceRow;
-    const handle = tables.handleOf('r10') as number;
+    const handle = tables.findRow('r10') as number;
     const before = internals.placeOf(handle);
     writer.apply(patchOf([handle], { order: [key(999_999)] }));
     row.order = key(999_999);
@@ -47,8 +47,8 @@ describe('the delta of a layer', () => {
     expect(internals.placeOf(handle)?.group.delta).toBe(true);
     // The copy in its group is hidden from the drawing and the readers
     expect(before && (before.group.state[before.row] & STATE_HIDDEN_DELTA) !== 0).toBe(true);
-    expect(tables.layer('a')?.listDrawnRows([-100, -100, 100, 100]).includes(handle)).toBe(true);
-    const drawn = Array.from(tables.layer('a')?.listDrawnRows([-100, -100, 100, 100]) ?? []);
+    expect(tables.get('a')?.listDrawnRows([-100, -100, 100, 100]).includes(handle)).toBe(true);
+    const drawn = Array.from(tables.get('a')?.listDrawnRows([-100, -100, 100, 100]) ?? []);
     expect(drawn.filter((h) => h === handle)).toHaveLength(1);
   });
 
@@ -56,7 +56,7 @@ describe('the delta of a layer', () => {
     const random = seededRandom(2);
     const reference = referenceOf(random, 40, ['a', 'b']);
     const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a', 'b']);
-    const moved = tables.handleOf('r3') as number;
+    const moved = tables.findRow('r3') as number;
     writer.apply(patchOf([moved], { layerId: ['b'], order: [key(10)] }));
     Object.assign(reference.rows.get('r3') as ReferenceRow, { layerId: 'b', order: key(10) });
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
@@ -86,7 +86,7 @@ describe('the delta of a layer', () => {
     const random = seededRandom(3);
     const reference = referenceOf(random, 30, ['a']);
     const { tables, writer, internals } = tablesOf(reference, ['a']);
-    const handle = tables.handleOf('r5') as number;
+    const handle = tables.findRow('r5') as number;
     writer.apply(patchOf([handle], { order: [key(1)] }));
     const delta = internals.layerTable('a')?.delta;
     const slot = internals.ids.deltaSlot(handle);
@@ -102,7 +102,7 @@ describe('the delta of a layer', () => {
     expect(delta?.group).toBe(group);
     expect(delta?.revision).toBe(revision);
     expect(delta?.writtenOf(slot)).toBeGreaterThan(first);
-    expect(tables.layer('a')?.valueAt(handle, 'name')).toBe('written');
+    expect(tables.get('a')?.getRowValue(handle, 'name')).toBe('written');
     expect(writes).toHaveLength(1);
     expect((writes[0] as { group: number }).group).toBe(delta?.handle);
   });
@@ -111,7 +111,7 @@ describe('the delta of a layer', () => {
     const random = seededRandom(4);
     const reference = referenceOf(random, 30, ['a']);
     const { tables, internals, groupHandleOf } = tablesOf(reference, ['a']);
-    const handles = ['r1', 'r2', 'r20'].map((id) => tables.handleOf(id) as number);
+    const handles = ['r1', 'r2', 'r20'].map((id) => tables.findRow(id) as number);
     internals.toDelta(handles);
     expect(internals.deltaRowCount()).toBe(3);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
@@ -121,8 +121,8 @@ describe('the delta of a layer', () => {
     const random = seededRandom(5);
     const reference = referenceOf(random, 20, ['a', 'b']);
     const { tables, writer } = tablesOf(reference, ['a', 'b']);
-    const a = tables.handleOf('r0') as number;
-    const b = tables.handleOf('r1') as number;
+    const a = tables.findRow('r0') as number;
+    const b = tables.findRow('r1') as number;
     const change = writer.apply(
       patchOf(
         [a, b],

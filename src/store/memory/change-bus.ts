@@ -30,7 +30,7 @@ import type {
   LayerRowsChange,
   RowField,
   RowsChange,
-  RowValuesSnapshot,
+  RowValues,
   StoreChange,
   UpdateSource,
 } from '../types.js';
@@ -142,8 +142,8 @@ export function mergeRowsChanges(a: RowsChange, b: RowsChange): RowsChange {
  * The values before of two writes of a transaction: the rows of both, a row with the values it had
  * before the first write of it (a field the first did not read is read in the second)
  */
-function mergeSnapshots(a: RowValuesSnapshot, b: RowValuesSnapshot): RowValuesSnapshot {
-  const rowsOf = (snapshot: RowValuesSnapshot) =>
+function mergeSnapshots(a: RowValues, b: RowValues): RowValues {
+  const rowsOf = (snapshot: RowValues) =>
     new Map(Array.from(snapshot.handles, (handle, i) => [handle, i]));
   const ra = rowsOf(a);
   const rb = rowsOf(b);
@@ -177,9 +177,9 @@ function mergeSnapshots(a: RowValuesSnapshot, b: RowValuesSnapshot): RowValuesSn
  * between the state before the first and after the second
  */
 export function mergeHeld(
-  a: NonNullable<StoreChange['held']>,
-  b: NonNullable<StoreChange['held']>,
-): NonNullable<StoreChange['held']> {
+  a: NonNullable<StoreChange['opened']>,
+  b: NonNullable<StoreChange['opened']>,
+): NonNullable<StoreChange['opened']> {
   const added = new Map(a.added.map((feature) => [feature.id, feature]));
   const removed = new Set(a.removed);
   for (const id of b.removed) {
@@ -229,7 +229,8 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   // order: the moves in the order they were made (appended, so that every one is undone)
   if (changes.order) target.order = appendField(target.order, changes.order);
   // What keeps the rows deleted: one per transaction, the first given
-  if (changes.retain !== undefined && target.retain === undefined) target.retain = changes.retain;
+  if (changes.restoreToken !== undefined && target.restoreToken === undefined)
+    target.restoreToken = changes.restoreToken;
 
   // selection (overwritten)
   if (changes.selection) target.selection = changes.selection;
@@ -255,8 +256,8 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   }
 
   // rows made features and no longer (the difference over the transaction)
-  if (changes.held) {
-    target.held = target.held ? mergeHeld(target.held, changes.held) : changes.held;
+  if (changes.opened) {
+    target.opened = target.opened ? mergeHeld(target.opened, changes.opened) : changes.opened;
   }
 
   // files

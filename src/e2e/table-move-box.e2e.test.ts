@@ -158,8 +158,8 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createRowGroupBuilder: typeof import('../table/row-group-builder.js').createRowGroupBuilder;
-            createTableMemoryStore: typeof import('../index.js').createTableMemoryStore;
+            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
+            createTableStore: typeof import('../store/table-memory.js').createTableStore;
           };
           internals: { MemoryContractStore: new () => Contract };
         };
@@ -176,10 +176,10 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
       };
       let store: Contract;
       if (form === 'rows') {
-        const made = w.e2e.tables.createTableMemoryStore({ moveHeldByStateFrom: 2 });
+        const made = w.e2e.tables.createTableStore({ moveOpenedByStateFrom: 2 });
         store = made.store as unknown as Contract;
         store.createLayer({ ...layer, kind: 'table' } as never);
-        const builder = w.e2e.tables.createRowGroupBuilder({});
+        const builder = w.e2e.tables.createRowBlockBuilder({});
         features.forEach((f, i) => {
           builder.addRow({
             id: f.id,
@@ -192,7 +192,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
             locked: false,
           } as never);
         });
-        made.writer.adopt('rows', builder.finish());
+        made.writer.addBlocks('rows', builder.finish());
       } else {
         store = new w.e2e.internals.MemoryContractStore();
         const contract = store;
@@ -324,10 +324,10 @@ async function moveHeld(
         };
       };
       const store = w.store;
-      const tables = store.tables as import('../index.js').FeatureTables;
+      const tables = store.tables as import('../kasane/index.js').FeatureTables;
       const internals = w.e2e.internals.featureTablesInternals(tables);
       if (!internals) throw new Error('the Store of the page holds no rows');
-      internals.hold(
+      internals.open(
         'e2e',
         geometries.map((f) => f.id),
       );
@@ -341,7 +341,7 @@ async function moveHeld(
         }
       });
       return before.every((f) => {
-        const row = tables.layer('rows')?.getRow(tables.handleOf(f.id) ?? -1);
+        const row = tables.get('rows')?.getRow(tables.findRow(f.id) ?? -1);
         return JSON.stringify(row?.geometry) === JSON.stringify(f.geometry);
       });
     },

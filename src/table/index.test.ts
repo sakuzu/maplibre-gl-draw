@@ -23,58 +23,23 @@ const SRC = resolve(here, '..');
 
 /** The names the entry exports, values and types */
 const EXPORTS = [
-  'circleRowRings',
   'Column',
-  'compareRowKeys',
-  'CoordinateDims',
-  'CoordinateSystem',
-  'createRowGroupBuilder',
+  'CoordinateDimensions',
   'createTableBuilder',
   'DictionaryColumn',
   'GeometryType',
-  'GroupKeySource',
-  'mergeRowGroup',
-  'PackedRTree',
   'prepareTable',
   'PreparedTable',
-  'PropertyColumns',
-  'ROW_FLAG_DELETED',
-  'ROW_FLAG_LOCKED',
-  'ROW_FLAG_VISIBLE',
-  'ROW_GROUP_TARGET_ROWS',
-  'ROW_GROUP_TARGET_VERTICES',
-  'RowGroupBuilder',
-  'RowGroupBuilderOptions',
-  'RowGroupData',
-  'RowGroupKey',
-  'RowGroupMerge',
-  'rowGroupTransferList',
-  'RowInput',
-  'RowKeySource',
-  'RowRings',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
   'TableGeometry',
   'TableMixedGeometry',
   'transferList',
-  'TriangleCache',
-  'Utf8Column',
-  'VALUE_ABSENT',
-  'VALUE_FALSE',
-  'VALUE_NESTED',
-  'VALUE_NULL',
-  'VALUE_NUMBER',
-  'VALUE_STRING',
-  'VALUE_TRUE',
-  'ValueColumn',
 ];
 
-/**
- * The packages the entry loads at runtime: earcut triangulates the fills of the rows as they
- * are built, and depends on nothing itself
- */
-const PACKAGES = ['earcut'];
+/** The packages the entry loads at runtime: none */
+const PACKAGES: string[] = [];
 
 /** The runtime imports of a file (type-only imports are erased) */
 function runtimeImports(file: string): string[] {
@@ -123,27 +88,10 @@ describe('the table subpath', () => {
     expect(exportedNames().sort(byName)).toEqual([...EXPORTS].sort(byName));
   });
 
-  it('exports at runtime the building, the preparation and the transfer lists', () => {
+  it('exports at runtime the building, the preparation and the transfer list', () => {
     expect(Object.keys(table).sort()).toEqual([
-      'ROW_FLAG_DELETED',
-      'ROW_FLAG_LOCKED',
-      'ROW_FLAG_VISIBLE',
-      'ROW_GROUP_TARGET_ROWS',
-      'ROW_GROUP_TARGET_VERTICES',
-      'VALUE_ABSENT',
-      'VALUE_FALSE',
-      'VALUE_NESTED',
-      'VALUE_NULL',
-      'VALUE_NUMBER',
-      'VALUE_STRING',
-      'VALUE_TRUE',
-      'circleRowRings',
-      'compareRowKeys',
-      'createRowGroupBuilder',
       'createTableBuilder',
-      'mergeRowGroup',
       'prepareTable',
-      'rowGroupTransferList',
       'tableFromFeatures',
       'transferList',
     ]);
@@ -168,28 +116,13 @@ describe('the table subpath', () => {
     expect([...new Set(packages)].sort()).toEqual(PACKAGES);
     const files = [...seen].map((file) => relative(SRC, file)).sort();
     expect(files).toEqual([
-      'geometry/circle.ts',
-      'geometry/coords.ts',
-      'geometry/distance.ts',
-      'geometry/units.ts',
-      'shared/circle-rings.ts',
-      'shared/properties.ts',
       'table/builder.ts',
-      'table/canonical-value.ts',
       'table/coordinates.ts',
       'table/index.ts',
       'table/packed-rtree.ts',
       'table/partition.ts',
-      'table/polygon-rings.ts',
       'table/prepare.ts',
-      'table/row-geometry.ts',
-      'table/row-group-builder.ts',
-      'table/row-group-merge.ts',
-      'table/row-group-types.ts',
-      'table/row-keys.ts',
       'table/table.ts',
-      'table/utf8-column.ts',
-      'table/value-column.ts',
     ]);
   });
 });

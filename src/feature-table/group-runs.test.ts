@@ -11,8 +11,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
-import { createTableMemoryStore } from '../store/table-memory.js';
-import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { createTableStore } from '../store/table-memory.js';
+import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { compareRowKeys } from '../table/row-keys.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
@@ -92,7 +92,7 @@ function comparable(result: { cuts: Map<RowGroup, Set<number>>; members: boolean
 const GROUPS = ['g0', 'g1', 'g2', 'g3', 'g4'];
 
 function setup(n: number) {
-  const { store, writer } = createTableMemoryStore();
+  const { store, writer } = createTableStore();
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -103,7 +103,7 @@ function setup(n: number) {
     metadata: undefined,
     styleRule: undefined,
   });
-  const builder = createRowGroupBuilder({ targetRows: 64 });
+  const builder = createRowBlockDataBuilder({ targetRows: 64 });
   for (let i = 0; i < n; i++) {
     builder.addRow({
       id: `r${i}`,
@@ -112,10 +112,10 @@ function setup(n: number) {
       order: `k${String(i).padStart(5, '0')}`,
     });
   }
-  writer.adopt('rows', builder.finish());
+  writer.addBlocks('rows', builder.finish());
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.flushAdoption();
+  internals.addQueuedBlocks();
   store.transact(() => {
     GROUPS.forEach((id, k) => {
       store.createGroup({
@@ -171,7 +171,7 @@ describe('groupRunCuts', () => {
         }
         store.transact(() => writer.apply({ handles, fields, deleted }), 'remote');
         if (step % 3 === 0) {
-          internals.flushAdoption();
+          internals.addQueuedBlocks();
           internals.flushVersions();
         }
         // New keys for some groups, compared before they go in
@@ -229,7 +229,7 @@ describe('groupRunCuts', () => {
       // 20 members spread over the layer, in their group once its next versions are made
       const handles = Int32Array.from(
         { length: 20 },
-        (_, k) => tables.handleOf(`r${Math.floor((k * n) / 20)}`) as number,
+        (_, k) => tables.findRow(`r${Math.floor((k * n) / 20)}`) as number,
       );
       store.transact(
         () =>

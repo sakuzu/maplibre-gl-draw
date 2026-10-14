@@ -3,38 +3,36 @@
 
 /**
  * The Worker the tables of the measurement page hand their large work to: the next versions of
- * the row groups merged (`mergeRowGroup`) and the new rows of an import built
- * (`createRowGroupBuilder`), sent back without a copy
+ * the row groups merged (`mergeRowBlock`) and the new rows of an import built
+ * (`createRowBlockBuilder`), sent back without a copy
  */
 
 import {
-  circleRowRings,
-  createRowGroupBuilder,
-  mergeRowGroup,
-  type RowGroupBuilderOptions,
-  type RowGroupMerge,
+  createRowBlockBuilder,
+  mergeRowBlock,
+  type RowBlockBuilderOptions,
+  type RowBlockMerge,
   type RowInput,
-  rowGroupTransferList,
-} from '@sakuzu/maplibre-gl-draw/table';
+  transferList,
+} from '@sakuzu/maplibre-gl-draw/kasane';
 
 /** What the page asks for */
 export interface RowsWorkerRequest {
   readonly id: number;
-  readonly merge?: RowGroupMerge;
+  readonly merge?: RowBlockMerge;
   readonly rows?: readonly RowInput[];
-  readonly options?: RowGroupBuilderOptions;
+  readonly options?: RowBlockBuilderOptions;
 }
 
 self.onmessage = (event: MessageEvent<RowsWorkerRequest>) => {
   const { id, merge, rows, options } = event.data;
-  let groups: ReturnType<typeof mergeRowGroup>;
+  let groups: ReturnType<typeof mergeRowBlock>;
   if (merge) {
-    groups = mergeRowGroup(merge);
+    groups = mergeRowBlock(merge);
   } else {
-    // The rings of the Circles: a function, which is not posted
-    const builder = createRowGroupBuilder({ ...options, rings: circleRowRings });
+    const builder = createRowBlockBuilder(options);
     for (const row of rows ?? []) builder.addRow(row);
     groups = builder.finish();
   }
-  (self as unknown as Worker).postMessage({ id, groups }, rowGroupTransferList(groups));
+  (self as unknown as Worker).postMessage({ id, groups }, transferList(groups));
 };

@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
-import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -116,9 +116,9 @@ describe('many new rows written at once', () => {
       create(setup, reference, rows);
       expect(internals.deltaRowCount()).toBe(0);
       // A frame between the writes
-      internals.advanceAdoption(UNBOUNDED);
+      internals.advanceQueuedBlocks(UNBOUNDED);
       internals.advanceVersions(UNBOUNDED);
-      internals.advanceAdoption(UNBOUNDED);
+      internals.advanceQueuedBlocks(UNBOUNDED);
     }
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);
@@ -164,7 +164,7 @@ describe('many new rows written at once', () => {
       merge: () => Promise.reject(new Error('no merge')),
       build: (rows, options) => {
         built.push(rows.length);
-        const builder = createRowGroupBuilder(options);
+        const builder = createRowBlockDataBuilder(options);
         for (const row of rows) builder.addRow(structuredClone(row));
         return Promise.resolve(builder.finish());
       },
@@ -179,7 +179,7 @@ describe('many new rows written at once', () => {
     );
     for (let i = 0; i < 4; i++) internals.advanceVersions(UNBOUNDED);
     await Promise.resolve();
-    internals.advanceAdoption(UNBOUNDED);
+    internals.advanceQueuedBlocks(UNBOUNDED);
     expect(built).toEqual([500]);
     expect(internals.deltaRowCount()).toBe(0);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
@@ -196,10 +196,10 @@ describe('many new rows written at once', () => {
       Array.from({ length: 200 }, (_, i) => ({ id: `c${i}`, order: `${key(9000)}${i}` })),
     );
     // Read before it is built
-    expect(tables.handleOf('c5')).toBe(handles[5]);
+    expect(tables.findRow('c5')).toBe(handles[5]);
     writer.apply(rowPatch([handles[5]], { 'property:n': [-1] }));
     (reference.rows.get('c5') as ReferenceRow).properties = { n: -1 };
-    expect(tables.handleOf('c5')).toBe(handles[5]);
+    expect(tables.findRow('c5')).toBe(handles[5]);
     expect(internals.deltaRowCount()).toBe(0);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
   });
@@ -211,7 +211,7 @@ describe('many new rows written at once', () => {
       build: (rows, options) =>
         new Promise((resolve) => {
           release = () => {
-            const builder = createRowGroupBuilder(options);
+            const builder = createRowBlockDataBuilder(options);
             for (const row of rows) builder.addRow(structuredClone(row));
             resolve(builder.finish());
           };
@@ -234,7 +234,7 @@ describe('many new rows written at once', () => {
       const inBox: number[] = [];
       const cursor = tables.scan({ layerIds: ['a'], bbox: [9.5, 0.5, 10.5, 1.5], order: 'layer' });
       for (let batch = cursor.next(); batch; batch = cursor.next()) inBox.push(...batch);
-      expect(inBox.map((handle) => tables.idOf(handle))).toEqual(['r10']);
+      expect(inBox.map((handle) => tables.getRowId(handle))).toEqual(['r10']);
       const hit = hitTestLayerTable(internals, table as NonNullable<typeof table>, {
         coordinate: [10, 1],
         reach: 0.1,
@@ -246,8 +246,8 @@ describe('many new rows written at once', () => {
         },
       });
       const hitHandle = hit ? hit.group.data.handles[hit.row] : -1;
-      expect(tables.idOf(hitHandle)).toBe('r10');
-      expect(tables.layer('a')?.valueAt(hitHandle, 'n')).toBe(10);
+      expect(tables.getRowId(hitHandle)).toBe('r10');
+      expect(tables.get('a')?.getRowValue(hitHandle, 'n')).toBe(10);
     };
     // Gathered
     reads();
@@ -259,7 +259,7 @@ describe('many new rows written at once', () => {
     (release as unknown as () => void)();
     await Promise.resolve();
     await Promise.resolve();
-    expect(internals.hasPendingAdoption).toBe(true);
+    expect(internals.hasQueuedBlocks).toBe(true);
     reads();
     // Hidden by this client while queued: the state of the row read is hidden
     internals.states.setHidden(Int32Array.of(handles[10]), true);
@@ -268,8 +268,8 @@ describe('many new rows written at once', () => {
     expect((place?.group.state[place.row] ?? 0) & STATE_HIDDEN_MASK).not.toBe(0);
     internals.states.setHidden(Int32Array.of(handles[10]), false);
     // Taken in
-    internals.advanceAdoption(UNBOUNDED);
-    expect(internals.hasPendingAdoption).toBe(false);
+    internals.advanceQueuedBlocks(UNBOUNDED);
+    expect(internals.hasQueuedBlocks).toBe(false);
     expect(internals.placeOf(handles[10])?.group.pending).toBe(false);
     reads();
   });

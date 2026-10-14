@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The in-memory Store of rows (`createTableMemoryStore`)
+ * The in-memory Store of rows (`createTableStore`)
  *
  * - Its layers and groups are held as rows; its features are rows, read from its tables, and a
  *   row is a feature while it is held (selected, edited)
@@ -22,12 +22,12 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../shared/circle-rings.js';
-import { createRowGroupBuilder } from '../table/row-group-builder.js';
+import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { utf8String } from '../table/utf8-column.js';
 import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
 import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';
-import { createTableMemoryStore } from './table-memory.js';
+import { createTableStore } from './table-memory.js';
 import type { Feature, StoreChange } from './types.js';
 
 /** A point of the tests */
@@ -48,7 +48,7 @@ function point(id: string, x: number, extra: Partial<Feature> = {}): Feature {
 
 /** A Store of rows with a layer and points in it, and its notifications gathered */
 function setup(count = 5) {
-  const { store, writer } = createTableMemoryStore();
+  const { store, writer } = createTableStore();
   store.createLayer({
     id: 'layer',
     name: 'Layer',
@@ -77,8 +77,8 @@ describe('the in-memory Store of rows', () => {
     expect(store.getFeature('p2')).not.toBe(store.getFeature('p2'));
     expect(() => store.listFeatures()).toThrow();
     expect(() => store.listFeaturesInOrder()).toThrow();
-    const view = tables.layer('layer');
-    const order = Array.from(view?.rowsInOrder(0, 10) ?? [], (h) => tables.idOf(h));
+    const view = tables.get('layer');
+    const order = Array.from(view?.listRowHandles(0, 10) ?? [], (h) => tables.getRowId(h));
     expect(order).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
   });
 
@@ -87,7 +87,7 @@ describe('the in-memory Store of rows', () => {
     store.updateFeature('p1', { properties: { n: 10 } });
     store.deleteFeature('p2');
     expect(notified).toHaveLength(2);
-    const handle = (id: string) => tables.handleOf(id) ?? -1;
+    const handle = (id: string) => tables.findRow(id) ?? -1;
     expect(notified[0].features).toBeUndefined();
     expect(Array.from(notified[0].rows?.layers.get('layer')?.updated ?? [])).toEqual([
       handle('p1'),
@@ -100,7 +100,7 @@ describe('the in-memory Store of rows', () => {
   it('holds the rows selected, and notifies the writes of them as changes of features', () => {
     const { store, notified } = setup();
     store.setSelection('feature', ['p1', 'p3']);
-    const held = notified[notified.length - 1]?.held;
+    const held = notified[notified.length - 1]?.opened;
     expect(held?.added.map((f) => f.id)).toEqual(['p1', 'p3']);
     const p1 = store.getFeature('p1');
     expect(store.getFeature('p1')).toBe(p1);
@@ -116,7 +116,7 @@ describe('the in-memory Store of rows', () => {
     expect(store.getFeature('p1')).toBe(store.getFeature('p1'));
     vi.advanceTimersByTime(RELEASE_DELAY_MS);
     vi.useRealTimers();
-    expect(notified[notified.length - 1]?.held).toEqual({ added: [], removed: ['p1', 'p3'] });
+    expect(notified[notified.length - 1]?.opened).toEqual({ added: [], removed: ['p1', 'p3'] });
     expect(store.getFeature('p1')?.geometry).toEqual({ type: 'Point', coordinates: [9, 9] });
   });
 
@@ -131,7 +131,7 @@ describe('the in-memory Store of rows', () => {
     vi.advanceTimersByTime(RELEASE_DELAY_MS);
     vi.useRealTimers();
     expect(store.getFeature('p1')).toBe(p1);
-    const removed = notified.flatMap((change) => change.held?.removed ?? []);
+    const removed = notified.flatMap((change) => change.opened?.removed ?? []);
     expect(removed).toEqual(['p2']);
   });
 
@@ -144,7 +144,7 @@ describe('the in-memory Store of rows', () => {
     expect(notified).toHaveLength(1);
     expect(notified[0].rows).toBeUndefined();
     expect(notified[0].features?.created?.map((f) => f.id)).toEqual(['n']);
-    expect(notified[0].held?.added ?? []).toEqual([]);
+    expect(notified[0].opened?.added ?? []).toEqual([]);
     expect(notified[0].selection?.ids).toEqual(['n']);
   });
 
@@ -154,7 +154,7 @@ describe('the in-memory Store of rows', () => {
     notified.length = 0;
     store.transact(() => {
       writer.apply({
-        handles: Int32Array.of(tables.handleOf('p2') ?? -1),
+        handles: Int32Array.of(tables.findRow('p2') ?? -1),
         fields: new Map(),
         deleted: Uint8Array.of(1),
       });
@@ -162,7 +162,7 @@ describe('the in-memory Store of rows', () => {
     expect(notified).toHaveLength(1);
     expect(notified[0].source).toBe('remote');
     expect(notified[0].features?.deleted?.map((f) => f.id)).toEqual(['p2']);
-    expect(notified[0].held?.removed ?? []).toEqual([]);
+    expect(notified[0].opened?.removed ?? []).toEqual([]);
     expect(notified[0].rows).toBeUndefined();
     expect(store.getSelection().ids).toEqual([]);
   });
@@ -176,7 +176,7 @@ describe('the in-memory Store of rows', () => {
     // Another moves it and colors it meanwhile
     store.transact(() => {
       writer.apply({
-        handles: Int32Array.of(tables.handleOf('p3') ?? -1),
+        handles: Int32Array.of(tables.findRow('p3') ?? -1),
         fields: new Map<RowField, unknown[]>([
           ['geometry', [at(-3)]],
           ['style', [{ pointColor: '#00ff00' }]],
@@ -199,7 +199,7 @@ describe('the in-memory Store of rows', () => {
     store.updateFeature('p3', { geometry: at(30) }, { isIntermediate: true });
     store.transact(() => {
       writer.apply({
-        handles: Int32Array.of(tables.handleOf('p3') ?? -1),
+        handles: Int32Array.of(tables.findRow('p3') ?? -1),
         fields: new Map<RowField, unknown[]>([['geometry', [at(-3)]]]),
       });
     }, 'remote');
@@ -241,19 +241,19 @@ describe('the in-memory Store of rows', () => {
     store.createFeature(point('c', 3));
     notified.length = 0;
     store.setSelection('group', ['g']);
-    expect(notified[notified.length - 1]?.held?.added.map((f) => f.id)).toEqual(['a', 'b']);
+    expect(notified[notified.length - 1]?.opened?.added.map((f) => f.id)).toEqual(['a', 'b']);
   });
 });
 
 describe('the order of the in-memory Store of rows (stage 3b)', () => {
   /** The ids of the items of the layer in their order */
   const items = (tables: NonNullable<ReturnType<typeof setup>['tables']>, store: Store) => {
-    const view = tables.layer('layer');
+    const view = tables.get('layer');
     if (!view) return [];
-    const refs = view.itemsInOrder(0, view.itemCount);
+    const refs = view.listItems(0, view.itemCount);
     return Array.from(refs.handles, (h, i) =>
       refs.kinds[i] === 0
-        ? tables.idOf(h)
+        ? tables.getRowId(h)
         : store
             .listGroups()
             .find((g) => featureTablesInternals(tables)?.groups.handleOfId(g.id) === h)?.id,
@@ -271,7 +271,7 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
     expect(order.slice(0, 2002)).toEqual(['p0', ...ids, 'p1']);
     const internals = featureTablesInternals(tables);
     for (const id of ids) {
-      const place = internals?.placeOf(tables.handleOf(id) as number);
+      const place = internals?.placeOf(tables.findRow(id) as number);
       const key = place ? utf8String(place.group.data.itemKeys, place.row) : '';
       expect(key.length).toBeLessThanOrEqual(64);
     }
@@ -354,7 +354,7 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
     );
     // One write of the rows of the members, in one notification
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(Array.from(apply.mock.calls[0][0].handles, (h) => tables.idOf(h))).toEqual([
+    expect(Array.from(apply.mock.calls[0][0].handles, (h) => tables.getRowId(h))).toEqual([
       'p1',
       'p3',
       'p5',
@@ -363,16 +363,16 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
     apply.mockRestore();
     // At the place of the frontmost member, the members in their order
     expect(items(tables, store)).toEqual(['p0', 'p2', 'p4', 'g', 'p6', 'p7']);
-    const view = tables.layer('layer');
+    const view = tables.get('layer');
     const handle = featureTablesInternals(tables)?.groups.handleOfId('g') ?? -1;
     expect(
-      Array.from(view?.groupMembersInOrder(handle, 0, 3) ?? [], (h) => tables.idOf(h)),
+      Array.from(view?.listGroupMembers(handle, 0, 3) ?? [], (h) => tables.getRowId(h)),
     ).toEqual(['p1', 'p3', 'p5']);
     for (const id of ['p1', 'p3', 'p5']) expect(store.getFeature(id)?.groupId).toBe('g');
   });
 
   it('leaves no work behind when rows spread over the layer are grouped and ungrouped again and again', () => {
-    const { store, writer } = createTableMemoryStore();
+    const { store, writer } = createTableStore();
     store.createLayer({
       id: 'layer',
       name: 'Layer',
@@ -384,7 +384,7 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
       styleRule: undefined,
     });
     // 10,000 rows in groups of the target size; 50 members spread over the first half of them
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     for (let i = 0; i < 10_000; i++) {
       builder.addRow({
         id: `r${i}`,
@@ -395,10 +395,10 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
         properties: { n: i },
       });
     }
-    writer.adopt('layer', builder.finish());
+    writer.addBlocks('layer', builder.finish());
     const internals = featureTablesInternals(store.tables);
     if (!internals) throw new Error('a Store of rows has tables');
-    internals.flushAdoption();
+    internals.addQueuedBlocks();
     const layer = internals.layerTable('layer');
     const members = Array.from({ length: 50 }, (_, k) => `r${k * 100}`);
     const apply = vi.spyOn(writer, 'apply');
@@ -430,7 +430,7 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
       // of the members
       let longest = 0;
       for (const id of members) {
-        const place = internals.placeOf(store.tables?.handleOf(id) as number);
+        const place = internals.placeOf(store.tables?.findRow(id) as number);
         const data = place?.group.data;
         if (!data || !place) continue;
         const keys = [utf8String(data.itemKeys, place.row), utf8String(data.memberKeys, place.row)];
@@ -449,7 +449,7 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
 
 describe('the rows of a layer of z and m in the in-memory Store of rows', () => {
   it('give the values before and take them back with their z and m, as an undo writes them', () => {
-    const { store, writer } = createTableMemoryStore({ dimsOf: () => 'xyzm' });
+    const { store, writer } = createTableStore({ dimensionsOf: () => 'xyzm' });
     store.createLayer({
       id: 'layer',
       name: 'Layer',
@@ -468,16 +468,16 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
         [2, 2, 12],
       ],
     };
-    const builder = createRowGroupBuilder({ dims: 'xyzm', rings: circleRowRings });
+    const builder = createRowBlockDataBuilder({ dimensions: 'xyzm', rings: circleRowRings });
     builder.addRow({ id: 'l', type: 'LineString', geometry: line, order: 'k1' });
-    writer.adopt('layer', builder.finish());
+    writer.addBlocks('layer', builder.finish());
     const tables = store.tables;
     if (!tables) throw new Error('a Store of rows has tables');
-    featureTablesInternals(tables)?.flushAdoption();
-    const handle = tables.handleOf('l') as number;
+    featureTablesInternals(tables)?.addQueuedBlocks();
+    const handle = tables.findRow('l') as number;
     const geometryOf = () =>
       tables
-        .snapshot({ handles: Int32Array.of(handle), fields: new Map([['geometry', [0]]]) })
+        .readValues({ handles: Int32Array.of(handle), fields: new Map([['geometry', [0]]]) })
         .fields.get('geometry')?.[0];
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
@@ -499,8 +499,8 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
         ],
       ]),
     };
-    const before = tables.snapshot(patch);
-    expect(store.applyLocal?.({ patch, before })).toBe(true);
+    const before = tables.readValues(patch);
+    expect(store.applyRows?.({ patch, before })).toBe(true);
     expect(notified[notified.length - 1]?.rows?.before?.fields.get('geometry')?.[0]).toEqual(line);
     expect(geometryOf()).toEqual({
       type: 'LineString',
@@ -510,9 +510,9 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
       ],
     });
     // The values before written back
-    store.applyLocal?.({
+    store.applyRows?.({
       patch: { handles: before.handles, fields: before.fields },
-      before: tables.snapshot(patch),
+      before: tables.readValues(patch),
     });
     expect(geometryOf()).toEqual(line);
     // A row of it is not a feature

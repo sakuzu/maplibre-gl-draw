@@ -166,7 +166,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     const rowFilter = Object.fromEntries(checkedEntries(filter)) as RowFilter;
     const tables = store.tables;
     if (!tables) return;
-    forEachMatchingRow(store, rowFilter, (handle) => visit(tables.idOf(handle) as string));
+    forEachMatchingRow(store, rowFilter, (handle) => visit(tables.getRowId(handle) as string));
   };
 
   function list(filter?: FeatureFilter): Feature[];

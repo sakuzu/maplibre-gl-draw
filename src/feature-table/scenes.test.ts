@@ -61,7 +61,7 @@ describe('the deltas and the versions at their edges', () => {
     for (let g = 0; g < 20; g++) {
       const id = `p${g * 550 + 5}`;
       const order = `${key((g * 550 + 549) * 1000)}x`;
-      writer.apply(rowPatch([tables.handleOf(id) as number], { order: [order] }));
+      writer.apply(rowPatch([tables.findRow(id) as number], { order: [order] }));
       (reference.rows.get(id) as ReferenceRow).order = order;
     }
     // The bytes of three versions at once: the others wait for the ones held
@@ -91,7 +91,7 @@ describe('the deltas and the versions at their edges', () => {
     );
     writer.apply(
       rowPatch(
-        ids.map((id) => tables.handleOf(id) as number),
+        ids.map((id) => tables.findRow(id) as number),
         { order: orders },
       ),
     );
@@ -130,7 +130,7 @@ describe('the deltas and the versions at their edges', () => {
       geometry: { type: 'Point', coordinates: [1, 1] },
       order: key(1),
     });
-    writer.apply(rowPatch([tables.handleOf('p3') as number], {}, [1]));
+    writer.apply(rowPatch([tables.findRow('p3') as number], {}, [1]));
     (reference.rows.get('p3') as ReferenceRow).deleted = true;
     internals.flushVersions();
     expect(internals.layerTable('b')?.groupCount).toBe(1);

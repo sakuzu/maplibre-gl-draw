@@ -133,8 +133,8 @@ export class StoreSpatialIndex implements SpatialIndex {
       return;
     }
     // The rows held come and go (a Store that holds its features as rows)
-    for (const feature of changes.held?.added ?? []) this.#refresh(feature.id);
-    for (const id of changes.held?.removed ?? []) this.#refresh(id);
+    for (const feature of changes.opened?.added ?? []) this.#refresh(feature.id);
+    for (const id of changes.opened?.removed ?? []) this.#refresh(id);
     const features = changes.features;
     if (!features) return;
 
@@ -184,6 +184,8 @@ export class StoreSpatialIndex implements SpatialIndex {
   /** The feature of an id as the index holds it (only a row held, of a Store of rows) */
   #indexed(id: string): Feature | undefined {
     const tables = this.#store.tables;
-    return tables ? featureTablesInternals(tables)?.heldFeature(id) : this.#store.getFeature(id);
+    return tables
+      ? featureTablesInternals(tables)?.getOpenedFeature(id)
+      : this.#store.getFeature(id);
   }
 }

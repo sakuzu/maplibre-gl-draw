@@ -4,7 +4,8 @@
 // The tree of a layer held as rows: its items and the members of its groups read from the rows,
 // and a drop in it named by the item behind the node
 
-import type { FeatureTables, Group, Layer } from '@sakuzu/maplibre-gl-draw';
+import type { Group, Layer } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureTables } from '@sakuzu/maplibre-gl-draw/kasane';
 import { describe, expect, it } from 'vitest';
 import { planMove } from '../src/layers/move.js';
 import { buildNodes, type LayerTreeNode, type TreeSource } from '../src/layers/tree.js';
@@ -41,19 +42,19 @@ function tableSource(): TreeSource {
   }
   // Rows 0 to 3 are a, b, c, d; the group is the handle 7
   const tables = {
-    idOf: (handle: number) => ids[handle],
-    groupIdOf: (handle: number) => (handle === 7 ? 'g' : undefined),
-    groupHandleOf: (id: string) => (id === 'g' ? 7 : undefined),
-    layer: (layerId: string) =>
+    getRowId: (handle: number) => ids[handle],
+    getGroupId: (handle: number) => (handle === 7 ? 'g' : undefined),
+    findGroup: (id: string) => (id === 'g' ? 7 : undefined),
+    get: (layerId: string) =>
       layerId === 'rows'
         ? {
             itemCount: 3,
-            itemsInOrder: () => ({
+            listItems: () => ({
               kinds: Uint8Array.of(0, 1, 0),
               handles: Int32Array.of(0, 7, 1),
             }),
-            groupMemberCount: (handle: number) => (handle === 7 ? 2 : 0),
-            groupMembersInOrder: (handle: number) =>
+            countGroupMembers: (handle: number) => (handle === 7 ? 2 : 0),
+            listGroupMembers: (handle: number) =>
               handle === 7 ? Int32Array.of(2, 3) : new Int32Array(0),
           }
         : undefined,

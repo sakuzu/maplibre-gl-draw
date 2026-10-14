@@ -361,9 +361,12 @@ const DOCUMENT_KEYS = [
 ] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
 
 /** The categories of the state of this client that `document.changed` carries along */
-const CLIENT_KEYS = ['selection', 'editing', 'mode', 'retain'] as const satisfies ReadonlyArray<
-  keyof DocumentChange & keyof StoreChange
->;
+const CLIENT_KEYS = [
+  'selection',
+  'editing',
+  'mode',
+  'restoreToken',
+] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
 
 /**
  * The change a notification carries, without the state that only the drawing reads (the

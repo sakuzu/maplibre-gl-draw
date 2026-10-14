@@ -33,7 +33,7 @@ export interface RowRings {
   ringOf(type: string, x: number, y: number, value: (key: string) => unknown): Float64Array | null;
   /**
    * The number of coordinates a row that draws a ring is counted as when the rows are cut into
-   * groups (the coordinates of its ring)
+   * blocks (the coordinates of its ring)
    */
   readonly ringVertices: number;
 }

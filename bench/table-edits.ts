@@ -29,7 +29,7 @@
  * or `members`), each an input timed to the frame nothing is left to build (the longest key of
  * the order of the rows moved is noted); an edit of `members` rows undone and redone by a history
  * of the page (the Store of the page has none): the values before and after the edit written back
- * through the Store (`applyRows`, which returns the values before; the features of the Store are
+ * through the Store (`restoreRows`, which returns the values before; the features of the Store are
  * updated with their values for the Store of objects), with the bytes the history holds noted. A
  * box drawn with Shift (`boxHeld`) is grown and shrunk a step per frame, each move of the pointer
  * timed.
@@ -40,16 +40,13 @@
  * holds it: it is not part of its API).
  */
 
+import type { Draw, Feature, Store } from '@sakuzu/maplibre-gl-draw';
 import type {
-  Draw,
-  Feature,
   FeatureTables,
   FeatureTablesWriter,
   RowField,
-  RowPatch,
-  RowValuesSnapshot,
-  Store,
-} from '@sakuzu/maplibre-gl-draw';
+  RowValues,
+} from '@sakuzu/maplibre-gl-draw/kasane';
 import type { Geometry, Position } from 'geojson';
 import type * as maplibregl from 'maplibre-gl';
 import type { BenchCandidates, EditOp, RemoteKind, TableBenchPageParams } from './table-data';
@@ -68,7 +65,7 @@ import {
  * client, returning the values they had (what an undo writes back)
  */
 export interface RowsStore {
-  applyRows(patch: RowPatch): RowValuesSnapshot | null;
+  restoreRows(patch: RowValues): RowValues | null;
 }
 
 /** What the edits write to */
@@ -124,8 +121,8 @@ interface RowChange {
 /** The feature of a row as it is now */
 function featureOf(target: EditTarget, id: string): Feature | undefined {
   if (!target.tables) return target.draw.features.get(id);
-  const handle = target.tables.handleOf(id);
-  return handle === undefined ? undefined : target.tables.layer(target.layerId)?.getRow(handle);
+  const handle = target.tables.findRow(id);
+  return handle === undefined ? undefined : target.tables.get(target.layerId)?.getRow(handle);
 }
 
 /**
@@ -152,7 +149,7 @@ function writeRows(target: EditTarget, changes: ReadonlyArray<[string, RowChange
     return values;
   };
   for (const [id, change] of changes) {
-    const handle = tables.handleOf(id);
+    const handle = tables.findRow(id);
     if (handle === undefined) continue;
     handles.push(handle);
     if (change.geometry) field('geometry').push(change.geometry);
@@ -234,7 +231,7 @@ function keyAfter(params: TableBenchPageParams, n: number, tag: string): string 
 
 /** The rows of the layer */
 function rowCount(target: EditTarget): number {
-  return target.tables?.layer(target.layerId)?.rowCount ?? target.draw.features.count();
+  return target.tables?.get(target.layerId)?.rowCount ?? target.draw.features.count();
 }
 
 /** A building of 5 corners around a position */
@@ -460,9 +457,9 @@ function ensureOtherLayer(target: EditTarget): void {
 function longestKey(target: EditTarget, ids: readonly string[]): number {
   const { tables } = target;
   if (!tables) return 0;
-  const handles = ids.map((id) => tables.handleOf(id)).filter((h) => h !== undefined) as number[];
+  const handles = ids.map((id) => tables.findRow(id)).filter((h) => h !== undefined) as number[];
   if (handles.length === 0) return 0;
-  const read = tables.snapshot({
+  const read = tables.readValues({
     handles: Int32Array.from(handles),
     fields: new Map<RowField, unknown[]>([['order', handles.map(() => undefined)]]),
   });
@@ -474,7 +471,7 @@ function longestKey(target: EditTarget, ids: readonly string[]): number {
 }
 
 /** The bytes of values of rows as a history holds them (the values as JSON, and the handles) */
-function snapshotBytes(snapshot: RowValuesSnapshot): number {
+function snapshotBytes(snapshot: RowValues): number {
   let bytes = snapshot.handles.length * 4 + (snapshot.deleted?.length ?? 0);
   for (const values of snapshot.fields.values()) {
     for (const value of values) bytes += JSON.stringify(value ?? null).length;
@@ -635,7 +632,7 @@ function boxSteps(target: EditTarget, params: TableBenchPageParams): (i: number)
 /**
  * The steps of an edit of rows undone and redone by a history of the page: the edit (the rows
  * moved and colored) is made once, then undone and redone in turn, each a write of the values
- * the history holds (through `applyRows` for rows, `updateMany` for features of the Store)
+ * the history holds (through `restoreRows` for rows, `updateMany` for features of the Store)
  */
 function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) => Promise<void> {
   const { draw, tables, rowsStore } = target;
@@ -652,21 +649,21 @@ function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) 
   let undo: (() => void) | null = null;
   let redo: (() => void) | null = null;
   if (tables && rowsStore) {
-    const handles = [...after.keys()].map((id) => tables.handleOf(id) as number);
-    const patch: RowPatch = {
+    const handles = [...after.keys()].map((id) => tables.findRow(id) as number);
+    const patch: RowValues = {
       handles: Int32Array.from(handles),
       fields: new Map<RowField, unknown[]>([
         ['geometry', [...after.values()].map((v) => v.geometry)],
         ['style', [...after.values()].map((v) => v.style)],
       ]),
     };
-    let before: RowValuesSnapshot | null = null;
-    let done: RowValuesSnapshot | null = null;
+    let before: RowValues | null = null;
+    let done: RowValues | null = null;
     undo = () => {
-      done = before ? rowsStore.applyRows(before as RowPatch) : null;
+      done = before ? rowsStore.restoreRows(before as RowValues) : null;
     };
     redo = () => {
-      before = rowsStore.applyRows(done ?? patch);
+      before = rowsStore.restoreRows(done ?? patch);
     };
     redo();
     const bytes = (before ? snapshotBytes(before) : 0) * 2;
@@ -883,7 +880,7 @@ function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[
           ['layerId', [target.layerId]],
         ]),
       });
-      const handles = members.map((m) => tables.handleOf(m)).filter((h) => h !== undefined);
+      const handles = members.map((m) => tables.findRow(m)).filter((h) => h !== undefined);
       writer.apply({
         handles: Int32Array.from(handles as number[]),
         fields: new Map<RowField, unknown[]>([
@@ -1095,7 +1092,7 @@ async function runReorders(
       return;
     }
     if (tables && writer) {
-      const handles = ids.map((id) => tables.handleOf(id));
+      const handles = ids.map((id) => tables.findRow(id));
       writer.apply({
         handles: Int32Array.from(handles.filter((h) => h !== undefined) as number[]),
         fields: new Map<RowField, unknown[]>([

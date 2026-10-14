@@ -41,7 +41,7 @@ export function queryFeaturesInBox(
       order: 'any',
     });
     for (let batch = cursor?.next(); batch; batch = cursor?.next()) {
-      for (const handle of batch) candidateIds.add(tables?.idOf(handle) as string);
+      for (const handle of batch) candidateIds.add(tables?.getRowId(handle) as string);
     }
   }
 

@@ -12,7 +12,7 @@ import {
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
 import { MemoryContractStore } from '../../store/memory.js';
-import { createRowGroupBuilder } from '../../table/row-group-builder.js';
+import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import {
   createMapStub,
   createSyntheticInput,
@@ -72,24 +72,24 @@ describe('debug.gpu and the hooks of measurement of the rows', () => {
   it('reports no GPU memory before anything is drawn', () => {
     draw = createDraw(createMapStub().map);
     const gpu = draw.debug.gpu();
-    expect(gpu).toEqual({ bytes: 0, bufferBytes: 0, textureBytes: 0, byRenderer: {} });
+    expect(gpu).toEqual({ bytes: 0, bufferBytes: 0, textureBytes: 0 });
     expect(Object.isFrozen(gpu)).toBe(true);
   });
 
   it('writes the state of the rows of the tables of the Store', () => {
     const { tables, writer } = createFeatureTablesStore();
-    const builder = createRowGroupBuilder();
+    const builder = createRowBlockDataBuilder();
     ['a', 'b'].forEach((id, i) => {
       builder.addRow(rowOfFeature(feature(id, 'Point', [i, i]), orderKey(i)));
     });
-    writer.adopt('rows', builder.finish());
-    featureTablesInternals(tables)?.flushAdoption();
+    writer.addBlocks('rows', builder.finish());
+    featureTablesInternals(tables)?.addQueuedBlocks();
     const contract = new MemoryContractStore();
     Object.defineProperty(contract, 'tables', { value: tables });
     draw = createDraw(createMapStub().map, { store: contract, initDefaultLayer: false });
 
     const debug = tableDiagnosticsOf(draw);
-    const handle = tables.handleOf('b') as number;
+    const handle = tables.findRow('b') as number;
     debug.setRowsMoving([handle], 2);
     debug.setMoveTranslation(2, 0.5, -0.5);
     const internals = featureTablesInternals(tables);

@@ -20,7 +20,7 @@ import {
 } from '../../feature-table/feature-tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
-import { createRowGroupBuilder } from '../../table/row-group-builder.js';
+import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import {
   createTestDrawer,
   feature,
@@ -345,11 +345,11 @@ describe('the order of the drawing of a layer held as rows', () => {
   it('takes the row groups given to adopt in a group per frame first, and draws those taken in, in order', () => {
     const { tables, writer } = createFeatureTablesStore();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    const builder = createRowGroupBuilder({ targetRows: 20 });
+    const builder = createRowBlockDataBuilder({ targetRows: 20 });
     interleaved(100, 9).forEach((f, i) => {
       builder.addRow(rowOfFeature(f, orderKey(i)));
     });
-    writer.adopt('layer', builder.finish());
+    writer.addBlocks('layer', builder.finish());
     const mocks = createRenderers();
     let repaints = 0;
     const renderer = new TableLayerRenderer({
@@ -380,10 +380,10 @@ describe('the order of the drawing of a layer held as rows', () => {
       renderer.recordDraws(null);
       expect(inOrder(record)).toBe(true);
       frames++;
-    } while ((renderer.hasPendingWork || internals.hasPendingAdoption) && frames < 1000);
+    } while ((renderer.hasPendingWork || internals.hasQueuedBlocks) && frames < 1000);
     // With no time in the frame, the first step of each frame takes one group in
     expect(taken.slice(0, 5)).toEqual([1, 2, 3, 4, 5]);
-    expect(internals.hasPendingAdoption).toBe(false);
+    expect(internals.hasQueuedBlocks).toBe(false);
     expect(repaints).toBeGreaterThanOrEqual(4);
   });
 });

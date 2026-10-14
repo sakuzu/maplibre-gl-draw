@@ -13,7 +13,7 @@ import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { featuresInOrder } from '../../store/feature-stream.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
-import { createTableMemoryStore } from '../../store/table-memory.js';
+import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
@@ -98,7 +98,7 @@ let fromRows: FeaturesCollection;
 let fromObjects: FeaturesCollection;
 
 beforeEach(() => {
-  rows = createTableMemoryStore().store;
+  rows = createTableStore().store;
   objects = new MemoryStore();
   fill(rows, true);
   fill(objects, false);

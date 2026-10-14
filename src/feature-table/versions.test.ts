@@ -21,8 +21,12 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
-import { mergeRowGroup, type RowGroupMerge } from '../table/row-group-merge.js';
-import type { RowGroupData } from '../table/row-group-types.js';
+import {
+  mergeRowBlockData,
+  type RowBlockDataMerge,
+  type RowBlockMerge,
+} from '../table/row-group-merge.js';
+import type { RowBlockData } from '../table/row-group-types.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -126,7 +130,7 @@ describe('the next versions of the row groups', () => {
     const reference = pointsReference(32);
     const { tables, writer, internals, groupHandleOf } = tablesOfReference(reference, ['a'], 8);
     const sides = gate(internals);
-    const at = (id: string) => tables.handleOf(id) as number;
+    const at = (id: string) => tables.findRow(id) as number;
     // p3 to the range of the second group
     writer.apply(rowPatch([at('p3')], { order: [key(9500)] }));
     (reference.rows.get('p3') as ReferenceRow).order = key(9500);
@@ -148,7 +152,7 @@ describe('the next versions of the row groups', () => {
     // The rows of the delta written after it started stay there
     expect(internals.deltaRowCount()).toBe(2);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    expect(tables.layer('a')?.valueAt(at('p9'), 'name')).toBe('kept');
+    expect(tables.get('a')?.getRowValue(at('p9'), 'name')).toBe('kept');
     // The next versions take them
     sides.allowAll();
     internals.flushVersions();
@@ -166,7 +170,7 @@ describe('the next versions of the row groups', () => {
         1100,
       );
       const sides = gate(internals);
-      const at = (id: string) => tables.handleOf(id) as number;
+      const at = (id: string) => tables.findRow(id) as number;
       // p2 (group 0) to the range of group 1, p1200 (group 1) to the range of group 0
       writer.apply(rowPatch([at('p2'), at('p1200')], { order: [key(1_500_500), key(4500)] }));
       (reference.rows.get('p2') as ReferenceRow).order = key(1_500_500);
@@ -250,7 +254,7 @@ describe('the next versions of the row groups', () => {
   });
 
   it('drop a version merged in the Worker whose groups of features changed their keys', async () => {
-    const pending: Array<{ merge: RowGroupMerge; resolve: (groups: RowGroupData[]) => void }> = [];
+    const pending: Array<{ merge: RowBlockMerge; resolve: (groups: RowBlockData[]) => void }> = [];
     const worker: FeatureTablesWorker = {
       merge: (merge) =>
         new Promise((resolve) => {
@@ -266,7 +270,7 @@ describe('the next versions of the row groups', () => {
     }
     const setup = tablesOfReference(reference, ['a'], 20_000, { worker });
     const { tables, writer, internals, groupHandleOf } = setup;
-    const at = (id: string) => tables.handleOf(id) as number;
+    const at = (id: string) => tables.findRow(id) as number;
     writer.apply(rowPatch([at('p100')], { order: [key(100_500)] }));
     (reference.rows.get('p100') as ReferenceRow).order = key(100_500);
     internals.flushVersions();
@@ -274,7 +278,9 @@ describe('the next versions of the row groups', () => {
     // The key of the group changes before the merge comes back
     internals.groups.setOrder(groupHandleOf('g'), key(7_000_500));
     (reference.groups.get('g') as { order: string }).order = key(7_000_500);
-    pending[0].resolve(mergeRowGroup({ ...pending[0].merge, groups: internals.groups }));
+    pending[0].resolve(
+      mergeRowBlockData({ ...(pending[0].merge as RowBlockDataMerge), groups: internals.groups }),
+    );
     await Promise.resolve();
     await Promise.resolve();
     expect(internals.builtVersions('a')).toHaveLength(0);
@@ -282,7 +288,9 @@ describe('the next versions of the row groups', () => {
     // Made again, with the keys as they are now
     internals.flushVersions();
     expect(pending).toHaveLength(2);
-    pending[1].resolve(mergeRowGroup({ ...pending[1].merge, groups: internals.groups }));
+    pending[1].resolve(
+      mergeRowBlockData({ ...(pending[1].merge as RowBlockDataMerge), groups: internals.groups }),
+    );
     await Promise.resolve();
     await Promise.resolve();
     internals.swapVersions();
@@ -295,7 +303,7 @@ describe('the next versions of the row groups', () => {
     const reference = pointsReference(600);
     const { tables, writer, internals, groupHandleOf } = tablesOfReference(reference, ['a'], 600);
     const table = internals.layerTable('a');
-    const handles = Array.from({ length: 200 }, (_, i) => tables.handleOf(`p${i}`) as number);
+    const handles = Array.from({ length: 200 }, (_, i) => tables.findRow(`p${i}`) as number);
     writer.apply(
       rowPatch(handles, {
         geometry: handles.map((_, i) => ({ type: 'Point', coordinates: [i, 50] })),
@@ -312,8 +320,8 @@ describe('the next versions of the row groups', () => {
     expect(internals.movedRowCount()).toBe(0);
     expect(table?.groupAt(0).unindexedCount).toBe(0);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    const found = tables.layer('a')?.listDrawnRows([10.5, 49, 12.5, 51]);
-    expect(Array.from(found ?? []).map((h) => tables.idOf(h))).toEqual(['p11', 'p12']);
+    const found = tables.get('a')?.listDrawnRows([10.5, 49, 12.5, 51]);
+    expect(Array.from(found ?? []).map((h) => tables.getRowId(h))).toEqual(['p11', 'p12']);
   });
 
   it('read every row as the reference while writes and versions go on at random', () => {

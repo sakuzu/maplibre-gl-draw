@@ -17,7 +17,7 @@
  */
 
 import type { Feature, Geometry, Position } from 'geojson';
-import { type CoordinateDims, copyCoordinates, strideOf } from './coordinates.js';
+import { type CoordinateDimensions, copyCoordinates, strideOf } from './coordinates.js';
 import type { Column, GeometryType, Table, TableGeometry } from './types.js';
 
 /**
@@ -39,7 +39,7 @@ export interface TableBuilder {
    * @param id The id of the row. Once any row has an id, the rows without one get their row
    *   number
    * @throws when the builder was created with a `geometryType` and the geometry has another
-   *   type, when a position has more values than the `dims` of the builder (or than 4), or when
+   *   type, when a position has more values than the `dimensions` of the builder (or than 4), or when
    *   `finish` was already called
    */
   add(
@@ -100,7 +100,7 @@ class GrowingFloat64 {
   }
 
   /** The values pushed as coordinates of other dimensions (more of them: NaN for the new ones) */
-  restride(from: CoordinateDims, to: CoordinateDims): void {
+  restride(from: CoordinateDimensions, to: CoordinateDimensions): void {
     const count = this.length / strideOf(from);
     const next = new Float64Array(
       Math.max(4, Math.ceil(this.data.length / strideOf(from))) * strideOf(to),
@@ -157,7 +157,7 @@ class GeometryColumnBuilder {
   /** The offset arrays, outermost first; each starts with 0 */
   private readonly offsets: GrowingInt32[] = [];
   /** The dimensions of the coordinates collected */
-  private dims: CoordinateDims;
+  private dims: CoordinateDimensions;
   private stride: number;
 
   /**
@@ -167,7 +167,7 @@ class GeometryColumnBuilder {
   constructor(
     readonly type: GeometryType,
     capacity: number,
-    private readonly fixedDims: CoordinateDims | undefined,
+    private readonly fixedDims: CoordinateDimensions | undefined,
   ) {
     this.dims = fixedDims ?? 'xy';
     this.stride = strideOf(this.dims);
@@ -198,7 +198,7 @@ class GeometryColumnBuilder {
         `TableBuilder: a position of ${length} values does not fit coordinates of ${this.fixedDims ?? 'xyzm'}`,
       );
     }
-    const dims: CoordinateDims = length === 3 && this.dims === 'xy' ? 'xyz' : 'xyzm';
+    const dims: CoordinateDimensions = length === 3 && this.dims === 'xy' ? 'xyz' : 'xyzm';
     this.coords.restride(this.dims, dims);
     this.dims = dims;
     this.stride = strideOf(dims);
@@ -259,7 +259,7 @@ class GeometryColumnBuilder {
   /** The column as collected: one row per row added */
   finish(): TableGeometry {
     const geometry: TableGeometry = { type: this.type, coords: this.coords.finish() };
-    if (this.dims !== 'xy') geometry.dims = this.dims;
+    if (this.dims !== 'xy') geometry.dimensions = this.dims;
     if (this.offsets.length > 0) geometry.offsets = this.offsets.map((o) => o.finish());
     return geometry;
   }
@@ -272,7 +272,7 @@ class GeometryColumnBuilder {
    * @param length The number of rows of the table
    */
   finishSpread(childOf: Int8Array, length: number): TableGeometry {
-    const dims = this.dims !== 'xy' ? { dims: this.dims } : {};
+    const dims = this.dims !== 'xy' ? { dimensions: this.dims } : {};
     if (this.type === 'Point') {
       const source = this.coords.finish();
       const stride = this.stride;
@@ -327,23 +327,23 @@ function isTableGeometryType(type: string): type is GeometryType {
  * Every value of the positions is kept. A geometry column holds `x` and `y`, and takes the
  * dimensions of a longer position when one comes (`xyz` for 3 values, `xyzm` for 4), the values
  * the positions before it do not have being NaN; the rows are drawn by their `x` and `y`. With
- * `dims`, every column has those dimensions, and a longer position throws.
+ * `dimensions`, every column has those dimensions, and a longer position throws.
  *
  * @param options `geometryType` fixes the geometry type of every row (a geometry of another
  *   type throws), and gives the type of a table without any geometry. `capacity` is the
  *   expected number of rows, to size the arrays from the start. `columns` limits the attributes
- *   that become columns to these names (every one is created, even if no row has it). `dims`
- *   fixes the dimensions of the coordinates (`[x, y, m]` is a position of `xym`)
+ *   that become columns to these names (every one is created, even if no row has it).
+ *   `dimensions` fixes the dimensions of the coordinates (`[x, y, m]` is a position of `xym`)
  * @returns A new builder
  */
 export function createTableBuilder(options?: {
   geometryType?: GeometryType;
   capacity?: number;
   columns?: readonly string[];
-  dims?: CoordinateDims;
+  dimensions?: CoordinateDimensions;
 }): TableBuilder {
   const fixedType = options?.geometryType;
-  const fixedDims = options?.dims;
+  const fixedDims = options?.dimensions;
   const capacity = Math.max(1, Math.floor(options?.capacity ?? DEFAULT_CAPACITY));
   const fixedColumns = options?.columns !== undefined;
 
@@ -467,8 +467,12 @@ export function createTableBuilder(options?: {
 }
 
 /** A geometry column of one type whose rows all have no geometry */
-function emptyGeometry(type: GeometryType, length: number, dims: CoordinateDims): TableGeometry {
-  const of = dims !== 'xy' ? { dims } : {};
+function emptyGeometry(
+  type: GeometryType,
+  length: number,
+  dims: CoordinateDimensions,
+): TableGeometry {
+  const of = dims !== 'xy' ? { dimensions: dims } : {};
   if (type === 'Point') {
     return { type, coords: new Float64Array(length * strideOf(dims)).fill(Number.NaN), ...of };
   }
@@ -486,8 +490,8 @@ function emptyGeometry(type: GeometryType, length: number, dims: CoordinateDims)
  * column.
  *
  * @param features The features, in row order
- * @param options `columns` limits the properties that become columns to these names; `dims`
- *   fixes the dimensions of the coordinates (see {@link createTableBuilder})
+ * @param options `columns` limits the properties that become columns to these names;
+ *   `dimensions` fixes the dimensions of the coordinates (see {@link createTableBuilder})
  * @returns The table
  *
  * @example
@@ -500,12 +504,12 @@ function emptyGeometry(type: GeometryType, length: number, dims: CoordinateDims)
  */
 export function tableFromFeatures(
   features: readonly Feature<Geometry | null>[],
-  options?: { columns?: readonly string[]; dims?: CoordinateDims },
+  options?: { columns?: readonly string[]; dimensions?: CoordinateDimensions },
 ): Table {
   const builder = createTableBuilder({
     capacity: features.length,
     columns: options?.columns,
-    dims: options?.dims,
+    dimensions: options?.dimensions,
   });
   for (const feature of features) {
     builder.add(feature.geometry, feature.properties, feature.id);

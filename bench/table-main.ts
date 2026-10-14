@@ -31,15 +31,15 @@
  * a stream (on the map opened by the measurement). The draw instance is `window.benchDraw`.
  */
 
-import {
-  createDraw,
-  createTableMemoryStore,
-  type Draw,
-  type FeatureTablesWorker,
-  type RowField,
-  type Store,
-} from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type Draw, type Store } from '@sakuzu/maplibre-gl-draw';
+import type {
+  createTableStore as createPublicTableStore,
+  FeatureTablesOptions,
+  FeatureTablesWorker,
+  RowField,
+} from '@sakuzu/maplibre-gl-draw/kasane';
 import * as maplibregl from 'maplibre-gl';
+import * as tableMemory from '../src/store/table-memory';
 import {
   type BenchCandidates,
   type BenchFeature,
@@ -207,13 +207,22 @@ function rowsWorker(): FeatureTablesWorker {
   };
 }
 
-// The rows are held by an in-memory Store of rows: its tables are drawn, its writer takes the row
-// groups in and writes the changes of others
+// The rows are held by an in-memory Store of rows: its tables are drawn, its writer adds the
+// blocks of rows and writes the changes of others. It is made from the module of the library that
+// holds it, with an option the library keeps to itself (the number of rows opened from which they
+// move by their state), which the declarations of its build leave out
+const createTableStore = (
+  tableMemory as unknown as {
+    createTableStore(
+      options: FeatureTablesOptions & { readonly moveOpenedByStateFrom?: number },
+    ): ReturnType<typeof createPublicTableStore>;
+  }
+).createTableStore;
 const ofRows =
   params.mode === 'table'
-    ? createTableMemoryStore({
+    ? createTableStore({
         ...(params.worker && { worker: rowsWorker() }),
-        ...(params.moveFrom !== null && { moveHeldByStateFrom: params.moveFrom }),
+        ...(params.moveFrom !== null && { moveOpenedByStateFrom: params.moveFrom }),
       })
     : null;
 const tablesOfPage =
@@ -440,7 +449,7 @@ async function runTableBench(): Promise<TableBenchResult> {
   window.benchResult = result;
   const finish = (stopped?: string): TableBenchResult => {
     if (stopped) result.stopped = stopped;
-    for (const [name, bytes] of Object.entries(draw.debug.gpu().byRenderer)) {
+    for (const [name, bytes] of Object.entries(diagnostics.gpuBytesByRenderer())) {
       result.gpu[name] = bytes / MB;
     }
     render(result);

@@ -501,7 +501,7 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 
 ### 地物を行で持つストア
 
-地物を列の行で持つストア (`createTableMemoryStore` や、
+地物を列の行で持つストア (`createTableStore` や、
 `createFeatureTables` の上に作った自前のストア) は、地物になっていない
 行 (選んでいない、編集していない行) を、地物でなく行として、行の番号
 (handle) で知らせます。元に戻すためのものも変更に入っています。
@@ -514,7 +514,7 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 - 項目の場所 (レイヤー、グループ、ほかの項目との並び) は、地物か行かに
   よらず `change.order` に入ります。1 つの移動なら項目がいた場所
   (`ItemMove.from`) を、たくさんの行なら移動の前の並びの鍵
-  (`RowRangeMove.before`。`draw.tables.applyRows` で書き戻します) を
+  (`RowsMove.before`。`draw.tables.applyRows` で書き戻します) を
   持ちます
 - この端末の削除は、消した行を手放すまで (`store.tables.release`) 残し
   ます (`change.retain`)。削除でない値を書くと、行は元の場所に戻ります。
@@ -522,9 +522,9 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
   呼ぶと元の場所に戻ります
 
 ```ts
-import type { RowValuesSnapshot } from '@sakuzu/maplibre-gl-draw';
+import type { RowValues } from '@sakuzu/maplibre-gl-draw';
 
-const steps: RowValuesSnapshot[] = [];
+const steps: RowValues[] = [];
 draw.getStore().subscribe((change) => {
   if (change.source === 'local' && change.rows?.before) {
     steps.push(change.rows.before);
@@ -540,7 +540,7 @@ if (last) draw.transact(() => draw.tables.applyRows(last), { source: 'history' }
 と同じく、読み取り専用のあいだは `null` を返します。
 
 レイヤーとグループの項目をリストで持ち、項目を場所に置く以外の方法で
-リストを変える自前のストアは、変更の前と後のリストから `itemMovesBetween`
+リストを変える自前のストアは、変更の前と後のリストから `diffItemOrder`
 で `change.order` の移動を作ります。
 
 ## 関連する例

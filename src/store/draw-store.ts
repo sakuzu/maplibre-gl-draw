@@ -27,7 +27,7 @@
  *     modes and the public API rely on it.
  */
 
-import type { FeatureTables, LocalRowWrite, RowPatch } from '../api/tables.js';
+import type { FeatureTables, RowWrite } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import {
   tableGroupMemberCount,
@@ -51,7 +51,7 @@ import type {
   Layer,
   Metadata,
   Mode,
-  RowValuesSnapshot,
+  RowValues,
   Selection,
   SelectionType,
   StoreChange,
@@ -231,21 +231,21 @@ export class DrawStore implements Store {
       return true;
     });
   }
-  applyLocal(write: LocalRowWrite): boolean {
+  applyRows(write: RowWrite): boolean {
     const contract = this.#contract;
-    if (!contract.tables || !contract.applyLocal) {
+    if (!contract.tables || !contract.applyRows) {
       throw new Error('The Store does not hold its features as rows: it writes no rows');
     }
-    return this.#write(() => (contract.applyLocal as (w: LocalRowWrite) => boolean)(write));
+    return this.#write(() => (contract.applyRows as (w: RowWrite) => boolean)(write));
   }
-  applyRows(patch: RowPatch): RowValuesSnapshot | null {
+  restoreRows(patch: RowValues): RowValues | null {
     const tables = this.#contract.tables;
-    if (!tables || !this.#contract.applyLocal) {
+    if (!tables || !this.#contract.applyRows) {
       throw new Error('The Store does not hold its features as rows: it writes no rows');
     }
     if (this.#contract.isReadOnly()) return null;
-    const before = tables.snapshot(patch);
-    return this.applyLocal({ patch, before }) ? before : null;
+    const before = tables.readValues(patch);
+    return this.applyRows({ patch, before }) ? before : null;
   }
 
   createGroup(group: Group): boolean {
@@ -492,15 +492,15 @@ export class DrawStore implements Store {
       if (this.#released.delete(id)) released = true;
     }
     // A row passing from one owner to the other is named by one of them all the while
-    if (released) holder.hold(RELEASED_OWNER, [...new Set([...releasedBefore, ...this.#released])]);
-    holder.hold(SELECTION_OWNER, [...ids]);
+    if (released) holder.open(RELEASED_OWNER, [...new Set([...releasedBefore, ...this.#released])]);
+    holder.open(SELECTION_OWNER, [...ids]);
     if (!released) return;
-    holder.hold(RELEASED_OWNER, [...this.#released]);
+    holder.open(RELEASED_OWNER, [...this.#released]);
     if (this.#releaseTimer !== null) clearTimeout(this.#releaseTimer);
     this.#releaseTimer = setTimeout(() => {
       this.#releaseTimer = null;
       this.#released.clear();
-      holder.hold(RELEASED_OWNER, []);
+      holder.open(RELEASED_OWNER, []);
     }, RELEASE_DELAY_MS);
   }
 

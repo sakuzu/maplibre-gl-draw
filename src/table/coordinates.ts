@@ -23,21 +23,26 @@
  * The dimensions of the coordinates of a column: `x` and `y`, with a `z`, an `m`, or both (the
  * names of GeoArrow). The values of a coordinate are in this order.
  */
-export type CoordinateDims = 'xy' | 'xyz' | 'xym' | 'xyzm';
+export type CoordinateDimensions = 'xy' | 'xyz' | 'xym' | 'xyzm';
 
 /** The number of values of a coordinate of each dimensions */
-const STRIDES: Readonly<Record<CoordinateDims, 2 | 3 | 4>> = { xy: 2, xyz: 3, xym: 3, xyzm: 4 };
+const STRIDES: Readonly<Record<CoordinateDimensions, 2 | 3 | 4>> = {
+  xy: 2,
+  xyz: 3,
+  xym: 3,
+  xyzm: 4,
+};
 
 /** Where `z` and `m` are in a coordinate of each dimensions (-1 for none) */
-const Z_AT: Readonly<Record<CoordinateDims, number>> = { xy: -1, xyz: 2, xym: -1, xyzm: 2 };
-const M_AT: Readonly<Record<CoordinateDims, number>> = { xy: -1, xyz: -1, xym: 2, xyzm: 3 };
+const Z_AT: Readonly<Record<CoordinateDimensions, number>> = { xy: -1, xyz: 2, xym: -1, xyzm: 2 };
+const M_AT: Readonly<Record<CoordinateDimensions, number>> = { xy: -1, xyz: -1, xym: 2, xyzm: 3 };
 
 /**
  * Whether a value names dimensions of coordinates
  *
  * @internal
  */
-export function isCoordinateDims(value: unknown): value is CoordinateDims {
+export function isCoordinateDimensions(value: unknown): value is CoordinateDimensions {
   return value === 'xy' || value === 'xyz' || value === 'xym' || value === 'xyzm';
 }
 
@@ -46,7 +51,7 @@ export function isCoordinateDims(value: unknown): value is CoordinateDims {
  *
  * @internal
  */
-export function strideOf(dims: CoordinateDims | undefined): 2 | 3 | 4 {
+export function strideOf(dims: CoordinateDimensions | undefined): 2 | 3 | 4 {
   return STRIDES[dims ?? 'xy'];
 }
 
@@ -56,7 +61,7 @@ export function strideOf(dims: CoordinateDims | undefined): 2 | 3 | 4 {
  *
  * @internal
  */
-export function dimsWithin(inner: CoordinateDims, outer: CoordinateDims): boolean {
+export function dimsWithin(inner: CoordinateDimensions, outer: CoordinateDimensions): boolean {
   return (Z_AT[inner] < 0 || Z_AT[outer] >= 0) && (M_AT[inner] < 0 || M_AT[outer] >= 0);
 }
 
@@ -65,7 +70,7 @@ export function dimsWithin(inner: CoordinateDims, outer: CoordinateDims): boolea
  *
  * @internal
  */
-export function unionDims(a: CoordinateDims, b: CoordinateDims): CoordinateDims {
+export function unionDims(a: CoordinateDimensions, b: CoordinateDimensions): CoordinateDimensions {
   const z = Z_AT[a] >= 0 || Z_AT[b] >= 0;
   const m = M_AT[a] >= 0 || M_AT[b] >= 0;
   return z ? (m ? 'xyzm' : 'xyz') : m ? 'xym' : 'xy';
@@ -87,11 +92,11 @@ export function unionDims(a: CoordinateDims, b: CoordinateDims): CoordinateDims 
  */
 export function copyCoordinates(
   source: Float64Array,
-  sourceDims: CoordinateDims,
+  sourceDims: CoordinateDimensions,
   from: number,
   count: number,
   target: Float64Array,
-  targetDims: CoordinateDims,
+  targetDims: CoordinateDimensions,
   at: number,
 ): void {
   if (sourceDims === targetDims) {
