@@ -269,13 +269,15 @@ export interface FeatureTablesInternals {
   readonly hasPendingAdoption: boolean;
   /**
    * Takes in the row groups waiting, one group per step, within the budget of the frame (at
-   * least one group per call). A group that cannot be taken in is left out and reported
+   * least one group per call), but the ones of a layer whose reorder of groups of features waits
+   * (taken in once it is in). A group that cannot be taken in is left out and reported
    *
    * @returns Whether groups are still waiting
    */
   advanceAdoption(budget: TableWorkBudget): boolean;
   /**
-   * Takes in every row group waiting at once (a host without frames, the tests)
+   * Takes in every row group waiting at once (a host without frames, the tests), but the ones
+   * of a layer whose reorder of groups of features waits (they are taken in once it is in)
    *
    * @throws when a group cannot be taken in (the groups after it keep waiting)
    */
@@ -602,8 +604,20 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const before = this.versions.swapped;
       this.versions.advance(unbounded, false);
       this.versions.swapReady();
+      // The row groups that waited for a reorder swapped in now
+      this.flushAdoption();
       if (this.versions.swapped === before && this.versions.built().length > 0) break;
     }
+  }
+
+  /**
+   * Whether a reorder of the groups of features of a layer waits to go in: the keys of its groups
+   * are going to change, so nothing new is put among its row groups until then (row groups taken
+   * in, new rows built into groups of their own, next versions): what is placed by the keys
+   * written would be put among the groups by the keys before
+   */
+  private reorderWaits(layer: LayerTable): boolean {
+    return this.versions.reorders(layer).length > 0;
   }
 
   builtVersions(layerId: string): GroupVersion[] {
@@ -816,8 +830,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   advanceAdoption(budget: TableWorkBudget): boolean {
-    while (this.adoptions.length > 0 && budget.canStep()) {
-      const next = this.adoptions.shift() as Adoption;
+    let at = 0;
+    while (at < this.adoptions.length && budget.canStep()) {
+      const next = this.adoptions[at];
+      // The groups of a layer whose reorder waits wait with it, in their order
+      if (this.reorderWaits(next.layer)) {
+        at++;
+        continue;
+      }
+      this.adoptions.splice(at, 1);
       budget.step(() => {
         try {
           this.takeIn(next);
@@ -832,7 +853,16 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   flushAdoption(): void {
     this.advanceCreations(UNBOUNDED_BUDGET, false);
-    while (this.adoptions.length > 0) this.takeIn(this.adoptions.shift() as Adoption);
+    let at = 0;
+    while (at < this.adoptions.length) {
+      const next = this.adoptions[at];
+      if (this.reorderWaits(next.layer)) {
+        at++;
+        continue;
+      }
+      this.adoptions.splice(at, 1);
+      this.takeIn(next);
+    }
   }
 
   /**
@@ -886,12 +916,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const creation of [...this.creations]) {
       if (creation.status !== 'gathering') continue;
       creation.idle++;
+      // Its rows are read from it until the reorder of its layer is in, and built then
+      if (this.reorderWaits(creation.layer)) continue;
       // Rows keep coming: the groups of the target size are built, the rest keeps gathering (so
       // a long import is not cut into a group per write)
       if (wait && creation.idle <= CREATE_WAIT_FRAMES) this.splitCreation(creation);
     }
     for (const creation of [...this.creations]) {
-      if (creation.status !== 'gathering') continue;
+      if (creation.status !== 'gathering' || this.reorderWaits(creation.layer)) continue;
       if (wait && creation.idle <= CREATE_WAIT_FRAMES) continue;
       const worker = this.worker;
       if (worker && wait) {
@@ -986,8 +1018,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.dropReading(creation);
   }
 
-  /** Builds and takes in a creation now (a row of it is written before it is taken in) */
+  /**
+   * Builds and takes in a creation now (a row of it is written before it is taken in); while a
+   * reorder of its layer waits, its rows not taken in go to the delta instead
+   */
   private finishCreationNow(creation: Creation): void {
+    if (this.reorderWaits(creation.layer)) {
+      for (const adoption of this.adoptions.filter((entry) => entry.creation === creation)) {
+        this.adoptions.splice(this.adoptions.indexOf(adoption), 1);
+      }
+      this.creationToDelta(creation);
+      return;
+    }
     if (creation.status === 'queued') {
       // Its groups are built: they are taken in now, before the groups queued before them
       const own = this.adoptions.filter((adoption) => adoption.creation === creation);
@@ -1062,7 +1104,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const rows: DeltaInput[] = [];
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
-      if (this.placeOf(handle)) continue;
+      // A row read from a row group or a delta is not put there again (one read from its
+      // creation, which it is about to leave, is)
+      if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) continue;
       rows.push({ handle, input: rowInputOf(this.readContext, group, r) });
     }
     this.rebuildDelta(layer, new Set(), rows, ++this.writeCount);

@@ -405,6 +405,11 @@ export interface FeatureTablesWriter {
    * built). It is for a host that draws nothing, and for tests: the tables take the groups in
    * over the frames of the drawing otherwise, and do so still when this is not called.
    *
+   * The groups of a layer whose groups of features are being put in the order of new keys (a
+   * drawing holds the reorder until it has drawn it) keep waiting, and are taken in once it is
+   * in: placed among the row groups by the keys before, they could overlap the members of a
+   * group where its new key puts it. Without a drawing, nothing waits.
+   *
    * @throws when a group given to `adopt` cannot be taken in (see `adopt`): the groups after it
    *   keep waiting
    */

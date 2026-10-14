@@ -18,7 +18,7 @@
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createFeatureTables,
   type FeatureTables,
@@ -81,6 +81,17 @@ function setup() {
     open = false;
   };
   open = false;
+  /**
+   * One frame of the drawing, in its order: the row groups waiting and the next versions are
+   * advanced, then the versions whose GPU side is up are swapped in (`up`: whether it is)
+   */
+  const frame = (up: boolean) => {
+    internals.advanceAdoption(ONE_STEP);
+    internals.advanceVersions(ONE_STEP);
+    open = up;
+    internals.swapVersions();
+    open = false;
+  };
   /** The ids of the items of a layer in their order */
   const items = (layerId: string) => {
     const view = tables.layer(layerId);
@@ -90,7 +101,7 @@ function setup() {
       refs.kinds[i] === 0 ? tables.idOf(h) : tables.groupIdOf(h),
     );
   };
-  return { store, writer, tables, internals, draw, items };
+  return { store, writer, tables, internals, draw, frame, items };
 }
 
 describe('the key of the order of a group of features', () => {
@@ -366,6 +377,191 @@ describe('the order written, while the drawing holds the reorder of a group', ()
     store.moveItem('g', { layerId: 'a', below: 'r1' });
     draw();
     expect(items('a')).toEqual(['r0', 'r1', 'g', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
+  });
+});
+
+describe('the row groups taken in while the drawing holds the reorder of a group', () => {
+  /**
+   * A group `g` of r2 and r3 moved to the front of the layer `a`, its reorder held by the
+   * drawing, and two keys around its new key, after the last row
+   */
+  function heldReorder() {
+    const setupOf = setup();
+    setupOf.store.createGroup({
+      id: 'g',
+      layerId: 'a',
+      name: 'g',
+      featureIds: ['r2', 'r3'],
+      visible: true,
+      locked: false,
+    });
+    setupOf.draw();
+    setupOf.store.moveItem('g', { layerId: 'a', above: null });
+    const handle = setupOf.tables.groupHandleOf('g') as number;
+    const written = setupOf.tables.groupOrderOf(handle) as string;
+    expect(setupOf.internals.writtenOrders.get(handle)).toBe(written);
+    // After the last row in the order drawn, and around the new key of the group
+    const low = `${key(9)}0`;
+    const high = `${written}z`;
+    expect(compareKeys(low, key(9))).toBeGreaterThan(0);
+    expect(compareKeys(low, written)).toBeLessThan(0);
+    expect(compareKeys(high, written)).toBeGreaterThan(0);
+    return { ...setupOf, handle, low, high };
+  }
+
+  /** Two points `n0` and `n1` of these keys */
+  function around(low: string, high: string) {
+    const builder = createRowGroupBuilder({ targetRows: 4 });
+    ['n0', 'n1'].forEach((id, i) => {
+      builder.addRow({
+        id,
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [20 + i, 0] },
+        order: i === 0 ? low : high,
+      });
+    });
+    return builder.finish();
+  }
+
+  /** The order once the group of `n0` and `n1` and the reorder are in */
+  const BETWEEN = ['r0', 'r1', 'n0', 'n1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'g'];
+
+  it('wait for the reorder, and are taken in the frame after it goes in', () => {
+    const { writer, tables, frame, items } = heldReorder();
+    // Where the members of the group stood: among them in the order drawn, free once it is in
+    writer.adopt('a', around(`${key(1)}5`, `${key(2)}5`));
+    const takenIn: number[] = [];
+    // The drawing holds the reorder for three frames
+    for (let f = 1; f <= 6; f++) {
+      frame(f >= 4);
+      if (takenIn.length === 0 && tables.handleOf('n0') !== undefined) takenIn.push(f);
+    }
+    // The reorder goes in at the end of the fourth frame, the group in the fifth (taken in at
+    // the start of a frame, before its versions are swapped in)
+    expect(takenIn).toEqual([5]);
+    expect(items('a')).toEqual(BETWEEN);
+  });
+
+  it('wait for the reorder when taken in at once, and are taken in once it is', () => {
+    const { writer, tables, internals, draw, items } = heldReorder();
+    writer.adopt('a', around(`${key(1)}5`, `${key(2)}5`));
+    writer.flushAdoption();
+    expect(internals.hasPendingAdoption).toBe(true);
+    expect(tables.handleOf('n0')).toBeUndefined();
+    draw();
+    expect(internals.hasPendingAdoption).toBe(false);
+    expect(items('a')).toEqual(BETWEEN);
+  });
+
+  it('leave out a group whose keys hold the new key of the group, once the reorder is in', () => {
+    const { writer, tables, frame, items, low, high } = heldReorder();
+    writer.adopt('a', around(low, high));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (let f = 1; f <= 6; f++) frame(f >= 4);
+    // Refused when it is taken in (it would overlap the members of the group), not when the
+    // reorder goes in
+    expect(error).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+    expect(tables.handleOf('n0')).toBeUndefined();
+    expect(items('a')).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'g']);
+  });
+
+  /** Writes `n` new rows `c00`.. of these keys (a run no row of the order drawn is within) */
+  function createRows(
+    writer: ReturnType<typeof setup>['writer'],
+    keyOf: (i: number) => string,
+    n = 80,
+  ) {
+    const ids = Array.from({ length: n }, (_, i) => `c${String(i).padStart(2, '0')}`);
+    const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
+    writer.apply({
+      handles,
+      fields: new Map<RowField, unknown[]>([
+        ['type', ids.map(() => 'Point')],
+        ['layerId', ids.map(() => 'a')],
+        ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i, 1] }))],
+        ['order', ids.map((_, i) => keyOf(i))],
+      ]),
+    });
+    return { ids, handles };
+  }
+
+  it('build new rows into a row group of their own once the reorder is in', () => {
+    const { writer, tables, internals, frame, items, low } = heldReorder();
+    // Between the last row and the new key of the group
+    const { ids, handles } = createRows(writer, (i) => `${low}${String(i).padStart(2, '0')}`);
+    let built = 0;
+    for (let f = 1; f <= 10; f++) {
+      // The drawing holds the reorder for five frames
+      frame(f >= 6);
+      if (built === 0 && internals.ids.mainGroup(handles[0]) >= 0) built = f;
+      // Read from their creation meanwhile
+      expect(tables.handleOf(ids[0])).toBe(handles[0]);
+    }
+    // Gathered for two frames, then waiting for the reorder (in at the end of the sixth frame):
+    // built in the seventh and taken in at the start of the eighth, in a group of their own, not
+    // in the delta (without the reorder: built in the third frame, taken in in the fourth)
+    expect(built).toBe(8);
+    expect(internals.ids.deltaLayer(handles[0])).toBeLessThan(0);
+    const order = items('a');
+    expect(order.slice(0, 8)).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
+    expect(order.slice(8, 8 + ids.length)).toEqual(ids);
+    expect(order[order.length - 1]).toBe('g');
+  });
+
+  it('put new rows whose keys hold the new key of the group into the delta once it is in', () => {
+    const { writer, tables, internals, frame, items, low, high } = heldReorder();
+    const n = 80;
+    const { ids, handles } = createRows(writer, (i) =>
+      i < n / 2 ? `${low}${String(i).padStart(2, '0')}` : `${high}${String(i).padStart(2, '0')}`,
+    );
+    let left = 0;
+    for (let f = 1; f <= 10; f++) {
+      frame(f >= 6);
+      const placed =
+        internals.ids.mainGroup(handles[0]) >= 0 || internals.ids.deltaLayer(handles[0]) >= 0;
+      if (left === 0 && placed) left = f;
+      expect(tables.handleOf(ids[0])).toBe(handles[0]);
+    }
+    // Not built before the reorder is in (they would be built by the keys before); built in the
+    // seventh frame, their group overlaps the members of the group when it is taken in, in the
+    // eighth, so they go to the delta then
+    expect(left).toBe(8);
+    const order = items('a');
+    expect(order.indexOf('g')).toBe(order.indexOf(ids[n / 2 - 1]) + 1);
+    expect(order.indexOf(ids[n / 2])).toBe(order.indexOf('g') + 1);
+  });
+
+  it('put the rows of new rows written again into the delta while the reorder waits', () => {
+    const { writer, tables, internals, draw, items, low, high } = heldReorder();
+    const n = 80;
+    const ids = Array.from({ length: n }, (_, i) => `c${String(i).padStart(2, '0')}`);
+    const keys = ids.map((_, i) =>
+      i < n / 2 ? `${low}${String(i).padStart(2, '0')}` : `${high}${String(i).padStart(2, '0')}`,
+    );
+    const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
+    writer.apply({
+      handles,
+      fields: new Map<RowField, unknown[]>([
+        ['type', ids.map(() => 'Point')],
+        ['layerId', ids.map(() => 'a')],
+        ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i, 1] }))],
+        ['order', keys],
+      ]),
+    });
+    // A row of them written before they are built
+    writer.apply({
+      handles: handles.subarray(0, 1),
+      fields: new Map<RowField, unknown[]>([
+        ['geometry', [{ type: 'Point', coordinates: [9, 9] }]],
+      ]),
+    });
+    expect(tables.layer('a')?.getRowPoint(handles[0])).toEqual([9, 9]);
+    expect(internals.ids.mainGroup(handles[1])).toBeLessThan(0);
+    draw();
+    const order = items('a');
+    expect(order.indexOf('g')).toBe(order.indexOf(ids[n / 2 - 1]) + 1);
+    expect(order.indexOf(ids[n / 2])).toBe(order.indexOf('g') + 1);
   });
 });
 
