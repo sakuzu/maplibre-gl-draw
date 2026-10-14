@@ -14,11 +14,16 @@
  * The items are numbered as the changes of the order number them: a row by twice its handle, a
  * group of features by twice its handle plus one. A container is the layer (-1), or a group of
  * features whose members are its items.
+ *
+ * The order walked is the order written, which the writes read: a group of features given a new
+ * key stands at the place of that key at once, though its members are read and drawn in the order
+ * before until their reorder goes in (`ItemWalkSource.writtenOrders`). Its rows are passed where
+ * they stand, and the group is put among the other items by its new key.
  */
 
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
+import type { RowKeySource } from '../table/row-keys.js';
+import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
 import type { GroupTable } from './group-table.js';
 import type { LayerTable, OrderRow, RowGroup } from './layer-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
@@ -52,6 +57,34 @@ export interface ItemWalkSource {
   placeOf(
     handle: RowHandle,
   ): { readonly layer: LayerTable; readonly group: RowGroup; readonly row: number } | undefined;
+  /**
+   * The keys of the order of groups of features written and not in the order read yet: their
+   * members are read where the keys before put them until their reorder goes in (none when
+   * omitted)
+   */
+  readonly writtenOrders?: ReadonlyMap<GroupHandle, string>;
+}
+
+/**
+ * The key an item is ordered by in its container: the key of its order and its id (a row or a
+ * group of features in a layer), or the key of its order in its group and its id (a member)
+ *
+ * @internal
+ */
+export type ItemKey = readonly [string, string];
+
+/**
+ * The order of two items by their keys, then their ids (the order of their UTF-8 bytes)
+ *
+ * @internal
+ */
+export function compareItemKeys(a: ItemKey, b: ItemKey): number {
+  return compareCodePoints(a[0], b[0]) || compareCodePoints(a[1], b[1]);
+}
+
+/** What `down` and `up` pass */
+interface Skip {
+  has(code: number): boolean;
 }
 
 /** The rows an item spans in the order of its layer, deleted rows at its ends left out */
@@ -66,10 +99,17 @@ interface ItemSpan {
  * @internal
  */
 export class ItemWalk {
+  /** The groups of the layer whose keys written are not in the order read yet, with those keys */
+  private readonly written = new Map<GroupHandle, string>();
+
   constructor(
     private readonly layer: LayerTable,
     private readonly source: ItemWalkSource,
-  ) {}
+  ) {
+    for (const [group, order] of source.writtenOrders ?? []) {
+      if (source.groups.layerOf(group) === layer.layerId) this.written.set(group, order);
+    }
+  }
 
   /**
    * The rows an item spans (null when it is not an item of the container: a row of another
@@ -102,7 +142,13 @@ export class ItemWalk {
    */
   below(code: number, container: GroupHandle, skip?: ReadonlySet<number>): number | null {
     const span = this.span(code, container);
-    return span ? this.down(this.layer.previousRow(span.first), container, skip) : null;
+    if (!span) return null;
+    if (container >= 0 || this.written.size === 0) {
+      return this.down(this.layer.previousRow(span.first), container, skip);
+    }
+    const key = this.keyOf(code);
+    const from = this.isWritten(code) ? this.rowBefore(key) : this.layer.previousRow(span.first);
+    return this.later(this.down(from, -1, this.passing(skip)), this.writtenBefore(key, skip), -1);
   }
 
   /**
@@ -111,38 +157,54 @@ export class ItemWalk {
    */
   above(code: number, container: GroupHandle, skip?: ReadonlySet<number>): number | null {
     const span = this.span(code, container);
-    return span ? this.up(this.layer.nextRow(span.last), container, skip) : null;
+    if (!span) return null;
+    if (container >= 0 || this.written.size === 0) {
+      return this.up(this.layer.nextRow(span.last), container, skip);
+    }
+    const key = this.keyOf(code);
+    const from = this.isWritten(code)
+      ? this.layer.rowNotBefore(probe(key, true), 0)
+      : this.layer.nextRow(span.last);
+    return this.later(this.up(from, -1, this.passing(skip)), this.writtenAfter(key, skip), 1);
   }
 
   /** The first item of a container from the back (null for none), the items `skip` holds passed */
   bottom(container: GroupHandle, skip?: ReadonlySet<number>): number | null {
-    if (container < 0) return this.up(this.layer.firstRow(), container, skip);
+    if (container < 0) {
+      const first = this.up(this.layer.firstRow(), container, this.passing(skip));
+      return this.later(first, this.writtenAfter(null, skip), 1);
+    }
     if (!this.source.groups.has(container)) return null;
     return this.up(this.layer.rowNotBefore(this.groupStart(container), 0), container, skip);
   }
 
   /** The last item of a container (null for none), the items `skip` holds passed */
   top(container: GroupHandle, skip?: ReadonlySet<number>): number | null {
-    if (container < 0) return this.down(this.layer.lastRow(), container, skip);
+    if (container < 0) {
+      const last = this.down(this.layer.lastRow(), container, this.passing(skip));
+      return this.later(last, this.writtenBefore(null, skip), -1);
+    }
     if (!this.source.groups.has(container)) return null;
     const after = this.rowAfterGroup(container);
     return this.down(after ? this.layer.previousRow(after) : this.layer.lastRow(), container, skip);
   }
 
   /**
-   * The item of the layer a row is in, or the first one after it (null for none), the items
+   * The first item of the layer whose key does not come before a key (null for none), the items
    * `skip` holds passed
    */
-  itemFrom(at: OrderRow | null, skip?: ReadonlySet<number>): number | null {
-    return this.up(at, -1, skip);
+  itemNotBefore(key: ItemKey, skip?: ReadonlySet<number>): number | null {
+    const at = this.layer.rowNotBefore(probe(key, false), 0);
+    return this.later(this.up(at, -1, this.passing(skip)), this.writtenFrom(key, skip), 1);
   }
 
   /**
-   * The item of the layer a row is in, or the last one before it (null for none), the items
-   * `skip` holds passed
+   * The last item of the layer whose key comes before a key (null for none), the items `skip`
+   * holds passed
    */
-  itemUntil(at: OrderRow | null, skip?: ReadonlySet<number>): number | null {
-    return this.down(at, -1, skip);
+  itemBefore(key: ItemKey, skip?: ReadonlySet<number>): number | null {
+    const last = this.down(this.rowBefore(key), -1, this.passing(skip));
+    return this.later(last, this.writtenBefore(key, skip), -1);
   }
 
   /** The handles of the members of a group of features, in their order, from `start` on */
@@ -167,22 +229,107 @@ export class ItemWalk {
   }
 
   /**
-   * The order of two items of the layer (each read where it stands: an item it is not gives 0
+   * The order of two items of the layer, by their keys written (an item it is not gives 0
    * against anything)
    *
    * @returns A negative number when `a` comes first
    */
   compare(a: number, b: number): number {
-    const x = this.span(a, -1);
-    const y = this.span(b, -1);
-    if (!x || !y) return 0;
-    return compareRowKeys(
-      x.first.group.data,
-      x.first.row,
-      y.first.group.data,
-      y.first.row,
-      this.source.groups,
-    );
+    if (!this.span(a, -1) || !this.span(b, -1)) return 0;
+    return compareItemKeys(this.keyOf(a), this.keyOf(b));
+  }
+
+  /**
+   * The key an item of the layer is ordered by: the key written of a group of features, the key
+   * of the order of a row
+   */
+  keyOf(code: number): ItemKey {
+    const groups = this.source.groups;
+    if ((code & 1) === 1) {
+      const group = code >> 1;
+      return [this.written.get(group) ?? groups.orderOf(group) ?? '', groups.idOf(group) ?? ''];
+    }
+    const place = this.source.placeOf(code >> 1);
+    if (!place) return ['', ''];
+    return [
+      utf8String(place.group.data.itemKeys, place.row),
+      utf8String(place.group.data.ids, place.row),
+    ];
+  }
+
+  /** Whether an item is a group of features whose key written is not in the order read yet */
+  private isWritten(code: number): boolean {
+    return (code & 1) === 1 && this.written.has(code >> 1);
+  }
+
+  /** The items `skip` holds and the groups whose keys written are not read yet, passed */
+  private passing(skip: ReadonlySet<number> | undefined): Skip | undefined {
+    if (this.written.size === 0) return skip;
+    return { has: (code) => this.isWritten(code) || (skip?.has(code) ?? false) };
+  }
+
+  /** The last row of the order whose key comes before a key (null for none) */
+  private rowBefore(key: ItemKey): OrderRow | null {
+    const at = this.layer.rowNotBefore(probe(key, false), 0);
+    return at ? this.layer.previousRow(at) : this.layer.lastRow();
+  }
+
+  /**
+   * Of the groups whose keys written are not read yet and that are items of the layer, the one
+   * of the largest key before a key (null for none; the largest of all for no key)
+   */
+  private writtenBefore(key: ItemKey | null, skip: ReadonlySet<number> | undefined): number | null {
+    let best: number | null = null;
+    for (const code of this.writtenItems(skip)) {
+      const own = this.keyOf(code);
+      if (key && compareItemKeys(own, key) >= 0) continue;
+      if (best === null || compareItemKeys(own, this.keyOf(best)) > 0) best = code;
+    }
+    return best;
+  }
+
+  /**
+   * Of the groups whose keys written are not read yet and that are items of the layer, the one
+   * of the smallest key after a key (null for none; the smallest of all for no key)
+   */
+  private writtenAfter(key: ItemKey | null, skip: ReadonlySet<number> | undefined): number | null {
+    let best: number | null = null;
+    for (const code of this.writtenItems(skip)) {
+      const own = this.keyOf(code);
+      if (key && compareItemKeys(own, key) <= 0) continue;
+      if (best === null || compareItemKeys(own, this.keyOf(best)) < 0) best = code;
+    }
+    return best;
+  }
+
+  /** As `writtenAfter`, the key itself counted */
+  private writtenFrom(key: ItemKey, skip: ReadonlySet<number> | undefined): number | null {
+    let best: number | null = null;
+    for (const code of this.writtenItems(skip)) {
+      const own = this.keyOf(code);
+      if (compareItemKeys(own, key) < 0) continue;
+      if (best === null || compareItemKeys(own, this.keyOf(best)) < 0) best = code;
+    }
+    return best;
+  }
+
+  /** The groups whose keys written are not read yet that are items of the layer, not skipped */
+  private *writtenItems(skip: ReadonlySet<number> | undefined): Iterable<number> {
+    for (const group of this.written.keys()) {
+      const code = groupCode(group);
+      if (!skip?.has(code) && this.span(code, -1)) yield code;
+    }
+  }
+
+  /**
+   * Of two items of the layer, the one that comes later in a direction (1: the smaller key, the
+   * one met first going up; -1: the larger, the one met first going down), or the one there is
+   */
+  private later(a: number | null, b: number | null, direction: 1 | -1): number | null {
+    if (a === null) return b;
+    if (b === null) return a;
+    const order = compareItemKeys(this.keyOf(a), this.keyOf(b));
+    return direction === 1 ? (order <= 0 ? a : b) : order >= 0 ? a : b;
   }
 
   /**
@@ -191,7 +338,7 @@ export class ItemWalk {
   private down(
     from: OrderRow | null,
     container: GroupHandle,
-    skip: ReadonlySet<number> | undefined,
+    skip: Skip | undefined,
   ): number | null {
     let at = from;
     while (at) {
@@ -216,11 +363,7 @@ export class ItemWalk {
   }
 
   /** The first item at or above a row, read up (null when there is none in the container) */
-  private up(
-    from: OrderRow | null,
-    container: GroupHandle,
-    skip: ReadonlySet<number> | undefined,
-  ): number | null {
+  private up(from: OrderRow | null, container: GroupHandle, skip: Skip | undefined): number | null {
     let at = from;
     while (at) {
       if (isDeleted(at)) {
@@ -271,6 +414,32 @@ const EMPTY = utf8ColumnFromStrings(['']);
 
 /** The group of a row outside a group */
 const NO_GROUP = Int32Array.of(-1);
+
+/**
+ * A key of the order of no row: the place just before the rows of an item of a key (or just
+ * after them)
+ */
+function probe(key: ItemKey, after: boolean): RowKeySource {
+  // The id followed by the smallest character: no item id comes between them
+  return {
+    ids: utf8ColumnFromStrings([after ? `${key[1]}\u0000` : key[1]]),
+    itemKeys: utf8ColumnFromStrings([key[0]]),
+    memberKeys: EMPTY,
+    groups: NO_GROUP,
+  };
+}
+
+/** The order of two strings by their code points (the order of their UTF-8 bytes) */
+function compareCodePoints(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const x = a.codePointAt(i) as number;
+    const y = b.codePointAt(i) as number;
+    if (x !== y) return x - y;
+    if (x > 0xffff) i++;
+  }
+  return a.length - b.length;
+}
 
 /** Whether a row is deleted */
 function isDeleted(at: { readonly group: RowGroup; readonly row: number }): boolean {

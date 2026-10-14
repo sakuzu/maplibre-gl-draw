@@ -44,9 +44,9 @@ import {
 } from '../shared/utils/item-moves.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
-import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
+import { utf8String } from '../table/utf8-column.js';
 import type { GroupTable } from './group-table.js';
-import { groupCode, ItemWalk, rowCode } from './item-walk.js';
+import { compareItemKeys, groupCode, type ItemKey, ItemWalk, rowCode } from './item-walk.js';
 import type { LayerTable, RowGroup } from './layer-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
 
@@ -79,16 +79,15 @@ export interface ItemOrderSource {
   idOf(handle: RowHandle): string | undefined;
   /** Where a row is read (undefined for no row) */
   placeOf(handle: RowHandle): RowAt | undefined;
+  /**
+   * The keys of the order of groups of features written and not in the order read yet (see
+   * `ItemWalkSource.writtenOrders`)
+   */
+  readonly writtenOrders?: ReadonlyMap<GroupHandle, string>;
 }
 
 /** The fields of a row that place it, as a row holds them (what `RowRangeMove.before` keeps) */
 const PLACE_FIELDS: readonly RowField[] = ['layerId', 'groupId', 'order', 'member'];
-
-/**
- * The key an item is ordered by in its container: the key of its order and its id (a row or a
- * group of features in a layer), or the key of its order in its group and its id (a member)
- */
-type ItemKey = readonly [string, string];
 
 /**
  * The items of a container the moves are made from, at one time (before or after the write): the
@@ -310,10 +309,11 @@ export class ItemOrderWatch {
     return [utf8String(member ? data.memberKeys : data.itemKeys, at.row), id];
   }
 
-  /** The key a group of features is ordered by in its layer */
+  /** The key a group of features is ordered by in its layer (the key written) */
   private groupKey(group: GroupHandle): ItemKey {
     const groups = this.source.groups;
-    return [groups.orderOf(group) ?? '', groups.idOf(group) ?? ''];
+    const order = this.source.writtenOrders?.get(group) ?? groups.orderOf(group);
+    return [order ?? '', groups.idOf(group) ?? ''];
   }
 
   /** The walk of the items of a layer (null for a layer that holds no row) */
@@ -352,8 +352,11 @@ export class ItemOrderWatch {
     const out: RowRangeMove[] = [];
     const groupIds = new Map<GroupHandle, string>();
     for (const [layer, rows] of byLayer) {
+      // In the order written (the keys of the groups written and not read yet)
+      const written = this.source.writtenOrders;
+      const keys = written && written.size > 0 ? this.source.groups.withOrders(written) : null;
       rows.sort((a, b) =>
-        compareRowKeys(a.group.data, a.row, b.group.data, b.row, this.source.groups),
+        compareRowKeys(a.group.data, a.row, b.group.data, b.row, keys ?? this.source.groups),
       );
       const handles = Int32Array.from(rows, (at) => at.group.data.handles[at.row]);
       const fields = new Map<RowField, unknown[]>(PLACE_FIELDS.map((field) => [field, []]));
@@ -428,11 +431,6 @@ function inOrder(items: ItemsKept): number[] {
   );
 }
 
-/** The order of two items by their keys, then their ids */
-function compareItemKeys(a: ItemKey, b: ItemKey): number {
-  return compareCodePoints(a[0], b[0]) || compareCodePoints(a[1], b[1]);
-}
-
 /**
  * The moves of groups of features given new keys of their order, made before the keys go in: the
  * groups that are items of their layer, and the items that stay just below and above each of them
@@ -454,13 +452,7 @@ export function groupKeyMoves(
     if (walk.span(groupCode(group), -1)) moved.add(groupCode(group));
   }
   if (moved.size === 0) return [];
-  const keyOf = (code: number): ItemKey => {
-    const handle = code >> 1;
-    if ((code & 1) === 1)
-      return [source.groups.orderOf(handle) ?? '', source.groups.idOf(handle) ?? ''];
-    const at = source.placeOf(handle);
-    return [at ? utf8String(at.group.data.itemKeys, at.row) : '', source.idOf(handle) ?? ''];
-  };
+  const keyOf = (code: number): ItemKey => walk.keyOf(code);
   const before: ItemsKept = new Map();
   const after: ItemsKept = new Map();
   const stay = (code: number | null): void => {
@@ -479,17 +471,8 @@ export function groupKeyMoves(
     stay(walk.below(code, -1, moved));
     stay(walk.above(code, -1, moved));
     // Where its new key puts it: the items that stay just above and below the key
-    const at = layer.rowNotBefore(
-      {
-        ids: utf8ColumnFromStrings([id]),
-        itemKeys: utf8ColumnFromStrings([order]),
-        memberKeys: utf8ColumnFromStrings(['']),
-        groups: Int32Array.of(-1),
-      },
-      0,
-    );
-    stay(walk.itemFrom(at, moved));
-    stay(walk.itemUntil(at ? layer.previousRow(at) : layer.lastRow(), moved));
+    stay(walk.itemNotBefore([order, id], moved));
+    stay(walk.itemBefore([order, id], moved));
   }
   return itemMovesBetween([trimmedContainer(layerId, undefined, inOrder(before), inOrder(after))], {
     moved,
@@ -498,16 +481,4 @@ export function groupKeyMoves(
     idOf: (code) =>
       ((code & 1) === 1 ? source.groups.idOf(code >> 1) : source.idOf(code >> 1)) ?? '',
   });
-}
-
-/** The order of two strings by their code points (the order of their UTF-8 bytes) */
-function compareCodePoints(a: string, b: string): number {
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    const x = a.codePointAt(i) as number;
-    const y = b.codePointAt(i) as number;
-    if (x !== y) return x - y;
-    if (x > 0xffff) i++;
-  }
-  return a.length - b.length;
 }

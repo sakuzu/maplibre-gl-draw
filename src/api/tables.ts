@@ -196,7 +196,7 @@ export interface LocalRowWrite {
 /**
  * A field of a group of features a {@link TableGroupPatch} writes.
  */
-export type TableGroupField = 'id' | 'order' | 'layerId' | 'visible' | 'locked';
+export type TableGroupField = 'id' | 'name' | 'order' | 'layerId' | 'visible' | 'locked';
 
 /**
  * Values written to groups of features of a document, by the implementation of the Store: the
@@ -456,12 +456,15 @@ export interface FeatureTablesWriter {
   /**
    * Writes values of groups of features, after the implementation of the Store recorded them.
    *
-   * A new group (a handle no group has) needs its `id`, `order` and `layerId`. A new key of the
+   * A new group (a handle no group has) needs its `id`, `order` and `layerId`; its `name` is held
+   * by the Store, not by the tables (the Store of rows of `createTableMemoryStore` creates,
+   * changes and deletes its groups as the values say, and notifies them). A new key of the
    * order of a group moves its members, which follow each other at the place of the group: the
    * row groups are cut at the runs of the members and at the place they go to, and put in their
    * new order over the frames, read and drawn in the order before until then; the rows are not
-   * written. A group shown or hidden shows or hides its members. A group deleted is taken out
-   * once no row names it.
+   * written. A group given another `layerId` is in that layer from then on; its members go there
+   * by the writes of their rows (`apply`). A group shown or hidden shows or hides its members. A
+   * group deleted is taken out once no row names it.
    *
    * @throws when a new group misses its id, its key or its layer, or a value is not of its kind
    *   (nothing is written then)

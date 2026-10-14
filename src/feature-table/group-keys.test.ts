@@ -9,17 +9,32 @@
  *   in the notification of the change that wrote it: a group created, moved in its layer, moved
  *   to another layer. While a drawing holds the reorder of its members, the rows are read in the
  *   order before, and the key is still the new one
+ * - The writes of the Store and the changes of the order it notifies read the order written: an
+ *   item put next to a group whose reorder the drawing holds goes next to the group where its new
+ *   key puts it, and a key written in another layer is not overwritten by the reorder of before
+ * - The groups written through the writer of the Store (from elsewhere) are the groups of the
+ *   document: created, moved to another layer, renamed, shown, locked and deleted, and notified
  * - `FeatureTablesWriter.flushAdoption` takes in the row groups given to `adopt` and the new rows
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
 import { describe, expect, it } from 'vitest';
-import { createFeatureTables, type FeatureTables, type RowField } from '../api/tables.js';
+import {
+  createFeatureTables,
+  type FeatureTables,
+  type RowField,
+  type TableGroupField,
+} from '../api/tables.js';
 import type { StoreChange } from '../shared/types/model.js';
 import { createTableMemoryStore } from '../store/table-memory.js';
 import { createRowGroupBuilder } from '../table/row-group-builder.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
+import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
+import type { TableWorkBudget } from './types.js';
+
+/** A budget of one step at a time */
+const ONE_STEP: TableWorkBudget = { canStep: () => true, step: (work) => work(Infinity) };
 
 /** The key of the order of the `i`-th row of the tests */
 const key = (i: number) => `k${String(i).padStart(3, '0')}`;
@@ -208,6 +223,302 @@ describe('the key of the order of a group of features', () => {
   it('is undefined for a handle of no group', () => {
     const { tables } = setup();
     expect(tables.groupOrderOf(42)).toBeUndefined();
+  });
+});
+
+describe('the order written, while the drawing holds the reorder of a group', () => {
+  /** A group `g` of r2 and r3 in the layer `a`, drawn */
+  function grouped() {
+    const setupOf = setup();
+    setupOf.store.createGroup({
+      id: 'g',
+      layerId: 'a',
+      name: 'g',
+      featureIds: ['r2', 'r3'],
+      visible: true,
+      locked: false,
+    });
+    setupOf.draw();
+    return { ...setupOf, handle: setupOf.tables.groupHandleOf('g') as number };
+  }
+
+  it('puts an item just above a group moved to the front, where its new key puts it', () => {
+    const { store, draw, items } = grouped();
+    store.moveItem('g', { layerId: 'a', above: null });
+    const moves: StoreChange['order'][] = [];
+    store.subscribe((change) => moves.push(change.order));
+    store.moveItem('r5', { layerId: 'a', below: 'g' });
+    // Told where it goes in the order written
+    expect(moves[0]).toEqual([
+      expect.objectContaining({
+        kind: 'item',
+        itemId: 'r5',
+        from: expect.objectContaining({ below: 'r4', above: 'r6' }),
+        to: expect.objectContaining({ below: 'g', above: null }),
+      }),
+    ]);
+    draw();
+    expect(items('a')).toEqual(['r0', 'r1', 'r4', 'r6', 'r7', 'r8', 'r9', 'g', 'r5']);
+  });
+
+  it('puts an item at the front, and a new group after it, above a group moved to the front', () => {
+    const { store, draw, items } = grouped();
+    store.moveItem('g', { layerId: 'a', above: null });
+    store.moveItem('r0', { layerId: 'a', above: null });
+    store.createGroup({
+      id: 'h',
+      layerId: 'a',
+      name: 'h',
+      kind: 'table',
+      visible: true,
+      locked: false,
+    });
+    store.moveItems(['r1'], { layerId: 'a', groupId: 'h' });
+    draw();
+    expect(items('a')).toEqual(['r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'g', 'r0', 'h']);
+  });
+
+  it('tells a second move of the group from where the first one put it', () => {
+    const { store, draw, items } = grouped();
+    store.moveItem('g', { layerId: 'a', above: null });
+    const moves: StoreChange['order'][] = [];
+    store.subscribe((change) => moves.push(change.order));
+    store.moveItem('g', { layerId: 'a', below: null });
+    expect(moves[0]).toEqual([
+      expect.objectContaining({
+        kind: 'item',
+        itemId: 'g',
+        from: expect.objectContaining({ below: 'r9', above: null }),
+        to: expect.objectContaining({ below: null, above: 'r0' }),
+      }),
+    ]);
+    draw();
+    expect(items('a')).toEqual(['g', 'r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
+  });
+
+  it('puts the items where the order written says, whenever the drawing lets the reorders in', () => {
+    for (const seed of [7, 8, 9]) {
+      const random = seededRandom(seed);
+      const { store, internals, draw, items } = setup();
+      for (const [id, members] of [
+        ['g0', ['r2', 'r3']],
+        ['g1', ['r6', 'r7']],
+      ] as const) {
+        store.createGroup({
+          id,
+          layerId: 'a',
+          name: id,
+          featureIds: [...members],
+          visible: true,
+          locked: false,
+        });
+      }
+      draw();
+      // The items of the layer as the writes put them (the reference)
+      const reference = items('a') as string[];
+      let held = 0;
+      for (let step = 0; step < 60; step++) {
+        if (internals.writtenOrders.size > 0) held++;
+        const pick = random();
+        if (pick < 0.15) {
+          // Sometimes the drawing lets the versions in, sometimes it only starts them
+          if (random() < 0.5) draw();
+          else internals.advanceVersions(ONE_STEP);
+          continue;
+        }
+        const id = reference[Math.floor(random() * reference.length)];
+        const others = reference.filter((other) => other !== id);
+        const k = Math.floor(random() * (others.length + 2));
+        reference.splice(reference.indexOf(id), 1);
+        if (k === others.length) {
+          store.moveItem(id, { layerId: 'a', below: null });
+          reference.unshift(id);
+        } else if (k === others.length + 1) {
+          store.moveItem(id, { layerId: 'a', above: null });
+          reference.push(id);
+        } else if (random() < 0.5) {
+          store.moveItem(id, { layerId: 'a', below: others[k] });
+          reference.splice(reference.indexOf(others[k]) + 1, 0, id);
+        } else {
+          store.moveItem(id, { layerId: 'a', above: others[k] });
+          reference.splice(reference.indexOf(others[k]), 0, id);
+        }
+      }
+      // Reorders were held while items were put next to the groups
+      expect(held).toBeGreaterThan(5);
+      draw();
+      expect(items('a')).toEqual(reference);
+    }
+  });
+
+  it('keeps the key a group was given in another layer when the reorder of before goes in', () => {
+    const { store, tables, internals, draw, items, handle } = grouped();
+    store.moveItem('g', { layerId: 'a', above: null });
+    store.moveItem('g', { layerId: 'b' });
+    const key = tables.groupOrderOf(handle);
+    draw();
+    expect(tables.groupOrderOf(handle)).toBe(key);
+    expect(internals.groups.orderOf(handle)).toBe(key);
+    expect(internals.writtenOrders.size).toBe(0);
+    expect(items('b')).toEqual(['g']);
+    expect(items('a')).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
+    // And it is put back in its layer where the keys put it
+    store.moveItem('g', { layerId: 'a', below: 'r1' });
+    draw();
+    expect(items('a')).toEqual(['r0', 'r1', 'g', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
+  });
+});
+
+describe('the groups written through the writer of the Store of rows', () => {
+  it('follow a group moved to another layer from elsewhere, notified as remote', () => {
+    const { store, writer, tables, draw, items } = setup();
+    store.createGroup({
+      id: 'g',
+      layerId: 'a',
+      name: 'g',
+      featureIds: ['r2', 'r3'],
+      visible: true,
+      locked: false,
+    });
+    draw();
+    const handle = tables.groupHandleOf('g') as number;
+    const members = ['r2', 'r3'].map((id) => tables.handleOf(id) as number);
+    const notified: StoreChange[] = [];
+    store.subscribe((change) => notified.push(change));
+    store.transact(() => {
+      writer.apply({
+        handles: Int32Array.from(members),
+        fields: new Map<RowField, unknown[]>([['layerId', ['b', 'b']]]),
+      });
+      writer.applyGroups({
+        handles: Int32Array.of(handle),
+        fields: new Map<TableGroupField, unknown[]>([
+          ['layerId', ['b']],
+          ['order', ['m']],
+        ]),
+      });
+    }, 'remote');
+    expect(notified).toHaveLength(1);
+    expect(notified[0]?.source).toBe('remote');
+    expect(notified[0]?.groups?.updated).toEqual([
+      expect.objectContaining({
+        id: 'g',
+        group: expect.objectContaining({ layerId: 'b' }),
+        previous: expect.objectContaining({ layerId: 'a' }),
+      }),
+    ]);
+    expect(store.getGroup('g')?.layerId).toBe('b');
+    expect(tables.groupOrderOf(handle)).toBe('m');
+    draw();
+    expect(items('b')).toEqual(['g']);
+    expect(store.getFeature('r2')?.layerId).toBe('b');
+    // A write here reads the group where it is now
+    store.moveItem('r0', { layerId: 'b', below: 'g' });
+    draw();
+    expect(items('b')).toEqual(['g', 'r0']);
+  });
+
+  it('rename, show and lock the groups, and notify them once', () => {
+    const { store, writer, tables } = setup();
+    store.createGroup({
+      id: 'g',
+      layerId: 'a',
+      name: 'g',
+      featureIds: ['r2'],
+      visible: true,
+      locked: false,
+    });
+    const handle = tables.groupHandleOf('g') as number;
+    const notified: StoreChange[] = [];
+    store.subscribe((change) => notified.push(change));
+    store.transact(() => {
+      writer.applyGroups({
+        handles: Int32Array.of(handle),
+        fields: new Map<TableGroupField, unknown[]>([
+          ['name', ['renamed']],
+          ['visible', [false]],
+          ['locked', [true]],
+        ]),
+      });
+    }, 'remote');
+    expect(store.getGroup('g')).toMatchObject({ name: 'renamed', visible: false, locked: true });
+    expect(notified).toHaveLength(1);
+    expect(notified[0]?.groups?.updated?.map((entry) => entry.id)).toEqual(['g']);
+    // The same values again change nothing
+    notified.length = 0;
+    store.transact(() => {
+      writer.applyGroups({
+        handles: Int32Array.of(handle),
+        fields: new Map<TableGroupField, unknown[]>([['visible', [false]]]),
+      });
+    }, 'remote');
+    expect(notified[0]?.groups).toBeUndefined();
+    // A change here is notified once, as before
+    notified.length = 0;
+    store.updateGroup('g', { visible: true });
+    expect(notified).toHaveLength(1);
+    expect(notified[0]?.groups?.updated).toHaveLength(1);
+  });
+
+  it('create and delete groups, and the groups created here take other handles', () => {
+    const { store, writer, tables } = setup();
+    const notified: StoreChange[] = [];
+    store.subscribe((change) => notified.push(change));
+    store.transact(() => {
+      writer.applyGroups({
+        handles: Int32Array.of(40),
+        fields: new Map<TableGroupField, unknown[]>([
+          ['id', ['far']],
+          ['name', ['Far']],
+          ['order', ['m']],
+          ['layerId', ['a']],
+        ]),
+      });
+    }, 'remote');
+    expect(store.getGroup('far')).toMatchObject({
+      id: 'far',
+      name: 'Far',
+      layerId: 'a',
+      visible: true,
+      locked: false,
+      kind: 'table',
+    });
+    expect(notified[0]?.groups?.created?.map((group) => group.id)).toEqual(['far']);
+    store.createGroup({
+      id: 'near',
+      layerId: 'a',
+      name: 'near',
+      kind: 'table',
+      visible: true,
+      locked: false,
+    });
+    expect(tables.groupHandleOf('near')).toBeGreaterThan(40);
+    expect(tables.groupHandleOf('far')).toBe(40);
+    notified.length = 0;
+    store.transact(() => {
+      writer.applyGroups({
+        handles: Int32Array.of(40),
+        fields: new Map(),
+        deleted: Uint8Array.of(1),
+      });
+    }, 'remote');
+    expect(store.getGroup('far')).toBeUndefined();
+    expect(notified[0]?.groups?.deleted?.map((group) => group.id)).toEqual(['far']);
+  });
+
+  it('are moved to another layer here by putting them in a place, not by updateGroup', () => {
+    const { store } = setup();
+    store.createGroup({
+      id: 'g',
+      layerId: 'a',
+      name: 'g',
+      featureIds: ['r2'],
+      visible: true,
+      locked: false,
+    });
+    expect(() => store.updateGroup('g', { layerId: 'b' })).toThrow();
+    store.moveItem('g', { layerId: 'b' });
+    expect(store.getGroup('g')?.layerId).toBe('b');
   });
 });
 

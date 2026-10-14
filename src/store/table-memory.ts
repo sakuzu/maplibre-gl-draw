@@ -39,6 +39,7 @@ import type {
   RowField,
   RowHandle,
   RowPatch,
+  TableGroupPatch,
 } from '../api/tables.js';
 import { featureFields, featureWithFields } from '../feature-table/feature-fields.js';
 import {
@@ -165,7 +166,7 @@ export class TableContractStore implements StoreContract {
       flushAdoption: () => writer.flushAdoption(),
       raiseDims: (layerId, dims) => writer.raiseDims(layerId, dims),
       apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
-      applyGroups: (patch, options) => writer.applyGroups(patch, options),
+      applyGroups: (patch, options) => this.#applyGroups(patch, options),
       writeHeld: (id, feature, options) => writer.writeHeld(id, feature, options),
     };
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
@@ -551,7 +552,7 @@ export class TableContractStore implements StoreContract {
         });
       }
       if (groupWrites.length > 0) {
-        this.writer.applyGroups({
+        this.#writer.applyGroups({
           handles: Int32Array.from(groupWrites, (write) => write.handle),
           fields: new Map<'order' | 'layerId', unknown[]>([
             ['order', groupWrites.map((write) => write.key)],
@@ -611,8 +612,8 @@ export class TableContractStore implements StoreContract {
       // A group deleted whose rows are kept is created again with its handle and the key it had
       const kept = this.#internals.groups.handleOfId(created.id);
       const handle = kept >= 0 ? kept : this.#nextGroup++;
-      const keptOrder = kept >= 0 ? this.#internals.groups.orderOf(kept) : undefined;
-      this.writer.applyGroups({
+      const keptOrder = kept >= 0 ? this.tables.groupOrderOf(kept) : undefined;
+      this.#writer.applyGroups({
         handles: Int32Array.of(handle),
         fields: new Map<'id' | 'order' | 'layerId' | 'visible' | 'locked', unknown[]>([
           ['id', [created.id]],
@@ -653,7 +654,7 @@ export class TableContractStore implements StoreContract {
       const group = frozenCopy({ ...previous, ...fields, id, kind: 'table' as const });
       const handle = this.#internals.groups.handleOfId(id);
       if (handle >= 0 && (group.visible !== previous.visible || group.locked !== previous.locked)) {
-        this.writer.applyGroups({
+        this.#writer.applyGroups({
           handles: Int32Array.of(handle),
           fields: new Map<'visible' | 'locked', unknown[]>([
             ['visible', [group.visible]],
@@ -840,6 +841,73 @@ export class TableContractStore implements StoreContract {
     this.#remoteDeleted = this.#remoteDeleted.slice(excess);
   }
 
+  /**
+   * Writes values of groups of features given to its writer (the writes from elsewhere, in a
+   * transaction of their source): written to the tables, and the groups of the document created,
+   * changed (their layer, name, shown and locked) and deleted as the values say, in the
+   * notification (`groups`)
+   */
+  #applyGroups(patch: TableGroupPatch, options?: RowApplyOptions): void {
+    this.transact(() => {
+      const groups = this.#internals.groups;
+      const idsBefore = Array.from(patch.handles, (handle) => groups.idOf(handle));
+      this.#writer.applyGroups(patch, options);
+      const names = patch.fields.get('name');
+      const created: TableGroup[] = [];
+      const updated: Array<{ id: string; group: TableGroup; previous: TableGroup }> = [];
+      const deleted: TableGroup[] = [];
+      patch.handles.forEach((handle, i) => {
+        if (patch.deleted?.[i]) {
+          const id = idsBefore[i];
+          const group = id === undefined ? undefined : this.#groups.get(id);
+          if (id === undefined || !group) return;
+          this.#groups.delete(id);
+          deleted.push(group);
+          return;
+        }
+        const id = groups.idOf(handle);
+        if (id === undefined) return;
+        // The handles given from elsewhere are not given again to the groups created here
+        this.#nextGroup = Math.max(this.#nextGroup, handle + 1);
+        const previous = this.#groups.get(id);
+        const name = names?.[i];
+        const fields = {
+          id,
+          name: typeof name === 'string' ? name : (previous?.name ?? ''),
+          layerId: groups.layerOf(handle) as string,
+          visible: groups.isVisible(handle),
+          locked: groups.isLocked(handle),
+        };
+        if (!previous) {
+          const group = frozenCopy({ ...fields, kind: 'table' as const });
+          this.#groups.set(id, group);
+          created.push(group);
+          return;
+        }
+        if (
+          previous.name === fields.name &&
+          previous.layerId === fields.layerId &&
+          previous.visible === fields.visible &&
+          previous.locked === fields.locked
+        ) {
+          return;
+        }
+        const group = frozenCopy({ ...previous, ...fields, kind: 'table' as const });
+        this.#groups.set(id, group);
+        updated.push({ id, group, previous });
+      });
+      if (created.length > 0 || updated.length > 0 || deleted.length > 0) {
+        this.#bus.merge({
+          groups: {
+            ...(created.length > 0 && { created }),
+            ...(updated.length > 0 && { updated }),
+            ...(deleted.length > 0 && { deleted }),
+          },
+        });
+      }
+    }, options?.source);
+  }
+
   /** Deletes the groups features left that have no member left */
   #deleteEmptyGroups(): void {
     if (this.#leftGroups.size === 0) return;
@@ -882,7 +950,8 @@ export class TableContractStore implements StoreContract {
   /** The key of an item in a layer (its own key, the key of a group), or in a group */
   #keyOfCode(code: number, inGroup: boolean): string {
     const handle = code >> 1;
-    if ((code & 1) === 1) return this.#internals.groups.orderOf(handle) ?? '';
+    // The key written of a group (its members may be read where the key before puts them)
+    if ((code & 1) === 1) return this.tables.groupOrderOf(handle) ?? '';
     const place = this.#internals.placeOf(handle);
     if (!place) return '';
     return utf8String(inGroup ? place.group.data.memberKeys : place.group.data.itemKeys, place.row);
@@ -999,7 +1068,7 @@ export class TableContractStore implements StoreContract {
     // A group without members is not an item of the rows; its key may come after
     for (const group of this.#groups.values()) {
       if (group.layerId !== layerId) continue;
-      const key = this.#internals.groups.orderOf(this.#internals.groups.handleOfId(group.id));
+      const key = this.tables.groupOrderOf(this.#internals.groups.handleOfId(group.id));
       if (key !== undefined && (last === null || key > last)) last = key;
     }
     return last;
@@ -1033,7 +1102,7 @@ export class TableContractStore implements StoreContract {
       .map((group) => this.#internals.groups.handleOfId(group.id))
       .filter((handle) => handle >= 0);
     if (handles.length > 0) {
-      this.writer.applyGroups({
+      this.#writer.applyGroups({
         handles: Int32Array.from(handles),
         fields: new Map(),
         deleted: new Uint8Array(handles.length).fill(1),

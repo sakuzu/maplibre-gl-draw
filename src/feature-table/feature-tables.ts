@@ -246,6 +246,12 @@ export interface FeatureTablesInternals {
   readonly ids: IdIndex;
   readonly styles: StyleTable;
   readonly groups: GroupTable;
+  /**
+   * The keys of the order of groups of features written and not in the order read yet: their
+   * members are read and drawn where the keys before put them until their reorder goes in. The
+   * writes read the order written (`ItemWalk`)
+   */
+  readonly writtenOrders: ReadonlyMap<GroupHandle, string>;
   readonly states: RowStateSets;
   readonly strings: ValueStringCache;
   readonly readContext: RowReadContext;
@@ -464,6 +470,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   readonly ids = new IdIndex();
   readonly styles = new StyleTable();
   readonly groups = new GroupTable();
+  readonly writtenOrders = new Map<GroupHandle, string>();
   readonly strings: ValueStringCache;
   readonly states: RowStateSets;
   readonly readContext: RowReadContext;
@@ -755,17 +762,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * The key of the order of a group of features last written: the one of the last reorder still
-   * going in that puts it in (its members are read in the order before until it is swapped in),
-   * or the one of the table of the groups
+   * The key of the order of a group of features last written: the one not in the order read yet
+   * (its members are read in the order before until its reorder goes in), or the one of the table
+   * of the groups
    */
   groupOrderOf(group: GroupHandle): string | undefined {
     if (!this.groups.has(group)) return undefined;
-    let latest: GroupVersion | undefined;
-    for (const version of this.versions.reordersOf(group)) {
-      if (!latest || version.id > latest.id) latest = version;
-    }
-    return latest?.orders?.get(group) ?? this.groups.orderOf(group);
+    return this.writtenOrders.get(group) ?? this.groups.orderOf(group);
   }
 
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]> {
@@ -1595,6 +1598,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       groups: this.groups,
       idOf: (handle) => this.ids.idOf(handle),
       placeOf: (handle) => this.placeOf(handle),
+      writtenOrders: this.writtenOrders,
     };
   }
 
@@ -2200,10 +2204,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (deleted && deleted.length !== n) {
       throw new Error('FeatureTables: deleted has another length than the groups');
     }
-    const value = (field: 'id' | 'order' | 'layerId' | 'visible' | 'locked', i: number) =>
+    const value = (field: 'id' | 'name' | 'order' | 'layerId' | 'visible' | 'locked', i: number) =>
       fields.get(field)?.[i];
     for (let i = 0; i < n; i++) {
       if (deleted?.[i]) continue;
+      // The name is the Store's (the tables do not hold it)
+      const name = value('name', i);
+      if (name !== undefined && typeof name !== 'string') {
+        throw new Error(`FeatureTables: the name of the group ${handles[i]} is not a string`);
+      }
       for (const field of ['id', 'order', 'layerId'] as const) {
         const v = value(field, i);
         if (v !== undefined && typeof v !== 'string') {
@@ -2294,7 +2303,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const creation of this.creations) this.dropReading(creation);
     for (const group of removed) {
       if (this.groupNamed(group)) this.deletedGroups.add(group);
-      else this.groups.delete(group);
+      else {
+        this.groups.delete(group);
+        this.writtenOrders.delete(group);
+      }
     }
     this.revisionCount++;
     this.notifyWork();
@@ -2309,9 +2321,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
    */
   private reorderGroups(layerId: string, orders: Map<GroupHandle, string>): void {
     const layer = this.layers.get(layerId);
+    // The keys of a reorder still waiting that are still the ones written (a key written since,
+    // here or in another layer, is the one that goes in)
     for (const version of this.versions.reorders(layer)) {
       for (const [group, order] of version.orders ?? []) {
-        if (!orders.has(group)) orders.set(group, order);
+        if (!orders.has(group) && this.writtenOrders.get(group) === order) orders.set(group, order);
       }
     }
     // The cuts of each row group: the runs of the members, and where they go
@@ -2320,7 +2334,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
       : { cuts: new Map<RowGroup, Set<number>>(), members: false };
     if (!layer || !members) {
       // No member in the groups: the keys go in now (the deltas in their new order)
-      for (const [group, order] of orders) this.groups.setOrder(group, order);
+      for (const [group, order] of orders) {
+        this.groups.setOrder(group, order);
+        this.writtenOrders.delete(group);
+      }
       for (const other of this.layers.values()) {
         if (other.delta.group) this.rebuildDelta(other, new Set(), [], this.writeCount);
         other.touchItems();
@@ -2343,6 +2360,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
           pieces.push(this.sliceRows(group, points[k], points[k + 1], layer.dims));
       }
     }
+    for (const [group, order] of orders) this.writtenOrders.set(group, order);
     this.versions.startReorder(layer, groups, pieces, orders);
   }
 
@@ -2590,7 +2608,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const replaced = new Set(version.replaces.map((group) => group.handle));
     const replacedGroups = new Set<RowGroup>(version.replaces);
     if (version.orders) {
-      for (const [group, order] of version.orders) this.groups.setOrder(group, order);
+      // The keys that are still the ones written go in (a key written since, in another layer,
+      // went in or waits there)
+      for (const [group, order] of version.orders) {
+        if (this.writtenOrders.get(group) !== order) continue;
+        this.groups.setOrder(group, order);
+        this.writtenOrders.delete(group);
+      }
       for (const creation of this.creations) this.dropReading(creation);
     }
     layer.replaceGroups(version.replaces, groups);
@@ -2735,6 +2759,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         if (this.groupNamed(group)) continue;
         this.deletedGroups.delete(group);
         this.groups.delete(group);
+        this.writtenOrders.delete(group);
       }
     }
     // A version started before the dimensions of its layer were raised has the ones of before:

@@ -329,6 +329,10 @@ export class GroupVersions {
         this.due.delete(handle);
         continue;
       }
+      // While a reorder of the layer waits, the keys of its groups of features are going to
+      // change: the rows of the deltas written meanwhile are placed by the keys written, which a
+      // version made now would read by the keys before. It is made once the reorder is in
+      if (this.reorders(found.layer).length > 0) continue;
       if (this.pendingBytes() + found.group.data.length * ROW_BYTES > this.pendingBytesLimit) {
         // The ones started are swapped first
         if (this.pending.size > 0) break;
