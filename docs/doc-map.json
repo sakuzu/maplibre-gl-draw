@@ -9,6 +9,7 @@
       "src/index.ts",
       "src/geometry/index.ts",
       "src/table/index.ts",
+      "src/kasane/index.ts",
       "src/webgl/index.ts",
       "src/api/*.ts",
       "src/api/extension/**",
@@ -18,6 +19,7 @@
       "src/index.ts",
       "src/geometry/index.ts",
       "src/table/index.ts",
+      "src/kasane/index.ts",
       "src/webgl/index.ts"
     ],
     "docs/getting-started.md": [
@@ -125,6 +127,7 @@
       "src/index.ts",
       "src/geometry/index.ts",
       "src/table/index.ts",
+      "src/kasane/index.ts",
       "src/webgl/index.ts"
     ],
     "docs/reference/events.md": [

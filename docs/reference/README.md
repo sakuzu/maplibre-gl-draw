@@ -20,7 +20,7 @@ they link here for the details.
 
 ## Entry points
 
-The package has four entry points.
+The package has five entry points.
 
 - `@sakuzu/maplibre-gl-draw` — the drawing and editing library:
   `createDraw` and the instance it returns (`Draw`, with its
@@ -41,12 +41,18 @@ The package has four entry points.
   (`prepareTable`) and the list of its buffers for `postMessage`
   (`transferList`). It depends on neither maplibre-gl nor WebGL nor the
   DOM, so a Worker that reads a file can use it
+- `@sakuzu/maplibre-gl-draw/kasane` — the parts that hold the features of
+  a layer as rows of columns: a store of rows (`createTableStore`,
+  `createFeatureTables`), the reading and writing of its rows, and the
+  building of blocks of rows in a Worker (`createRowBlockBuilder`). It
+  depends on neither maplibre-gl nor WebGL nor the DOM. It is
+  experimental and may change in a minor release
 - `@sakuzu/maplibre-gl-draw/webgl` — building blocks for custom shaders
   (the GLSL snippet and the projection uniforms, the quad shader, the
   blend and billboard helpers, the dash and terrain subdivision rules).
   It may change in a minor release
 
-Import only from these four. Paths inside the package (`dist/...`) are
+Import only from these five. Paths inside the package (`dist/...`) are
 not public and may change in any release.
 
 ## The two layers of the public API
@@ -61,14 +67,21 @@ providers). It also includes the functions for style rules and the
 check for the keys of the library in `properties`. The geometry and
 table entries follow the same rules as layer 1.
 
-Layer 2 is the entry `@sakuzu/maplibre-gl-draw/webgl`: building blocks
-for people who write their own shaders and want them to draw the way
-the library does. Most overlays do not need it, because the context of
-a renderer already passes the shared renderers. Prefer an extension
-point of layer 1 when one does the job.
+Layer 2 is two entries. `@sakuzu/maplibre-gl-draw/kasane` holds the
+parts in the words of the rows, for a store that holds the features of
+its layers as rows of columns; the fields of layer 1 such a store fills
+(`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows` and
+`DocumentChange.opened`) are marked experimental, and an application
+that reads and writes features does not need them.
+`@sakuzu/maplibre-gl-draw/webgl` holds building blocks for people who
+write their own shaders and want them to draw the way the library does.
+Most overlays do not need it, because the context of a renderer already
+passes the shared renderers. Prefer an extension point of layer 1 when
+one does the job.
 
-The lists are fixed in `src/index.ts` and `src/webgl/index.ts`; whatever
-they do not export is internal.
+The lists are fixed in the entry files (`src/index.ts`,
+`src/geometry/index.ts`, `src/table/index.ts`, `src/kasane/index.ts` and
+`src/webgl/index.ts`); whatever they do not export is internal.
 
 ## Versioning
 
@@ -103,10 +116,11 @@ npm run build && npm run ui:build
 npm run site:dev   # then open http://localhost:5173/maplibre-gl-draw/
 ```
 
-`npm run docs:api` runs typedoc on the four entry points and writes
+`npm run docs:api` runs typedoc on the five entry points and writes
 Markdown to `docs/api/`, sorted by task: the categories come from the
 section comments of the entry files (`src/index.ts`,
-`src/geometry/index.ts`, `src/table/index.ts` and `src/webgl/index.ts`),
+`src/geometry/index.ts`, `src/table/index.ts`, `src/kasane/index.ts` and
+`src/webgl/index.ts`),
 and the groups of the members of `Draw` from the section comments of
 its declaration in `src/api/draw.ts` (`scripts/typedoc-categories.mjs`).
 A symbol outside any section fails the build. The page of each entry

@@ -6,8 +6,99 @@ the project follows semantic versioning.
 
 ## [Unreleased]
 
-An application can make the IDs itself, and can read a source into new
-features, groups, files and layers without writing it.
+3.0.0 lets a store hold the features of a layer as rows of columns, so
+that a layer of a million features is drawn, hit tested and edited
+without a million objects: a row is made a feature only while it is
+selected or edited. The layers and groups of such a store are a kind of
+their own (`kind: 'table'`), the stacking order is told by the moves of
+its items, and the parts in the words of the rows are in a new entry,
+`@sakuzu/maplibre-gl-draw/kasane`, which is experimental. An app over
+the default store changes in a few places: the
+[migration guide](docs/guides/migrating.md#from-2x-to-30) lists them.
+
+2.3.0 comes before 3.0.0: an application can make the IDs itself, and
+can read a source into new features, groups, files and layers without
+writing it. Its changes are listed after those of 3.0.0.
+
+### Added in 3.0.0
+
+- The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
+  change in a minor release): `createTableStore`, an in-memory store that
+  holds its features as rows, and `createFeatureTables`, the tables for a
+  store of your own; the reading and writing sides of the tables
+  (`FeatureTables`, `LayerTableView`, `FeatureTablesWriter`); the values
+  of rows (`RowValues`, `createRowValues`, `rowValuesOf`); and the builder
+  and the merge of blocks of rows for a Worker (`createRowBlockBuilder`,
+  `mergeRowBlock`, `RowBlock`, `transferList`). It loads neither
+  maplibre-gl nor the drawing, and its errors are `DrawError`s.
+- `TableLayer` and `TableGroup`, the layers and groups of a store that
+  holds its features as rows (`kind: 'table'`), with `ObjectLayer` and
+  `ObjectGroup`.
+- Reads of a layer of any size: `features.list(filter, { limit, after })`
+  lists the features up to a limit and reads on after the feature read
+  last (`FeatureListOptions`); `layers.listItems(id, { offset, limit })`,
+  `layers.countItems(id)` and `groups.listMembers(id, { offset, limit })`
+  read the items of a layer and the features of a group by position
+  (`ItemListOptions`), in every kind of layer.
+- What an undo over a store of rows writes back:
+  `DocumentChange.previousValues` (`FeatureValues`) and
+  `DocumentChange.restoreToken` (`RestoreToken`), written back with
+  `features.restore(values)` and `groups.restore(id)`, and let go of with
+  `features.releaseRestore(token)`. A lock refuses them unless the
+  transaction ignores the locks.
+- `MoveTarget` names a place by the items around it (`ItemPlacement`:
+  `{ layerId, groupId?, below }` or `{ ..., above }`), in every kind of
+  layer.
+- `DocumentChange.order`: the items put in another place of the stacking
+  order, each with where it was and where it is (`ItemMove`,
+  `ItemPosition`), and many rows put in another place at once. For a
+  store of your own, `diffItemOrder(lists, isGroup)` makes them from the
+  lists of items before and after (`ItemListChange`).
+- The event `group.moved`.
+- Optional members of `Store`: `moveItem` and `moveItems`, and for a store
+  that holds its features as rows, `tables` and `applyRows`. The fields
+  of a store of rows (`StoreView.tables`, `Store.applyRows`,
+  `DocumentChange.rows` and `DocumentChange.opened`) are experimental, and
+  their types are in `/kasane`.
+- `GroupInput.layerId`, which must be the layer of the features.
+- `draw.debug.gpu()` (`GpuMemoryDiagnostics`): the bytes of GPU memory the
+  drawing holds.
+- `CoordinateDimensions` in `/table`.
+
+### Changed in 3.0.0
+
+- `Layer` and `Group` are unions told apart by `kind`. A layer held as
+  rows has no `items`, and a group of it no `featureIds`: narrow by
+  `kind` before reading them, or read them with `layers.listItems` and
+  `groups.listMembers`.
+- `feature.moved` carries `from` and `to` as `ItemPosition`s (the layer,
+  the group and the items just below and above) instead of `MoveTarget`s,
+  and fires for a move in the same layer or group as well, once per
+  transaction. It fires after the events of the groups, with
+  `group.moved`.
+- A store that holds its features as rows refuses what would make or
+  place every feature at once: `features.list` without a `limit`, and a
+  place by `index`, throw a `DrawError` with the code `invalid-state`.
+- `TableGeometry.dimensions` takes the names of GeoArrow (`'xy'`,
+  `'xyz'`, `'xym'` or `'xyzm'`, `CoordinateDimensions`) instead of `2` or
+  `3`.
+
+### Removed in 3.0.0
+
+- `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
+  order inside a layer or a group is told by `DocumentChange.order`.
+
+### Migration to 3.0.0
+
+| 2.x | 3.0 |
+| --- | --- |
+| `DocumentChange.layerReorder` | `DocumentChange.order` |
+| `DocumentChange.groupReorder` | `DocumentChange.order` |
+| `feature.moved` `from`, `to` (`MoveTarget`) | `ItemPosition` |
+| `TableGeometry.dimensions: 2` | `'xy'` |
+| `TableGeometry.dimensions: 3` | `'xyz'` |
+| `layer.items` of any layer | `layers.listItems(layer.id)` |
+| `group.featureIds` of any group | `groups.listMembers(group.id)` |
 
 ### Added in 2.3.0
 

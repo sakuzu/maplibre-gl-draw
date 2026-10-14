@@ -226,9 +226,13 @@ Import from the main entry unless you need one of the others.
   polygons. It also runs in Node and in Workers
 - `@sakuzu/maplibre-gl-draw/table`: read a large table in a Worker and
   pass it to a dataset
+- `@sakuzu/maplibre-gl-draw/kasane`: the parts that hold the features of
+  a layer as rows of columns, for a layer of more features than can be
+  made objects at once: a store of rows and the building of its rows in a
+  Worker. It is experimental and may change in a minor release
 - `@sakuzu/maplibre-gl-draw/webgl`: the building blocks for writing your
-  own shaders. It may change in a minor release; the other three follow
-  semantic versioning
+  own shaders. It may change in a minor release; the main entry,
+  `/geometry` and `/table` follow semantic versioning
 
 ## Compatibility
 

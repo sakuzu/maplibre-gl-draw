@@ -190,7 +190,7 @@ of a table has no style of its own.
   floating point column, NaN means no value
 - A row without a geometry (an empty run, NaN coordinates for a point,
   or a 0 bit in `validity`) is neither drawn nor hit
-- The coordinates have the dimensions in `dims`: `xy` (the default),
+- The coordinates have the dimensions in `dimensions`: `xy` (the default),
   `xyz`, `xym` or `xyzm`, the names of GeoArrow, the values of a
   coordinate next to each other. The rows are drawn and hit by `x` and
   `y`

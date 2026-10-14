@@ -509,38 +509,46 @@ A store that holds its features as rows of columns
 selected or edited) as rows, by their handles, rather than as features.
 What puts them back is in the change as well:
 
-- `change.rows.before` holds the values the rows had before a write of
+- `change.previousValues` holds the values the rows had before a write of
   this client, for the fields written: an update or a deletion through
   `draw.features`, a deletion of a layer, a write of rows. Written back
-  with `draw.tables.applyRows`, they put the rows back. A row created has
-  none: written deleted, it is taken back
+  with `draw.features.restore`, they put the rows back, and it returns the
+  values they had before it, which put them forward again. A row created
+  has none: written deleted, it is taken back
 - the place of an item (its layer, its group and its place among the
   others) is in `change.order`, whether it is a feature or a row: a move
   with where the item stood (`ItemMove.from`), or many rows with their
-  keys before (`RowsMove.before`, written back with
-  `draw.tables.applyRows`)
-- a deletion of this client keeps the rows it deleted (`change.retain`)
-  until they are let go of (`store.tables.release`). Written not deleted,
-  a row comes back where it was, and `draw.groups.create` with the ID of a
-  group deleted with its rows brings the group back at its place
+  keys before (`RowsMove.before`, written back with `draw.features.restore`
+  after `createRowValues` of `@sakuzu/maplibre-gl-draw/kasane`)
+- a deletion of this client keeps the rows and the groups it deleted
+  (`change.restoreToken`) until they are let go of
+  (`draw.features.releaseRestore`). Written not deleted, a row comes back
+  where it was, and `draw.groups.restore` brings a group back at its place
 
 ```ts
-import type { RowValues } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureValues } from '@sakuzu/maplibre-gl-draw';
 
-const steps: RowValues[] = [];
+const steps: FeatureValues[] = [];
 draw.getStore().subscribe((change) => {
-  if (change.source === 'local' && change.rows?.before) {
-    steps.push(change.rows.before);
+  if (change.source === 'local' && change.previousValues) {
+    steps.push(change.previousValues);
   }
 });
 
 // Later: the rows of the last write as they were
 const last = steps.pop();
-if (last) draw.transact(() => draw.tables.applyRows(last), { source: 'history' });
+if (last) {
+  draw.transact(() => draw.features.restore(last), {
+    source: 'history',
+    ignoreLocks: true,
+  });
+}
 ```
 
-`draw.tables.applyRows` goes through the gate of the instance: it returns
-`null` while read-only, as the other writes do.
+`draw.features.restore` goes through the gate of the instance: it returns
+`null` while read-only, as the other writes do, and when a lock refuses
+it, unless the transaction ignores the locks (`ignoreLocks`), as an undo
+does.
 
 A store of your own that keeps the items of its layers and groups as
 lists, and changes them otherwise than by putting items in a place, makes

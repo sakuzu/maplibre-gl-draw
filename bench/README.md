@@ -90,7 +90,7 @@ writes them too):
 | `alpha` | `1` translucent, `0` opaque | `1` |
 | `cuts` | Artificial cuts: `0`, `100`, `1000`, `3000` | `0` |
 | `limit` | Heap limit in MB: `1024`, `500`, `400` | `1024` |
-| `workers` | Workers of the opening (`0`: one per logical core but one, at most 8) | `0` |
+| `workers` | Workers of the opening (`0`: cores but one, 8 at most) | `0` |
 
 A `line` has 10 vertices, `polygon5` and `polygon50` have 5 and 50, and
 `mixed` takes the four kinds in turn. The cuts split the ranges drawn of

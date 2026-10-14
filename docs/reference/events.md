@@ -63,7 +63,7 @@ change is made.
 | `feature.created` | `{ feature; source }` |
 | `feature.updated` | `{ feature; previous; source; intermediate }` |
 | `feature.deleted` | `{ feature; source }` |
-| `feature.moved` | `{ feature; from: MoveTarget; to: MoveTarget; source }` |
+| `feature.moved` | `{ feature; from; to; source }` (`ItemPosition`) |
 
 ### Layers and groups
 
@@ -76,6 +76,7 @@ change is made.
 | `group.created` | `{ group; source }` |
 | `group.updated` | `{ group; previous; source }` |
 | `group.deleted` | `{ group; source }` |
+| `group.moved` | `{ group; from; to; source }` (`ItemPosition`) |
 
 ### The document
 
@@ -147,11 +148,16 @@ Within one transaction, several updates of the same layer or group arrive
 as one `layer.updated` or `group.updated`: its `previous` is the state
 before the transaction and its `layer` or `group` the state after it.
 
-Creating a feature also changes the `items` of its layer (or the
-`featureIds` of its group), so it comes with an update of that layer or
-group. A change of the order inside a layer arrives as `layer.updated` with
-the new `items`, and inside a group as `group.updated` with the new
-`featureIds`.
+A feature or a group put in another place of the stacking order fires
+`feature.moved` or `group.moved`, wherever it went: in its layer or
+group, into another one, or out of its group. Creating a feature, or
+moving an item, also changes the `items` of a layer of objects (or the
+`featureIds` of its group), so it comes with a `layer.updated` (or
+`group.updated`) of that layer or group with the new list. A layer held
+as rows (a Store that holds its features as rows) lists no items, and a
+group of it no features: a move there fires no `layer.updated` nor
+`group.updated`, and the items are read with `layers.listItems` and
+`groups.listMembers`.
 
 ### One event per transaction
 
@@ -167,14 +173,26 @@ present only when the transaction changed it.
 | `features` | The features created, updated and deleted |
 | `layers` | The layers created, updated and deleted, and the stacking order |
 | `groups` | `created`, `updated` and `deleted` |
-| `layerReorder` | The new order of the items of a layer |
-| `groupReorder` | The new order of the features of a group |
+| `order` | The items put in another place, each with where it was and is |
 | `metadata` | The new title and description, and the ones before |
 | `files` | The embedded files created and deleted |
 | `selection` | The new selection and the one before |
 | `editing` | The IDs of the features whose editing started and ended |
 | `mode` | The new mode and the one before |
 | `reset` | `true` when a Store replaced the whole document at once |
+| `previousValues` | The values the rows had before a write of this client |
+| `restoreToken` | What keeps the rows and the groups this client deleted |
+| `rows` | The rows written (experimental) |
+| `opened` | The rows opened as features for this client (experimental) |
+
+The last four come from a Store that holds its features as rows. Such a
+Store tells the rows that are not features (not selected or edited) by
+`rows`, by their handles, rather than in `features`, and many rows put in
+another place at once by one entry of `order`; `document.changed` is the
+only event that tells them. `previousValues` and `restoreToken` are what
+an undo writes back with `draw.features.restore` and `draw.groups.restore`
+(see [Saving and loading](../guides/save-load.md)). The types of `rows`
+and `opened` are in `@sakuzu/maplibre-gl-draw/kasane`.
 
 A listener that rebuilds a view on any change (a feature list, a legend)
 listens to `document.changed`, so that a load of 1,000 features costs one
@@ -197,18 +215,19 @@ never `document.changed`.
 The events of one transaction are emitted in this order.
 
 1. `feature.created` for each created feature
-2. `feature.updated` for each updated feature, each followed by
-   `feature.moved` when the update moved it to another layer or group
+2. `feature.updated` for each updated feature
 3. `feature.deleted` for each deleted feature
 4. `layer.created`, `layer.updated`, `layer.deleted`, then
    `layer.reordered`
 5. `group.created`, `group.updated`, `group.deleted`
-6. `metadata.updated`
-7. `selection.changed`
-8. `mode.changed`
-9. `vertexSelection.changed`
-10. `hidden.changed`, `readOnly.changed`, then `interactionLock.changed`
-11. `document.changed`
+6. `feature.moved` and `group.moved` for each item put in another place,
+   in the order the items were first moved
+7. `metadata.updated`
+8. `selection.changed`
+9. `mode.changed`
+10. `vertexSelection.changed`
+11. `hidden.changed`, `readOnly.changed`, then `interactionLock.changed`
+12. `document.changed`
 
 ## Sources
 
@@ -261,16 +280,22 @@ A listener that does expensive work on changes skips the updates with
 
 ## Details per event
 
-### feature.moved
+### feature.moved and group.moved
 
-Fires after the `feature.updated` of a feature that changed its layer or
-its group: `features.move`, `groups.create`, `selection.group` and the
-rest. `from` and `to` are `MoveTarget`s, with the position in the new
-place as `index`. `{ groupId: null }` in `to` means the feature left its
-group and stayed in its layer.
+Fire for a feature or a group put in another place of the stacking order:
+`features.move`, `groups.move`, `groups.create`, `selection.group` and the
+rest. Each item fires once per transaction, with where it was before its
+first move (`from`) and where it is after its last one (`to`). Both are
+`ItemPosition`s: the layer, the group (`undefined` for an item of the
+layer), and the items just below and above it, `null` at an end, as the
+Store tells them in `DocumentChange.order`. A Store tells every move in
+`order`; a move it leaves out is not told.
 
-A move to another position in the same layer or group changes no field of
-the feature, so it fires only `layer.updated` or `group.updated`.
+A feature that changed its layer or its group fires `feature.updated`
+first. A move in the same layer or group changes no field of the item, so
+it fires no `feature.updated` nor `group.updated`. An item created or
+deleted fires its own event instead. Many rows of a layer held as rows put
+in another place at once are told by `document.changed` only (`order`).
 
 ### layer.reordered
 

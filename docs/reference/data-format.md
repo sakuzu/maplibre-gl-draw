@@ -6,8 +6,8 @@ lists the geometry and the properties of each feature type and the checks a
 load performs. For how to save and load in an application, see
 [Saving and loading](../guides/save-load.md). For the fields of
 [`Feature`](../api/maplibre-gl-draw/interfaces/Feature.md),
-[`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) and
-[`Group`](../api/maplibre-gl-draw/interfaces/Group.md) one by one, see the
+[`Layer`](../api/maplibre-gl-draw/type-aliases/Layer.md) and
+[`Group`](../api/maplibre-gl-draw/type-aliases/Group.md) one by one, see the
 [generated API reference](../api/index.md).
 
 ```ts

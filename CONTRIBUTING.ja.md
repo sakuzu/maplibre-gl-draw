@@ -124,11 +124,12 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
 
 ### 公開する範囲
 
-`src/index.ts`、`src/geometry/index.ts`、`src/table/index.ts`、
-`src/webgl/index.ts` では公開する記号を 1 つずつ名前で並べ、`export *`
-は使いません。名前は 2 つの層に分かれます。層 1 は main の入口 (同じ
-規則に従う `/geometry` と `/table` を含みます) で、層 2 は入口
-`@sakuzu/maplibre-gl-draw/webgl` です。
+5 つの入口 `src/index.ts`、`src/geometry/index.ts`、
+`src/table/index.ts`、`src/kasane/index.ts`、`src/webgl/index.ts` では
+公開する記号を 1 つずつ名前で並べ、`export *` は使いません。名前は 2 つの
+層に分かれます。層 1 は main の入口 (同じ規則に従う `/geometry` と
+`/table` を含みます) で、層 2 は入口 `@sakuzu/maplibre-gl-draw/kasane`
+と `@sakuzu/maplibre-gl-draw/webgl` です。
 
 - 層 1 は公開 API です。`createDraw` と、コレクションと資源の型を
   持つインスタンス `Draw`、`DrawOptions` と `RuntimeOptions`、入力と
@@ -137,23 +138,36 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
   データセット、Store の契約、拡張の窓口 (`Plugin`、各種の窓口、
   `ModeHandler`、`FeatureTypeDefinition`、描画器、提供者)、スタイルの
   規則の関数を含みます。契約は `src/api/` と `src/api/extension/` で
-  宣言します。semver に従います。
+  宣言します。semver に従います。地物、レイヤー、グループ、項目の
+  言葉で書き、行の言葉 (行、行の札、行の組) は `/kasane` に任せます。
+- 層 2 の `/kasane` は、地物を列の行で持つための部品です
+  (`src/kasane/index.ts`、実験的)。行で持つストア (`createTableStore`、
+  `createFeatureTables`)、その表の読む側と書く側、行の値と札、Worker で
+  行の組を作る builder と merge を含みます。maplibre も描画も読み込み
+  ません。行で持つストアが埋める層 1 の欄 (`StoreView.tables`、
+  `Store.applyRows`、`DocumentChange.rows`、`DocumentChange.opened`、
+  `ItemOrderChange` のうち行をまとめて動かす形) には `@experimental` を
+  付け、その型は `/kasane` だけが export します。
 - 層 2 は独自のシェーダーを書く人向けの部品です (`src/webgl/index.ts`)。
   core のシェーダーと地形の描き方に結び付いた部品を含みます。GLSL の
   断片と投影の uniform、`createProgram`、`QuadShader`、合成と看板の補助、
   共有の線の描画器の入力の型、破線と地形の分割の規則、
   `PointHitTestStrategy` が該当します。それに結び付かない純粋な計算
   (向きのある矩形、px と度の換算、色のコントラスト) は公開せず、拡張の側で
-  持ちます。保証は層 1 より弱く、minor の版で変わることがあります。層 1
-  の宣言は層 2 の型を参照しません。
+  持ちます。
+
+層 2 の保証は層 1 より弱く、minor の版で変わることがあります。層 1 の
+宣言は、上の実験的な欄を除いて、層 2 の型を参照しません。
 
 新しい記号をどこに置くかは次のように決めます。
 
 - ホストのアプリケーションがライブラリーを使うのに必要な記号と、拡張が
   拡張点につなぐのに必要な記号は層 1 に置きます。
 - 独自のシェーダーが core のシェーダーと同じことを再現するための記号は
-  層 2 に置きます。一般的な拡張点で足りるなら、新しい部品よりそちらを
-  選びます。
+  層 2 (`/webgl`) に置きます。一般的な拡張点で足りるなら、新しい部品より
+  そちらを選びます。
+- 行で持つストアや、その行を作る Worker が要る、行の言葉の記号は層 2
+  (`/kasane`) に置きます。
 - 公開の宣言が参照する型 (引数、戻り値、フィールド) も export します。
   置く層は、その型を必要とする宣言の層に合わせます。
 - それ以外は内部の記号で、並べません。

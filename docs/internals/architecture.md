@@ -227,13 +227,14 @@ otherwise.
 There are no runtime violations and no runtime cycles. The type-only
 imports that point upward are few and deliberate: `modes/`, `snapping/`,
 `dataset/` and `view/ui/` read the normalized event and hit test types of
-`dispatcher/`; the tables of `feature-table/` read the public types of their
-reading and writing sides (`api/tables.ts`); the drawing modes of `modes/draw/` read the types of the
-extension contract they are written to; the Store of core reads the public
-`Store` it is programmed against; the point hit test reads the public
-`Feature`; `view/shaders/` reads the shader types of the render context;
-`view/layer/` reads `DatasetManager` to draw datasets in the
-same pass; and the snap marker reads the line renderer's style type.
+`dispatcher/`; the tables of `feature-table/` read the public types of
+their reading and writing sides (`api/tables.ts`); the drawing modes of
+`modes/draw/` read the types of the extension contract they are written
+to; the Store of core reads the public `Store` it is programmed against;
+the point hit test reads the public `Feature`; `view/shaders/` reads the
+shader types of the render context; `view/layer/` reads `DatasetManager`
+to draw datasets in the same pass; and the snap marker reads the line
+renderer's style type.
 `npm run check:layers` prints the current list.
 
 ## The Store
@@ -330,8 +331,14 @@ optional category per kind of change:
 
 - `features`, `layers` and `groups`: `created`, `updated` (with `previous`)
   and `deleted`; `layers` also has `orderChanged`
-- `layerReorder` and `groupReorder`: the order inside one layer or group,
-  separate from `layers.updated` so a consumer can handle them apart
+- `order`: the items put in another place of the stacking order, each with
+  where it was and where it is (`ItemMove`), or many rows of a layer held
+  as rows at once (`RowsMove`); the one record of the order inside the
+  layers and groups
+- `rows`, `previousValues`, `restoreToken` and `opened`: from a Store that
+  holds its features as rows, the rows written, the values they had
+  before, what keeps the rows and groups deleted, and the rows opened as
+  features for this client
 - `selection`, `editing`, `tentative`, `mode`, `metadata` and `files`
 - `uiStateChanged`: a state without a category of its own changed (drag
   state, box selection, vertex selection, read-only, the interaction lock,

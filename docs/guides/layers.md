@@ -89,6 +89,12 @@ The front is at the end of every list:
 3. inside a group, `group.featureIds`
 
 `features.list()` returns every feature in this order, from the back.
+`layers.listItems(id, { offset, limit })` and
+`groups.listMembers(id, { offset, limit })` read the items of a layer
+and the features of a group by position, from the back, and
+`layers.countItems(id)` counts the items. They read every kind of layer:
+a layer held as rows (a store that holds its features as rows,
+`kind: 'table'`) has no `items`, and a group of it no `featureIds`.
 `layers.reorder` takes the IDs of every layer from the back (and may
 place other entries of the stacking order, below), and
 `features.move` and `groups.move` place features and groups. Without an
@@ -126,10 +132,15 @@ draw.groups.move(groupId, { layerId: notes.id, index: 0 });
   and puts it just in front of the group
 - `moveMany` moves several features or groups and keeps their order among
   them
+- A place can be named by the item just below it instead of an index
+  (`{ layerId, groupId?, below }`, `null` for the back), or by the item
+  just above it (`above`). A layer held as rows takes only these, and
+  refuses an `index`
 - A move of a locked item, or into a locked layer or group, returns
   `false` and changes nothing
-- `feature.moved` reports each feature that moved, with where it came from
-  and where it went
+- `feature.moved` and `group.moved` report each feature and group that
+  moved, with where it came from and where it went, by the items around
+  it
 
 The stacking order is part of the document: `document.toJSON()` writes it
 in `layerOrder`, and `document.load` of a document replaces it.
@@ -326,9 +337,9 @@ draw.on('layerStack.changed', placeMapLayers);
 
 - [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
   and [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
-- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md),
+- [`Layer`](../api/maplibre-gl-draw/type-aliases/Layer.md),
   [`LayerInput`](../api/maplibre-gl-draw/interfaces/LayerInput.md) and
-  [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)
+  [`Group`](../api/maplibre-gl-draw/type-aliases/Group.md)
 - [`MoveTarget`](../api/maplibre-gl-draw/type-aliases/MoveTarget.md)
 - [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`getLayerStack`)
   and [`LayerStackEntry`](../api/maplibre-gl-draw/interfaces/LayerStackEntry.md)

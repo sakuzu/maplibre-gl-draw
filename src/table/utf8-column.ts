@@ -23,7 +23,7 @@
  * Entry `i` is `bytes[offsets[i]]` up to `bytes[offsets[i + 1]]` (exclusive), so `offsets` has
  * one more value than the column has entries, and its values never decrease.
  *
- * @example The column of `'a'`, `''` and `'日本'`
+ * @example A column of three strings: a, an empty one and 日本
  * ```ts
  * const column: Utf8Column = {
  *   offsets: new Int32Array([0, 1, 1, 7]),

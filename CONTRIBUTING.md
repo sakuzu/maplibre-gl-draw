@@ -132,11 +132,12 @@ not cover.
 
 ### The public surface
 
-`src/index.ts`, `src/geometry/index.ts`, `src/table/index.ts` and
-`src/webgl/index.ts` name every public symbol one by one; they have no
-`export *`. The names fall into two layers: layer 1 is the main entry
-(with `/geometry` and `/table`, which follow the same rules), and layer 2
-is the entry `@sakuzu/maplibre-gl-draw/webgl`.
+`src/index.ts`, `src/geometry/index.ts`, `src/table/index.ts`,
+`src/kasane/index.ts` and `src/webgl/index.ts`, the five entries, name
+every public symbol one by one; they have no `export *`. The names fall
+into two layers: layer 1 is the main entry (with `/geometry` and
+`/table`, which follow the same rules), and layer 2 is the entries
+`@sakuzu/maplibre-gl-draw/kasane` and `@sakuzu/maplibre-gl-draw/webgl`.
 
 - Layer 1, the public API. `createDraw` and the `Draw` instance with the
   types of its collections and resources, `DrawOptions` and
@@ -146,7 +147,19 @@ is the entry `@sakuzu/maplibre-gl-draw/webgl`.
   contracts, the extension contract (`Plugin`, the contexts,
   `ModeHandler`, `FeatureTypeDefinition`, the renderers and the
   providers) and the style rule functions. The contracts are declared in
-  `src/api/` and `src/api/extension/`. It follows semver.
+  `src/api/` and `src/api/extension/`. It follows semver. It is written
+  in the words of features, layers, groups and items: the words of the
+  rows (a row, its handle, a block of rows) are left to `/kasane`.
+- Layer 2, the parts that hold features as rows of columns
+  (`src/kasane/index.ts`, experimental): the Store that holds them
+  (`createTableStore`, `createFeatureTables`), the reading and writing
+  sides of its tables, the values and the handles of rows, and the
+  builder and the merge of the blocks of rows for a Worker. It loads
+  neither maplibre nor the drawing. The fields of layer 1 that a Store of
+  rows fills (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows`,
+  `DocumentChange.opened`, and the rows moved at once of
+  `ItemOrderChange`) carry the `@experimental` tag, and their types are
+  exported by `/kasane` only.
 - Layer 2, the building blocks for custom shaders (`src/webgl/index.ts`).
   Parts tied to the shaders and the terrain drawing of core: the GLSL
   snippet and the projection uniforms, `createProgram`, `QuadShader`, the
@@ -154,17 +167,21 @@ is the entry `@sakuzu/maplibre-gl-draw/webgl`.
   renderer, the dash and terrain subdivision rules, and
   `PointHitTestStrategy`. Pure math that is not tied to them (oriented
   boxes, pixel and degree conversion, contrast colors) is not published;
-  an extension keeps its own. Its guarantee is weaker than that of layer
-  1: it may change in a minor release. No layer 1 declaration refers to a
-  layer 2 type.
+  an extension keeps its own.
+
+The guarantee of layer 2 is weaker than that of layer 1: it may change in
+a minor release. No layer 1 declaration refers to a layer 2 type, but the
+experimental fields above.
 
 Where a new symbol goes is decided as follows.
 
 - A symbol that a host application needs to use the library, or that an
   extension needs to plug into an extension point, is layer 1.
 - A symbol that exists so that a custom shader can reproduce what the
-  shaders of core do is layer 2. Prefer a general extension point to a new
-  building block when one would do.
+  shaders of core do is layer 2 (`/webgl`). Prefer a general extension
+  point to a new building block when one would do.
+- A symbol in the words of the rows, which a Store of rows or a Worker
+  that builds its rows needs, is layer 2 (`/kasane`).
 - A type that a public declaration refers to is exported too (a parameter,
   a return value, a field), in the layer of the declaration that needs it.
 - Everything else is internal and is not listed.

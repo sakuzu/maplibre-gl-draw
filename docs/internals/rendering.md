@@ -81,10 +81,11 @@ interface RenderCoordinator {
 ```
 
 `shouldRepaint(changes)` is true when the `StoreChange` carry any of
-`features`, `layers` (including the order between layers), `groups`,
-`layerReorder`, `groupReorder`, `selection`, `tentative` (the in-progress
-geometry of a drawing mode) or `uiStateChanged` (drag state, box
-selection).
+`features`, `rows` and `opened` (a Store that holds its features as
+rows), `layers` (including the order between layers), `groups`, `order`
+(the items put in another place), `selection`, `tentative` (the
+in-progress geometry of a drawing mode), `uiStateChanged` (drag state,
+box selection) or `reset`.
 
 The coordinator only schedules a frame. What the frame redraws, and what
 it rebuilds, is decided by the custom layer from its own Store
@@ -1000,8 +1001,8 @@ too much is still correct, rebuilding too little leaves a stale picture.
 | Feature moved to another layer                  | both layers        |
 | Layer styleRule, visible, order; layer deleted  | that layer         |
 | Layer opacity alone                             | nothing            |
-| Reordering inside a layer (layerReorder)        | that layer         |
-| Group changes (groups, groupReorder)            | all layers         |
+| Items put in another place (order)              | layers left and to |
+| Group changes (groups)                          | all layers         |
 | Locally hidden set                              | all layers         |
 | Overlay renderer or custom type registered      | all layers         |
 | Companion provider registered or removed        | all layers         |

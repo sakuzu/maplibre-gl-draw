@@ -90,6 +90,12 @@ Delete キー) は、少なくとも 1 つのレイヤーを残します。
 3. グループの中では、`group.featureIds`
 
 `features.list()` は、すべての地物をこの順に奥から返します。
+`layers.listItems(id, { offset, limit })` と
+`groups.listMembers(id, { offset, limit })` は、レイヤーの項目と
+グループの地物を、奥から位置で読みます。`layers.countItems(id)` は
+項目を数えます。どの種類のレイヤーでも読めます。行で持つレイヤー
+(地物を行で持つストアのレイヤー、`kind: 'table'`) は `items` を
+持たず、そのグループは `featureIds` を持ちません。
 `layers.reorder` はすべてのレイヤーの ID を奥から並べて受け取り
 (重なりの順のほかの項目も置けます。後で述べます)、
 `features.move` と `groups.move` が地物とグループを置きます。`index` を
@@ -126,9 +132,14 @@ draw.groups.move(groupId, { layerId: notes.id, index: 0 });
   グループから出してグループのすぐ手前に置きます
 - `moveMany` は複数の地物やグループを、それらのあいだの順を保って
   移します
+- 置く場所は、`index` の代わりに、すぐ下の項目
+  (`{ layerId, groupId?, below }`。一番奥は `null`) か、すぐ上の項目
+  (`above`) でも指せます。行で持つレイヤーはこの形だけを受け取り、
+  `index` を断ります
 - ロックされたものの移動や、ロックされたレイヤーやグループへの移動は
   `false` を返し、何も変えません
-- 移った地物ごとに、元の場所と行き先を載せた `feature.moved` が届きます
+- 移った地物とグループごとに、元の場所と行き先を周りの項目で載せた
+  `feature.moved` と `group.moved` が届きます
 
 重なりの順は文書の一部です。`document.toJSON()` は `layerOrder` に書き
 出し、文書の `document.load` はこれを置き換えます。
@@ -326,9 +337,9 @@ draw.on('layerStack.changed', placeMapLayers);
 
 - [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
   と [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
-- [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md)、
+- [`Layer`](../api/maplibre-gl-draw/type-aliases/Layer.md)、
   [`LayerInput`](../api/maplibre-gl-draw/interfaces/LayerInput.md)、
-  [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)
+  [`Group`](../api/maplibre-gl-draw/type-aliases/Group.md)
 - [`MoveTarget`](../api/maplibre-gl-draw/type-aliases/MoveTarget.md)
 - [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`getLayerStack`)
   と [`LayerStackEntry`](../api/maplibre-gl-draw/interfaces/LayerStackEntry.md)

@@ -506,38 +506,46 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
 行 (選んでいない、編集していない行) を、地物でなく行として、行の番号
 (handle) で知らせます。元に戻すためのものも変更に入っています。
 
-- `change.rows.before` は、この端末の書き込みの前に行が持っていた値を、
-  書いた項目について持ちます。`draw.features` での更新や削除、
-  レイヤーの削除、行の書き込みのどれでも付きます。`draw.tables.applyRows`
-  で書き戻すと、行が元に戻ります。作った行には付きません。削除として
-  書くと取り消せます
+- `change.previousValues` は、この端末の書き込みの前に行が持っていた
+  値を、書いた項目について持ちます。`draw.features` での更新や削除、
+  レイヤーの削除、行の書き込みのどれでも付きます。`draw.features.restore`
+  で書き戻すと行が元に戻り、戻す前の値が返ります (やり直しに使えます)。
+  作った行には付きません。削除として書くと取り消せます
 - 項目の場所 (レイヤー、グループ、ほかの項目との並び) は、地物か行かに
   よらず `change.order` に入ります。1 つの移動なら項目がいた場所
   (`ItemMove.from`) を、たくさんの行なら移動の前の並びの鍵
-  (`RowsMove.before`。`draw.tables.applyRows` で書き戻します) を
+  (`RowsMove.before`。`@sakuzu/maplibre-gl-draw/kasane` の
+  `createRowValues` で包み、`draw.features.restore` で書き戻します) を
   持ちます
-- この端末の削除は、消した行を手放すまで (`store.tables.release`) 残し
-  ます (`change.retain`)。削除でない値を書くと、行は元の場所に戻ります。
-  行と一緒に削除したグループは、その ID で `draw.groups.create` を
-  呼ぶと元の場所に戻ります
+- この端末の削除は、消した行とグループを手放すまで
+  (`draw.features.releaseRestore`) 残します (`change.restoreToken`)。
+  削除でない値を書くと、行は元の場所に戻ります。グループは
+  `draw.groups.restore` で元の場所に戻ります
 
 ```ts
-import type { RowValues } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureValues } from '@sakuzu/maplibre-gl-draw';
 
-const steps: RowValues[] = [];
+const steps: FeatureValues[] = [];
 draw.getStore().subscribe((change) => {
-  if (change.source === 'local' && change.rows?.before) {
-    steps.push(change.rows.before);
+  if (change.source === 'local' && change.previousValues) {
+    steps.push(change.previousValues);
   }
 });
 
 // あとで、最後の書き込みの前の行に戻す
 const last = steps.pop();
-if (last) draw.transact(() => draw.tables.applyRows(last), { source: 'history' });
+if (last) {
+  draw.transact(() => draw.features.restore(last), {
+    source: 'history',
+    ignoreLocks: true,
+  });
+}
 ```
 
-`draw.tables.applyRows` は、インスタンスの門を通ります。ほかの書き込み
-と同じく、読み取り専用のあいだは `null` を返します。
+`draw.features.restore` は、インスタンスの門を通ります。ほかの書き込み
+と同じく、読み取り専用のあいだは `null` を返します。ロックに断られた
+ときも `null` を返します。undo のようにロックを越える取引
+(`ignoreLocks`) の中では断られません。
 
 レイヤーとグループの項目をリストで持ち、項目を場所に置く以外の方法で
 リストを変える自前のストアは、変更の前と後のリストから `diffItemOrder`

@@ -168,5 +168,5 @@ draw.hidden.clear(); // この端末が隠したものをすべて表示する
   `isReadOnly`、`setInteractionLocked`、`isInteractionLocked`)
 - [`HiddenCollection`](../api/maplibre-gl-draw/interfaces/HiddenCollection.md)
 - [`Feature`](../api/maplibre-gl-draw/interfaces/Feature.md)、
-  [`Group`](../api/maplibre-gl-draw/interfaces/Group.md)、
-  [`Layer`](../api/maplibre-gl-draw/interfaces/Layer.md) (`locked`)
+  [`Group`](../api/maplibre-gl-draw/type-aliases/Group.md)、
+  [`Layer`](../api/maplibre-gl-draw/type-aliases/Layer.md) (`locked`)

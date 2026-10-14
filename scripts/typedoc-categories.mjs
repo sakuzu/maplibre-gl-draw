@@ -4,7 +4,8 @@
 // A TypeDoc plugin that sorts the API reference by task instead of by kind.
 //
 // The sources already group the public symbols: the section comments of each entry point
-// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/webgl/index.ts) and of the
+// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/kasane/index.ts,
+// src/webgl/index.ts) and of the
 // Draw interface (src/api/draw.ts). This plugin reads those comments and gives every symbol a
 // category, and every member of Draw a group, so that the grouping lives in one place, next to
 // the code. A symbol outside any section, or a section this file does not
@@ -21,6 +22,7 @@ const MAIN_CATEGORIES = [
   'Entry and options',
   'Document model',
   'Inputs, patches and filters',
+  'The stacking order of the items',
   'State',
   'Events',
   'Errors',
@@ -30,6 +32,13 @@ const MAIN_CATEGORIES = [
   'Style rule functions',
   'GeoJSON functions',
   'Parse functions',
+];
+
+/** The sections of src/kasane/index.ts, which are its categories (in this order) */
+const KASANE_CATEGORIES = [
+  'Stores that hold features as rows',
+  'The order of the rows',
+  'Build blocks of rows in a Worker',
 ];
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */
@@ -128,6 +137,11 @@ export function load(app) {
       },
       { module: 'geometry', file: 'src/geometry/index.ts', rename: (s) => s },
       { module: 'table', file: 'src/table/index.ts', rename: (s) => s },
+      {
+        module: 'kasane',
+        file: 'src/kasane/index.ts',
+        rename: (s) => (KASANE_CATEGORIES.includes(s) ? s : undefined),
+      },
       {
         module: 'webgl',
         file: 'src/webgl/index.ts',

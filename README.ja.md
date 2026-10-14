@@ -217,9 +217,13 @@ document.querySelector('#save')?.addEventListener('click', () => {
   ことができます。Node や Worker でも動きます
 - `@sakuzu/maplibre-gl-draw/table` は、大きな表を Worker で読んで
   データセットに渡す部品です
+- `@sakuzu/maplibre-gl-draw/kasane` は、レイヤーの地物を列の行で持つ
+  部品です。一度にオブジェクトにできないほど多くの地物を持つレイヤー
+  のためのもので、行で持つストアと、Worker で行を作る部品を含みます。
+  実験的なもので、小さい版で変わることがあります
 - `@sakuzu/maplibre-gl-draw/webgl` は、独自のシェーダーを書くための
-  部品です。小さい版で変わることがあります。ほかの 3 つはセマンティック
-  バージョニングに従います
+  部品です。小さい版で変わることがあります。main の入口、`/geometry`、
+  `/table` はセマンティックバージョニングに従います
 
 ## 動作環境
 

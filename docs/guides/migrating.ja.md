@@ -667,6 +667,48 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 書いてあったとおりの振る舞いです)。回避のために `{ diff: false }` で
 `setStyle` を呼んでいたアプリは、そのままでも外しても構いません。
 
+## 2.x から 3.0 へ
+
+3.0 では、ストアがレイヤーの地物を列の行で持てるようになりました
+([変更履歴](../../CHANGELOG.md#unreleased))。標準のストアを使う
+アプリで変わるところは 3 つです。
+
+`Layer` と `Group` は、`kind` で見分ける共用体になりました。行で持つ
+レイヤー (`kind: 'table'`) は `items` を持たず、そのグループは
+`featureIds` を持ちません。読む前に `kind` で絞るか、どの種類の
+レイヤーでも項目を位置で読みます。
+
+```ts
+const layer = draw.layers.get(layerId);
+if (layer && layer.kind !== 'table') console.log(layer.items);
+
+// どの種類のレイヤーでも、奥から 50 個の項目
+const items = draw.layers.listItems(layerId, { limit: 50 });
+const members = draw.groups.listMembers(groupId);
+```
+
+レイヤーやグループの中の並びは、`DocumentChange.layerReorder` と
+`groupReorder` に入らなくなりました。別の場所に置いた項目は、すべて
+`DocumentChange.order` に入ります。元の場所と今の場所を、すぐ下と
+すぐ上の項目 (`ItemPosition`) で持ちます。`feature.moved` の `from`
+と `to` も `ItemPosition` になり、同じレイヤーやグループの中の移動でも
+届きます。`group.moved` が加わりました。
+
+```ts
+draw.on('document.changed', (change) => {
+  for (const move of change.order ?? []) {
+    if (move.kind === 'item') console.log(move.itemId, move.from, move.to);
+  }
+});
+```
+
+データセットの `TableGeometry.dimensions` は GeoArrow の名前を取り
+ます。`2` は `'xy'`、`3` は `'xyz'` です。
+
+自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
+ストアは、変更の前と後のリストから `diffItemOrder` で
+`DocumentChange.order` を作ります。
+
 ## mapbox-gl-draw や terra-draw から
 
 モード、地物の store、イベント、独自のモードといった考え方は、

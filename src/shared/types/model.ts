@@ -952,7 +952,7 @@ declare const restoreTokenBrand: unique symbol;
 /**
  * What keeps the rows and the groups a deletion of this client deleted
  * (`DocumentChange.restoreToken`): they stay as they were, so that a deletion undone puts them
- * back where they were, until it is let go of (`FeatureTables.release`).
+ * back where they were, until it is let go of (`features.releaseRestore`).
  */
 export type RestoreToken = number & { readonly [restoreTokenBrand]: true };
 

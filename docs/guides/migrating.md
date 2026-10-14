@@ -656,6 +656,48 @@ diffed `map.setStyle` (the drawing stays on top of the new style, as the
 documentation always said). An app that called `setStyle` with
 `{ diff: false }` to work around that can keep doing so or drop it.
 
+## From 2.x to 3.0
+
+3.0 lets a store hold the features of a layer as rows of columns (see
+[the change log](../../CHANGELOG.md#unreleased)). An app over the
+default store changes in three places.
+
+`Layer` and `Group` are unions told apart by `kind`. A layer held as rows
+(`kind: 'table'`) has no `items`, and a group of it no `featureIds`.
+Narrow by `kind` before reading them, or read the items of any layer by
+position:
+
+```ts
+const layer = draw.layers.get(layerId);
+if (layer && layer.kind !== 'table') console.log(layer.items);
+
+// Any kind of layer, the first 50 items from the back
+const items = draw.layers.listItems(layerId, { limit: 50 });
+const members = draw.groups.listMembers(groupId);
+```
+
+The order inside a layer or a group is no longer in
+`DocumentChange.layerReorder` and `groupReorder`. Every item put in
+another place is in `DocumentChange.order`, with where it was and where
+it is, by the items just below and above it (`ItemPosition`). The
+`from` and `to` of `feature.moved` are `ItemPosition`s too, and it fires
+for a move in the same layer or group as well; `group.moved` is new.
+
+```ts
+draw.on('document.changed', (change) => {
+  for (const move of change.order ?? []) {
+    if (move.kind === 'item') console.log(move.itemId, move.from, move.to);
+  }
+});
+```
+
+`TableGeometry.dimensions` of a dataset takes the names of GeoArrow:
+`'xy'` for `2` and `'xyz'` for `3`.
+
+A store of your own needs no change. A store that keeps the items of its
+layers as lists makes `DocumentChange.order` from the lists before and
+after with `diffItemOrder`.
+
 ## From mapbox-gl-draw or terra-draw
 
 The concepts carry over: modes, a store of features, events and custom

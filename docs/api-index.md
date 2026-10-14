@@ -36,7 +36,7 @@ generated from the sources. To learn how to use the library, start with
 
 ## Entry points
 
-The package has four entry points. Import from the first one unless
+The package has five entry points. Import from the first one unless
 you need the others.
 
 - `@sakuzu/maplibre-gl-draw` ({@link maplibre-gl-draw | the reference}):
@@ -50,6 +50,11 @@ you need the others.
 - `@sakuzu/maplibre-gl-draw/table` ({@link table | the reference}):
   the parts for reading a large table in a Worker and putting it on the
   map as a dataset.
+- `@sakuzu/maplibre-gl-draw/kasane` ({@link kasane | the reference}):
+  the parts that hold the features of a layer as rows of columns, for a
+  layer of more features than can be made objects at once. It is
+  experimental and may change in a minor release.
 - `@sakuzu/maplibre-gl-draw/webgl` ({@link webgl | the reference}):
   building blocks for custom shaders. They may change in a minor
-  release; everything else follows semantic versioning.
+  release, as `/kasane` may; everything else follows semantic
+  versioning.
