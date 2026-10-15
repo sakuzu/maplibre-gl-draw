@@ -22,6 +22,13 @@
  * Without folding, the amount retained in one transaction becomes O(N^2) and a bulk import
  * reaches the heap limit. A folded entry keeps previous as the first state and layer/group as
  * the last state, so as the diff of a single flush it means the same as before folding.
+ *
+ * A transaction whose writes go on over several tasks (a restore of many rows written in steps)
+ * holds its notification (`hold`): the outermost transaction ends without it, the steps add to it
+ * (`continueHeld`), and it goes out once, with the source of the transaction, when the hold is
+ * let go of (`release`). Anything else that comes meanwhile (an outermost transaction, a change
+ * merged outside one) first has the held writes finished (`finish`), so the notifications keep
+ * the order of the writes.
  */
 
 import type {
@@ -374,6 +381,10 @@ export class ChangeBus {
   #pendingChanges: StoreChange = {};
   #currentSource: UpdateSource = 'local';
   #updateIndex: UpdateIndex = { layers: new Map(), groups: new Map(), rows: new Map() };
+  /** The notification held for writes over several tasks: what finishes them, and its source */
+  #hold: { readonly finish: () => void; readonly source: UpdateSource } | null = null;
+  /** Whether the held writes are being finished (what comes meanwhile is part of them) */
+  #finishing = false;
 
   /**
    * @param beforeFlush Called when the outermost operation is about to notify, before the
@@ -405,11 +416,13 @@ export class ChangeBus {
    */
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     const wasInTransaction = this.#transactionDepth > 0;
+    // Another transaction comes after the held writes, finished first
+    if (!wasInTransaction) this.#finishHeld();
     this.#transactionDepth++;
 
-    // Set source only for the outermost transaction
+    // Set source only for the outermost transaction (the held one's, while it is finished)
     if (!wasInTransaction) {
-      this.#currentSource = source;
+      this.#currentSource = this.#hold?.source ?? source;
     }
 
     try {
@@ -417,7 +430,7 @@ export class ChangeBus {
     } finally {
       this.#transactionDepth--;
       if (this.#transactionDepth === 0) {
-        this.#flushChanges();
+        if (!this.#hold) this.#flushChanges();
         this.#currentSource = 'local';
       }
     }
@@ -427,10 +440,81 @@ export class ChangeBus {
    * Merges the changes into pendingChanges. Flushes immediately if outside a transaction.
    */
   merge(changes: StoreChange): void {
+    if (this.#transactionDepth === 0) this.#finishHeld();
     appendChanges(this.#pendingChanges, changes, this.#updateIndex);
-    if (this.#transactionDepth === 0) {
+    if (this.#transactionDepth === 0 && !this.#hold) {
       this.#flushChanges();
     }
+  }
+
+  /**
+   * Holds the notification of the transaction under way (called inside it): it is not flushed
+   * when the transaction ends, but when `release` is called. `finish` writes the rest of what the
+   * transaction goes on writing, and calls `release`: it is called when anything else comes first
+   */
+  hold(finish: () => void): void {
+    this.#hold = { finish, source: this.#currentSource };
+  }
+
+  /** Whether a notification is held */
+  get held(): boolean {
+    return this.#hold !== null;
+  }
+
+  /**
+   * Runs a write of the held transaction in a later task: added to its notification, with its
+   * source, nothing finished (flushed when it lets go of the notification)
+   */
+  continueHeld<T>(fn: () => T): T {
+    const hold = this.#hold;
+    if (!hold) return this.transact(fn);
+    const wasInTransaction = this.#transactionDepth > 0;
+    this.#transactionDepth++;
+    if (!wasInTransaction) this.#currentSource = hold.source;
+    try {
+      return fn();
+    } finally {
+      this.#transactionDepth--;
+      if (this.#transactionDepth === 0) {
+        // Let go of within it: flushed with its source
+        if (!this.#hold) {
+          this.#currentSource = hold.source;
+          this.#flushChanges();
+        }
+        this.#currentSource = 'local';
+      }
+    }
+  }
+
+  /**
+   * Lets go of the notification held: flushed now outside a transaction, with the transaction it
+   * is in otherwise
+   */
+  release(): void {
+    const hold = this.#hold;
+    if (!hold) return;
+    this.#hold = null;
+    if (this.#transactionDepth > 0) return;
+    this.#currentSource = hold.source;
+    try {
+      this.#flushChanges();
+    } finally {
+      this.#currentSource = 'local';
+    }
+  }
+
+  /** Finishes the held writes (once; what they bring meanwhile is part of them) */
+  #finishHeld(): void {
+    const hold = this.#hold;
+    if (!hold || this.#finishing) return;
+    this.#finishing = true;
+    try {
+      hold.finish();
+    } finally {
+      this.#finishing = false;
+    }
+    // A finish that did not let go of the notification: let go of here
+    if (this.#hold === hold) this.release();
   }
 
   /** Whether an update entry for this layer is already stacked within the same flush */

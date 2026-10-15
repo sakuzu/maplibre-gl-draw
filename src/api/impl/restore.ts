@@ -6,6 +6,7 @@
  * back through the gate of the instance, and the rows a deletion kept let go of
  */
 
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FeatureValues, RestoreToken } from '../model.js';
 import type { FeatureTables, RowValues } from '../tables.js';
 import { checkRowValues } from '../tables.js';
@@ -60,8 +61,13 @@ export function createRestore(deps: Pick<ResourceDeps, 'store'>): {
     restore(values) {
       const tables = requireTables(store);
       const rows = checkRowValues(values);
+      // Whether each handle has a row, without reading its id (a restore of a layer of 100,000)
+      const ids = featureTablesInternals(tables)?.ids;
+      const known = ids
+        ? (handle: number) => ids.has(handle)
+        : (handle: number) => tables.getRowId(handle) !== undefined;
       for (const handle of rows.handles) {
-        if (tables.getRowId(handle) === undefined) throw notFound('feature of the row', handle);
+        if (!known(handle)) throw notFound('feature of the row', handle);
       }
       if (store.isReadOnly()) return null;
       if (!locksIgnored(store) && rowsLocked(store, tables, rows)) return null;

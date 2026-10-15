@@ -103,3 +103,55 @@ describe('the rows in the notifications of a transaction', () => {
     expect(performance.now() - started).toBeLessThan(100);
   });
 });
+
+describe('a notification held for writes over several tasks', () => {
+  /** A bus that holds the transaction it is in, and whose writes go on until finished */
+  function heldBus() {
+    const bus = new ChangeBus();
+    const told: StoreChange[] = [];
+    bus.subscribe((change) => told.push(change));
+    let left = 2;
+    const step = () =>
+      bus.continueHeld(() => {
+        bus.merge({ rows: rows('l', { created: [10 - left] }) });
+        left--;
+        if (left === 0) bus.release();
+      });
+    const finish = () => {
+      while (left > 0) step();
+    };
+    bus.transact(() => {
+      bus.merge({ rows: rows('l', { created: [7] }) });
+      bus.hold(finish);
+    }, 'undo');
+    return { bus, told, step };
+  }
+
+  it('goes out once, with the source of its transaction, when let go of', () => {
+    const { bus, told, step } = heldBus();
+    expect(told).toHaveLength(0);
+    expect(bus.held).toBe(true);
+    step();
+    expect(told).toHaveLength(0);
+    step();
+    expect(told).toHaveLength(1);
+    expect(told[0]?.source).toBe('undo');
+    expect(Array.from(told[0]?.rows?.layers.get('l')?.created ?? [])).toEqual([7, 8, 9]);
+  });
+
+  it('has the writes finished before another transaction, told before it', () => {
+    const { bus, told } = heldBus();
+    bus.transact(() => bus.merge({ metadata: { metadata: {}, previous: {} } }), 'local');
+    expect(told.map((change) => change.source)).toEqual(['undo', 'local']);
+    expect(told[0]?.rows?.layers.get('l')?.created.length).toBe(3);
+    expect(told[1]?.rows).toBeUndefined();
+  });
+
+  it('has the writes finished before a change merged outside a transaction', () => {
+    const { bus, told } = heldBus();
+    bus.merge({ uiStateChanged: true });
+    expect(told).toHaveLength(2);
+    expect(told[0]?.source).toBe('undo');
+    expect(told[1]?.uiStateChanged).toBe(true);
+  });
+});

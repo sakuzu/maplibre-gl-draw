@@ -51,6 +51,7 @@ import { rowsOfSummary, summaryOf } from './bulk-selection.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
+import { BULK_SLICE_ROWS, type RowSteps, rowStepsOf } from './row-steps.js';
 import type { SlicedWrite, Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
@@ -165,6 +166,8 @@ export class DrawStore implements Store {
   /** The write of many rows made over several tasks under way, and whether a step of it runs */
   #sliced: SlicedWrite | null = null;
   #slicedSteps = 0;
+  /** The restore of rows written in steps whose notification this Store holds (`row-steps.ts`) */
+  #restoring: SlicedWrite | null = null;
   /** Whether the selection is being written here (its notification does not prune it) */
   #selecting = false;
   /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
@@ -300,7 +303,35 @@ export class DrawStore implements Store {
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
     this.finishSlicedWrite();
     const before = tables.readValues(patch);
+    // Many rows are written in steps by a Store of core that has them, as one transaction
+    const steps = rowStepsOf.get(this.#contract);
+    if (steps && patch.handles.length > BULK_SLICE_ROWS) {
+      return this.#write(() => this.#restoreInSteps(steps, { patch, before })) ? before : null;
+    }
     return this.applyRows({ patch, before }) ? before : null;
+  }
+
+  /**
+   * Begins a restore of rows written in steps (in a transaction of this Store): when steps are
+   * left, the notification of this Store is held with the one of the contract, and let go of once
+   * the contract wrote the last rows and told them
+   */
+  #restoreInSteps(steps: RowSteps, write: RowWrite): boolean {
+    const restore: SlicedWrite = { finish: () => steps.finish() };
+    let ended = false;
+    const going = steps.begin(write, () => {
+      ended = true;
+      if (this.#sliced === restore) this.#sliced = null;
+      if (this.#restoring !== restore) return;
+      this.#restoring = null;
+      this.#bus.release();
+    });
+    if (!going || ended) return true;
+    this.#sliced = restore;
+    this.#restoring = restore;
+    // Anything else that comes to this Store finishes it first
+    this.#bus.hold(() => restore.finish());
+    return true;
   }
 
   createGroup(group: Group): boolean {
@@ -965,7 +996,10 @@ export class DrawStore implements Store {
    */
   #receive(changes: StoreChange): void {
     this.#bulkLocked = null;
-    this.#bus.transact(() => {
+    // The notification of a restore written in steps goes into the one this Store holds
+    const run = <T>(fn: () => T, source: UpdateSource): T =>
+      this.#restoring ? this.#bus.continueHeld(fn) : this.#bus.transact(fn, source);
+    run(() => {
       if (this.#contract.tables && this.#changesHeld(changes)) this.#heldStale = true;
       const normalized = this.#normalizeChanges(withoutSource(changes));
       if (normalized.selection) {

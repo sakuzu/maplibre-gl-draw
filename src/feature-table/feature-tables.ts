@@ -215,19 +215,47 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
   writer: FeatureTablesWriter;
 } {
   const store = new FeatureTablesStore(options);
+  // A read through the reading side lets the gate of the reads finish what is written first
+  // (`setReadGate`); core reads the rows through its internals
+  const gate = (): void => store.readGate?.();
   const tables: FeatureTables = {
-    get: (layerId) => store.view(layerId),
-    findRow: (id) => store.handleOf(id),
-    getRowId: (handle) => store.ids.idOf(handle),
-    getGroupId: (groupHandle) => store.groups.idOf(groupHandle),
+    get: (layerId) => {
+      gate();
+      return store.view(layerId);
+    },
+    findRow: (id) => {
+      gate();
+      return store.handleOf(id);
+    },
+    getRowId: (handle) => {
+      gate();
+      return store.ids.idOf(handle);
+    },
+    getGroupId: (groupHandle) => {
+      gate();
+      return store.groups.idOf(groupHandle);
+    },
     findGroup: (id) => {
+      gate();
       const group = store.groups.handleOfId(id);
       return group >= 0 ? group : undefined;
     },
-    scan: (options) => store.scan(options ?? {}),
-    readValues: (rows) => store.readValues(rows),
-    release: (token) => store.release(token),
-    showInPlace: (owner, features) => store.showInPlace(owner, features),
+    scan: (options) => {
+      gate();
+      return store.scan(options ?? {});
+    },
+    readValues: (rows) => {
+      gate();
+      return store.readValues(rows);
+    },
+    release: (token) => {
+      gate();
+      store.release(token);
+    },
+    showInPlace: (owner, features) => {
+      gate();
+      store.showInPlace(owner, features);
+    },
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
@@ -455,6 +483,13 @@ export interface FeatureTablesInternals {
    * @param features The features it draws (none: it draws none any more)
    */
   showInPlace(owner: string, features: readonly Feature[]): void;
+  /**
+   * Sets what a read through the reading side of the tables (`FeatureTables`) calls first (none:
+   * nothing): the Store finishes there a write it makes over several tasks, so that what is read
+   * is what the write leaves. A view of a layer is gated when it is asked for (`get`), a scan
+   * when it starts
+   */
+  setReadGate(gate: (() => void) | null): void;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -556,6 +591,8 @@ interface LayerChangeDraft {
 
 /** The implementation of the tables */
 class FeatureTablesStore implements FeatureTablesInternals {
+  /** What a read through the reading side calls first (see `setReadGate`) */
+  readGate: (() => void) | null = null;
   readonly ids = new IdIndex();
   readonly styles = new StyleTable();
   readonly groups = new GroupTable();
@@ -2181,6 +2218,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * keys of the row it is drawn over (at the end of its layer for a feature of no row), and the
    * row it is drawn over is not drawn (`STATE_HIDDEN_OVERLAY`). The rows are not written
    */
+  setReadGate(gate: (() => void) | null): void {
+    this.readGate = gate;
+  }
+
   showInPlace(owner: string, features: readonly Feature[]): void {
     const before = this.overlays.get(owner) ?? new Map<string, OverlayEntry>();
     const next = new Map<string, OverlayEntry>();

@@ -31,6 +31,7 @@
  * - The writes of rows from elsewhere go through the writer it returns, in a transaction with
  *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
+ * - A restore of many rows is written in steps, as one transaction told once (`row-steps.ts`)
  */
 
 import type {
@@ -59,6 +60,7 @@ import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { keyAfter, keysBetween } from './order-keys.js';
+import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS, rowStepsOf, sliceRowValues } from './row-steps.js';
 import { combineValuesBefore } from './row-values-before.js';
 import type { Store, StoreContract } from './store.js';
 import type {
@@ -123,6 +125,20 @@ export function createTableStore(options: TableStoreOptions = {}): {
  */
 export const REMOTE_DELETED_KEPT = 10_000;
 
+/** A restore of rows written in steps (`row-steps.ts`) */
+interface RestoreSteps {
+  readonly patch: RowValues;
+  /** The values the rows had before, the same rows in the same order */
+  readonly before: RowValues;
+  /** The first row not written yet */
+  at: number;
+  /** Whether it deletes rows (they are kept by the token of the transaction) */
+  readonly deletes: boolean;
+  readonly onEnd: () => void;
+  /** The next step waiting */
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
 /**
  * The fields of the place of a row: a write of them is told by the changes of the order, not by
  * the values before
@@ -162,6 +178,10 @@ export class TableContractStore implements StoreContract {
   #remoteDeleted: RowHandle[] = [];
   /** The groups features left in the write being made (deleted at its end when empty) */
   readonly #leftGroups = new Set<string>();
+  /** The restore of rows written in steps under way (`row-steps.ts`) */
+  #steps: RestoreSteps | null = null;
+  /** Whether a step of it is being written (its own writes and reads do not finish it) */
+  #inStep = false;
 
   constructor(options: TableStoreOptions = {}) {
     const { tables, writer } = createFeatureTablesStore({
@@ -187,6 +207,14 @@ export class TableContractStore implements StoreContract {
     };
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
     this.#bus.subscribe((changes) => this.#deliver(changes));
+    // A read of the rows comes after the restore under way, finished first
+    this.#internals.setReadGate(() => {
+      if (this.#steps && !this.#inStep) this.#finishSteps();
+    });
+    rowStepsOf.set(this, {
+      begin: (write, onEnd) => this.#beginSteps(write, onEnd),
+      finish: () => this.#finishSteps(),
+    });
   }
 
   // ==========================================================================
@@ -824,12 +852,98 @@ export class TableContractStore implements StoreContract {
   }
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
+    // A write comes after the restore under way, finished first (in a transaction too)
+    if (this.#steps && !this.#inStep) this.#finishSteps();
     return this.#bus.transact(fn, source);
   }
 
   // ==========================================================================
   // Private
   // ==========================================================================
+
+  /**
+   * Writes the rows of a restore in steps (see `row-steps.ts`), in a transaction: the first step
+   * now; when rows are left, the notification is held and the next step goes in a later task
+   */
+  #beginSteps(write: RowWrite, onEnd: () => void): boolean {
+    this.#finishSteps();
+    const { patch, before } = write;
+    const steps: RestoreSteps = {
+      patch,
+      before,
+      at: 0,
+      deletes: patch.deleted?.some((value) => value !== 0) ?? false,
+      onEnd,
+      timer: null,
+    };
+    this.#steps = steps;
+    this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS);
+    if (steps.at >= patch.handles.length) {
+      this.#steps = null;
+      this.#deleteEmptyGroups();
+      return false;
+    }
+    this.#bus.hold(() => this.#finishSteps());
+    steps.timer = setTimeout(() => this.#nextStep(steps), 0);
+    return true;
+  }
+
+  /** Writes the next step of a restore, in its transaction, and the end after the last one */
+  #nextStep(steps: RestoreSteps): void {
+    if (this.#steps !== steps) return;
+    this.#bus.continueHeld(() => this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS));
+    if (steps.at < steps.patch.handles.length) {
+      steps.timer = setTimeout(() => this.#nextStep(steps), 0);
+      return;
+    }
+    this.#endSteps(steps);
+  }
+
+  /** Writes the rest of the restore under way now, and its end */
+  #finishSteps(): void {
+    const steps = this.#steps;
+    if (!steps || this.#inStep) return;
+    this.#bus.continueHeld(() => this.#writeSteps(steps, Number.POSITIVE_INFINITY));
+    this.#endSteps(steps);
+  }
+
+  /**
+   * Writes the rows of a restore from where it is, a run at a time, until a time (the rows of a
+   * run with the values they had before, as `applyRows` writes values of rows there)
+   */
+  #writeSteps(steps: RestoreSteps, deadline: number): void {
+    const n = steps.patch.handles.length;
+    this.#inStep = true;
+    try {
+      while (steps.at < n) {
+        const from = steps.at;
+        const to = Math.min(n, from + BULK_SLICE_ROWS);
+        const patch = sliceRowValues(steps.patch, from, to);
+        steps.at = to;
+        this.#leaveGroups(patch);
+        this.#applyRows(patch, {
+          before: sliceRowValues(steps.before, from, to),
+          ...(steps.deletes && this.#keeping()),
+        });
+        if (performance.now() >= deadline) break;
+      }
+    } finally {
+      this.#inStep = false;
+    }
+  }
+
+  /**
+   * Ends a restore written in steps: the groups its rows left with no member are deleted, the
+   * notification goes out (or into the transaction under way), and the end is told
+   */
+  #endSteps(steps: RestoreSteps): void {
+    if (this.#steps !== steps) return;
+    this.#steps = null;
+    if (steps.timer !== null) clearTimeout(steps.timer);
+    this.#bus.continueHeld(() => this.#deleteEmptyGroups());
+    this.#bus.release();
+    steps.onEnd();
+  }
 
   /**
    * Runs one write of the document; true once it applied. A group a feature left empty is deleted

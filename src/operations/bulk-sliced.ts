@@ -24,19 +24,12 @@
 
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import { TableSelection } from '../feature-table/selection.js';
+import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../store/row-steps.js';
 import type { SlicedWrite, Store } from '../store/store.js';
 import { rowsLocked } from './bulk-selection.js';
 import type { BulkKinds } from './bulk-transform.js';
 
-/**
- * The time of one step of the write (ms): rows are written until it is spent. A step then lasts
- * about 20 ms (the last rows and the notification of the step past it), so that a frame with
- * the drawing of the rows written stays near 50 ms
- */
-export const BULK_SLICE_BUDGET_MS = 12;
-
-/** The rows written at a time within a step (the time is looked at between two of them) */
-export const BULK_SLICE_ROWS = 256;
+export { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS };
 
 /**
  * How a write in steps goes

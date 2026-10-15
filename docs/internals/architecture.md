@@ -381,6 +381,63 @@ quadratic memory. A folded entry keeps the first state in `previous` and the
 last in `layer` or `group`, so as the difference of one flush it means the
 same thing.
 
+### A restore of many rows written in steps
+
+`draw.features.restore` of more rows than one run (`BULK_SLICE_ROWS`) on the
+Store of rows of core is written in steps (`src/store/row-steps.ts`), with the
+run and the time of a step of the write of a drag of features selected in bulk
+(`BULK_SLICE_ROWS`, `BULK_SLICE_BUDGET_MS`): the first step in the call, the
+next ones in later tasks. The undo of the deletion of a layer of 100,000 rows
+writes them back so, and no frame waits for all of them.
+
+Unlike the write of a drag, it stays one transaction. Its notification is held
+on both buses, the contract's and the one of `DrawStore`
+(`ChangeBus.hold`); the steps add to it (`continueHeld`), and it goes out
+once, with the source of the transaction the restore was called in, when the
+last rows are written (`release`). A history sees one step, with what keeps
+the rows (`restoreToken`) told once.
+
+- Anything else that comes to either bus first finishes the rest: an
+  outermost transaction, from this client or from elsewhere (`remote`), or a
+  change merged outside one (the selection, the state of the drawing). A write
+  of the contract inside a transaction finishes it too (`transact` of the
+  contract). The writes keep their order, and the restore is told before what
+  came.
+- A read of the rows through the reading side of the tables (`FeatureTables`,
+  which the reads of the instance go through: a feature, the items of a
+  layer, an export) finishes it first (`setReadGate` of the internals), so no
+  read sees the rows half written. The drawing reads through the internals and
+  draws the rows as the steps write them.
+- A group the rows left with no member is deleted once the last rows are
+  written, in the notification of the restore: between two steps, the rows of
+  a later step may still join it.
+- The values before are read for every row in the call (they are what the
+  call returns), and each run is written with its part of them.
+- It is not part of the Store contract: the contract of core tells it through
+  `rowStepsOf`, and a Store given by the host writes a restore at once. No
+  member of the public types was added; `Store.slicedWritePending` tells that
+  a restore is under way, as it tells the write of a drag.
+
+What was weighed:
+
+- A write from elsewhere finishes the restore, while it does not finish the
+  write of a drag. The drag write tells each step on its own, so a remote
+  change can come between two of them; the restore tells one notification,
+  and a remote change told before it would be told before writes made earlier.
+  Keeping the remote notifications in a queue until the end was the other way,
+  left out for the order it would give the listeners.
+- A read finishes the restore rather than reading what it will leave (the
+  values of the patch over the rows). It is simpler and reads in the middle of
+  a restore are rare; the cost is that the listeners of the restore run inside
+  the read that finished it.
+- A view of a layer is gated when it is asked for (`get`), and a scan when it
+  starts, not at each of their reads: the drawing shares the view objects. A
+  view kept from before the restore and read during it reads the rows half
+  written.
+- A change of the state of the drawing (a box selection, a drag state)
+  finishes the restore, as any change merged into the bus does: pointer work
+  during a restore makes it end sooner.
+
 ## Data flow
 
 ```text
