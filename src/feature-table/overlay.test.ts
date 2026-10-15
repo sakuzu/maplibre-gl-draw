@@ -59,9 +59,7 @@ describe('the features drawn over rows for this client', () => {
     const { tables, internals, table, emitted, ids } = setup();
     const before = ids();
     const p3 = tables.get('layer')?.getRow(tables.findRow('p3') ?? -1);
-    tables.showInPlace('peer', [
-      { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
-    ]);
+    tables.showInPlace('peer', [{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]);
     // Drawn as a row of the delta, at the place of p3
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p3']);
     const place = table.deltaPlaces();
