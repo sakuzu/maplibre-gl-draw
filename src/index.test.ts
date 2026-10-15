@@ -237,6 +237,8 @@ const TABLE = [
  */
 const KASANE = [
   'CoordinateSystem',
+  'copyTableStore',
+  'TableStoreCopy',
   'CreatedRows',
   'createFeatureTables',
   'createRowBlockBuilder',

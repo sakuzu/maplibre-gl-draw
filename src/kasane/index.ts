@@ -61,8 +61,10 @@ export type {
   TableGroupField,
   TableGroupPatch,
   TableScanOptions,
+  TableStoreCopy,
 } from '../api/tables.js';
 export {
+  copyTableStore,
   createFeatureTables,
   createRowValues,
   createTableStore,

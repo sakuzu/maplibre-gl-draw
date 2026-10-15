@@ -28,13 +28,14 @@ import type {
   RowsChange,
   RowValues,
 } from '../shared/types/model.js';
+import { copyTableStore as copyTableStoreOf } from '../store/table-copy.js';
 import { createTableStore as createTableStoreOf } from '../store/table-memory.js';
 import type { CoordinateDimensions, CoordinateSystem } from '../table/coordinates.js';
 import type { RowBlock } from '../table/row-group-types.js';
 import type { Utf8Column } from '../table/utf8-column.js';
 import { DrawError } from './errors.js';
 import type { DocumentChange } from './events.js';
-import type { Store, UpdateSource } from './extension/store.js';
+import type { Store, StoreView, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';
 
 export type {
@@ -611,4 +612,52 @@ export function createTableStore(
   writer: FeatureTablesWriter;
 } {
   return createTableStoreOf(options);
+}
+
+/**
+ * A copy of a document held as rows ({@link copyTableStore}), made a block of rows at a time.
+ */
+export interface TableStoreCopy {
+  /** The new Store, for the `store` option of the `createDraw` that draws the copy */
+  readonly store: Store;
+  /** The writer of its tables */
+  readonly writer: FeatureTablesWriter;
+  /**
+   * Copies the next block of rows into the new Store (it takes them in over the frames of its
+   * drawing, as `addBlocks` does)
+   *
+   * @returns Whether rows are left to copy
+   */
+  copyNext(): boolean;
+}
+
+/**
+ * Copies a document held as rows into a new Store that holds its features as rows, to draw it
+ * apart from the instance that edits it (a print, a thumbnail) without making its features.
+ *
+ * The layers (each held as rows), the groups at their places, the stacking order, the metadata
+ * and the embedded files are copied at once, and the features of a layer of objects too. The rows
+ * are listed at once, in the order of their layers, and copied a block at a time with
+ * `copyNext`, each block read as the rows are then (a value written meanwhile is copied as it is
+ * when its block is read), so that the copy of a large document is spread over frames or tasks.
+ * The layers keep the dimensions of their coordinates.
+ *
+ * @param source - The Store of the document (`draw.getStore()`)
+ * @param options - The options of the tables of the new Store (the Worker that builds its next
+ *   versions)
+ * @throws `DrawError` with the code `invalid-input` when the Store does not hold its features as
+ *   rows
+ *
+ * @example
+ * ```ts
+ * const copy = copyTableStore(draw.getStore());
+ * const printed = createDraw(printMap, { store: copy.store, initDefaultLayer: false });
+ * while (copy.copyNext()) await new Promise(requestAnimationFrame);
+ * ```
+ */
+export function copyTableStore(
+  source: StoreView,
+  options: Omit<FeatureTablesOptions, 'onChange' | 'onRelease' | 'dimensionsOf'> = {},
+): TableStoreCopy {
+  return copyTableStoreOf(source, options);
 }
