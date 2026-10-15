@@ -77,7 +77,12 @@ import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { translationBetween } from './held-move.js';
 import { IdIndex } from './id-index.js';
-import { groupKeyMoves, type ItemOrderSource, ItemOrderWatch } from './item-order.js';
+import {
+  groupKeyMoves,
+  type ItemOrderSource,
+  ItemOrderWatch,
+  ORDER_ITEM_LIMIT,
+} from './item-order.js';
 import { ItemWalk } from './item-walk.js';
 import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
 import {
@@ -490,6 +495,13 @@ export interface FeatureTablesInternals {
    * when it starts
    */
   setReadGate(gate: (() => void) | null): void;
+  /**
+   * Tells the changes of the order of a write made in several parts (a restore written in steps)
+   * once, as one write of the whole of it would: the items it disturbs are read now, the writes of
+   * rows tell no change of the order until the function returned is called, which tells the
+   * changes the whole write made
+   */
+  watchOrderOf(patch: RowValues): () => void;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -593,6 +605,8 @@ interface LayerChangeDraft {
 class FeatureTablesStore implements FeatureTablesInternals {
   /** What a read through the reading side calls first (see `setReadGate`) */
   readGate: (() => void) | null = null;
+  /** The changes of the order of a write made in several parts, under way (`watchOrderOf`) */
+  private partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
   readonly ids = new IdIndex();
   readonly styles = new StyleTable();
   readonly groups = new GroupTable();
@@ -1593,7 +1607,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * an edit of it writes in its middle are kept for when the edit ends (`OpenedApplyOptions`)
    */
   apply(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
-    const watch = this.watchOrder(patch);
+    // A part of a write made in several parts: its changes of the order are told at its end
+    const watch = this.partsWatch ? null : this.watchOrder(patch);
     const drafts = new Map<string, LayerChangeDraft>();
     const heldWritten: Array<{ handle: RowHandle; fields: Map<RowField, unknown> }> = [];
     if (this.heldRows.size === 0) {
@@ -1887,13 +1902,25 @@ class FeatureTablesStore implements FeatureTablesInternals {
    */
   private watchOrder(patch: RowValues): ItemOrderWatch | null {
     if (!this.onChange) return null;
-    const watch = new ItemOrderWatch(this.orderSource);
     const { handles, fields, deleted } = patch;
     const layerIds = fields.get('layerId');
     const groupIds = fields.get('groupId');
     const orders = fields.get('order');
     const members = fields.get('member');
     const placeFields = !!(layerIds || groupIds || orders || members);
+    // Rows only deleted and created again, more than are told one at a time: they are told by
+    // the change of the rows alone (`ItemOrderWatch`), so nothing is kept for them (the deletion
+    // of a layer of 100,000 rows, and its undo)
+    if (!placeFields && handles.length > ORDER_ITEM_LIMIT) {
+      let flips = 0;
+      for (let i = 0; i < handles.length; i++) {
+        const place = this.placeOf(handles[i]);
+        const there = !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
+        if (there ? !!deleted?.[i] : !!place && !deleted?.[i]) flips++;
+      }
+      if (flips > ORDER_ITEM_LIMIT) return null;
+    }
+    const watch = new ItemOrderWatch(this.orderSource);
     const groupOf = (value: unknown): GroupHandle =>
       typeof value === 'string' && value !== '' ? this.groups.handleOfId(value) : -1;
     for (let i = 0; i < handles.length; i++) {
@@ -2220,6 +2247,17 @@ class FeatureTablesStore implements FeatureTablesInternals {
    */
   setReadGate(gate: (() => void) | null): void {
     this.readGate = gate;
+  }
+
+  watchOrderOf(patch: RowValues): () => void {
+    const parts = { watch: this.watchOrder(patch) };
+    this.partsWatch = parts;
+    return () => {
+      if (this.partsWatch !== parts) return;
+      this.partsWatch = null;
+      const order = parts.watch?.finish() ?? [];
+      if (order.length > 0) this.onChange?.({ order });
+    };
   }
 
   showInPlace(owner: string, features: readonly Feature[]): void {

@@ -125,11 +125,12 @@ export function createTableStore(options: TableStoreOptions = {}): {
  */
 export const REMOTE_DELETED_KEPT = 10_000;
 
+/** No values of rows: what a run of a restore written in steps reads before (see `#beginSteps`) */
+const NO_VALUES: RowValues = { handles: new Int32Array(0), fields: new Map() };
+
 /** A restore of rows written in steps (`row-steps.ts`) */
 interface RestoreSteps {
   readonly patch: RowValues;
-  /** The values the rows had before, the same rows in the same order */
-  readonly before: RowValues;
   /** The first row not written yet */
   at: number;
   /** Whether it deletes rows (they are kept by the token of the transaction) */
@@ -137,6 +138,8 @@ interface RestoreSteps {
   readonly onEnd: () => void;
   /** The next step waiting */
   timer: ReturnType<typeof setTimeout> | null;
+  /** Tells the changes of the order of the whole restore (once its last rows are written) */
+  readonly tellOrder: () => void;
 }
 
 /**
@@ -417,11 +420,25 @@ export class TableContractStore implements StoreContract {
       const layer = this.#layers.get(id);
       if (!layer) throw new Error(`Layer with id "${id}" not found`);
       // Its rows are deleted, then its groups; they are kept as they are (created again, the
-      // layer gets them back where they were)
+      // layer gets them back where they were). The rows are deleted in one write: a write of each
+      // batch the scan reads made the notification fold the rows and the values before of a
+      // thousand writes for a layer of a million rows
+      const batches: Int32Array[] = [];
+      let count = 0;
       const cursor = this.tables.scan({ layerIds: [id] });
       for (let batch = cursor.next(); batch; batch = cursor.next()) {
+        batches.push(batch);
+        count += batch.length;
+      }
+      if (count > 0) {
+        const handles = new Int32Array(count);
+        let at = 0;
+        for (const batch of batches) {
+          handles.set(batch, at);
+          at += batch.length;
+        }
         this.writer.apply(
-          { handles: batch, fields: new Map(), deleted: new Uint8Array(batch.length).fill(1) },
+          { handles, fields: new Map(), deleted: new Uint8Array(count).fill(1) },
           this.#keeping(),
         );
       }
@@ -870,16 +887,21 @@ export class TableContractStore implements StoreContract {
     const { patch, before } = write;
     const steps: RestoreSteps = {
       patch,
-      before,
       at: 0,
       deletes: patch.deleted?.some((value) => value !== 0) ?? false,
       onEnd,
       timer: null,
+      // The order is told as by one write of every row (a part of a few rows tells each of its
+      // rows created or deleted as a move of its own, read among the rows of the other parts)
+      tellOrder: this.#internals.watchOrderOf(patch),
     };
     this.#steps = steps;
+    // The values before go with the notification as one part (the runs give none of their own)
+    if (before.handles.length > 0) this.#before.push(before);
     this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS);
     if (steps.at >= patch.handles.length) {
       this.#steps = null;
+      steps.tellOrder();
       this.#deleteEmptyGroups();
       return false;
     }
@@ -921,10 +943,7 @@ export class TableContractStore implements StoreContract {
         const patch = sliceRowValues(steps.patch, from, to);
         steps.at = to;
         this.#leaveGroups(patch);
-        this.#applyRows(patch, {
-          before: sliceRowValues(steps.before, from, to),
-          ...(steps.deletes && this.#keeping()),
-        });
+        this.#applyRows(patch, { before: NO_VALUES, ...(steps.deletes && this.#keeping()) });
         if (performance.now() >= deadline) break;
       }
     } finally {
@@ -940,7 +959,10 @@ export class TableContractStore implements StoreContract {
     if (this.#steps !== steps) return;
     this.#steps = null;
     if (steps.timer !== null) clearTimeout(steps.timer);
-    this.#bus.continueHeld(() => this.#deleteEmptyGroups());
+    this.#bus.continueHeld(() => {
+      steps.tellOrder();
+      this.#deleteEmptyGroups();
+    });
     this.#bus.release();
     steps.onEnd();
   }

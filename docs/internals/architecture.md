@@ -414,7 +414,12 @@ the rows (`restoreToken`) told once.
   written, in the notification of the restore: between two steps, the rows of
   a later step may still join it.
 - The values before are read for every row in the call (they are what the
-  call returns), and each run is written with its part of them.
+  call returns), and go with the notification as one part.
+- The changes of the order are told as one write of every row tells them
+  (`watchOrderOf` of the internals): a run of a few hundred rows written on
+  its own would tell each of its rows created or deleted as a move of its
+  own, read among the deleted rows of the other runs (a walk over them for
+  each row).
 - It is not part of the Store contract: the contract of core tells it through
   `rowStepsOf`, and a Store given by the host writes a restore at once. No
   member of the public types was added; `Store.slicedWritePending` tells that

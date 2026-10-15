@@ -319,4 +319,21 @@ describe('draw.features.restore of many rows', () => {
     expect(notified).toHaveLength(1);
     expect(draw.selection.get().bulk?.count).toBe(COUNT);
   });
+
+  it('tells the changes of the order a write of every row at once tells', () => {
+    const steps = setup();
+    steps.draw.features.restore(steps.before);
+    runSteps();
+    draw?.destroy();
+    draw = undefined;
+    const once = setup();
+    once.store.applyRows({
+      patch: rowValuesOf(once.before),
+      before: once.tables.readValues(rowValuesOf(once.before)),
+    });
+    expect(steps.notified).toHaveLength(1);
+    expect(once.notified).toHaveLength(1);
+    expect(steps.notified[0]?.order ?? []).toEqual(once.notified[0]?.order ?? []);
+    expect(steps.notified[0]?.rows?.layers.get('rows')?.created.length).toBe(COUNT);
+  });
 });
