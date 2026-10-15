@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The features drawn over rows for this client (`FeatureTables.overlay`, 9.7 of the design)
+ * The features drawn over rows for this client (`FeatureTables.showInPlace`, 9.7 of the design)
  *
  * - A feature is drawn in the place of the row of its id (a row of the delta drawn and not read),
  *   and the row is not drawn while it is; a feature of no row is drawn at the end of its layer
@@ -59,7 +59,7 @@ describe('the features drawn over rows for this client', () => {
     const { tables, internals, table, emitted, ids } = setup();
     const before = ids();
     const p3 = tables.get('layer')?.getRow(tables.findRow('p3') ?? -1);
-    internalsOf(tables).overlay('peer', [
+    tables.showInPlace('peer', [
       { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
     ]);
     // Drawn as a row of the delta, at the place of p3
@@ -97,7 +97,7 @@ describe('the features drawn over rows for this client', () => {
 
   it('are replaced by the next call of their owner, and taken away by none', () => {
     const { tables, internals, table } = setup();
-    internalsOf(tables).overlay('peer', [
+    internalsOf(tables).showInPlace('peer', [
       { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
       { ...feature('new', 'Polygon', square(40)), layerId: 'layer' },
     ]);
@@ -107,21 +107,37 @@ describe('the features drawn over rows for this client', () => {
     expect(newAt).toBeGreaterThanOrEqual(0);
     expect(places.groups[newAt]).toBe(table.groupCount - 1);
     expect(places.cuts[newAt]).toBe(table.groupAt(table.groupCount - 1).data.length);
-    internalsOf(tables).overlay('peer', [
+    internalsOf(tables).showInPlace('peer', [
       { ...feature('p5', 'Polygon', square(50)), layerId: 'layer' },
     ]);
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p5']);
     const p3 = internals.placeOf(tables.findRow('p3') ?? -1);
     expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
-    internalsOf(tables).overlay('peer', []);
+    internalsOf(tables).showInPlace('peer', []);
     expect(table.delta.group).toBeNull();
     const p5 = internals.placeOf(tables.findRow('p5') ?? -1);
     expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
   });
 
+  it('are kept per owner: an owner replaces only its own', () => {
+    const { tables, internals, table } = setup();
+    tables.showInPlace('a', [{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]);
+    tables.showInPlace('b', [{ ...feature('p5', 'Polygon', square(50)), layerId: 'layer' }]);
+    expect(deltaIds(table).sort()).toEqual([
+      '\u0000overlay\u0000a\u0000p3',
+      '\u0000overlay\u0000b\u0000p5',
+    ]);
+    tables.showInPlace('a', []);
+    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000b\u0000p5']);
+    const p3 = internals.placeOf(tables.findRow('p3') ?? -1);
+    const p5 = internals.placeOf(tables.findRow('p5') ?? -1);
+    expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
+    expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_OVERLAY).not.toBe(0);
+  });
+
   it('are not taken by the next versions', () => {
     const { tables, internals, table, writer, ids } = setup();
-    internalsOf(tables).overlay('peer', [
+    internalsOf(tables).showInPlace('peer', [
       { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
     ]);
     // A row moved in the same layer goes to the delta and to the next version

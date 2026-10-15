@@ -346,6 +346,21 @@ export interface FeatureTables {
    * with the next versions of their blocks, and the Store may forget their ids
    */
   release(token: RestoreToken): void;
+  /**
+   * Draws features in the places of rows, for this client only: the features `owner` draws over
+   * rows are now these (the ones it drew before and does not give now are no longer drawn).
+   *
+   * A feature is drawn in the place of the row of its id in the order, and the row is not drawn
+   * while it is (it is still hit where it is); a feature of no row is drawn at the end of its
+   * layer (`layerId`). Nothing is written: the rows, what is read of
+   * them and the notifications of the document stay as they are, and a feature shown so is not
+   * a feature of the document (`getFeature` does not give it). It is how a Store shows the edits
+   * of others in their middle, before they are written.
+   *
+   * @param owner - Who draws the features (each owner has its own; an owner replaces only its own)
+   * @param features - The features it draws (none: it draws none any more)
+   */
+  showInPlace(owner: string, features: readonly Feature[]): void;
 }
 
 /**

@@ -474,7 +474,7 @@ describe('the drawing of the rows of the delta', () => {
     const live = setup(list);
     live.frame();
     const over = list[20];
-    internalsOf(live.tables).overlay('peer', [
+    internalsOf(live.tables).showInPlace('peer', [
       { ...over, geometry: { type: 'Point', coordinates: [50, 50] } },
     ]);
     const { record } = live.frame();
@@ -487,7 +487,7 @@ describe('the drawing of the rows of the delta', () => {
     }
     expect(drawnIds(record, live.table)).toEqual(expected);
     // Taken away: the row is drawn again in its place
-    internalsOf(live.tables).overlay('peer', []);
+    internalsOf(live.tables).showInPlace('peer', []);
     expect(drawnIds(live.frame().record, live.table)).toEqual(
       shownIds(live.table, live.tables.getRowId),
     );

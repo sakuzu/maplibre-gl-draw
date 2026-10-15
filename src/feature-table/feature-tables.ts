@@ -227,6 +227,7 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
     scan: (options) => store.scan(options ?? {}),
     readValues: (rows) => store.readValues(rows),
     release: (token) => store.release(token),
+    showInPlace: (owner, features) => store.showInPlace(owner, features),
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
@@ -444,7 +445,7 @@ export interface FeatureTablesInternals {
    * @param owner Who draws the features
    * @param features The features it draws (none: it draws none any more)
    */
-  overlay(owner: string, features: readonly Feature[]): void;
+  showInPlace(owner: string, features: readonly Feature[]): void;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -2071,12 +2072,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
   // === The features drawn over rows for this client ===
 
   /**
-   * Draws features in the places of rows, for this client only (see `FeatureTables.overlay`): a
+   * Draws features in the places of rows, for this client only (see `FeatureTables.showInPlace`): a
    * feature is a row of the delta of its layer drawn and not read (`drawnOnlyRows`), with the
    * keys of the row it is drawn over (at the end of its layer for a feature of no row), and the
    * row it is drawn over is not drawn (`STATE_HIDDEN_OVERLAY`). The rows are not written
    */
-  overlay(owner: string, features: readonly Feature[]): void {
+  showInPlace(owner: string, features: readonly Feature[]): void {
     const before = this.overlays.get(owner) ?? new Map<string, OverlayEntry>();
     const next = new Map<string, OverlayEntry>();
     const leaving = new Map<LayerTable, Set<RowHandle>>();

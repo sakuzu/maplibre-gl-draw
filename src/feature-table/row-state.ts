@@ -37,7 +37,7 @@ export const STATE_HIDDEN_DELTA = 1 << 4;
  */
 export const STATE_HIDDEN_WAIT = 1 << 5;
 /**
- * A feature is drawn over the row in its place for this client only (`FeatureTables.overlay`):
+ * A feature is drawn over the row in its place for this client only (`FeatureTables.showInPlace`):
  * the row is not drawn, and is still hit where it is
  */
 export const STATE_HIDDEN_OVERLAY = 1 << 6;

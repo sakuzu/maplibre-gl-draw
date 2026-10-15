@@ -11,7 +11,7 @@
  * feature is made. A type whose test reads a feature (an image, the type of an extension, a
  * shape cut on the globe) is tested on a feature made of the row for the test and dropped. A
  * hidden row (not shown, deleted, hidden by this client) is not a candidate; a row a feature is
- * drawn over for this client (`overlay`) is hit where it is.
+ * drawn over for this client (`showInPlace`) is hit where it is.
  */
 
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';
