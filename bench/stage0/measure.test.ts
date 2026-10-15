@@ -12,7 +12,7 @@
  *   make its rows blocks of rows of the tables
  * - Applying batches: 100,000 items applied, a thousand batches of a client waiting for their
  *   serials, then batches of another client of 1, 1,000 and 10,000 writes received, and the own
- *   batches received back. The heap the waiting batches and the table of the last writers of
+ *   batches received back. The heap the waiting batches and the table of the last writes of
  *   100,000 fields add (with `--expose-gc`)
  */
 
@@ -20,7 +20,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'vitest';
 import { decodeFile } from './decode-work.ts';
-import { type Batch, Client, Sequencer } from './serial-apply.ts';
+import { type Batch, Client, Serials } from './serial-apply.ts';
 
 const MEASURE = process.env.STAGE0_MEASURE === '1';
 const OUT = join(import.meta.dirname, '..', 'data', 'stage0');
@@ -37,7 +37,7 @@ describe.skipIf(!MEASURE)('the trial measured', () => {
     if (!existsSync(OUT)) throw new Error('make the blocks first (bench/stage0/make-blocks.ts)');
     for (const name of readdirSync(OUT).sort()) {
       const dir = join(OUT, name);
-      const head = JSON.parse(readFileSync(join(dir, 'head.json'), 'utf8')) as {
+      const head = JSON.parse(readFileSync(join(dir, 'head.ndjson'), 'utf8')) as {
         manifest: string;
       };
       const manifest = JSON.parse(readFileSync(join(dir, head.manifest), 'utf8')) as {
@@ -104,7 +104,7 @@ describe.skipIf(!MEASURE)('the trial measured', () => {
     const ITEMS = 100_000;
     const WAITING = 1000;
     const heap0 = heapMb();
-    const sequencer = new Sequencer();
+    const serials = new Serials();
     const a = new Client('a');
     const ids = Array.from({ length: ITEMS }, (_, i) => `item-${i}`);
     // The items of an import of another client, with fields like the buildings of the files
@@ -118,7 +118,7 @@ describe.skipIf(!MEASURE)('the trial measured', () => {
         fields: { type: 'building', floors: i % 7, height: (i % 50) * 0.5, name: `b${i}` },
       })),
     };
-    a.receive(sequencer.next(imported));
+    a.receive(serials.next(imported));
     const heapItems = heapMb();
 
     // A thousand batches of the client waiting, each writing the color of an item
@@ -151,7 +151,7 @@ describe.skipIf(!MEASURE)('the trial measured', () => {
       const times: number[] = [];
       let overwritten = 0;
       for (let rep = 0; rep < 5; rep++) {
-        const b = sequencer.next(other(n, batch++, rep === 0 ? overlapping : 0));
+        const b = serials.next(other(n, batch++, rep === 0 ? overlapping : 0));
         const r0 = performance.now();
         const r = a.receive(b);
         times.push(performance.now() - r0);
@@ -169,16 +169,16 @@ describe.skipIf(!MEASURE)('the trial measured', () => {
     // The own batches received back with their serials
     const a0 = performance.now();
     let superseded = 0;
-    for (const b of own) superseded += a.receive(sequencer.next(b)).applied.superseded.length;
+    for (const b of own) superseded += a.receive(serials.next(b)).applied.superseded.length;
     const ackMs = performance.now() - a0;
     const heapAcked = heapMb();
     const entriesBefore = a.items.lastWrites.size;
 
-    // The table of the last writers: 100,000 fields written after their items were made
+    // The table of the last writes: 100,000 fields written after their items were made
     const w0 = performance.now();
     for (let k = 0; k < 100; k++) {
       a.receive(
-        sequencer.next({
+        serials.next({
           client: 'b',
           batch: batch++,
           base: a.items.serial,

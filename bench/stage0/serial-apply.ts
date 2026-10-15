@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A small trial of applying batches of changes in the order of the serials a sequencer gives
+ * A small trial of applying batches of changes in the order of the serials a counter gives
  * them, to measure what it costs a client: the time to apply a batch of another client while a
  * thousand batches of its own wait for their serials, and the memory it adds.
  *
@@ -58,7 +58,7 @@ export interface SerialBatch extends Batch {
 }
 
 /** Who wrote a field last */
-export interface Writer {
+export interface WrittenBy {
   readonly serial: number;
   readonly client: string;
 }
@@ -67,7 +67,7 @@ export interface Writer {
 export interface Superseded {
   readonly item: string;
   readonly field: string;
-  readonly by: Writer;
+  readonly by: WrittenBy;
 }
 
 /** What applying a batch did */
@@ -80,7 +80,7 @@ export interface Applied {
 
 interface Item {
   readonly fields: Map<string, unknown>;
-  readonly created: Writer;
+  readonly created: WrittenBy;
   deleted: boolean;
 }
 
@@ -99,8 +99,8 @@ function sameValue(a: unknown, b: unknown): boolean {
 /** The items of the serials applied */
 export class Items {
   readonly #items = new Map<string, Item>();
-  /** The last writer of the fields written after their item was made */
-  readonly lastWrites = new Map<string, Writer>();
+  /** The last write of the fields written after their item was made */
+  readonly lastWrites = new Map<string, WrittenBy>();
   /** The last serial applied */
   serial = 0;
 
@@ -122,7 +122,7 @@ export class Items {
   }
 
   /** Who wrote a field last */
-  writerOf(item: string, field: string): Writer | undefined {
+  writtenBy(item: string, field: string): WrittenBy | undefined {
     return this.lastWrites.get(fieldKey(item, field)) ?? this.#items.get(item)?.created;
   }
 
@@ -134,14 +134,14 @@ export class Items {
     this.serial = b.serial;
     const skipped = this.#check(b);
     if (skipped) return { serial: b.serial, skipped, superseded: [] };
-    const writer: Writer = { serial: b.serial, client: b.client };
+    const by: WrittenBy = { serial: b.serial, client: b.client };
     const superseded: Superseded[] = [];
     for (const change of b.changes) {
       switch (change.kind) {
         case 'create':
           this.#items.set(change.item, {
             fields: new Map(Object.entries(change.fields)),
-            created: writer,
+            created: by,
             deleted: false,
           });
           break;
@@ -159,7 +159,7 @@ export class Items {
           }
           if (change.value === undefined) item.fields.delete(change.field);
           else item.fields.set(change.field, change.value);
-          this.lastWrites.set(key, writer);
+          this.lastWrites.set(key, by);
           break;
         }
       }
@@ -268,7 +268,7 @@ export class Client {
         // A write applied (not superseded, not the value the field had): every waiting batch saw
         // a serial before this one, so its write of the field will be superseded, and the field
         // shows the value of the other client
-        if (this.items.writerOf(change.item, change.field)?.serial !== b.serial) continue;
+        if (this.items.writtenBy(change.item, change.field)?.serial !== b.serial) continue;
         if (this.shown.delete(fieldKey(change.item, change.field))) overwritten++;
       }
     }
@@ -338,7 +338,7 @@ export class Client {
 }
 
 /** Gives batches their serials, in the order they come */
-export class Sequencer {
+export class Serials {
   serial = 0;
 
   next(b: Batch): SerialBatch {

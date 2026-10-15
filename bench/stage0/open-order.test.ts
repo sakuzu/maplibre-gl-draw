@@ -11,7 +11,7 @@
 import { zstdCompressSync } from 'node:zlib';
 import { createFeatureTables } from '@sakuzu/maplibre-gl-draw/kasane';
 import { describe, expect, it } from 'vitest';
-import * as featureTablesModule from '../src/feature-table/feature-tables';
+import * as featureTablesModule from '../../src/feature-table/feature-tables';
 import { encodeSegment, packFile, type SegmentRows } from './codec.ts';
 import { decodeFile } from './decode-work.ts';
 import { idText } from './rows.ts';
@@ -65,7 +65,9 @@ describe('the blocks of files added out of their order', () => {
       onBlockRejected: (_layer, reason) => rejected.push(reason.message),
     });
     for (const f of [2, 0, 3, 1]) writer.addBlocks(LAYER, files[f].blocks);
-    featureTablesInternals(tables)?.addQueuedBlocks();
+    const internals = featureTablesInternals(tables);
+    expect(internals).toBeDefined();
+    internals?.addQueuedBlocks();
     expect(rejected).toEqual([]);
     const view = tables.get(LAYER);
     const total = FILES * SEGMENTS * ROWS;
@@ -79,7 +81,7 @@ describe('the blocks of files added out of their order', () => {
       ),
     );
     // Every row is in a block (none in the rows changed since their blocks were built)
-    const grouped = featureTablesInternals(tables)?.groupsOfRows(handles);
+    const grouped = internals?.groupsOfRows(handles);
     const inBlocks = [...(grouped?.values() ?? [])].reduce((s, rows) => s + rows.length, 0);
     expect(inBlocks).toBe(total);
   });

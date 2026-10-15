@@ -21,12 +21,15 @@
  * (`--level`, 3), and the segments into files of about `--file-mb` MB (2) compressed, each named
  * by the SHA-256 of its bytes (`blocks/<hash>.bin`). Beside them:
  *
- * - The small items (`<hash>.json`): the settings of the map and the layer, read first
- * - The manifest (`<hash>.json`): the name of the small items and of every file, with its bytes,
+ * - The small items (`<hash>.ndjson`): the settings of the map and the layer, read first
+ * - The manifest (`<hash>.ndjson`): the name of the small items and of every file, with its bytes,
  *   its rows, its place in the run, its bounding box and its runs of ids; the table of the fields
  *   written after the import (empty), and the views of the page (`city`, a view of zoom 14 over
  *   the most rows, and `all`, the bounds of every row)
- * - `head.json`: the name of the manifest
+ * - `head.ndjson`: the name of the manifest
+ *
+ * The small items, the manifest and the head are JSON of one line, named `.ndjson` as the other
+ * files of `bench/data/` (which the formatter of the repository does not read).
  *
  * `--no-check` leaves the check out.
  */
@@ -334,8 +337,8 @@ async function makeOne(name: string, options: Options): Promise<void> {
   const writeNamed = (value: unknown): { name: string; bytes: number } => {
     const bytes = Buffer.from(JSON.stringify(value));
     const hash = createHash('sha256').update(bytes).digest('hex');
-    writeFileSync(join(out, `${hash}.json`), bytes);
-    return { name: `${hash}.json`, bytes: bytes.length };
+    writeFileSync(join(out, `${hash}.ndjson`), bytes);
+    return { name: `${hash}.ndjson`, bytes: bytes.length };
   };
   const small = writeNamed({
     map: { background: '#eef0f4', view: { center: city.center, zoom: city.zoom } },
@@ -372,7 +375,7 @@ async function makeOne(name: string, options: Options): Promise<void> {
     views: { city, all: { bounds: allBox } },
     made,
   });
-  writeFileSync(join(out, 'head.json'), JSON.stringify({ manifest: manifest.name, serial: 1 }));
+  writeFileSync(join(out, 'head.ndjson'), JSON.stringify({ manifest: manifest.name, serial: 1 }));
   console.log(JSON.stringify({ name, ...made }));
 
   if (options.check) {
@@ -384,7 +387,7 @@ async function makeOne(name: string, options: Options): Promise<void> {
 
 /** Reads every row back from the files of the manifest and compares it with its line */
 async function checkOne(name: string, source: string, out: string): Promise<number> {
-  const head = JSON.parse(readFileSync(join(out, 'head.json'), 'utf8')) as { manifest: string };
+  const head = JSON.parse(readFileSync(join(out, 'head.ndjson'), 'utf8')) as { manifest: string };
   const manifest = JSON.parse(readFileSync(join(out, head.manifest), 'utf8')) as {
     files: FileEntry[];
   };

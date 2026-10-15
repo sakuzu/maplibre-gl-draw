@@ -444,7 +444,7 @@ async function open(): Promise<OpenResult> {
     const base = dataUrl(params.data);
     const link = new Link(params.mbps, params.rtt);
     setStatus('Opening: the manifest');
-    const head = await link.json<{ manifest: string }>(new URL('head.json', base).href);
+    const head = await link.json<{ manifest: string }>(new URL('head.ndjson', base).href);
     const manifest = await link.json<Manifest>(new URL(head.manifest, base).href);
     mark('manifest');
     const small = await link.json<SmallItems>(new URL(manifest.small.name, base).href);
@@ -566,7 +566,7 @@ async function attach(): Promise<AttachResult | null> {
   try {
     const base = dataUrl(params.attach);
     const link = new Link(params.mbps, params.rtt);
-    const head = await link.json<{ manifest: string }>(new URL('head.json', base).href);
+    const head = await link.json<{ manifest: string }>(new URL('head.ndjson', base).href);
     const manifest = await link.json<Manifest>(new URL(head.manifest, base).href);
     const small = await link.json<SmallItems>(new URL(manifest.small.name, base).href);
     for (const layer of small.layers) createLayer(layer.id, layer.name);
