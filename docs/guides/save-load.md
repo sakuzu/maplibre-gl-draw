@@ -555,6 +555,74 @@ lists, and changes them otherwise than by putting items in a place, makes
 the moves of `change.order` from the lists before and after with
 `diffItemOrder`.
 
+The tables of such a store (`store.tables`, and the writer of
+`createTableStore`) have two more parts for a store kept in step with
+others, in `@sakuzu/maplibre-gl-draw/kasane`:
+
+- `tables.showInPlace(owner, features)` draws features in the places of
+  rows, for this client only, without writing them: the edits of others
+  in their middle, before they are written. Each owner replaces only its
+  own features
+- `writer.clear()` takes every row out of the tables, when the document is
+  replaced from elsewhere (read again from the start), before its rows
+  come back with `addBlocks`. The rows opened as features and the
+  features selected in bulk are let go of, the work under way is dropped,
+  and the ids keep their handles
+
+## Another document on the same map
+
+`draw.document.setShown(store)` shows another document in place of the
+document, for this client only: a past version of the document, read
+into a store that holds its features as rows, to look at on the same map
+without a second map nor a feature made of it. While it is shown, the
+instance is read-only and the pointer and the keys move the map only;
+`setShown(null)` shows the document again.
+
+```ts
+import { createTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
+
+const version = createTableStore();
+version.store.createLayer({
+  id: 'buildings',
+  name: 'Buildings',
+  visible: true,
+  locked: false,
+  opacity: 1,
+  styleRule: undefined,
+  metadata: undefined,
+  kind: 'table',
+});
+// The rows of the version, built in a Worker:
+// version.writer.addBlocks('buildings', blocks)
+draw.document.setShown(version.store);
+// ...
+draw.document.setShown(null);
+```
+
+To draw the document apart, in a map of its own (a print), copy it into a
+store of rows with `copyTableStore` of `@sakuzu/maplibre-gl-draw/kasane`:
+its layers, groups and order at once, its rows a block at a time, without
+making their features.
+
+<!-- docs-check:
+declare const printMap: import('maplibre-gl').Map;
+-->
+
+```ts
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { copyTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
+
+const copy = copyTableStore(draw.getStore());
+const printed = createDraw(printMap, {
+  store: copy.store,
+  initDefaultLayer: false,
+});
+while (copy.copyNext()) await new Promise(requestAnimationFrame);
+```
+
+Both count in `draw.memory`, against the limit of the device
+([Performance](performance.md#memory-against-the-limit-of-the-device)).
+
 ## Examples
 
 - [Save and load](../examples/save-and-load.md) loads a GeoJSON file
@@ -565,7 +633,8 @@ the moves of `change.order` from the lists before and after with
 ## Reference
 
 - [`DocumentResource`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
-  and [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
+  (`setShown`) and
+  [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
 - [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md),
   [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md) and
   [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)

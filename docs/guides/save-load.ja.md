@@ -551,6 +551,70 @@ if (last) {
 リストを変える自前のストアは、変更の前と後のリストから `diffItemOrder`
 で `change.order` の移動を作ります。
 
+そうしたストアの表 (`store.tables` と、`createTableStore` の writer) には、
+ほかの端末と同期するストアのための部品が `@sakuzu/maplibre-gl-draw/kasane`
+にもう 2 つあります。
+
+- `tables.showInPlace(owner, features)` は、この端末だけで、行の位置に
+  地物を書かずに描きます。ほかの人の書き込む前の編集の途中を見せる
+  ためのものです。持ち主は自分の地物だけを置き換えます
+- `writer.clear()` は、文書がよそから置き換わるとき (最初から読み直す
+  とき)、行を `addBlocks` で戻す前に、表から行を全部出します。地物に
+  した行とまとめて選んだ地物を手放し、途中の仕事を捨て、ID は行の
+  handle を持ち続けます
+
+## 同じ地図の上の別の文書
+
+`draw.document.setShown(store)` は、この端末だけで、文書の代わりに別の
+文書を見せます。たとえば文書の過去の版を、地物を行で持つストアに
+読み込み、2 つ目の地図も地物も作らずに同じ地図で見ます。見せている
+あいだ、インスタンスは読み取り専用で、ポインターとキーは地図を動かす
+だけです。`setShown(null)` で文書に戻ります。
+
+```ts
+import { createTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
+
+const version = createTableStore();
+version.store.createLayer({
+  id: 'buildings',
+  name: 'Buildings',
+  visible: true,
+  locked: false,
+  opacity: 1,
+  styleRule: undefined,
+  metadata: undefined,
+  kind: 'table',
+});
+// Worker で作った版の行を足す:
+// version.writer.addBlocks('buildings', blocks)
+draw.document.setShown(version.store);
+// ...
+draw.document.setShown(null);
+```
+
+文書を別の地図で描く (印刷する) ときは、`@sakuzu/maplibre-gl-draw/kasane`
+の `copyTableStore` で、地物を行で持つストアに写します。レイヤーと
+グループと並びは一度に、行は塊ずつ、地物を作らずに写します。
+
+<!-- docs-check:
+declare const printMap: import('maplibre-gl').Map;
+-->
+
+```ts
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { copyTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
+
+const copy = copyTableStore(draw.getStore());
+const printed = createDraw(printMap, {
+  store: copy.store,
+  initDefaultLayer: false,
+});
+while (copy.copyNext()) await new Promise(requestAnimationFrame);
+```
+
+どちらも `draw.memory` で端末の上限に数えます
+([性能](performance.ja.md#端末の上限に対するメモリー))。
+
 ## 関連する例
 
 - [Save and load](../examples/save-and-load.ja.md) では、GeoJSON の
@@ -561,7 +625,8 @@ if (last) {
 ## リファレンス
 
 - [`DocumentResource`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
-  と [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
+  (`setShown`) と
+  [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
 - [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md)、
   [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md)、
   [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)

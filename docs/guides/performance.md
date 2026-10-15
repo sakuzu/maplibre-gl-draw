@@ -120,6 +120,51 @@ async function whenPictureComplete(): Promise<void> {
 The collision thinning of a dataset needs nothing: the frame decides
 which points it draws from the zoom it draws with.
 
+A picture of the map as it is on the screen needs no second map:
+`draw.captureImage` takes it in the next frame the map draws, without
+the selection, its handles and the shape being drawn, and scales it to
+the size asked for (a size of another shape is covered by the map and
+cut at its middle). It costs one frame, so it suits a thumbnail of a
+document too large to draw a second time:
+
+```ts
+const thumbnail = await draw.captureImage({
+  width: 320,
+  height: 200,
+  type: 'image/webp',
+  quality: 0.8,
+});
+```
+
+## Memory against the limit of the device
+
+A browser stops a page that takes more memory than the device has for
+it, and a phone has less than a desktop. `draw.memory.get()` tells what
+the documents drawn on the page take, against a limit of the device:
+400 MiB on an iPhone, 500 MiB on an iPad, 1 GiB elsewhere, or the one
+you set with `draw.memory.setLimit`. Every draw instance of the page is
+counted, a second one that prints or a document shown in place of the
+document included. `gpuBytes` is what the drawing allocated on the GPU;
+`jsBytes` is an estimate from the features and their positions (a
+browser does not tell the heap of the page everywhere). The base map and
+the rest of the page are not in it.
+
+`draw.memory.estimate` gives what a document of a size would take, held
+as the Store of the instance holds its features, so a page can stop what
+would pass the limit before it starts: a map to open, a print, a version
+to look at.
+
+```ts
+const now = draw.memory.get();
+const added = draw.memory.estimate({ features: 120_000, positions: 700_000 });
+if (now.bytes + added.bytes > now.limitBytes) {
+  // tell the user it is too large for this device, and do not open it
+}
+```
+
+Nothing is refused by the instance: the page decides what to stop and
+what to tell.
+
 ## Dense lines
 
 A line with thousands of vertices, such as a GPS track, would be covered
@@ -237,7 +282,9 @@ browser.
   for `renderScale`, `pixelRatio`, `cacheGeometry` and `timeSlicing`
 - [OptionsResource](../api/maplibre-gl-draw/interfaces/OptionsResource.md)
   for `draw.options.update`
-- [Draw](../api/maplibre-gl-draw/interfaces/Draw.md) for `hasPendingWork`
-  and `transact`
+- [Draw](../api/maplibre-gl-draw/interfaces/Draw.md) for `hasPendingWork`,
+  `captureImage` and `transact`
+- [MemoryResource](../api/maplibre-gl-draw/interfaces/MemoryResource.md)
+  for `draw.memory`
 - [FeaturesCollection](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
   for `createMany`, `updateMany` and `deleteMany`

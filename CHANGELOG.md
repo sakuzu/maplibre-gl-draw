@@ -100,6 +100,29 @@ writing it. Its changes are listed after those of 3.0.0.
   factor of the radius of a Circle), 0 and 1 for the others.
 - A group hidden on this client (`draw.hidden`) hides its features in a
   layer held as rows too, as in a layer of objects.
+- `draw.document.setShown(store)` and `getShown()`: another document held
+  as rows (a past version, say) shown in place of the document on the
+  same map, for this client only. The instance is read-only meanwhile and
+  the pointer and the keys move the map only; the changes from elsewhere
+  are still taken.
+- `draw.memory` (`MemoryResource`): what the documents drawn on the page
+  take (`get`, `MemoryUsage`: the GPU memory every instance allocated and
+  an estimate of the heap from the features and their positions) against
+  the limit of the device (400 MiB on an iPhone, 500 MiB on an iPad,
+  1 GiB elsewhere, or the one of `setLimit`), and what a document of a
+  size would take (`estimate`, `DocumentSize`, `MemoryBytes`), so that a
+  page stops what would pass the limit before it starts.
+- `draw.captureImage(options)` (`CaptureImageOptions`): an image of the map
+  as it is drawn, taken in its next frame without the selection and the
+  shape being drawn.
+- In `/kasane`: `FeatureTables.showInPlace(owner, features)`, features
+  drawn in the places of rows for this client only, without writing them
+  (the edits of others in their middle); `FeatureTablesWriter.clear()`,
+  every row taken out of the tables to come back, the rows opened, the
+  features selected in bulk and the work under way let go of, the ids
+  keeping their handles; and `copyTableStore` (`TableStoreCopy`), a copy
+  of a document held as rows into a new store of rows a block at a time,
+  to draw it apart without making its features.
 
 ### Changed in 3.0.0
 

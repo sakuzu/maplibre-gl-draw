@@ -125,6 +125,50 @@ async function whenPictureComplete(): Promise<void> {
 データセットの点の衝突による間引きには、何もいりません。フレームが、
 描くときのズームから描く点を決めます。
 
+画面に見えているままの地図の絵には、2 つ目の地図はいりません。
+`draw.captureImage` は、地図が次に描くフレームで、選択とその
+ハンドルと描いている途中の形を除いて絵を取り、求めた大きさにします
+(形の違う大きさでは、地図で覆って真ん中で切ります)。かかるのは
+1 フレームなので、もう 1 度描くには大きすぎる文書のサムネイルに
+向きます。
+
+```ts
+const thumbnail = await draw.captureImage({
+  width: 320,
+  height: 200,
+  type: 'image/webp',
+  quality: 0.8,
+});
+```
+
+## 端末の上限に対するメモリー
+
+ブラウザーは、端末がそのページに使わせるより多くのメモリーを取る
+ページを止めます。スマホはデスクトップより少ないです。
+`draw.memory.get()` は、ページで描いている文書が取るメモリーを、端末の
+上限と並べて返します。上限は iPhone で 400 MiB、iPad で 500 MiB、
+ほかで 1 GiB で、`draw.memory.setLimit` で決めることもできます。
+ページの draw インスタンスを全部数えます。印刷する 2 つ目の
+インスタンスも、文書の代わりに見せている文書も入ります。
+`gpuBytes` は描画が GPU に割り当てた量で、`jsBytes` は地物とその
+位置の数からの見積もりです (ページのヒープは、どのブラウザーでも
+わかるわけではありません)。基図とページのほかの部分は入りません。
+
+`draw.memory.estimate` は、ある大きさの文書が、インスタンスの Store が
+地物を持つ形で取る量を返します。上限を超えるもの (開く地図、印刷、
+見る版) を、始める前に止められます。
+
+```ts
+const now = draw.memory.get();
+const added = draw.memory.estimate({ features: 120_000, positions: 700_000 });
+if (now.bytes + added.bytes > now.limitBytes) {
+  // この端末には大きすぎることを伝え、開かない
+}
+```
+
+インスタンスは何も断りません。何を止め、何を伝えるかはページが
+決めます。
+
 ## 頂点の多い線
 
 GPS の軌跡のように頂点が数千ある線は、そのままでは頂点の
@@ -245,7 +289,9 @@ draw.extensions.overlays.add({
   [RenderingOptions](../api/maplibre-gl-draw/interfaces/RenderingOptions.md)
 - `draw.options.update` については
   [OptionsResource](../api/maplibre-gl-draw/interfaces/OptionsResource.md)
-- `hasPendingWork` と `transact` については
+- `hasPendingWork`、`captureImage`、`transact` については
   [Draw](../api/maplibre-gl-draw/interfaces/Draw.md)
+- `draw.memory` については
+  [MemoryResource](../api/maplibre-gl-draw/interfaces/MemoryResource.md)
 - `createMany`、`updateMany`、`deleteMany` については
   [FeaturesCollection](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
