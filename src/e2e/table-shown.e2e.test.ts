@@ -3,8 +3,8 @@
 
 /**
  * End-to-end tests of another document shown in place of the document on the same map, and of the
- * image of the map taken from the frame (13.7 of the design of the tables, the ruling of
- * 2026-10-15: a version is looked at on the same map, drawn as a document held as rows; the
+ * image of the map taken from the frame (13.7 of the design of the tables: a version is looked
+ * at on the same map, drawn as a document held as rows; the
  * thumbnail of a large map is taken from the screen)
  *
  * On the real maplibre and WebGL of the browser:

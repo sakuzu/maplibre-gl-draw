@@ -3,7 +3,7 @@
 
 /**
  * `draw.document.setShown`: another document held as rows shown in place of the document on the
- * same map (13.7 of the design of the tables, the ruling of 2026-10-15): the instance is read-only
+ * same map (13.7 of the design of the tables): the instance is read-only
  * while it is, the input goes to the map only, the changes from elsewhere are still taken, and
  * its memory counts in `draw.memory`. What is drawn is checked by the end-to-end test.
  */

@@ -3,7 +3,7 @@
 
 /**
  * `draw.memory`: what the documents of the page take against the limit of the device (5.6 and
- * 13.7 of the design of the tables): the limit by the device and by the option, the estimate of a
+ * 13.7 of the design of the tables): the limit by the device and the one set, the estimate of a
  * document held as rows and as features, and the sum over the instances of the page.
  */
 
