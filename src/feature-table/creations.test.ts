@@ -273,4 +273,43 @@ describe('many new rows written at once', () => {
     expect(internals.placeOf(handles[10])?.group.pending).toBe(false);
     reads();
   });
+
+  it('keep their groups and the first group of the delta apart, whichever goes in first', () => {
+    // A layer without groups: new rows of a run of their own (every other key) are gathered,
+    // the rows within their run go to the delta, whose first group starts while the run is
+    // built; the run is taken in before that group is swapped in
+    const reference = new ReferenceRows();
+    const setup = tablesOfReference(reference, ['a'], 10);
+    const { tables, internals, groupHandleOf } = setup;
+    let uploaded = false;
+    internals.attachReceiver({ uploaded: () => uploaded, swapped: () => {}, dropped: () => {} });
+    const order = (i: number) => key(10_000 + i * 10);
+    create(
+      setup,
+      reference,
+      Array.from({ length: 200 }, (_, i) => ({ id: `even${i}`, order: order(2 * i) })),
+    );
+    create(
+      setup,
+      reference,
+      Array.from({ length: 200 }, (_, i) => ({ id: `odd${i}`, order: order(2 * i + 1) })),
+    );
+    expect(internals.deltaRowCount()).toBe(200);
+    for (let frame = 0; frame < 6; frame++) {
+      internals.advanceQueuedBlocks(UNBOUNDED);
+      internals.advanceVersions(UNBOUNDED);
+      internals.swapVersions();
+    }
+    expect(internals.builtVersions('a').length).toBeGreaterThan(0);
+    expect(sizes(internals)).toEqual([200]);
+    // The GPU side of the first group of the delta is up: it overlaps the run taken in, so it is
+    // not swapped in, and the rows of the delta go to the next version of the run's group
+    uploaded = true;
+    expect(() => internals.swapVersions()).not.toThrow();
+    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
+    expect(() => internals.flushVersions()).not.toThrow();
+    expect(internals.deltaRowCount()).toBe(0);
+    expect(sizes(internals).reduce((sum, n) => sum + n, 0)).toBe(400);
+    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
+  });
 });

@@ -647,6 +647,18 @@ export class GroupVersions {
       this.drop(version);
       return null;
     }
+    // A group taken in within its range since it started (the rows of a run built into groups
+    // of their own, while the first group of the delta of the layer was made): its groups would
+    // overlap it. Dropped: its rows stay where they are read now (the delta), and the next
+    // version of the group they fall in takes them
+    if (
+      version.orders === null &&
+      version.layer.overlapsAfter(version.replaces, version.groups ?? [])
+    ) {
+      this.drop(version);
+      this.host.requestWork();
+      return null;
+    }
     const change = this.host.swapIn(version, this.waiting);
     this.release(version);
     version.status = 'swapped';

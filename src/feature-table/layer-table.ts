@@ -441,20 +441,60 @@ export class LayerTable {
   }
 
   /**
+   * The groups of the layer once some are replaced by others, in the order of their rows (null
+   * when the rows of two of them would overlap)
+   *
+   * @throws when a group replaced is not in the layer
+   */
+  private groupsAfter(
+    before: readonly RowGroup[],
+    after: readonly RowGroup[],
+    groupKeys: GroupKeySource,
+  ): RowGroup[] | null {
+    const replaced = new Set<RowGroup>();
+    for (const group of before) {
+      if (this.groups.get(group.handle) !== group) {
+        throw new DrawError('invalid-state', 'LayerTable: a group replaced is not in the layer');
+      }
+      replaced.add(group);
+    }
+    const groups = [...this.groups.values()].filter((group) => !replaced.has(group));
+    for (const group of after) if (group.data.length > 0) groups.push(group);
+    groups.sort((a, b) => compareRowKeys(a.data, 0, b.data, 0, groupKeys));
+    for (let i = 1; i < groups.length; i++) {
+      const a = groups[i - 1].data;
+      const b = groups[i].data;
+      if (compareRowKeys(a, a.length - 1, b, 0, groupKeys) >= 0) return null;
+    }
+    return groups;
+  }
+
+  /**
+   * Whether the rows of a group would overlap the rows of another once some groups are replaced
+   * by others (a next version built while a group was taken in within its range)
+   */
+  overlapsAfter(
+    before: readonly RowGroup[],
+    after: readonly RowGroup[],
+    groupKeys: GroupKeySource = this.groupKeys,
+  ): boolean {
+    return this.groupsAfter(before, after, groupKeys) === null;
+  }
+
+  /**
    * Replaces row groups of the layer by others (the next versions of groups, groups cut or
    * joined, the order of their rows changed) and puts the groups in the order of their rows
    *
-   * @throws when the rows of two groups overlap
+   * @throws when the rows of two groups would overlap (the layer is left as it was)
    */
   replaceGroups(
     before: readonly RowGroup[],
     after: readonly RowGroup[],
     groupKeys: GroupKeySource = this.groupKeys,
   ): void {
+    const groups = this.groupsAfter(before, after, groupKeys);
+    if (!groups) throw new DrawError('invalid-state', 'LayerTable: the rows of two groups overlap');
     for (const group of before) {
-      if (this.groups.get(group.handle) !== group) {
-        throw new DrawError('invalid-state', 'LayerTable: a group replaced is not in the layer');
-      }
       this.groups.delete(group.handle);
       this.rows -= group.data.length;
       this.dropMoved(group);
@@ -463,15 +503,6 @@ export class LayerTable {
       if (group.data.length === 0) continue;
       this.groups.set(group.handle, group);
       this.rows += group.data.length;
-    }
-    const groups = [...this.groups.values()];
-    groups.sort((a, b) => compareRowKeys(a.data, 0, b.data, 0, groupKeys));
-    for (let i = 1; i < groups.length; i++) {
-      const a = groups[i - 1].data;
-      const b = groups[i].data;
-      if (compareRowKeys(a, a.length - 1, b, 0, groupKeys) >= 0) {
-        throw new DrawError('invalid-state', 'LayerTable: the rows of two groups overlap');
-      }
     }
     this.order.length = 0;
     for (const group of groups) this.order.push(group.handle);
