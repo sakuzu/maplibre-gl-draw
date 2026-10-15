@@ -381,6 +381,8 @@ export class DrawStore implements Store {
     };
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
+    // Read from the rows a restore under way leaves (see `#local`)
+    this.#restoring?.finish();
     // A selection of more features of rows than are opened at once is selected in bulk
     const internals = featureTablesInternals(this.#contract.tables);
     if (internals && type !== null && this.#heldCount(type, ids) > this.holdLimit) {
@@ -395,6 +397,7 @@ export class DrawStore implements Store {
   }
 
   isSelectedRowLocked(): boolean {
+    this.#restoring?.finish();
     const bulk = this.#bulk;
     const internals = featureTablesInternals(this.#contract.tables);
     if (!bulk || !internals) return false;
@@ -408,6 +411,7 @@ export class DrawStore implements Store {
   }
 
   selectRows(rows: TableSelection): void {
+    this.#restoring?.finish();
     const internals = featureTablesInternals(this.#contract.tables);
     if (!internals) return;
     const containers = this.#containers();
@@ -424,6 +428,7 @@ export class DrawStore implements Store {
   }
 
   restoreSelection(selection: Selection): void {
+    this.#restoring?.finish();
     const rows = rowsOfSummary(selection.bulk);
     if (rows && selection.type === 'feature') {
       this.selectRows(rows);
@@ -634,6 +639,9 @@ export class DrawStore implements Store {
    * category or not at all.
    */
   #local(fn: () => void, redraw = false): void {
+    // A write of the state of this client comes after the rows of a restore under way (the
+    // selection reads them), in the same transaction too
+    this.#restoring?.finish();
     this.#bus.transact(() => {
       fn();
       if (redraw) this.#bus.merge({ uiStateChanged: true });

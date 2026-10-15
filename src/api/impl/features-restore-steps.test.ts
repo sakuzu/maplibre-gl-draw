@@ -13,7 +13,7 @@ import { createRowValues, rowValuesOf } from '../../kasane/index.js';
 import { BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
-import type { Feature, StoreChange } from '../../store/types.js';
+import type { Feature, Selection, StoreChange } from '../../store/types.js';
 import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -74,8 +74,10 @@ function drawOn(store: Store): Draw {
  * A layer of rows, every one of them deleted (by a write that is not a restore): the values the
  * deletion read before, which a restore brings them back with
  */
-function setup() {
-  const { store } = createTableStore();
+function setup(options: { holdLimit?: number; prepare?: (draw: Draw) => void } = {}) {
+  const { store } = createTableStore(
+    options.holdLimit === undefined ? {} : { holdLimit: options.holdLimit },
+  );
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -92,6 +94,7 @@ function setup() {
   const tables = store.tables as FeatureTables;
   const handles = Int32Array.from({ length: COUNT }, (_, i) => tables.findRow(`p${i}`) as number);
   const instance = drawOn(store);
+  options.prepare?.(instance);
   const notified: StoreChange[] = [];
   instance.getStore().subscribe((change) => notified.push(change));
   const patch = createRowValues({
@@ -295,5 +298,25 @@ describe('draw.features.restore of many rows', () => {
     expect(notified).toHaveLength(1);
     expect(notified[0]?.groups?.deleted?.map((group) => group.id)).toEqual(['g']);
     expect(rowsBack(tables, handles)).toBe(0);
+  });
+
+  it('writes the rest first when the selection is written in the same transaction', () => {
+    let selected: Selection | null = null;
+    const { draw, tables, handles, notified, before } = setup({
+      holdLimit: 10,
+      prepare: (instance) => {
+        instance.selection.setAll();
+        selected = instance.selection.get();
+      },
+    });
+    expect((selected as Selection | null)?.bulk?.count).toBe(COUNT);
+    // The features selected in bulk put back after the rows, as an undo does
+    draw.transact(() => {
+      draw.features.restore(before);
+      draw.selection.restore(selected as Selection);
+    });
+    expect(rowsBack(tables, handles)).toBe(COUNT);
+    expect(notified).toHaveLength(1);
+    expect(draw.selection.get().bulk?.count).toBe(COUNT);
   });
 });

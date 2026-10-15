@@ -401,8 +401,10 @@ the rows (`restoreToken`) told once.
   outermost transaction, from this client or from elsewhere (`remote`), or a
   change merged outside one (the selection, the state of the drawing). A write
   of the contract inside a transaction finishes it too (`transact` of the
-  contract). The writes keep their order, and the restore is told before what
-  came.
+  contract), and so does a write of the state of this client in `DrawStore`
+  (the selection reads the rows through the internals: an undo that puts a
+  selection in bulk back after its rows selects all of them). The writes keep
+  their order, and the restore is told before what came.
 - A read of the rows through the reading side of the tables (`FeatureTables`,
   which the reads of the instance go through: a feature, the items of a
   layer, an export) finishes it first (`setReadGate` of the internals), so no
