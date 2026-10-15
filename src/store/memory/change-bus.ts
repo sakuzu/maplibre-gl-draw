@@ -44,6 +44,85 @@ type GroupUpdate = NonNullable<NonNullable<StoreChange['groups']>['updated']>[nu
 interface UpdateIndex {
   readonly layers: Map<string, number>;
   readonly groups: Map<string, number>;
+  /**
+   * The rows written by the transaction, by layer, folded as they come (made into the arrays of
+   * the notification when it is flushed): folding the arrays at each write would take time in
+   * the square of the writes of a transaction (a layer deleted a batch of rows at a time)
+   */
+  readonly rows: Map<string, RowsFold>;
+}
+
+/** The rows of a layer written by a transaction, being folded */
+interface RowsFold {
+  readonly created: Set<number>;
+  readonly updated: Set<number>;
+  readonly deleted: Set<number>;
+  readonly fields: Set<RowField>;
+  readonly styleKeys: Set<string>;
+  /** Whether it holds one write as it came (folded with the next one in full, as two are) */
+  single: boolean;
+}
+
+/** A row created and deleted within the folds dropped, a row created or deleted not updated */
+function settleRow(fold: RowsFold, handle: number): void {
+  if (fold.created.has(handle) && fold.deleted.has(handle)) {
+    fold.created.delete(handle);
+    fold.deleted.delete(handle);
+    fold.updated.delete(handle);
+  } else if (fold.updated.has(handle) && (fold.created.has(handle) || fold.deleted.has(handle))) {
+    fold.updated.delete(handle);
+  }
+}
+
+/**
+ * Folds the rows written by a write of a transaction into the ones before (the same as
+ * `mergeRowsChanges` of the writes two by two, in time linear in the rows of the write)
+ */
+function foldRows(folds: Map<string, RowsFold>, change: RowsChange): void {
+  for (const [layerId, next] of change.layers) {
+    const fold = folds.get(layerId);
+    if (!fold) {
+      folds.set(layerId, {
+        created: new Set(next.created),
+        updated: new Set(next.updated),
+        deleted: new Set(next.deleted),
+        fields: new Set(next.fields),
+        styleKeys: new Set(next.styleKeys),
+        single: true,
+      });
+      continue;
+    }
+    for (const handle of next.created) fold.created.add(handle);
+    for (const handle of next.deleted) fold.deleted.add(handle);
+    for (const handle of next.updated) fold.updated.add(handle);
+    for (const field of next.fields) fold.fields.add(field);
+    for (const key of next.styleKeys) fold.styleKeys.add(key);
+    if (fold.single) {
+      // The first write is settled with the second, every row of both
+      fold.single = false;
+      for (const handle of [...fold.deleted]) settleRow(fold, handle);
+      for (const handle of [...fold.updated]) settleRow(fold, handle);
+      continue;
+    }
+    for (const handle of next.created) settleRow(fold, handle);
+    for (const handle of next.deleted) settleRow(fold, handle);
+    for (const handle of next.updated) settleRow(fold, handle);
+  }
+}
+
+/** The rows of the folds, as the notification has them */
+function rowsOfFolds(folds: ReadonlyMap<string, RowsFold>): RowsChange {
+  const layers = new Map<string, LayerRowsChange>();
+  for (const [layerId, fold] of folds) {
+    layers.set(layerId, {
+      created: Int32Array.from(fold.created),
+      updated: Int32Array.from(fold.updated),
+      deleted: Int32Array.from(fold.deleted),
+      fields: fold.fields,
+      styleKeys: fold.styleKeys,
+    });
+  }
+  return { layers };
 }
 
 /**
@@ -264,10 +343,8 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.reset === true) target.reset = true;
   if (changes.metadata) target.metadata = changes.metadata;
 
-  // rows held as columns (one entry per row)
-  if (changes.rows) {
-    target.rows = target.rows ? mergeRowsChanges(target.rows, changes.rows) : changes.rows;
-  }
+  // rows held as columns (one entry per row): folded in the index, made at the flush
+  if (changes.rows) foldRows(index.rows, changes.rows);
   // the values the rows had before (a row with the values before the first write of it)
   if (changes.previousValues) {
     // A Store of rows gives values of rows
@@ -296,7 +373,7 @@ export class ChangeBus {
   #transactionDepth = 0;
   #pendingChanges: StoreChange = {};
   #currentSource: UpdateSource = 'local';
-  #updateIndex: UpdateIndex = { layers: new Map(), groups: new Map() };
+  #updateIndex: UpdateIndex = { layers: new Map(), groups: new Map(), rows: new Map() };
 
   /**
    * @param beforeFlush Called when the outermost operation is about to notify, before the
@@ -386,6 +463,9 @@ export class ChangeBus {
   #flushChanges(): void {
     const added = this.#beforeFlush?.();
     if (added) appendChanges(this.#pendingChanges, added, this.#updateIndex);
+    if (this.#updateIndex.rows.size > 0) {
+      this.#pendingChanges.rows = rowsOfFolds(this.#updateIndex.rows);
+    }
     if (Object.keys(this.#pendingChanges).length === 0) return;
 
     const changes: StoreChange = this.#pendingChanges;
@@ -393,7 +473,7 @@ export class ChangeBus {
     // Swap in a new container for the next accumulation (the flushed object is retained by the
     // listeners, so always recreate it so that appends do not pollute it).
     this.#pendingChanges = {};
-    this.#updateIndex = { layers: new Map(), groups: new Map() };
+    this.#updateIndex = { layers: new Map(), groups: new Map(), rows: new Map() };
 
     // Every listener gets the notification: one that throws is reported and the others still
     // run, so the Store and its subscribers (rendering, the mode manager, the spatial index, a

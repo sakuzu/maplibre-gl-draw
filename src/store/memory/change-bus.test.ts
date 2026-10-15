@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LayerRowsChange, RowField, RowsChange } from '../../api/tables.js';
 import type { StoreChange } from '../types.js';
-import { ChangeBus } from './change-bus.js';
+import { ChangeBus, mergeRowsChanges } from './change-bus.js';
 
 function rows(
   layerId: string,
@@ -50,5 +50,56 @@ describe('the rows in the notifications of a transaction', () => {
     expect([...(a?.fields ?? [])]).toEqual(['geometry', 'style']);
     expect([...(a?.styleKeys ?? [])]).toEqual(['fillColor']);
     expect(Array.from(seen[0].rows?.layers.get('b')?.updated ?? [])).toEqual([9]);
+  });
+
+  it('fold many writes of rows of a transaction as the writes fold two by two, in time linear in them', () => {
+    // A random sequence of writes of rows of two layers: the notification is the fold of the
+    // writes two by two (mergeRowsChanges)
+    let seed = 7;
+    const random = (n: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % n;
+    };
+    const writes: RowsChange[] = [];
+    for (let w = 0; w < 300; w++) {
+      const pick = () => Array.from({ length: random(6) }, () => random(40));
+      writes.push(
+        rows(w % 3 === 0 ? 'b' : 'a', {
+          created: pick(),
+          updated: pick(),
+          deleted: pick(),
+          fields: random(2) ? ['geometry'] : ['style'],
+          styleKeys: random(2) ? ['fillColor'] : [],
+        }),
+      );
+    }
+    const bus = new ChangeBus();
+    const seen: StoreChange[] = [];
+    bus.subscribe((change) => seen.push(change));
+    bus.transact(() => {
+      for (const write of writes) bus.merge({ rows: write });
+    });
+    const folded = writes.reduce((a, b) => mergeRowsChanges(a, b));
+    const plain = (change: RowsChange | undefined) =>
+      [...(change?.layers ?? [])].map(([layerId, entry]) => [
+        layerId,
+        [...entry.created],
+        [...entry.updated],
+        [...entry.deleted],
+        [...entry.fields],
+        [...entry.styleKeys],
+      ]);
+    expect(plain(seen[0]?.rows)).toEqual(plain(folded));
+    // 100,000 rows deleted in writes of 500 (a layer deleted a batch at a time)
+    const large = new ChangeBus();
+    const started = performance.now();
+    large.transact(() => {
+      for (let w = 0; w < 200; w++) {
+        large.merge({
+          rows: rows('a', { deleted: Array.from({ length: 500 }, (_, i) => w * 500 + i) }),
+        });
+      }
+    });
+    expect(performance.now() - started).toBeLessThan(100);
   });
 });
