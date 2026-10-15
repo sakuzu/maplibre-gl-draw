@@ -13,17 +13,15 @@
  * meanwhile is copied with the values it has when its block is read.
  */
 
-import { DrawError } from '../api/errors.js';
-import type { StoreView } from '../api/extension/store.js';
-import type { FeatureTablesWriter } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { rowInputOf } from '../feature-table/row-read.js';
+import { DrawError } from '../shared/draw-error.js';
 import {
   createRowBlockBuilder,
   type GroupEntry,
   ROW_BLOCK_TARGET_ROWS,
 } from '../table/row-group-builder.js';
-import type { Store } from './store.js';
+import type { Store, StoreContractView } from './store.js';
 import { createTableStore, type TableStoreOptions } from './table-memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
@@ -34,7 +32,7 @@ import type { Feature, Group, Layer } from './types.js';
  */
 export interface TableStoreCopyState {
   readonly store: Store;
-  readonly writer: FeatureTablesWriter;
+  readonly writer: ReturnType<typeof createTableStore>['writer'];
   copyNext(): boolean;
 }
 
@@ -53,7 +51,7 @@ interface LayerRows {
  * @internal
  */
 export function copyTableStore(
-  source: StoreView,
+  source: StoreContractView,
   options: TableStoreOptions & { readonly blockRows?: number } = {},
 ): TableStoreCopyState {
   const internals = featureTablesInternals(source.tables);

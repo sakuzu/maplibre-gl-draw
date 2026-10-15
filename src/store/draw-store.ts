@@ -896,7 +896,18 @@ export class DrawStore implements Store {
     if (vertices) ids.add(vertices.featureId);
     for (const followed of this.#drawing.getFollowedVertices() ?? []) ids.add(followed.featureId);
     const before = this.#heldIds;
-    if (ids.size === before.size && [...ids].every((id) => before.has(id))) return;
+    // The same features, every one held that has a row (one whose row came back after the rows
+    // were replaced is opened again)
+    if (
+      ids.size === before.size &&
+      [...ids].every(
+        (id) =>
+          before.has(id) &&
+          (holder.getOpenedFeature(id) !== undefined || tables.findRow(id) === undefined),
+      )
+    ) {
+      return;
+    }
     this.#heldIds = ids;
     // What the selection lets go of stays held a moment (unless it is named again meanwhile)
     const releasedBefore = [...this.#released];
@@ -923,6 +934,31 @@ export class DrawStore implements Store {
   }
 
   /**
+   * The rows were taken out of the tables, to come back (`FeatureTablesWriter.clear`): none is
+   * opened any more, and the features selected in bulk are let go of. The features selected stay
+   * selected, and their rows are opened again when they are selected again once they are back
+   */
+  #rowsReplaced(): void {
+    this.#heldIds = new Set();
+    this.#released.clear();
+    if (this.#releaseTimer !== null) {
+      clearTimeout(this.#releaseTimer);
+      this.#releaseTimer = null;
+    }
+    this.#heldStale = true;
+    if (this.#bulk) {
+      this.#selecting = true;
+      try {
+        this.#setBulk(null);
+        this.#contract.setSelection(null, []);
+      } finally {
+        this.#selecting = false;
+      }
+      this.#notifySelection();
+    }
+  }
+
+  /**
    * Takes a notification of the contract into the notification of this Store, together with
    * the state of this client it changes (one notification with the contract's source when it
    * did not come from a transaction of this Store)
@@ -939,6 +975,7 @@ export class DrawStore implements Store {
         else delete normalized.selection;
       }
       this.#bus.merge(normalized);
+      if (changes.reset === true && this.#contract.tables) this.#rowsReplaced();
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);

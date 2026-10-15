@@ -241,6 +241,7 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
     createRestoreToken: () => store.createRestoreToken(),
     forget: (handles) => store.forget(handles),
     getGroupOrder: (groupHandle) => store.getGroupOrder(groupHandle),
+    clear: () => store.clear(),
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
@@ -384,6 +385,8 @@ export interface FeatureTablesInternals {
   versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number };
   /** Sets the bytes the versions held at once may take (the tests, the measurements) */
   setPendingVersionBytes(bytes: number): void;
+  /** Takes every row out of the tables (see `FeatureTablesWriter.clear`) */
+  clear(): void;
   /**
    * The rows the tables hold and the positions of their geometries: the rows of the blocks of
    * every layer, of the rows changed since (the delta) and of the blocks waiting to be taken in
@@ -751,6 +754,79 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   setPendingVersionBytes(bytes: number): void {
     this.versions.pendingBytesLimit = bytes;
+  }
+
+  clear(): void {
+    // The rows opened as features are let go of, without writing them (their rows go)
+    const removed: string[] = [];
+    for (const [handle, held] of this.heldRows) {
+      this.stopMove(handle, held);
+      removed.push(held.feature.id);
+    }
+    this.heldRows.clear();
+    this.holders.clear();
+    // The features drawn in the places of rows, and the marks of the rows selected in bulk and
+    // dragged by their values (the marks of the rows hidden on this client stay with their
+    // handles, which the rows of the same ids get again)
+    if (this.overlaidRows.size > 0)
+      this.states.setOverlaid(Int32Array.from(this.overlaidRows), false);
+    this.overlays.clear();
+    this.drawnOnlyRows.clear();
+    this.overlaidRows = new Set();
+    const marked = Int32Array.from(this.states.bulkHandles());
+    if (marked.length > 0) {
+      this.states.setBulk(marked, false);
+      this.states.setByValues(marked, false);
+    }
+    // The next versions and the work given to the Worker are dropped (what comes back is not
+    // taken in), and the blocks queued and the new rows gathered go
+    this.versions.clear();
+    for (const creation of [...this.creations]) this.endCreation(creation);
+    this.creations.length = 0;
+    this.creationOf.clear();
+    this.adoptions.length = 0;
+    // The keys of the order of the groups written go into the table of the groups at once
+    for (const [group, key] of this.writtenOrders) this.groups.setOrder(group, key);
+    this.writtenOrders.clear();
+    // The rows of every layer: their styles let go of, and their handles placed nowhere (an id
+    // keeps its handle until the Store forgets it)
+    const release = (group: RowGroup): void => {
+      const data = group.data;
+      for (let r = 0; r < data.length; r++) {
+        this.styles.release(data.styles[r]);
+        const handle = data.handles[r];
+        if (handle < 0) continue;
+        if (group.delta) this.ids.setDelta(handle, -1, -1);
+        else if (this.ids.mainGroup(handle) === group.handle) this.ids.setMain(handle, -1, -1);
+      }
+    };
+    for (const layer of this.layers.values()) {
+      // A layer keeps the dimensions of its coordinates for the rows that come next
+      this.raisedDims.set(layer.layerId, layer.dims);
+      for (let g = 0; g < layer.groupCount; g++) release(layer.groupAt(g));
+      if (layer.delta.group) release(layer.delta.group);
+    }
+    this.layers.clear();
+    this.layerList.length = 0;
+    this.views.clear();
+    this.rowGroups.clear();
+    this.groupsDue.clear();
+    // The deletions kept: their rows are gone, and the groups deleted that they kept go too
+    for (const token of [...this.retainedGroups.keys()]) this.releaseGroups(token);
+    this.retained.clear();
+    this.retainOf.clear();
+    for (const group of [...this.deletedGroups]) {
+      this.deletedGroups.delete(group);
+      this.groups.delete(group);
+    }
+    // The ids forgotten are freed now that no row holds them
+    for (const handle of [...this.forgotten]) this.freeIfGone(handle);
+    this.revisionCount++;
+    this.onChange?.({
+      reset: true,
+      ...(removed.length > 0 && { opened: { added: [], removed } }),
+    });
+    this.notifyWork();
   }
 
   size(): { readonly rows: number; readonly positions: number } {

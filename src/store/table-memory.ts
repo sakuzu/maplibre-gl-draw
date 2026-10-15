@@ -183,6 +183,7 @@ export class TableContractStore implements StoreContract {
       applyGroups: (patch, options) => this.#applyGroups(patch, options),
       applyOpened: (id, feature, options) => writer.applyOpened(id, feature, options),
       getGroupOrder: (groupHandle) => writer.getGroupOrder(groupHandle),
+      clear: () => this.transact(() => writer.clear(), 'remote'),
     };
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
     this.#bus.subscribe((changes) => this.#deliver(changes));

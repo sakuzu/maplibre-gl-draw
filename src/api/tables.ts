@@ -512,6 +512,27 @@ export interface FeatureTablesWriter {
    * @returns The key (undefined for an unknown handle)
    */
   getGroupOrder(groupHandle: number): string | undefined;
+  /**
+   * Takes every row out of the tables, after the implementation of the Store recorded it: the
+   * document is replaced from elsewhere (a version of it put back, the document read again from
+   * the start), and its rows come back with `addBlocks`.
+   *
+   * The rows opened as features and the features shown in place are let go of, the features
+   * selected in bulk are no longer marked, the next versions of the blocks and the work given to
+   * the Worker are dropped (what the Worker gives back is not taken in), the blocks queued and the
+   * new rows not built yet go, and so do the rows and the groups of features the deletions kept
+   * (their tokens keep nothing any more). The groups of features stay, with the keys of their
+   * order, and the layers keep the dimensions of their coordinates. An id keeps its handle until
+   * the Store forgets it (`forget`): a row of an id seen before gets the same handle when its
+   * block is added, so that what is kept by the handles (the values of the rows written before,
+   * the rows hidden on this client) goes on; the Store forgets the ids that do not come back.
+   *
+   * It is told as a replacement of the document (`DocumentChange.reset`), with the rows opened no
+   * longer (`DocumentChange.opened`). The Store of core lets go of the features selected in bulk
+   * then, and opens the rows of the features selected again when they are selected again
+   * (`setSelection` with the same features), once their rows are back.
+   */
+  clear(): void;
 }
 
 /**

@@ -379,6 +379,19 @@ export class GroupVersions {
     return out;
   }
 
+  /**
+   * Drops every version started, and forgets the groups due and the copies waiting (the rows are
+   * taken out of the tables): a version a Worker is building is not taken in when it comes back
+   */
+  clear(): void {
+    for (const version of [...this.pending.values()]) this.drop(version);
+    this.pending.clear();
+    this.locked.clear();
+    this.due.clear();
+    this.urged.clear();
+    this.waiting.clear();
+  }
+
   /** Drops the version a group is locked by (its groups are cut or reordered meanwhile) */
   dropLock(group: RowGroupHandle): void {
     const version = this.locked.get(group);

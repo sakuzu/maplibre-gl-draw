@@ -384,6 +384,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         renderScope.styleRules.clear();
         terrainContext.fillCache.clear();
         engine.storeRetainedCache?.invalidateAll();
+        // The rows were taken out of the tables (they come back as new blocks): their chunks go
+        if (own.tables)
+          engine.tableRetained?.dispose(engine.renderers?.batchManager.getRetainedRenderers());
       }
       engine.storeRetainedCache?.applyChanges(changes);
       displayList.applyChanges(changes);
