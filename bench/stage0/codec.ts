@@ -1080,6 +1080,7 @@ export function sameValue(a: unknown, b: unknown): boolean {
   const ao = a as Record<string, unknown>;
   const bo = b as Record<string, unknown>;
   const keys = Object.keys(ao);
-  if (keys.length !== Object.keys(bo).length) return false;
-  return keys.every((k) => Object.hasOwn(bo, k) && sameValue(ao[k], bo[k]));
+  const other = new Set(Object.keys(bo));
+  if (keys.length !== other.size) return false;
+  return keys.every((k) => other.has(k) && sameValue(ao[k], bo[k]));
 }

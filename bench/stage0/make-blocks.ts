@@ -190,7 +190,7 @@ async function* featuresOf(path: string): AsyncGenerator<Feature> {
 /** The attributes of a feature kept in its row: its own, and its id in the file */
 export function propertiesOf(f: Feature): Record<string, unknown> {
   const props = { ...(f.properties ?? {}) };
-  if (Object.hasOwn(props, SOURCE_ID)) {
+  if (Object.keys(props).includes(SOURCE_ID)) {
     throw new Error(`a feature already has the attribute ${SOURCE_ID}`);
   }
   if (f.id !== undefined) props[SOURCE_ID] = f.id;
