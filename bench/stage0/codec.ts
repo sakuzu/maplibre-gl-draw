@@ -636,7 +636,8 @@ const MAX_DECIMALS = 13;
 /** The integer of `v` at `d` decimal digits, when it reads back to the same bits (null if not) */
 function decimalAt(v: number, d: number): number | null {
   const k = Math.round(v * POW10[d]);
-  if (!Number.isInteger(k) || Math.abs(k) > 2 ** 51) return null;
+  // -0 is not an integer of the differences (it would read back as 0)
+  if (!Number.isInteger(k) || Math.abs(k) > 2 ** 51 || Object.is(k, -0)) return null;
   const back = k / POW10[d];
   return Object.is(back, v) ? k : null;
 }
