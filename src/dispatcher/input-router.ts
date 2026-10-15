@@ -119,6 +119,11 @@ export interface InputRouterDeps {
    * engine receive the input.
    */
   extensionInput?: ExtensionInputRoute;
+  /**
+   * Whether the input goes to the map only for now (another document is shown in place of the
+   * document): no mode nor extension receives it, and nothing is taken from the map
+   */
+  isBlocked?(): boolean;
 }
 
 /**
@@ -420,6 +425,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
    *   the mode of the engine has a receiver for it
    */
   function handleEvent(input: NormalizedEvent, options: HandleEventOptions = {}): boolean {
+    if (deps.isBlocked?.()) return false;
     // Only input originating from the real pointer is stopped while held.
     // Synthetic input (dispatch) is let through
     if (pointerHeld && !options.synthetic && HELD_EVENT_TYPES.has(input.type)) return false;

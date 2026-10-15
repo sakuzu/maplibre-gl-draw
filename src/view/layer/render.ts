@@ -195,6 +195,9 @@ export function renderLayers(
           },
         );
       }
+    } else if (tables && layer.kind === 'table') {
+      // A layer held as rows that has no rows yet draws nothing: a cache of the features of
+      // objects of the same id, built for another document the instance drew, is not its own
     } else if (useRetained && retainedRenderers) {
       storeRetained.drawLayer(
         layerId,

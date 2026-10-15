@@ -34,6 +34,21 @@ export interface TransactOptions {
   ignoreLocks?: boolean;
 }
 
+/** The options of {@link Draw.captureImage} */
+export interface CaptureImageOptions {
+  /**
+   * The width of the image in pixels (the width of the canvas of the map when left out, or the
+   * one that keeps its shape with `height`)
+   */
+  width?: number;
+  /** The height of the image in pixels (the one that keeps the shape of the map when left out) */
+  height?: number;
+  /** The type of the image, as a canvas encodes it (`'image/png'` when left out) */
+  type?: string;
+  /** The quality of a type that loses detail (`'image/jpeg'`, `'image/webp'`), from 0 to 1 */
+  quality?: number;
+}
+
 /**
  * A draw instance on a map: the collections and resources of the document and of this
  * client, and the members that belong to no resource.
@@ -138,6 +153,22 @@ export interface Draw {
   hasPendingWork(): boolean;
   /** The divisions of the stacking order, one per run of layers. */
   getLayerStack(): readonly LayerStackEntry[];
+  /**
+   * An image of the map as it is drawn now: the base map, the document (or the document shown in
+   * its place) and the datasets, as far as the map shows them, without the state of this client
+   * (the selection, its handles, the shape being drawn, the box). The image is taken in the next
+   * frame the map draws, which this asks for; the frames after it draw the state of this client
+   * again. A size of another shape than the map is covered by the map, cut at its middle.
+   *
+   * It costs one frame and no other drawing of the document: a thumbnail of a document too large
+   * to draw a second time is taken so.
+   *
+   * @returns The image, once encoded
+   * @throws `DrawError` (the promise rejects) with the code `invalid-input` when an option has the
+   *   wrong type, or `invalid-state` when there is no canvas to copy the map onto or the type
+   *   cannot be encoded
+   */
+  captureImage(options?: CaptureImageOptions): Promise<Blob>;
   /** Diagnostics; their fields follow the drawing and carry a weaker promise. */
   readonly debug: {
     /** The state the terrain was drawn with. */

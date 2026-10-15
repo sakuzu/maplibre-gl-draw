@@ -87,6 +87,7 @@ const MAIN = [
   'getStyleRuleChannel',
   'GpuMemoryDiagnostics',
   'DocumentSize',
+  'CaptureImageOptions',
   'MemoryBytes',
   'MemoryResource',
   'MemoryUsage',

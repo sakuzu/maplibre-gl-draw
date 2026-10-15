@@ -414,6 +414,8 @@ export function createEngine(
     },
     snapService,
     extensionInput: extensions.input,
+    // While another document is shown in place of the document, the input goes to the map only
+    isBlocked: () => customLayer.getShown() !== null,
   });
 
   // 8. Set up

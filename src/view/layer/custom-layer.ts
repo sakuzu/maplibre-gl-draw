@@ -49,7 +49,7 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { Store } from '../../store/store.js';
+import type { Store, StoreContractView } from '../../store/store.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
 import type { GpuMemorySnapshot } from '../gpu-ledger.js';
@@ -73,6 +73,7 @@ import { type FrameRenderDeps, renderForeground, renderSegment } from './frame-r
 import { buildFrameState, type FrameState, StyleZoom } from './frame-state.js';
 import { createRenderScope } from './render-scope.js';
 import { disposeRenderers, initRenderers, type Renderers } from './renderers.js';
+import { createShownStore } from './shown-store.js';
 import { SlotManager } from './slot-manager.js';
 import { type StackSlot, slotLayerId } from './slots.js';
 import { StoreRetainedCache } from './store-retained.js';
@@ -183,6 +184,20 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   getTerrainContext(): TerrainContext;
   /** The WebGL context of the map while the drawing is on it, or null */
   getGL(): WebGL2RenderingContext | null;
+  /** The document shown in place of the document of the instance (null for none) */
+  getShown(): StoreContractView | null;
+  /**
+   * Shows another document in place of the document of the instance, held as rows and read
+   * only (null: the document of the instance again). Its rows are drawn by a drawing of their
+   * own, released when it is no longer shown; what the drawing built of the document of the
+   * instance is kept and drawn again then
+   */
+  setShown(other: StoreContractView | null): void;
+  /**
+   * Leaves the state of this client (the selection, the shape being drawn, the box, the drag)
+   * out of the frames drawn, or draws it again
+   */
+  setEditingHidden(hidden: boolean): void;
   /** The GPU memory the renderers of this instance hold (what they recorded allocating) */
   getGpuMemory(): GpuMemorySnapshot;
   /**
@@ -227,6 +242,11 @@ interface EngineState {
   /** The drawing of the layers held as rows of columns (null while the GPU side is not built) */
   tableRetained: TableLayerRenderer | null;
   /**
+   * The drawing of the rows of the document shown in place of the document (null while none is
+   * shown or the GPU side is not built)
+   */
+  shownTableRetained: TableLayerRenderer | null;
+  /**
    * The rendering pixel ratio baked into the retained batches (null when not built yet)
    *
    * Line widths and point sizes are converted to physical pixels and baked into the retained
@@ -238,6 +258,8 @@ interface EngineState {
   unsubscribeStore: (() => void) | null;
   /** Stops the asking for frames when row groups wait to be taken in */
   unwatchTables: (() => void) | null;
+  /** Stops following the document shown in place of the document (its rows and its changes) */
+  unwatchShown: (() => void) | null;
   /** Stops following the context loss of the canvas (null while not added) */
   unwatchContextLoss: (() => void) | null;
   /** The frame being drawn (the first slot builds it, the last slot closes it) */
@@ -257,7 +279,7 @@ interface EngineState {
 export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   const {
     map,
-    store,
+    store: own,
     spatialIndex,
     featureStyle,
     selectionConfig,
@@ -278,15 +300,22 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     }
   }
 
+  // The drawing reads the Store through a view of it, which gives the document shown in place of
+  // the document while there is one, and leaves the state of this client out while asked
+  const shown = createShownStore(own);
+  const store = shown.store;
+
   const engine: EngineState = {
     gl: null,
     mapInstance: null,
     renderers: null,
     storeRetainedCache: null,
     tableRetained: null,
+    shownTableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
     unwatchTables: null,
+    unwatchShown: null,
     unwatchContextLoss: null,
     frame: null,
     preparedTerrainState: null,
@@ -407,7 +436,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // The row groups given to the tables are taken in over the frames: a frame is asked for
     // when they start waiting. The rows written in place are written into the chunks that draw
     // them before the next frame
-    const tables = featureTablesInternals(store.tables);
+    const tables = featureTablesInternals(own.tables);
     if (tables) {
       const unwatchWork = tables.onPendingWork(() => engine.mapInstance?.triggerRepaint());
       const unwatchWrites = tables.onRowsWritten((layerId, writes) => {
@@ -424,6 +453,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     } else {
       engine.unwatchTables = null;
     }
+    watchShown();
 
     watchContextLoss(mapInstance);
 
@@ -443,6 +473,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     }
     engine.unwatchTables?.();
     engine.unwatchTables = null;
+    engine.unwatchShown?.();
+    engine.unwatchShown = null;
     engine.unwatchContextLoss?.();
     engine.unwatchContextLoss = null;
 
@@ -472,6 +504,68 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   // state (the Store subscription, the caches of triangulation and style evaluation, the
   // drape index of the elements) is kept.
   // ---------------------------------------------------------------------------
+
+  /** A drawing of the layers held as rows */
+  function createTableRenderer(gl: WebGL2RenderingContext): TableLayerRenderer {
+    return new TableLayerRenderer({
+      gl,
+      terrain: terrainContext,
+      ledger: renderScope.gpu,
+      pixelRatio,
+      requestRepaint: () => engine.mapInstance?.triggerRepaint(),
+    });
+  }
+
+  /**
+   * Follows the document shown in place of the document while the engine is on the map: a frame
+   * is asked for when its rows wait to be taken in or are written, and its changes drop what the
+   * drawing derived from the document drawn (the stacking order, the drape)
+   */
+  function watchShown(): void {
+    const other = shown.getShown();
+    if (!other) return;
+    const repaint = (): void => engine.mapInstance?.triggerRepaint();
+    const unwatch: Array<() => void> = [];
+    const tables = featureTablesInternals(other.tables);
+    if (tables) {
+      unwatch.push(tables.onPendingWork(repaint));
+      unwatch.push(
+        tables.onRowsWritten((layerId, writes) => {
+          engine.shownTableRetained?.rowsWritten(layerId, writes);
+          repaint();
+        }),
+      );
+      unwatch.push(tables.onDeltaChanged(repaint));
+    }
+    unwatch.push(
+      other.subscribe((changes) => {
+        displayList.applyChanges(changes);
+        drape.invalidate();
+        if (changes.layers !== undefined || changes.reset === true) slots.sync();
+        repaint();
+      }),
+    );
+    engine.unwatchShown = () => {
+      for (const stop of unwatch) stop();
+    };
+  }
+
+  /**
+   * What the drawing derived from the document drawn is made again from the one drawn now (when
+   * another document is shown in its place, and when it no longer is)
+   */
+  function followShown(): void {
+    // The caches of the features of objects read the document drawn when they are built
+    engine.storeRetainedCache?.invalidateAll();
+    renderScope.earcut.clear();
+    renderScope.styleRules.clear();
+    terrainContext.fillCache.clear();
+    displayList.invalidate();
+    drape.invalidate();
+    if (!engine.mapInstance) return;
+    slots.sync();
+    engine.mapInstance.triggerRepaint();
+  }
 
   /**
    * Creates the GPU resources of the engine
@@ -503,13 +597,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         extensions: renderScope.selection.extensions,
       });
     }
-    engine.tableRetained = new TableLayerRenderer({
-      gl,
-      terrain: terrainContext,
-      ledger: renderScope.gpu,
-      pixelRatio,
-      requestRepaint: () => engine.mapInstance?.triggerRepaint(),
-    });
+    engine.tableRetained = createTableRenderer(gl);
+    if (shown.getShown()) engine.shownTableRetained = createTableRenderer(gl);
 
     // Initialize the custom renderers and the overlay renderers (an overlay added before the
     // engine existed receives its onAdd here)
@@ -549,6 +638,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     engine.storeRetainedCache = null;
     engine.tableRetained?.dispose(r.batchManager.getRetainedRenderers());
     engine.tableRetained = null;
+    engine.shownTableRetained?.dispose(r.batchManager.getRetainedRenderers());
+    engine.shownTableRetained = null;
     engine.builtPixelRatio = null;
 
     // The DEM atlas, the drape renderers, and the plan and the index that point into the pack
@@ -611,9 +702,14 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     );
     // The budget of the builds of the rows held as columns is one per frame, and the row groups
     // waiting to be taken in go first in it (the chunks are built from the groups taken in)
+    // The rows of the document of the instance are taken in while another is shown as well (they
+    // are not drawn then, so nothing waits for their chunks)
     engine.tableRetained?.beginFrame();
-    const tables = featureTablesInternals(store.tables);
+    const tables = featureTablesInternals(own.tables);
     if (tables) engine.tableRetained?.advanceTables(tables);
+    const shownTables = featureTablesInternals(shown.getShown()?.tables);
+    engine.shownTableRetained?.beginFrame();
+    if (shownTables) engine.shownTableRetained?.advanceTables(shownTables);
 
     // The zoom that the rendering reads is the style zoom (a value that absorbs the steps of the
     // elevation settlement; frame-state.ts). The position of the camera (the altitude in meters)
@@ -704,7 +800,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       featureCompanions,
       datasets,
       storeRetainedCache: engine.storeRetainedCache,
-      tableRetained: engine.tableRetained,
+      // The rows of the document shown in place of the document, by a drawing of their own
+      tableRetained: shown.getShown() ? engine.shownTableRetained : engine.tableRetained,
       selectionScope: renderScope.selection,
     };
     renderSegment(renderDeps, frame, index);
@@ -713,6 +810,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     if (index === frame.segments.length - 1) {
       renderForeground(renderDeps, frame);
       engine.tableRetained?.endFrame();
+      engine.shownTableRetained?.endFrame();
       engine.frame = null;
     }
   }
@@ -763,6 +861,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // The textures and buffers of the rows drawn in one draw are written here too, for the
       // same reason
       engine.tableRetained?.prerender();
+      engine.shownTableRetained?.prerender();
     },
 
     // The first argument also accepts WebGL1, to match the declaration of CustomRenderMethod
@@ -807,6 +906,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       // retained)
       engine.storeRetainedCache?.invalidateAll();
       engine.tableRetained?.reclassify();
+      engine.shownTableRetained?.reclassify();
       // Only while the GPU side exists (otherwise buildGpuResources calls onAdd)
       if (engine.renderers && engine.gl && engine.mapInstance) {
         // A renderer can serve several types: it is released only when no type uses it
@@ -818,6 +918,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         customRenderers.delete(type);
         engine.storeRetainedCache?.invalidateAll();
         engine.tableRetained?.reclassify();
+        engine.shownTableRetained?.reclassify();
         if (engine.renderers && engine.gl && !isRegisteredRenderer(renderer)) renderer.onRemove();
         engine.mapInstance?.triggerRepaint();
       };
@@ -842,16 +943,41 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       return renderScope.gpu.snapshot();
     },
 
+    getShown(): StoreContractView | null {
+      return shown.getShown();
+    },
+
+    setShown(other: StoreContractView | null): void {
+      if (other === shown.getShown()) return;
+      engine.unwatchShown?.();
+      engine.unwatchShown = null;
+      const r = engine.renderers;
+      engine.shownTableRetained?.dispose(r?.batchManager.getRetainedRenderers());
+      engine.shownTableRetained = null;
+      shown.setShown(other);
+      if (other && engine.gl && r) engine.shownTableRetained = createTableRenderer(engine.gl);
+      if (engine.mapInstance) watchShown();
+      followShown();
+    },
+
+    setEditingHidden(hidden: boolean): void {
+      if (shown.isEditingHidden() === hidden) return;
+      shown.setEditingHidden(hidden);
+      engine.mapInstance?.triggerRepaint();
+    },
+
     getTableRenderer(): TableLayerRenderer | null {
       return engine.tableRetained;
     },
 
     hasPendingWork(): boolean {
-      if (store.slicedWritePending) return true;
+      if (own.slicedWritePending) return true;
       if (drape.hasPendingWork) return true;
       if (datasets?.hasPendingWork()) return true;
       if (engine.tableRetained?.hasPendingWork) return true;
-      if (featureTablesInternals(store.tables)?.hasPendingWork) return true;
+      if (engine.shownTableRetained?.hasPendingWork) return true;
+      if (featureTablesInternals(own.tables)?.hasPendingWork) return true;
+      if (featureTablesInternals(shown.getShown()?.tables)?.hasPendingWork) return true;
       for (const renderer of dynamicOverlayRenderers) {
         if (renderer.hasPendingWork?.()) return true;
       }

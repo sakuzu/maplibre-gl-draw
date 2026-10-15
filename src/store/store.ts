@@ -22,7 +22,7 @@
  * DocumentStore is the document half the in-memory contract store is built on.
  */
 
-import type { Store as PublicStore } from '../api/extension/store.js';
+import type { Store as PublicStore, StoreView as PublicStoreView } from '../api/extension/store.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import type { TableSelection } from '../feature-table/selection.js';
@@ -58,6 +58,14 @@ import type {
  * written on the public `Store` and `StoreView` (`src/api/extension/store.ts`).
  */
 export interface StoreContract extends PublicStore {}
+
+/**
+ * The read side of a Store of the host (the public `StoreView`): what the drawing reads of a
+ * document shown in place of the document
+ *
+ * @internal
+ */
+export interface StoreContractView extends PublicStoreView {}
 
 /**
  * The document, in memory: the half the in-memory {@link StoreContract} is built on
@@ -464,6 +472,12 @@ export interface Store extends StoreView, UiState {
    * @throws when the Store does not hold its features as rows
    */
   restoreRows(patch: RowValues): RowValues | null;
+  /**
+   * Refuses the writes of this client of the document through this Store, which is read-only
+   * then (`isReadOnly`), or takes them again: while another document is shown in place of the
+   * document. The writes in a transaction from elsewhere (`remote`) are not refused
+   */
+  setDocumentWritable(writable: boolean): void;
 
   /** The most features of rows opened at once for the selection: past it they are selected in bulk */
   readonly holdLimit: number;

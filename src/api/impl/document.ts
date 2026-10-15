@@ -11,6 +11,7 @@ import { insertGroup } from '../../store/item-lists.js';
 import type { Coordinate } from '../../store/types.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
+import type { StoreView } from '../extension/store.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
 import type { GroupShell } from './groups.js';
 import { prepareGroupShell } from './groups.js';
@@ -42,15 +43,35 @@ interface PreparedItem {
 }
 
 /**
+ * The document shown in place of the document, as the instance keeps it
+ *
+ * @internal
+ */
+export interface ShownDocument {
+  get(): StoreView | null;
+  set(other: StoreView | null): void;
+}
+
+/** No document is ever shown in place of the document (an instance without a drawing) */
+const NO_SHOWN_DOCUMENT: ShownDocument = {
+  get: () => null,
+  set: () => {
+    throw new DrawError('invalid-state', 'This instance shows no other document');
+  },
+};
+
+/**
  * Creates `draw.document`
  *
  * @param onLoaded - Called after each load that read something, with the result and the source
  *   its writes carried
+ * @param shown - The document shown in place of the document, as the instance keeps it
  * @internal
  */
 export function createDocument(
   deps: Pick<ResourceDeps, 'store' | 'autoNameGenerator' | 'generateId' | 'getActiveLayerId'>,
   onLoaded?: (result: LoadResult, source: string) => void,
+  shown: ShownDocument = NO_SHOWN_DOCUMENT,
 ): DocumentResource {
   const { store } = deps;
 
@@ -80,7 +101,7 @@ export function createDocument(
    * null when the document became read-only while they were read
    */
   const writeAll = (prepared: readonly PreparedItem[]): LoadResult[] | null => {
-    if (store.isReadOnly()) return null;
+    if (store.isReadOnly() || shown.get() !== null) return null;
     // An ID given to a new layer or group may have been taken while the sources were read;
     // nothing may throw once the writing has started
     for (const { layer, group } of prepared) {
@@ -138,6 +159,27 @@ export function createDocument(
       }
       return writeAll(prepared);
     },
+
+    setShown(other: StoreView | null): void {
+      if (other !== null) {
+        if (typeof other !== 'object' || typeof other.getLayerOrder !== 'function') {
+          throw invalidInput('The document to show must be a Store or null');
+        }
+        if (other.tables === undefined) {
+          throw invalidInput(
+            'The document to show must be a Store that holds its features as rows',
+          );
+        }
+        if (other === store || other.tables === store.tables) {
+          throw invalidInput(
+            'The document to show must be another Store than the one of the instance',
+          );
+        }
+      }
+      shown.set(other);
+    },
+
+    getShown: () => shown.get(),
 
     toJSON: (): DrawDocument => exportNative(store),
 

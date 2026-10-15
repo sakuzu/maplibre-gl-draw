@@ -9,6 +9,7 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawOptions } from '../options.js';
+import { captureImage } from './capture.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
@@ -28,7 +29,11 @@ import { invalidInput, notFound, requireRecord, withLocksIgnored } from './share
 import { attachTableDiagnostics } from './table-diagnostics.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
-const ASYNC_MEMBERS: ReadonlySet<string> = new Set(['document.load', 'document.loadMany']);
+const ASYNC_MEMBERS: ReadonlySet<string> = new Set([
+  'document.load',
+  'document.loadMany',
+  'captureImage',
+]);
 
 /**
  * Builds the draw instance on an engine and hands it to the extensions of the engine
@@ -68,7 +73,10 @@ export function createDrawOnEngine(
   // Counted among the instances of the page until it is destroyed
   const memory = createMemory({
     store,
-    shownStores: () => [view],
+    shownStores: () => {
+      const other = engine.customLayer.getShown();
+      return other ? [view, other] : [view];
+    },
     gpuBytes: () => engine.customLayer.getGpuMemory().bytes,
     limitBytes: drawOptions.getMemoryLimitBytes,
   });
@@ -88,8 +96,19 @@ export function createDrawOnEngine(
     drawing: createDrawingResource(engine),
     metadata: createMetadata(deps),
     options: { get: drawOptions.get, update: drawOptions.update },
-    document: createDocument(deps, (result, source) =>
-      events.emit('document.loaded', { result, source }),
+    document: createDocument(
+      deps,
+      (result, source) => events.emit('document.loaded', { result, source }),
+      {
+        get: () => engine.customLayer.getShown(),
+        set(other) {
+          if (other === engine.customLayer.getShown()) return;
+          // No mode receives the input while another document is shown: a drawing mode is left
+          if (other !== null && modeManager.getMode() !== 'select') modeManager.setMode('select');
+          store.setDocumentWritable(other === null);
+          engine.customLayer.setShown(other);
+        },
+      },
     ),
     extensions: engine.extensions.collections,
     memory: memory.memory,
@@ -125,6 +144,8 @@ export function createDrawOnEngine(
     once: (event, listener) => events.once(event, listener),
 
     ...createDrawing(engine),
+    captureImage: (captureOptions) =>
+      captureImage(map, (hidden) => engine.customLayer.setEditingHidden(hidden), captureOptions),
 
     destroy() {
       if (destroyed) return;

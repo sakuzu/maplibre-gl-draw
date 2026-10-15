@@ -171,6 +171,13 @@ export class DrawStore implements Store {
   #bulkLocked: boolean | null = null;
   /** The selection as this Store told it last (what a change of it tells as the one before) */
   #toldSelection: Selection;
+  /**
+   * Whether the writes of this client of the document are taken (not while another document is
+   * shown in its place); the writes in a transaction from elsewhere (`remote`) always are
+   */
+  #documentWritable = true;
+  /** The transactions from elsewhere (`remote`) under way */
+  #remoteDepth = 0;
   readonly holdLimit: number;
 
   constructor(contract: StoreContract, options: DrawStoreOptions = {}) {
@@ -290,7 +297,7 @@ export class DrawStore implements Store {
     if (!tables || !this.#contract.applyRows) {
       throw new Error('The Store does not hold its features as rows: it writes no rows');
     }
-    if (this.#contract.isReadOnly()) return null;
+    if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
     this.finishSlicedWrite();
     const before = tables.readValues(patch);
     return this.applyRows({ patch, before }) ? before : null;
@@ -475,7 +482,8 @@ export class DrawStore implements Store {
   }
 
   isReadOnly(): boolean {
-    return this.#contract.isReadOnly();
+    // Read-only too while another document is shown in place of the document
+    return this.#contract.isReadOnly() || !this.#documentWritable;
   }
   setReadOnly(value: boolean): void {
     if (this.#contract.isReadOnly() === value) return;
@@ -554,7 +562,15 @@ export class DrawStore implements Store {
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     // A write of this client comes after the write over several tasks under way
     if (source !== 'remote') this.finishSlicedWrite();
-    return this.#bus.transact(() => this.#contract.transact(fn, source), source);
+    if (source !== 'remote') {
+      return this.#bus.transact(() => this.#contract.transact(fn, source), source);
+    }
+    this.#remoteDepth++;
+    try {
+      return this.#bus.transact(() => this.#contract.transact(fn, source), source);
+    } finally {
+      this.#remoteDepth--;
+    }
   }
 
   // ============================================================================
@@ -563,8 +579,21 @@ export class DrawStore implements Store {
 
   /** Runs one document write unless read-only; what the contract returned */
   #write(fn: () => boolean): boolean {
-    if (this.#contract.isReadOnly()) return false;
+    if (this.#contract.isReadOnly() || !this.#takesWrites()) return false;
     return this.transact(fn);
+  }
+
+  /** Whether a write of the document is taken now (see `#documentWritable`) */
+  #takesWrites(): boolean {
+    return this.#documentWritable || this.#remoteDepth > 0;
+  }
+
+  setDocumentWritable(writable: boolean): void {
+    if (this.#documentWritable === writable) return;
+    // Told as a change of read-only (`isReadOnly`)
+    this.#local(() => {
+      this.#documentWritable = writable;
+    }, true);
   }
 
   /**

@@ -53,7 +53,7 @@
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by topic
 
 // Entry and options
-export type { Draw, TransactOptions } from './api/draw.js';
+export type { CaptureImageOptions, Draw, TransactOptions } from './api/draw.js';
 export { createDraw } from './api/draw.js';
 export type {
   AutoNameOptions,
