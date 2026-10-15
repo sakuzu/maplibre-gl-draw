@@ -449,13 +449,6 @@ export interface RuntimeOptions {
    * of the base map; the stacking order is divided at those entries
    */
   isExternalEntry?: (id: string) => boolean;
-  /**
-   * The most bytes the documents drawn on the page may take on this device, which
-   * `draw.memory` compares what they take with. When it is left out, it is chosen by the
-   * device: 400 MiB on an iPhone, 500 MiB on an iPad, 1 GiB elsewhere. Nothing is refused by
-   * it: the host decides what to stop
-   */
-  memoryLimitBytes?: number;
 }
 
 /**

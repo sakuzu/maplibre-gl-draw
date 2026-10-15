@@ -24,6 +24,7 @@ const MAIN_CATEGORIES = [
   'Inputs, patches and filters',
   'The stacking order of the items',
   'State',
+  'Memory',
   'Events',
   'Errors',
   'Datasets',

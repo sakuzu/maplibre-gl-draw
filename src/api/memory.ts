@@ -31,7 +31,7 @@ export interface MemoryBytes {
  * and their positions.
  */
 export interface MemoryUsage extends MemoryBytes {
-  /** The most bytes the documents may take on this device (`memoryLimitBytes`) */
+  /** The most bytes the documents may take on this device (`draw.memory.setLimit`) */
   readonly limitBytes: number;
 }
 
@@ -64,6 +64,15 @@ export interface DocumentSize {
 export interface MemoryResource {
   /** The memory the documents drawn on the page take now, and the limit of the device. */
   get(): MemoryUsage;
+  /**
+   * Sets the most bytes the documents drawn on the page may take on this device, which `get`
+   * compares what they take with (`limitBytes`). Until it is set, or with `null`, it is chosen by
+   * the device: 400 MiB on an iPhone, 500 MiB on an iPad, 1 GiB elsewhere. Nothing is refused by
+   * it: the host decides what to stop.
+   *
+   * @throws `DrawError` with the code `invalid-input` when the bytes are not a number above 0
+   */
+  setLimit(bytes: number | null): void;
   /**
    * An estimate of the memory a document of this size takes once it is drawn by this instance:
    * held as rows when the Store of the instance holds its features as rows, as features

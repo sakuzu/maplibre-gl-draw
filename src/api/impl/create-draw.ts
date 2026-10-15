@@ -78,7 +78,6 @@ export function createDrawOnEngine(
       return other ? [view, other] : [view];
     },
     gpuBytes: () => engine.customLayer.getGpuMemory().bytes,
-    limitBytes: drawOptions.getMemoryLimitBytes,
   });
 
   const members: Draw = {

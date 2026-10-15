@@ -131,7 +131,7 @@ const instances = new Set<InstanceMemory>();
  * Creates `draw.memory` for an instance, and counts the instance among those of the page
  *
  * @param deps - The Store of the instance, the documents it draws (the Store, and a document
- *   shown in its place), its GPU ledger, and the limit of the options
+ *   shown in its place), and its GPU ledger
  * @returns The resource, and the function that takes the instance out of the page (at destroy)
  * @internal
  */
@@ -139,8 +139,9 @@ export function createMemory(deps: {
   readonly store: StoreView;
   readonly shownStores: () => readonly StoreView[];
   readonly gpuBytes: () => number;
-  readonly limitBytes: () => number;
 }): { memory: MemoryResource; dispose: () => void } {
+  /** The limit set (null: the one of the device) */
+  let limit: number | null = null;
   const instance: InstanceMemory = {
     gpuBytes: deps.gpuBytes,
     jsBytes: () => {
@@ -162,8 +163,14 @@ export function createMemory(deps: {
         jsBytes,
         gpuBytes,
         bytes: jsBytes + gpuBytes,
-        limitBytes: deps.limitBytes(),
+        limitBytes: limit ?? deviceMemoryLimitBytes(),
       });
+    },
+    setLimit(bytes: number | null): void {
+      if (bytes !== null && (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0)) {
+        throw invalidInput('The limit must be a number of bytes above 0, or null');
+      }
+      limit = bytes;
     },
     estimate(size: DocumentSize): MemoryBytes {
       if (typeof size !== 'object' || size === null)

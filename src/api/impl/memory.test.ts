@@ -31,13 +31,13 @@ afterEach(() => {
   for (const draw of draws.splice(0)) draw.destroy();
 });
 
-function drawOn(store: Store, options: { memoryLimitBytes?: number } = {}): Draw {
+function drawOn(store: Store): Draw {
   const engine = createEngine(
     createMapStub().map,
     { store, initDefaultLayer: false },
     { deferDefaultMode: true },
   );
-  const draw = createDrawOnEngine(engine, { store, initDefaultLayer: false, ...options });
+  const draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
   engine.enterDefaultMode();
   draws.push(draw);
   return draw;
@@ -110,19 +110,21 @@ describe('the limit of the device', () => {
     expect(DEFAULT_MEMORY_LIMIT_BYTES).toBe(1024 * 1024 * 1024);
   });
 
-  it('is the option when it is given, and changes with draw.options', () => {
-    const draw = drawOn(new MemoryStore(), { memoryLimitBytes: 300 * 1024 * 1024 });
+  it('is the one set, and the one of the device again with null', () => {
+    const draw = drawOn(new MemoryStore());
+    draw.memory.setLimit(300 * 1024 * 1024);
     expect(draw.memory.get().limitBytes).toBe(300 * 1024 * 1024);
-    expect(draw.options.get().memoryLimitBytes).toBe(300 * 1024 * 1024);
-    draw.options.update({ memoryLimitBytes: 200 * 1024 * 1024 });
+    draw.memory.setLimit(200 * 1024 * 1024);
     expect(draw.memory.get().limitBytes).toBe(200 * 1024 * 1024);
-    expect(() => draw.options.update({ memoryLimitBytes: 0 })).toThrow(DrawError);
+    expect(() => draw.memory.setLimit(0)).toThrow(DrawError);
+    expect(() => draw.memory.setLimit(Number.NaN)).toThrow(DrawError);
+    draw.memory.setLimit(null);
+    expect(draw.memory.get().limitBytes).toBe(deviceMemoryLimitBytes());
   });
 
-  it('is the one of the device when the option is left out', () => {
+  it('is the one of the device until it is set', () => {
     const draw = drawOn(new MemoryStore());
     expect(draw.memory.get().limitBytes).toBe(deviceMemoryLimitBytes());
-    expect(draw.options.get().memoryLimitBytes).toBe(deviceMemoryLimitBytes());
   });
 });
 
