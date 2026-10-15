@@ -437,10 +437,12 @@ What was weighed:
   values of the patch over the rows). It is simpler and reads in the middle of
   a restore are rare; the cost is that the listeners of the restore run inside
   the read that finished it.
-- A view of a layer is gated when it is asked for (`get`), and a scan when it
-  starts, not at each of their reads: the drawing shares the view objects. A
-  view kept from before the restore and read during it reads the rows half
-  written.
+- Each read of a view of a layer handed out by `get`, and each batch of a
+  scan, goes through the gate, a view kept from before the restore included
+  (a list of the rows that keeps its view reads them as the restore leaves
+  them). The views handed out wrap the ones of the internals, which the
+  drawing reads without the gate. Gating only when a view is asked for was
+  the first form, left for the views kept.
 - A change of the state of the drawing (a box selection, a drag state)
   finishes the restore, as any change merged into the bus does: pointer work
   during a restore makes it end sooner.

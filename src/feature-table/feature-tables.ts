@@ -223,10 +223,20 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
   // A read through the reading side lets the gate of the reads finish what is written first
   // (`setReadGate`); core reads the rows through its internals
   const gate = (): void => store.readGate?.();
+  // The views and the scans handed out read through the gate at each of their reads (a view kept
+  // from before a write is read later); the drawing reads the views of the internals
+  const gated = new WeakMap<LayerTableView, LayerTableView>();
   const tables: FeatureTables = {
     get: (layerId) => {
       gate();
-      return store.view(layerId);
+      const view = store.view(layerId);
+      if (!view) return undefined;
+      let out = gated.get(view);
+      if (!out) {
+        out = new GatedLayerView(view, gate);
+        gated.set(view, out);
+      }
+      return out;
     },
     findRow: (id) => {
       gate();
@@ -247,7 +257,13 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
     },
     scan: (options) => {
       gate();
-      return store.scan(options ?? {});
+      const cursor = store.scan(options ?? {});
+      return {
+        next: () => {
+          gate();
+          return cursor.next();
+        },
+      };
     },
     readValues: (rows) => {
       gate();
@@ -278,6 +294,82 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
+}
+
+/**
+ * A view of a layer handed out by the reading side of the tables: each read goes through the gate
+ * of the reads first (see `FeatureTablesInternals.setReadGate`), a check of one flag when there is
+ * nothing to finish
+ */
+class GatedLayerView implements LayerTableView {
+  constructor(
+    private readonly view: LayerTableView,
+    private readonly gate: () => void,
+  ) {}
+
+  get layerId(): string {
+    return this.view.layerId;
+  }
+  get rowCount(): number {
+    this.gate();
+    return this.view.rowCount;
+  }
+  get rowCountWithDeleted(): number {
+    this.gate();
+    return this.view.rowCountWithDeleted;
+  }
+  get itemCount(): number {
+    this.gate();
+    return this.view.itemCount;
+  }
+  listDrawnRows(bbox: BBox): Int32Array {
+    this.gate();
+    return this.view.listDrawnRows(bbox);
+  }
+  getRowBounds(handle: RowHandle): BBox | null {
+    this.gate();
+    return this.view.getRowBounds(handle);
+  }
+  getRowType(handle: RowHandle): FeatureType | null {
+    this.gate();
+    return this.view.getRowType(handle);
+  }
+  getRowPoint(handle: RowHandle): Position | null {
+    this.gate();
+    return this.view.getRowPoint(handle);
+  }
+  getRowValue(handle: RowHandle, key: string): unknown {
+    this.gate();
+    return this.view.getRowValue(handle, key);
+  }
+  getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
+    this.gate();
+    return this.view.getRowStyle(handle);
+  }
+  getRow(handle: RowHandle): Feature | undefined {
+    this.gate();
+    return this.view.getRow(handle);
+  }
+  getDrawnRowsRevision(): number {
+    this.gate();
+    return this.view.getDrawnRowsRevision();
+  }
+  listRowHandles(start: number, count: number): Int32Array {
+    this.gate();
+    return this.view.listRowHandles(start, count);
+  }
+  listItems(start: number, count: number): ItemHandles {
+    this.gate();
+    return this.view.listItems(start, count);
+  }
+  countGroupMembers(groupHandle: number): number {
+    this.gate();
+    return this.view.countGroupMembers(groupHandle);
+  }
+  listGroupMembers(groupHandle: number, start: number, count: number): Int32Array {
+    this.gate();
+    return this.view.listGroupMembers(groupHandle, start, count);
+  }
 }
 
 /**
@@ -491,8 +583,8 @@ export interface FeatureTablesInternals {
   /**
    * Sets what a read through the reading side of the tables (`FeatureTables`) calls first (none:
    * nothing): the Store finishes there a write it makes over several tasks, so that what is read
-   * is what the write leaves. A view of a layer is gated when it is asked for (`get`), a scan
-   * when it starts
+   * is what the write leaves. Each read of a view of a layer and each batch of a scan handed out
+   * goes through it, a view kept from before included
    */
   setReadGate(gate: (() => void) | null): void;
   /**

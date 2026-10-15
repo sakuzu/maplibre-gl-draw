@@ -18,7 +18,7 @@ import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureValues } from '../model.js';
-import type { FeatureTables, RowField, RowWrite } from '../tables.js';
+import type { FeatureTables, LayerTableView, RowField, RowWrite } from '../tables.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
@@ -335,5 +335,36 @@ describe('draw.features.restore of many rows', () => {
     expect(once.notified).toHaveLength(1);
     expect(steps.notified[0]?.order ?? []).toEqual(once.notified[0]?.order ?? []);
     expect(steps.notified[0]?.rows?.layers.get('rows')?.created.length).toBe(COUNT);
+  });
+
+  it('reads the rows as the restore leaves them through a view held from before', () => {
+    const reads: Array<(view: LayerTableView) => unknown> = [
+      (view) => view.rowCount,
+      (view) => view.itemCount,
+      (view) => view.getRow(view.listRowHandles(COUNT - 1, 1)[0] as number)?.id,
+      (view) => view.listItems(0, COUNT).handles.length,
+      (view) => view.listRowHandles(0, COUNT).length,
+    ];
+    const expected: unknown[] = [COUNT, COUNT, `p${COUNT - 1}`, COUNT, COUNT];
+    reads.forEach((read, k) => {
+      draw?.destroy();
+      draw = undefined;
+      const { draw: instance, tables, notified, before } = setup();
+      const view = tables.get('rows') as LayerTableView;
+      instance.features.restore(before);
+      expect(notified).toHaveLength(0);
+      expect(read(view)).toEqual(expected[k]);
+      expect(notified).toHaveLength(1);
+    });
+  });
+
+  it('reads the rows as the restore leaves them through a scan started before', () => {
+    const { draw, tables, notified, before } = setup();
+    const cursor = tables.scan({ layerIds: ['rows'] });
+    draw.features.restore(before);
+    let count = 0;
+    for (let batch = cursor.next(); batch; batch = cursor.next()) count += batch.length;
+    expect(count).toBe(COUNT);
+    expect(notified).toHaveLength(1);
   });
 });
