@@ -91,6 +91,7 @@ writes them too):
 | `cuts` | Artificial cuts: `0`, `100`, `1000`, `3000` | `0` |
 | `limit` | Heap limit in MB: `1024`, `500`, `400` | `1024` |
 | `workers` | Workers of the opening (`0`: cores but one, 8 at most) | `0` |
+| `terrain` | `1` turns the terrain on | `0` |
 
 A `line` has 10 vertices, `polygon5` and `polygon50` have 5 and 50, and
 `mixed` takes the four kinds in turn. The cuts split the ranges drawn of
@@ -133,11 +134,37 @@ row groups are taken in over the frames, after `adoptQueue`). The run
 stops when the JS heap goes past `limit`, and reports what it measured
 until then.
 
+With `terrain=1` the map has the terrain on: the elevation tiles of the
+examples and the playground ([Mapterhorn](https://mapterhorn.com/), from
+its TileJSON) are a `raster-dem` source of the map under
+`map.setTerrain`, with the exaggeration of the terrain example (1.5). The
+run waits until the elevation tiles of the view are loaded before it
+opens the map (it stops with the reason after 60 seconds), and adds a
+phase after the pan and zoom: the camera pitched 45 degrees at zoom 14,
+still for 3 seconds, then panned and back. The edits run at zoom 14 with
+the camera not pitched, on the terrain. Compare `mode=table` with
+`mode=store` at the same parameters, both with `terrain=1`, for example
+<http://localhost:3002/table.html?mode=table&terrain=1&n=100000&kind=mixed>
+and the same with `mode=store`.
+
+After the opening, each phase and each edit, the page records the ranges
+of rows drawn in 2 frames and shows how they were drawn: in one draw per
+chunk with rows of every kind (`rows`), as on a flat map, or by kind
+(`polygon`, `line`, `point` and `immediate`, `(delta)` for the rows of a
+delta), as on the terrain and the globe. Beside them it shows whether the
+terrain was on in the last drawing and whether the areas were laid on the
+analytic drape (`draw.debug.terrain()`), and the errors of the map, so
+that elevation tiles that cannot be read are seen. In `mode=store` no
+rows are drawn: the features are drawn by the renderers of the Store.
+
 Only this page is served cross-origin isolated (COOP and COEP headers, by
 the dev and preview servers of `bench/vite.config.ts`), so
 `performance.measureUserAgentSpecificMemory()` works; the page shows
-`isolated=true` when it is. The heap of `performance.memory` is shown in
-Chromium-based browsers only.
+`isolated=true` when it is. The elevation tiles are read from another
+origin in the isolated page: they are fetched in CORS mode and their
+server allows every origin (`Access-Control-Allow-Origin: *`), which the
+embedder policy `require-corp` accepts. The heap of `performance.memory`
+is shown in Chromium-based browsers only.
 
 Once the map is open, Edit repeats an edit and Stream sends changes of
 others, each measured before, during and after it (the frames, the JS

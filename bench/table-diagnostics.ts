@@ -39,10 +39,28 @@ export type TableEditStats = Readonly<
   >
 >;
 
+/**
+ * One range of rows drawn in one draw, as the record of the draws gives it: drawn in one draw
+ * with rows of every kind (`rows`), from a retained batch of its kind, or at once
+ */
+export interface TableDrawnRange {
+  readonly layerId: string;
+  readonly kind: 'rows' | 'polygon' | 'line' | 'point' | 'immediate';
+  /** Whether the rows are rows of the delta of the layer */
+  readonly delta?: boolean;
+}
+
 /** The hooks the pages use */
 export interface TableDiagnostics {
   /** Cuts the ranges drawn of every layer held as rows at `count` places (0 for none) */
   setArtificialCuts(count: number): void;
+  /**
+   * Records the ranges drawn from the next frame on, in the order they are drawn, into the array
+   * it returns, until `stopRecording`
+   */
+  recordDraws(): readonly TableDrawnRange[];
+  /** Stops the recording of the ranges drawn */
+  stopRecording(): void;
   /** Draws the layers held as rows with one renderer per kind of geometry (true) */
   setDrawingByKind(byKind: boolean): void;
   /** What the writes of rows in place hold and did */

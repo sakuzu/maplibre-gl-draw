@@ -24,7 +24,12 @@
  * Worker of the page (`worker=0`: on the main thread), and the chunks of the next versions of the
  * row groups are built while the camera moves with `moving=<ms>` (once it is still otherwise).
  *
- * The map has no base map (a background layer only), so nothing is fetched from another origin.
+ * The map has no base map (a background layer only), so nothing is fetched from another origin,
+ * unless the terrain is on (`terrain=1`): the elevation tiles of the examples (Mapterhorn) are a
+ * raster-dem source of the map under `map.setTerrain`, and a phase with the camera pitched is
+ * added. The page shows how the rows were drawn after the opening, each phase and each edit (in
+ * one draw per chunk, or by kind as on the terrain), from the record of the draws, with what the
+ * terrain was drawn with (`draw.debug.terrain()`).
  *
  * For automation the results are also on `window.benchResult`, `window.runTableBench()` runs the
  * measurement, and `window.runTableEdit(op)` and `window.runTableStream(kind, rate)` an edit and
@@ -81,6 +86,18 @@ import type { RowsWorkerRequest } from './table-rows-worker';
 // Worker URL setup for v6 (side effect). Required before the Map is created.
 import './maplibre-setup';
 
+/** How the rows were drawn in a few frames, and what the terrain was drawn with */
+interface DrawingPath {
+  /** When it was read: after the opening, a phase or an edit */
+  readonly when: string;
+  /** Whether the terrain was on and its elevation data usable in the last drawing */
+  readonly terrain: boolean;
+  /** Whether the areas were laid on the analytic drape, or why not, and on how many features */
+  readonly drape: string;
+  /** The ranges of rows drawn in the frames recorded, by how they were drawn */
+  readonly ranges: Readonly<Record<string, number>>;
+}
+
 interface TableBenchResult {
   readonly params: TableBenchPageParams;
   /** The time of each step of the opening (ms) */
@@ -92,6 +109,10 @@ interface TableBenchResult {
   readonly gpu: Record<string, number>;
   /** The edits and the streams run on the map opened */
   readonly edits: EditResult[];
+  /** How the rows were drawn after the opening, each phase and each edit */
+  readonly drawing: DrawingPath[];
+  /** The errors of the map (an elevation tile that could not be read, for one) */
+  readonly mapErrors: { count: number; last: string | null };
   /** Why the run stopped early (absent when it ran to the end) */
   stopped?: string;
 }
@@ -151,6 +172,7 @@ for (const [key, value] of Object.entries({
   bigArea: String(params.bigArea),
   held: String(params.held),
   moveFrom: params.moveFrom === null ? '' : String(params.moveFrom),
+  terrain: params.terrain ? '1' : '0',
 })) {
   const field = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
   if (field) field.value = value;
@@ -185,6 +207,32 @@ const map = new maplibregl.Map({
   fadeDuration: 0,
 });
 window.benchMap = map;
+
+/**
+ * The elevation tiles of the terrain (`terrain=1`): the TileJSON of Mapterhorn, which the
+ * examples and the playground use (`examples/basemap.ts`). It gives the encoding, the tile size
+ * and the attribution, so the source names nothing else
+ */
+const DEM_TILES = 'https://tiles.mapterhorn.com/tiles.json';
+/** The exaggeration of the terrain, as in the terrain example */
+const TERRAIN_EXAGGERATION = 1.5;
+/** The pitch of the camera of the phase added on the terrain (degrees) */
+const TERRAIN_PITCH = 45;
+const DEM_SOURCE = 'dem';
+
+if (params.terrain) {
+  map.on('load', () => {
+    map.addSource(DEM_SOURCE, { type: 'raster-dem', url: DEM_TILES });
+    map.setTerrain({ source: DEM_SOURCE, exaggeration: TERRAIN_EXAGGERATION });
+  });
+}
+
+/** The errors of the map, so that tiles that cannot be read (blocked, for one) are seen */
+const mapErrors: TableBenchResult['mapErrors'] = { count: 0, last: null };
+map.on('error', (event: { error?: { message?: string } }) => {
+  mapErrors.count++;
+  mapErrors.last = event.error?.message ?? 'unknown error';
+});
 
 /** The Worker the tables hand their large merges and builds to */
 function rowsWorker(): FeatureTablesWorker {
@@ -286,6 +334,62 @@ async function settle(timeoutMs = 120_000): Promise<boolean> {
     await nextFrame();
   }
   return true;
+}
+
+/** The longest the elevation tiles of the view may take to load before the run stops (ms) */
+const TERRAIN_LOAD_MS = 60_000;
+
+/**
+ * Waits until the terrain is set and the elevation tiles of the view are loaded, so that the map
+ * opens on the terrain (the rows are not built for the flat map first)
+ *
+ * @returns Why it stopped waiting (null once the terrain is ready)
+ */
+async function terrainReady(): Promise<string | null> {
+  const start = performance.now();
+  while (!map.getTerrain() || !map.isSourceLoaded(DEM_SOURCE) || !map.loaded()) {
+    if (performance.now() - start > TERRAIN_LOAD_MS) {
+      return (
+        `the elevation tiles were not loaded after ${TERRAIN_LOAD_MS / 1000} s ` +
+        `(terrain set: ${map.getTerrain() !== null}, errors of the map: ${mapErrors.count}` +
+        `${mapErrors.last ? `, the last: ${mapErrors.last}` : ''})`
+      );
+    }
+    map.triggerRepaint();
+    await nextFrame();
+  }
+  return null;
+}
+
+/** The frames the ranges drawn are recorded in */
+const RECORDED_FRAMES = 2;
+
+/**
+ * Reads how the rows are drawn: the ranges drawn in a few frames, by how they were drawn (in one
+ * draw per chunk with rows of every kind, `rows`, or by kind: `polygon`, `line`, `point`,
+ * `immediate`), and what the terrain was drawn with
+ */
+async function drawingPath(when: string): Promise<DrawingPath> {
+  const record = diagnostics.recordDraws();
+  for (let i = 0; i < RECORDED_FRAMES; i++) {
+    map.triggerRepaint();
+    await nextFrame();
+  }
+  diagnostics.stopRecording();
+  const ranges: Record<string, number> = {};
+  for (const range of record) {
+    const key = range.delta ? `${range.kind} (delta)` : range.kind;
+    ranges[key] = (ranges[key] ?? 0) + 1;
+  }
+  const { render, drape } = draw.debug.terrain();
+  return {
+    when,
+    terrain: render.active,
+    drape: drape.used
+      ? `used, ${drape.featureCount} features`
+      : `not used (${drape.reason}), ${drape.featureCount} features`,
+    ranges,
+  };
 }
 
 /** The longest the drawing of the rows taken in may take before the opening stops (ms) */
@@ -445,6 +549,8 @@ async function runTableBench(): Promise<TableBenchResult> {
     memory: { afterOpenMb: null, endMb: null },
     gpu: {},
     edits: [],
+    drawing: [],
+    mapErrors,
   };
   window.benchResult = result;
   const finish = (stopped?: string): TableBenchResult => {
@@ -461,6 +567,11 @@ async function runTableBench(): Promise<TableBenchResult> {
     if (map.loaded()) resolve();
     else map.once('load', () => resolve());
   });
+  if (params.terrain) {
+    setStatus('Loading the elevation tiles...');
+    const notReady = await terrainReady();
+    if (notReady) return finish(`the terrain is not ready: ${notReady}`);
+  }
 
   setStatus('Opening...');
   // The frames of the opening: the longest one is the longest the page stops while it opens
@@ -472,6 +583,7 @@ async function runTableBench(): Promise<TableBenchResult> {
   );
   result.phases.push(phaseOf(draw, 'opening', openIntervals));
   if (failure) return finish(`the opening stopped: ${failure}`);
+  result.drawing.push(await drawingPath('opening'));
   render(result);
   if (overLimit())
     return finish(
@@ -516,15 +628,35 @@ async function runTableBench(): Promise<TableBenchResult> {
       },
     ],
   ];
+  if (params.terrain) {
+    // The camera pitched over the terrain: still at z14, then panned and back
+    phases.push([
+      `pitched ${TERRAIN_PITCH} at z14`,
+      async () => {
+        map.jumpTo({ center, zoom: 14, pitch: TERRAIN_PITCH });
+        await settle();
+        await wait(3000);
+        const span = Math.min(east - west, 0.2);
+        await ease({ center: [center[0] + span / 4, center[1]] });
+        await ease({ center });
+      },
+    ]);
+  }
   for (const [name, run] of phases) {
     setStatus(`Measuring: ${name}`);
     const intervals = await recordFrames(map, run);
     result.phases.push(phaseOf(draw, name, intervals));
+    result.drawing.push(await drawingPath(name));
     render(result);
     if (overLimit())
       return finish(
         `the JS heap went past ${params.limitMb} MB or the GPU memory past ${GPU_LIMIT_MB} MB (${name})`,
       );
+  }
+  if (params.terrain) {
+    // The edits run with the camera of the flat map (z14, not pitched), on the terrain
+    map.jumpTo({ center, zoom: 14, pitch: 0 });
+    await settle();
   }
   result.memory.endMb = await measuredMemoryMb();
   return finish();
@@ -564,7 +696,43 @@ function render(result: TableBenchResult): void {
       ])}
     </table>
     ${result.stopped ? `<p class="stopped">Stopped: ${result.stopped}</p>` : ''}
+    ${renderDrawing(result)}
     ${renderEdits(result.edits)}
+  `;
+}
+
+/**
+ * The table of how the rows were drawn: in one draw per chunk (`rows`) or by kind, read from the
+ * ranges drawn in a few frames, with the state of the terrain and of the drape
+ */
+function renderDrawing(result: TableBenchResult): string {
+  if (result.drawing.length === 0) return '';
+  const describe = (ranges: Readonly<Record<string, number>>): string => {
+    const entries = Object.entries(ranges);
+    if (entries.length === 0) {
+      return params.mode === 'store' ? 'features of the Store (no rows)' : 'no rows drawn';
+    }
+    const oneDraw = entries.some(([kind]) => kind.startsWith('rows'));
+    const byKind = entries.some(([kind]) => !kind.startsWith('rows'));
+    const way = oneDraw && byKind ? 'both' : oneDraw ? 'one draw per chunk' : 'by kind';
+    return `${way}: ${entries.map(([kind, count]) => `${kind} ${count}`).join(', ')}`;
+  };
+  const cells = result.drawing.map((path) => [
+    path.when,
+    path.terrain ? 'on' : 'off',
+    path.drape,
+    describe(path.ranges),
+  ]);
+  return `
+    <table>
+      <tr><th>Drawn after</th><th>terrain</th><th>drape</th><th>rows drawn (ranges in ${RECORDED_FRAMES} frames)</th></tr>
+      ${cells.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+    </table>
+    ${
+      result.mapErrors.count > 0
+        ? `<p class="stopped">Errors of the map: ${result.mapErrors.count} (the last: ${result.mapErrors.last})</p>`
+        : ''
+    }
   `;
 }
 
@@ -655,6 +823,7 @@ async function runEditOf(
   try {
     const edit = await run(target);
     result.edits.push(edit);
+    result.drawing.push(await drawingPath(name));
     render(result);
     setStatus(edit.error ? `Not run: ${edit.error}` : 'Done');
     return edit;
@@ -687,5 +856,5 @@ startButton.addEventListener('click', () => {
 setStatus(
   `${params.mode} n=${params.n} kind=${params.kind} styles=${params.styles} ` +
     `alpha=${params.translucent ? 1 : 0} cuts=${params.cuts} limit=${params.limitMb}MB ` +
-    `isolated=${crossOriginIsolated}`,
+    `terrain=${params.terrain ? 1 : 0} isolated=${crossOriginIsolated}`,
 );

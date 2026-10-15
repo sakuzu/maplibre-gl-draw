@@ -89,6 +89,11 @@ export interface TableBenchPageParams extends TableBenchParams {
    * (`moveOpenedByStateFrom` of the tables; null for the default of the library)
    */
   readonly moveFrom: number | null;
+  /**
+   * Whether the map has the terrain on (`terrain=1`): the elevation tiles of the examples, as a
+   * raster-dem source of the map, under `map.setTerrain`
+   */
+  readonly terrain: boolean;
 }
 
 /**
@@ -196,6 +201,7 @@ export function parseParams(search: string): TableBenchPageParams {
     bigArea: number('bigArea', 0),
     held: Math.max(1, number('held', 2000)),
     moveFrom: (params.get('moveFrom') ?? '') === '' ? null : number('moveFrom', 0),
+    terrain: params.get('terrain') === '1',
   };
 }
 
