@@ -147,6 +147,9 @@ export type {
 } from './api/state.js';
 export { MODES } from './api/state.js';
 
+// Memory
+export type { DocumentSize, MemoryBytes, MemoryResource, MemoryUsage } from './api/memory.js';
+
 // Events
 export type { DocumentChange, DrawEventListener, DrawEvents, ScreenPoint } from './api/events.js';
 export type { Position } from 'geojson';

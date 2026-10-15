@@ -17,6 +17,7 @@ import type { GroupsCollection } from './groups.js';
 import type { HiddenCollection } from './hidden.js';
 import { createDraw as createDrawInstance } from './impl/create-draw.js';
 import type { LayersCollection } from './layers.js';
+import type { MemoryResource } from './memory.js';
 import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
@@ -64,6 +65,8 @@ export interface Draw {
   readonly document: DocumentResource;
   /** The plugins, modes, feature types, overlays and providers */
   readonly extensions: ExtensionsCollections;
+  /** The memory the documents drawn on the page take, against the limit of the device */
+  readonly memory: MemoryResource;
 
   // The map and the Store
 

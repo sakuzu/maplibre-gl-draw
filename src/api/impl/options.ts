@@ -33,6 +33,7 @@ import type {
 import type { Engine } from './engine.js';
 import type { EngineOptions } from './engine-context.js';
 import { describeStyleProblem } from './import-export/style-validation.js';
+import { deviceMemoryLimitBytes } from './memory.js';
 import { invalidInput, isRecord, onlyKeys } from './shared.js';
 
 /** The options that can only be given when the instance is created */
@@ -53,6 +54,7 @@ const RUNTIME_KEYS = [
   'dragThreshold',
   'rendering',
   'isExternalEntry',
+  'memoryLimitBytes',
 ] as const satisfies ReadonlyArray<keyof RuntimeOptions>;
 
 // ============================================================================
@@ -223,6 +225,7 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
     timeSlicing: bool,
   }),
   isExternalEntry: func,
+  memoryLimitBytes: positive,
 };
 
 /**
@@ -709,6 +712,8 @@ export interface OptionsState extends OptionsResource {
   applyCreation(): void;
   /** The `style` option as it was given, not copied */
   getStyle(): RuntimeOptions['style'];
+  /** The limit of the memory: the option, or the one of the device */
+  getMemoryLimitBytes(): number;
 }
 
 /**
@@ -838,6 +843,7 @@ export function createOptions(
     const values: RuntimeOptions = {
       ...current,
       scaleWithZoom: context.options.scaleWithZoom,
+      memoryLimitBytes: current.memoryLimitBytes ?? deviceMemoryLimitBytes(),
       clickTolerance: context.options.clickTolerance,
       dragThreshold: context.options.dragThreshold,
       snapping: {
@@ -875,6 +881,10 @@ export function createOptions(
 
     getStyle(): RuntimeOptions['style'] {
       return current.style;
+    },
+
+    getMemoryLimitBytes(): number {
+      return current.memoryLimitBytes ?? deviceMemoryLimitBytes();
     },
 
     applyCreation(): void {

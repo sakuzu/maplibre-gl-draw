@@ -19,6 +19,7 @@ import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createHidden } from './hidden.js';
 import { createLayers } from './layers.js';
+import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createSelection, createVertexSelection } from './selection.js';
@@ -64,6 +65,13 @@ export function createDrawOnEngine(
   // Set once destroy has run to the end, so that the extensions removed by it can still read
   // the instance
   let destroyed = false;
+  // Counted among the instances of the page until it is destroyed
+  const memory = createMemory({
+    store,
+    shownStores: () => [view],
+    gpuBytes: () => engine.customLayer.getGpuMemory().bytes,
+    limitBytes: drawOptions.getMemoryLimitBytes,
+  });
 
   const members: Draw = {
     features,
@@ -84,6 +92,7 @@ export function createDrawOnEngine(
       events.emit('document.loaded', { result, source }),
     ),
     extensions: engine.extensions.collections,
+    memory: memory.memory,
 
     getMap: () => map,
     getStore: () => view,
@@ -122,6 +131,7 @@ export function createDrawOnEngine(
       try {
         engine.destroy();
       } finally {
+        memory.dispose();
         destroyed = true;
       }
     },

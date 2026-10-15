@@ -384,6 +384,12 @@ export interface FeatureTablesInternals {
   versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number };
   /** Sets the bytes the versions held at once may take (the tests, the measurements) */
   setPendingVersionBytes(bytes: number): void;
+  /**
+   * The rows the tables hold and the positions of their geometries: the rows of the blocks of
+   * every layer, of the rows changed since (the delta) and of the blocks waiting to be taken in
+   * (deleted rows kept included), what the memory of the tables is estimated from
+   */
+  size(): { readonly rows: number; readonly positions: number };
   /** The values the rows of `rows` have now, for its fields (see `FeatureTables.readValues`) */
   readValues(rows: RowValues): RowValues;
   /**
@@ -745,6 +751,28 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   setPendingVersionBytes(bytes: number): void {
     this.versions.pendingBytesLimit = bytes;
+  }
+
+  size(): { readonly rows: number; readonly positions: number } {
+    let rows = 0;
+    let positions = 0;
+    for (const layer of this.layers.values()) {
+      for (let g = 0; g < layer.groupCount; g++) {
+        const data = layer.groupAt(g).data;
+        rows += data.length;
+        positions += data.vertexCount;
+      }
+      const delta = layer.delta.group?.data;
+      if (delta) {
+        rows += delta.length;
+        positions += delta.vertexCount;
+      }
+    }
+    for (const { data } of this.adoptions) {
+      rows += data.length;
+      positions += data.vertexCount;
+    }
+    return { rows, positions };
   }
 
   /** Tells the sides that draw in tiles the extent of rows whose drawing changed */
