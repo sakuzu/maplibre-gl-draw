@@ -434,6 +434,8 @@ export interface SlicedWrite {
 export interface Store extends StoreView, UiState {
   /** Creates a feature (see {@link DocumentStore.createFeature}) */
   createFeature(feature: Feature): boolean;
+  /** Creates features, one after the other in the order given (see the public `Store.createFeatures`) */
+  createFeatures(features: readonly Feature[]): boolean;
   /** Updates a feature (see {@link DocumentStore.updateFeature}) */
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean;
   /** Discards uncommitted intermediate states (see DocumentStore) */

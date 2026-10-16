@@ -184,6 +184,14 @@ export interface StoreView {
 export interface Store extends StoreView {
   /** Creates a feature. */
   createFeature(feature: Feature): boolean;
+  /**
+   * Creates features, one after the other in the order given, as `createFeature` creates each
+   * (all of them or none: it throws before creating any when one cannot be created). A Store
+   * that holds its features as rows has it, and writes the features of a layer to its tables at
+   * once, so that many features cost their own rows, not the rows of their layer once per feature.
+   * A Store without it is given the features one at a time.
+   */
+  createFeatures?(features: readonly Feature[]): boolean;
   /** Changes the fields given of a feature; `isIntermediate` marks an edit in progress. */
   updateFeature(
     id: string,

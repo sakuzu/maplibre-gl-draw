@@ -243,6 +243,15 @@ export class DrawStore implements Store {
   createFeature(feature: Feature): boolean {
     return this.#write(() => this.#contract.createFeature(feature));
   }
+  createFeatures(features: readonly Feature[]): boolean {
+    return this.#write(() => {
+      const contract = this.#contract;
+      if (contract.createFeatures) return contract.createFeatures(features);
+      // A Store that does not create many features at once: one at a time
+      for (const feature of features) contract.createFeature(feature);
+      return true;
+    });
+  }
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
     return this.#write(() => this.#contract.updateFeature(id, updates, options));
   }

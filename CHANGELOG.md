@@ -55,11 +55,15 @@ writing it. Its changes are listed after those of 3.0.0.
   store of your own, `diffItemOrder(lists, isGroup)` makes them from the
   lists of items before and after (`ItemListChange`).
 - The event `group.moved`.
-- Optional members of `Store`: `moveItem` and `moveItems`, and for a store
-  that holds its features as rows, `tables` and `applyRows`. The fields
-  of a store of rows (`StoreView.tables`, `Store.applyRows`,
-  `DocumentChange.rows` and `DocumentChange.opened`) are experimental, and
-  their types are in `/kasane`.
+- Optional members of `Store`: `moveItem` and `moveItems`;
+  `createFeatures`, which creates many features at once, so that a store
+  that holds its features as rows writes them in one write of its tables
+  (`features.createMany` uses it, and gives the features one at a time to
+  a store without it); and for a store that holds its features as rows,
+  `tables` and `applyRows`. The fields of a store of rows
+  (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows` and
+  `DocumentChange.opened`) are experimental, and their types are in
+  `/kasane`.
 - `GroupInput.layerId`, which must be the layer of the features.
 - `draw.debug.gpu()` (`GpuMemoryDiagnostics`): the bytes of GPU memory the
   drawing holds.

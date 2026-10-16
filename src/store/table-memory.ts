@@ -50,7 +50,7 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../feature-table/feature-tables.js';
-import { ItemWalk } from '../feature-table/item-walk.js';
+import { compareItemKeys, ItemWalk } from '../feature-table/item-walk.js';
 import { rowFeature } from '../feature-table/row-read.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
@@ -266,50 +266,100 @@ export class TableContractStore implements StoreContract {
   // ==========================================================================
 
   createFeature(feature: Feature): boolean {
+    return this.createFeatures([feature]);
+  }
+
+  /**
+   * Creates features, one after the other in the order given (see the public
+   * `Store.createFeatures`): every one is checked before any is written, the keys of their order
+   * are made from the last key of each layer and group read once, and the rows of each layer
+   * are written in one write of the tables, so that many features cost their own rows rather
+   * than the rows of their layer once per feature
+   */
+  createFeatures(features: readonly Feature[]): boolean {
     return this.#apply(() => {
-      if (this.tables.findRow(feature.id) !== undefined) {
-        throw new Error(`Feature with id "${feature.id}" already exists`);
+      const ids = new Set<string>();
+      const groups: Array<TableGroup | undefined> = [];
+      for (const feature of features) {
+        if (ids.has(feature.id) || this.tables.findRow(feature.id) !== undefined) {
+          throw new Error(`Feature with id "${feature.id}" already exists`);
+        }
+        ids.add(feature.id);
+        if (!this.#layers.has(feature.layerId)) {
+          throw new Error(`Layer with id "${feature.layerId}" not found`);
+        }
+        const group = feature.groupId ? this.#groups.get(feature.groupId) : undefined;
+        if (feature.groupId && !group) {
+          throw new Error(`Group with id "${feature.groupId}" not found`);
+        }
+        groups.push(group);
       }
-      if (!this.#layers.has(feature.layerId)) {
-        throw new Error(`Layer with id "${feature.layerId}" not found`);
-      }
-      const group = feature.groupId ? this.#groups.get(feature.groupId) : undefined;
-      if (feature.groupId && !group) {
-        throw new Error(`Group with id "${feature.groupId}" not found`);
-      }
-      const [handle] = this.writer.allocateHandles(utf8ColumnFromStrings([feature.id]));
-      // A row deleted and kept is created again at the place it had in its layer and its group
-      const kept = this.#internals.placeOf(handle);
-      const keptGroup = kept ? kept.group.data.groups[kept.row] : -1;
-      const sameLayer = kept?.layer.layerId === feature.layerId;
-      const fields = new Map<RowField, unknown>([
-        ['type', feature.type],
-        ['layerId', feature.layerId],
-        ['geometry', feature.geometry],
-        [
-          'order',
+      if (features.length === 0) return;
+      const handles = this.writer.allocateHandles(
+        utf8ColumnFromStrings(features.map((feature) => feature.id)),
+      );
+      // The last key of a layer and of a group, read before the first row created in it, then
+      // the last of the rows created in it: what each one is put after, as when they are created
+      // one at a time
+      const lastItems = new Map<string, string | null>();
+      const lastMembers = new Map<TableGroup, string | null>();
+      const lastItemOf = (layerId: string): string | null => {
+        if (!lastItems.has(layerId)) lastItems.set(layerId, this.#lastItemKey(layerId));
+        return lastItems.get(layerId) ?? null;
+      };
+      const lastMemberOf = (group: TableGroup): string | null => {
+        if (!lastMembers.has(group)) lastMembers.set(group, this.#lastMemberKey(group));
+        return lastMembers.get(group) ?? null;
+      };
+      // The rows of each layer, in the order given
+      const writes = new Map<
+        string,
+        Array<{ handle: RowHandle; fields: Map<RowField, unknown> }>
+      >();
+      features.forEach((feature, i) => {
+        const handle = handles[i];
+        const group = groups[i];
+        // A row deleted and kept is created again at the place it had in its layer and its group
+        const kept = this.#internals.placeOf(handle);
+        const keptGroup = kept ? kept.group.data.groups[kept.row] : -1;
+        const sameLayer = kept?.layer.layerId === feature.layerId;
+        const order =
           kept && sameLayer
             ? utf8String(kept.group.data.itemKeys, kept.row)
-            : keyAfter(this.#lastItemKey(feature.layerId)),
-        ],
-        ['style', feature.style ?? {}],
-        ['visible', feature.visible !== false],
-        ['locked', feature.locked === true],
-      ]);
-      if (group) {
-        const handleOfGroup = this.#internals.groups.handleOfId(group.id);
-        fields.set('groupId', group.id);
-        fields.set(
-          'member',
-          kept && sameLayer && keptGroup >= 0 && keptGroup === handleOfGroup
-            ? utf8String(kept.group.data.memberKeys, kept.row)
-            : keyAfter(this.#lastMemberKey(group)),
-        );
-      }
-      for (const [key, value] of Object.entries(feature.properties ?? {})) {
-        if (value !== undefined) fields.set(`property:${key}`, value);
-      }
-      this.#write(handle, fields);
+            : keyAfter(lastItemOf(feature.layerId));
+        const fields = new Map<RowField, unknown>([
+          ['type', feature.type],
+          ['layerId', feature.layerId],
+          ['geometry', feature.geometry],
+          ['order', order],
+          ['style', feature.style ?? {}],
+          ['visible', feature.visible !== false],
+          ['locked', feature.locked === true],
+        ]);
+        if (group) {
+          const handleOfGroup = this.#internals.groups.handleOfId(group.id);
+          const member =
+            kept && sameLayer && keptGroup >= 0 && keptGroup === handleOfGroup
+              ? utf8String(kept.group.data.memberKeys, kept.row)
+              : keyAfter(lastMemberOf(group));
+          fields.set('groupId', group.id);
+          fields.set('member', member);
+          lastMembers.set(group, laterKey(lastMemberOf(group), member));
+        } else {
+          // A row in a group is not an item of its layer: its group is
+          lastItems.set(feature.layerId, laterKey(lastItemOf(feature.layerId), order));
+        }
+        for (const [key, value] of Object.entries(feature.properties ?? {})) {
+          if (value !== undefined) fields.set(`property:${key}`, value);
+        }
+        let rows = writes.get(feature.layerId);
+        if (!rows) {
+          rows = [];
+          writes.set(feature.layerId, rows);
+        }
+        rows.push({ handle, fields });
+      });
+      for (const rows of writes.values()) this.#writeRows(rows);
     });
   }
 
@@ -1176,9 +1226,31 @@ export class TableContractStore implements StoreContract {
 
   /** Writes fields of one row */
   #write(handle: RowHandle, fields: ReadonlyMap<RowField, unknown>): void {
-    const columns = new Map<RowField, readonly unknown[]>();
-    for (const [field, value] of fields) columns.set(field, [value]);
-    this.writer.apply({ handles: Int32Array.of(handle), fields: columns });
+    this.#writeRows([{ handle, fields }]);
+  }
+
+  /**
+   * Writes fields of rows in one write: each field written of any of them, in the order the rows
+   * first give it, with nothing (undefined) for a row that does not give it
+   */
+  #writeRows(
+    rows: ReadonlyArray<{ handle: RowHandle; fields: ReadonlyMap<RowField, unknown> }>,
+  ): void {
+    const columns = new Map<RowField, unknown[]>();
+    rows.forEach(({ fields }, i) => {
+      for (const [field, value] of fields) {
+        let values = columns.get(field);
+        if (!values) {
+          values = new Array<unknown>(rows.length).fill(undefined);
+          columns.set(field, values);
+        }
+        values[i] = value;
+      }
+    });
+    this.writer.apply({
+      handles: Int32Array.from(rows, (row) => row.handle),
+      fields: columns,
+    });
   }
 
   /**
@@ -1513,6 +1585,11 @@ function reconcile(
     };
   }
   return out;
+}
+
+/** The later of a key of the order and the last one before it (null: none), as items are ordered */
+function laterKey(last: string | null, key: string): string {
+  return last !== null && compareItemKeys([last, ''], [key, '']) > 0 ? last : key;
 }
 
 /** A layer given to the Store, as a layer held as rows (the items it lists are not kept) */
