@@ -38,7 +38,7 @@ export const TABANE_GROUP_ROWS = 1000;
 /** The most coordinates of a group the writer makes when not told (a larger row is alone) */
 export const TABANE_GROUP_VERTICES = 40_000;
 /** The most bytes of the groups of a block the writer makes when not told */
-export const TABANE_BLOCK_BYTES = 8 << 20;
+export const TABANE_BLOCK_BYTES = 4 << 20;
 
 /**
  * What a block is written from: a run of rows of one parent
