@@ -41,7 +41,8 @@ const KASANE_CATEGORIES = [
   'The order of the rows',
   'Features selected in bulk and dragged',
   'Pictures of points drawn with the rows',
-  'Build blocks of rows in a Worker',
+  'Build row blocks in a Worker',
+  'Rows written as blocks named by their content, and their manifests (Tabane)',
 ];
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */
