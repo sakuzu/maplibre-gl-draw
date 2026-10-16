@@ -287,7 +287,16 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
         ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
         : tolerance;
-    const reach = Math.max(tolerance, maxMarkerReach(tables, deps) * degreesPerPixel);
+    // A type that registered an extra reach (an icon around a point) is looked for as far, its
+    // pixels measured as the features are (from the tolerance of the click)
+    const extraReach = hitTestService.maxCandidateReachPx?.() ?? 0;
+    const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
+    const pixel = clickPx > 0 ? tolerance / clickPx : degreesPerPixel;
+    const reach = Math.max(
+      tolerance,
+      maxMarkerReach(tables, deps) * degreesPerPixel,
+      tolerance + extraReach * pixel,
+    );
     const hidden = store.listHidden();
     for (const coordinate of copies) {
       const hit = hitTestLayerTable(tables, table, {
@@ -445,11 +454,12 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
 }
 
 /** The reach of the largest marker among the styles of the rows (screen px), by table */
-const MARKER_REACH = new WeakMap<FeatureTablesInternals, { styles: number; reach: number }>();
+const MARKER_REACH = new WeakMap<FeatureTablesInternals, { revision: number; reach: number }>();
 
 /**
  * The reach of the largest marker of the points of the rows (screen px): the largest reach of
- * the styles of the rows, kept until a style is added
+ * the styles the table holds (a number taken back holds none), kept until a number is given to a
+ * style again
  */
 function maxMarkerReach(
   tables: FeatureTablesInternals,
@@ -457,13 +467,14 @@ function maxMarkerReach(
 ): number {
   const reachOf = deps.pointMarkerReachPx;
   if (!reachOf) return 0;
+  const styles = tables.styles;
   const known = MARKER_REACH.get(tables);
-  if (known && known.styles === tables.styles.size) return known.reach;
+  if (known && known.revision === styles.revision) return known.reach;
   let reach = 0;
-  for (let id = 0; id < tables.styles.size; id++) {
-    reach = Math.max(reach, reachOf(tables.styles.get(id)));
+  for (let id = 0; id < styles.capacity; id++) {
+    if (styles.has(id)) reach = Math.max(reach, reachOf(styles.get(id)));
   }
-  MARKER_REACH.set(tables, { styles: tables.styles.size, reach });
+  MARKER_REACH.set(tables, { revision: styles.revision, reach });
   return reach;
 }
 

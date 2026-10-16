@@ -48,6 +48,7 @@ import type {
   RowValues,
   StoreChange,
 } from '../shared/types/model.js';
+import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
@@ -85,6 +86,7 @@ import {
 } from './item-order.js';
 import { ItemWalk } from './item-walk.js';
 import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
+import { RowBoxIndex } from './row-box-index.js';
 import {
   type RowReadContext,
   rowFeature,
@@ -414,6 +416,31 @@ export interface FeatureTablesInternals {
   rowGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | undefined;
   /** Where the row of a handle is read (undefined for a handle of no row) */
   placeOf(handle: RowHandle): RowPlace | undefined;
+  /**
+   * The rows of a layer whose boxes meet a box, in the order of the layer: the rows a click there
+   * may hit. Every row of the tables is in one spatial index by the box it covers as it is drawn
+   * (`row-box-index.ts`): the box of its positions, the box the calculation of its type gives
+   * (`setRowBoxCalculator`), or for a row held, the box of its feature
+   *
+   * @param visit Receives each row, in order, with the group it is read from
+   */
+  searchRowBoxes(
+    table: LayerTable,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    visit: (group: RowGroup, row: number) => void,
+  ): void;
+  /**
+   * Sets how the box of the rows of a type is worked out from their features (the type of an
+   * extension that covers more than its positions); undefined puts it back to its positions
+   */
+  setRowBoxCalculator(type: string, calculator: RowBoxCalculator | undefined): void;
+  /** Sets the size of the tiles the boxes of the rows are worked out at (an Image, a calculation) */
+  setRowBoxTileSize(tileSize: number): void;
+  /** The rows in the index of the boxes, and the bytes it holds about */
+  rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
   /** Whether row groups given to `adopt` are still waiting to be taken in */
@@ -646,6 +673,13 @@ interface Creation {
   reading: { readonly group: RowGroup; readonly rows: ReadonlyMap<RowHandle, number> } | null;
 }
 
+/**
+ * How the box of a row of a type is worked out from its feature
+ *
+ * @internal
+ */
+export type RowBoxCalculator = (feature: Feature, tileSize: number) => BoundingBox;
+
 /** A row held as a feature */
 interface HeldRow {
   /** The feature given for it */
@@ -777,6 +811,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly coordinates: CoordinateSystem;
   /** The dimensions raised of the layers that hold no rows yet (`raiseDimensions`) */
   private readonly raisedDims = new Map<string, CoordinateDimensions>();
+  /** The boxes of every row, in one spatial index (the rows a click may hit) */
+  private readonly rowBoxes: RowBoxIndex;
+  /** How the boxes of the rows of some types are worked out from their features */
+  private readonly rowBoxCalculators = new Map<string, RowBoxCalculator>();
+  private rowBoxTileSize = 512;
 
   constructor(options: FeatureTablesInternalOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -797,6 +836,78 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
     this.moveHeldByStateFrom = options.moveOpenedByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
+    this.rowBoxes = new RowBoxIndex({
+      boxOf: (handle, out) => this.rowBoxOf(handle, out),
+      forEachRow: (visit) => {
+        for (const layer of this.layerList) {
+          for (const handle of layer.rowOrder().handles) visit(handle);
+        }
+      },
+    });
+  }
+
+  /**
+   * The box of a row as it is drawn now, and the number of its layer (null for no row): the box of
+   * the feature of a row held, the box the calculation of its type gives (an Image, the type of an
+   * extension), or the box of its positions
+   */
+  private rowBoxOf(handle: RowHandle, out: Float64Array): number | null {
+    const place = this.placeOf(handle);
+    if (!place) return null;
+    const { layer, group, row } = place;
+    if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return null;
+    const held = this.heldRows.get(handle);
+    const type = held ? held.feature.type : rowType(group.data, row);
+    const calculator = this.rowBoxCalculators.get(type);
+    if (held || calculator || type === 'Image') {
+      const feature = held?.feature ?? rowFeature(this.readContext, layer.layerId, group, row);
+      const box = calculator
+        ? calculator(feature, this.rowBoxTileSize)
+        : getBoundingBox(feature, this.rowBoxTileSize);
+      if (![box.minX, box.minY, box.maxX, box.maxY].every(Number.isFinite)) return null;
+      out[0] = box.minX;
+      out[1] = box.minY;
+      out[2] = box.maxX;
+      out[3] = box.maxY;
+      return layer.serial;
+    }
+    return layer.rowBox(group, row, out) ? layer.serial : null;
+  }
+
+  searchRowBoxes(
+    table: LayerTable,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+    visit: (group: RowGroup, row: number) => void,
+  ): void {
+    const found: { group: RowGroup; row: number; at: [number, number, number] }[] = [];
+    for (const handle of this.rowBoxes.search(table.serial, minX, minY, maxX, maxY)) {
+      const place = this.placeOf(handle);
+      if (!place || place.layer !== table) continue;
+      const at = table.orderPositionOf(place.group, place.row);
+      if (at) found.push({ group: place.group, row: place.row, at });
+    }
+    found.sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2]);
+    for (const { group, row } of found) visit(group, row);
+  }
+
+  setRowBoxCalculator(type: string, calculator: RowBoxCalculator | undefined): void {
+    if (calculator) this.rowBoxCalculators.set(type, calculator);
+    else this.rowBoxCalculators.delete(type);
+    this.rowBoxes.markAll();
+  }
+
+  setRowBoxTileSize(tileSize: number): void {
+    if (tileSize === this.rowBoxTileSize) return;
+    this.rowBoxTileSize = tileSize;
+    this.rowBoxes.markAll();
+  }
+
+  rowBoxIndexSize(): { readonly rows: number; readonly bytes: number } {
+    this.rowBoxes.search(-1, 0, 0, 0, 0);
+    return { rows: this.rowBoxes.size, bytes: this.rowBoxes.bytes };
   }
 
   /** What the versions read and write of the tables */
@@ -902,6 +1013,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   clear(): void {
+    this.rowBoxes.markAll();
     // The rows opened as features are let go of, without writing them (their rows go)
     const removed: string[] = [];
     for (const [handle, held] of this.heldRows) {
@@ -1083,6 +1195,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       );
       const table = layer;
       layer.setPendingSource(() => this.pendingGroups(table));
+      layer.onRowBox = (handle) => this.rowBoxes.markOne(handle);
       layer.setDrawnOnly((handle) => this.drawnOnlyRows.has(handle));
       this.layers.set(layerId, layer);
       this.layerList.push(layer);
@@ -1465,6 +1578,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private rowsToDelta(layer: LayerTable, data: RowBlockData): void {
     this.numberStyles(data);
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
+    this.rowBoxes.mark(data.handles);
     const group = createRowGroup(-1, data);
     const rows: DeltaInput[] = [];
     const seen = new Set<RowHandle>();
@@ -2251,6 +2365,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const handle = this.ids.handleOf(id);
     const held = handle >= 0 ? this.heldRows.get(handle) : undefined;
     if (!held) throw new DrawError('invalid-state', `FeatureTables: the row "${id}" is not opened`);
+    this.rowBoxes.markOne(handle);
     if (feature.id !== id)
       throw new DrawError(
         'invalid-input',
@@ -2443,6 +2558,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private holdRow(handle: RowHandle): Feature | null {
     const place = this.placeOf(handle);
     if (!place) return null;
+    this.rowBoxes.markOne(handle);
     const feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
     this.heldRows.set(handle, {
       feature,
@@ -2471,6 +2587,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private releaseRow(handle: RowHandle): string | undefined {
     const held = this.heldRows.get(handle);
     if (!held) return undefined;
+    this.rowBoxes.markOne(handle);
     this.heldRows.delete(handle);
     if (held.intermediate.size > 0) {
       this.writeHeldRow(handle, featureFields(this.heldRowValues(held), held.committed));
@@ -2486,6 +2603,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /** Takes a row out of every owner, without writing it (it was deleted) */
   private forgetHeld(handle: RowHandle): void {
+    this.rowBoxes.markOne(handle);
     const held = this.heldRows.get(handle);
     if (held) this.stopMove(handle, held);
     this.heldRows.delete(handle);
@@ -2602,6 +2720,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    */
   private applyPatch(patch: RowValues, changes: Map<string, LayerChangeDraft>): void {
     const { handles, fields, deleted } = patch;
+    this.rowBoxes.mark(handles);
     const n = handles.length;
     const checked = this.checkRows(patch);
     const groupHandles = checked.groupHandles;
@@ -3591,6 +3710,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     const group = createRowGroup(this.nextGroup++, data);
     layer.insert(group);
+    this.rowBoxes.mark(data.handles);
     // The rows that use each style are counted (a style no row uses is given again)
     for (let r = 0; r < data.length; r++) this.styles.retain(data.styles[r]);
     this.rowGroups.set(group.handle, { layer, group });

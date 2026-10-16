@@ -20,7 +20,9 @@
  *   being dragged is the shape that is indexed
  *
  * A Store that holds its features as rows has the features of the rows held (selected, edited)
- * only: they come and go with `held`, and the rows themselves are found in the tables.
+ * only: they come and go with `held`, and the rows themselves are found in the index of the
+ * boxes of every row of the tables, which takes the same calculations of the extents of the
+ * types (`setCustomBoundingBoxCalculator`) and the same tile size.
  *
  * The extent of a type registered with a custom bounding box calculator can change for
  * reasons outside the Store (a font that arrives later, for example). Its owner announces
@@ -66,6 +68,7 @@ export class StoreSpatialIndex implements SpatialIndex {
    */
   setTileSize(tileSize: number): void {
     this.#index.setTileSize(tileSize);
+    featureTablesInternals(this.#store.tables)?.setRowBoxTileSize(tileSize);
     this.#rebuild();
   }
 
@@ -81,9 +84,13 @@ export class StoreSpatialIndex implements SpatialIndex {
     calculator: CustomBoundingBoxCalculator,
   ): () => void {
     const cancel = this.#index.setCustomBoundingBoxCalculator(type, calculator);
+    // The rows of the type are found by the same extent
+    const tables = featureTablesInternals(this.#store.tables);
+    tables?.setRowBoxCalculator(type, calculator);
     this.invalidateType(type);
     return () => {
       cancel();
+      tables?.setRowBoxCalculator(type, undefined);
       this.invalidateType(type);
     };
   }

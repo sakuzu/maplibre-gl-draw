@@ -188,6 +188,11 @@ export interface HitTestService {
    *   registration of the same type)
    */
   registerCandidateReach?(type: string, reachPx: number | (() => number)): () => void;
+  /**
+   * The largest of the extra reaches registered (in CSS pixels): how much farther than the
+   * tolerance the candidates are looked for (the rows held as columns are looked for as far)
+   */
+  maxCandidateReachPx?(): number;
 }
 
 /**
@@ -362,7 +367,7 @@ export class HitTestServiceImpl implements HitTestService {
    * Widening the candidate set is cheap (the precise test of the second stage drops the
    * extras), so the search is not split per type and is done once with the single maximum.
    */
-  private maxCandidateReachPx(): number {
+  maxCandidateReachPx(): number {
     let max = 0;
     for (const reach of this.candidateReach.values()) {
       const value = typeof reach === 'function' ? reach() : reach;

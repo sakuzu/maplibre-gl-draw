@@ -312,6 +312,9 @@ export class LayerTable {
   private extras: ReadExtras | null = null;
   private extrasKey = '';
 
+  /** Told of the rows whose boxes were written again in place (the index of the boxes of the rows) */
+  onRowBox: ((handle: number) => void) | null = null;
+
   /**
    * The dimensions of the coordinates of the rows of the layer. The groups built since it was
    * last raised have them; a group of before keeps its own (fewer) until its next version
@@ -1085,6 +1088,7 @@ export class LayerTable {
    */
   moveRow(group: RowGroup, row: number, bounds: Float64Array): void {
     const handle = group.data.handles[row];
+    this.onRowBox?.(handle);
     group.unindexed ??= new Uint8Array(group.data.length);
     if (group.unindexed[row] === 0) group.unindexedCount++;
     group.unindexed[row] = 1;
@@ -1195,6 +1199,38 @@ export class LayerTable {
       flush(g, group.data.length);
     }
     flush(Number.MAX_SAFE_INTEGER, 0);
+  }
+
+  /**
+   * The box of the positions of a row as it is now (its bbox is written again with every write
+   * of its geometry in place): written into `out` as minX, minY, maxX, maxY
+   *
+   * @returns false for a row without positions
+   */
+  rowBox(group: RowGroup, row: number, out: Float64Array): boolean {
+    const b = group.data.rowBounds;
+    const at = row * 4;
+    if (Number.isNaN(b[at])) return false;
+    out[0] = b[at];
+    out[1] = b[at + 1];
+    out[2] = b[at + 2];
+    out[3] = b[at + 3];
+    return true;
+  }
+
+  /**
+   * Where a row read in the layer is drawn, to sort rows into the order of the layer: the place
+   * of its group, its slot (`2r + 1` for row `r` of a group of the order; `2c` for a row of the
+   * delta or of the new rows, drawn just before row `c` of that group) and the order of the rows
+   * at the same slot. Null for a row not read in the layer
+   */
+  orderPositionOf(group: RowGroup, row: number): [number, number, number] | null {
+    const g = this.indexOf.get(group.handle);
+    if (g !== undefined && this.groups.get(group.handle) === group) return [g, 2 * row + 1, 0];
+    const extras = this.readExtras();
+    const k = extras.entries.get(group)?.[row] ?? -1;
+    if (k < 0) return null;
+    return [extras.places.groups[k], 2 * extras.places.cuts[k], k];
   }
 
   /** Takes the rows of a group out of the index of the moved rows (the group left the layer) */

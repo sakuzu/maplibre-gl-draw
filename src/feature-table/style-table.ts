@@ -47,6 +47,13 @@ export class StyleTable {
   private epochs = new Uint32Array(16);
   /** The numbers taken back, to be given again */
   private readonly free: number[] = [];
+  /** The number of times a number was given to a style (new or given again) */
+  private given = 0;
+
+  /** Changes every time a number is given to a style: what is kept by the styles held is read again */
+  get revision(): number {
+    return this.given;
+  }
 
   /** The number of distinct styles held */
   get size(): number {
@@ -91,6 +98,7 @@ export class StyleTable {
     } else {
       this.epochs[id]++;
     }
+    this.given++;
     this.entries[id] = bytes.slice(start, end);
     this.hashes[id] = hash;
     this.styles[id] = undefined;

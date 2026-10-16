@@ -4,9 +4,10 @@
 /**
  * The hit testing of the rows of a layer held as columns
  *
- * The candidates are the rows whose bbox meets the box of the click (the spatial index of each
- * row group and of the delta of the layer, the index of the rows moved since their group was
- * built, and the new rows not taken in yet), tested from the front of the order. A candidate is
+ * The candidates are the rows whose boxes meet the box of the click, from the one spatial index of
+ * the boxes of every row (`FeatureTablesInternals.searchRowBoxes`: the box of the positions of a
+ * row, the box the calculation of its type gives, or the box of the feature of a row held),
+ * tested from the front of the order. A candidate is
  * tested on its column, read in place as a shape, by the same test as a feature of its type: no
  * feature is made. A type whose test reads a feature (an image, the type of an extension, a
  * shape cut on the globe) is tested on a feature made of the row for the test and dropped. A
@@ -82,7 +83,7 @@ export function hitTestLayerTable(
   const [x, y] = input.coordinate;
   const reach = input.reach;
   const candidates: Array<{ group: RowGroup; row: number }> = [];
-  table.searchInOrder(x - reach, y - reach, x + reach, y + reach, (group, row) => {
+  internals.searchRowBoxes(table, x - reach, y - reach, x + reach, y + reach, (group, row) => {
     if ((group.state[row] & STATE_UNHIT_MASK) !== 0) return;
     if (input.skip?.(group, row)) return;
     candidates.push({ group, row });
