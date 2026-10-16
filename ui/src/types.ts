@@ -393,10 +393,13 @@ export interface LeftSettings {
 export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
   readonly layers: Pick<
     Draw['layers'],
-    'get' | 'getOrder' | 'reorder' | 'create' | 'update' | 'setActive'
+    'get' | 'getOrder' | 'listItems' | 'reorder' | 'create' | 'update' | 'setActive'
   >;
-  readonly groups: Pick<Draw['groups'], 'get' | 'update' | 'move'>;
-  readonly features: Pick<Draw['features'], 'get' | 'update' | 'move' | 'getAppliedStyle'>;
+  readonly groups: Pick<Draw['groups'], 'get' | 'listMembers' | 'update' | 'move'>;
+  readonly features: Pick<
+    Draw['features'],
+    'get' | 'count' | 'update' | 'move' | 'getAppliedStyle'
+  >;
   readonly selection: Pick<Draw['selection'], 'get' | 'set' | 'clear' | 'group'>;
   readonly hidden: Pick<Draw['hidden'], 'has' | 'remove'>;
   readonly datasets: Pick<Draw['datasets'], 'get' | 'list' | 'move'>;
