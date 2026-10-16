@@ -14,10 +14,11 @@
  *   their bits
  * - The time to read the groups as the Worker of a page does: decompress a frame (fzstd, as in a
  *   browser), read the group, make it a block of rows of the tables. Then, for the same rows, the
- *   way before: rows made objects again and given to the builder of the blocks of rows
+ *   way before: rows made objects again and given to the builder of the blocks of rows, and the
+ *   files of the trial of bench/stage0 when they were made (`node bench/stage0/make-blocks.ts`)
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
 import {
@@ -36,6 +37,7 @@ import {
 import { decompress } from 'fzstd';
 import type { Feature } from 'geojson';
 import { describe, it } from 'vitest';
+import { decodeFile } from '../stage0/decode-work.ts';
 
 const MEASURE = process.env.TABANE_MEASURE === '1';
 const DATA = join(import.meta.dirname, '..', 'data');
@@ -43,8 +45,11 @@ const FILES = (process.env.TABANE_FILES ?? 'fgd-buildings-tokyo-100k').split(','
 const ORIGIN = '1AAAAAAAAAAAA';
 
 const round = (v: number, digits = 2) => Math.round(v * 10 ** digits) / 10 ** digits;
-const nodeZstd = { compress: (raw: Uint8Array) => new Uint8Array(zstdCompressSync(raw)) };
-const fzstd = { decompress: (stored: Uint8Array) => decompress(stored) };
+/** Compressed with Node's zstd, decompressed with fzstd (as in a browser) */
+const zstd = {
+  compress: (raw: Uint8Array) => new Uint8Array(zstdCompressSync(raw)),
+  decompress: (stored: Uint8Array) => decompress(stored),
+};
 
 /** Whether two values are the same, numbers by their bits */
 function same(a: unknown, b: unknown): boolean {
@@ -88,7 +93,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         const blocks = writeTabaneBlocks({ parent: 'layer', head: 'V', rows, fills });
         const writeMs = performance.now() - t0;
         const t1 = performance.now();
-        const files = blocks.map((b) => packTabaneBlock(b, nodeZstd));
+        const files = blocks.map((b) => packTabaneBlock(b, zstd));
         const zstdMs = performance.now() - t1;
         let content = 0;
         let stored = 0;
@@ -110,7 +115,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         let differ = 0;
         for (const f of files) {
           for (const frame of tabaneFrames(f).slice(1)) {
-            const group = readTabaneGroup(tabaneFrameContent(frame, fzstd));
+            const group = readTabaneGroup(tabaneFrameContent(frame, zstd));
             for (const back of tabaneRows(group)) {
               const row = rows[at++];
               if (
@@ -129,10 +134,10 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         const frames = files.flatMap((f) => tabaneFrames(f).slice(1));
         const pass = () => {
           const t = { unzip: 0, read: 0, block: 0, groups: 0 };
-          let longest = 0;
+          const each: number[] = [];
           for (const frame of frames) {
             const a = performance.now();
-            const bytes = tabaneFrameContent(frame, fzstd);
+            const bytes = tabaneFrameContent(frame, zstd);
             const b = performance.now();
             const group = readTabaneGroup(bytes);
             const c = performance.now();
@@ -142,9 +147,11 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
             t.read += c - b;
             t.block += d - c;
             t.groups++;
-            longest = Math.max(longest, d - a);
+            each.push(d - a);
           }
-          return { ...t, longest };
+          each.sort((x, y) => x - y);
+          const at = (q: number) => each[Math.min(each.length - 1, Math.floor(q * each.length))];
+          return { ...t, p50: at(0.5), p95: at(0.95), longest: each[each.length - 1] };
         };
         pass();
         const t = pass();
@@ -154,6 +161,8 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
           read: per1000(t.read),
           block: per1000(t.block),
           all: per1000(t.unzip + t.read + t.block),
+          groupP50: round(t.p50),
+          groupP95: round(t.p95),
           longestGroup: round(t.longest),
           allRowsMs: Math.round(t.unzip + t.read + t.block),
         };
@@ -182,6 +191,33 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
       };
       builderPass();
       result.builderPer1000Ms = round((builderPass() / rows.length) * 1000);
+
+      // The trial before (bench/stage0), on its files of the same rows when they were made
+      const stage0 = join(DATA, 'stage0', file);
+      if (existsSync(stage0)) {
+        const head = JSON.parse(readFileSync(join(stage0, 'head.ndjson'), 'utf8')) as {
+          manifest: string;
+        };
+        const manifest = JSON.parse(readFileSync(join(stage0, head.manifest), 'utf8')) as {
+          files: { name: string }[];
+        };
+        const stageFiles = manifest.files.map(
+          (f) => new Uint8Array(readFileSync(join(stage0, f.name))),
+        );
+        decodeFile(stageFiles[0]);
+        const sum = { decode: 0, blocks: 0, rows: 0 };
+        for (const bytes of stageFiles) {
+          const d = decodeFile(bytes);
+          sum.decode += d.times.unzipMs + d.times.decodeMs;
+          sum.blocks += d.times.rowsMs + d.times.addMs + d.times.finishMs;
+          sum.rows += d.rows;
+        }
+        result.stage0Per1000Ms = {
+          decode: round((sum.decode / sum.rows) * 1000),
+          blocks: round((sum.blocks / sum.rows) * 1000),
+          all: round(((sum.decode + sum.blocks) / sum.rows) * 1000),
+        };
+      }
       console.log(JSON.stringify(result, null, 1));
     }, 600_000);
   }
