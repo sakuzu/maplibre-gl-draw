@@ -5,6 +5,7 @@
  * `draw.features`: the features of the document
  */
 
+import type { BBox } from '../geometry/types.js';
 import type {
   Feature,
   FeatureFilter,
@@ -74,6 +75,23 @@ export interface FeaturesCollection {
    * @param filter - Counts only the features that match every key given
    */
   count(filter?: FeatureFilter): number;
+  /**
+   * The extent of the features, without making them, as `[west, south, east, north]` in
+   * degrees: the extent the instance draws them in (the circle of a Circle, the image of an
+   * Image at the zoom it was placed at). Over a Store that holds its features as rows, it is
+   * read from the boxes of the rows the tables keep. Crossing the ±180 degree meridian is not
+   * handled.
+   *
+   * @param filter - Reads only the features that match every key given
+   * @returns The extent, or `null` when no feature matches (or none has a position)
+   *
+   * @example Fitting the map to a layer
+   * ```ts
+   * const box = draw.features.bbox({ layerId: 'buildings' });
+   * if (box) map.fitBounds(box, { padding: 40 });
+   * ```
+   */
+  bbox(filter?: FeatureFilter): BBox | null;
   /** Whether a feature with this ID exists. */
   has(id: string): boolean;
   /**

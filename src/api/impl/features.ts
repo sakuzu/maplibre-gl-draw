@@ -35,6 +35,7 @@ import type {
   MoveTarget,
 } from '../model.js';
 import type { RuntimeOptions } from '../options.js';
+import { featuresExtent, rowsExtent } from './feature-extent.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
 import { runSplit } from './geometry/split.js';
@@ -214,6 +215,12 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       return store.listFeatures().filter((feature) => keep(feature, checks)).length;
     },
     has: (id) => store.getFeature(id) !== undefined,
+    bbox(filter) {
+      if (store.tables)
+        return rowsExtent(store, Object.fromEntries(checkedEntries(filter)) as RowFilter);
+      const checks = filterOf(filter);
+      return featuresExtent(store.listFeatures().filter((feature) => keep(feature, checks)));
+    },
 
     create(input) {
       const feature = prepareFeature(deps, input, new Set());

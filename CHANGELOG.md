@@ -39,7 +39,9 @@ writing it. Its changes are listed after those of 3.0.0.
   last (`FeatureListOptions`); `layers.listItems(id, { offset, limit })`,
   `layers.countItems(id)` and `groups.listMembers(id, { offset, limit })`
   read the items of a layer and the features of a group by position
-  (`ItemListOptions`), in every kind of layer.
+  (`ItemListOptions`), in every kind of layer; `features.bbox(filter)`
+  reads the extent of the features that match, as `features.count`
+  counts them, without making them (`null` when none matches).
 - What an undo over a store of rows writes back:
   `DocumentChange.previousValues` (`FeatureValues`) and
   `DocumentChange.restoreToken` (`RestoreToken`), written back with
