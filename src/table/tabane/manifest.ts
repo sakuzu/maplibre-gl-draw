@@ -88,20 +88,21 @@ export async function tabaneManifestEntryOf(block: TabaneBlock): Promise<TabaneM
   let parent = '';
   let firstKey = '';
   let lastKey = '';
-  layout.groups.forEach((g, k) => {
-    const group = readRowBlockData(content, g.start, g.end);
-    for (const [origin, first, count] of group.ids) {
+  layout.rowBlocks.forEach((g, k) => {
+    const rowBlock = readRowBlockData(content, g.start, g.end);
+    for (const [origin, first, count] of rowBlock.ids) {
       const last = ids[ids.length - 1];
       if (last && last[0] === origin && last[1] + last[2] === first) last[2] += count;
       else ids.push([origin, first, count]);
     }
     if (k === 0) {
-      parent = group.place.parent;
-      firstKey = group.place.head + tabaneRowSuffixOf(group.place.firstIndex);
+      parent = rowBlock.place.parent;
+      firstKey = rowBlock.place.head + tabaneRowSuffixOf(rowBlock.place.firstIndex);
     }
-    lastKey = group.place.head + tabaneRowSuffixOf(group.place.firstIndex + group.length - 1);
-    const stride = strideOf(group.dimensions);
-    for (const child of group.geometry.children) {
+    lastKey =
+      rowBlock.place.head + tabaneRowSuffixOf(rowBlock.place.firstIndex + rowBlock.length - 1);
+    const stride = strideOf(rowBlock.dimensions);
+    for (const child of rowBlock.geometry.children) {
       const c = child.coords;
       if (c.length === 0) continue;
       box ??= new Array(stride).fill(null);

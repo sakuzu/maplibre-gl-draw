@@ -22,7 +22,7 @@ import {
   type TabaneBlockInput,
   writeTabaneBlocks,
 } from './block.js';
-import { type TabaneCompression, tabaneNameOf, unpackTabaneFile } from './file.js';
+import { type TabaneCompressor, tabaneNameOf, unpackTabaneFile } from './file.js';
 import { formatTabaneId } from './ids.js';
 import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
 import { tabaneRowsOf } from './rows.js';
@@ -31,7 +31,7 @@ import type { TabaneRow } from './types.js';
 const DIR = join(import.meta.dirname, 'vectors');
 const WRITE = process.env.TABANE_VECTORS_WRITE === '1';
 
-const zstd: TabaneCompression = {
+const zstd: TabaneCompressor = {
   compress: (raw) => new Uint8Array(zstdCompressSync(raw)),
   decompress: (stored) => new Uint8Array(zstdDecompressSync(stored)),
 };
@@ -290,7 +290,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     name: 'revisions',
-    description: 'What made the rows and the revisions of their cells, from three origins',
+    description: 'What created the rows and the revisions of their cells, from three origins',
     input: {
       parent: 'L',
       head: 'k',
@@ -303,7 +303,7 @@ const SCENARIOS: Scenario[] = [
           type: 'Point',
           geometry: { type: 'Point', coordinates: [i, i] },
           properties: i % 2 === 0 ? { name: `n${i}` } : {},
-          made: (i < 4 ? [1, A, 1] : [9, B, 3]) as [number, string, number],
+          created: (i < 4 ? [1, A, 1] : [9, B, 3]) as [number, string, number],
           ...(i === 1 && {
             revisions: { 'p.name': [12, B, 4], geometry: [13, '0000000000002', 1] },
           }),
@@ -315,7 +315,7 @@ const SCENARIOS: Scenario[] = [
   {
     name: 'blocks',
     description:
-      'A run cut into groups of 4 rows and into blocks of at most 600 bytes of groups, and the manifest of the blocks',
+      'A run cut into row blocks of 4 rows and into blocks of at most 600 bytes of row blocks, and the manifest of the blocks',
     input: {
       parent: 'L',
       head: 'V',

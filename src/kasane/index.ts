@@ -33,6 +33,20 @@
  * The functions used most are {@link createTableStore}, {@link createRowBlockBuilder} and
  * {@link FeatureTables}.
  *
+ * Rows can also be kept and handed out as Tabane blocks: files named by the SHA-256 of their
+ * content, each a run of rows of one parent cut into row blocks, listed by a manifest. Use them to
+ * save the rows of a document, or to send them to another client, without making features of
+ * them: a block read is row blocks the tables take as they are ({@link rowBlockOfTabane}).
+ *
+ * ```ts
+ * const block = writeTabaneBlock({ parent: 'buildings', head: 'V', rows });
+ * const name = await tabaneNameOf(block.content); // the name to keep the file under
+ * const file = packTabaneBlock(block, compressor); // its parts compressed with zstd
+ *
+ * // where it is read
+ * const rowBlocks = readTabaneBlockFile(file, compressor).map((b) => rowBlockOfTabane(b));
+ * ```
+ *
  * @module kasane
  * @experimental
  */
@@ -111,7 +125,7 @@ export type { Utf8Column } from '../table/utf8-column.js';
 export type {
   TabaneBlock,
   TabaneBlockInput,
-  TabaneCompression,
+  TabaneCompressor,
   TabaneFill,
   TabaneFilePart,
   TabaneRowBlock,

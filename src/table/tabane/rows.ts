@@ -110,14 +110,14 @@ function widen(
  *
  * @internal
  */
-export function idColumn(group: TabaneRowBlock): Utf8Column {
-  const n = group.length;
+export function idColumn(rowBlock: TabaneRowBlock): Utf8Column {
+  const n = rowBlock.length;
   const offsets = new Int32Array(n + 1);
   // 13 digits, `-`, at most 11 digits of a number
   const bytes = new Uint8Array(n * 25);
   let at = 0;
   let row = 0;
-  for (const [origin, first, count] of group.ids) {
+  for (const [origin, first, count] of rowBlock.ids) {
     const prefix = encoder.encode(`${origin}-`);
     for (let k = 0; k < count; k++) {
       bytes.set(prefix, at);
@@ -135,24 +135,24 @@ export function idColumn(group: TabaneRowBlock): Utf8Column {
  *
  * @internal
  */
-export function keyColumn(group: TabaneRowBlock): Utf8Column {
-  const n = group.length;
-  const head = encoder.encode(group.place.head);
+export function keyColumn(rowBlock: TabaneRowBlock): Utf8Column {
+  const n = rowBlock.length;
+  const head = encoder.encode(rowBlock.place.head);
   const offsets = new Int32Array(n + 1);
   const bytes = new Uint8Array(n * (head.length + 11));
   let at = 0;
   for (let r = 0; r < n; r++) {
     bytes.set(head, at);
     at += head.length;
-    at += writeRowSuffix(group.place.firstIndex + r, bytes, at);
+    at += writeRowSuffix(rowBlock.place.firstIndex + r, bytes, at);
     offsets[r + 1] = at;
   }
   return { offsets, bytes: bytes.slice(0, at) };
 }
 
 /** Whether a row of a row block is deleted */
-function isDeleted(group: TabaneRowBlockData, row: number): boolean {
-  const d = group.deleted;
+function isDeleted(rowBlock: TabaneRowBlockData, row: number): boolean {
+  const d = rowBlock.deleted;
   return d !== null && (d[row >> 3] & (1 << (row & 7))) !== 0;
 }
 
@@ -165,10 +165,10 @@ function isDeleted(group: TabaneRowBlockData, row: number): boolean {
  * @experimental
  */
 export function rowBlockOfTabane(
-  group: TabaneRowBlock,
+  rowBlock: TabaneRowBlock,
   options: RowBlockOfTabaneOptions = {},
 ): RowBlock {
-  return rowBlockDataOfTabane(group as TabaneRowBlockData, options);
+  return rowBlockDataOfTabane(rowBlock as TabaneRowBlockData, options);
 }
 
 /**
@@ -177,33 +177,33 @@ export function rowBlockOfTabane(
  * @internal
  */
 export function rowBlockDataOfTabane(
-  group: TabaneRowBlockData,
+  rowBlock: TabaneRowBlockData,
   options: RowBlockOfTabaneOptions = {},
 ): RowBlockData {
-  const n = group.length;
-  const dims = options.dimensions ?? group.dimensions;
+  const n = rowBlock.length;
+  const dims = options.dimensions ?? rowBlock.dimensions;
   const system = options.coordinateSystem ?? planarCoordinates;
   const rings = options.rings ?? circleRowRings;
-  const geometry = widen(group.geometry, group.dimensions, dims);
+  const geometry = widen(rowBlock.geometry, rowBlock.dimensions, dims);
   const stride = strideOf(dims);
 
-  const ids = idColumn(group);
+  const ids = idColumn(rowBlock);
   const idHashes = new Uint32Array(n);
   for (let r = 0; r < n; r++) idHashes[r] = hashUtf8(ids, r);
 
   const flags = new Uint8Array(n);
   for (let r = 0; r < n; r++)
-    flags[r] = ROW_FLAG_VISIBLE | (isDeleted(group, r) ? ROW_FLAG_DELETED : 0);
+    flags[r] = ROW_FLAG_VISIBLE | (isDeleted(rowBlock, r) ? ROW_FLAG_DELETED : 0);
 
   // The attributes a ring reads, by key
   const columnOf = new Map<string, number>();
-  group.properties.keys.forEach((key, c) => {
+  rowBlock.properties.keys.forEach((key, c) => {
     columnOf.set(key, c);
   });
-  const drawsRing = group.typeNames.map((t) => rings.draws(t));
+  const drawsRing = rowBlock.typeNames.map((t) => rings.draws(t));
 
   const rowBounds = new Float64Array(n * 4);
-  const fills = group.fills;
+  const fills = rowBlock.fills;
   const triOffsets = new Int32Array(n + 1);
   let indices = new Uint16Array(fills ? fills.indices.length : n * 8);
   let narrow = 0;
@@ -244,9 +244,9 @@ export function rowBlockDataOfTabane(
     const child = geometry.children[c];
     const at = geometry.offsets[r];
     const [first, end] = vertexRange(child, at);
-    const type = group.typeNames[group.types[r]];
-    if (child.type === 'Point' && drawsRing[group.types[r]]) {
-      const properties = group.properties;
+    const type = rowBlock.typeNames[rowBlock.types[r]];
+    if (child.type === 'Point' && drawsRing[rowBlock.types[r]]) {
+      const properties = rowBlock.properties;
       const ring = rings.ringOf(
         type,
         child.coords[first * stride],
@@ -293,16 +293,16 @@ export function rowBlockDataOfTabane(
     handles: new Int32Array(n).fill(-1),
     ids,
     idHashes,
-    types: group.types,
-    typeNames: group.typeNames,
+    types: rowBlock.types,
+    typeNames: rowBlock.typeNames,
     geometry,
-    itemKeys: keyColumn(group),
+    itemKeys: keyColumn(rowBlock),
     memberKeys: { offsets: new Int32Array(n + 1), bytes: new Uint8Array(0) },
     groups: new Int32Array(n).fill(-1),
     flags,
-    styles: group.styles,
-    styleDictionary: group.styleDictionary,
-    properties: group.properties,
+    styles: rowBlock.styles,
+    styleDictionary: rowBlock.styleDictionary,
+    properties: rowBlock.properties,
     rowBounds,
     triangles,
     index: buildPackedRTree(rowBounds, undefined, sortKeyOf(system)),
@@ -333,18 +333,18 @@ function geometryOf(child: TableGeometry, row: number, stride: number): Geometry
  * @experimental
  */
 export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
-  const group = read as TabaneRowBlockData;
-  const n = group.length;
-  const stride = strideOf(group.dimensions);
+  const rowBlock = read as TabaneRowBlockData;
+  const n = rowBlock.length;
+  const stride = strideOf(rowBlock.dimensions);
   const ids: string[] = [];
-  for (const [origin, first, count] of group.ids) {
+  for (const [origin, first, count] of rowBlock.ids) {
     for (let k = 0; k < count; k++) ids.push(formatTabaneId({ origin, number: first + k }));
   }
-  const made: TabaneRevision[] = [];
-  for (const [revision, count] of group.made ?? [])
-    for (let k = 0; k < count; k++) made.push(revision);
+  const created: TabaneRevision[] = [];
+  for (const [revision, count] of rowBlock.created ?? [])
+    for (let k = 0; k < count; k++) created.push(revision);
   const revisions: Record<string, TabaneRevision>[] = Array.from({ length: n }, () => ({}));
-  const rv = group.revisions;
+  const rv = rowBlock.revisions;
   for (let k = 0; k < rv.rows.length; k++) {
     revisions[rv.rows[k]][rv.names[rv.cells[k]]] = [
       rv.sequences[k],
@@ -354,22 +354,22 @@ export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
   }
   const out: TabaneRow[] = [];
   for (let r = 0; r < n; r++) {
-    const c = group.geometry.types[r];
-    const child = c >= 0 ? group.geometry.children[c] : null;
-    const geometry = child ? geometryOf(child, group.geometry.offsets[r], stride) : null;
-    const s = group.styles[r];
+    const c = rowBlock.geometry.types[r];
+    const child = c >= 0 ? rowBlock.geometry.children[c] : null;
+    const geometry = child ? geometryOf(child, rowBlock.geometry.offsets[r], stride) : null;
+    const s = rowBlock.styles[r];
     const style = decodeCanonicalValue(
-      group.styleDictionary.bytes,
-      group.styleDictionary.offsets[s],
-      group.styleDictionary.offsets[s + 1],
+      rowBlock.styleDictionary.bytes,
+      rowBlock.styleDictionary.offsets[s],
+      rowBlock.styleDictionary.offsets[s + 1],
     ) as Record<string, unknown>;
     const properties: Record<string, unknown> = {};
-    group.properties.keys.forEach((key, k) => {
-      const v = readValue(group.properties.columns[k], r);
+    rowBlock.properties.keys.forEach((key, k) => {
+      const v = readValue(rowBlock.properties.columns[k], r);
       if (v !== undefined) properties[key] = v;
     });
     let fill: TabaneFill | undefined;
-    const f = group.fills;
+    const f = rowBlock.fills;
     if (f && f.vertices[r] >= 0) {
       fill = {
         vertices: f.vertices[r],
@@ -378,12 +378,12 @@ export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
     }
     out.push({
       id: ids[r],
-      type: group.typeNames[group.types[r]],
+      type: rowBlock.typeNames[rowBlock.types[r]],
       geometry,
       style,
       properties,
-      ...(isDeleted(group, r) && { deleted: true }),
-      ...(group.made && { made: made[r] }),
+      ...(isDeleted(rowBlock, r) && { deleted: true }),
+      ...(rowBlock.created && { created: created[r] }),
       ...(Object.keys(revisions[r]).length > 0 && { revisions: revisions[r] }),
       ...(fill && { fill }),
     });

@@ -20,12 +20,12 @@ import {
   listTabaneFileParts,
   packTabaneFile,
   readTabaneFilePart,
-  type TabaneCompression,
+  type TabaneCompressor,
   unpackTabaneFile,
 } from './file.js';
 import { tabaneRowSuffixOf } from './ids.js';
 import { readRowBlockData } from './row-block-read.js';
-import { writeGroup } from './row-block-write.js';
+import { writeRowBlock } from './row-block-write.js';
 import type { TabaneRow, TabaneRowBlock, TabaneRowBlockData } from './types.js';
 
 /** The first bytes of the content of a block: `TBNB` */
@@ -132,7 +132,7 @@ function dimensionsOf(rows: readonly TabaneRow[]): CoordinateDimensions {
  * @returns The number of rows of each row block
  * @internal
  */
-export function cutGroups(
+export function cutRowBlocks(
   rows: readonly TabaneRow[],
   targetRows = TABANE_TARGET_ROWS,
   targetVertices = TABANE_TARGET_VERTICES,
@@ -165,12 +165,12 @@ export function writeTabaneBlock(input: TabaneBlockInput): TabaneBlock {
   const rows = input.rows;
   if (rows.length === 0) throw new DrawError('invalid-input', 'Tabane: a block of no rows');
   const dimensions = input.dimensions ?? dimensionsOf(rows);
-  const sizes = cutGroups(rows, input.targetRows, input.targetVertices);
-  const groups: Uint8Array[] = [];
+  const sizes = cutRowBlocks(rows, input.targetRows, input.targetVertices);
+  const rowBlocks: Uint8Array[] = [];
   let first = 0;
   for (const size of sizes) {
-    groups.push(
-      writeGroup({
+    rowBlocks.push(
+      writeRowBlock({
         place: { parent: input.parent, head: input.head, firstIndex: first },
         dimensions,
         rows: rows.slice(first, first + size),
@@ -179,27 +179,34 @@ export function writeTabaneBlock(input: TabaneBlockInput): TabaneBlock {
     );
     first += size;
   }
-  return blockOfGroups(groups, sizes);
+  return blockOfRowBlocks(rowBlocks, sizes);
 }
 
-/** The content of a block of the bytes of its row blocks */
-function blockOfGroups(groups: readonly Uint8Array[], sizes: readonly number[]): TabaneBlock {
+/**
+ * The content of a block of the bytes of its row blocks
+ *
+ * @internal
+ */
+export function blockOfRowBlocks(
+  rowBlocks: readonly Uint8Array[],
+  sizes: readonly number[],
+): TabaneBlock {
   const head = new ByteSink();
   head.bytes(BLOCK_MAGIC);
   head.uint(TABANE_VERSION);
-  head.uint(groups.length);
-  groups.forEach((g, k) => {
+  head.uint(rowBlocks.length);
+  rowBlocks.forEach((g, k) => {
     head.uint(sizes[k]);
     head.uint(g.length);
   });
   const headBytes = head.finish();
   let total = headBytes.length;
-  for (const g of groups) total += g.length;
+  for (const g of rowBlocks) total += g.length;
   const content = new Uint8Array(total);
   content.set(headBytes);
   const partEnds = [headBytes.length];
   let at = headBytes.length;
-  for (const g of groups) {
+  for (const g of rowBlocks) {
     content.set(g, at);
     at += g.length;
     partEnds.push(at);
@@ -225,23 +232,23 @@ export function writeTabaneBlocks(
   if (rows.length === 0) return [];
   const dimensions = input.dimensions ?? dimensionsOf(rows);
   const targetBytes = input.targetBytes ?? TABANE_TARGET_BYTES;
-  const sizes = cutGroups(rows, input.targetRows, input.targetVertices);
+  const sizes = cutRowBlocks(rows, input.targetRows, input.targetVertices);
   const out: TabaneBlock[] = [];
-  let groups: Uint8Array[] = [];
-  let groupSizes: number[] = [];
+  let rowBlocks: Uint8Array[] = [];
+  let rowBlockSizes: number[] = [];
   let bytes = 0;
   let firstOfBlock = 0;
   let first = 0;
   const close = (): void => {
-    out.push(blockOfGroups(groups, groupSizes));
-    groups = [];
-    groupSizes = [];
+    out.push(blockOfRowBlocks(rowBlocks, rowBlockSizes));
+    rowBlocks = [];
+    rowBlockSizes = [];
     bytes = 0;
   };
   for (const size of sizes) {
     // The row block as a row block of the block being made, or of the next when it does not fit
     const write = (): Uint8Array =>
-      writeGroup({
+      writeRowBlock({
         place: {
           parent: input.parent,
           head: input.head + tabaneRowSuffixOf(out.length),
@@ -252,17 +259,17 @@ export function writeTabaneBlocks(
         fills: input.fills ?? true,
       });
     let g = write();
-    if (groups.length > 0 && bytes + g.length > targetBytes) {
+    if (rowBlocks.length > 0 && bytes + g.length > targetBytes) {
       close();
       firstOfBlock = first;
       g = write();
     }
-    groups.push(g);
-    groupSizes.push(size);
+    rowBlocks.push(g);
+    rowBlockSizes.push(size);
     bytes += g.length;
     first += size;
   }
-  if (groups.length > 0) close();
+  if (rowBlocks.length > 0) close();
   return out;
 }
 
@@ -272,7 +279,7 @@ export function writeTabaneBlocks(
  * @internal
  */
 export interface BlockLayout {
-  readonly groups: readonly {
+  readonly rowBlocks: readonly {
     readonly rows: number;
     readonly start: number;
     readonly end: number;
@@ -298,14 +305,14 @@ export function readBlockHead(content: Uint8Array): BlockLayout {
   for (let k = 0; k < count; k++) heads.push({ rows: r.uint(), length: r.uint() });
   let at = r.pos;
   let rows = 0;
-  const groups = heads.map((h) => {
+  const rowBlocks = heads.map((h) => {
     const g = { rows: h.rows, start: at, end: at + h.length };
     at += h.length;
     rows += h.rows;
     return g;
   });
-  if (at !== content.length) throw formatError('the groups of a block do not fill it');
-  return { groups, rows };
+  if (at !== content.length) throw formatError('the row blocks of a block do not fill it');
+  return { rowBlocks, rows };
 }
 
 /**
@@ -326,16 +333,18 @@ export function readTabaneBlock(content: Uint8Array): TabaneRowBlock[] {
  */
 export function readBlockData(content: Uint8Array): TabaneRowBlockData[] {
   const layout = readBlockHead(content);
-  return layout.groups.map((g) => {
-    const group = readRowBlockData(content, g.start, g.end);
-    if (group.length !== g.rows) throw formatError('a row block of other rows than the head says');
-    return group;
+  return layout.rowBlocks.map((g) => {
+    const rowBlock = readRowBlockData(content, g.start, g.end);
+    if (rowBlock.length !== g.rows) {
+      throw formatError('a row block of other rows than the head says');
+    }
+    return rowBlock;
   });
 }
 
 /**
  * Reads the row blocks of a file of a block, a part at a time when its parts are those of its
- * row blocks (as the writer partEnds them), else from its whole content
+ * row blocks (as the writer cuts them), else from its whole content
  *
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a block
  *
@@ -343,9 +352,9 @@ export function readBlockData(content: Uint8Array): TabaneRowBlockData[] {
  */
 export function readTabaneBlockFile(
   file: Uint8Array,
-  compression?: TabaneCompression,
+  compressor?: TabaneCompressor,
 ): TabaneRowBlock[] {
-  return readBlockFileData(file, compression);
+  return readBlockFileData(file, compressor);
 }
 
 /**
@@ -355,11 +364,11 @@ export function readTabaneBlockFile(
  */
 export function readBlockFileData(
   file: Uint8Array,
-  compression?: TabaneCompression,
+  compressor?: TabaneCompressor,
 ): TabaneRowBlockData[] {
-  const frames = listTabaneFileParts(file);
-  if (frames.length >= 2) {
-    const headBytes = readTabaneFilePart(frames[0], compression);
+  const parts = listTabaneFileParts(file);
+  if (parts.length >= 2) {
+    const headBytes = readTabaneFilePart(parts[0], compressor);
     const r = new ByteSource(headBytes);
     const magic = r.take(4);
     if (BLOCK_MAGIC.some((b, i) => magic[i] !== b)) throw formatError('not a block');
@@ -370,19 +379,20 @@ export function readBlockFileData(
     for (let k = 0; k < count; k++) heads.push({ rows: r.uint(), length: r.uint() });
     if (
       r.done &&
-      count === frames.length - 1 &&
-      heads.every((h, k) => frames[k + 1].rawLength === h.length)
+      count === parts.length - 1 &&
+      heads.every((h, k) => parts[k + 1].contentBytes === h.length)
     ) {
       return heads.map((h, k) => {
-        const bytes = readTabaneFilePart(frames[k + 1], compression);
-        const group = readRowBlockData(bytes);
-        if (group.length !== h.rows)
+        const bytes = readTabaneFilePart(parts[k + 1], compressor);
+        const rowBlock = readRowBlockData(bytes);
+        if (rowBlock.length !== h.rows) {
           throw formatError('a row block of other rows than the head says');
-        return group;
+        }
+        return rowBlock;
       });
     }
   }
-  return readBlockData(unpackTabaneFile(file, compression));
+  return readBlockData(unpackTabaneFile(file, compressor));
 }
 
 /**
@@ -390,6 +400,6 @@ export function readBlockFileData(
  *
  * @experimental
  */
-export function packTabaneBlock(block: TabaneBlock, compression?: TabaneCompression): Uint8Array {
-  return packTabaneFile(block.content, block.partEnds, compression);
+export function packTabaneBlock(block: TabaneBlock, compressor?: TabaneCompressor): Uint8Array {
+  return packTabaneFile(block.content, block.partEnds, compressor);
 }

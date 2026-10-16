@@ -12,9 +12,9 @@
  *   (Node's), with and without the fills of the polygons
  * - Every row read back and compared with the feature it was written from, the coordinates to
  *   their bits
- * - The time to read the groups as the Worker of a page does: decompress a frame (fzstd, as in a
- *   browser), read the group, make it a block of rows of the tables. Then, for the same rows, the
- *   way before: rows made objects again and given to the builder of the blocks of rows, and the
+ * - The time to read the row blocks as the Worker of a page does: decompress a part (fzstd, as in
+ *   a browser), read the row block, make it a row block of the tables. Then, for the same rows, the
+ *   way before: rows made objects again and given to the builder of the row blocks, and the
  *   files of the trial of bench/stage0 when they were made (`node bench/stage0/make-blocks.ts`)
  */
 
@@ -114,9 +114,9 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         let at = 0;
         let differ = 0;
         for (const f of files) {
-          for (const frame of listTabaneFileParts(f).slice(1)) {
-            const group = readTabaneRowBlock(readTabaneFilePart(frame, zstd));
-            for (const back of tabaneRowsOf(group)) {
+          for (const part of listTabaneFileParts(f).slice(1)) {
+            const rowBlock = readTabaneRowBlock(readTabaneFilePart(part, zstd));
+            for (const back of tabaneRowsOf(rowBlock)) {
               const row = rows[at++];
               if (
                 back.id !== row.id ||
@@ -130,23 +130,23 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         }
         (result[label] as Record<string, unknown>).readBack = { rows: at, differ };
 
-        // The time to read the groups into blocks of rows, a frame at a time (warmed up)
-        const frames = files.flatMap((f) => listTabaneFileParts(f).slice(1));
+        // The time to read the row blocks into row blocks of the tables, a part at a time (warmed up)
+        const parts = files.flatMap((f) => listTabaneFileParts(f).slice(1));
         const pass = () => {
-          const t = { unzip: 0, read: 0, block: 0, groups: 0 };
+          const t = { unzip: 0, read: 0, block: 0, rowBlocks: 0 };
           const each: number[] = [];
-          for (const frame of frames) {
+          for (const part of parts) {
             const a = performance.now();
-            const bytes = readTabaneFilePart(frame, zstd);
+            const bytes = readTabaneFilePart(part, zstd);
             const b = performance.now();
-            const group = readTabaneRowBlock(bytes);
+            const rowBlock = readTabaneRowBlock(bytes);
             const c = performance.now();
-            rowBlockOfTabane(group);
+            rowBlockOfTabane(rowBlock);
             const d = performance.now();
             t.unzip += b - a;
             t.read += c - b;
             t.block += d - c;
-            t.groups++;
+            t.rowBlocks++;
             each.push(d - a);
           }
           each.sort((x, y) => x - y);

@@ -54,9 +54,9 @@ export interface TabaneRow {
   readonly properties?: Readonly<Record<string, unknown>>;
   /** Whether the row is deleted (kept for what refers to it) */
   readonly deleted?: boolean;
-  /** What made the row (every row of a row block has one, or none has) */
-  readonly made?: TabaneRevision;
-  /** The revision of each cell changed after the row was made, by the name of the cell */
+  /** What created the row (every row of a row block has one, or none has) */
+  readonly created?: TabaneRevision;
+  /** The revision of each cell changed after the row was created, by the name of the cell */
   readonly revisions?: Readonly<Record<string, TabaneRevision>>;
   /**
    * The fill of a polygon row, when the writer is not to make it (it makes it from the geometry
@@ -95,7 +95,7 @@ export interface TabaneFills {
 }
 
 /**
- * The cells changed after their row was made, in the order of the rows, then of the names
+ * The cells changed after their row was created, in the order of the rows, then of the names
  *
  * @internal
  */
@@ -126,8 +126,8 @@ export interface TabaneRowBlock {
   /** The ids of the rows as runs: `[origin, first number, count]` */
   readonly ids: readonly (readonly [origin: string, first: number, count: number])[];
   readonly place: TabanePlace;
-  /** What made each row, as runs `[revision, count]` (null: what added the row block) */
-  readonly made: readonly (readonly [revision: TabaneRevision, count: number])[] | null;
+  /** What created each row, as runs `[revision, count]` (null: what added the row block) */
+  readonly created: readonly (readonly [revision: TabaneRevision, count: number])[] | null;
   /** The dimensions of the coordinates */
   readonly dimensions: CoordinateDimensions;
   /** The names of the types of the rows */

@@ -61,7 +61,7 @@ const VALUE_OF_TAG = [
 ];
 
 /** The most rows of a row block */
-export const MAX_GROUP_ROWS = 1 << 20;
+export const MAX_ROW_BLOCK_ROWS = 1 << 20;
 
 /**
  * Reads a row block
@@ -91,7 +91,7 @@ export function readRowBlockData(
 ): TabaneRowBlockData {
   const r = new ByteSource(bytes, start, end);
   const n = r.uint();
-  if (n < 1 || n > MAX_GROUP_ROWS) throw formatError(`a row block of ${n} rows`);
+  if (n < 1 || n > MAX_ROW_BLOCK_ROWS) throw formatError(`a row block of ${n} rows`);
 
   const originCount = r.count(8);
   const origins: string[] = [];
@@ -124,11 +124,11 @@ export function readRowBlockData(
   const head = r.string();
   const firstIndex = r.uint();
 
-  // What made the rows
-  let made: (readonly [TabaneRevision, number])[] | null = null;
-  const madeMode = r.byte();
-  if (madeMode === 1) {
-    made = [];
+  // What created the rows
+  let created: (readonly [TabaneRevision, number])[] | null = null;
+  const createdMode = r.byte();
+  if (createdMode === 1) {
+    created = [];
     const runs = r.count(4);
     let sum = 0;
     for (let k = 0; k < runs; k++) {
@@ -137,12 +137,12 @@ export function readRowBlockData(
       const step = r.uint();
       const count = r.uint();
       if (count < 1) throw formatError('an empty run of revisions');
-      made.push([[sequence, origin, step], count]);
+      created.push([[sequence, origin, step], count]);
       sum += count;
     }
-    if (sum !== n) throw formatError('the runs of what made the rows do not cover them');
-  } else if (madeMode !== 0) {
-    throw formatError(`a form of what made the rows of ${madeMode}`);
+    if (sum !== n) throw formatError('the runs of what created the rows do not cover them');
+  } else if (createdMode !== 0) {
+    throw formatError(`a form of what created the rows of ${createdMode}`);
   }
 
   // The deleted rows
@@ -201,7 +201,7 @@ export function readRowBlockData(
     columns.push(readColumn(r, n));
   }
 
-  // The cells changed after their rows were made
+  // The cells changed after their rows were created
   const revisions = readRevisions(r, n, origins);
 
   if (!r.done) throw formatError('bytes are left after the row block');
@@ -209,7 +209,7 @@ export function readRowBlockData(
     length: n,
     ids,
     place: { parent, head, firstIndex },
-    made,
+    created,
     deleted,
     typeNames,
     types,

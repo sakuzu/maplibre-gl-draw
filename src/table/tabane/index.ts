@@ -38,7 +38,7 @@ export type { RowBlockOfTabaneOptions } from './rows.js';
 export { rowBlockOfTabane, tabaneRowsOf } from './rows.js';
 
 // Files and names
-export type { TabaneCompression, TabaneFilePart } from './file.js';
+export type { TabaneCompressor, TabaneFilePart } from './file.js';
 export {
   packTabaneFile,
   readTabaneFilePart,

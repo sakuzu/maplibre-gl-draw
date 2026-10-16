@@ -1,5 +1,5 @@
 {
-  "description": "A run cut into groups of 4 rows and into blocks of at most 600 bytes of groups, and the manifest of the blocks",
+  "description": "A run cut into row blocks of 4 rows and into blocks of at most 600 bytes of row blocks, and the manifest of the blocks",
   "input": {
     "parent": "L",
     "head": "V",

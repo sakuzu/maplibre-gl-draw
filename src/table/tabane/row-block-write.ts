@@ -56,7 +56,7 @@ export const TAG_INTEGER = 7;
  *
  * @internal
  */
-export interface GroupInput {
+export interface RowBlockInput {
   readonly place: TabanePlace;
   readonly dimensions: CoordinateDimensions;
   readonly rows: readonly TabaneRow[];
@@ -107,7 +107,7 @@ function checkRevision(r: TabaneRevision): void {
  * @throws `DrawError` with the code `invalid-input` when a row cannot be written
  * @internal
  */
-export function writeGroup(input: GroupInput): Uint8Array {
+export function writeRowBlock(input: RowBlockInput): Uint8Array {
   const { rows, place, dimensions } = input;
   const n = rows.length;
   if (n === 0) throw invalid('a row block holds at least one row');
@@ -130,23 +130,23 @@ export function writeGroup(input: GroupInput): Uint8Array {
     i += len;
   }
 
-  // What made the rows, as runs
-  const madeRuns: number[] = [];
-  const withMade = rows.filter((r) => r.made !== undefined).length;
-  if (withMade !== 0 && withMade !== n)
-    throw invalid('every row of a row block says what made it, or none does');
-  if (withMade === n) {
+  // What created the rows, as runs
+  const createdRuns: number[] = [];
+  const withCreated = rows.filter((r) => r.created !== undefined).length;
+  if (withCreated !== 0 && withCreated !== n)
+    throw invalid('every row of a row block says what created it, or none does');
+  if (withCreated === n) {
     for (let i = 0; i < n; ) {
-      const made = rows[i].made as TabaneRevision;
-      checkRevision(made);
+      const created = rows[i].created as TabaneRevision;
+      checkRevision(created);
       let len = 1;
-      while (i + len < n && sameRevision(rows[i + len].made as TabaneRevision, made)) len++;
-      madeRuns.push(made[0], origins.of(made[1]), made[2], len);
+      while (i + len < n && sameRevision(rows[i + len].created as TabaneRevision, created)) len++;
+      createdRuns.push(created[0], origins.of(created[1]), created[2], len);
       i += len;
     }
   }
 
-  // The cells changed after their rows were made
+  // The cells changed after their rows were created
   const cellNames = new Set<string>();
   for (const row of rows) {
     if (!row.revisions) continue;
@@ -169,7 +169,7 @@ export function writeGroup(input: GroupInput): Uint8Array {
     }
   });
 
-  // Every origin is numbered by now (the ids, what made the rows, the revisions, in this order):
+  // Every origin is numbered by now (the ids, what created the rows, the revisions, in this order):
   // the table of the origins, then the ids
   out.uint(n);
   out.uint(origins.list.length);
@@ -185,13 +185,13 @@ export function writeGroup(input: GroupInput): Uint8Array {
   out.string(place.head);
   out.uint(place.firstIndex);
 
-  // What made the rows
-  if (madeRuns.length === 0) {
+  // What created the rows
+  if (createdRuns.length === 0) {
     out.byte(0);
   } else {
     out.byte(1);
-    out.uint(madeRuns.length / 4);
-    for (const v of madeRuns) out.uint(v);
+    out.uint(createdRuns.length / 4);
+    for (const v of createdRuns) out.uint(v);
   }
 
   // The deleted rows
@@ -270,7 +270,7 @@ export function writeGroup(input: GroupInput): Uint8Array {
   // The attributes
   writeProperties(out, rows);
 
-  // The cells changed after their rows were made
+  // The cells changed after their rows were created
   out.uint(names.length);
   for (const name of names) out.string(name);
   out.uint(revisionEntries.length / 5);

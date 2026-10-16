@@ -19,9 +19,9 @@ import { ByteSink, ByteSource, formatError } from './bytes.js';
 export const FILE_MAGIC = Uint8Array.of(0x54, 0x42, 0x4e, 0x46);
 
 /** A part stored as it is */
-export const FRAME_STORED = 0;
+export const PART_STORED = 0;
 /** A part compressed with zstd */
-export const FRAME_ZSTD = 1;
+export const PART_ZSTD = 1;
 
 /**
  * The compressor of the parts (zstd), given by the platform: the format depends on no
@@ -29,11 +29,11 @@ export const FRAME_ZSTD = 1;
  *
  * @experimental
  */
-export interface TabaneCompression {
+export interface TabaneCompressor {
   /** The zstd frame of `raw` (the parts are stored as they are when omitted) */
   compress?(raw: Uint8Array): Uint8Array;
-  /** The bytes of a zstd frame, of `rawLength` bytes */
-  decompress(stored: Uint8Array, rawLength: number): Uint8Array;
+  /** The bytes of a zstd frame, of `contentBytes` bytes */
+  decompress(stored: Uint8Array, contentBytes: number): Uint8Array;
 }
 
 /**
@@ -42,10 +42,12 @@ export interface TabaneCompression {
  * @experimental
  */
 export interface TabaneFilePart {
-  readonly method: number;
+  /** How the part is stored: as it is, or compressed with zstd */
+  readonly method: 'stored' | 'zstd';
   /** Where the content of the part starts in the content of the file */
   readonly contentStart: number;
-  readonly rawLength: number;
+  /** The number of bytes of the content of the part */
+  readonly contentBytes: number;
   /** The bytes of the part as stored (in the file) */
   readonly stored: Uint8Array;
 }
@@ -61,35 +63,35 @@ export interface TabaneFilePart {
 export function packTabaneFile(
   content: Uint8Array,
   partEnds: readonly number[] = [],
-  compression?: TabaneCompression,
+  compressor?: TabaneCompressor,
 ): Uint8Array {
   const ends = [...partEnds.filter((c) => c > 0 && c < content.length), content.length];
-  const frames: { method: number; raw: number; stored: Uint8Array }[] = [];
+  const parts: { method: number; raw: number; stored: Uint8Array }[] = [];
   let start = 0;
   for (const end of ends) {
     if (end < start) throw formatError('the partEnds of a file are not in order');
     const raw = content.subarray(start, end);
-    let method = FRAME_STORED;
+    let method = PART_STORED;
     let stored = raw;
-    if (compression?.compress && raw.length > 0) {
-      const packed = compression.compress(raw);
+    if (compressor?.compress && raw.length > 0) {
+      const packed = compressor.compress(raw);
       if (packed.length < raw.length) {
-        method = FRAME_ZSTD;
+        method = PART_ZSTD;
         stored = packed;
       }
     }
-    frames.push({ method, raw: raw.length, stored });
+    parts.push({ method, raw: raw.length, stored });
     start = end;
   }
   const out = new ByteSink(content.length + 64);
   out.bytes(FILE_MAGIC);
-  out.uint(frames.length);
-  for (const f of frames) {
+  out.uint(parts.length);
+  for (const f of parts) {
     out.byte(f.method);
     out.uint(f.raw);
     out.uint(f.stored.length);
   }
-  for (const f of frames) out.bytes(f.stored);
+  for (const f of parts) out.bytes(f.stored);
   return out.finish();
 }
 
@@ -108,25 +110,25 @@ export function listTabaneFileParts(file: Uint8Array): TabaneFilePart[] {
   const heads: { method: number; raw: number; stored: number }[] = [];
   for (let k = 0; k < count; k++) {
     const method = r.byte();
-    if (method !== FRAME_STORED && method !== FRAME_ZSTD) throw formatError(`a frame of ${method}`);
+    if (method !== PART_STORED && method !== PART_ZSTD)
+      throw formatError(`a part of the method ${method}`);
     const raw = r.uint();
     const stored = r.uint();
-    if (method === FRAME_STORED && raw !== stored)
-      throw formatError('a stored part of two lengths');
+    if (method === PART_STORED && raw !== stored) throw formatError('a stored part of two lengths');
     heads.push({ method, raw, stored });
   }
   const out: TabaneFilePart[] = [];
   let contentStart = 0;
   for (const h of heads) {
     out.push({
-      method: h.method,
+      method: h.method === PART_ZSTD ? 'zstd' : 'stored',
       contentStart,
-      rawLength: h.raw,
+      contentBytes: h.raw,
       stored: r.take(h.stored),
     });
     contentStart += h.raw;
   }
-  if (!r.done) throw formatError('bytes are left after the frames');
+  if (!r.done) throw formatError('bytes are left after the parts');
   return out;
 }
 
@@ -139,35 +141,36 @@ export function listTabaneFileParts(file: Uint8Array): TabaneFilePart[] {
  * @experimental
  */
 export function readTabaneFilePart(
-  frame: TabaneFilePart,
-  compression?: TabaneCompression,
+  part: TabaneFilePart,
+  compressor?: TabaneCompressor,
 ): Uint8Array {
-  if (frame.method === FRAME_STORED) return frame.stored;
-  if (!compression) throw formatError('a compressed part and no compressor');
-  const raw = compression.decompress(frame.stored, frame.rawLength);
-  if (raw.length !== frame.rawLength) throw formatError('a part that does not hold its length');
-  return raw;
+  if (part.method === 'stored') return part.stored;
+  if (!compressor) throw formatError('a compressed part and no compressor');
+  const content = compressor.decompress(part.stored, part.contentBytes);
+  if (content.length !== part.contentBytes)
+    throw formatError('a part that does not hold its length');
+  return content;
 }
 
 /**
  * The content of a file: its parts, decompressed and put together
  *
- * @param maxLength The most bytes of content read (a file that says more is refused)
+ * @param maxBytes The most bytes of content read (a file that says more is refused)
  *
  * @experimental
  */
 export function unpackTabaneFile(
   file: Uint8Array,
-  compression?: TabaneCompression,
-  maxLength = 1 << 30,
+  compressor?: TabaneCompressor,
+  maxBytes = 1 << 30,
 ): Uint8Array {
-  const frames = listTabaneFileParts(file);
+  const parts = listTabaneFileParts(file);
   let total = 0;
-  for (const f of frames) total += f.rawLength;
-  if (total > maxLength) throw formatError(`a content of ${total} bytes`);
-  if (frames.length === 1) return readTabaneFilePart(frames[0], compression).slice();
+  for (const p of parts) total += p.contentBytes;
+  if (total > maxBytes) throw formatError(`a content of ${total} bytes`);
+  if (parts.length === 1) return readTabaneFilePart(parts[0], compressor).slice();
   const out = new Uint8Array(total);
-  for (const f of frames) out.set(readTabaneFilePart(f, compression), f.contentStart);
+  for (const p of parts) out.set(readTabaneFilePart(p, compressor), p.contentStart);
   return out;
 }
 

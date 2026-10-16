@@ -14,7 +14,7 @@ implementation in Go follows the same document and passes the same vectors.
 
 - A row is an id, a type, a geometry (one of the six GeoJSON types, or none), a
   style (an object), attributes (an object of values), and optionally a deleted
-  flag, what made it and the revisions of its cells
+  flag, what created it and the revisions of its cells
 - A row block is about a thousand rows of one run, written as columns. Read, it
   is a row block of the tables (`RowBlock`)
 - A block is a run of rows under one parent, cut into row blocks. Its content is
@@ -100,7 +100,7 @@ A row block holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
 
 1. `uint` `n`
 2. The origins: `uint` count, then 8 bytes each. They are numbered in the order
-   they are first named by the ids, then by what made the rows, then by the
+   they are first named by the ids, then by what created the rows, then by the
    revisions (in the order of the rows, then of the names of the cells)
 3. The ids: `uint` count of runs, then per run `uint` origin, `uint` first
    number, `uint` count (at least 1). The runs cover the rows in order; a run is
@@ -108,7 +108,7 @@ A row block holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
 4. The place: `string` parent (the empty string for none), `byte` form of the
    keys (0: from a head), `string` head, `uint` the number of the first row of
    the row block in its run. Row `r` has the key of row `first + r` of the run
-5. What made the rows: `byte` 0 (none: what added the block made them) or 1,
+5. What created the rows: `byte` 0 (none: what added the block created them) or 1,
    then `uint` count of runs and per run `uint` sequence, `uint` origin, `uint`
    step, `uint` count. A run is as long as the revision is the same
 6. The deleted rows: `byte` 0 (none) or 1, then `ceil(n / 8)` bytes, row `r` at
@@ -195,7 +195,7 @@ key: the key (`string`), then:
 
 ### 3.4 The revisions of the cells
 
-The cells of a row changed after the row was made, each with its revision. A
+The cells of a row changed after the row was created, each with its revision. A
 cell is a name the user of the format gives (a field, an element of a geometry);
 the format does not read it.
 

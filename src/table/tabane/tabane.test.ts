@@ -9,7 +9,7 @@
  * - The ids, the keys of the rows, the floats by XOR and the decimal coordinates read back as
  *   they were written
  * - A block reads back to the rows it was written from: every coordinate to the same bits, every
- *   value to the same value, the deleted rows, what made the rows and the revisions of their
+ *   value to the same value, the deleted rows, what created the rows and the revisions of their
  *   cells; the same rows always give the same bytes
  * - A row block read is a block of rows of the tables: the same columns the builder of the blocks of
  *   rows makes from the same rows, and the tables take it as it is
@@ -40,7 +40,7 @@ import {
 } from './block.js';
 import { ByteSink, ByteSource } from './bytes.js';
 import { decimalAt, fewestDecimals } from './decimals.js';
-import { packTabaneFile, type TabaneCompression, tabaneNameOf, unpackTabaneFile } from './file.js';
+import { packTabaneFile, type TabaneCompressor, tabaneNameOf, unpackTabaneFile } from './file.js';
 import {
   formatTabaneId,
   isTabaneOrigin,
@@ -55,7 +55,7 @@ import { rowBlockDataOfTabane, tabaneRowsOf } from './rows.js';
 import type { TabaneRow } from './types.js';
 import { XorSink, XorSource } from './xor.js';
 
-const zstd: TabaneCompression = {
+const zstd: TabaneCompressor = {
   compress: (raw) => new Uint8Array(zstdCompressSync(raw)),
   decompress: (stored) => new Uint8Array(zstdDecompressSync(stored)),
 };
@@ -90,7 +90,7 @@ function normal(rows: readonly TabaneRow[]): unknown[] {
       Object.entries(r.properties ?? {}).filter(([, v]) => v !== undefined),
     ),
     ...(r.deleted && { deleted: true }),
-    ...(r.made && { made: r.made }),
+    ...(r.created && { created: r.created }),
     ...(r.revisions && Object.keys(r.revisions).length > 0 && { revisions: r.revisions }),
   }));
 }
@@ -355,14 +355,14 @@ describe('a block', () => {
   it('reads back to the rows it was written from', () => {
     const rows = variety();
     const block = writeTabaneBlock({ parent: 'layer-1', head: 'V', rows });
-    const groups = readTabaneBlock(block.content);
-    expect(groups.length).toBe(1);
-    const back = tabaneRowsOf(groups[0]);
+    const rowBlocks = readTabaneBlock(block.content);
+    expect(rowBlocks.length).toBe(1);
+    const back = tabaneRowsOf(rowBlocks[0]);
     expect(same(normal(back), normal(rows))).toBe(true);
     // The fills of the polygons are those the builder makes
     expect(back.filter((r) => r.fill).map((r) => r.id)).toEqual([rows[2].id, rows[5].id]);
-    expect(groups[0].place).toEqual({ parent: 'layer-1', head: 'V', firstIndex: 0 });
-    expect(groups[0].ids).toEqual([
+    expect(rowBlocks[0].place).toEqual({ parent: 'layer-1', head: 'V', firstIndex: 0 });
+    expect(rowBlocks[0].ids).toEqual([
       [ORIGIN, 1, 6],
       [OTHER, 7, 2],
     ]);
@@ -387,34 +387,34 @@ describe('a block', () => {
         geometry: { type: 'Point', coordinates: [1, 2] },
       },
     ];
-    const group = readTabaneBlock(writeTabaneBlock({ parent: '', head: 'a', rows }).content)[0];
-    expect(group.dimensions).toBe('xyzm');
-    const back = tabaneRowsOf(group);
+    const rowBlock = readTabaneBlock(writeTabaneBlock({ parent: '', head: 'a', rows }).content)[0];
+    expect(rowBlock.dimensions).toBe('xyzm');
+    const back = tabaneRowsOf(rowBlock);
     expect(same(back[0].geometry, rows[0].geometry)).toBe(true);
     expect(same(back[1].geometry, { type: 'Point', coordinates: [1, 2, NaN, NaN] })).toBe(true);
   });
 
-  it('keeps what made the rows and the revisions of their cells', () => {
+  it('keeps what created the rows and the revisions of their cells', () => {
     const rows: TabaneRow[] = buildings(5).map((r, i) => ({
       ...r,
-      made: i < 3 ? [10, OTHER, 2] : [11, ORIGIN, 3],
+      created: i < 3 ? [10, OTHER, 2] : [11, ORIGIN, 3],
       ...(i === 1 && {
         revisions: { 'p.type': [20, OTHER, 5], geometry: [21, '0000000000002', 1] },
       }),
     }));
-    const group = readTabaneBlock(writeTabaneBlock({ parent: 'l', head: 'k', rows }).content)[0];
-    expect(group.made).toEqual([
+    const rowBlock = readTabaneBlock(writeTabaneBlock({ parent: 'l', head: 'k', rows }).content)[0];
+    expect(rowBlock.created).toEqual([
       [[10, OTHER, 2], 3],
       [[11, ORIGIN, 3], 2],
     ]);
-    expect(same(withoutFill(tabaneRowsOf(group)), withoutFill(normal(rows) as TabaneRow[]))).toBe(
-      true,
-    );
+    expect(
+      same(withoutFill(tabaneRowsOf(rowBlock)), withoutFill(normal(rows) as TabaneRow[])),
+    ).toBe(true);
     expect(() =>
       writeTabaneBlock({
         parent: 'l',
         head: 'k',
-        rows: [rows[0], { ...rows[1], made: undefined }],
+        rows: [rows[0], { ...rows[1], created: undefined }],
       }),
     ).toThrow(/every row/);
   });
@@ -431,12 +431,12 @@ describe('a block', () => {
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
   });
 
-  it('partEnds its rows into groups and its groups into blocks', () => {
+  it('cuts its rows into row blocks and its row blocks into blocks', () => {
     const rows = buildings(2500);
     const block = writeTabaneBlock({ parent: 'p', head: 'V', rows });
-    const groups = readTabaneBlock(block.content);
-    expect(groups.map((g) => g.length)).toEqual([1000, 1000, 500]);
-    expect(groups.map((g) => g.place.firstIndex)).toEqual([0, 1000, 2000]);
+    const rowBlocks = readTabaneBlock(block.content);
+    expect(rowBlocks.map((g) => g.length)).toEqual([1000, 1000, 500]);
+    expect(rowBlocks.map((g) => g.place.firstIndex)).toEqual([0, 1000, 2000]);
     const blocks = writeTabaneBlocks({ parent: 'p', head: 'V', rows, targetBytes: 80_000 });
     expect(blocks.length).toBeGreaterThan(1);
     let first = 0;
@@ -475,11 +475,11 @@ describe('a file', () => {
     const rows = buildings(2100);
     const block = writeTabaneBlock({ parent: 'p', head: 'V', rows });
     const name = await tabaneNameOf(block.content);
-    for (const compression of [undefined, zstd]) {
-      const file = packTabaneBlock(block, compression);
+    for (const compressor of [undefined, zstd]) {
+      const file = packTabaneBlock(block, compressor);
       expect(await tabaneNameOf(unpackTabaneFile(file, zstd))).toBe(name);
-      const groups = readTabaneBlockFile(file, zstd);
-      expect(same(normal(groups.flatMap((g) => tabaneRowsOf(g))), normal(rows))).toBe(true);
+      const rowBlocks = readTabaneBlockFile(file, zstd);
+      expect(same(normal(rowBlocks.flatMap((g) => tabaneRowsOf(g))), normal(rows))).toBe(true);
     }
     // One part for all: read whole
     const whole = packTabaneFile(block.content, [], zstd);
@@ -535,7 +535,7 @@ describe('a row block as a block of rows of the tables', () => {
   it('holds the columns the builder makes of the same rows', () => {
     for (const rows of [buildings(1000, 3), variety()]) {
       for (const fills of [true, false]) {
-        const group = readBlockData(
+        const rowBlock = readBlockData(
           writeTabaneBlock({ parent: 'p', head: 'V', rows, fills }).content,
         )[0];
         const builder = createRowBlockDataBuilder({ targetRows: 1000 });
@@ -551,7 +551,7 @@ describe('a row block as a block of rows of the tables', () => {
           });
         });
         const [built] = builder.finish();
-        expectSameBlock(rowBlockDataOfTabane(group), built);
+        expectSameBlock(rowBlockDataOfTabane(rowBlock), built);
       }
     }
   });
@@ -569,10 +569,10 @@ describe('a row block as a block of rows of the tables', () => {
       metadata: undefined,
       styleRule: undefined,
     });
-    const groups = readBlockData(writeTabaneBlock({ parent: 'l', head: 'V', rows }).content);
+    const rowBlocks = readBlockData(writeTabaneBlock({ parent: 'l', head: 'V', rows }).content);
     writer.addBlocks(
       'l',
-      groups.map((g) => rowBlockDataOfTabane(g)),
+      rowBlocks.map((g) => rowBlockDataOfTabane(g)),
     );
     featureTablesInternals(store.tables as FeatureTables)?.addQueuedBlocks();
     for (const k of [0, 999, 1000, 1499]) {
