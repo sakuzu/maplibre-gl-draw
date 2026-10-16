@@ -1577,4 +1577,80 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
     });
   });
+
+  describe('the drags a plugin keeps from starting (canDrag)', () => {
+    /** The plugins: a drag may grab what `allow` says, and every question is kept */
+    function gate(allow: (featureId: string, vertices?: readonly VertexRef[]) => boolean) {
+      const canDrag = vi.fn(allow);
+      context.plugins = { canDrag } as unknown as EngineModeContext['plugins'];
+      return canDrag;
+    }
+
+    function startDrag(hit: HandleHitResult, from: Coordinate, ids: string[]): void {
+      store.setSelection('feature', ids);
+      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      handler.startDrag(hit, dragEvent(from[0], from[1]), context, bbox);
+    }
+
+    beforeEach(() => {
+      putFeature(square('f1', 0, 0));
+      putFeature(square('f2', 10, 0));
+    });
+
+    it('starts no vertex drag when a vertex it moves may not be grabbed', () => {
+      const canDrag = gate((_, vertices) => !vertices?.some((v) => v.index === 1));
+      dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
+      expect(canDrag).toHaveBeenCalledWith('f1', [{ part: undefined, ring: 0, index: 1 }]);
+      expect(handler.isActive()).toBe(false);
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+      expect(map.dragPan.isEnabled()).toBe(true);
+      // Another vertex of the same feature is grabbed
+      dragVertex('f1', { ring: 0, index: 2 }, [10, 10], [11, 12]);
+      expect((coordinatesOf('f1') as number[][][])[0][2]).toEqual([11, 12]);
+    });
+
+    it('asks for the vertices that follow a shared vertex, and starts nothing when one may not move', () => {
+      enableSharedVertexDrag(true);
+      const canDrag = gate((featureId) => featureId !== 'f2');
+      dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
+      expect(canDrag.mock.calls.map((call) => call[0])).toEqual(['f1', 'f2']);
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+      expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 10, 0)));
+    });
+
+    it('asks for every selected feature whole before a move, a resize, a rotation', () => {
+      const canDrag = gate((featureId) => featureId !== 'f2');
+      startDrag({ type: 'move' }, [0, 0], ['f1', 'f2']);
+      expect(canDrag).toHaveBeenCalledWith('f1');
+      expect(canDrag).toHaveBeenCalledWith('f2');
+      expect(handler.isActive()).toBe(false);
+      startDrag({ type: 'rotate' }, [0, 0], ['f1', 'f2']);
+      expect(handler.isActive()).toBe(false);
+      startDrag({ type: 'move' }, [0, 0], ['f1']);
+      expect(handler.isActive()).toBe(true);
+      handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
+      handler.endDrag(context);
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
+    });
+
+    it('asks for no vertex before a vertex is added between two', () => {
+      const canDrag = gate(() => false);
+      startDrag(
+        { type: 'midpoint', featureId: 'f1', vertexRef: { ring: 0, index: 0 } },
+        [5, 0],
+        ['f1'],
+      );
+      expect(canDrag).toHaveBeenCalledWith('f1', []);
+      expect(handler.isActive()).toBe(false);
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+    });
+
+    it('announces no drag it keeps from starting', () => {
+      gate(() => false);
+      const emit = vi.fn();
+      context.eventEmitter = { emit, on: vi.fn(), off: vi.fn() } as never;
+      startDrag({ type: 'move' }, [0, 0], ['f1']);
+      expect(emit).not.toHaveBeenCalled();
+    });
+  });
 });

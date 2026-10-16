@@ -639,6 +639,32 @@ describe('the input of the plugins and the modes', () => {
     expect(store.getSelection().ids).toEqual([]);
   });
 
+  it('asks every plugin whether a drag may grab what it moves (canDrag)', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { interactions } = engine.extensions;
+    expect(interactions.canDrag('f')).toBe(true);
+    const first = vi.fn(() => true);
+    engine.extensions.collections.plugins.add(plugin('a', { interaction: { canDrag: first } }));
+    engine.extensions.collections.plugins.add(
+      plugin('throws', {
+        interaction: {
+          canDrag: () => {
+            throw new Error('no');
+          },
+        },
+      }),
+    );
+    expect(interactions.canDrag('f', [{ ring: 0, index: 1 }])).toBe(true);
+    expect(first).toHaveBeenCalledWith('f', [{ ring: 0, index: 1 }]);
+    engine.extensions.collections.plugins.add(
+      plugin('b', { interaction: { canDrag: (id: string) => id !== 'held' } }),
+    );
+    expect(interactions.canDrag('f')).toBe(true);
+    expect(interactions.canDrag('held')).toBe(false);
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it('tells the plugins about a feature clicked again, with the feature and the click', () => {
     const { store } = engine.context;
     const layerId = store.listLayers()[0].id;

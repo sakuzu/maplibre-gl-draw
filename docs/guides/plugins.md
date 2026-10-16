@@ -278,6 +278,15 @@ draw.extensions.plugins.add(createShortcuts());
   selects many features of a layer held as rows, and returns the handles
   of the rows that may be selected, without making features of them; a
   plugin without it narrows no row
+- `canDrag(featureId, vertices)` is asked before a drag of the select
+  mode grabs what it moves of a feature: some of its vertices
+  (`vertices`, empty for a vertex added between two), or the feature
+  whole (no `vertices`: a move, a resize, a rotation, a drag of a
+  radius). It is asked for every feature the drag would change, the
+  features that follow a shared vertex included; false for any of them
+  keeps the drag from starting, as for a locked feature. The drags of
+  features selected in bulk and of the handles of providers are not
+  asked
 - `onFeatureClick(feature, event)` is called when a selected feature
   is clicked again; returning true means the plugin handled the click
 - `onFeatureDoubleClick(feature, event)` is called when a feature is

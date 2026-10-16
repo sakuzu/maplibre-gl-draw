@@ -94,15 +94,33 @@ export class VertexDrag implements DragOperation {
 }
 
 /**
- * Start a vertex drag, and set the DragState and the followed vertices it draws from. Returns
- * null when the feature or the vertex is gone
+ * What a vertex drag would move: the vertices of the feature grabbed, and the vertices of the
+ * features that follow along through a shared vertex
+ *
+ * @internal
  */
-export function startVertexDrag(
+export interface VertexDragPlan {
+  /** The vertex grabbed */
+  readonly vertexRef: VertexRef;
+  /** The move of the vertices of the feature grabbed */
+  readonly state: VertexState;
+  /** The moves of the vertices of the features that follow along */
+  readonly followers: VertexState[];
+}
+
+/**
+ * Plans a vertex drag: the selected vertices when the one grabbed is one of them (the one grabbed
+ * alone otherwise), and the vertices that follow along through a shared vertex. Returns null when
+ * the feature or the vertex is gone
+ *
+ * @internal
+ */
+export function planVertexDrag(
   event: DragNormalizedEvent,
   featureId: string,
   vertexRef: VertexRef,
   context: EngineModeContext,
-): VertexDrag | null {
+): VertexDragPlan | null {
   const { store, spatialIndex } = context;
   const feature = store.getFeature(featureId);
   if (!feature) return null;
@@ -130,7 +148,7 @@ export function startVertexDrag(
   // The following set is determined at the start and is not re-searched afterwards.
   // If the temporary-disable modifier key (the same key as for snapping) is held down, no set
   // is built.
-  let sharedVertexStates: VertexState[] = [];
+  let followers: VertexState[] = [];
   if (context.topology?.sharedVertexDrag && !isSharedVertexDragSuppressed(event, context)) {
     const shared = collectSharedVertexMoves({
       store,
@@ -140,16 +158,25 @@ export function startVertexDrag(
       startLngLat,
     });
     vertexRefsToMove = shared.mainRefs;
-    sharedVertexStates = shared.followers;
+    followers = shared.followers;
   }
 
   const state = startVertexMove(feature, vertexRefsToMove, startLngLat);
   if (!state) return null;
+  return { vertexRef, state, followers };
+}
+
+/**
+ * Start a planned vertex drag, and set the DragState and the followed vertices it draws from
+ */
+export function startVertexDrag(plan: VertexDragPlan, context: EngineModeContext): VertexDrag {
+  const { store } = context;
+  const { state, followers } = plan;
 
   // Write the following vertices into the UI state so they are drawn in a style distinct from
   // the selected vertices. They are set back to null when the drag ends (endDrag / reset).
   store.setFollowedVertices?.(
-    sharedVertexStates.map((followerState) => ({
+    followers.map((followerState) => ({
       featureId: followerState.featureId,
       vertices: followerState.vertices,
     })),
@@ -158,11 +185,11 @@ export function startVertexDrag(
   // Set the DragState (activeVertex is the vertex the drag started from)
   store.setDragState({
     operation: 'vertex',
-    activeVertex: vertexRef,
-    activeFeatureId: featureId,
+    activeVertex: plan.vertexRef,
+    activeFeatureId: state.featureId,
   });
 
-  return new VertexDrag('vertex', state, sharedVertexStates);
+  return new VertexDrag('vertex', state, followers);
 }
 
 /**

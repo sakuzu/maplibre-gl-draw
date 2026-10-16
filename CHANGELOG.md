@@ -82,6 +82,10 @@ writing it. Its changes are listed after those of 3.0.0.
   page at a time.
 - `drag.started` and `drag.ended` carry `bulk` for features selected in
   bulk.
+- `interaction.canDrag(featureId, vertices)` of a plugin: asked before a
+  drag of the select mode grabs vertices of a feature, or the feature
+  whole, it keeps the drag from starting when it answers false (vertices
+  another person drags, for instance), as a lock does.
 - Experimental: `FeatureRenderer.rowSprites`, the pictures of the points
   a renderer draws, drawn with the rows of a layer held as rows;
   `interaction.filterSelectionRows` of a plugin; and in `/kasane`,

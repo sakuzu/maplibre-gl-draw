@@ -6,6 +6,7 @@
  */
 
 import type { Feature } from '../model.js';
+import type { VertexRef } from '../state.js';
 import type { LayerTableView } from '../tables.js';
 import type { PluginContext } from './context.js';
 import type { DrawPointerEvent, InputHandlers } from './mode.js';
@@ -43,6 +44,16 @@ export interface Plugin<Api = unknown> {
      * @experimental
      */
     filterSelectionRows?(view: LayerTableView, handles: Int32Array): Int32Array;
+    /**
+     * Whether a drag of the select mode may grab what it moves of a feature: some of its
+     * vertices (`vertices`: the vertices it moves, empty for a vertex it adds between two), or
+     * the feature whole (`vertices` absent: a move, a resize, a rotation, a drag of a radius).
+     * Asked before the drag starts, for every feature it would change (the features that follow
+     * a vertex shared with the one grabbed included); false for any of them keeps the drag from
+     * starting, as for a locked feature. A plugin without it lets every drag start. The drags of
+     * features selected in bulk (`Selection.bulk`) and of the handles of providers are not asked
+     */
+    canDrag?(featureId: string, vertices?: readonly VertexRef[]): boolean;
     /** A selected feature was clicked again; returning true means the plugin handled it */
     onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A feature was double-clicked; returning true means the plugin handled it */

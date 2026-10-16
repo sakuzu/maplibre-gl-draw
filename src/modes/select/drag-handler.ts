@@ -30,7 +30,12 @@ import { startMoveDrag } from './drag/move.js';
 import type { DragOperation, DragScope } from './drag/operation.js';
 import { startRadiusDrag } from './drag/radius.js';
 import { startResizeDrag, startRotateDrag } from './drag/transform.js';
-import { startMidpointDrag, startVertexDrag } from './drag/vertex.js';
+import {
+  planVertexDrag,
+  startMidpointDrag,
+  startVertexDrag,
+  type VertexDragPlan,
+} from './drag/vertex.js';
 
 /** What a drag grabbed: the features, a vertex or a handle of the selection */
 type DragKind = EngineSignals['drag.started']['kind'];
@@ -116,6 +121,15 @@ export class SelectModeDragHandler {
       return;
     }
 
+    // What the drag would grab: a plugin may keep it from starting (vertices another holds, for
+    // instance), as a lock does. A vertex drag is planned first to know the vertices it moves
+    let vertexPlan: VertexDragPlan | null = null;
+    if (hitResult.type === 'vertex') {
+      vertexPlan = planVertexDrag(event, hitResult.featureId!, hitResult.vertexRef!, context);
+      if (!vertexPlan) return;
+    }
+    if (!this.mayGrab(hitResult, selectedIds, vertexPlan, context)) return;
+
     // Core attaches no meaning to auxiliary handles, so first ask the provider whether it
     // accepts the delegation. If it refuses, core starts nothing (dragPan is not stopped either
     // = the same as not having grabbed anything). Because the gates above have been passed,
@@ -169,7 +183,7 @@ export class SelectModeDragHandler {
         break;
 
       case 'vertex':
-        this.begin(startVertexDrag(event, hitResult.featureId!, hitResult.vertexRef!, context));
+        this.begin(startVertexDrag(vertexPlan!, context));
         break;
 
       case 'midpoint':
@@ -236,6 +250,36 @@ export class SelectModeDragHandler {
       this.begin(new BulkResizeDrag(context, rows, event, hitResult.handle as HandleType, bbox));
     }
     return true;
+  }
+
+  /**
+   * Whether the plugins let the drag grab what it moves: for a vertex drag the vertices of the
+   * feature grabbed and of the features that follow along, for a midpoint the feature (no vertex
+   * moved), for the drags of the selection every selected feature whole. A drag of an auxiliary
+   * handle is the provider's, and is not asked
+   */
+  private mayGrab(
+    hitResult: HandleHitResult,
+    selectedIds: readonly string[],
+    vertexPlan: VertexDragPlan | null,
+    context: EngineModeContext,
+  ): boolean {
+    const plugins = context.plugins;
+    if (!plugins) return true;
+    switch (hitResult.type) {
+      case 'vertex': {
+        const plan = vertexPlan as VertexDragPlan;
+        return [plan.state, ...plan.followers].every((state) =>
+          plugins.canDrag(state.featureId, state.vertices),
+        );
+      }
+      case 'midpoint':
+        return plugins.canDrag(hitResult.featureId!, []);
+      case 'auxiliary':
+        return true;
+      default:
+        return selectedIds.every((id) => plugins.canDrag(id));
+    }
   }
 
   /**

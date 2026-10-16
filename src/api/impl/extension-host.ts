@@ -400,6 +400,13 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       });
       return filtered;
     },
+    canDrag(featureId, vertices) {
+      // A plugin that answers false stops the drag; one that throws is reported and skipped
+      return !eachPlugin('canDrag', (plugin) => {
+        const allow = plugin.interaction?.canDrag;
+        return allow ? allow.call(plugin.interaction, featureId, vertices) === false : false;
+      });
+    },
     handleFeatureClick: click('onFeatureClick'),
     handleFeatureDoubleClick: click('onFeatureDoubleClick'),
     isPluginInteracting: () =>
