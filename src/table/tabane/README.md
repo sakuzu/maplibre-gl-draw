@@ -108,9 +108,9 @@ A row block holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
 4. The place: `string` parent (the empty string for none), `byte` form of the
    keys (0: from a head), `string` head, `uint` the number of the first row of
    the row block in its run. Row `r` has the key of row `first + r` of the run
-5. What created the rows: `byte` 0 (none: what added the block created them) or 1,
-   then `uint` count of runs and per run `uint` sequence, `uint` origin, `uint`
-   step, `uint` count. A run is as long as the revision is the same
+5. What created the rows: `byte` 0 (none: what added the block created them)
+   or 1, then `uint` count of runs and per run `uint` sequence, `uint` origin,
+   `uint` step, `uint` count. A run is as long as the revision is the same
 6. The deleted rows: `byte` 0 (none) or 1, then `ceil(n / 8)` bytes, row `r` at
    bit `r % 8` of byte `r / 8`
 7. The types: `uint` count (1 to 255) and the names (`string`) in the order of
