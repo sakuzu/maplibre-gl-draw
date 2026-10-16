@@ -9,9 +9,10 @@
  * form from `toJSON()` (the tags of `value.ts`), so that `JSON.stringify` of a feature never
  * throws.
  *
- * Every class is marked with the name of its kind under the symbol `Symbol.for('value.kind')`,
- * and its `instanceof` reads that mark: the values of another implementation of the same kinds,
- * with the same members and the same mark, are taken as values of these classes.
+ * Every class is marked with the name of its kind under the symbol
+ * `Symbol.for('kasane.value.kind')`, and its `instanceof` reads that mark: the values of another
+ * implementation of the same kinds, with the same members and the same mark, are taken as values
+ * of these classes.
  *
  * - A big integer is an integer outside -(2^53 - 1) to 2^53 - 1, from -2^63 to 2^64 - 1. An
  *   integer inside that range is a number, never a big integer
@@ -42,7 +43,7 @@ function invalid(message: string): DrawError {
 }
 
 /** The symbol whose property names the kind of the class of a value */
-export const VALUE_KIND: unique symbol = Symbol.for('value.kind') as typeof VALUE_KIND;
+export const VALUE_KIND: unique symbol = Symbol.for('kasane.value.kind') as typeof VALUE_KIND;
 
 /** Marks the class of a kind of value with the name of its kind */
 export function markKind(cls: { prototype: object }, kind: string): void {

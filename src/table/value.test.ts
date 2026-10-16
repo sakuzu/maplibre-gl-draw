@@ -92,7 +92,7 @@ describe('a value given to the library', () => {
       readonly zone = 'utc';
       readonly offsetMinutes = 0;
     }
-    Object.defineProperty(OtherDateTime.prototype, Symbol.for('value.kind'), {
+    Object.defineProperty(OtherDateTime.prototype, Symbol.for('kasane.value.kind'), {
       value: 'datetime',
     });
     const other = new OtherDateTime();
