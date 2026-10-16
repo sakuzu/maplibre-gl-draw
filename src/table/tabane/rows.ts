@@ -230,7 +230,8 @@ export function rowBlockDataOfTabane(
       return;
     }
     if (narrow + (to - from) > indices.length) {
-      let size = indices.length * 2;
+      // An empty array (a block whose fills hold no triangle) grows too
+      let size = Math.max(64, indices.length * 2);
       while (size < narrow + (to - from)) size *= 2;
       const next = new Uint16Array(size);
       next.set(indices.subarray(0, narrow));

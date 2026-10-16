@@ -606,7 +606,14 @@ describe('a row block as a row block of the tables', () => {
       ...(i % 3 === 0 && { visible: false }),
       ...(i % 4 === 0 && { locked: true }),
     }));
-    for (const rows of [buildings(1000, 3), variety(), flagged]) {
+    // Circles only: fills written that hold no triangle, and the rings of the circles
+    const circles = buildings(3, 9).map((r, i) => ({
+      ...r,
+      type: 'Circle',
+      geometry: { type: 'Point' as const, coordinates: [i, i] },
+      properties: { 'maplibre-gl-draw:radiusMeters': 25 + i },
+    }));
+    for (const rows of [buildings(1000, 3), variety(), flagged, circles]) {
       for (const fills of [true, false]) {
         const rowBlock = readBlockData(
           writeTabaneBlock({ parent: 'p', head: 'V', rows, fills }).content,
