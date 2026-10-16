@@ -50,7 +50,7 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../feature-table/feature-tables.js';
-import { compareItemKeys, ItemWalk } from '../feature-table/item-walk.js';
+import { ItemWalk } from '../feature-table/item-walk.js';
 import { rowFeature } from '../feature-table/row-read.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
@@ -59,7 +59,7 @@ import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
-import { keyAfter, keysBetween } from './order-keys.js';
+import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS, rowStepsOf, sliceRowValues } from './row-steps.js';
 import { combineValuesBefore } from './row-values-before.js';
 import type { Store, StoreContract } from './store.js';
@@ -272,9 +272,9 @@ export class TableContractStore implements StoreContract {
   /**
    * Creates features, one after the other in the order given (see the public
    * `Store.createFeatures`): every one is checked before any is written, the keys of their order
-   * are made from the last key of each layer and group read once, and the rows of each layer
-   * are written in one write of the tables, so that many features cost their own rows rather
-   * than the rows of their layer once per feature
+   * are made at once after the last key of each layer and group read once (short, `EndKeys`),
+   * and the rows of each layer are written in one write of the tables, so that many features
+   * cost their own rows rather than the rows of their layer once per feature
    */
   createFeatures(features: readonly Feature[]): boolean {
     return this.#apply(() => {
@@ -298,18 +298,25 @@ export class TableContractStore implements StoreContract {
       const handles = this.writer.allocateHandles(
         utf8ColumnFromStrings(features.map((feature) => feature.id)),
       );
-      // The last key of a layer and of a group, read before the first row created in it, then
-      // the last of the rows created in it: what each one is put after, as when they are created
-      // one at a time
-      const lastItems = new Map<string, string | null>();
-      const lastMembers = new Map<TableGroup, string | null>();
-      const lastItemOf = (layerId: string): string | null => {
-        if (!lastItems.has(layerId)) lastItems.set(layerId, this.#lastItemKey(layerId));
-        return lastItems.get(layerId) ?? null;
+      // The keys of the ends of the layers and the groups, from their last keys read once: the
+      // new rows put at an end one after the other get keys made at once, short
+      const layerEnds = new Map<string, EndKeys>();
+      const groupEnds = new Map<TableGroup, EndKeys>();
+      const layerEnd = (layerId: string): EndKeys => {
+        let end = layerEnds.get(layerId);
+        if (!end) {
+          end = new EndKeys(this.#lastItemKey(layerId));
+          layerEnds.set(layerId, end);
+        }
+        return end;
       };
-      const lastMemberOf = (group: TableGroup): string | null => {
-        if (!lastMembers.has(group)) lastMembers.set(group, this.#lastMemberKey(group));
-        return lastMembers.get(group) ?? null;
+      const groupEnd = (group: TableGroup): EndKeys => {
+        let end = groupEnds.get(group);
+        if (!end) {
+          end = new EndKeys(this.#lastMemberKey(group));
+          groupEnds.set(group, end);
+        }
+        return end;
       };
       // The rows of each layer, in the order given
       const writes = new Map<
@@ -323,31 +330,39 @@ export class TableContractStore implements StoreContract {
         const kept = this.#internals.placeOf(handle);
         const keptGroup = kept ? kept.group.data.groups[kept.row] : -1;
         const sameLayer = kept?.layer.layerId === feature.layerId;
-        const order =
-          kept && sameLayer
-            ? utf8String(kept.group.data.itemKeys, kept.row)
-            : keyAfter(lastItemOf(feature.layerId));
         const fields = new Map<RowField, unknown>([
           ['type', feature.type],
           ['layerId', feature.layerId],
           ['geometry', feature.geometry],
-          ['order', order],
+          ['order', undefined],
           ['style', feature.style ?? {}],
           ['visible', feature.visible !== false],
           ['locked', feature.locked === true],
         ]);
+        const end = layerEnd(feature.layerId);
+        if (kept && sameLayer) {
+          const order = utf8String(kept.group.data.itemKeys, kept.row);
+          fields.set('order', order);
+          // A row in a group is not an item of its layer: its group is
+          if (!group) end.keep(order);
+        } else if (group) {
+          // The key of a member is not read in the order of its layer
+          fields.set('order', keyAfter(end.first));
+        } else {
+          end.add((key) => fields.set('order', key));
+        }
         if (group) {
           const handleOfGroup = this.#internals.groups.handleOfId(group.id);
-          const member =
-            kept && sameLayer && keptGroup >= 0 && keptGroup === handleOfGroup
-              ? utf8String(kept.group.data.memberKeys, kept.row)
-              : keyAfter(lastMemberOf(group));
           fields.set('groupId', group.id);
-          fields.set('member', member);
-          lastMembers.set(group, laterKey(lastMemberOf(group), member));
-        } else {
-          // A row in a group is not an item of its layer: its group is
-          lastItems.set(feature.layerId, laterKey(lastItemOf(feature.layerId), order));
+          fields.set('member', undefined);
+          const members = groupEnd(group);
+          if (kept && sameLayer && keptGroup >= 0 && keptGroup === handleOfGroup) {
+            const member = utf8String(kept.group.data.memberKeys, kept.row);
+            fields.set('member', member);
+            members.keep(member);
+          } else {
+            members.add((key) => fields.set('member', key));
+          }
         }
         for (const [key, value] of Object.entries(feature.properties ?? {})) {
           if (value !== undefined) fields.set(`property:${key}`, value);
@@ -359,6 +374,8 @@ export class TableContractStore implements StoreContract {
         }
         rows.push({ handle, fields });
       });
+      for (const end of layerEnds.values()) end.finish();
+      for (const end of groupEnds.values()) end.finish();
       for (const rows of writes.values()) this.#writeRows(rows);
     });
   }
@@ -1587,9 +1604,46 @@ function reconcile(
   return out;
 }
 
-/** The later of a key of the order and the last one before it (null: none), as items are ordered */
-function laterKey(last: string | null, key: string): string {
-  return last !== null && compareItemKeys([last, ''], [key, '']) > 0 ? last : key;
+/**
+ * The keys of the order of items put at the end of a container one after the other: a run of new
+ * items gets its keys at once (`keysBetween`: short, where keys made one after the other grow by
+ * a character every few dozen items), and an item that keeps its key puts the ones after it after
+ * it when it is the last
+ */
+class EndKeys {
+  /** The last key of the container before the items */
+  readonly first: string | null;
+  #last: string | null;
+  #run: Array<(key: string) => void> = [];
+
+  constructor(last: string | null) {
+    this.first = last;
+    this.#last = last;
+  }
+
+  /** A new item: its key is given to `set` once the run it is in ends */
+  add(set: (key: string) => void): void {
+    this.#run.push(set);
+  }
+
+  /** An item that keeps its key */
+  keep(key: string): void {
+    this.#finishRun();
+    if (this.#last === null || compareKeys(key, this.#last) > 0) this.#last = key;
+  }
+
+  /** Gives the keys of the last run */
+  finish(): void {
+    this.#finishRun();
+  }
+
+  #finishRun(): void {
+    if (this.#run.length === 0) return;
+    const keys = keysBetween(this.#last, null, this.#run.length);
+    this.#run.forEach((set, i) => set(keys[i]));
+    this.#last = keys[keys.length - 1];
+    this.#run = [];
+  }
 }
 
 /** A layer given to the Store, as a layer held as rows (the items it lists are not kept) */

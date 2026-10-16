@@ -5,8 +5,9 @@
  * Many features created at once over an in-memory Store of rows (`features.createMany`): the rows
  * of a layer are written in one write of the tables, not one write per feature (each write of a
  * new row reads every row the layer changed before it, so a write per feature costs the square
- * of their number), and they are what creating them one at a time makes: the same values, keys
- * of the order, items and members, the deleted rows kept created again where they were
+ * of their number), and they are what creating them one at a time makes: the same values, items
+ * and members in the same order, the deleted rows kept created again where they were; the keys
+ * of their order are made at once, and stay short
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -94,7 +95,7 @@ function members(store: Store, groupId: string): string[] {
   ) as string[];
 }
 
-/** The keys of the order and the place of rows, as the tables hold them */
+/** The place of rows (their layer and group), as the tables hold them */
 function places(store: Store, ids: readonly string[]): unknown[] {
   const internals = featureTablesInternals(store.tables);
   return ids.map((id) => {
@@ -102,12 +103,21 @@ function places(store: Store, ids: readonly string[]): unknown[] {
     const at = handle === undefined ? null : internals?.placeOf(handle);
     if (!at) return null;
     const data = at.group.data;
-    return {
-      layerId: at.layer.layerId,
-      group: data.groups[at.row],
-      order: utf8String(data.itemKeys, at.row),
-      member: utf8String(data.memberKeys, at.row),
-    };
+    return { layerId: at.layer.layerId, group: data.groups[at.row] };
+  });
+}
+
+/** The keys of the order of the rows of a layer (the key within its group for a member) */
+function keysOf(store: Store, layerId: string): string[] {
+  const tables = store.tables;
+  const internals = featureTablesInternals(tables);
+  const view = tables?.get(layerId);
+  if (!tables || !view || !internals) return [];
+  return Array.from(view.listRowHandles(0, view.rowCount), (handle) => {
+    const at = internals.placeOf(handle);
+    if (!at) return '';
+    const data = at.group.data;
+    return utf8String(data.groups[at.row] >= 0 ? data.memberKeys : data.itemKeys, at.row);
   });
 }
 
@@ -143,6 +153,19 @@ describe('many features created at once over a Store of rows', () => {
     expect(ids.map((id) => many.store.getFeature(id))).toEqual(
       ids.map((id) => one.store.getFeature(id)),
     );
+  });
+
+  it('makes the keys of the order of many features at once, short', () => {
+    const { draw, store } = instance();
+    const n = 20000;
+    draw.features.createMany(Array.from({ length: n }, (_, i) => point(`k${i}`, 'b', i)));
+    const keys = keysOf(store, 'b');
+    expect(keys).toHaveLength(n + 1);
+    // Made one after the other, the last of them would be 646 characters long
+    expect(Math.max(...keys.map((key) => key.length))).toBeLessThanOrEqual(8);
+    const sorted = [...keys].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    expect(keys).toEqual(sorted);
+    expect(items(store, 'b').slice(1)).toEqual(Array.from({ length: n }, (_, i) => `k${i}`));
   });
 
   it('notifies the rows created once, in the order given in each layer', () => {

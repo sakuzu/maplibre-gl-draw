@@ -57,7 +57,8 @@ writing it. Its changes are listed after those of 3.0.0.
 - The event `group.moved`.
 - Optional members of `Store`: `moveItem` and `moveItems`;
   `createFeatures`, which creates many features at once, so that a store
-  that holds its features as rows writes them in one write of its tables
+  that holds its features as rows writes them in one write of its tables,
+  with the keys of their order made together and short
   (`features.createMany` uses it, and gives the features one at a time to
   a store without it); and for a store that holds its features as rows,
   `tables` and `applyRows`. The fields of a store of rows
