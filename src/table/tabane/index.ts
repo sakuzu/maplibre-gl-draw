@@ -17,6 +17,7 @@ export {
   packTabaneBlock,
   readTabaneBlock,
   readTabaneBlockFile,
+  rewriteTabaneBlock,
   TABANE_TARGET_BYTES,
   TABANE_TARGET_ROWS,
   TABANE_TARGET_VERTICES,

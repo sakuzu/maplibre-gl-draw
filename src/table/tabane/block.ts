@@ -23,9 +23,11 @@ import {
   type TabaneCompressor,
   unpackTabaneFile,
 } from './file.js';
-import { tabaneRowSuffixOf } from './ids.js';
+import { formatTabaneId, isTabaneOrigin, type TabaneId, tabaneRowSuffixOf } from './ids.js';
 import { readRowBlockData } from './row-block-read.js';
 import { writeRowBlock } from './row-block-write.js';
+import { tabaneRowsOf } from './rows.js';
+import { sha256Hex } from './sha256.js';
 import type { TabaneRow, TabaneRowBlock, TabaneRowBlockData } from './types.js';
 
 /** The first bytes of the content of a block: `TBNB` */
@@ -402,4 +404,61 @@ export function readBlockFileData(
  */
 export function packTabaneBlock(block: TabaneBlock, compressor?: TabaneCompressor): Uint8Array {
   return packTabaneFile(block.content, block.partEnds, compressor);
+}
+
+/**
+ * Writes a block again with other ids: row `i` of the block (over its row blocks, in their order)
+ * gets the origin of `first` and the number `first.number + i`. Everything else of its rows is
+ * kept to the same bits (their place, coordinates, values, fills, what created them and the
+ * revisions of their cells), so the rows of the block made again are the rows of the block, under
+ * new ids. It answers at once, with the name of the new content (the SHA-256 that
+ * `tabaneNameOf` gives): for a caller that cannot wait, as one that gives the rows of a
+ * block another origin while it makes its writes again.
+ *
+ * @param content - The content of the block
+ * @param first - The id of its first row from now on
+ * @returns The block written again, and its name
+ * @throws `DrawError` with the code `unsupported-format` when the bytes are not a block, or
+ *   `invalid-input` when `first` is not an id (its origin, or a number that is not a whole number
+ *   of at least 1 the last row can take)
+ *
+ * @experimental
+ */
+export function rewriteTabaneBlock(
+  content: Uint8Array,
+  first: TabaneId,
+): { readonly block: TabaneBlock; readonly name: string } {
+  if (!isTabaneOrigin(first.origin)) {
+    throw new DrawError('invalid-input', `Tabane: not an origin: ${first.origin}`);
+  }
+  const rowBlocks = readBlockData(content);
+  let count = 0;
+  for (const rowBlock of rowBlocks) count += rowBlock.length;
+  if (
+    !Number.isSafeInteger(first.number) ||
+    first.number < 1 ||
+    !Number.isSafeInteger(first.number + count - 1)
+  ) {
+    throw new DrawError('invalid-input', `Tabane: not the number of a first id: ${first.number}`);
+  }
+  const bytes: Uint8Array[] = [];
+  const sizes: number[] = [];
+  let at = first.number;
+  for (const rowBlock of rowBlocks) {
+    const rows = tabaneRowsOf(rowBlock).map((row) => ({
+      ...row,
+      id: formatTabaneId({ origin: first.origin, number: at++ }),
+    }));
+    bytes.push(
+      writeRowBlock({
+        place: rowBlock.place,
+        dimensions: rowBlock.dimensions,
+        rows,
+        fills: rowBlock.fills !== null,
+      }),
+    );
+    sizes.push(rowBlock.length);
+  }
+  const block = blockOfRowBlocks(bytes, sizes);
+  return { block, name: sha256Hex(block.content) };
 }

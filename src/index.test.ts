@@ -269,6 +269,7 @@ const KASANE = [
   'readTabaneFilePart',
   'readTabaneManifest',
   'readTabaneRowBlock',
+  'rewriteTabaneBlock',
   'ROW_BLOCK_TARGET_ROWS',
   'ROW_BLOCK_TARGET_VERTICES',
   'RowApplyOptions',

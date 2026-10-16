@@ -16,6 +16,8 @@
  * - Files: parts compressed or stored, read a part at a time or whole; the name is the hash of
  *   the content whatever the parts
  * - A reader refuses bytes a writer never writes
+ * - A block written again with other ids keeps everything else of its rows to the same bits, and
+ *   is named at once as the hash of its content is
  */
 
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
@@ -35,6 +37,7 @@ import {
   readBlockData,
   readTabaneBlock,
   readTabaneBlockFile,
+  rewriteTabaneBlock,
   writeTabaneBlock,
   writeTabaneBlocks,
 } from './block.js';
@@ -52,6 +55,7 @@ import {
 } from './ids.js';
 import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
 import { rowBlockDataOfTabane, tabaneRowsOf } from './rows.js';
+import { sha256Hex } from './sha256.js';
 import type { TabaneRow } from './types.js';
 import { XorSink, XorSource } from './xor.js';
 
@@ -607,5 +611,97 @@ describe('a manifest', () => {
     }
     expect(() => readTabaneManifest(content.subarray(1))).toThrow(/not a manifest/);
     expect(decodeCanonicalValue(content, 4)).toMatchObject({ tabane: 1 });
+  });
+});
+
+describe('a block written again with other ids', () => {
+  it('names a content at once as the platform does', async () => {
+    const random = seededRandom(7);
+    for (const n of [0, 1, 55, 56, 63, 64, 65, 119, 120, 1000, 4096 + 3]) {
+      const bytes = Uint8Array.from({ length: n }, () => Math.floor(random() * 256));
+      expect(sha256Hex(bytes)).toBe(await tabaneNameOf(bytes));
+    }
+    // A view into a larger buffer
+    const big = Uint8Array.from({ length: 300 }, (_, k) => k & 255);
+    expect(sha256Hex(big.subarray(17, 250))).toBe(await tabaneNameOf(big.slice(17, 250)));
+  });
+
+  it('gives every row the next id and keeps the rest to the same bits', async () => {
+    const rows = buildings(2100).map((row, i) => ({
+      ...row,
+      ...(i % 7 === 0 && { deleted: true }),
+      created: [5, OTHER, 3] as [number, string, number],
+      ...(i % 5 === 0 && { revisions: { 'p.name': [9, ORIGIN, 4] as [number, string, number] } }),
+    }));
+    const block = writeTabaneBlock({ parent: 'layer-1', head: 'V', rows, targetRows: 800 });
+    const { block: again, name } = rewriteTabaneBlock(block.content, {
+      origin: OTHER,
+      number: 101,
+    });
+    expect(name).toBe(await tabaneNameOf(again.content));
+    expect(again.rows).toBe(2100);
+    expect(again.partEnds.length).toBe(block.partEnds.length);
+    const read = readTabaneBlock(again.content);
+    expect(read.map((b) => b.place)).toEqual(readTabaneBlock(block.content).map((b) => b.place));
+    const back = read.flatMap((b) => tabaneRowsOf(b));
+    expect(back.map((r) => r.id)).toEqual(
+      rows.map((_, i) => formatTabaneId({ origin: OTHER, number: 101 + i })),
+    );
+    expect(
+      same(
+        normal(back).map((r) => ({ ...(r as object), id: '' })),
+        normal(rows).map((r) => ({ ...(r as object), id: '' })),
+      ),
+    ).toBe(true);
+    // The fills are kept as they were written
+    const fills = (rs: TabaneRow[]) => rs.map((r) => r.fill);
+    expect(fills(back)).toEqual(
+      fills(readTabaneBlock(block.content).flatMap((b) => tabaneRowsOf(b))),
+    );
+    // Written again with the ids it had, it is the block it was
+    const before = parseTabaneId(rows[0].id) as { origin: string; number: number };
+    const undone = rewriteTabaneBlock(again.content, before);
+    expect(undone.block.content).toEqual(block.content);
+    expect(undone.name).toBe(await tabaneNameOf(block.content));
+  });
+
+  it('keeps a block written without fills without them, and the dimensions it has', () => {
+    const rows: TabaneRow[] = [
+      {
+        id: formatTabaneId({ origin: ORIGIN, number: 1 }),
+        type: 'LineString',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [1, 2, 3],
+            [4, 5, Number.NaN],
+          ],
+        },
+      },
+    ];
+    const block = writeTabaneBlock({ parent: '', head: 'a', rows, fills: false });
+    const { block: again } = rewriteTabaneBlock(block.content, { origin: ORIGIN, number: 9 });
+    const [read] = readTabaneBlock(again.content);
+    expect(read.dimensions).toBe('xyz');
+    const [row] = tabaneRowsOf(read);
+    expect(row.id).toBe(formatTabaneId({ origin: ORIGIN, number: 9 }));
+    expect(row.fill).toBeUndefined();
+    expect(same(row.geometry, rows[0].geometry)).toBe(true);
+  });
+
+  it('refuses an id that is not one, and bytes that are not a block', () => {
+    const block = writeTabaneBlock({ parent: '', head: 'a', rows: buildings(3) });
+    expect(() => rewriteTabaneBlock(block.content, { origin: 'x', number: 1 })).toThrow(
+      /not an origin/,
+    );
+    expect(() => rewriteTabaneBlock(block.content, { origin: ORIGIN, number: 0 })).toThrow(
+      /first id/,
+    );
+    expect(() =>
+      rewriteTabaneBlock(block.content, { origin: ORIGIN, number: Number.MAX_SAFE_INTEGER }),
+    ).toThrow(/first id/);
+    expect(() =>
+      rewriteTabaneBlock(block.content.subarray(1), { origin: ORIGIN, number: 1 }),
+    ).toThrow(/not a block/);
   });
 });

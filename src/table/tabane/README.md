@@ -230,6 +230,12 @@ by the suffix of `j` (section 2.1), and its rows are numbered from 0: the key of
 row `i` of block `j` is the head, the suffix of `j`, the suffix of `i`. A row
 block is written for the block it goes in.
 
+A block may be written again with other ids (`rewriteTabaneBlock`): row `i`
+takes the origin given and the number given plus `i`, and every other byte of
+its rows is what the writer writes for them (their place, coordinates, values,
+fills, what created them and the revisions of their cells). It is a new content
+under a new name.
+
 ## 5. A file
 
 A file holds a content cut into parts:
